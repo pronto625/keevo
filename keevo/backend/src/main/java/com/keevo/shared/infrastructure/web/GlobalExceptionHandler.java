@@ -77,10 +77,11 @@ public class GlobalExceptionHandler {
                  "NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "UNAUTHORIZED", "TOKEN_EXPIRED",
                  "INVALID_CREDENTIALS" -> HttpStatus.UNAUTHORIZED;
-            case "EMAIL_ALREADY_EXISTS",
+            case "EMAIL_ALREADY_EXISTS", "USER_ALREADY_EXISTS",
                  "TENANT_ALREADY_EXISTS" -> HttpStatus.CONFLICT;
-            case "VALIDATION_ERROR",
-                 "INVALID_AMOUNT" -> HttpStatus.UNPROCESSABLE_ENTITY;
+            case "VALIDATION_ERROR", "INVALID_AMOUNT",
+                 "INVALID_PHONE_NUMBER", "INVALID_PASSWORD" -> HttpStatus.UNPROCESSABLE_ENTITY;
+            case "TENANT_PROVISION_FAILED" -> HttpStatus.INTERNAL_SERVER_ERROR;
             default -> HttpStatus.INTERNAL_SERVER_ERROR;
         };
     }

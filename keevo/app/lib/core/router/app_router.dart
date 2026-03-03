@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/auth/presentation/page/register_page.dart';
+
 /// Placeholder page shown until each feature is implemented
 class _PlaceholderPage extends StatelessWidget {
   final String title;
@@ -23,12 +25,16 @@ class _PlaceholderPage extends StatelessWidget {
 /// Application router — all feature routes registered here.
 /// Each route points to a placeholder until the feature story is implemented.
 final GoRouter appRouter = GoRouter(
-  initialLocation: '/auth/login',
+  initialLocation: '/auth/register', // Story 1.2: registration is the entry point
   routes: [
     // ── Auth ────────────────────────────────────────────────
     GoRoute(
       path: '/auth/login',
       builder: (_, __) => const _PlaceholderPage(title: 'Login'),
+    ),
+    GoRoute(
+      path: '/auth/register',
+      builder: (_, __) => const RegisterPage(),
     ),
 
     // ── Onboarding ──────────────────────────────────────────

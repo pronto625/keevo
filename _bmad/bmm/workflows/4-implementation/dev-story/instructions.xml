@@ -223,8 +223,11 @@
 
   <step n="5" goal="Implement task following red-green-refactor cycle">
     <critical>FOLLOW THE STORY FILE TASKS/SUBTASKS SEQUENCE EXACTLY AS WRITTEN - NO DEVIATION</critical>
+    <critical>🔴 TDD STRICT: Write FAILING test FIRST. Run it. Confirm RED. Then write minimum code. Confirm GREEN. Then refactor. NO EXCEPTIONS.</critical>
+    <critical>🔴 GoF MANDATORY: Before writing any production code, identify which GoF pattern applies to this task and document it in Dev Notes. Patterns to consider: Strategy, Observer, Factory, Builder, Adapter, Decorator, Template Method, Chain of Responsibility, Façade, Singleton. NEVER write a class without first answering: "Which pattern governs this class and why?"</critical>
 
     <action>Review the current task/subtask from the story file - this is your authoritative implementation guide</action>
+    <action>Identify which GoF pattern(s) apply to this task — document reasoning in Dev Agent Record</action>
     <action>Plan implementation following red-green-refactor cycle</action>
 
     <!-- RED PHASE -->

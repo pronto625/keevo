@@ -14,7 +14,10 @@ public enum ErrorCode {
 
     // ── Identity / Auth ───────────────────────────────────────────
     USER_NOT_FOUND,
+    USER_ALREADY_EXISTS,
     EMAIL_ALREADY_EXISTS,
+    INVALID_PHONE_NUMBER,
+    INVALID_PASSWORD,
     INVALID_CREDENTIALS,
     TOKEN_EXPIRED,
     UNAUTHORIZED,
@@ -22,6 +25,7 @@ public enum ErrorCode {
     // ── Tenant ────────────────────────────────────────────────────
     TENANT_NOT_FOUND,
     TENANT_ALREADY_EXISTS,
+    TENANT_PROVISION_FAILED,
 
     // ── Catalog ───────────────────────────────────────────────────
     PRODUCT_NOT_FOUND,

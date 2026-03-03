@@ -58,6 +58,20 @@ keevo:
     secret: ${JWT_SECRET}
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}
 
+# Springdoc OpenAPI / Swagger UI
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    operations-sorter: alpha
+    tags-sorter: alpha
+    try-it-out-enabled: true
+  show-actuator: false
+  packages-to-scan: com.keevo
+
 logging:
   level:
     root: ${LOG_LEVEL:INFO}

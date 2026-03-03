@@ -24,6 +24,9 @@ dependencies:
   # Secure storage
   flutter_secure_storage: ^9.2.2
 
+  # HTTP client
+  dio: ^5.7.0
+
   # Code generation (models)
   freezed_annotation: ^2.4.4
   json_annotation: ^4.9.0

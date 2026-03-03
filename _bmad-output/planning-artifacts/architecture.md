@@ -325,40 +325,73 @@ lib/
 
 ## Implementation Patterns & Consistency Rules
 
-### 🔴 FULL TDD — NON-NEGOTIABLE
+### 🔴 FULL TDD — NON-NEGOTIABLE (STRICT)
 
-**Every single feature MUST follow strict Test-Driven Development:**
+> **This section is LAW. No code may be written before a failing test. No exceptions.**
 
-1. **RED** — Write a failing test FIRST (unit, integration, or widget test)
-2. **GREEN** — Write the minimum code to make the test pass
-3. **REFACTOR** — Clean up while keeping tests green
+**The cycle: RED → GREEN → REFACTOR. Always in this order. Zero tolerance for deviations.**
+
+**✅ CORRECT sequence (mandatory):**
+```
+1. Write failing test  →  run test  →  confirm RED
+2. Write minimum code  →  run test  →  confirm GREEN
+3. Refactor code       →  run test  →  confirm still GREEN
+4. Repeat for every acceptance criterion
+```
+
+**❌ FORBIDDEN — any dev agent MUST refuse to:**
+- Write a class or method before writing a failing test for it
+- Skip tests because "the logic seems obvious"
+- Write tests AFTER implementation ("test-last") — this is NOT TDD
+- Use `@Disabled` tests to make a build pass
+- Mark a story as done with failing tests or zero test coverage
 
 **TDD rules:**
 - NO production code without a failing test written first
 - A feature is DONE only when ALL its tests pass
 - Test coverage must be comprehensive — happy path + edge cases + error cases
 - Tests are the specification — they document what the code does
+- Every story file MUST have a **Task 1: Write RED tests** section **before** any implementation task
+
+---
+
+> ⚠️ **TEST VALIDITY PRINCIPLE — NON-NEGOTIABLE**
+>
+> When writing tests, always make sure they exercise the real production code and not just mocked behavior. If a test can pass without executing the actual runtime logic, wiring, configuration, or data flow used in production, then it provides a **false sense of safety**. Mocks should only exist at system boundaries to control external dependencies, never to replace core logic. A good test must **fail when the real system is broken**; otherwise, it validates assumptions instead of behavior and hides bugs rather than revealing them.
+>
+> **Practical consequences:**
+> - Unit tests that mock a service under test are **invalid** — they test the mock, not the service
+> - JPA/persistence behavior (ID strategy, constraints, lifecycle hooks) **must** be tested with a real DB (`@DataJpaTest` + real PostgreSQL or H2), never with a mocked repository
+> - Flyway migrations and SQL correctness **must** be verified via integration tests against a real database — mocking `FlywayTenantMigration` in unit tests cannot detect missing tables or incorrect SQL
+> - Spring wiring, security rules, and HTTP request/response mapping **must** be tested with the actual application context slices (`@WebMvcTest`, `@SpringBootTest`), not pure unit mocks
+> - If the only way to make a test pass is by calling `.when(mock).thenReturn(...)`, ask: **"Would this test catch the bug if I deleted the production class?"** — if not, it is not a real test
+
+---
 
 **Backend (Spring Boot) testing stack:**
 
 | Layer | Test Type | Tools |
 |---|---|---|
-| Domain (use cases) | Unit tests | JUnit 5 + Mockito |
+| Domain models | Unit tests | JUnit 5 (pure Java — no Spring context) |
+| Use cases / services | Unit tests | JUnit 5 + Mockito (`@ExtendWith(MockitoExtension.class)`) |
 | Ports (interfaces) | Contract tests | JUnit 5 |
-| Adapters (REST) | Integration tests | `@WebMvcTest` + MockMvc |
-| Adapters (DB) | Repository tests | `@DataJpaTest` + Testcontainers (PostgreSQL) |
-| Multi-tenant | Isolation tests | Custom: verify no cross-tenant data leaks |
-| End-to-end | API tests | `@SpringBootTest` + Testcontainers |
+| Adapters (REST) | Slice tests | `@WebMvcTest` + MockMvc + `@MockBean` |
+| Adapters (JPA) | Slice tests | `@DataJpaTest` + H2 or Testcontainers |
+| Security rules | Security tests | `@WebMvcTest` + `spring-security-test` |
+| End-to-end | Integration tests | `@SpringBootTest` + Testcontainers (PostgreSQL) |
 
 **Frontend (Flutter) testing stack:**
 
 | Layer | Test Type | Tools |
 |---|---|---|
-| Domain (use cases) | Unit tests | `test` package + `mocktail` |
-| Data (repositories) | Unit tests | `test` + mock datasources |
-| Providers (Riverpod) | Provider tests | `riverpod_test` / `ProviderContainer.test` |
-| Widgets | Widget tests | `flutter_test` + `WidgetTester` |
-| Integration | Flow tests | `integration_test` package |
+| Domain use cases | Unit tests | `test` package + `mocktail` |
+| Data repositories | Unit tests | `test` + mock datasources |
+| Providers (Riverpod) | Unit tests | `ProviderContainer` + `mocktail` |
+| Widgets / Pages | Widget tests | `flutter_test` + `WidgetTester` |
+| Integration flows | Integration tests | `integration_test` package |
+
+> **Critical for Flutter tests**: Always call `GoogleFonts.config.allowRuntimeFetching = false`
+> in `setUpAll()` — failure to do this causes network calls during tests.
 
 **TDD workflow per feature:**
 ```
@@ -369,6 +402,130 @@ lib/
 5. Write widget test → implement UI
 6. ALL tests green → feature is DONE
 ```
+
+---
+
+### 🔴 GoF DESIGN PATTERN ANALYSIS — MANDATORY BEFORE EVERY FEATURE
+
+> **No implementation may begin before completing this analysis. It is documented in the story file.**
+
+**The Dev Agent MUST fill this table in every story before writing any code:**
+
+```markdown
+## GoF Pattern Analysis (MANDATORY — fill before any implementation)
+
+| Question | Answer |
+|---|---|
+| What variability exists in this feature? | [answer] |
+| What might change in the future? | [answer] |
+| Which GoF pattern(s) apply? | [pattern name + reason] |
+| How does it enable Open/Closed principle? | [answer] |
+| Where is the pattern applied? | [class/method] |
+```
+
+**Mandatory reasoning step** — for each feature, ask:
+
+1. **Is there an algorithm that might change?** → Strategy
+2. **Do I need to notify multiple systems of an event?** → Observer
+3. **Is object creation complex (3+ steps / conditional logic)?** → Factory or Builder
+4. **Do I need to adapt an incompatible interface?** → Adapter
+5. **Do I need to add behavior without modifying the class?** → Decorator
+6. **Is there a skeleton algorithm with variable steps?** → Template Method
+7. **Do I need to pass a request through a chain?** → Chain of Responsibility
+8. **Do I need a single global instance?** → Singleton (via DI container)
+9. **Do I work with tree structures or composite objects?** → Composite
+10. **Do I need to decouple sender from receiver?** → Command pattern
+
+**Anti-pattern (FORBIDDEN):**
+- Proceeding with implementation when no pattern was analyzed
+- Using a pattern "by habit" without justifying it fits the problem
+- Skipping the GoF analysis because the ticket "looks simple"
+
+**Common Keevo patterns (reference):**
+
+| Problem | GoF Pattern | Example |
+|---|---|---|
+| Multiple sync strategies | **Strategy** | `SyncService` → `RestSyncService`, `PowerSyncService` |
+| Multiple notification providers | **Strategy + Adapter** | `WhatsAppPort` → `WassenderAdapter` |
+| Complex object creation | **Factory** | `TenantFactory.create()` |
+| Audit on every mutation | **Observer** | `UserRegisteredEvent` → `AuditEventListener` |
+| Access control decoration | **Decorator** | `@RequiresRole(OWNER)` wrapping use cases |
+| Conflict resolution | **Strategy** | `ConflictResolver` → `DeltaStockResolver` |
+| Report generation | **Template Method** | `AbstractReport` → `DailyReport`, `WeeklyReport` |
+| Notification routing | **Chain of Responsibility** | WhatsApp → Push → SMS fallback chain |
+| Building complex queries | **Builder** | `SyncPullQueryBuilder` |
+| Unique code generation | **Strategy** | `TenantCodeGenerator` |
+| Registration orchestration | **Façade** | `RegistrationService` |
+
+---
+
+### 🔴 Spring Security — Correct Usage (Non-Negotiable)
+
+> **This project uses `spring-boot-starter-security` (Spring Security 6.x). Spring Cloud Security is NOT used and NOT needed.**
+
+**Clarification:**
+- **Spring Security 6.x** (`spring-boot-starter-security`) = the standard security framework for Spring Boot. Handles authentication, authorization, password encoding, CSRF, CORS, filter chains. **This is what Keevo uses.**
+- **Spring Cloud Security** = an add-on for OAuth2/OIDC SSO flows in distributed microservice architectures. NOT applicable to a standalone REST API + Flutter app.
+
+**Mandatory Spring Security rules for this project:**
+
+```java
+// ✅ ALWAYS required for REST APIs (prevents HTML /login page redirect)
+.formLogin(form -> form.disable())
+.httpBasic(basic -> basic.disable())
+
+// ✅ ALWAYS required for REST APIs (no browser sessions)
+.sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+
+// ✅ ALWAYS return JSON status for unauthenticated requests (not HTML redirect)
+.exceptionHandling(ex -> ex
+    .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
+)
+
+// ✅ ALWAYS disable CSRF for stateless REST (CSRF only matters for browser sessions)
+.csrf(csrf -> csrf.disable())
+```
+
+**Swagger/OpenAPI paths MUST be in the public list:**
+```java
+private static final String[] PUBLIC_PATHS = {
+    "/actuator/health",
+    "/api/v1/auth/**",
+    "/v3/api-docs/**",
+    "/swagger-ui/**",
+    "/swagger-ui.html"
+};
+```
+
+---
+
+### 🔴 Springdoc OpenAPI — Mandatory for Every Controller
+
+> **Every REST controller MUST have OpenAPI annotations. Swagger UI is available at `/swagger-ui.html`.**
+
+**Required annotations per controller:**
+```java
+@Tag(name = "Domain Name", description = "What this group of endpoints does")
+@RestController
+public class MyController {
+
+    @Operation(summary = "Short action name", description = "Full explanation")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Success"),
+        @ApiResponse(responseCode = "400", description = "Validation error"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized")
+    })
+    @SecurityRequirements  // Only on public endpoints — removes the Bearer lock icon
+    @GetMapping("/resource")
+    public ResponseEntity<Response> getResource() { ... }
+}
+```
+
+**OpenAPI configuration** is in `shared/infrastructure/web/OpenApiConfig.java`.
+JWT Bearer scheme is pre-configured — all endpoints show the lock icon by default.
+Mark public endpoints explicitly with `@SecurityRequirements` to remove it.
+
+
 
 ### Naming Patterns
 
@@ -577,7 +734,8 @@ backend/
 │   ├── application.yml
 │   ├── application-dev.yml
 │   ├── application-prod.yml
-│   └── db/migration/tenant/           # Flyway per-tenant
+│   ├── db/migration/                   # Flyway public schema (Spring Boot auto-scanned)
+│   └── db/tenant-migration/            # Flyway per-tenant (isolated — programmatic only, avoids V1 conflict)
 └── src/test/java/com/keevo/          # Mirrors src — TDD tests per module
 ```
 
@@ -650,18 +808,13 @@ app/
 
 ### GoF Design Pattern Analysis — Pre-Implementation Checklist
 
-**Before implementing ANY feature, the agent MUST:**
+> See the full mandatory analysis framework in [Implementation Patterns — GoF section](#-gof-design-pattern-analysis--mandatory-before-every-feature) above.
 
-1. **Identify the problem type** — What variability exists? What might change?
-2. **Select the appropriate GoF pattern** — Match the problem to the pattern
-3. **Document the pattern choice** — Comment in code why this pattern was chosen
-4. **Implement via interfaces** — Closed for modification, open for extension
-
-**Common Keevo patterns:**
+**Common Keevo patterns quick reference:**
 
 | Problem | GoF Pattern | Example |
 |---|---|---|
-| Multiple sync strategies | **Strategy** | `SyncService` → `RestSyncService`, future `PowerSyncService` |
+| Multiple sync strategies | **Strategy** | `SyncService` → `RestSyncService`, `PowerSyncService` |
 | Multiple WhatsApp providers | **Strategy + Adapter** | `WhatsAppPort` → `WassenderAdapter` |
 | Complex object creation | **Factory** | `TenantFactory.create()` (schema + roles + defaults) |
 | Audit on every mutation | **Observer** | `DomainEvent` → `AuditEventListener` |

@@ -1,11 +1,14 @@
 package com.keevo.shared.infrastructure.security;
 
+import org.springframework.stereotype.Component;
+
 /**
  * JwtTokenProvider — Stub for JWT token generation and validation.
  *
  * <p>Full implementation in Story 1.3 (JWT authentication).
  * This stub exists to satisfy the compiler and establish the API contract.
  */
+@Component
 public class JwtTokenProvider {
 
     /**
@@ -16,38 +19,31 @@ public class JwtTokenProvider {
      * @return signed JWT string
      */
     public String generateToken(String subject, String tenantId) {
-        // TODO (Story 1.3): Implement JWT generation with JJWT
-        throw new UnsupportedOperationException(
-                "JwtTokenProvider.generateToken() not yet implemented — Story 1.3");
+        // STUB — Story 1.3 implements real JWT (RS256, 24h expiry)
+        // Returns a clearly-marked placeholder token for Story 1.2
+        return "STUB:" + subject + ":" + tenantId;
     }
 
-    /**
-     * Validate the token signature and expiry.
-     *
-     * @param token JWT string
-     * @return true if valid
-     */
     public boolean validateToken(String token) {
-        // TODO (Story 1.3): Implement validation
-        throw new UnsupportedOperationException(
-                "JwtTokenProvider.validateToken() not yet implemented — Story 1.3");
+        // STUB — Story 1.3 implements validation
+        return token != null && token.startsWith("STUB:");
     }
 
-    /**
-     * Extract the subject (user ID) from a token.
-     */
     public String getSubject(String token) {
-        // TODO (Story 1.3)
-        throw new UnsupportedOperationException(
-                "JwtTokenProvider.getSubject() not yet implemented — Story 1.3");
+        // STUB — Story 1.3 implements parsing
+        if (token != null && token.startsWith("STUB:")) {
+            String[] parts = token.split(":");
+            return parts.length > 1 ? parts[1] : null;
+        }
+        return null;
     }
 
-    /**
-     * Extract the tenant ID claim from a token.
-     */
     public String getTenantId(String token) {
-        // TODO (Story 1.3)
-        throw new UnsupportedOperationException(
-                "JwtTokenProvider.getTenantId() not yet implemented — Story 1.3");
+        // STUB — Story 1.3 implements parsing
+        if (token != null && token.startsWith("STUB:")) {
+            String[] parts = token.split(":");
+            return parts.length > 2 ? parts[2] : null;
+        }
+        return null;
     }
 }

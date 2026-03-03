@@ -1,9 +1,0 @@
-# Flyway per-tenant migration scripts are placed here.
-# Naming convention: V{version}__{description}.sql
-# Example: V1__create_products_table.sql
-#
-# These scripts are applied programmatically to each tenant schema
-# via FlywayTenantMigration during tenant provisioning (Story 1.2).
-#
-# DO NOT add shared/public schema migrations here.
-# Public schema migrations go in: db/migration/public/
