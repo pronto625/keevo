@@ -1,0 +1,125 @@
+package com.keevo.shared.domain.model;
+
+import com.keevo.shared.domain.exception.DomainException;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * MoneyTest — TDD bootstrap test for the Money XAF value object.
+ *
+ * <p>Written FIRST (Red) per TDD mandate.
+ * Money.java was then implemented to make these tests Green.
+ */
+@DisplayName("Money XAF value object")
+class MoneyTest {
+
+    // ── Creation ─────────────────────────────────────────────
+
+    @Test
+    @DisplayName("should create valid money with positive value")
+    void should_create_valid_money() {
+        Money money = new Money(5000);
+        assertThat(money.value()).isEqualTo(5000);
+    }
+
+    @Test
+    @DisplayName("should create money with zero value")
+    void should_create_money_with_zero() {
+        Money money = new Money(0);
+        assertThat(money.value()).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("should reject negative amount with DomainException")
+    void should_reject_negative_amount() {
+        assertThatThrownBy(() -> new Money(-1))
+                .isInstanceOf(DomainException.class)
+                .hasMessageContaining("INVALID_AMOUNT");
+    }
+
+    // ── toString ──────────────────────────────────────────────
+
+    @Test
+    @DisplayName("should display '5000 XAF' format")
+    void should_format_as_xaf() {
+        assertThat(new Money(5000).toString()).isEqualTo("5000 XAF");
+    }
+
+    @Test
+    @DisplayName("should display '0 XAF' for zero")
+    void should_format_zero_as_xaf() {
+        assertThat(new Money(0).toString()).isEqualTo("0 XAF");
+    }
+
+    // ── Arithmetic ────────────────────────────────────────────
+
+    @Test
+    @DisplayName("should add two Money values")
+    void should_add_money() {
+        Money a = new Money(3000);
+        Money b = new Money(2000);
+        assertThat(a.add(b).value()).isEqualTo(5000);
+    }
+
+    @Test
+    @DisplayName("should subtract smaller from larger")
+    void should_subtract_money() {
+        Money a = new Money(5000);
+        Money b = new Money(2000);
+        assertThat(a.subtract(b).value()).isEqualTo(3000);
+    }
+
+    @Test
+    @DisplayName("should reject subtraction resulting in negative")
+    void should_reject_negative_subtraction() {
+        Money a = new Money(1000);
+        Money b = new Money(2000);
+        assertThatThrownBy(() -> a.subtract(b))
+                .isInstanceOf(DomainException.class)
+                .hasMessageContaining("INVALID_AMOUNT");
+    }
+
+    @Test
+    @DisplayName("should multiply by positive factor")
+    void should_multiply_money() {
+        Money price = new Money(2500);
+        assertThat(price.multiply(3).value()).isEqualTo(7500);
+    }
+
+    @Test
+    @DisplayName("should multiply by zero resulting in 0 XAF")
+    void should_multiply_by_zero() {
+        assertThat(new Money(5000).multiply(0).value()).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("should reject negative multiplication factor")
+    void should_reject_negative_factor() {
+        assertThatThrownBy(() -> new Money(5000).multiply(-1))
+                .isInstanceOf(DomainException.class)
+                .hasMessageContaining("INVALID_AMOUNT");
+    }
+
+    // ── Equality ──────────────────────────────────────────────
+
+    @Test
+    @DisplayName("should be equal when values are the same")
+    void should_be_equal_for_same_value() {
+        assertThat(new Money(5000)).isEqualTo(new Money(5000));
+    }
+
+    @Test
+    @DisplayName("should not be equal when values differ")
+    void should_not_be_equal_for_different_values() {
+        assertThat(new Money(5000)).isNotEqualTo(new Money(4999));
+    }
+
+    @Test
+    @DisplayName("should have consistent hashCode")
+    void should_have_consistent_hash_code() {
+        assertThat(new Money(5000).hashCode()).isEqualTo(new Money(5000).hashCode());
+    }
+}

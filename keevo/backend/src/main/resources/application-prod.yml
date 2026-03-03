@@ -1,0 +1,16 @@
+spring:
+  jpa:
+    show-sql: false
+
+  security:
+    require-ssl: true
+
+logging:
+  level:
+    root: WARN
+    com.keevo: INFO
+
+server:
+  tomcat:
+    max-threads: 200
+    accept-count: 100

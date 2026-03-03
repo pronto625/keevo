@@ -1,0 +1,141 @@
+# generated: 2026-03-02
+# project: Bmad-test
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: /home/toor/Project/FreeLance/AI/Bmad-test/_bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - SM typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+
+generated: 2026-03-02
+project: Bmad-test
+project_key: NOKEY
+tracking_system: file-system
+story_location: /home/toor/Project/FreeLance/AI/Bmad-test/_bmad-output/implementation-artifacts
+
+development_status:
+  # ─────────────────────────────────────────────────────────
+  # Epic 1: Foundation, Infrastructure & Authentication
+  # ─────────────────────────────────────────────────────────
+  epic-1: in-progress
+  1-1-project-initialization-architecture-scaffold: done
+  1-2-user-registration-automated-tenant-provisioning: backlog
+  1-3-jwt-authentication-session-management: backlog
+  1-4-onboarding-wizard-sector-templates-shop-setup: backlog
+  1-5-local-data-storage-encryption-connectivity-indicator: backlog
+  1-6-subscription-model-plan-limits-account-lifecycle: backlog
+  1-7-immutable-audit-trail-security-domain-foundation: backlog
+  epic-1-retrospective: optional
+
+  # ─────────────────────────────────────────────────────────
+  # Epic 2: Catalogue Produits & Base Fournisseurs/Clients
+  # ─────────────────────────────────────────────────────────
+  epic-2: backlog
+  2-1-crud-produits-creation-edition-archivage: backlog
+  2-2-moteur-de-prix-calcul-de-marge: backlog
+  2-3-seuils-de-stock-historique-des-mouvements: backlog
+  2-4-import-csv-creation-progressive-de-produits: backlog
+  2-5-gestion-clients-fournisseurs: backlog
+  epic-2-retrospective: optional
+
+  # ─────────────────────────────────────────────────────────
+  # Epic 3: Gestion Multi-Boutiques, Stock & Équipe
+  # ─────────────────────────────────────────────────────────
+  epic-3: backlog
+  3-1-creation-configuration-des-boutiques-et-warehouse: backlog
+  3-2-vue-centralisee-des-stocks-multi-boutiques: backlog
+  3-3-transferts-inter-boutiques-avec-tracabilite-complete: backlog
+  3-4-verification-de-disponibilite-cross-boutique: backlog
+  3-5-invitation-employes-roles-assignation-boutique: backlog
+  epic-3-retrospective: optional
+
+  # ─────────────────────────────────────────────────────────
+  # Epic 4: Point de Vente (POS)
+  # ─────────────────────────────────────────────────────────
+  epic-4: backlog
+  4-1-enregistrement-de-vente-flux-pos-core: backlog
+  4-2-reductions-prix-modifiable-en-panier: backlog
+  4-3-cloture-journaliere-historique-des-ventes: backlog
+  4-4-annulation-correction-de-vente: backlog
+  4-5-leaderboard-vendeurs-historique-global: backlog
+  epic-4-retrospective: optional
+
+  # ─────────────────────────────────────────────────────────
+  # Epic 5: Moteur de Synchronisation Offline-First
+  # ─────────────────────────────────────────────────────────
+  epic-5: backlog
+  5-1-push-sync-envoi-par-lot-des-operations-en-file: backlog
+  5-2-pull-sync-telechargement-delta-fusion-locale: backlog
+  5-3-resolution-de-conflits-delta-stock-last-write-wins: backlog
+  5-4-limite-7-jours-hors-ligne-gate-de-deverrouillage: backlog
+  5-5-monitoring-sync-recuperation-derreurs-coherence-multi-device: backlog
+  epic-5-retrospective: optional
+
+  # ─────────────────────────────────────────────────────────
+  # Epic 6: Inventaire Assisté
+  # ─────────────────────────────────────────────────────────
+  epic-6: backlog
+  6-1-lancement-configuration-session-inventaire: backlog
+  6-2-formulaire-guide-saisie-des-quantites-physiques: backlog
+  6-3-calcul-des-ecarts-rapport-inventaire: backlog
+  6-4-validation-application-des-ajustements-au-stock: backlog
+  epic-6-retrospective: optional
+
+  # ─────────────────────────────────────────────────────────
+  # Epic 7: Rapports, Dashboard & Communication WhatsApp
+  # ─────────────────────────────────────────────────────────
+  epic-7: backlog
+  7-1-dashboard-matinal-message-motivationnel: backlog
+  7-2-rapport-end-of-day-generation-envoi-whatsapp: backlog
+  7-3-rapport-hebdomadaire-automatique: backlog
+  7-4-dashboard-rentabilite-analyse-par-produit-boutique: backlog
+  7-5-configuration-des-rapports-preferences-whatsapp: backlog
+  epic-7-retrospective: optional
+
+  # ─────────────────────────────────────────────────────────
+  # Epic 8: Alertes, Notifications & Gestion Opérationnelle
+  # ─────────────────────────────────────────────────────────
+  epic-8: backlog
+  8-1-alertes-stock-critique-tendances-de-ventes: backlog
+  8-2-suivi-activite-employes: backlog
+  8-3-desactivation-employe-revocation-de-sessions: backlog
+  8-4-feedback-utilisateur-signalement-de-probleme: backlog
+  8-5-suppression-de-compte-donnees-rgpd: backlog
+  epic-8-retrospective: optional
+
+  # ─────────────────────────────────────────────────────────
+  # Epic 9: Super Admin Dashboard (Toor)
+  # ─────────────────────────────────────────────────────────
+  epic-9: backlog
+  9-1-gestion-des-tenants: backlog
+  9-2-activation-plan-payant: backlog
+  9-3-dashboard-revenus: backlog
+  9-4-analytics-plateforme: backlog
+  9-5-sante-systeme-alertes-notifications-push-globales: backlog
+  epic-9-retrospective: optional

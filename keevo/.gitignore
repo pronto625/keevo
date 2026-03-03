@@ -1,0 +1,58 @@
+# ─────────────────────────────────────────────
+# Keevo Monorepo — .gitignore
+# ─────────────────────────────────────────────
+
+# Environment files
+.env
+*.env.local
+
+# ─── Java / Maven ─────────────────────────────
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+backend/*.class
+backend/*.jar
+backend/*.war
+*.iml
+.idea/
+*.iws
+*.ipr
+
+# ─── Flutter / Dart ───────────────────────────
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/.pub-cache/
+app/.pub/
+app/build/
+app/android/.gradle/
+app/android/local.properties
+app/android/captures/
+app/android/key.properties
+app/ios/.symlinks/
+app/ios/Flutter/Flutter.framework
+app/ios/Flutter/Flutter.podspec
+app/ios/Pods/
+app/ios/Podfile.lock
+app/ios/Runner.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
+app/linux/flutter/ephemeral/
+app/windows/flutter/ephemeral/
+app/macos/Flutter/ephemeral/
+
+# ─── Docker ───────────────────────────────────
+docker-data/
+postgres_data/
+
+# ─── OS ───────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# ─── IDE ──────────────────────────────────────
+.vscode/settings.json
+.vscode/*.code-workspace
+*.suo
+*.user
+.agent/
+.claude/
+.cursor/

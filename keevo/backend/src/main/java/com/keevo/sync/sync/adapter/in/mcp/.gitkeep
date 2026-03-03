@@ -1,0 +1,3 @@
+package com.keevo.sync.sync.adapter.in.mcp;
+// MCP placeholder — full implementation pending MCP integration (post-MVP).
+// See adapter/in/rest/SyncController.java for the REST equivalent.

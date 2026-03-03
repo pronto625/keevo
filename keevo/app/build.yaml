@@ -1,0 +1,14 @@
+targets:
+  $default:
+    builders:
+      # Drift code generation
+      drift_dev:
+        options:
+          sql:
+            dialects:
+              - sqlite
+          store_date_time_values_as_text: true
+      # Riverpod generator
+      riverpod_generator:
+        options:
+          riverpod_version: 2
