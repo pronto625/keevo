@@ -1,0 +1,91 @@
+# ============================================================
+# AI / Agent tooling (BMAD framework — local only)
+# ============================================================
+_bmad/                  # BMAD framework engine (agents, workflows, configs) — local only
+# _bmad-output/ is intentionally tracked — it contains project documentation (PRD, architecture, epics, stories)
+.agent/
+.claude/
+.cursor/
+.vscode/
+.github/agents/
+.github/prompts/
+.windsurf/
+
+# ============================================================
+# Java / Maven
+# ============================================================
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+hs_err_pid*
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# ============================================================
+# Flutter / Dart
+# ============================================================
+keevo/app/build/
+keevo/app/.dart_tool/
+keevo/app/.flutter-plugins
+keevo/app/.flutter-plugins-dependencies
+keevo/app/.pub-cache/
+keevo/app/.pub/
+keevo/app/pubspec.lock
+# Generated files — keep source, ignore generated
+keevo/app/**/*.g.dart
+keevo/app/**/*.freezed.dart
+# Android build
+keevo/app/android/.gradle/
+keevo/app/android/local.properties
+keevo/app/android/key.properties
+keevo/app/android/app/debug.keystore
+keevo/app/android/app/release.keystore
+keevo/app/android/app/profile.keystore
+keevo/app/android/app/*.jks
+# iOS build
+keevo/app/ios/Pods/
+keevo/app/ios/.symlinks/
+keevo/app/ios/Flutter/App.framework/
+keevo/app/ios/Flutter/Flutter.framework/
+keevo/app/ios/Flutter/Flutter.podspec
+keevo/app/ios/Flutter/Generated.xcconfig
+keevo/app/ios/Flutter/ephemeral/
+keevo/app/ios/Runner.xcworkspace/xcshareddata/
+# Web build
+keevo/app/web/
+
+# ============================================================
+# Secrets & environment
+# ============================================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# ============================================================
+# OS / Editor noise
+# ============================================================
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# ============================================================
+# Logs & temp
+# ============================================================
+*.log
+logs/
+tmp/
+temp/
