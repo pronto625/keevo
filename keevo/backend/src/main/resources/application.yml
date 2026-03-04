@@ -6,11 +6,11 @@ spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
 
-  # DataSource — overridden per profile
+  # DataSource — values from env vars, with local-dev defaults
   datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:keevo_dev}
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5444}/${POSTGRES_DB:keevo_dev}
     username: ${POSTGRES_USER:keevo}
-    password: ${POSTGRES_PASSWORD}
+    password: ${POSTGRES_PASSWORD:keevo_local_pwd}
     driver-class-name: org.postgresql.Driver
     hikari:
       connection-timeout: 20000

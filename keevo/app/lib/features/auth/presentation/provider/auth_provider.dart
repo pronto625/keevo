@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -17,7 +18,7 @@ part 'auth_provider.g.dart';
 /// Base API URL — replace with environment-based config in Story 1.3.
 const _apiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://10.0.2.2:8080', // Android emulator → localhost
+  defaultValue: 'http://10.0.3.2:8080', // Genymotion emulator → localhost (AVD: 10.0.2.2)
 );
 
 /// Dio HTTP client — singleton for connection pooling.
@@ -27,6 +28,14 @@ final dioProvider = Provider<Dio>((ref) {
     connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(seconds: 10),
     headers: const {'Content-Type': 'application/json'},
+  ));
+  dio.interceptors.add(LogInterceptor(
+    requestHeader: true,
+    requestBody: true,
+    responseHeader: false,
+    responseBody: true,
+    error: true,
+    logPrint: (o) => debugPrint('[DIO] $o'),
   ));
   ref.onDispose(dio.close);
   return dio;
