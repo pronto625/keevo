@@ -69,7 +69,10 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     ref.listen(registrationProvider, (previous, next) {
       next.whenData((result) {
         if (result != null) {
-          context.go('/onboarding');
+          // Registration succeeded — navigate to login so the user
+          // can authenticate and receive the full token pair (access + refresh).
+          // Onboarding was already seen before reaching this screen.
+          context.go('/auth/login');
         }
       });
     });
@@ -142,34 +145,12 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                       const SizedBox(height: 36),
 
                       // ── Champ numéro WhatsApp ───────────────────────
-                      Text(
-                        'Numéro WhatsApp *',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w500,
-                            ),
-                      ),
-                      const SizedBox(height: 8),
                       IntlPhoneField(
                         key: const Key('phoneField'),
                         decoration: InputDecoration(
-                          hintText: 'Entrez votre numéro',
+                          labelText: 'Numéro WhatsApp',
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(
-                              color: cs.outline.withOpacity(0.5),
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                BorderSide(color: cs.primary, width: 1.5),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 16,
                           ),
                         ),
                         initialCountryCode: 'CM',
@@ -279,57 +260,30 @@ class _PasswordField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Mot de passe *',
-          style: Theme.of(context)
-              .textTheme
-              .bodyMedium
-              ?.copyWith(fontWeight: FontWeight.w500),
+    return TextFormField(
+      key: const Key('passwordField'),
+      controller: controller,
+      obscureText: obscure,
+      decoration: InputDecoration(
+        labelText: 'Mot de passe',
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
         ),
-        const SizedBox(height: 8),
-        TextFormField(
-          key: const Key('passwordField'),
-          controller: controller,
-          obscureText: obscure,
-          decoration: InputDecoration(
-            hintText: 'Minimum 8 caractères',
-            prefixIcon: const Icon(Icons.lock_outlined),
-            suffixIcon: IconButton(
-              icon: Icon(obscure ? Icons.visibility_off : Icons.visibility),
-              onPressed: onToggle,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: cs.outline.withOpacity(0.5)),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: cs.primary, width: 1.5),
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 16,
-            ),
-          ),
-          validator: (value) {
-            if (value == null || value.trim().isEmpty) {
-              return 'Le mot de passe est requis';
-            }
-            if (value.trim().length < 8) {
-              return 'Le mot de passe doit contenir au moins 8 caractères';
-            }
-            return null;
-          },
-          textInputAction: TextInputAction.done,
+        suffixIcon: IconButton(
+          icon: Icon(obscure ? Icons.visibility_off : Icons.visibility),
+          onPressed: onToggle,
         ),
-      ],
+      ),
+      validator: (value) {
+        if (value == null || value.trim().isEmpty) {
+          return 'Le mot de passe est requis';
+        }
+        if (value.trim().length < 8) {
+          return 'Le mot de passe doit contenir au moins 8 caractères';
+        }
+        return null;
+      },
+      textInputAction: TextInputAction.done,
     );
   }
 }

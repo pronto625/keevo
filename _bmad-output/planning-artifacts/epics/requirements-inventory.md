@@ -204,7 +204,7 @@
 - ARCH15: AWS héberge le backend (RDS PostgreSQL, EC2/ECS, S3)
 - ARCH16: GitHub Actions assure la CI/CD (backend-ci.yml, flutter-ci.yml)
 - ARCH17: CloudWatch + Spring Actuator pour le monitoring
-- ARCH18: Chaque tenant dispose d'un schéma PostgreSQL isolé `kv_xxxxxx` (schema-per-tenant, Flyway programmatic par tenant, ThreadLocal pour résolution)
+- ARCH18: Chaque tenant dispose d'un schéma PostgreSQL isolé `kv_xxxxxx` (schema-per-tenant, provisionnement via `TenantSchemaProvisioner` en DDL JDBC programmatique — pas de SQL files ni Flyway, ThreadLocal `TenantContext` pour résolution du schéma courant)
 - ARCH19: Sync offline-first via moteur REST delta-based custom (MVP) : table Drift `sync_queue`, `POST /api/v1/sync/push` (batch), `GET /api/v1/sync/pull?since={timestamp}`, conflits stock = delta-based, autres = last-write-wins, retry backoff exponentiel (2s, 4s, 8s… max 5min)
 
 **From Architecture — Security Implementation**

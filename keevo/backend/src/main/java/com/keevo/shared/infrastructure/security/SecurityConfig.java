@@ -10,6 +10,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
  * SecurityConfig — Spring Security 6.x configuration (REST / stateless).
@@ -17,23 +18,17 @@ import org.springframework.security.web.authentication.HttpStatusEntryPoint;
  * <p>
  * <b>IMPORTANT — Spring Security vs Spring Cloud Security:</b><br>
  * This project uses {@code spring-boot-starter-security} (Spring Security 6.x),
- * which is the
- * correct choice for a standalone Spring Boot REST API. Spring Cloud Security
- * is a separate
- * module designed for OAuth2 SSO flows in microservice ecosystems and is NOT
- * needed here.
+ * which is the correct choice for a standalone Spring Boot REST API.
  *
- * <p>
- * Configuration principles:
+ * <p>Configuration principles:
  * <ul>
  * <li>STATELESS — no HTTP sessions, no JSESSIONID cookie</li>
- * <li>formLogin DISABLED — prevents Spring's HTML /login redirect for REST
- * clients</li>
+ * <li>formLogin DISABLED — prevents Spring's HTML /login redirect for REST clients</li>
  * <li>httpBasic DISABLED — no Basic-auth header prompts</li>
  * <li>401 JSON response for anonymous requests (not 302 redirect)</li>
  * <li>403 JSON response for authenticated but unauthorized requests</li>
  * <li>BCryptPasswordEncoder at cost 12 (non-negotiable)</li>
- * <li>JWT filter added in Story 1.3</li>
+ * <li>JwtAuthFilter processes JWT tokens before Spring's auth filter</li>
  * </ul>
  */
 @Configuration
@@ -43,12 +38,20 @@ public class SecurityConfig {
     /** Public paths that bypass authentication entirely. */
     private static final String[] PUBLIC_PATHS = {
             "/actuator/health",
-            "/api/v1/auth/**",
-            "/v3/api-docs", // Springdoc OpenAPI JSON
-            "/v3/api-docs/**", // Springdoc OpenAPI JSON
-            "/swagger-ui/**", // Swagger UI static assets
-            "/swagger-ui.html" // Swagger UI entry point
+            "/api/v1/auth/register",
+            "/api/v1/auth/login",
+            "/api/v1/auth/refresh",
+            "/v3/api-docs",
+            "/v3/api-docs/**",
+            "/swagger-ui/**",
+            "/swagger-ui.html"
     };
+
+    private final JwtAuthFilter jwtAuthFilter;
+
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter) {
+        this.jwtAuthFilter = jwtAuthFilter;
+    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -77,10 +80,11 @@ public class SecurityConfig {
                                 jakarta.servlet.DispatcherType.ERROR)
                         .permitAll()
                         .requestMatchers(PUBLIC_PATHS).permitAll()
-                        .anyRequest().authenticated());
+                        .anyRequest().authenticated())
 
-        // TODO (Story 1.3): Add JwtAuthFilter before
-        // UsernamePasswordAuthenticationFilter
+                // ── JWT filter: runs before Spring's authentication filter ────
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+
         return http.build();
     }
 

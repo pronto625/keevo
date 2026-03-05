@@ -1,6 +1,8 @@
 package com.keevo.shared.infrastructure.web;
 
 import com.keevo.shared.domain.exception.DomainException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -28,6 +30,8 @@ import java.util.Map;
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(DomainException.class)
     public ResponseEntity<ApiResponseWrapper<Void>> handleDomainException(DomainException ex) {
@@ -59,6 +63,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponseWrapper<Void>> handleGeneral(Exception ex) {
+        log.error("Unhandled exception — {}: {}", ex.getClass().getSimpleName(), ex.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponseWrapper.error(
                         "An unexpected error occurred",
@@ -76,7 +81,8 @@ public class GlobalExceptionHandler {
                  "STOCK_NOT_FOUND", "STORE_NOT_FOUND",
                  "NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "UNAUTHORIZED", "TOKEN_EXPIRED",
-                 "INVALID_CREDENTIALS" -> HttpStatus.UNAUTHORIZED;
+                 "INVALID_CREDENTIALS", "ACCOUNT_LOCKED",
+                 "REFRESH_TOKEN_INVALID" -> HttpStatus.UNAUTHORIZED;
             case "EMAIL_ALREADY_EXISTS", "USER_ALREADY_EXISTS",
                  "TENANT_ALREADY_EXISTS" -> HttpStatus.CONFLICT;
             case "VALIDATION_ERROR", "INVALID_AMOUNT",

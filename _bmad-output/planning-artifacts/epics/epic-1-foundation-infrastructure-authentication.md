@@ -27,12 +27,11 @@ So that every subsequent story has a clean, consistent structure to build upon w
 
 **Given** the Spring Boot backend is initialized
 **When** Spring Initializr generates the project (Spring Boot 3.5.x, Java 21, Maven)
-**Then** `backend/pom.xml` includes: Web, Data JPA, Security, Actuator, PostgreSQL, Flyway, Validation, Lombok
+**Then** `backend/pom.xml` includes: Web, Data JPA, Security, Actuator, PostgreSQL, Flyway (dependency present, disabled at runtime via `spring.flyway.enabled=false`), Validation, Lombok
 **And** the hexagonal domain structure exists for all 10 domains: `identity/`, `catalog/`, `commerce/`, `inventory/`, `store/`, `reporting/`, `messaging/`, `sync/`, `subscription/`, `admin/`
 **And** each domain contains the sub-structure: `domain/model/`, `domain/port/in/`, `domain/port/out/`, `application/service/`, `adapter/in/rest/`, `adapter/out/persistence/`
 **And** `shared/` contains: `infrastructure/security/` (stub), `infrastructure/persistence/` (TenantContext stub, MultiTenantConnectionProvider interface), `infrastructure/web/` (GlobalExceptionHandler stub), `domain/exception/DomainException.java`, `domain/model/Money.java` (XAF value object)
 **And** `application.yml`, `application-dev.yml`, `application-prod.yml` exist with placeholder configuration
-**And** `db/migration/tenant/` folder exists for Flyway per-tenant migrations
 
 **Given** the sync infrastructure stubs are needed by all subsequent features
 **When** the sync scaffold is created
@@ -67,10 +66,9 @@ So that I can start using Keevo immediately without any manual configuration.
 **Then** the system creates his user account with role `OWNER`
 **And** a unique tenant code `KV-XXXXXX` (6 alphanumeric characters, uppercase) is generated and stored
 **And** a dedicated PostgreSQL schema `kv_xxxxxx` is created automatically via `TenantFactory`
-**And** Flyway executes all tenant migrations on the new schema (tables: `products`, `stock_levels`, `sales`, `sale_items`, `stores`, `warehouses`, `users`, `roles`, `audit_log`, `sync_queue`, `notifications`, `subscriptions`)
-**And** the `OWNER` and `EMPLOYEE` roles are initialized with their default permissions
+**And** `TenantSchemaProvisioner` provisions the tenant schema programmatically (JDBC — no SQL migration files), creating 5 tables: `users`, `subscriptions`, `roles`, `user_roles`, `stores`, and seeding the `OWNER` and `EMPLOYEE` roles and a `Free` subscription
 **And** a default store named after the business (entered in onboarding) is created
-**And** the subscription is initialized as `Plan Free` with limits: 3 stores, 500 products, 5 employees
+**And** the `Plan Free` subscription limits apply immediately: 3 stores, 500 products, 5 employees
 **And** the JWT token for the new user contains `tenantId`, `userId`, `role` claims
 **And** the response returns HTTP 201 with the tenant code and JWT token
 
@@ -109,7 +107,8 @@ So that I can access my workspace from mobile and desktop with my data protected
 **Then** the system returns a JWT access token (RS256, expires 24h) and a refresh token (expires 30 days)
 **And** the JWT payload contains: `userId`, `tenantId`, `role`, `iat`, `exp`
 **And** all tokens are stored via `flutter_secure_storage`
-**And** the `TenantJwtFilter` on the backend resolves `tenantId` from the JWT and sets `TenantContext` via `ThreadLocal` before every request
+**And** `JwtAuthFilter` (`OncePerRequestFilter`) on the backend resolves `tenantId` from the JWT and sets `TenantContext` via `ThreadLocal` before every protected request
+**And** `JwtAuthFilter.shouldNotFilter()` bypasses JWT validation for public paths: `/api/v1/auth/register`, `/api/v1/auth/login`, `/api/v1/auth/refresh`
 
 **Given** Simon's JWT has expired
 **When** he makes any API request
@@ -138,7 +137,7 @@ So that I can access my workspace from mobile and desktop with my data protected
 **When** both sessions are active
 **Then** both devices can operate independently with their own valid tokens
 
-**Given** a `TenantJwtFilter` interceptor is active on all protected endpoints
+**Given** `JwtAuthFilter` (`shared/infrastructure/security/`) is active on all protected endpoints
 **When** a request arrives without a valid JWT
 **Then** the backend returns HTTP 401 immediately, before reaching any business logic
 **And** the tenant schema is never touched
@@ -325,5 +324,45 @@ So that I can trust my data is accurate, disputes are resolvable, and my employe
 **Then** the response always follows the standard error format: `{ "error": "...", "code": "HTTP_STATUS", "domainCode": "DOMAIN_SPECIFIC_CODE", "details": { ... }, "timestamp": "ISO8601" }`
 **And** stack traces are never exposed in API responses (only logged server-side)
 **And** user-facing error messages are in French, human-readable, with no technical jargon
+
+---
+
+## Story 1.8: Certificate Pinning — Transport Security Hardening
+
+> ⏸️ **POST-MVP — à implémenter après la sortie V1. Ne pas bloquer le MVP.**
+
+As a user (Simon or Loïc),
+I want the app to refuse any connection that is not directly authenticated with the Keevo server certificate,
+So that my credentials and business data cannot be intercepted by a MITM attack on public networks.
+
+**Context:**
+
+HTTPS alone is not enough on mobile. An attacker on a shared wifi (café, market) can install a trusted root certificate on the device and intercept all HTTPS traffic in plaintext using tools like Burp Suite or Charles Proxy. Certificate pinning makes the Flutter app reject any TLS connection whose certificate does not exactly match the pinned Keevo server certificate — even if it is signed by a legitimate CA.
+
+**Acceptance Criteria:**
+
+**Given** the Keevo backend TLS certificate (or its public key hash)
+**When** the Flutter app initializes its Dio HTTP client in `core/network/api_client.dart`
+**Then** a `SecurityContext` is created with `withTrustedRoots: false` (system CAs are ignored)
+**And** only the Keevo server certificate (bundled in `assets/certs/keevo_server.crt`) is trusted
+**And** the `HttpClient` is constructed with this `SecurityContext` and injected into Dio via `IOHttpClientAdapter`
+
+**Given** a MITM attacker intercepts the connection with their own TLS certificate
+**When** the app attempts any API request
+**Then** the `HandshakeException` is caught and the request is aborted immediately
+**And** the user sees a generic network error in French (no technical details exposed)
+**And** no data (credentials, tokens, business data) is transmitted to the attacker
+
+**Given** the backend TLS certificate is renewed (rotation)
+**When** the new certificate is deployed on the server
+**Then** a new app version with the updated certificate is published simultaneously
+**And** the previous app version gracefully shows an "mise à jour requise" message instead of a cryptic error
+
+**Implementation notes:**
+- Bundle **two certificates** in the assets (current + next) to allow zero-downtime rotation
+- The pinned certificate file is `assets/certs/keevo_server.crt` (PEM format, server leaf certificate)
+- `withTrustedRoots: false` is mandatory — without it, system CAs still apply and pinning is bypassed
+- Only applies to `IOHttpClientAdapter` (mobile/desktop) — web platform uses browser TLS, pinning not applicable
+- Dev/staging builds use a separate self-signed certificate via `--dart-define=ENV=dev`
 
 ---

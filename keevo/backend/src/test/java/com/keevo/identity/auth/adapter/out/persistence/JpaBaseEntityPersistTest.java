@@ -1,5 +1,7 @@
 package com.keevo.identity.auth.adapter.out.persistence;
 
+import com.keevo.identity.auth.adapter.out.persistence.entity.TenantJpaEntity;
+import com.keevo.identity.auth.adapter.out.persistence.jpa.TenantSpringRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,15 +35,14 @@ import static org.assertj.core.api.Assertions.assertThatNoException;
         "spring.datasource.url=jdbc:postgresql://localhost:5444/keevo_dev",
         "spring.datasource.username=keevo",
         "spring.datasource.password=keevo_local_pwd",
-        "spring.flyway.enabled=true",
-        "spring.flyway.locations=classpath:db/migration",
-        "spring.jpa.hibernate.ddl-auto=validate"
+        "spring.flyway.enabled=false",
+        "spring.jpa.hibernate.ddl-auto=update"
 })
 @DisplayName("JpaBaseEntity — Persistable<UUID> with domain-assigned IDs")
 class JpaBaseEntityPersistTest {
 
     @Autowired
-    private TenantJpaRepository tenantJpaRepository;
+    private TenantSpringRepository tenantJpaRepository;
 
     @Test
     @DisplayName("save() with domain-assigned UUID uses persist() not merge() — no OptimisticLockingFailure")

@@ -58,6 +58,22 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 
 ### Technical Constraints & Dependencies
 
+> ⚠️ **CRITICAL OPEN DECISION — Must be resolved BEFORE Epic 5 story creation (2026-03-04)**
+>
+> **PostgreSQL schema strategy for sync is irreversible.**
+> The current implementation (Stories 1.1 & 1.2) uses **full schema-per-tenant** (`kv_xxxxxx`) for ALL tables.
+> Migrating from full separation to a hybrid model later (some tables in `public`) is a breaking change requiring data migration across all tenants — extremely costly and risky in production.
+>
+> **Two mutually exclusive paths — choose ONE before Epic 5:**
+>
+> | Path | PostgreSQL isolation | Sync engine | Migration cost if changed later |
+> |---|---|---|---|
+> | **A — Full schema-per-tenant (current)** | ✅ Complete per-tenant schemas | Custom REST delta (push/pull API) | N/A — this is the current state |
+> | **B — Hybrid (public + tenant_id for synced tables)** | ⚠️ Partial — synced tables in `public` | PowerSync possible + Custom REST | ❌ Extremely high — full data migration |
+>
+> **Toor's constraint (2026-03-04):** Full PostgreSQL schema separation per tenant is non-negotiable. If this holds → Path A is locked, PowerSync is excluded permanently.
+> **Decision must be confirmed before creating story 5-1.** Once Epic 5 implementation starts, this is frozen.
+
 - **Sync engine constraint**: If using PowerSync, sync rules don't support dynamic schemas — requires hybrid approach (synced tables in shared `public` schema with `tenant_id` column, sensitive data in tenant schemas). Alternative sync solutions may have different constraints.
 - **Backend**: Spring Boot (Java), schema-per-tenant via ThreadLocal, Flyway per-tenant migrations
 - **Mobile**: Flutter, Drift (SQLite ORM), Material 3, responsive breakpoints (compact/medium/expanded)
@@ -209,7 +225,8 @@ src/main/java/com/keevo/
 - `domain/port/in/` — Use case interfaces (driving ports)
 - `domain/port/out/` — Repository & external service interfaces (driven ports)
 - `application/service/` — Use case implementations (orchestration only)
-- `adapter/in/rest/` — REST controllers + Request/Response DTOs *(MVP)*
+- `adapter/in/rest/` — REST controllers *(MVP)*
+- `adapter/in/rest/dto/` — Request/Response DTOs (separate from controller for clarity)
 - `adapter/in/mcp/` — MCP Tool adapters *(placeholder — V2, Spring AI MCP Server)*
 - `adapter/out/persistence/` — JPA repositories, entity mappers
 - `adapter/out/external/` — External API adapters (WhatsApp, etc.)
@@ -694,48 +711,65 @@ backend/
 │   ├── shared/
 │   │   ├── infrastructure/
 │   │   │   ├── security/              # JwtTokenProvider, JwtAuthFilter, SecurityConfig
-│   │   │   ├── persistence/           # TenantContext, TenantConnectionProvider, FlywayTenantMigration
-│   │   │   ├── config/                # AppConfig
+│   │   │   ├── persistence/           # JpaBaseEntity, TenantContext, MultiTenantConnectionProvider,
+│   │   │   │                          # TenantSchemaProvisioner (programmatic DDL — no SQL files)
 │   │   │   └── web/                   # GlobalExceptionHandler, ApiResponseWrapper
 │   │   ├── domain/
 │   │   │   ├── exception/             # DomainException, ErrorCode enum
 │   │   │   └── model/                 # BaseEntity, Money (XAF value object)
 │   │   └── application/port/          # AuditPort
 │   ├── identity/                      # DOMAIN: Identity & Access
-│   │   ├── auth/                      # MODULE: hexagonal structure (domain/application/adapter)
-│   │   └── user/                      # MODULE
+│   │   └── auth/                      # MODULE — full hexagonal structure:
+│   │       ├── domain/
+│   │       │   ├── model/             # User, Tenant, RefreshToken, Role, PlanType, ...
+│   │       │   └── port/
+│   │       │       ├── in/            # RegisterUserUseCase, AuthenticateUserUseCase, ...
+│   │       │       └── out/           # UserRepository, TenantRepository, RefreshTokenRepository,
+│   │       │                          # TenantSchemaPort  (pure Java interfaces — no Spring/JPA)
+│   │       ├── application/
+│   │       │   └── service/           # RegistrationService, AuthenticationService,
+│   │       │                          # RefreshTokenService, TenantFactory, TenantCodeGenerator
+│   │       └── adapter/
+│   │           ├── in/rest/           # AuthController + dto/ (LoginRequest, RegistrationRequest, ...)
+│   │           └── out/persistence/   # ← THE PERSISTENCE PATTERN (see section below)
+│   │               ├── entity/        # UserJpaEntity, TenantJpaEntity, RefreshTokenJpaEntity
+│   │               ├── jpa/           # UserSpringRepository, TenantSpringRepository,
+│   │               │                  # RefreshTokenSpringRepository  (extends JpaRepository)
+│   │               └── impl/          # UserRepositoryAdapter, TenantRepositoryAdapter,
+│   │                                  # RefreshTokenRepositoryAdapter, TenantSchemaAdapter
 │   ├── catalog/                       # DOMAIN: Product Catalog
-│   │   ├── product/
-│   │   ├── category/
-│   │   └── variant/
+│   │   ├── product/                   # MODULE: Products
+│   │   ├── category/                  # MODULE: Categories
+│   │   └── variant/                   # MODULE: Variants & attributes
 │   ├── commerce/                      # DOMAIN: Sales & POS
-│   │   ├── pos/
-│   │   ├── sale/
-│   │   └── payment/
+│   │   ├── pos/                       # MODULE: Point of Sale
+│   │   ├── sale/                      # MODULE: Sales & receipts
+│   │   └── payment/                   # MODULE: Payments & cash
 │   ├── inventory/                     # DOMAIN: Stock Management
-│   │   ├── stock/
-│   │   ├── transfer/
-│   │   └── counting/
+│   │   ├── stock/                     # MODULE: Stock tracking per store
+│   │   ├── transfer/                  # MODULE: Inter-store transfers
+│   │   └── counting/                  # MODULE: Physical inventory counting
 │   ├── store/                         # DOMAIN: Multi-Store
-│   │   ├── store/
-│   │   └── warehouse/
-│   ├── reporting/                     # DOMAIN: Reports
-│   │   ├── dashboard/
-│   │   └── report/
+│   │   ├── store/                     # MODULE: Store CRUD & settings
+│   │   └── warehouse/                 # MODULE: Warehouse management
+│   ├── reporting/                     # DOMAIN: Reports & Analytics
+│   │   ├── dashboard/                 # MODULE: Real-time dashboard
+│   │   └── report/                    # MODULE: End-of-day, weekly, custom
 │   ├── messaging/                     # DOMAIN: Communication
-│   │   ├── whatsapp/
-│   │   └── notification/
-│   ├── sync/sync/                     # DOMAIN: Synchronization
-│   ├── subscription/plan/             # DOMAIN: Billing
+│   │   ├── whatsapp/                  # MODULE: WhatsApp integration
+│   │   └── notification/              # MODULE: Alerts & push notifications
+│   ├── sync/                          # DOMAIN: Synchronization
+│   │   └── sync/                      # MODULE: Push/Pull REST sync
+│   ├── subscription/                  # DOMAIN: Billing
+│   │   └── plan/                      # MODULE: Plans & limits enforcement
 │   └── admin/                         # DOMAIN: Super Admin
-│       ├── tenant/
-│       └── platform/
+│       ├── tenant/                    # MODULE: Tenant management
+│       └── platform/                  # MODULE: Platform analytics & health
 ├── src/main/resources/
-│   ├── application.yml
+│   ├── application.yml                # ddl-auto=update, flyway.enabled=false
 │   ├── application-dev.yml
 │   ├── application-prod.yml
-│   ├── db/migration/                   # Flyway public schema (Spring Boot auto-scanned)
-│   └── db/tenant-migration/            # Flyway per-tenant (isolated — programmatic only, avoids V1 conflict)
+│   └── keys/                          # RSA keypair for JWT
 └── src/test/java/com/keevo/          # Mirrors src — TDD tests per module
 ```
 
@@ -950,3 +984,170 @@ public class ProductMcpTools {
 2. Spring Boot init + hexagonal scaffold + multi-tenant + auth
 3. Sync REST service
 4. Core features domain by domain
+
+---
+
+## Backend Persistence Pattern — Implementation Reference
+
+> **This is the mandatory pattern for every entity in the project.**
+> Tables are created automatically from JPA entity definitions. No SQL migration files.
+
+### Core Principles
+
+| Principle | Rule |
+|-----------|------|
+| **No manual SQL** | `ddl-auto=update` creates/alters public schema tables from JPA entities. No `.sql` files, no Flyway. |
+| **Clean separation** | Domain model, JPA entity, Spring Data interface, and adapter are 4 distinct classes in 4 distinct sub-packages. |
+| **Domain isolation** | `domain/model/` and `domain/port/` are pure Java — zero Spring or JPA imports. |
+| **Infrastructure isolation** | `@Entity`, `@Repository`, `@Component` live exclusively in `adapter/out/persistence/`. |
+| **Anti-corruption** | The adapter translates domain ↔ JPA entity. The domain never sees a JPA entity. |
+
+### The Four Sub-Packages
+
+```
+adapter/out/persistence/
+├── entity/     ← @Entity classes — Hibernate reads these to auto-create/alter tables
+├── jpa/        ← Spring Data JpaRepository interfaces — CRUD + custom queries
+└── impl/       ← @Component adapters implementing domain ports — translate domain ↔ entity
+```
+
+### Layer 1 — Domain Port (`domain/port/out/`)
+
+Declares **what** the domain needs, without knowing **how** it is stored.
+
+```java
+// Pure Java interface — no Spring, no JPA
+public interface UserRepository {
+    User save(User user);
+    Optional<User> findByPhoneNumber(String phoneNumber);
+    Optional<User> findById(UUID id);
+    boolean existsByPhoneNumber(String phoneNumber);
+}
+```
+
+### Layer 2 — JPA Entity (`adapter/out/persistence/entity/`)
+
+Maps the domain concept to a DB table. **Hibernate auto-creates the table from this class.**
+
+```java
+@Entity
+@Table(name = "users")
+public class UserJpaEntity extends JpaBaseEntity {   // JpaBaseEntity handles id + createdAt + updatedAt
+
+    @Column(name = "phone_number", unique = true, nullable = false, length = 20)
+    private String phoneNumber;
+
+    @Column(name = "tenant_id", nullable = false)
+    private UUID tenantId;
+
+    // ... other columns
+
+    protected UserJpaEntity() {}                    // required by JPA
+    public UserJpaEntity(UUID id, ...) { if (id != null) setId(id); ... }  // domain UUID
+    // getters only — no setters
+}
+```
+
+**Adding a column** = add a `@Column` field → Hibernate issues `ALTER TABLE` on next start.
+
+### Layer 3 — Spring Data Interface (`adapter/out/persistence/jpa/`)
+
+```java
+@Repository
+public interface UserSpringRepository extends JpaRepository<UserJpaEntity, UUID> {
+    Optional<UserJpaEntity> findByPhoneNumber(String phoneNumber);
+    boolean existsByPhoneNumber(String phoneNumber);
+}
+```
+
+Consumed **only** by the adapter. Never injected into application or domain layers.
+
+### Layer 4 — Adapter (`adapter/out/persistence/impl/`)
+
+Implements the domain port. Contains only mapping logic — no business logic.
+
+```java
+@Component
+public class UserRepositoryAdapter implements UserRepository {
+
+    private final UserSpringRepository springRepository;
+
+    public UserRepositoryAdapter(UserSpringRepository springRepository) {
+        this.springRepository = springRepository;
+    }
+
+    @Override
+    public User save(User user) {
+        return toDomain(springRepository.save(toEntity(user)));
+    }
+
+    @Override
+    public Optional<User> findByPhoneNumber(String phoneNumber) {
+        return springRepository.findByPhoneNumber(phoneNumber).map(this::toDomain);
+    }
+
+    // ── Mapping only — no business logic ──────────────────────────────────────
+    private UserJpaEntity toEntity(User u) { ... }
+    private User toDomain(UserJpaEntity e) { ... }
+}
+```
+
+### JpaBaseEntity — Why It Exists
+
+All entities extend `shared/infrastructure/persistence/JpaBaseEntity`, a `@MappedSuperclass` that centralises:
+
+- `@Id UUID id` — domain UUID assigned at construction time (never `@GeneratedValue`)
+- `@CreationTimestamp Instant createdAt`
+- `@UpdateTimestamp Instant updatedAt`
+
+**⚠️ `Persistable<UUID>` — REMOVED (do not re-add)**
+
+An earlier version implemented `Persistable<UUID>` with an `@Transient isNew` flag. This caused a production bug:
+`isNew` was not reliably cleared to `false` after load, so `SimpleJpaRepository.save()` kept calling `persist()` on existing entities → `EntityExistsException` → HTTP 500 on login.
+
+**Current approach**: `JpaBaseEntity` does NOT implement `Persistable`. `SimpleJpaRepository.save()` falls back to the default strategy: checks if `id == null` (new) → `persist()`, or `id != null` but entity already in DB → `merge()`. Both paths work correctly when the domain UUID is always set at construction time.
+
+### Table Creation Strategy
+
+| Schema | Strategy | Config |
+|--------|----------|--------|
+| **Public** (`users`, `tenants`, `refresh_tokens`) | `ddl-auto=update` — Hibernate auto-creates/alters | `spring.jpa.hibernate.ddl-auto: update` |
+| **Tenant** (`kv_xxxxxx` — per-tenant) | `TenantSchemaProvisioner` — programmatic DDL via JDBC at registration time | Called by `TenantFactory` during user registration |
+
+`TenantSchemaProvisioner` creates: `users`, `subscriptions`, `roles`, `user_roles`, `stores` + seeds OWNER/EMPLOYEE roles, Free subscription.
+
+### Naming Conventions
+
+| Layer | Pattern | Example |
+|-------|---------|---------|
+| Domain model | `{Aggregate}` | `User`, `Tenant` |
+| Domain port (out) | `{Aggregate}Repository` | `UserRepository` |
+| Domain port (in) | `{Action}UseCase` | `RegisterUserUseCase` |
+| Use case command | `{Action}Command` | `RegisterUserCommand` |
+| Application service | `{Feature}Service` | `RegistrationService` |
+| JPA entity | `{Aggregate}JpaEntity` | `UserJpaEntity` |
+| Spring Data interface | `{Aggregate}SpringRepository` | `UserSpringRepository` |
+| Adapter | `{Aggregate}RepositoryAdapter` | `UserRepositoryAdapter` |
+
+### Checklist — Adding a New Entity
+
+- [ ] `domain/model/{Aggregate}.java` — pure Java, no annotations
+- [ ] `domain/port/out/{Aggregate}Repository.java` — pure Java interface
+- [ ] `adapter/out/persistence/entity/{Aggregate}JpaEntity.java` — extends `JpaBaseEntity`, `@Entity @Table`
+- [ ] `adapter/out/persistence/jpa/{Aggregate}SpringRepository.java` — `extends JpaRepository<..., UUID>`
+- [ ] `adapter/out/persistence/impl/{Aggregate}RepositoryAdapter.java` — `@Component implements {Aggregate}Repository`
+- [ ] Inject the **domain port** (not the adapter) into the application service
+- [ ] Start backend → Hibernate auto-creates the table
+
+### Forbidden Anti-Patterns
+
+| ❌ Forbidden | ✅ Correct |
+|-------------|----------|
+| Injecting `UserSpringRepository` into a service | Inject `UserRepository` (domain port) |
+| Using `UserJpaEntity` in domain or application layer | Use `User` (domain model) |
+| Putting `@Entity` on a domain model | Create a separate `UserJpaEntity` |
+| Writing `.sql` files for public schema tables | Add `@Column` to the JPA entity |
+| Using `@GeneratedValue` for UUID | Set UUID from domain via `setId()` in `JpaBaseEntity` |
+| Business logic in `toEntity()` / `toDomain()` | Pure field translation only |
+| Creating Flyway migrations for new columns | Add the `@Column` field; `ddl-auto=update` handles it |
+| Implementing `Persistable<UUID>` in `JpaBaseEntity` | Do NOT add — causes `persist()` on existing entities → HTTP 500. Use default `merge()` strategy. |

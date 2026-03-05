@@ -72,8 +72,8 @@ class RegistrationServiceTest {
         when(passwordEncoder.encode(PASSWORD)).thenReturn("hashed_pwd");
         when(tenantFactory.create()).thenReturn(tenant);
         when(userRepository.save(any(User.class))).thenReturn(user);
-        when(jwtTokenProvider.generateToken(anyString(), anyString()))
-                .thenReturn("STUB:" + user.getId() + ":" + tenant.getId());
+        when(jwtTokenProvider.generateAccessToken(any(), anyString(), anyString()))
+                .thenReturn("jwt-access-token");
 
         // act
         RegistrationResult result = registrationService.register(
@@ -81,7 +81,7 @@ class RegistrationServiceTest {
 
         // assert
         assertThat(result.tenantCode()).isEqualTo(tenant.getCode());
-        assertThat(result.token()).startsWith("STUB:");
+        assertThat(result.token()).isEqualTo("jwt-access-token");
         assertThat(result.userId()).isEqualTo(user.getId().toString());
         assertThat(result.tenantId()).isEqualTo(tenant.getId().toString());
     }
@@ -97,7 +97,7 @@ class RegistrationServiceTest {
         when(passwordEncoder.encode(PASSWORD)).thenReturn("hashed_pwd");
         when(tenantFactory.create()).thenReturn(tenant);
         when(userRepository.save(any(User.class))).thenReturn(user);
-        when(jwtTokenProvider.generateToken(anyString(), anyString())).thenReturn("STUB:x:y");
+        when(jwtTokenProvider.generateAccessToken(any(), anyString(), anyString())).thenReturn("jwt-access-token");
 
         // act
         registrationService.register(new RegisterUserCommand(PHONE, PASSWORD, null));
@@ -153,7 +153,7 @@ class RegistrationServiceTest {
         when(passwordEncoder.encode(PASSWORD)).thenReturn("hashed_pwd");
         when(tenantFactory.create()).thenReturn(tenant);
         when(userRepository.save(any(User.class))).thenReturn(savedUser);
-        when(jwtTokenProvider.generateToken(anyString(), anyString())).thenReturn("STUB:x:y");
+        when(jwtTokenProvider.generateAccessToken(any(), anyString(), anyString())).thenReturn("jwt-access-token");
 
         registrationService.register(new RegisterUserCommand(PHONE, PASSWORD, null));
 

@@ -3,9 +3,9 @@
 
 ## Project Configuration
 
-- **Project**: Bmad-test
+- **Project**: Keevo
 - **User**: Toor
-- **Communication Language**: French
+- **Communication Language**: french
 - **Document Output Language**: English
 - **User Skill Level**: intermediate
 - **Output Folder**: {project-root}/_bmad-output

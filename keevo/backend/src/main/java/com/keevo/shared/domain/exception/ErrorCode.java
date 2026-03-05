@@ -19,7 +19,9 @@ public enum ErrorCode {
     INVALID_PHONE_NUMBER,
     INVALID_PASSWORD,
     INVALID_CREDENTIALS,
+    ACCOUNT_LOCKED,
     TOKEN_EXPIRED,
+    REFRESH_TOKEN_INVALID,
     UNAUTHORIZED,
 
     // ── Tenant ────────────────────────────────────────────────────

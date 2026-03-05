@@ -8,6 +8,8 @@
 
 # ─── Java / Maven ─────────────────────────────
 backend/target/
+# RSA keys — never commit production keys
+backend/src/main/resources/keys/*.pem
 backend/.mvn/wrapper/maven-wrapper.jar
 backend/*.class
 backend/*.jar

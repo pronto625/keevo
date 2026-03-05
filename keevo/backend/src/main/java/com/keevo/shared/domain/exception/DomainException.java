@@ -15,22 +15,26 @@ package com.keevo.shared.domain.exception;
 public class DomainException extends RuntimeException {
 
     private final String domainCode;
+    private final ErrorCode errorCode;
 
     // ── String-based constructors (backward compatible) ────────────
 
     public DomainException(String domainCode) {
         super(domainCode);
         this.domainCode = domainCode;
+        this.errorCode = null;
     }
 
     public DomainException(String domainCode, String message) {
         super(domainCode + ": " + message);
         this.domainCode = domainCode;
+        this.errorCode = null;
     }
 
     public DomainException(String domainCode, Throwable cause) {
         super(domainCode, cause);
         this.domainCode = domainCode;
+        this.errorCode = null;
     }
 
     // ── ErrorCode-based constructors (type-safe, preferred) ──────
@@ -38,19 +42,27 @@ public class DomainException extends RuntimeException {
     public DomainException(ErrorCode code) {
         super(code.name());
         this.domainCode = code.name();
+        this.errorCode = code;
     }
 
     public DomainException(ErrorCode code, String message) {
         super(code.name() + ": " + message);
         this.domainCode = code.name();
+        this.errorCode = code;
     }
 
     public DomainException(ErrorCode code, Throwable cause) {
         super(code.name(), cause);
         this.domainCode = code.name();
+        this.errorCode = code;
     }
 
     public String getDomainCode() {
         return domainCode;
+    }
+
+    /** Type-safe accessor — present when constructed with an {@link ErrorCode} constant. */
+    public ErrorCode getErrorCode() {
+        return errorCode;
     }
 }

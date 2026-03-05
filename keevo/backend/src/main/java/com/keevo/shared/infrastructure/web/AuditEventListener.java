@@ -1,5 +1,6 @@
 package com.keevo.shared.infrastructure.web;
 
+import com.keevo.identity.auth.domain.model.UserAuthenticatedEvent;
 import com.keevo.identity.auth.domain.model.UserRegisteredEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +34,22 @@ public class AuditEventListener {
                 event.tenantId(),
                 event.tenantCode(),
                 event.schemaName(),
+                event.occurredAt());
+    }
+
+    /**
+     * Handle user authenticated event: log for now, persist to audit_log in Story 1.7.
+     *
+     * @param event the UserAuthenticatedEvent published by AuthenticationService
+     */
+    @EventListener
+    public void on(UserAuthenticatedEvent event) {
+        // Story 1.7 will replace this log with a real insert into audit_log table
+        log.info("AUDIT: user_authenticated userId={} tenantId={} role={} ip={} at={}",
+                event.userId(),
+                event.tenantId(),
+                event.role(),
+                event.ipAddress(),
                 event.occurredAt());
     }
 }

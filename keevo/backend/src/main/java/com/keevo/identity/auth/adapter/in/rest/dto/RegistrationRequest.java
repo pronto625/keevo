@@ -1,4 +1,4 @@
-package com.keevo.identity.auth.adapter.in.rest;
+package com.keevo.identity.auth.adapter.in.rest.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;

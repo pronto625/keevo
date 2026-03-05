@@ -1,5 +1,17 @@
 # Epic 5: Moteur de Synchronisation Offline-First
 
+> ⚠️ **DÉCISION ARCHITECTURALE BLOQUANTE — À CONFIRMER AVANT DE CRÉER STORY 5-1**
+>
+> **La stratégie de schéma PostgreSQL pour la synchronisation est irréversible.**
+> Démarrer l'Epic 5 sans avoir tranché ce point entraînerait une migration de données catastrophique sur tous les tenants en production.
+>
+> **Question :** Est-ce que la séparation complète schema-per-tenant (`kv_xxxxxx` pour TOUTES les tables) est non-négociable ?
+>
+> - **OUI → Path A** : Custom REST delta-based (push/pull API maison). PowerSync exclu définitivement. Isolation PostgreSQL complète garantie.
+> - **NON → Path B** : Hybride — tables syncées dans `public` + `tenant_id`, tables sensibles dans `kv_xxxxxx`. PowerSync envisageable Phase 2.
+>
+> **Position actuelle de Toor (2026-03-04) :** séparation schéma complète requise → **Path A pressenti**. À confirmer explicitement avant story 5-1.
+
 L'application fonctionne 100% opérationnellement hors-ligne pendant 7 jours, synchronise automatiquement toutes les données au retour de la connectivité en moins de 60 secondes, résout les conflits multi-device intelligemment (delta-based pour le stock, last-write-wins pour le reste), garantit zéro perte de données, et suspend l'accès écriture après 7 jours sans sync pour forcer une reconnexion.
 
 **FRs couverts :** FR69–FR71, FR73–FR74, FR76

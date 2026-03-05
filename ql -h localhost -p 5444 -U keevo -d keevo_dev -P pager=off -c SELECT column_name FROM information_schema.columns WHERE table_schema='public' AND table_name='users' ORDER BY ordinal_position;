@@ -1,0 +1,21 @@
+                                Table "public.users"
+    Column     |           Type           | Collation | Nullable |      Default      
+---------------+--------------------------+-----------+----------+-------------------
+ id            | uuid                     |           | not null | gen_random_uuid()
+ phone_number  | character varying(20)    |           | not null | 
+ password_hash | character varying(255)   |           | not null | 
+ role          | character varying(20)    |           | not null | 
+ tenant_id     | uuid                     |           | not null | 
+ is_active     | boolean                  |           | not null | true
+ created_at    | timestamp with time zone |           | not null | now()
+ updated_at    | timestamp with time zone |           | not null | now()
+Indexes:
+    "users_pkey" PRIMARY KEY, btree (id)
+    "idx_users_tenant" btree (tenant_id)
+    "uq_users_phone" UNIQUE, btree (phone_number)
+    "users_phone_number_key" UNIQUE CONSTRAINT, btree (phone_number)
+Check constraints:
+    "users_role_check" CHECK (role::text = ANY (ARRAY['OWNER'::character varying, 'EMPLOYEE'::character varying, 'SUPER_ADMIN'::character varying]::text[]))
+Foreign-key constraints:
+    "users_tenant_id_fkey" FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+

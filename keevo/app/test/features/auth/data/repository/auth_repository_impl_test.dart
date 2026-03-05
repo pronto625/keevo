@@ -1,0 +1,122 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
+
+import 'package:keevo/features/auth/data/datasource/remote_auth_datasource.dart';
+import 'package:keevo/features/auth/data/repository/auth_repository_impl.dart';
+import 'package:keevo/features/auth/domain/exception/auth_exception.dart';
+import 'package:keevo/features/auth/domain/model/auth_tokens.dart';
+
+// ── Mocks ─────────────────────────────────────────────────────────────────
+
+class MockRemoteAuthDataSource extends Mock implements RemoteAuthDataSource {}
+
+void main() {
+  late MockRemoteAuthDataSource mockDataSource;
+  late AuthRepositoryImpl repository;
+
+  setUp(() {
+    mockDataSource = MockRemoteAuthDataSource();
+    repository = AuthRepositoryImpl(mockDataSource);
+  });
+
+  const validPhone = '+237600000001';
+  const validPassword = 'SecurePass123!';
+  const tokens = AuthTokens(
+    accessToken: 'eyJ.signed.token',
+    refreshToken: 'opaque-refresh-token',
+    userId: 'user-uuid',
+    tenantId: 'kv_abc123',
+    role: 'OWNER',
+    expiresIn: 86400,
+  );
+
+  group('AuthRepositoryImpl.login()', () {
+    test('maps 200 → AuthTokens', () async {
+      when(() => mockDataSource.login(
+            phoneNumber: validPhone,
+            password: validPassword,
+          )).thenAnswer((_) async => tokens);
+
+      final result = await repository.login(
+        phoneNumber: validPhone,
+        password: validPassword,
+      );
+
+      expect(result.accessToken, equals('eyJ.signed.token'));
+      expect(result.userId, equals('user-uuid'));
+      expect(result.role, equals('OWNER'));
+    });
+
+    test('propagates AuthException(INVALID_CREDENTIALS) on 401', () async {
+      when(() => mockDataSource.login(
+            phoneNumber: any(named: 'phoneNumber'),
+            password: any(named: 'password'),
+          )).thenThrow(const AuthException(
+        domainCode: 'INVALID_CREDENTIALS',
+        message: 'Wrong credentials',
+      ));
+
+      expect(
+        () => repository.login(phoneNumber: validPhone, password: 'wrong'),
+        throwsA(
+          isA<AuthException>().having(
+            (e) => e.domainCode,
+            'domainCode',
+            'INVALID_CREDENTIALS',
+          ),
+        ),
+      );
+    });
+
+    test('propagates AuthException(ACCOUNT_LOCKED) when account is locked',
+        () async {
+      when(() => mockDataSource.login(
+            phoneNumber: any(named: 'phoneNumber'),
+            password: any(named: 'password'),
+          )).thenThrow(const AuthException(
+        domainCode: 'ACCOUNT_LOCKED',
+        message: 'Compte verrouillé',
+      ));
+
+      expect(
+        () => repository.login(
+            phoneNumber: validPhone, password: validPassword),
+        throwsA(
+          isA<AuthException>()
+              .having((e) => e.domainCode, 'domainCode', 'ACCOUNT_LOCKED'),
+        ),
+      );
+    });
+  });
+
+  group('AuthRepositoryImpl.refreshToken()', () {
+    test('maps 200 → new AuthTokens', () async {
+      when(() => mockDataSource.refreshToken('old-refresh-token'))
+          .thenAnswer((_) async => tokens);
+
+      final result = await repository.refreshToken('old-refresh-token');
+
+      expect(result.accessToken, equals('eyJ.signed.token'));
+    });
+
+    test('propagates AuthException(REFRESH_TOKEN_INVALID) on failure',
+        () async {
+      when(() => mockDataSource.refreshToken(any()))
+          .thenThrow(const AuthException(
+        domainCode: 'REFRESH_TOKEN_INVALID',
+        message: 'Token expiré',
+      ));
+
+      expect(
+        () => repository.refreshToken('expired-token'),
+        throwsA(
+          isA<AuthException>().having(
+            (e) => e.domainCode,
+            'domainCode',
+            'REFRESH_TOKEN_INVALID',
+          ),
+        ),
+      );
+    });
+  });
+}

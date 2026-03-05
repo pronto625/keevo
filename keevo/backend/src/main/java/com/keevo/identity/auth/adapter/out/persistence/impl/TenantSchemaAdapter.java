@@ -1,4 +1,4 @@
-package com.keevo.identity.auth.adapter.out.persistence;
+package com.keevo.identity.auth.adapter.out.persistence.impl;
 
 import com.keevo.identity.auth.domain.port.out.TenantSchemaPort;
 import com.keevo.shared.domain.exception.DomainException;
@@ -13,45 +13,33 @@ import java.sql.SQLException;
 import java.util.UUID;
 
 /**
- * JdbcTenantSchemaAdapter — JDBC adapter implementing TenantSchemaPort.
+ * TenantSchemaAdapter — Adapter implementing {@link TenantSchemaPort}.
  *
- * <p>Executes raw SQL against the isolated tenant schema ({@code kv_xxxxxx}).
- * Standard JPA repositories operate in the public schema via the global connection pool;
- * this adapter explicitly names the target schema in every statement.
- *
- * <p>Architecture: this is an adapter/out/persistence — infrastructure layer only.
- * No domain logic belongs here.
+ * <p>Executes operations that must target a specific tenant schema (kv_xxxxxx)
+ * rather than the public schema managed by JPA.
+ * Architecture layer: {@code adapter/out/persistence/impl} — infrastructure only.
  */
 @Component
-public class JdbcTenantSchemaAdapter implements TenantSchemaPort {
+public class TenantSchemaAdapter implements TenantSchemaPort {
 
     private final DataSource dataSource;
 
-    public JdbcTenantSchemaAdapter(DataSource dataSource) {
+    public TenantSchemaAdapter(DataSource dataSource) {
         this.dataSource = dataSource;
     }
 
     /**
      * Assign the OWNER role to the given user in the tenant's isolated schema.
      *
-     * <p>Looks up the OWNER role UUID from {@code {schemaName}.roles},
-     * then inserts a row into {@code {schemaName}.user_roles}.
-     *
-     * <p>Called by {@link com.keevo.identity.auth.application.service.RegistrationService}
-     * AFTER the user is persisted to public.users (so the UUID is known).
-     *
-     * @param schemaName tenant schema name (e.g. "kv_abc123") — validated by regex guard
+     * @param schemaName tenant schema name (e.g. "kv_abc123")
      * @param userId     UUID of the newly registered user
-     * @throws DomainException TENANT_PROVISION_FAILED if role cannot be assigned
      */
     @Override
     public void assignOwnerRole(String schemaName, UUID userId) {
-        // Safety guard: never target an unexpected schema name
         if (!schemaName.matches("^kv_[a-z0-9]{6}$")) {
             throw new DomainException(ErrorCode.TENANT_PROVISION_FAILED,
-                    "Invalid schema name for role assignment: " + schemaName);
+                    "Invalid schema name: " + schemaName);
         }
-
         try (Connection conn = dataSource.getConnection()) {
             UUID ownerRoleId = fetchOwnerRoleId(conn, schemaName);
             insertUserRole(conn, schemaName, userId, ownerRoleId);
@@ -69,14 +57,14 @@ public class JdbcTenantSchemaAdapter implements TenantSchemaPort {
              ResultSet rs = ps.executeQuery()) {
             if (!rs.next()) {
                 throw new DomainException(ErrorCode.TENANT_PROVISION_FAILED,
-                        "OWNER role not found in schema " + schemaName + " — did V2 migration run?");
+                        "OWNER role not found in schema " + schemaName);
             }
             return rs.getObject("id", UUID.class);
         }
     }
 
     private void insertUserRole(Connection conn, String schemaName,
-                                 UUID userId, UUID roleId) throws SQLException {
+                                UUID userId, UUID roleId) throws SQLException {
         String sql = "INSERT INTO \"" + schemaName + "\".user_roles (user_id, role_id) " +
                      "VALUES (?, ?) ON CONFLICT (user_id, role_id) DO NOTHING";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {

@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Clé SharedPreferences indiquant que l'utilisateur a accepté les CGU.
-const String kTermsAcceptedKey = 'terms_accepted';
+import '../../../../core/storage/app_constants.dart';
 
 /// Page de validation des Conditions Générales d'Utilisation.
 ///

@@ -1,3 +1,4 @@
+import '../../domain/model/auth_tokens.dart';
 import '../../domain/model/registration_result.dart';
 import '../../domain/repository/auth_repository.dart';
 import '../datasource/remote_auth_datasource.dart';
@@ -21,5 +22,21 @@ class AuthRepositoryImpl implements AuthRepository {
       phoneNumber: phoneNumber,
       password: password,
     );
+  }
+
+  @override
+  Future<AuthTokens> login({
+    required String phoneNumber,
+    required String password,
+  }) async {
+    return _remoteDataSource.login(
+      phoneNumber: phoneNumber,
+      password: password,
+    );
+  }
+
+  @override
+  Future<AuthTokens> refreshToken(String rawRefreshToken) async {
+    return _remoteDataSource.refreshToken(rawRefreshToken);
   }
 }

@@ -1,10 +1,36 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../features/auth/presentation/page/login_page.dart';
 import '../../features/auth/presentation/page/register_page.dart';
 import '../../features/onboarding/presentation/page/onboarding_page.dart';
 import '../../features/onboarding/presentation/page/terms_page.dart';
+import '../storage/app_constants.dart';
+
+/// Returns true only if [token] is a structurally valid JWT **and** its `exp`
+/// claim is in the future. Expired or malformed tokens return false.
+bool _isValidJwt(String token) {
+  final parts = token.split('.');
+  if (parts.length != 3 || !token.startsWith('eyJ')) return false;
+  try {
+    final payload = parts[1];
+    final decoded = utf8.decode(
+      base64Url.decode(base64Url.normalize(payload)),
+    );
+    final data = jsonDecode(decoded) as Map<String, dynamic>;
+    final exp = data['exp'] as int?;
+    if (exp == null) return false;
+    return DateTime.now().isBefore(
+      DateTime.fromMillisecondsSinceEpoch(exp * 1000),
+    );
+  } catch (_) {
+    return false;
+  }
+}
 
 /// Placeholder page shown until each feature is implemented
 class _PlaceholderPage extends StatelessWidget {
@@ -42,18 +68,34 @@ class _SplashRedirectPageState extends State<_SplashRedirectPage> {
   }
 
   Future<void> _redirect() async {
+    const storage = FlutterSecureStorage();
+    final token = await storage.read(key: 'jwt_token');
+
+    // Already logged in with a valid, non-expired token → go straight to POS.
+    if (token != null && _isValidJwt(token)) {
+      if (!mounted) return;
+      context.go('/pos');
+      return;
+    }
+
+    // Purge any expired / malformed token left in storage.
+    if (token != null) await storage.delete(key: 'jwt_token');
+
     final prefs = await SharedPreferences.getInstance();
     final onboardingSeen = prefs.getBool(kOnboardingSeenKey) ?? false;
-    final termsAccepted = prefs.getBool(kTermsAcceptedKey) ?? false;
     if (!mounted) return;
+
     if (!onboardingSeen) {
+      // First install — full first-launch flow: onboarding → terms → register.
       context.go('/onboarding');
-    } else if (!termsAccepted) {
-      context.go('/terms');
     } else {
-      context.go('/auth/register');
+      // Returning user with expired/missing token → login only.
+      // Onboarding and terms are shown exactly once (on first install).
+      context.go('/auth/login');
     }
   }
+
+  // Top-level _isValidJwt() used — checks format + expiry claim.
 
   @override
   Widget build(BuildContext context) {
@@ -79,7 +121,14 @@ final GoRouter appRouter = GoRouter(
     // ── Auth ────────────────────────────────────────────────
     GoRoute(
       path: '/auth/login',
-      builder: (_, __) => const _PlaceholderPage(title: 'Login'),
+      redirect: (context, state) async {
+        // AC3: skip login only when a valid, non-expired JWT is present
+        const storage = FlutterSecureStorage();
+        final token = await storage.read(key: 'jwt_token');
+        if (token != null && _isValidJwt(token)) return '/pos';
+        return null; // proceed to LoginPage
+      },
+      builder: (_, __) => const LoginPage(),
     ),
     GoRoute(
       path: '/auth/register',

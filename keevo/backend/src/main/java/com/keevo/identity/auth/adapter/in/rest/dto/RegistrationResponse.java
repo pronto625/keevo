@@ -1,4 +1,4 @@
-package com.keevo.identity.auth.adapter.in.rest;
+package com.keevo.identity.auth.adapter.in.rest.dto;
 
 /**
  * RegistrationResponse — REST output DTO for successful user registration.

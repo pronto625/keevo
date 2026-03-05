@@ -4,7 +4,7 @@ import com.keevo.identity.auth.domain.model.PlanType;
 import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.auth.domain.model.TenantStatus;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
-import com.keevo.shared.infrastructure.persistence.FlywayTenantMigration;
+import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -19,21 +19,21 @@ import java.util.UUID;
  * <p>Called WITHIN the RegistrationService transaction boundary — rollback on any failure.
  *
  * <p>Architecture note: TenantFactory is in the application layer (not domain)
- * because it depends on infrastructure (FlywayTenantMigration) via constructor injection.
+ * because it depends on infrastructure (TenantSchemaProvisioner) via constructor injection.
  */
 @Component
 public class TenantFactory {
 
     private final TenantCodeGenerator codeGenerator;
     private final TenantRepository tenantRepository;
-    private final FlywayTenantMigration flywayTenantMigration;
+    private final TenantSchemaProvisioner schemaProvisioner;
 
     public TenantFactory(TenantCodeGenerator codeGenerator,
                          TenantRepository tenantRepository,
-                         FlywayTenantMigration flywayTenantMigration) {
-        this.codeGenerator = codeGenerator;
+                         TenantSchemaProvisioner schemaProvisioner) {
+        this.codeGenerator    = codeGenerator;
         this.tenantRepository = tenantRepository;
-        this.flywayTenantMigration = flywayTenantMigration;
+        this.schemaProvisioner = schemaProvisioner;
     }
 
     /**
@@ -65,17 +65,13 @@ public class TenantFactory {
         );
         Tenant savedTenant = tenantRepository.save(tenant);
 
-        // 3. Create PostgreSQL schema + run Flyway migrations for this tenant
-        //    This creates all tenant tables (products, sales, stock_levels, etc.)
-        //    V2 migration seeds default roles (OWNER/EMPLOYEE), subscription (FREE), and placeholder store
+        // 3. Provision tenant schema: CREATE SCHEMA + DDL tables + seed data
+        //    Programmatic DDL defined in TenantSchemaProvisioner (no SQL files).
+        //    Compensating action (dropSchemaIfExists) prevents orphaned schemas on failure (AC4).
         try {
-            flywayTenantMigration.migrate(savedTenant.getId().toString(), schemaName);
+            schemaProvisioner.provision(savedTenant.getId().toString(), schemaName);
         } catch (RuntimeException e) {
-            // M4: Narrow catch — RuntimeException only; never swallow Error
-            // Compensating action: drop orphaned schema to prevent partial tenant state (AC4)
-            // DDL (CREATE SCHEMA) runs outside the Spring @Transactional boundary,
-            // so we must clean up manually if subsequent migration steps fail.
-            flywayTenantMigration.dropSchemaIfExists(schemaName);
+            schemaProvisioner.dropSchemaIfExists(schemaName);
             throw e;
         }
 

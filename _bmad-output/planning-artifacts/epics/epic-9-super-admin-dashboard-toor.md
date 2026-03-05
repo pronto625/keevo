@@ -147,7 +147,7 @@ So that I can detect incidents before users report them and communicate planned 
 
 **Given** Toor navigates to the Santé Système section
 **When** the page loads
-**Then** a status card grid displays: API Uptime (last 30 days %), Current API Latency (p50, p95, p99 in ms), Error Rate (last 1h, % of 5xx), Active DB Connections, Sync Queue Depth (total unprocessed sync records across all tenants), Last Flyway migration status (✅ / ❌)
+**Then** a status card grid displays: API Uptime (last 30 days %), Current API Latency (p50, p95, p99 in ms), Error Rate (last 1h, % of 5xx), Active DB Connections, Sync Queue Depth (total unprocessed sync records across all tenants), DB Schema Health (public schema tables reachable ✅ / ❌)
 **And** all metrics are sourced from Spring Actuator (`/actuator/health`, `/actuator/metrics`) and displayed without caching (live on page load)
 
 **Given** any health metric breaches a threshold

@@ -10,6 +10,7 @@ class SecureTokenStorage implements TokenStorage {
   final FlutterSecureStorage _storage;
 
   static const _keyToken = 'jwt_token';
+  static const _keyRefreshToken = 'refresh_token';
   static const _keyUserId = 'user_id';
   static const _keyTenantId = 'tenant_id';
 
@@ -18,6 +19,10 @@ class SecureTokenStorage implements TokenStorage {
   @override
   Future<void> saveToken(String token) =>
       _storage.write(key: _keyToken, value: token);
+
+  @override
+  Future<void> saveRefreshToken(String refreshToken) =>
+      _storage.write(key: _keyRefreshToken, value: refreshToken);
 
   @override
   Future<void> saveUserId(String userId) =>
@@ -29,6 +34,9 @@ class SecureTokenStorage implements TokenStorage {
 
   @override
   Future<String?> getToken() => _storage.read(key: _keyToken);
+
+  @override
+  Future<String?> getRefreshToken() => _storage.read(key: _keyRefreshToken);
 
   @override
   Future<void> clearAll() => _storage.deleteAll();

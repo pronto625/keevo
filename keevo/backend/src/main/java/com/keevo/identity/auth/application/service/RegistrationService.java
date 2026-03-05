@@ -81,10 +81,11 @@ public class RegistrationService implements RegisterUserUseCase {
         //    Runs within the same @Transactional boundary — rolls back on failure.
         tenantSchemaPort.assignOwnerRole(tenant.getSchemaName(), savedUser.getId());
 
-        // 6. Generate stub JWT token (Story 1.3 implements real JWT)
-        String token = jwtTokenProvider.generateToken(
-            savedUser.getId().toString(),
-            tenant.getId().toString()
+        // 6. Generate RS256 JWT access token (Story 1.3 real JWT)
+        String token = jwtTokenProvider.generateAccessToken(
+            savedUser.getId(),
+            tenant.getSchemaName(),
+            savedUser.getRole().name()
         );
 
         // 7. Publish domain event (Observer pattern → AuditEventListener)

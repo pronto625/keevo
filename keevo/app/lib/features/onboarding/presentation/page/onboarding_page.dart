@@ -4,8 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Clé SharedPreferences indiquant que l'onboarding a déjà été vu.
-const String kOnboardingSeenKey = 'onboarding_seen';
+import '../../../../core/storage/app_constants.dart';
 
 /// Onboarding welcome screen — affiché uniquement au premier lancement.
 ///

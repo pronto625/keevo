@@ -6,7 +6,7 @@ import com.keevo.identity.auth.domain.model.TenantStatus;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.persistence.FlywayTenantMigration;
+import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -34,13 +34,13 @@ class TenantFactoryTest {
     private TenantRepository tenantRepository;
 
     @Mock
-    private FlywayTenantMigration flywayTenantMigration;
+    private TenantSchemaProvisioner schemaProvisioner;
 
     private TenantFactory tenantFactory;
 
     @BeforeEach
     void setUp() {
-        tenantFactory = new TenantFactory(codeGenerator, tenantRepository, flywayTenantMigration);
+        tenantFactory = new TenantFactory(codeGenerator, tenantRepository, schemaProvisioner);
     }
 
     @Test
@@ -65,7 +65,7 @@ class TenantFactoryTest {
     }
 
     @Test
-    @DisplayName("create() calls flywayTenantMigration.migrate() exactly once")
+    @DisplayName("create() calls schemaProvisioner.provision() exactly once")
     void create_callsMigrateOnce() {
         // arrange
         String code = "KV-XY1234";
@@ -79,8 +79,8 @@ class TenantFactoryTest {
         tenantFactory.create();
 
         // assert
-        verify(flywayTenantMigration, times(1))
-                .migrate(anyString(), eq(Tenant.schemaNameFromCode(code)));
+        verify(schemaProvisioner, times(1))
+                .provision(anyString(), eq(Tenant.schemaNameFromCode(code)));
     }
 
     @Test
@@ -94,7 +94,7 @@ class TenantFactoryTest {
         when(codeGenerator.generate()).thenReturn(code);
         when(tenantRepository.save(any(Tenant.class))).thenReturn(savedTenant);
         doThrow(new DomainException(ErrorCode.TENANT_PROVISION_FAILED))
-                .when(flywayTenantMigration).migrate(anyString(), anyString());
+                .when(schemaProvisioner).provision(anyString(), anyString());
 
         // act + assert
         DomainException ex = catchThrowableOfType(tenantFactory::create, DomainException.class);
@@ -113,11 +113,11 @@ class TenantFactoryTest {
         when(codeGenerator.generate()).thenReturn(code);
         when(tenantRepository.save(any(Tenant.class))).thenReturn(savedTenant);
         doThrow(new DomainException(ErrorCode.TENANT_PROVISION_FAILED))
-                .when(flywayTenantMigration).migrate(anyString(), anyString());
+                .when(schemaProvisioner).provision(anyString(), anyString());
 
         catchThrowableOfType(tenantFactory::create, DomainException.class);
 
         // AC4 compensating action: orphaned schema must be cleaned up
-        verify(flywayTenantMigration, times(1)).dropSchemaIfExists(eq(expectedSchema));
+        verify(schemaProvisioner, times(1)).dropSchemaIfExists(eq(expectedSchema));
     }
 }

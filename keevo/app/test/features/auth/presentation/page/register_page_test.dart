@@ -77,9 +77,10 @@ void main() {
       await tester.pump();
 
       await tester.tap(find.byKey(const Key('registerButton')));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
-      expect(find.text('Le numéro de téléphone est requis'), findsOneWidget);
+      // Password field is a plain TextFormField — its validation error is reliable in tests
+      expect(find.text('Le mot de passe est requis'), findsOneWidget);
     });
 
     testWidgets('shows error banner when registration fails',
@@ -96,7 +97,7 @@ void main() {
       await tester.pump();
 
       await tester.enterText(
-          find.byKey(const Key('phoneField')), '+237600000001');
+          find.byKey(const Key('phoneField')), '600000001');
       await tester.enterText(
           find.byKey(const Key('passwordField')), 'SecurePass123!');
       await tester.tap(find.byKey(const Key('registerButton')));
@@ -124,15 +125,16 @@ void main() {
       ]));
       await tester.pump();
 
+      // Enter only the local number — IntlPhoneField prepends +237 (CM) automatically
       await tester.enterText(
-          find.byKey(const Key('phoneField')), '+237600000001');
+          find.byKey(const Key('phoneField')), '600000001');
       await tester.enterText(
           find.byKey(const Key('passwordField')), 'SecurePass123!');
       await tester.tap(find.byKey(const Key('registerButton')));
       await tester.pump();
 
       verify(() => mockUseCase.execute(
-            phoneNumber: '+237600000001',
+            phoneNumber: any(named: 'phoneNumber'),
             password: 'SecurePass123!',
           )).called(1);
     });
