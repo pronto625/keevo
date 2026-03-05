@@ -2,6 +2,7 @@ package com.keevo.shared.infrastructure.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.infrastructure.persistence.TenantSchemaSyncService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
@@ -35,12 +36,13 @@ class JwtAuthFilterTest {
 
     @Mock JwtTokenProvider jwtTokenProvider;
     @Mock FilterChain filterChain;
+    @Mock TenantSchemaSyncService tenantSchemaSyncService;
 
     private JwtAuthFilter filter;
 
     @BeforeEach
     void setUp() {
-        filter = new JwtAuthFilter(jwtTokenProvider, new ObjectMapper());
+        filter = new JwtAuthFilter(jwtTokenProvider, new ObjectMapper(), tenantSchemaSyncService);
     }
 
     // ── Missing Authorization header ───────────────────────────────────────
@@ -129,7 +131,23 @@ class JwtAuthFilterTest {
         filter.doFilterInternal(request, response, filterChain);
 
         verify(filterChain).doFilter(request, response);
+        verify(tenantSchemaSyncService).syncIfNeeded("KV-ABC123");
         assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    @DisplayName("syncIfNeeded is NOT called when JWT is invalid")
+    void should_not_sync_schema_when_jwt_is_invalid() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer bad.jwt.token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        when(jwtTokenProvider.parseToken("bad.jwt.token"))
+                .thenThrow(new JwtException("invalid"));
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        verify(tenantSchemaSyncService, never()).syncIfNeeded(any());
     }
 
     @Test

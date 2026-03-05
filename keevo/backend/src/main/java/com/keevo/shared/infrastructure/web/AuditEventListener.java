@@ -2,6 +2,7 @@ package com.keevo.shared.infrastructure.web;
 
 import com.keevo.identity.auth.domain.model.UserAuthenticatedEvent;
 import com.keevo.identity.auth.domain.model.UserRegisteredEvent;
+import com.keevo.identity.onboarding.domain.model.OnboardingCompletedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
@@ -50,6 +51,23 @@ public class AuditEventListener {
                 event.tenantId(),
                 event.role(),
                 event.ipAddress(),
+                event.occurredAt());
+    }
+
+    /**
+     * Handle onboarding completed event: log for now, persist to audit_log in Story 1.7.
+     *
+     * @param event the OnboardingCompletedEvent published by OnboardingService
+     */
+    @EventListener
+    public void on(OnboardingCompletedEvent event) {
+        // Story 1.7 will replace this log with a real insert into audit_log table
+        log.info("AUDIT: onboarding_completed tenantId={} sector={} storeName={} categoriesCreated={} actorId={} at={}",
+                event.tenantId(),
+                event.sectorType(),
+                event.storeName(),
+                event.categoriesCreated(),
+                event.actorId(),
                 event.occurredAt());
     }
 }

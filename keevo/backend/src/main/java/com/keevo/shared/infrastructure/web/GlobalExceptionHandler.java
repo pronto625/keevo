@@ -87,6 +87,8 @@ public class GlobalExceptionHandler {
                  "TENANT_ALREADY_EXISTS" -> HttpStatus.CONFLICT;
             case "VALIDATION_ERROR", "INVALID_AMOUNT",
                  "INVALID_PHONE_NUMBER", "INVALID_PASSWORD" -> HttpStatus.UNPROCESSABLE_ENTITY;
+            case "SECTOR_TEMPLATE_NOT_FOUND",
+                 "ONBOARDING_ALREADY_COMPLETED" -> HttpStatus.BAD_REQUEST;
             case "TENANT_PROVISION_FAILED" -> HttpStatus.INTERNAL_SERVER_ERROR;
             default -> HttpStatus.INTERNAL_SERVER_ERROR;
         };

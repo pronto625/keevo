@@ -7,8 +7,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../features/auth/presentation/page/login_page.dart';
 import '../../features/auth/presentation/page/register_page.dart';
+import '../../features/onboarding/domain/model/sector_type.dart';
 import '../../features/onboarding/presentation/page/onboarding_page.dart';
+import '../../features/onboarding/presentation/page/sector_selection_page.dart';
+import '../../features/onboarding/presentation/page/shop_name_page.dart';
 import '../../features/onboarding/presentation/page/terms_page.dart';
+import '../../features/pos/presentation/page/pos_placeholder_page.dart';
 import '../storage/app_constants.dart';
 
 /// Returns true only if [token] is a structurally valid JWT **and** its `exp`
@@ -71,10 +75,14 @@ class _SplashRedirectPageState extends State<_SplashRedirectPage> {
     const storage = FlutterSecureStorage();
     final token = await storage.read(key: 'jwt_token');
 
-    // Already logged in with a valid, non-expired token → go straight to POS.
+    // Already logged in with a valid, non-expired token.
     if (token != null && _isValidJwt(token)) {
       if (!mounted) return;
-      context.go('/pos');
+      final prefs = await SharedPreferences.getInstance();
+      final wizardSeen = prefs.getBool(kOnboardingWizardSeenKey) ?? false;
+      if (!mounted) return;
+      // Route through the wizard if the user has not completed it yet.
+      context.go(wizardSeen ? '/pos' : '/onboarding/sector');
       return;
     }
 
@@ -147,10 +155,33 @@ final GoRouter appRouter = GoRouter(
       builder: (_, __) => const TermsPage(),
     ),
 
+    // ── Onboarding wizard ──────────────────────────────────────────
+    GoRoute(
+      path: '/onboarding/sector',
+      builder: (_, __) => const SectorSelectionPage(),
+    ),
+    GoRoute(
+      path: '/onboarding/shop-name',
+      builder: (context, state) {
+        final sector = state.extra;
+        if (sector == null || sector is! SectorType) {
+          // Guard: deep-link or process-kill — restart the wizard from sector selection
+          return const SectorSelectionPage();
+        }
+        return ShopNamePage(sectorType: sector);
+      },
+    ),
+
     // ── POS ─────────────────────────────────────────────────
+    // AC5: fade transition — no lateral slide when landing from onboarding
     GoRoute(
       path: '/pos',
-      builder: (_, __) => const _PlaceholderPage(title: 'POS'),
+      pageBuilder: (_, state) => CustomTransitionPage(
+        key: state.pageKey,
+        child: const PosPlaceholderPage(),
+        transitionsBuilder: (_, animation, __, child) =>
+            FadeTransition(opacity: animation, child: child),
+      ),
     ),
 
     // ── Products ────────────────────────────────────────────

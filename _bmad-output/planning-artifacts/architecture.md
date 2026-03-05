@@ -422,7 +422,86 @@ lib/
 
 ---
 
-### 🔴 GoF DESIGN PATTERN ANALYSIS — MANDATORY BEFORE EVERY FEATURE
+### 🔴 ITERATION LAW — CYCLE UNTIL EVERY TEST IS GREEN (NON-NEGOTIABLE)
+
+> **A story is NOT done until every test passes AND every cURL integration call returns the expected response. No exceptions, no workarounds.**
+
+**The complete validation cycle (mandatory on every story, every task):**
+
+```
+🔴 RED      → Write failing test   → run → confirm FAILURE
+🟢 GREEN    → Write minimum code   → run → confirm PASS
+🔵 REFACTOR → Clean code           → run → confirm still PASS
+🌐 cURL     → Run integration bash → confirm all ✅
+🔁 ITERATE  → Any failure?         → go back to 🔴 RED, fix, repeat
+```
+
+**Stopping condition — story may only be marked `done` when ALL of these are true simultaneously:**
+
+| Gate | Command | Required result |
+|---|---|---|
+| Backend unit + slice tests | `mvn test` | `BUILD SUCCESS — 0 failures, 0 errors` |
+| Flutter unit + widget tests | `flutter test --reporter=expanded` | `All N tests passed` |
+| cURL integration script | bash script in story file | All `✅` — zero `❌` |
+
+**Forbidden shortcuts (zero tolerance):**
+- `@Disabled` or `@Ignore` on ANY test to force a build pass
+- `// TODO: fix later` adjacent to a failing assertion
+- Skipping the cURL script because "the unit tests pass"
+- Marking a story `done` with a partial test suite
+- Using `try/catch` in tests to swallow assertion exceptions
+
+---
+
+### 🌐 cURL INTEGRATION TESTS — MANDATORY AFTER EVERY BACKEND STORY
+
+> **Every story that produces API endpoints MUST include a cURL validation section in the story file. The dev agent MUST run it before closing the story.**
+
+**Standard format for cURL sections in story files:**
+
+```bash
+#!/usr/bin/env bash
+# ======================================================
+# Story X.Y — cURL Integration Tests
+# Run: bash curl-tests-story-X-Y.sh
+# All steps must show ✅ before story is marked done
+# ======================================================
+set -euo pipefail
+BASE_URL="http://localhost:8443"
+
+# Step 1 — Prerequisite: register a test user and get JWT
+REGISTER=$(curl -s -X POST "$BASE_URL/api/v1/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"+237600000001","password":"Test1234!","firstName":"Test","lastName":"User"}')
+JWT=$(echo "$REGISTER" | jq -r '.data.accessToken')
+[[ -n "$JWT" && "$JWT" != "null" ]] && echo "✅ Step 1 — JWT obtained" || { echo "❌ Step 1 FAILED"; exit 1; }
+
+# Step N — Feature endpoint call
+RESPONSE=$(curl -s -X POST "$BASE_URL/api/v1/feature/endpoint" \
+  -H "Authorization: Bearer $JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"field": "value"}')
+echo "$RESPONSE" | jq .
+HTTP_STATUS=$(echo "$RESPONSE" | jq -r '.status // "200"')
+# Attendu: HTTP 200, body { "data": { ... } }
+[[ "$HTTP_STATUS" != "4"* && "$HTTP_STATUS" != "5"* ]] && echo "✅ Step N — OK" || { echo "❌ Step N FAILED"; exit 1; }
+
+echo "\n✅✅✅ All cURL integration checks passed — story backend validated ✅✅✅"
+```
+
+**Rules for cURL test scripts in story files:**
+- Every step is numbered sequentially and labeled with what it validates
+- Expected response is documented after each call (`# Attendu: HTTP 200, ...`)
+- Tokens and IDs are stored in variables and chained between steps (no hardcoded values)
+- Each step fails fast with `exit 1` so the error is clearly identified
+- Use `jq` for JSON field extraction — never `grep` raw JSON
+- Edge cases covered: 401 Unauthorized (no token), 400 Bad Request (invalid body), 409 Conflict (duplicate), 403 Forbidden (wrong role)
+- Final line echoes `✅✅✅ All cURL integration checks passed` — visible confirmation gate
+- Dev agent MUST run the full script end-to-end and paste output in the PR/commit message
+
+---
+
+###  GoF DESIGN PATTERN ANALYSIS — MANDATORY BEFORE EVERY FEATURE
 
 > **No implementation may begin before completing this analysis. It is documented in the story file.**
 
@@ -617,7 +696,8 @@ Mark public endpoints explicitly with `@SecurityRequirements` to remove it.
 
 **Error Handling:**
 - Domain: `throw new ProductNotFoundException("PRODUCT_NOT_FOUND")`
-- Controller: `@ExceptionHandler` → map domainCode → HTTP status
+- Controller: **centralised in `GlobalExceptionHandler` (`@RestControllerAdvice`) only** — all `DomainException` → HTTP status mapping lives there
+- ⚠️ **Anti-pattern** (discovered via E2E in Story 1-4): never use a local `@ExceptionHandler` in a `@RestController` for `DomainException`. `throw ex` inside an `@ExceptionHandler` **cannot delegate to `@RestControllerAdvice`** — Spring MVC converts it to HTTP 500. Unit tests cannot detect this because they mock the use case and never traverse the real Spring exception handler resolution order. Only a full HTTP round-trip E2E test exposes it.
 - Flutter data: `AsyncValue.error()`
 - Flutter UI: SnackBar via `ref.listen` sur les erreurs
 
@@ -1110,11 +1190,25 @@ An earlier version implemented `Persistable<UUID>` with an `@Transient isNew` fl
 ### Table Creation Strategy
 
 | Schema | Strategy | Config |
-|--------|----------|--------|
-| **Public** (`users`, `tenants`, `refresh_tokens`) | `ddl-auto=update` — Hibernate auto-creates/alters | `spring.jpa.hibernate.ddl-auto: update` |
-| **Tenant** (`kv_xxxxxx` — per-tenant) | `TenantSchemaProvisioner` — programmatic DDL via JDBC at registration time | Called by `TenantFactory` during user registration |
+|--------|------------|--------|
+| **Public** (`users`, `tenants`, `refresh_tokens`) | `ddl-auto=update` — Hibernate auto-creates/alters at startup | `spring.jpa.hibernate.ddl-auto: update` |
+| **Tenant** (`kv_xxxxxx` — per-tenant, at registration) | `TenantSchemaProvisioner` — programmatic DDL via JDBC called by `TenantFactory` during registration | Creates tables + seeds roles/store |
+| **Tenant** (per-tenant, at every login) | `TenantSchemaSyncService` — diffs `information_schema` between `public` and tenant schema; creates missing tables/columns | Called by `JwtAuthFilter` on every authenticated request (no-op after first sync per JVM thanks to `ConcurrentHashMap` cache) |
 
-`TenantSchemaProvisioner` creates: `users`, `subscriptions`, `roles`, `user_roles`, `stores` + seeds OWNER/EMPLOYEE roles, Free subscription.
+`TenantSchemaProvisioner` creates: `users`, `subscriptions`, `roles`, `user_roles`, `stores`, `categories`, `tenant_preferences` + seeds OWNER/EMPLOYEE roles, Free subscription, placeholder store.
+
+**`TenantSchemaSyncService` design:**
+- **Source of truth**: `public` schema (kept current by `ddl-auto=update` at startup)
+- **Missing table**: `CREATE TABLE IF NOT EXISTS "kv_xxx"."t" (LIKE public."t" INCLUDING ALL)` — copies column defs, NOT NULL, CHECK constraints, defaults (gen_random_uuid(), NOW()), indexes, storage settings. Foreign keys intentionally excluded.
+- **Missing column**: `ALTER TABLE "kv_xxx"."t" ADD COLUMN IF NOT EXISTS <col_def>` reconstructed from `information_schema.columns`
+- **Cache**: `ConcurrentHashMap<String, Boolean>` — first sync per schema costs 1 transaction; subsequent requests are ~nanosecond hashmap lookup
+- **Excluded tables**: `GLOBAL_ONLY_TABLES = {"tenants"}` — lives only in `public`
+- **Integration point**: `JwtAuthFilter.doFilterInternal()` — immediately after `TenantContext.setCurrentTenant()`, before JPA session opens
+- **Why raw JDBC (not EntityManager)**: Sync runs in the security filter before the JPA session, uses fully-qualified `"schema"."table"` names — no `search_path` needed. Intentional.
+- **Error handling**: Non-blocking — `SQLException` caught, logged, swallowed; request proceeds with existing schema
+
+**Critical rule for raw SQL in multi-tenant `@Transactional` methods:**
+Always use `EntityManager.createNativeQuery()` — never `DataSource.getConnection()` or `JdbcTemplate`. `JpaTransactionManager` binds the active connection under the `EntityManagerFactory` key (not `DataSource` key) in `TransactionSynchronizationManager`. Raw JDBC bypasses this binding and gets a fresh pool connection without `search_path` → `relation "<table>" does not exist`.
 
 ### Naming Conventions
 

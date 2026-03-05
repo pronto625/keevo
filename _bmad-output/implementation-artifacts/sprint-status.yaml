@@ -48,7 +48,7 @@ development_status:
   1-2-user-registration-automated-tenant-provisioning: done
   UI-1-onboarding-terms-phone-picker: done          # 2026-03-04 — onboarding screen, CGU page, IntlPhoneField
   1-3-jwt-authentication-session-management: done    # 2026-03-04 — code review passed | all CRIT/HIGH/MED/LOW issues fixed
-  1-4-onboarding-wizard-sector-templates-shop-setup: backlog
+  1-4-onboarding-wizard-sector-templates-shop-setup: done  # 2026-03-05 — code review passed | all CRIT/HIGH/MED/LOW issues fixed (fade nav, empty state, null guard, FR error messages, SQL injection guard, saveAll return, tutorial text/ordering, sector title, findAllActive @Query) | EntityManager fix for stores relation (JpaTransactionManager binds under EMF key not DataSource key) | TenantSchemaSyncService: auto-sync tenant schema vs public on login (information_schema diff, CREATE TABLE LIKE, ALTER TABLE ADD COLUMN, ConcurrentHashMap cache, integrated in JwtAuthFilter) | idempotency guard ONBOARDING_ALREADY_COMPLETED (count>0 on tenant_preferences) | E2E Python suite created (27/27 assertions, 11 test cases) | local @ExceptionHandler re-throw anti-pattern fixed in OnboardingController (detected by E2E T09, invisible to 100 unit tests) | 100 unit tests + 27/27 E2E assertions
   1-5-local-data-storage-encryption-connectivity-indicator: backlog
   1-6-subscription-model-plan-limits-account-lifecycle: backlog
   1-7-immutable-audit-trail-security-domain-foundation: backlog
@@ -57,6 +57,33 @@ development_status:
   # ─────────────────────────────────────────────────────────
   # Epic 2: Catalogue Produits & Base Fournisseurs/Clients
   # ─────────────────────────────────────────────────────────
+  #
+  # ⚠️  SM NOTE — READ BEFORE CREATING ANY EPIC 2 STORY:
+  #
+  # The `categories` table schema and `CategoryRepository` port contract are
+  # already established in Story 1.4 (see implementation-artifacts/1-4-onboarding-wizard-sector-templates-shop-setup.md).
+  #
+  # DDL columns already in place (per-tenant schema via TenantSchemaProvisioner):
+  #   - id UUID PK, name VARCHAR(100), parent_id UUID (self-ref → subcategories),
+  #     is_active BOOLEAN (deactivate/reactivate without delete),
+  #     is_custom BOOLEAN (false=template-seeded, true=merchant-created),
+  #     created_at, updated_at + indexes on parent_id and is_active
+  #
+  # Port contract already defined (identity/onboarding/domain/port/out/CategoryRepository.java):
+  #   - saveAll, save, findById, findAllActive, findByParentId,
+  #     toggleActive(UUID id), createCustom(String name, UUID parentId)
+  #   - Methods beyond saveAll are stubs (UnsupportedOperationException) — to be implemented here
+  #
+  # The Epic 2 story for category management MUST:
+  #   1. Reuse the existing DDL schema as-is (no new columns needed for CRUD)
+  #   2. Implement the stub methods in the JPA adapter (adapter/out/persistence/impl/CategoryRepositoryAdapter)
+  #   3. Add the CRUD use cases: CreateCategoryUseCase, UpdateCategoryUseCase, ToggleCategoryUseCase,
+  #      CreateSubcategoryUseCase, CreateCustomCategoryUseCase
+  #   4. Expose endpoints: POST /api/v1/categories, PATCH /api/v1/categories/{id},
+  #      PATCH /api/v1/categories/{id}/toggle, GET /api/v1/categories
+  #   5. Move CategoryRepository from identity/onboarding/domain/port/out/ → catalog/category/domain/port/out/
+  #      and update the import in OnboardingService accordingly
+  #
   epic-2: backlog
   2-1-crud-produits-creation-edition-archivage: backlog
   2-2-moteur-de-prix-calcul-de-marge: backlog

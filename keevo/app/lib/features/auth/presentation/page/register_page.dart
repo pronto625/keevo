@@ -72,7 +72,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
           // Registration succeeded — navigate to login so the user
           // can authenticate and receive the full token pair (access + refresh).
           // Onboarding was already seen before reaching this screen.
-          context.go('/auth/login');
+          context.go('/onboarding/sector');
         }
       });
     });

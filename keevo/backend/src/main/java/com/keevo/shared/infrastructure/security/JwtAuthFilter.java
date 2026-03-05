@@ -2,6 +2,7 @@ package com.keevo.shared.infrastructure.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.infrastructure.persistence.TenantSchemaSyncService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
@@ -60,10 +61,14 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final ObjectMapper objectMapper;
+    private final TenantSchemaSyncService tenantSchemaSyncService;
 
-    public JwtAuthFilter(JwtTokenProvider jwtTokenProvider, ObjectMapper objectMapper) {
+    public JwtAuthFilter(JwtTokenProvider jwtTokenProvider,
+                         ObjectMapper objectMapper,
+                         TenantSchemaSyncService tenantSchemaSyncService) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.objectMapper = objectMapper;
+        this.tenantSchemaSyncService = tenantSchemaSyncService;
     }
 
     /**
@@ -101,6 +106,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
             // Set multi-tenant context for JPA routing
             TenantContext.setCurrentTenant(tenantId);
+
+            // Sync tenant schema against public (no-op if already done this JVM lifetime)
+            tenantSchemaSyncService.syncIfNeeded(tenantId);
 
             // Populate Spring Security context
             var auth = new UsernamePasswordAuthenticationToken(

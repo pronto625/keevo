@@ -80,6 +80,33 @@ public class TenantSchemaProvisioner {
                 updated_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
             )""";
 
+    private static final String DDL_CATEGORIES = """
+            CREATE TABLE IF NOT EXISTS categories (
+                id         UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+                name       VARCHAR(100) NOT NULL,
+                parent_id  UUID         REFERENCES categories(id) ON DELETE SET NULL,
+                is_active  BOOLEAN      NOT NULL DEFAULT TRUE,
+                is_custom  BOOLEAN      NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+            )""";
+
+    private static final String DDL_CATEGORIES_IDX_PARENT =
+            "CREATE INDEX IF NOT EXISTS idx_categories_parent_id ON categories(parent_id)";
+
+    private static final String DDL_CATEGORIES_IDX_ACTIVE =
+            "CREATE INDEX IF NOT EXISTS idx_categories_is_active ON categories(is_active)";
+
+    private static final String DDL_TENANT_PREFERENCES = """
+            CREATE TABLE IF NOT EXISTS tenant_preferences (
+                id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                sector_type         VARCHAR(30),
+                eod_report_time     TIME        NOT NULL DEFAULT '20:00:00',
+                stock_alert_enabled BOOLEAN     NOT NULL DEFAULT TRUE,
+                created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )""";
+
     // ── Seed data ─────────────────────────────────────────────────────────────
 
     private static final String SEED_ROLES = """
@@ -166,6 +193,10 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_ROLES);
             stmt.execute(DDL_USER_ROLES);
             stmt.execute(DDL_STORES);
+            stmt.execute(DDL_CATEGORIES);
+            stmt.execute(DDL_CATEGORIES_IDX_PARENT);
+            stmt.execute(DDL_CATEGORIES_IDX_ACTIVE);
+            stmt.execute(DDL_TENANT_PREFERENCES);
             stmt.execute("SET search_path TO public");
         }
     }

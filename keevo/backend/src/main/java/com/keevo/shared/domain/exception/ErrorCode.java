@@ -28,7 +28,9 @@ public enum ErrorCode {
     TENANT_NOT_FOUND,
     TENANT_ALREADY_EXISTS,
     TENANT_PROVISION_FAILED,
-
+    // ── Onboarding ────────────────────────────────────────────────────────
+    ONBOARDING_ALREADY_COMPLETED,
+    SECTOR_TEMPLATE_NOT_FOUND,
     // ── Catalog ───────────────────────────────────────────────────
     PRODUCT_NOT_FOUND,
     CATEGORY_NOT_FOUND,
