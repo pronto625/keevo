@@ -28,7 +28,7 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 93 FRs organized into 14 domains:
 - **Auth & Onboarding** (FR1-7): WhatsApp-based signup, JWT auth, sector templates, video tutorials
 - **Tenant Provisioning** (FR8-15): Auto schema creation, default roles, tenant code generation
-- **Subscriptions** (FR16-20): Freemium limits, suspension read-only, manual activation
+- **Subscriptions** (FR15-20): Free plan limits (1 store, 500 products, 3 employees), Premium Trial (6 months at signup → auto-downgrade to Free on expiry), Premium paid plan, manual reactivation by admin
 - **Products** (FR21-29): CRUD with variants, margin calculation, CSV import, stock thresholds
 - **Multi-Store & Warehouse** (FR30-36): Centralized stock view, inter-store transfers, employee-store assignment
 - **POS** (FR37-44): Quick sale, payment modes, cross-store check, day close, leaderboard

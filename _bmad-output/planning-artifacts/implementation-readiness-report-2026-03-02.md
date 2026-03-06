@@ -68,12 +68,13 @@ documentsUsed:
 | FR12 | Provisioning | Le système initialise les préférences de notification par défaut |
 | FR13 | Provisioning | Le système crée la première boutique par défaut du tenant |
 | FR14 | Provisioning | Le système génère le code unique tenant (`KV-XXXXXX`) et l'associe au schéma |
-| FR15 | Provisioning | Le système initialise le statut de souscription par défaut (Plan Free) |
-| FR16 | Souscription | Le système applique les limites du plan gratuit (3 boutiques, 500 produits, 5 employés) |
+| FR15 | Provisioning | Le système initialise le statut de souscription en **Plan Premium Trial (6 mois offerts)** — bascule auto vers Free à expiration |
+| FR15b | Provisioning | Le système bascule automatiquement un tenant de `PREMIUM_TRIAL` vers `FREE` à expiration des 6 mois sans paiement |
+| FR16 | Souscription | Le système applique les limites du plan gratuit (**1 boutique**, 500 produits, **3 employés**) — *mise à jour 2026-03-06* |
 | FR17 | Souscription | Le système affiche un message clair avec CTA upgrade lorsqu'une limite est atteinte |
-| FR18 | Souscription | Le système suspend automatiquement un tenant en lecture seule à l'expiration |
-| FR19 | Souscription | Le système conserve les données d'un tenant suspendu (lecture seule) |
-| FR20 | Souscription | Un propriétaire peut consulter son statut de souscription |
+| FR18 | Souscription | Le système rétrograde automatiquement un tenant vers `FREE` à l'expiration (pas de suspension complète — accès limité au plan Free, données conservées) |
+| FR19 | Souscription | Le système conserve toutes les données lors d'une rétrogradation vers le plan Free |
+| FR20 | Souscription | Un propriétaire peut consulter son statut de souscription (Plan Free / Premium Trial / Premium Actif — avec date d'expiration) |
 | FR21 | Produits | Un propriétaire peut créer, modifier et archiver des produits |
 | FR22 | Produits | Un propriétaire peut définir des variantes produit (taille, couleur) |
 | FR23 | Produits | Un propriétaire peut saisir prix de vente, prix d'achat et coûts de transport par produit |

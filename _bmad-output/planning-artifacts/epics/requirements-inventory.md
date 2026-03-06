@@ -19,14 +19,15 @@
 - FR12: Le système peut initialiser les préférences de notification par défaut (heure du rapport end-of-day, alertes stock activées)
 - FR13: Le système peut créer la première boutique par défaut du tenant (saisie dans le wizard)
 - FR14: Le système peut générer le code unique tenant (`KV-XXXXXX`) et l'associer au schéma créé
-- FR15: Le système peut initialiser le statut de souscription par défaut (Plan Free, limites actives)
+- FR15: Le système peut initialiser le statut de souscription en **Plan Premium Trial (6 mois offerts)** à chaque nouveau tenant
+- FR15b: Le système peut basculer automatiquement un tenant de `PREMIUM_TRIAL` vers `FREE` à expiration des 6 mois sans paiement
 
 **Gestion des Souscriptions (FR16–FR20)**
-- FR16: Le système peut appliquer les limites du plan gratuit : max 3 boutiques, 500 produits, 5 employés
+- FR16: Le système peut appliquer les limites du plan gratuit : **max 1 boutique**, 500 produits, **3 employés** — *mise à jour 2026-03-06 (ancienne valeur: 3 boutiques, 5 employés)*
 - FR17: Le système peut afficher un message clair avec CTA upgrade lorsqu'une limite est atteinte
-- FR18: Le système peut suspendre automatiquement un tenant en lecture seule à l'expiration de son abonnement payant
-- FR19: Le système peut conserver les données d'un tenant suspendu (lecture seule, pas de suppression)
-- FR20: Un propriétaire peut consulter son statut de souscription (Actif / Expiré / Suspendu)
+- FR18: Le système peut rétrograder automatiquement un tenant vers le plan `FREE` à l'expiration de son abonnement `PREMIUM` ou `PREMIUM_TRIAL` (pas de suspension complète — données conservées, accès limité au plan Free)
+- FR19: Le système peut conserver toutes les données lors d'une rétrogradation vers le plan Free
+- FR20: Un propriétaire peut consulter son statut de souscription (Plan Free / Premium Trial / Premium Actif — avec date d'expiration du trial ou de l'abonnement payant)
 
 **Gestion des Produits (FR21–FR29)**
 - FR21: Un propriétaire peut créer, modifier et archiver des produits (nom, description, photo, référence)
@@ -280,12 +281,13 @@ FR11: Epic 1 - Pré-configuration catégories par template sectoriel
 FR12: Epic 1 - Initialisation préférences notification par défaut
 FR13: Epic 1 - Création première boutique par défaut
 FR14: Epic 1 - Génération code unique tenant KV-XXXXXX
-FR15: Epic 1 - Initialisation statut souscription (Plan Free)
-FR16: Epic 1 - Application limites plan gratuit (3 boutiques, 500 produits, 5 employés)
+FR15: Epic 1 - Initialisation souscription en Plan Premium Trial (6 mois) — *mise à jour 2026-03-06*
+FR15b: Epic 1 - Bascule automatique PREMIUM_TRIAL → FREE à expiration
+FR16: Epic 1 - Application limites plan gratuit (**1 boutique**, 500 produits, **3 employés**) — *mise à jour 2026-03-06*
 FR17: Epic 1 - Message upgrade CTA quand limite atteinte
-FR18: Epic 1 - Suspension automatique tenant expiré (lecture seule)
-FR19: Epic 1 - Conservation données tenant suspendu
-FR20: Epic 1 - Consultation statut souscription
+FR18: Epic 1 - Rétrogradation automatique vers FREE à expiration (pas de suspension complète)
+FR19: Epic 1 - Conservation données lors de rétrogradation vers plan Free
+FR20: Epic 1 - Consultation statut souscription (Free / Premium Trial / Premium)
 FR21: Epic 2 - CRUD produits (nom, description, photo, référence)
 FR22: Epic 2 - Définition variantes produit (taille, couleur)
 FR23: Epic 2 - Saisie prix vente, achat et transport

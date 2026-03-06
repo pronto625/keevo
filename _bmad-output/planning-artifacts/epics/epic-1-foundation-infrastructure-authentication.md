@@ -246,39 +246,47 @@ So that I can work with confidence whether online or offline, knowing my data is
 
 As a proprietor (Simon),
 I want to understand my plan limits clearly and manage my account lifecycle,
-So that I know what I can do on the free plan and have a clear path to upgrade when I'm ready.
+So that I know what I can do on the free plan, benefit from my 6-month Premium Trial, and have a clear path to upgrade when the trial expires.
 
 **Acceptance Criteria:**
 
-**Given** Simon is on the Free plan
-**When** he attempts to create a 4th store (limit: 3)
-**Then** a bottom sheet appears with the message "Vous avez atteint la limite de 3 boutiques sur votre plan gratuit"
+**Given** a new tenant completes registration
+**When** the tenant is provisioned
+**Then** the subscription is initialized as `PREMIUM_TRIAL` (6 months of unlimited Premium features, `expires_at = now + 6 months`)
+**And** after 6 months without payment, the system automatically downgrades the tenant to the `FREE` plan (1 store, 500 products, 3 employees)
+**And** the Flutter app shows a trial banner: "Plan Premium Trial — Expire le [date]"
+
+**Given** Simon is on the Free plan (after trial expired)
+**When** he attempts to create a 2nd store (limit: 1)
+**Then** a bottom sheet appears with the message "Vous avez atteint la limite de 1 boutique sur votre plan gratuit"
 **And** a prominent CTA button "Passer au plan Premium" is shown
 **And** the store is NOT created
-**And** the same enforcement applies for products (limit: 500) and employees (limit: 5)
+**And** the same enforcement applies for products (limit: 500) and employees (limit: 3)
 
 **Given** plan limits are enforced
 **When** the backend receives a request to create an entity that would exceed the limit
-**Then** the backend returns HTTP 403 with `{ "domainCode": "PLAN_LIMIT_EXCEEDED", "details": { "limit": 3, "current": 3, "entity": "stores" } }`
+**Then** the backend returns HTTP 403 with `{ "domainCode": "PLAN_LIMIT_EXCEEDED", "details": { "limit": 1, "current": 1, "entity": "stores" } }`
 **And** limits are checked server-side on every creation request — they cannot be bypassed from the client
 
-**Given** Simon's paid subscription expires
-**When** the expiration date passes
-**Then** the system automatically sets the tenant status to `SUSPENDED`
-**And** all write operations (sales, stock changes, new products) return HTTP 403
+**Given** Simon's Premium Trial or paid Premium subscription expires
+**When** the expiration date passes and the daily scheduler runs
+**Then** the system automatically downgrades the tenant to `plan_type = FREE`, `status = ACTIVE`
+**And** write operations beyond Free limits return HTTP 403 with `PLAN_LIMIT_EXCEEDED` (NOT ACCOUNT_SUSPENDED)
 **And** read operations (view stock, view history) continue to work
 **And** Simon's data is fully preserved — nothing is deleted
-**And** a banner is shown at the top of the app: "Votre abonnement a expiré. Vos données sont conservées."
+**And** the Flutter app shows a banner: "Votre période d'essai est terminée. Passez au Premium pour retrouver tous vos accès."
 
-**Given** Simon's account is suspended
-**When** Toor (Super Admin) manually activates his paid plan
-**Then** the tenant status changes to `ACTIVE` within 5 minutes
-**And** all write operations are restored immediately
+**Given** Simon's account is on Free plan (trial expired or never paid)
+**When** Toor (Super Admin) manually activates his paid plan via `POST /api/v1/admin/subscriptions/{tenantId}/activate`
+**Then** the tenant `plan_type` changes to `PREMIUM` within one request
+**And** all Premium features are immediately restored (no limits)
 **And** Simon receives a WhatsApp notification confirming reactivation
 
 **Given** Simon navigates to Paramètres > Souscription
 **When** the screen loads
-**Then** he sees his current plan (Free / Premium), status (Actif / Expiré / Suspendu), expiry date (if Premium), and usage (e.g., "2/3 boutiques, 87/500 produits, 3/5 employés")
+**Then** he sees his current plan (Free / Premium Trial / Premium), status (Actif / Expiré / Suspendu), expiry date (if Trial or Premium), and usage:
+  - Free plan: "1/1 boutique, 87/500 produits, 2/3 employés"
+  - Trial/Premium: "boutiques illimitées, produits illimités, employés illimités"
 
 **Given** the rate limiting rule
 **When** a tenant makes more than 100 API requests in one minute

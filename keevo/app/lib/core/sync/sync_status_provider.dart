@@ -1,17 +1,12 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import 'sync_status.dart';
+import '../di/providers.dart';
 import '../storage/app_constants.dart';
+import 'sync_status.dart';
 
-/// SharedPreferences provider — must be overridden in main.dart and tests.
-///
-/// Pattern: initialize prefs before runApp() and pass via override,
-/// so providers can read synchronously.
-final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
-  throw UnimplementedError('Override sharedPreferencesProvider before use');
-});
+// sharedPreferencesProvider is defined in core/di/providers.dart and
+// overridden in main.dart. Import it from there — do NOT redeclare here.
 
 /// Raw connectivity stream — List<ConnectivityResult> in connectivity_plus v6+.
 ///

@@ -243,8 +243,10 @@ Keevo est une application hybride Mobile (Flutter) + Desktop (Tauri 2.0) avec un
 
 ### Billing Model
 
-- **Freemium :** Gratuit — max 3 boutiques, 500 produits, 5 employés, fonctionnalités core complètes.
-- **Premium :** Payant — multi-boutiques, rapports avancés, support prioritaire.
+- **Plan Free (Gratuit) :** max 1 boutique, 500 produits, 3 employés — fonctionnalités core complètes.
+- **Premium Trial :** Offert automatiquement à chaque nouveau tenant — 6 mois de fonctionnalités Premium sans restriction dès l'inscription.
+- **Premium (Payant) :** boutiques illimitées, employés illimités, produits illimités, rapports avancés, exports PDF/Excel, support prioritaire. Requis après expiration du Premium Trial.
+- **Rétrogradation automatique :** À l'expiration du Trial ou de l'abonnement Premium sans renouvellement de paiement → bascule vers Plan Free (limitations actives, données conservées intégralement).
 - **Activation manuelle :** V1 — Toor active manuellement les comptes payants après preuve de paiement Mobile Money.
 - **Paiement automatique :** Growth — intégration directe Mobile Money.
 
@@ -339,15 +341,16 @@ Keevo est une application hybride Mobile (Flutter) + Desktop (Tauri 2.0) avec un
 - **FR12:** Le système peut initialiser les préférences de notification par défaut (heure du rapport end-of-day, alertes stock activées)
 - **FR13:** Le système peut créer la première boutique par défaut du tenant (saisie dans le wizard)
 - **FR14:** Le système peut générer le code unique tenant (`KV-XXXXXX`) et l'associer au schéma créé
-- **FR15:** Le système peut initialiser le statut de souscription par défaut (Plan Free, limites actives)
+- **FR15:** Le système peut initialiser le statut de souscription par défaut en **Plan Premium Trial (6 mois offerts)** à chaque nouveau tenant, avec toutes les fonctionnalités Premium actives et une date d'expiration fixée à 6 mois à compter de la date d'inscription
+- **FR15b:** Le système peut basculer automatiquement un tenant du statut `PREMIUM_TRIAL` vers le plan `FREE` à l'expiration des 6 mois si aucun paiement n'a été enregistré (accès limité aux fonctionnalités Free, données intégralement conservées)
 
 ### Gestion des Souscriptions
 
-- **FR16:** Le système peut appliquer les limites du plan gratuit : max 3 boutiques, 500 produits, 5 employés
+- **FR16:** Le système peut appliquer les limites du plan gratuit : max 1 boutique, 500 produits, 3 employés
 - **FR17:** Le système peut afficher un message clair avec CTA upgrade lorsqu'une limite est atteinte
-- **FR18:** Le système peut suspendre automatiquement un tenant en lecture seule à l'expiration de son abonnement payant
-- **FR19:** Le système peut conserver les données d'un tenant suspendu (lecture seule, pas de suppression)
-- **FR20:** Un propriétaire peut consulter son statut de souscription (Actif / Expiré / Suspendu)
+- **FR18:** Le système peut rétrograder automatiquement un tenant vers le plan `FREE` à l'expiration de son abonnement `PREMIUM` ou `PREMIUM_TRIAL` (accès limité aux fonctionnalités Free, pas de suspension complète — les données sont conservées et le tenant peut continuer à utiliser l'application dans les limites du plan gratuit)
+- **FR19:** Le système peut conserver les données d'un tenant lors d'une rétrogradation vers le plan Free (aucune suppression de données)
+- **FR20:** Un propriétaire peut consulter son statut de souscription (Plan Free / Premium Trial / Premium Actif — avec date d'expiration du trial ou de l'abonnement payant)
 
 ### Gestion des Produits
 
