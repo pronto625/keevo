@@ -4,7 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:keevo/core/storage/app_constants.dart';
 import 'package:keevo/features/onboarding/domain/exception/onboarding_exception.dart';
 import 'package:keevo/features/onboarding/domain/model/onboarding_result.dart';
 import 'package:keevo/features/onboarding/domain/model/sector_type.dart';
@@ -52,12 +54,13 @@ Widget _buildPage(
 void main() {
   setUpAll(() {
     GoogleFonts.config.allowRuntimeFetching = false;
-    registerFallbackValue(SectorType.other); // required by mocktail for any(named:...)
+    registerFallbackValue(SectorType.other);
   });
 
   late MockCompleteOnboardingUseCase mockUseCase;
 
-  setUp(() {
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
     mockUseCase = MockCompleteOnboardingUseCase();
   });
 
@@ -131,6 +134,50 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(find.byKey(const Key('errorSnackBar')), findsOneWidget);
+    });
+
+    // ── Cas critique : ONBOARDING_ALREADY_COMPLETED ───────────────────────────
+    //
+    // Ce cas est survenu en production : le backend retourne 400 quand le tenant
+    // a déjà complété l'onboarding (ex: relance FreshStart, double-tap, crash mid-submit).
+    // COMPORTEMENT ATTENDU :
+    //   - PAS de SnackBar d'erreur affiché
+    //   - kOnboardingWizardSeenKey = true écrit dans SharedPreferences
+    //   - Navigation vers /pos
+    testWidgets(
+        'ONBOARDING_ALREADY_COMPLETED: navigates to /pos silently (no error SnackBar)',
+        (tester) async {
+      when(() => mockUseCase.execute(
+                sectorType: any(named: 'sectorType'),
+                storeName: any(named: 'storeName'),
+              ))
+          .thenThrow(const OnboardingException(
+            domainCode: 'ONBOARDING_ALREADY_COMPLETED',
+            message: 'Onboarding already completed for tenant kv_test',
+          ));
+
+      await tester.pumpWidget(
+        _buildPage(SectorType.electronics, [
+          completeOnboardingUseCaseProvider.overrideWithValue(mockUseCase),
+        ]),
+      );
+      await tester.pump();
+
+      await tester.enterText(
+          find.byKey(const Key('shopNameField')), 'Alliance');
+      await tester.tap(find.byKey(const Key('submitButton')));
+      await tester.pumpAndSettle();
+
+      // Aucun SnackBar d'erreur — le cas est traité silencieusement
+      expect(find.byKey(const Key('errorSnackBar')), findsNothing);
+
+      // Navigation vers /pos effectuée
+      expect(find.text('POS'), findsOneWidget);
+
+      // kOnboardingWizardSeenKey = true persisté localement
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool(kOnboardingWizardSeenKey), isTrue);
+      expect(prefs.getString(kSectorTypeKey), 'ELECTRONICS');
     });
 
     testWidgets('calls use case with correct sector and store name',

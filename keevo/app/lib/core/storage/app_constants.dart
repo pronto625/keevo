@@ -21,3 +21,16 @@ const String kPosTutorialShownKey = 'pos_tutorial_shown';
 // completion. Used by [PosPlaceholderPage] to show the correct sector emoji
 // in the empty state (AC6).
 const String kSectorTypeKey = 'sector_type';
+
+// Encryption key for SQLCipher — 32-byte random hex string, stored in FlutterSecureStorage.
+// Generated once on first launch; reused on subsequent launches (AC1).
+const String kDbEncryptionKey = 'db_encryption_key';
+
+// Timestamp (milliseconds since epoch) of the first moment the device went offline.
+// Used by SyncIndicator to compute days-offline count (AC3).
+// Cleared when the device comes back online.
+const String kFirstOfflineDateKey = 'first_offline_date_ms';
+
+// Timestamp (milliseconds since epoch) of the last successful sync.
+// Displayed in the SyncIndicator bottom sheet (AC4).
+const String kLastSyncTimestampKey = 'last_sync_timestamp_ms';

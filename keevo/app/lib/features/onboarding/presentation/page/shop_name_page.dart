@@ -47,16 +47,31 @@ class _ShopNamePageState extends ConsumerState<ShopNamePage> {
         );
   }
 
-  String _errorMessage(AsyncValue<dynamic> state) {
+  /// Called when ONBOARDING_ALREADY_COMPLETED is received from the backend.
+  /// Marks the wizard locally as complete and navigates to /pos silently.
+  Future<void> _completeLocallyAndNavigate() async {
+    final router = GoRouter.of(context);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(kOnboardingWizardSeenKey, true);
+    await prefs.setString(kSectorTypeKey, widget.sectorType.apiCode);
+    if (!mounted) return;
+    router.go('/pos');
+  }
+
+  /// Returns a user-friendly error message, OR null for errors that are
+  /// handled programmatically (e.g. ONBOARDING_ALREADY_COMPLETED → navigate).
+  String? _errorMessage(AsyncValue<dynamic> state) {
     final error = state.error;
-    if (error == null) return '';
+    if (error == null) return null;
     final msg = error.toString();
     // Map known backend domain codes to user-friendly French messages
     if (msg.contains('SECTOR_TEMPLATE_NOT_FOUND')) {
       return 'Secteur d\'activité non reconnu. Veuillez retourner et sélectionner un secteur valide.';
     }
     if (msg.contains('ONBOARDING_ALREADY_COMPLETED')) {
-      return 'Votre boutique est déjà configurée. Veuillez relancer l\'application.';
+      // The tenant is already set up on the backend — treat as success:
+      // mark wizard done locally and navigate to /pos without user action.
+      return null; // handled in listener below
     }
     if (msg.contains('401') || msg.contains('Unauthorized')) {
       return 'Session expirée. Veuillez vous reconnecter.';
@@ -87,13 +102,23 @@ class _ShopNamePageState extends ConsumerState<ShopNamePage> {
         }
       });
       if (next.hasError) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            key: const Key('errorSnackBar'),
-            content: Text(_errorMessage(next)),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        final errMsg = next.error?.toString() ?? '';
+        // ONBOARDING_ALREADY_COMPLETED: the tenant is already set up on the backend.
+        // Mark locally as done and navigate to /pos — no user action required.
+        if (errMsg.contains('ONBOARDING_ALREADY_COMPLETED')) {
+          _completeLocallyAndNavigate();
+          return;
+        }
+        final msg = _errorMessage(next);
+        if (msg != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              key: const Key('errorSnackBar'),
+              content: Text(msg),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        }
       }
     });
 

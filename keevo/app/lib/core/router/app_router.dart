@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,6 +14,7 @@ import '../../features/onboarding/presentation/page/sector_selection_page.dart';
 import '../../features/onboarding/presentation/page/shop_name_page.dart';
 import '../../features/onboarding/presentation/page/terms_page.dart';
 import '../../features/pos/presentation/page/pos_placeholder_page.dart';
+import '../di/providers.dart';
 import '../storage/app_constants.dart';
 
 /// Returns true only if [token] is a structurally valid JWT **and** its `exp`
@@ -57,17 +59,21 @@ class _PlaceholderPage extends StatelessWidget {
 
 /// Écran de démarrage invisible — redirige vers l'onboarding au premier
 /// lancement ou directement vers l'inscription si déjà vu.
-class _SplashRedirectPage extends StatefulWidget {
+class _SplashRedirectPage extends ConsumerStatefulWidget {
   const _SplashRedirectPage();
 
   @override
-  State<_SplashRedirectPage> createState() => _SplashRedirectPageState();
+  ConsumerState<_SplashRedirectPage> createState() =>
+      _SplashRedirectPageState();
 }
 
-class _SplashRedirectPageState extends State<_SplashRedirectPage> {
+class _SplashRedirectPageState extends ConsumerState<_SplashRedirectPage> {
   @override
   void initState() {
     super.initState();
+    // Prewarm the encrypted DB at splash — forces SQLCipher init logs to appear
+    // on every cold start rather than waiting for the first actual DB operation.
+    ref.read(appDatabaseProvider);
     _redirect();
   }
 
@@ -75,18 +81,15 @@ class _SplashRedirectPageState extends State<_SplashRedirectPage> {
     const storage = FlutterSecureStorage();
     final token = await storage.read(key: 'jwt_token');
 
-    // Already logged in with a valid, non-expired token.
     if (token != null && _isValidJwt(token)) {
       if (!mounted) return;
       final prefs = await SharedPreferences.getInstance();
       final wizardSeen = prefs.getBool(kOnboardingWizardSeenKey) ?? false;
       if (!mounted) return;
-      // Route through the wizard if the user has not completed it yet.
       context.go(wizardSeen ? '/pos' : '/onboarding/sector');
       return;
     }
 
-    // Purge any expired / malformed token left in storage.
     if (token != null) await storage.delete(key: 'jwt_token');
 
     final prefs = await SharedPreferences.getInstance();
@@ -94,20 +97,14 @@ class _SplashRedirectPageState extends State<_SplashRedirectPage> {
     if (!mounted) return;
 
     if (!onboardingSeen) {
-      // First install — full first-launch flow: onboarding → terms → register.
       context.go('/onboarding');
     } else {
-      // Returning user with expired/missing token → login only.
-      // Onboarding and terms are shown exactly once (on first install).
       context.go('/auth/login');
     }
   }
 
-  // Top-level _isValidJwt() used — checks format + expiry claim.
-
   @override
   Widget build(BuildContext context) {
-    // Fond uni pendant le chargement des prefs (< 50 ms en pratique)
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       body: const Center(child: CircularProgressIndicator()),

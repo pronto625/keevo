@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/storage/app_constants.dart';
+import '../../../../features/sync_indicator/presentation/widget/sync_indicator.dart';
 import '../../../onboarding/domain/model/sector_type.dart';
 
 /// PosPlaceholderPage — Temporary POS landing page.
@@ -9,14 +11,17 @@ import '../../../onboarding/domain/model/sector_type.dart';
 /// Displayed after the onboarding wizard completes (or on subsequent logins).
 /// First visit: reads [kSectorTypeKey] from SharedPreferences to show the correct
 /// sector emoji in the empty state (AC6), and shows a tutorial [SnackBar] once (AC7).
-class PosPlaceholderPage extends StatefulWidget {
+///
+/// Story 1.5 (AC3): [SyncIndicator] added to AppBar actions for always-visible
+/// connectivity status.
+class PosPlaceholderPage extends ConsumerStatefulWidget {
   const PosPlaceholderPage({super.key});
 
   @override
-  State<PosPlaceholderPage> createState() => _PosPlaceholderPageState();
+  ConsumerState<PosPlaceholderPage> createState() => _PosPlaceholderPageState();
 }
 
-class _PosPlaceholderPageState extends State<PosPlaceholderPage> {
+class _PosPlaceholderPageState extends ConsumerState<PosPlaceholderPage> {
   SectorType? _sectorType;
 
   @override
@@ -65,7 +70,11 @@ class _PosPlaceholderPageState extends State<PosPlaceholderPage> {
   Widget build(BuildContext context) {
     final sector = _sectorType;
     return Scaffold(
-      appBar: AppBar(title: const Text('Point de Vente')),
+      appBar: AppBar(
+        title: const Text('Point de Vente'),
+        // Story 1.5 AC3: SyncIndicator always visible in AppBar trailing position
+        actions: const [SyncIndicator()],
+      ),
       body: Center(
         // AC6: Empty state with sector emoji/illustration + CTA
         child: Padding(
