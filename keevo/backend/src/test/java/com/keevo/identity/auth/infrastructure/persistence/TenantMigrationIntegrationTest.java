@@ -36,8 +36,12 @@ class TenantMigrationIntegrationTest {
     private static final String TENANT_ID = "00000000-0000-0000-0000-000000000001";
 
     // ── AC1: Tables created by TenantSchemaProvisioner ────────────────────────
+    // All 7 tables provisioned by TenantSchemaProvisioner.createTables().
+    // Note: products, stock_levels, sales, sale_items, warehouses, audit_log,
+    // sync_queue, notifications are provisioned by later epic stories.
     private static final Set<String> REQUIRED_TABLES = Set.of(
-            "users", "subscriptions", "roles", "user_roles", "stores"
+            "users", "subscriptions", "roles", "user_roles",
+            "stores", "categories", "tenant_preferences"
     );
 
     private static DataSource dataSource;
@@ -77,7 +81,7 @@ class TenantMigrationIntegrationTest {
 
     @Test
     @Order(1)
-    @DisplayName("migrate() creates all 12 required tables in the tenant schema (AC1)")
+    @DisplayName("migrate() creates all 7 required tables in the tenant schema (AC1)")
     void migrate_createsAllRequiredTables() throws Exception {
         schemaProvisioner.provision(TENANT_ID, SCHEMA);
 
@@ -109,21 +113,36 @@ class TenantMigrationIntegrationTest {
 
     @Test
     @Order(4)
-    @DisplayName("migrate() seeds FREE subscription with correct limits (AC1)")
-    void migrate_seedsFreeSubscription() throws Exception {
+    @DisplayName("migrate() seeds PREMIUM_TRIAL subscription with unlimited limits and 6-month expiry (AC1 — SPEC CHANGE 2026-03-06)")
+    void migrate_seedsPremiumTrialSubscription() throws Exception {
+        // SPEC CHANGE 2026-03-06: new tenants start on PREMIUM_TRIAL (unlimited, 6 months), NOT FREE
         schemaProvisioner.provision(TENANT_ID, SCHEMA);
 
         try (Connection conn = dataSource.getConnection();
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(
-                     "SELECT plan_type, max_stores, max_products, max_employees " +
-                     "FROM \"" + SCHEMA + "\".subscriptions WHERE plan_type = 'FREE'")) {
+                     "SELECT plan_type, max_stores, max_products, max_employees, status, expires_at " +
+                     "FROM \"" + SCHEMA + "\".subscriptions WHERE plan_type = 'PREMIUM_TRIAL'")) {
 
-            assertThat(rs.next()).as("FREE subscription row must exist").isTrue();
-            assertThat(rs.getString("plan_type")).isEqualTo("FREE");
-            assertThat(rs.getInt("max_stores")).isEqualTo(3);
-            assertThat(rs.getInt("max_products")).isEqualTo(500);
-            assertThat(rs.getInt("max_employees")).isEqualTo(5);
+            assertThat(rs.next()).as("PREMIUM_TRIAL subscription row must exist").isTrue();
+            assertThat(rs.getString("plan_type")).isEqualTo("PREMIUM_TRIAL");
+            assertThat(rs.getInt("max_stores")).isEqualTo(Integer.MAX_VALUE);
+            assertThat(rs.getInt("max_products")).isEqualTo(Integer.MAX_VALUE);
+            assertThat(rs.getInt("max_employees")).isEqualTo(Integer.MAX_VALUE);
+            assertThat(rs.getString("status")).isEqualTo("ACTIVE");
+
+            // expires_at must be approximately NOW() + 6 months
+            // PostgreSQL INTERVAL '6 months' = 181-184 calendar days depending on the month.
+            // We accept [180, 187] days from now to handle all calendar combinations.
+            java.sql.Timestamp expiresAt = rs.getTimestamp("expires_at");
+            assertThat(expiresAt).as("expires_at must be set").isNotNull();
+            long expiryFromNowSeconds = expiresAt.toInstant().getEpochSecond()
+                    - java.time.Instant.now().getEpochSecond();
+            long minSeconds = 180L * 86400L; // 180 days
+            long maxSeconds = 187L * 86400L; // 187 days
+            assertThat(expiryFromNowSeconds)
+                    .as("expires_at must be 6 months from now (180–187 days)")
+                    .isBetween(minSeconds, maxSeconds);
         }
     }
 

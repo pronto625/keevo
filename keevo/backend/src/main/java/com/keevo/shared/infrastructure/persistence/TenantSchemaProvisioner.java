@@ -44,11 +44,11 @@ public class TenantSchemaProvisioner {
     private static final String DDL_SUBSCRIPTIONS = """
             CREATE TABLE IF NOT EXISTS subscriptions (
                 id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-                plan_type     VARCHAR(20) NOT NULL DEFAULT 'FREE'
-                                  CHECK (plan_type IN ('FREE','PREMIUM')),
-                max_stores    INT         NOT NULL DEFAULT 3,
-                max_products  INT         NOT NULL DEFAULT 500,
-                max_employees INT         NOT NULL DEFAULT 5,
+                plan_type     VARCHAR(20) NOT NULL DEFAULT 'PREMIUM_TRIAL'
+                                  CHECK (plan_type IN ('FREE','PREMIUM_TRIAL','PREMIUM')),
+                max_stores    INT         NOT NULL DEFAULT 2147483647,
+                max_products  INT         NOT NULL DEFAULT 2147483647,
+                max_employees INT         NOT NULL DEFAULT 2147483647,
                 status        VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
                                   CHECK (status IN ('ACTIVE','SUSPENDED','EXPIRED')),
                 created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -115,12 +115,17 @@ public class TenantSchemaProvisioner {
                 ('EMPLOYEE', '{"pos": true, "inventory_view": true, "stock_view": true}'::jsonb)
             ON CONFLICT (name) DO NOTHING""";
 
+    // SPEC CHANGE 2026-03-06: new tenants start on 6-month PREMIUM_TRIAL (unlimited limits)
+    // WHERE NOT EXISTS ensures idempotency — provision() can be called multiple times safely.
     private static final String SEED_SUBSCRIPTION = """
-            INSERT INTO subscriptions (plan_type, max_stores, max_products, max_employees, status)
-            VALUES ('FREE', 3, 500, 5, 'ACTIVE')""";
+            INSERT INTO subscriptions (plan_type, max_stores, max_products, max_employees, status, expires_at)
+            SELECT 'PREMIUM_TRIAL', 2147483647, 2147483647, 2147483647, 'ACTIVE',
+                   NOW() + INTERVAL '6 months'
+            WHERE NOT EXISTS (SELECT 1 FROM subscriptions WHERE plan_type = 'PREMIUM_TRIAL')""";
 
     private static final String SEED_STORE = """
-            INSERT INTO stores (name) VALUES ('Ma Boutique')""";
+            INSERT INTO stores (name)
+            SELECT 'Ma Boutique' WHERE NOT EXISTS (SELECT 1 FROM stores)""";
 
     // ── DataSource ────────────────────────────────────────────────────────────
 

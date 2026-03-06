@@ -55,12 +55,13 @@ public class TenantFactory {
         String schemaName = Tenant.schemaNameFromCode(code);
 
         // 2. Create and persist tenant domain object
+        // SPEC CHANGE 2026-03-06: new tenants start on 6-month PREMIUM_TRIAL (Story 1.6 handles expiry)
         Tenant tenant = new Tenant(
             UUID.randomUUID(),
             code,
             schemaName,
             TenantStatus.ACTIVE,
-            PlanType.FREE,
+            PlanType.PREMIUM_TRIAL,
             Instant.now()
         );
         Tenant savedTenant = tenantRepository.save(tenant);

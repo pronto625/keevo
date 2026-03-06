@@ -11,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -50,7 +51,7 @@ class TenantFactoryTest {
         String code = "KV-ABC123";
         String schemaName = Tenant.schemaNameFromCode(code);
         Tenant savedTenant = new Tenant(UUID.randomUUID(), code, schemaName,
-                TenantStatus.ACTIVE, PlanType.FREE, Instant.now());
+                TenantStatus.ACTIVE, PlanType.PREMIUM_TRIAL, Instant.now());
 
         when(codeGenerator.generate()).thenReturn(code);
         when(tenantRepository.save(any(Tenant.class))).thenReturn(savedTenant);
@@ -70,7 +71,7 @@ class TenantFactoryTest {
         // arrange
         String code = "KV-XY1234";
         Tenant savedTenant = new Tenant(UUID.randomUUID(), code,
-                Tenant.schemaNameFromCode(code), TenantStatus.ACTIVE, PlanType.FREE, Instant.now());
+                Tenant.schemaNameFromCode(code), TenantStatus.ACTIVE, PlanType.PREMIUM_TRIAL, Instant.now());
 
         when(codeGenerator.generate()).thenReturn(code);
         when(tenantRepository.save(any(Tenant.class))).thenReturn(savedTenant);
@@ -89,7 +90,7 @@ class TenantFactoryTest {
         // arrange
         String code = "KV-FAIL00";
         Tenant savedTenant = new Tenant(UUID.randomUUID(), code,
-                Tenant.schemaNameFromCode(code), TenantStatus.ACTIVE, PlanType.FREE, Instant.now());
+                Tenant.schemaNameFromCode(code), TenantStatus.ACTIVE, PlanType.PREMIUM_TRIAL, Instant.now());
 
         when(codeGenerator.generate()).thenReturn(code);
         when(tenantRepository.save(any(Tenant.class))).thenReturn(savedTenant);
@@ -108,7 +109,7 @@ class TenantFactoryTest {
         String code = "KV-DROP01";
         String expectedSchema = Tenant.schemaNameFromCode(code);
         Tenant savedTenant = new Tenant(UUID.randomUUID(), code,
-                expectedSchema, TenantStatus.ACTIVE, PlanType.FREE, Instant.now());
+                expectedSchema, TenantStatus.ACTIVE, PlanType.PREMIUM_TRIAL, Instant.now());
 
         when(codeGenerator.generate()).thenReturn(code);
         when(tenantRepository.save(any(Tenant.class))).thenReturn(savedTenant);
@@ -119,5 +120,31 @@ class TenantFactoryTest {
 
         // AC4 compensating action: orphaned schema must be cleaned up
         verify(schemaProvisioner, times(1)).dropSchemaIfExists(eq(expectedSchema));
+    }
+
+    @Test
+    @DisplayName("1.4b — create() persists tenant with PREMIUM_TRIAL plan, not FREE (SPEC CHANGE 2026-03-06)")
+    void create_persistsTenantAsPremiumTrial() {
+        // ── RED first: verifies SPEC CHANGE 2026-03-06 ──
+        // New tenants must start on a 6-month PREMIUM_TRIAL, NOT FREE.
+        // The domain Tenant object carried through to tenantRepository.save() must use PREMIUM_TRIAL.
+        // The SQL seed (TenantSchemaProvisioner.SEED_SUBSCRIPTION) inserts PREMIUM_TRIAL +
+        //   expires_at = NOW() + INTERVAL '6 months'; verified by TenantMigrationIntegrationTest.
+        String code = "KV-TRIAL1";
+        ArgumentCaptor<Tenant> tenantCaptor = ArgumentCaptor.forClass(Tenant.class);
+        when(codeGenerator.generate()).thenReturn(code);
+        when(tenantRepository.save(tenantCaptor.capture())).thenAnswer(inv -> inv.getArgument(0));
+
+        // act
+        Tenant result = tenantFactory.create();
+
+        // assert — domain object must carry PREMIUM_TRIAL, not FREE
+        assertThat(result.getPlanType())
+                .as("New tenant must start on PREMIUM_TRIAL, not FREE (SPEC CHANGE 2026-03-06)")
+                .isEqualTo(PlanType.PREMIUM_TRIAL);
+        assertThat(tenantCaptor.getValue().getPlanType())
+                .as("Argument passed to tenantRepository.save() must be PREMIUM_TRIAL")
+                .isEqualTo(PlanType.PREMIUM_TRIAL);
+        assertThat(result.getPlanType()).isEqualTo(PlanType.PREMIUM_TRIAL);
     }
 }
