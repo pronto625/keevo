@@ -46,8 +46,19 @@ public enum ErrorCode {
     SYNC_CONFLICT,
     OFFLINE_LIMIT_EXCEEDED,
 
+    // ── Subscription / Plan Limits ────────────────────────────────
+    PLAN_LIMIT_EXCEEDED,    // HTTP 403 — store/product/employee limit reached on Free plan
+    ACCOUNT_SUSPENDED,      // HTTP 403 — tenant status = SUSPENDED (manual admin lockout)
+    RATE_LIMIT_EXCEEDED,    // HTTP 429 — >100 req/min per tenant
+
     // ── Generic ───────────────────────────────────────────────────
     NOT_FOUND,
     VALIDATION_ERROR,
-    INTERNAL_ERROR;
+    INTERNAL_ERROR,
+    /**
+     * FORBIDDEN — authenticated user does not have the required role.
+     * Maps to HTTP 403. Use instead of UNAUTHORIZED (401) when user IS
+     * authenticated but lacks permission (H2 fix — role guards).
+     */
+    FORBIDDEN;              // HTTP 403 — wrong role (authenticated but not authorised)
 }

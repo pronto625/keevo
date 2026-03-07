@@ -19,6 +19,14 @@ public interface TenantRepository {
     /** Find a tenant by its primary key. */
     Optional<Tenant> findById(UUID id);
 
+    /**
+     * Find a tenant by its schema name (e.g., {@code "kv_abc123"}).
+     *
+     * <p>Required because {@code LoginResponse.tenantId} exposes the schemaName, not the UUID.
+     * Flutter uses that value as a tenant identifier in all admin API calls.
+     */
+    Optional<Tenant> findBySchemaName(String schemaName);
+
     /** Check if a tenant code already exists (for uniqueness during provisioning). */
     boolean existsByCode(String code);
 }

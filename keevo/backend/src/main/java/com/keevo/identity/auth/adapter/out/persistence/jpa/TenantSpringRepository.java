@@ -17,4 +17,6 @@ import java.util.UUID;
 public interface TenantSpringRepository extends JpaRepository<TenantJpaEntity, UUID> {
 
     boolean existsByCode(String code);
+
+    java.util.Optional<TenantJpaEntity> findBySchemaName(String schemaName);
 }

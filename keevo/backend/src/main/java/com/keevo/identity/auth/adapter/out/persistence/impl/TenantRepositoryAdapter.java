@@ -43,6 +43,11 @@ public class TenantRepositoryAdapter implements TenantRepository {
         return springRepository.findById(id).map(this::toDomain);
     }
 
+    @Override
+    public Optional<Tenant> findBySchemaName(String schemaName) {
+        return springRepository.findBySchemaName(schemaName).map(this::toDomain);
+    }
+
     // ── Mapping ──────────────────────────────────────────────────────────────
 
     private TenantJpaEntity toEntity(Tenant t) {

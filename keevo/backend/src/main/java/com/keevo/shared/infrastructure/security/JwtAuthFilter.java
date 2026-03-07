@@ -103,9 +103,20 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             String tenantId = jwtTokenProvider.extractTenantId(claims);
             String role = jwtTokenProvider.extractRole(claims);
             UUID userId = jwtTokenProvider.extractUserId(claims);
+            String tenantStatus = jwtTokenProvider.extractTenantStatus(claims);
 
             // Set multi-tenant context for JPA routing
             TenantContext.setCurrentTenant(tenantId);
+
+            // SUSPENDED tenants: block all write operations (manual admin lockout).
+            // Read operations (GET, HEAD) are always permitted — data is preserved.
+            // Note: natural trial/premium expiry does NOT set SUSPENDED — it downgrades to FREE.
+            if ("SUSPENDED".equals(tenantStatus)
+                    && isWriteMethod(request.getMethod())) {
+                writeErrorWithStatus(response, "ACCOUNT_SUSPENDED",
+                        jakarta.servlet.http.HttpServletResponse.SC_FORBIDDEN);
+                return;
+            }
 
             // Sync tenant schema against public (no-op if already done this JVM lifetime)
             tenantSchemaSyncService.syncIfNeeded(tenantId);
@@ -127,6 +138,20 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             TenantContext.clear();
             SecurityContextHolder.clearContext();
         }
+    }
+
+    private static boolean isWriteMethod(String method) {
+        return "POST".equals(method) || "PUT".equals(method)
+                || "PATCH".equals(method) || "DELETE".equals(method);
+    }
+
+    private void writeErrorWithStatus(HttpServletResponse response,
+                                      String domainCode,
+                                      int status) throws IOException {
+        response.setStatus(status);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        String body = objectMapper.writeValueAsString(Map.of("domainCode", domainCode));
+        response.getWriter().write(body);
     }
 
     private void writeError(HttpServletResponse response, String domainCode) throws IOException {

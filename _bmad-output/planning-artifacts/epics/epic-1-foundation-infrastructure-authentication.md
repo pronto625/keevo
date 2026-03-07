@@ -296,7 +296,26 @@ So that I know what I can do on the free plan, benefit from my 6-month Premium T
 
 ---
 
-## Story 1.7: Immutable Audit Trail & Security Domain Foundation
+## Story 1.7: Multi-Tenant User Memberships & Two-Step Login
+
+> ✅ **Correct Course — 2026-03-07** — Architectural fix identified during Stories 1.2/1.3 implementation.
+> Original Story 1.7 (Audit Trail) is renumbered to 1.8.
+
+As a user (Simon or Loïc),
+I want to be able to belong to multiple Keevo tenants simultaneously (e.g., OWNER of my own shop AND EMPLOYEE in another merchant's shop),
+So that a single phone number uniquely identifies my global identity while my roles and permissions are scoped per tenant at login.
+
+**Context:** `public.users.tenant_id` (1:1 coupling) must be replaced by `public.user_tenant_memberships` (N:N). Login is split into two API steps: (1) verify credentials → return `loginToken` + memberships list; (2) select tenant → return full scoped JWT. Flutter auto-selects if user has only 1 membership (zero UX change for 99% of V1 users).
+
+**Note:** This is NOT related to Epic 3 multi-boutiques. Epic 3 = multiple stores within one tenant. This story = one person belonging to multiple tenants.
+
+**Acceptance Criteria:** See `_bmad-output/implementation-artifacts/1-7-multi-tenant-user-memberships-two-step-login.md` for full AC, tasks, and dev notes.
+
+---
+
+## Story 1.8: Immutable Audit Trail & Security Domain Foundation
+
+> Renumbered from 1.7 — 2026-03-07
 
 As a proprietor (Simon),
 I want every modification to my data to be permanently recorded with full traceability,
@@ -335,8 +354,9 @@ So that I can trust my data is accurate, disputes are resolvable, and my employe
 
 ---
 
-## Story 1.8: Certificate Pinning — Transport Security Hardening
+## Story 1.9: Certificate Pinning — Transport Security Hardening
 
+> Renumbered from 1.8 — 2026-03-07
 > ⏸️ **POST-MVP — à implémenter après la sortie V1. Ne pas bloquer le MVP.**
 
 As a user (Simon or Loïc),

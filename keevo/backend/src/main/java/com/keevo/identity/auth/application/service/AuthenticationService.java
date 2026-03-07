@@ -97,9 +97,10 @@ public class AuthenticationService implements AuthenticateUserUseCase {
                 .orElseThrow(() -> new DomainException(ErrorCode.TENANT_NOT_FOUND));
         String schemaName = tenant.getSchemaName(); // e.g., "kv_abc123"
 
-        // 6. Generate RS256 access token with schema name as tenantId claim
+        // 6. Generate RS256 access token with schema name as tenantId claim and tenant status
+        // tenantStatus is embedded in JWT so JwtAuthFilter can check SUSPENDED without a DB round-trip
         String accessToken = jwtTokenProvider.generateAccessToken(
-                user.getId(), schemaName, user.getRole().name());
+                user.getId(), schemaName, user.getRole().name(), tenant.getStatus().name());
 
         // 7. Generate opaque refresh token and store its SHA-256 hash
         String rawRefreshToken = jwtTokenProvider.generateRefreshToken();

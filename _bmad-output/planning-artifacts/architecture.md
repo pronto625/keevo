@@ -1207,8 +1207,216 @@ An earlier version implemented `Persistable<UUID>` with an `@Transient isNew` fl
 - **Why raw JDBC (not EntityManager)**: Sync runs in the security filter before the JPA session, uses fully-qualified `"schema"."table"` names — no `search_path` needed. Intentional.
 - **Error handling**: Non-blocking — `SQLException` caught, logged, swallowed; request proceeds with existing schema
 
-**Critical rule for raw SQL in multi-tenant `@Transactional` methods:**
-Always use `EntityManager.createNativeQuery()` — never `DataSource.getConnection()` or `JdbcTemplate`. `JpaTransactionManager` binds the active connection under the `EntityManagerFactory` key (not `DataSource` key) in `TransactionSynchronizationManager`. Raw JDBC bypasses this binding and gets a fresh pool connection without `search_path` → `relation "<table>" does not exist`.
+**Critical rule — Raw SQL and multi-tenant schema routing:**
+
+`SchemaAwareMultiTenantConnectionProvider` is a **Hibernate SPI**. It intercepts connections that **Hibernate itself** requests — it has zero effect on connections acquired via any other path.
+
+| SQL access method | Routed by `SchemaAwareMultiTenantConnectionProvider`? | Safe for tenant tables? |
+|---|---|---|
+| JPA `Repository` / `EntityManager` (Hibernate-managed) | ✅ Yes — Hibernate calls the SPI | ✅ Yes |
+| `EntityManager.createNativeQuery()` inside `@Transactional` | ✅ Yes — shares the Hibernate-bound connection | ✅ Yes |
+| `JdbcTemplate` | ❌ No — goes directly to HikariCP, bypasses SPI | ❌ No |
+| `DataSource.getConnection()` | ❌ No — bypasses SPI entirely | ❌ No |
+
+**Rule 1 — Inside `@Transactional` methods:** never use `JdbcTemplate` or raw `DataSource.getConnection()`. `JpaTransactionManager` binds the active connection under the `EntityManagerFactory` key in `TransactionSynchronizationManager`. Raw JDBC bypasses this and gets a fresh pool connection without `search_path` set.
+
+**Rule 2 — Outside `@Transactional` (e.g. lightweight count adapters):** `JdbcTemplate` is permitted **only if** every SQL statement uses a fully-qualified schema name built from `TenantContext.getCurrentTenant()`:
+```java
+String schema = TenantContext.getCurrentTenant();  // e.g. "kv_abc123"
+jdbcTemplate.queryForObject(
+    "SELECT COUNT(*) FROM \"" + schema + "\".stores WHERE is_active = TRUE",
+    Integer.class);
+```
+This is the same pattern used by `TenantSchemaSyncService`. Never use bare table names (`FROM stores`) with `JdbcTemplate` — PostgreSQL will look in `public` and the relation will not be found.
+
+**Summary — the golden rule:** if the SQL touches a tenant-schema table, either use Hibernate (JPA repository / `EntityManager`) or qualify the table name with `TenantContext.getCurrentTenant()` as the schema prefix.
+
+---
+
+## Multi-Tenant Identity Model
+
+> **Decision date:** 2026-03-07 — Correct course applied during Story 1.7 (sprint execution)
+
+### The Problem: 1:1 User ↔ Tenant Coupling
+
+The initial implementation (Stories 1.2 & 1.3) stored `tenant_id` directly on `public.users`. This creates a hard 1:1 coupling: one phone number → one tenant. This design fails for any scenario where a person belongs to more than one Keevo tenant simultaneously.
+
+**Real-world examples that require N:N:**
+- Simon (OWNER of `KV-ABC123`) is invited as an EMPLOYEE by a colleague in `KV-DEF456`
+- A freelance accountant manages books for three different merchants — three tenants
+- An employee leaves one shop and joins another. Their old record must remain; only membership changes
+
+**Critical distinction — multi-boutiques vs multi-tenant:**
+
+| Concept | Scope | Story | Design |
+|---|---|---|---|
+| **Multi-boutiques (Epic 3)** | Multiple stores within **one tenant** | 3-1 to 3-4 | `kv_xxx.stores` table — pure intra-tenant concern. ZERO impact on user identity model. |
+| **Multi-tenant membership (Story 1.7)** | One person belonging to **multiple tenants** | 1.7 | `public.user_tenant_memberships` — global N:N relation |
+
+These are **orthogonal problems**. Epic 3 is unrelated to Story 1.7.
+
+---
+
+### Database Schema — Global Identity Layer (`public`)
+
+```
+public.users
+    id              UUID PK
+    phone_number    VARCHAR(20) UNIQUE NOT NULL   ← global identifier
+    password_hash   VARCHAR(255) NOT NULL
+    is_active       BOOLEAN DEFAULT TRUE
+    failed_attempts INT DEFAULT 0
+    locked_until    TIMESTAMPTZ
+    created_at      TIMESTAMPTZ
+    -- NOTE: tenant_id column still physically exists (dangling from Story 1.2).
+    -- It is NOT mapped by Hibernate — completely ignored. Will be removed in a
+    -- future Flyway migration when proper migration strategy is adopted.
+
+public.user_tenant_memberships
+    id          UUID PK DEFAULT gen_random_uuid()
+    user_id     UUID NOT NULL REFERENCES public.users(id)
+    tenant_id   UUID NOT NULL REFERENCES public.tenants(id)
+    role        VARCHAR(30) NOT NULL           ← 'OWNER', 'EMPLOYEE', 'SUPER_ADMIN'
+    is_active   BOOLEAN DEFAULT TRUE
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+    UNIQUE(user_id, tenant_id)
+```
+
+**Why the UNIQUE constraint matters:** A person can hold only one role per tenant. If Simon is OWNER of `KV-ABC123`, he cannot also be EMPLOYEE of `KV-ABC123`. He CAN be EMPLOYEE of `KV-DEF456` (different tenant).
+
+**Valid membership combinations — all fully supported:**
+
+| Scenario | `user_tenant_memberships` rows |
+|---|---|
+| Simon owns 1 clothing shop (3 stores inside) | `(simon, KV-ABC123, OWNER)` — Epic 3 handles the 3 stores *inside* that one tenant |
+| Simon owns 2 completely separate businesses (clothing + electronics) | `(simon, KV-ABC123, OWNER)` + `(simon, KV-XYZ789, OWNER)` |
+| Loïc is an employee in two different merchants' shops | `(loic, KV-ABC123, EMPLOYEE)` + `(loic, KV-DEF456, EMPLOYEE)` |
+| Loïc owns his own shop AND works for Simon | `(loic, KV-GHI012, OWNER)` + `(loic, KV-ABC123, EMPLOYEE)` |
+
+**Key rule:** the `UNIQUE(user_id, tenant_id)` constraint only prevents having two rows for the **same** (user, tenant) pair. A person can have as many rows as they have distinct tenant relationships — there is no upper bound enforced at the DB level.
+
+---
+
+### Tenant Schema Layer (`kv_xxxxxx`)
+
+```
+kv_xxx.user_roles
+    id      UUID PK
+    user_id UUID           ← same UUID as public.users.id (cross-schema FK by convention, not DB constraint)
+    role_id UUID REFERENCES kv_xxx.roles(id)
+```
+
+`kv_xxx.users` — exists in every tenant schema (provisioned by `TenantSchemaProvisioner`) but is **never written to** for OWNER users. It is a placeholder for Epic 3 employee management where employees are invited into a tenant workspace and their profile is managed locally.
+
+**Source of authority per concern:**
+
+| Concern | Source |
+|---|---|
+| Authentication (password, lockout) | `public.users` |
+| Which tenants a user can access | `public.user_tenant_memberships` |
+| Role within a tenant at runtime | JWT claim `role` (derived from membership at login) |
+| Local employee profile in a tenant | `kv_xxx.users` (Epic 3, not yet populated) |
+
+---
+
+### Authentication Flow — Two-Step Login (Approach B)
+
+Chosen over three alternatives:
+
+| Approach | Verdict | Why |
+|---|---|---|
+| A — `tenantCode` in login form | ❌ Rejected | Forces all users (even owners) to know their tenant code. UX degradation for the majority. |
+| B — **Two-step login (chosen)** | ✅ Adopted | Step 1 is identical to old login for single-tenant users (auto-select). Step 2 is implicit. Zero UX change for 99% of V1 users. |
+| C — Try all tenant schemas | ❌ Rejected | N+1 DB problem. Catastrophic at scale. |
+| D — Separate employee endpoint | ❌ Rejected | Duplicates auth logic. Breaks uniform identity model. |
+
+#### Step 1 — Credential Verification
+
+```
+POST /api/v1/auth/login
+Body: { "phoneNumber": "+237...", "password": "..." }
+
+Response 200:
+{
+  "loginToken": "eyJ...",          ← RS256 JWT, TTL: 5 min, scope: "login_pending"
+  "memberships": [
+    {
+      "tenantCode":  "KV-ABC123",
+      "tenantName":  "Boutique Simon",
+      "role":        "OWNER",
+      "schemaName":  "kv_abc123"
+    }
+  ]
+}
+```
+
+- Credentials verified (password + lockout state)
+- `loginToken` is a **short-lived RS256 JWT** with claim `"scope": "login_pending"`
+- `loginToken` is **NOT usable** on protected API endpoints — `JwtAuthFilter` rejects scope `"login_pending"` with HTTP 401
+- Memberships loaded via `JdbcTemplate` (raw SQL on `public.user_tenant_memberships JOIN public.tenants`) — Hibernate NOT used here because `TenantContext` is not yet set
+
+#### Step 2 — Tenant Selection
+
+```
+POST /api/v1/auth/select-tenant
+Body: { "loginToken": "eyJ...", "tenantCode": "KV-ABC123" }
+
+Response 200:
+{
+  "accessToken":  "eyJ...",   ← RS256 JWT, TTL: 24h, scope: "access"
+  "refreshToken": "...",
+  "expiresIn":    86400,
+  "userId":       "...",
+  "tenantId":     "kv_abc123",
+  "role":         "OWNER"
+}
+```
+
+- `loginToken` validated: RS256 signature + expiry + `scope == "login_pending"`
+- `tenantCode` resolved → `tenantId` → membership lookup → verify `is_active == true`
+- Full `accessToken` generated (scope: `"access"`, or no scope claim — backward compatible)
+- `RefreshToken` created and persisted in `public.refresh_tokens`
+- `UserAuthenticatedEvent` published
+
+#### Flutter UX Optimization (auto-select)
+
+```
+Flutter: AuthRepository.login()
+  ┌─ Step 1: POST /auth/login ─────────────────────── always
+  │
+  ├─── memberships.length == 1 ──→ Step 2 auto-called → store tokens → navigate home
+  │                                       (zero UX change — identical to old login)
+  │
+  └─── memberships.length > 1  ──→ TenantPickerScreen → user selects → Step 2 called
+```
+
+In V1, virtually all users (OWNER-only) have exactly 1 membership. The tenant picker is a progressive enhancement for future use (Epic 3 employee invitation scenario).
+
+---
+
+### JWT Scope Convention
+
+| Token type | `scope` claim | TTL | Usage |
+|---|---|---|---|
+| Login token | `"login_pending"` | 5 minutes | Only valid for `POST /auth/select-tenant` |
+| Access token | absent (or `"access"`) | 24 hours | All protected API endpoints |
+| Refresh token | opaque (hashed) | 30 days | Only valid for `POST /auth/refresh` |
+
+`JwtAuthFilter` rule: if `scope == "login_pending"` → reject with HTTP 401 `TOKEN_INVALID`. A login token must never grant API access.
+
+---
+
+### Admin (SUPER_ADMIN) Identity
+
+```
+public.users: { id: 00000000-..., phoneNumber: $ADMIN_PHONE, role: SUPER_ADMIN }
+public.user_tenant_memberships: { userId: 00000000-..., tenantId: 00000000-..., role: SUPER_ADMIN }
+public.tenants: { id: 00000000-..., code: KV-ADMIN, schemaName: "public" }
+```
+
+`AdminAccountInitializer` creates both the user record AND the membership on first boot. Idempotent — guarded by existence checks.
+
+---
 
 ### Naming Conventions
 

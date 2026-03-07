@@ -14,6 +14,7 @@ import '../../features/onboarding/presentation/page/sector_selection_page.dart';
 import '../../features/onboarding/presentation/page/shop_name_page.dart';
 import '../../features/onboarding/presentation/page/terms_page.dart';
 import '../../features/pos/presentation/page/pos_placeholder_page.dart';
+import '../../features/settings/presentation/page/subscription_page.dart';
 import '../di/providers.dart';
 import '../storage/app_constants.dart';
 
@@ -210,5 +211,9 @@ final GoRouter appRouter = GoRouter(
       path: '/settings',
       builder: (_, __) => const _PlaceholderPage(title: 'Settings'),
     ),
-  ],
+    // ── Settings > Subscription ──────────────────────────────
+    GoRoute(
+      path: '/settings/subscription',
+      builder: (_, __) => const SubscriptionPage(),
+    ),  ],
 );

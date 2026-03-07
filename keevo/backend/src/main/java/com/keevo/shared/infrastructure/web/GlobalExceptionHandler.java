@@ -41,7 +41,7 @@ public class GlobalExceptionHandler {
                         ex.getMessage(),
                         status.name(),
                         ex.getDomainCode(),
-                        null
+                        ex.getDetails()
                 ));
     }
 
@@ -90,6 +90,10 @@ public class GlobalExceptionHandler {
             case "SECTOR_TEMPLATE_NOT_FOUND",
                  "ONBOARDING_ALREADY_COMPLETED" -> HttpStatus.BAD_REQUEST;
             case "TENANT_PROVISION_FAILED" -> HttpStatus.INTERNAL_SERVER_ERROR;
+            case "PLAN_LIMIT_EXCEEDED",
+                 "ACCOUNT_SUSPENDED",
+                 "FORBIDDEN" -> HttpStatus.FORBIDDEN;   // H2 fix: role mismatch is 403, not 401
+            case "RATE_LIMIT_EXCEEDED" -> HttpStatus.TOO_MANY_REQUESTS;
             default -> HttpStatus.INTERNAL_SERVER_ERROR;
         };
     }

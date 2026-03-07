@@ -7,10 +7,14 @@ import '../../features/auth/domain/repository/token_storage.dart';
 /// AC3: Automatically refreshes the access token when a 401 TOKEN_EXPIRED
 /// response is received, then retries the original request transparently.
 ///
+/// AC (Story 1.6): Intercepts 403 PLAN_LIMIT_EXCEEDED and invokes
+/// [onPlanLimitExceeded] so the caller can show [PlanLimitBottomSheet].
+///
 /// Responsibilities:
 /// - [onRequest]: inject [Authorization: Bearer <token>] header if token exists
 /// - [onError]: detect 401 TOKEN_EXPIRED → refresh → retry; on refresh failure,
 ///   call [onSessionExpired] (clear tokens + navigate to login)
+/// - [onError]: detect 403 PLAN_LIMIT_EXCEEDED → call [onPlanLimitExceeded]
 ///
 /// Architecture note: the [Dio] instance passed to this interceptor is the
 /// SAME instance that fires the original request. To avoid the inifinite refresh
@@ -21,6 +25,11 @@ class AuthInterceptor extends Interceptor {
   final Dio _refreshDio; // separate Dio for refresh calls (avoids interceptor loop)
   final void Function() onSessionExpired; // navigate to /auth/login + clear tokens
 
+  /// Called when 403 PLAN_LIMIT_EXCEEDED is received. Parameters:
+  /// - [entity]: 'stores' | 'products' | 'employees'
+  /// - [limit]: max allowed count for the current plan
+  final void Function(String entity, int limit)? onPlanLimitExceeded;
+
   /// Guards against concurrent refresh attempts.
   bool _isRefreshing = false;
 
@@ -29,6 +38,7 @@ class AuthInterceptor extends Interceptor {
     required Dio dio,
     required Dio refreshDio,
     required this.onSessionExpired,
+    this.onPlanLimitExceeded,
   })  : _storage = storage,
         _dio = dio,
         _refreshDio = refreshDio;
@@ -113,6 +123,18 @@ class AuthInterceptor extends Interceptor {
       }
     }
 
+    // ── 403 PLAN_LIMIT_EXCEEDED ──────────────────────────────────────────
+    if (statusCode == 403) {
+      final body = err.response?.data;
+      final domainCode = _extractDomainCode(body);
+      if (domainCode == 'PLAN_LIMIT_EXCEEDED' && onPlanLimitExceeded != null) {
+        final entity = _extractDetail(body, 'entity') ?? 'items';
+        final limitStr = _extractDetail(body, 'limit') ?? '0';
+        final limit = int.tryParse(limitStr) ?? 0;
+        onPlanLimitExceeded!(entity, limit);
+      }
+    }
+
     handler.next(err);
   }
 
@@ -128,6 +150,17 @@ class AuthInterceptor extends Interceptor {
   String? _extractDomainCode(dynamic body) {
     if (body is Map) {
       return body['domainCode'] as String?;
+    }
+    return null;
+  }
+
+  /// Extracts a string value from the 'details' map in the response body.
+  String? _extractDetail(dynamic body, String key) {
+    if (body is Map) {
+      final details = body['details'];
+      if (details is Map) {
+        return details[key]?.toString();
+      }
     }
     return null;
   }

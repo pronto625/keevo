@@ -44,23 +44,38 @@ public class JwtTokenProvider {
     }
 
     /**
-     * Generate a signed RS256 JWT access token.
+     * Generate a signed RS256 JWT access token with tenant status claim.
      *
-     * @param userId   subject (user UUID)
-     * @param tenantId tenant code (e.g., "KV-ABC123")
-     * @param role     user role
+     * @param userId       subject (user UUID)
+     * @param tenantId     tenant schema name (e.g., "kv_abc123")
+     * @param role         user role
+     * @param tenantStatus tenant status ("ACTIVE" | "SUSPENDED") — embedded for
+     *                     JwtAuthFilter suspension check without extra DB round-trip
      * @return compact JWT string
      */
-    public String generateAccessToken(UUID userId, String tenantId, String role) {
+    public String generateAccessToken(UUID userId, String tenantId, String role, String tenantStatus) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(userId.toString())
                 .claim("tenantId", tenantId)
                 .claim("role", role)
+                .claim("tenantStatus", tenantStatus)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(jwtProperties.getAccessTokenExpiryHours(), ChronoUnit.HOURS)))
                 .signWith(privateKey, Jwts.SIG.RS256)
                 .compact();
+    }
+
+    /**
+     * Generate a signed RS256 JWT access token (defaults tenantStatus to "ACTIVE").
+     *
+     * @param userId   subject (user UUID)
+     * @param tenantId tenant schema name (e.g., "kv_abc123")
+     * @param role     user role
+     * @return compact JWT string
+     */
+    public String generateAccessToken(UUID userId, String tenantId, String role) {
+        return generateAccessToken(userId, tenantId, role, "ACTIVE");
     }
 
     /**
@@ -104,6 +119,15 @@ public class JwtTokenProvider {
     /** Extract role from parsed claims. */
     public String extractRole(Claims claims) {
         return claims.get("role", String.class);
+    }
+
+    /**
+     * Extract tenantStatus from parsed claims.
+     * Defaults to "ACTIVE" if the claim is absent (backward-compatible with old tokens).
+     */
+    public String extractTenantStatus(Claims claims) {
+        String status = claims.get("tenantStatus", String.class);
+        return status != null ? status : "ACTIVE";
     }
 
     /**

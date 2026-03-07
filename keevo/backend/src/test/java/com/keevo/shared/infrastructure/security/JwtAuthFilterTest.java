@@ -173,6 +173,72 @@ class JwtAuthFilterTest {
         assertThat(TenantContext.getCurrentTenant()).isNull();
     }
 
+    // ── Suspension guard ───────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("SUSPENDED tenant + POST returns 403 ACCOUNT_SUSPENDED")
+    void should_return_403_when_tenant_suspended_and_write_method() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/stores");
+        request.addHeader("Authorization", "Bearer suspended.jwt.token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        UUID userId = UUID.randomUUID();
+        Claims mockClaims = buildClaims(userId, "KV-SUSP01", "OWNER");
+        when(jwtTokenProvider.parseToken("suspended.jwt.token")).thenReturn(mockClaims);
+        when(jwtTokenProvider.extractTenantId(mockClaims)).thenReturn("KV-SUSP01");
+        when(jwtTokenProvider.extractRole(mockClaims)).thenReturn("OWNER");
+        when(jwtTokenProvider.extractUserId(mockClaims)).thenReturn(userId);
+        when(jwtTokenProvider.extractTenantStatus(mockClaims)).thenReturn("SUSPENDED");
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(403);
+        assertThat(response.getContentAsString()).contains("ACCOUNT_SUSPENDED");
+        verify(filterChain, never()).doFilter(any(), any());
+    }
+
+    @Test
+    @DisplayName("SUSPENDED tenant + GET passes through (reads always allowed)")
+    void should_allow_get_for_suspended_tenant() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/subscription/me");
+        request.addHeader("Authorization", "Bearer suspended.jwt.token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        UUID userId = UUID.randomUUID();
+        Claims mockClaims = buildClaims(userId, "KV-SUSP02", "OWNER");
+        when(jwtTokenProvider.parseToken("suspended.jwt.token")).thenReturn(mockClaims);
+        when(jwtTokenProvider.extractTenantId(mockClaims)).thenReturn("KV-SUSP02");
+        when(jwtTokenProvider.extractRole(mockClaims)).thenReturn("OWNER");
+        when(jwtTokenProvider.extractUserId(mockClaims)).thenReturn(userId);
+        when(jwtTokenProvider.extractTenantStatus(mockClaims)).thenReturn("SUSPENDED");
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    @DisplayName("ACTIVE tenant + POST passes through normally")
+    void should_allow_post_for_active_tenant() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/stores");
+        request.addHeader("Authorization", "Bearer active.jwt.token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        UUID userId = UUID.randomUUID();
+        Claims mockClaims = buildClaims(userId, "KV-ACT01", "OWNER");
+        when(jwtTokenProvider.parseToken("active.jwt.token")).thenReturn(mockClaims);
+        when(jwtTokenProvider.extractTenantId(mockClaims)).thenReturn("KV-ACT01");
+        when(jwtTokenProvider.extractRole(mockClaims)).thenReturn("OWNER");
+        when(jwtTokenProvider.extractUserId(mockClaims)).thenReturn(userId);
+        when(jwtTokenProvider.extractTenantStatus(mockClaims)).thenReturn("ACTIVE");
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────
 
     private Claims buildClaims(UUID userId, String tenantId, String role) {

@@ -121,7 +121,7 @@ public class TenantSchemaProvisioner {
             INSERT INTO subscriptions (plan_type, max_stores, max_products, max_employees, status, expires_at)
             SELECT 'PREMIUM_TRIAL', 2147483647, 2147483647, 2147483647, 'ACTIVE',
                    NOW() + INTERVAL '6 months'
-            WHERE NOT EXISTS (SELECT 1 FROM subscriptions WHERE plan_type = 'PREMIUM_TRIAL')""";
+            WHERE NOT EXISTS (SELECT 1 FROM subscriptions)""";
 
     private static final String SEED_STORE = """
             INSERT INTO stores (name)
