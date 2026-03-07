@@ -17,9 +17,11 @@ import time
 
 HERE = os.path.dirname(__file__)
 
-# Map story ID → script filename
+# Map story ID → (script filename, accepts --base-url flag)
 STORIES = {
-    "1-4": "story_1_4_onboarding.py",
+    "1-4": ("story_1_4_onboarding.py", True),
+    "1-6": ("e2e-story-1-6.py",        False),
+    "1-7": ("e2e-story-1-7.py",        True),
 }
 
 
@@ -41,18 +43,18 @@ def main():
     if args.story and args.story not in STORIES:
         print(f"Story '{args.story}' inconnue. Stories disponibles: {list(STORIES.keys())}")
         sys.exit(1)
-
     results = {}
-    for story_id, script in scripts.items():
+    for story_id, (script, supports_base_url) in scripts.items():
         path = os.path.join(HERE, script)
-        cmd = [sys.executable, path, "--base-url", args.base_url]
-        if args.verbose:
+        cmd = [sys.executable, path]
+        if supports_base_url:
+            cmd += ["--base-url", args.base_url]
+        if args.verbose and supports_base_url:
             cmd.append("--verbose")
 
         print(f"\n{'=' * 58}")
         print(f"  Story {story_id}: {script}")
         print(f"{'=' * 58}")
-
         start = time.time()
         r = subprocess.run(cmd)
         elapsed = time.time() - start

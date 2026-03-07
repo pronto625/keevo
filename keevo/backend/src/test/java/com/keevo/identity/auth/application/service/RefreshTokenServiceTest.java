@@ -178,7 +178,7 @@ class RefreshTokenServiceTest {
 
     private User buildUser(UUID id, String phone, String role) {
         return new User(id, phone, "$2a$12$hash",
-                Role.valueOf(role), UUID.randomUUID(),
+                Role.valueOf(role),
                 true, Instant.now(), 0, null);
     }
 }

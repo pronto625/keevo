@@ -3,10 +3,12 @@ package com.keevo.identity.auth.application.service;
 import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.model.UserRegisteredEvent;
+import com.keevo.identity.auth.domain.model.UserTenantMembership;
 import com.keevo.identity.auth.domain.port.in.RegisterUserCommand;
 import com.keevo.identity.auth.domain.port.in.RegisterUserUseCase;
 import com.keevo.identity.auth.domain.port.in.RegistrationResult;
 import com.keevo.identity.auth.domain.port.out.TenantSchemaPort;
+import com.keevo.identity.auth.domain.port.out.UserMembershipRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -35,6 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class RegistrationService implements RegisterUserUseCase {
 
     private final UserRepository userRepository;
+    private final UserMembershipRepository userMembershipRepository;
     private final TenantFactory tenantFactory;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
@@ -42,12 +45,14 @@ public class RegistrationService implements RegisterUserUseCase {
     private final TenantSchemaPort tenantSchemaPort;
 
     public RegistrationService(UserRepository userRepository,
+                                UserMembershipRepository userMembershipRepository,
                                 TenantFactory tenantFactory,
                                 PasswordEncoder passwordEncoder,
                                 JwtTokenProvider jwtTokenProvider,
                                 ApplicationEventPublisher eventPublisher,
                                 TenantSchemaPort tenantSchemaPort) {
         this.userRepository = userRepository;
+        this.userMembershipRepository = userMembershipRepository;
         this.tenantFactory = tenantFactory;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
@@ -72,9 +77,13 @@ public class RegistrationService implements RegisterUserUseCase {
         //    If this fails → @Transactional rolls back everything (AC4)
         Tenant tenant = tenantFactory.create();
 
-        // 4. Create user domain object and persist
-        User user = User.newOwner(command.phoneNumber(), passwordHash, tenant.getId());
+        // 4. Create user domain object and persist (AC1 — no tenantId on User, Story 1.7)
+        User user = User.newOwner(command.phoneNumber(), passwordHash);
         User savedUser = userRepository.save(user);
+
+        // 4b. Create OWNER membership in the new tenant (Story 1.7 — AC1)
+        userMembershipRepository.save(
+            UserTenantMembership.create(savedUser.getId(), tenant.getId(), "OWNER"));
 
         // 5. Assign OWNER role in the tenant schema (AC1 — user_roles table)
         //    Must be called AFTER userRepository.save() so the userId is known.

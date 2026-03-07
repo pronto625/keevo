@@ -9,11 +9,13 @@ import '../../data/datasource/remote_auth_datasource.dart';
 import '../../data/repository/auth_repository_impl.dart';
 import '../../data/repository/secure_token_storage.dart';
 import '../../domain/model/auth_tokens.dart';
+import '../../domain/model/login_result.dart';
 import '../../domain/model/registration_result.dart';
 import '../../domain/repository/auth_repository.dart';
 import '../../domain/repository/token_storage.dart';
 import '../../domain/usecase/login_usecase.dart';
 import '../../domain/usecase/register_user_usecase.dart';
+import '../../domain/usecase/select_tenant_usecase.dart';
 
 part 'auth_provider.g.dart';
 
@@ -108,6 +110,14 @@ final loginUseCaseProvider = Provider<LoginUseCase>((ref) {
   );
 });
 
+/// Select tenant use case provider (Story 1.7 — two-step login step 2).
+final selectTenantUseCaseProvider = Provider<SelectTenantUseCase>((ref) {
+  return SelectTenantUseCase(
+    ref.watch(authRepositoryProvider),
+    ref.watch(tokenStorageProvider),
+  );
+});
+
 // ── Registration AsyncNotifier (Riverpod code-gen) ───────────────────────────
 
 /// [Registration] manages the async registration lifecycle.
@@ -138,17 +148,18 @@ class Registration extends _$Registration {
 
 // ── Login AsyncNotifier (Riverpod code-gen) ───────────────────────────────────
 
-/// [Login] manages the async login lifecycle.
+/// [Login] manages the async login lifecycle (Story 1.7 — two-step flow).
 ///
-/// State: [AsyncValue<AuthTokens?>]
+/// State: [AsyncValue<LoginResult?>]
 /// - Initial / reset: AsyncData(null)
 /// - Loading: AsyncLoading()
-/// - Success: AsyncData(AuthTokens(...))
+/// - Single membership: AsyncData(AuthenticatedResult(tokens))
+/// - Multi membership: AsyncData(NeedsTenantSelectionResult(...))
 /// - Error: AsyncError(AuthException, stackTrace)
 @riverpod
 class Login extends _$Login {
   @override
-  FutureOr<AuthTokens?> build() => null;
+  FutureOr<LoginResult?> build() => null;
 
   Future<void> login({
     required String phoneNumber,
@@ -167,3 +178,33 @@ class Login extends _$Login {
   void reset() => state = const AsyncData(null);
 }
 
+// ── SelectTenant AsyncNotifier (Riverpod code-gen) ───────────────────────────
+
+/// [SelectTenant] manages the tenant selection step (AC9, Story 1.7).
+///
+/// State: [AsyncValue<AuthTokens?>]
+/// - Initial / reset: AsyncData(null)
+/// - Loading: AsyncLoading()
+/// - Success: AsyncData(AuthTokens(...))
+/// - Error: AsyncError(AuthException, stackTrace)
+@riverpod
+class SelectTenant extends _$SelectTenant {
+  @override
+  FutureOr<AuthTokens?> build() => null;
+
+  Future<void> select({
+    required String loginToken,
+    required String tenantCode,
+  }) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(
+      () => ref.read(selectTenantUseCaseProvider).execute(
+            loginToken: loginToken,
+            tenantCode: tenantCode,
+          ),
+    );
+  }
+
+  /// Reset state to initial.
+  void reset() => state = const AsyncData(null);
+}

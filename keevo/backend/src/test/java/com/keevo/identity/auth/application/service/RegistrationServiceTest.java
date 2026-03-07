@@ -4,9 +4,11 @@ import com.keevo.identity.auth.domain.model.PlanType;
 import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.auth.domain.model.TenantStatus;
 import com.keevo.identity.auth.domain.model.User;
+import com.keevo.identity.auth.domain.model.UserTenantMembership;
 import com.keevo.identity.auth.domain.port.in.RegisterUserCommand;
 import com.keevo.identity.auth.domain.port.in.RegistrationResult;
 import com.keevo.identity.auth.domain.port.out.TenantSchemaPort;
+import com.keevo.identity.auth.domain.port.out.UserMembershipRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.auth.domain.model.UserRegisteredEvent;
 import com.keevo.shared.domain.exception.DomainException;
@@ -35,6 +37,7 @@ import static org.mockito.Mockito.*;
 class RegistrationServiceTest {
 
     @Mock private UserRepository userRepository;
+    @Mock private UserMembershipRepository userMembershipRepository;
     @Mock private TenantFactory tenantFactory;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private JwtTokenProvider jwtTokenProvider;
@@ -55,8 +58,8 @@ class RegistrationServiceTest {
                 TenantStatus.ACTIVE, PlanType.FREE, Instant.now());
     }
 
-    private User stubbedUser(UUID tenantId) {
-        return User.newOwner(PHONE, "hashed_pwd", tenantId);
+    private User stubbedUser() {
+        return User.newOwner(PHONE, "hashed_pwd");
     }
 
     // ── Happy path ──────────────────────────────────────────────────────────
@@ -66,12 +69,13 @@ class RegistrationServiceTest {
     void register_happyPath_returnsResult() {
         // arrange
         Tenant tenant = stubbedTenant();
-        User user = stubbedUser(tenant.getId());
+        User user = stubbedUser();
 
         when(userRepository.existsByPhoneNumber(PHONE)).thenReturn(false);
         when(passwordEncoder.encode(PASSWORD)).thenReturn("hashed_pwd");
         when(tenantFactory.create()).thenReturn(tenant);
         when(userRepository.save(any(User.class))).thenReturn(user);
+        when(userMembershipRepository.save(any(UserTenantMembership.class))).thenAnswer(inv -> inv.getArgument(0));
         when(jwtTokenProvider.generateAccessToken(any(), anyString(), anyString()))
                 .thenReturn("jwt-access-token");
 
@@ -91,12 +95,13 @@ class RegistrationServiceTest {
     void register_publishesDomainEvent() {
         // arrange
         Tenant tenant = stubbedTenant();
-        User user = stubbedUser(tenant.getId());
+        User user = stubbedUser();
 
         when(userRepository.existsByPhoneNumber(PHONE)).thenReturn(false);
         when(passwordEncoder.encode(PASSWORD)).thenReturn("hashed_pwd");
         when(tenantFactory.create()).thenReturn(tenant);
         when(userRepository.save(any(User.class))).thenReturn(user);
+        when(userMembershipRepository.save(any(UserTenantMembership.class))).thenAnswer(inv -> inv.getArgument(0));
         when(jwtTokenProvider.generateAccessToken(any(), anyString(), anyString())).thenReturn("jwt-access-token");
 
         // act
@@ -147,12 +152,13 @@ class RegistrationServiceTest {
     void register_assignsOwnerRoleInTenantSchema() {
         // ── RED: RegistrationService does not yet call tenantSchemaPort.assignOwnerRole() ──
         Tenant tenant = stubbedTenant();
-        User savedUser = stubbedUser(tenant.getId());
+        User savedUser = stubbedUser();
 
         when(userRepository.existsByPhoneNumber(PHONE)).thenReturn(false);
         when(passwordEncoder.encode(PASSWORD)).thenReturn("hashed_pwd");
         when(tenantFactory.create()).thenReturn(tenant);
         when(userRepository.save(any(User.class))).thenReturn(savedUser);
+        when(userMembershipRepository.save(any(UserTenantMembership.class))).thenAnswer(inv -> inv.getArgument(0));
         when(jwtTokenProvider.generateAccessToken(any(), anyString(), anyString())).thenReturn("jwt-access-token");
 
         registrationService.register(new RegisterUserCommand(PHONE, PASSWORD, null));

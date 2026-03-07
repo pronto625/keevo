@@ -79,12 +79,15 @@ public class GlobalExceptionHandler {
             case "USER_NOT_FOUND", "TENANT_NOT_FOUND",
                  "PRODUCT_NOT_FOUND", "CATEGORY_NOT_FOUND",
                  "STOCK_NOT_FOUND", "STORE_NOT_FOUND",
+                 "MEMBERSHIP_NOT_FOUND",
                  "NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "UNAUTHORIZED", "TOKEN_EXPIRED",
+                 "TOKEN_INVALID",
                  "INVALID_CREDENTIALS", "ACCOUNT_LOCKED",
                  "REFRESH_TOKEN_INVALID" -> HttpStatus.UNAUTHORIZED;
             case "EMAIL_ALREADY_EXISTS", "USER_ALREADY_EXISTS",
-                 "TENANT_ALREADY_EXISTS" -> HttpStatus.CONFLICT;
+                 "TENANT_ALREADY_EXISTS",
+                 "MEMBERSHIP_ALREADY_EXISTS" -> HttpStatus.CONFLICT;
             case "VALIDATION_ERROR", "INVALID_AMOUNT",
                  "INVALID_PHONE_NUMBER", "INVALID_PASSWORD" -> HttpStatus.UNPROCESSABLE_ENTITY;
             case "SECTOR_TEMPLATE_NOT_FOUND",

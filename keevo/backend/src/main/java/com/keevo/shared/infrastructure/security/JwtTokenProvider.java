@@ -79,6 +79,39 @@ public class JwtTokenProvider {
     }
 
     /**
+     * Generate a short-lived RS256 JWT login token (Story 1.7 two-step login).
+     *
+     * <p>This token has a 5-minute TTL and carries {@code scope = "login_pending"}.
+     * It is NOT usable as an access token — {@link JwtAuthFilter} MUST reject it.
+     *
+     * @param userId the authenticated user's UUID (becomes JWT subject)
+     * @return compact JWT string (TTL: 5 min, scope: "login_pending")
+     */
+    public String generateLoginToken(UUID userId) {
+        Instant now = Instant.now();
+        return Jwts.builder()
+                .subject(userId.toString())
+                .claim("scope", "login_pending")
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plus(5, ChronoUnit.MINUTES)))
+                .signWith(privateKey, Jwts.SIG.RS256)
+                .compact();
+    }
+
+    /**
+     * Extract the {@code scope} claim from parsed JWT claims.
+     *
+     * <p>Returns {@code null} if the claim is absent (standard access tokens have no scope).
+     * Returns {@code "login_pending"} for login tokens.
+     *
+     * @param claims pre-parsed token claims
+     * @return scope string or null
+     */
+    public String extractScope(Claims claims) {
+        return claims.get("scope", String.class);
+    }
+
+    /**
      * Generate a cryptographically random opaque refresh token.
      * 64 bytes of SecureRandom, base64url-encoded (no padding).
      *
@@ -144,52 +177,4 @@ public class JwtTokenProvider {
         }
     }
 
-    // ── Legacy methods (backward compatibility with Story 1.2 stub callers) ──────
-
-    /**
-     * @deprecated Use {@link #generateAccessToken(UUID, String, String)} instead.
-     *             Kept for backward compatibility — will be removed in Story 1.4.
-     */
-    @Deprecated(since = "1.3", forRemoval = true)
-    public String generateToken(String subject, String tenantId) {
-        return generateAccessToken(UUID.fromString(subject), tenantId, "OWNER");
-    }
-
-    /**
-     * @deprecated Use {@link #parseToken(String)} instead.
-     */
-    @Deprecated(since = "1.3", forRemoval = true)
-    public boolean validateToken(String token) {
-        try {
-            parseToken(token);
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    /**
-     * @deprecated Use {@link #extractUserId(Claims)} instead.
-     */
-    @Deprecated(since = "1.3", forRemoval = true)
-    public String getSubject(String token) {
-        try {
-            return parseToken(token).getSubject();
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    /**
-     * @deprecated Use {@link #extractTenantId(Claims)} instead.
-     */
-    @Deprecated(since = "1.3", forRemoval = true)
-    public String getTenantId(String token) {
-        try {
-            Claims claims = parseToken(token);
-            return extractTenantId(claims);
-        } catch (Exception e) {
-            return null;
-        }
-    }
 }

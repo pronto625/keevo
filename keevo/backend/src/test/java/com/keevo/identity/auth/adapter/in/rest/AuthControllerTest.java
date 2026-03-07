@@ -5,12 +5,16 @@ import com.keevo.identity.auth.adapter.in.rest.dto.LoginRequest;
 import com.keevo.identity.auth.adapter.in.rest.dto.RefreshRequest;
 import com.keevo.identity.auth.adapter.in.rest.dto.RegistrationRequest;
 import com.keevo.identity.auth.domain.model.AuthTokens;
+import com.keevo.identity.auth.domain.model.UserMembershipInfo;
 import com.keevo.identity.auth.domain.port.in.AuthenticateUserCommand;
 import com.keevo.identity.auth.domain.port.in.AuthenticateUserUseCase;
+import com.keevo.identity.auth.domain.port.in.LoginSessionResult;
 import com.keevo.identity.auth.domain.port.in.RefreshTokenUseCase;
 import com.keevo.identity.auth.domain.port.in.RegisterUserCommand;
 import com.keevo.identity.auth.domain.port.in.RegisterUserUseCase;
 import com.keevo.identity.auth.domain.port.in.RegistrationResult;
+import com.keevo.identity.auth.domain.port.in.SelectTenantCommand;
+import com.keevo.identity.auth.domain.port.in.SelectTenantUseCase;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.JwtAuthFilter;
@@ -26,6 +30,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -49,10 +54,11 @@ class AuthControllerTest {
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
 
-    @MockBean RegisterUserUseCase registerUserUseCase;
+    @MockBean RegisterUserUseCase   registerUserUseCase;
     @MockBean AuthenticateUserUseCase authenticateUserUseCase;
-    @MockBean RefreshTokenUseCase refreshTokenUseCase;
-    @MockBean JwtAuthFilter jwtAuthFilter;
+    @MockBean SelectTenantUseCase   selectTenantUseCase;
+    @MockBean RefreshTokenUseCase   refreshTokenUseCase;
+    @MockBean JwtAuthFilter         jwtAuthFilter;
 
     @BeforeEach
     void letFilterPassThrough() throws Exception {
@@ -119,28 +125,27 @@ class AuthControllerTest {
     }
 
     // ══════════════════════════════════════════════════
-    // POST /api/v1/auth/login  (AC1, AC4)
+    // POST /api/v1/auth/login  (Story 1.7 step-1 — AC2 + AC5)
     // ══════════════════════════════════════════════════
 
     @Test
-    @DisplayName("POST /login → 200 with accessToken, refreshToken, userId, tenantId, role, expiresIn")
-    void login_returns200WithFullTokenPayloadOnSuccess() throws Exception {
+    @DisplayName("POST /login → 200 with loginToken and memberships (step 1)")
+    void login_returns200WithLoginSessionResponse() throws Exception {
         UUID userId = UUID.randomUUID();
-        AuthTokens tokens = new AuthTokens("eyJhbGci.real.jwt", "opaque-refresh-token",
-                86400L, userId, "kv_abc123", "OWNER");
-        when(authenticateUserUseCase.authenticate(any(AuthenticateUserCommand.class))).thenReturn(tokens);
+        LoginSessionResult result = new LoginSessionResult(
+                "short-lived-login-token",
+                List.of(new UserMembershipInfo("KV-ABC123", "My Shop", "OWNER", "kv_abc123")));
+        when(authenticateUserUseCase.authenticate(any(AuthenticateUserCommand.class))).thenReturn(result);
 
         mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
                                 new LoginRequest("+22670000001", "SecurePass1!"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").value("eyJhbGci.real.jwt"))
-                .andExpect(jsonPath("$.refreshToken").value("opaque-refresh-token"))
-                .andExpect(jsonPath("$.userId").value(userId.toString()))
-                .andExpect(jsonPath("$.tenantId").value("kv_abc123"))
-                .andExpect(jsonPath("$.role").value("OWNER"))
-                .andExpect(jsonPath("$.expiresIn").value(86400));
+                .andExpect(jsonPath("$.loginToken").value("short-lived-login-token"))
+                .andExpect(jsonPath("$.memberships").isArray())
+                .andExpect(jsonPath("$.memberships[0].tenantCode").value("KV-ABC123"))
+                .andExpect(jsonPath("$.memberships[0].role").value("OWNER"));
     }
 
     @Test
@@ -179,6 +184,47 @@ class AuthControllerTest {
                         .content(objectMapper.writeValueAsString(
                                 new LoginRequest("", "SecurePass1!"))))
                 .andExpect(status().isUnprocessableEntity());
+    }
+
+    // ══════════════════════════════════════════════════
+    // POST /api/v1/auth/select-tenant  (Story 1.7 step-2 — AC3)
+    // ══════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("POST /select-tenant → 200 with full access+refresh tokens (step 2)")
+    void selectTenant_returns200WithFullTokens() throws Exception {
+        UUID userId = UUID.randomUUID();
+        AuthTokens tokens = new AuthTokens("eyJhbGci.access.jwt", "opaque-refresh-token",
+                86400L, userId, "kv_abc123", "OWNER");
+        when(selectTenantUseCase.select(any(SelectTenantCommand.class))).thenReturn(tokens);
+
+        String body = """
+                {"loginToken":"short-lived-login-token","tenantCode":"KV-ABC123"}
+                """;
+        mockMvc.perform(post("/api/v1/auth/select-tenant")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("eyJhbGci.access.jwt"))
+                .andExpect(jsonPath("$.refreshToken").value("opaque-refresh-token"))
+                .andExpect(jsonPath("$.tenantId").value("kv_abc123"))
+                .andExpect(jsonPath("$.role").value("OWNER"));
+    }
+
+    @Test
+    @DisplayName("POST /select-tenant → 401 TOKEN_INVALID when loginToken is an accessToken")
+    void selectTenant_returns401OnInvalidScope() throws Exception {
+        when(selectTenantUseCase.select(any()))
+                .thenThrow(new DomainException(ErrorCode.TOKEN_INVALID));
+
+        String body = """
+                {"loginToken":"wrong-scope-access-token","tenantCode":"KV-ABC123"}
+                """;
+        mockMvc.perform(post("/api/v1/auth/select-tenant")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.domainCode").value("TOKEN_INVALID"));
     }
 
     // ══════════════════════════════════════════════════

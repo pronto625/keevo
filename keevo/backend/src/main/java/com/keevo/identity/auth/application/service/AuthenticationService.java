@@ -1,41 +1,37 @@
 package com.keevo.identity.auth.application.service;
 
-import com.keevo.identity.auth.domain.model.AuthTokens;
-import com.keevo.identity.auth.domain.model.RefreshToken;
-import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.auth.domain.model.User;
-import com.keevo.identity.auth.domain.model.UserAuthenticatedEvent;
+import com.keevo.identity.auth.domain.model.UserMembershipInfo;
 import com.keevo.identity.auth.domain.port.in.AuthenticateUserCommand;
 import com.keevo.identity.auth.domain.port.in.AuthenticateUserUseCase;
-import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
-import com.keevo.identity.auth.domain.port.out.TenantRepository;
+import com.keevo.identity.auth.domain.port.in.LoginSessionResult;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.security.JwtProperties;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 
 /**
- * AuthenticationService — Orchestrates user login and token issuance.
+ * AuthenticationService — Orchestrates user login step 1 (two-step login, Story 1.7).
  *
- * <p>GoF Pattern: Façade — single entry point coordinating:
- * account lockout check → password verification → token generation →
- * refresh token persistence → audit event.
+ * <p>GoF Pattern: Façade — coordinates:
+ * account lockout check → password verification → membership loading → loginToken generation.
+ *
+ * <p>Step 1 ONLY — does NOT issue access/refresh tokens (moved to {@link SelectTenantService}).
+ * Step 1 returns a short-lived {@code loginToken} (5min) + the user's tenant memberships.
  *
  * <p>Architecture rules enforced:
- * - ActorId passed explicitly in command (never via SecurityContextHolder)
+ * - NEVER selects tenant here — this service knows only global identity
  * - No HTTP types in this class
  * - Password NEVER logged
- * - Zero business logic in AuthController — pure delegation here
  */
 @Service
 public class AuthenticationService implements AuthenticateUserUseCase {
@@ -46,32 +42,20 @@ public class AuthenticationService implements AuthenticateUserUseCase {
     private static final int LOCKOUT_MINUTES = 15;
 
     private final UserRepository userRepository;
-    private final TenantRepository tenantRepository;
-    private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
-    private final JwtProperties jwtProperties;
-    private final ApplicationEventPublisher eventPublisher;
 
     public AuthenticationService(UserRepository userRepository,
-                                  TenantRepository tenantRepository,
-                                  RefreshTokenRepository refreshTokenRepository,
                                   PasswordEncoder passwordEncoder,
-                                  JwtTokenProvider jwtTokenProvider,
-                                  JwtProperties jwtProperties,
-                                  ApplicationEventPublisher eventPublisher) {
-        this.userRepository = userRepository;
-        this.tenantRepository = tenantRepository;
-        this.refreshTokenRepository = refreshTokenRepository;
-        this.passwordEncoder = passwordEncoder;
+                                  JwtTokenProvider jwtTokenProvider) {
+        this.userRepository   = userRepository;
+        this.passwordEncoder  = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
-        this.jwtProperties = jwtProperties;
-        this.eventPublisher = eventPublisher;
     }
 
     @Override
-    @Transactional
-    public AuthTokens authenticate(AuthenticateUserCommand command) {
+    @Transactional(noRollbackFor = DomainException.class)
+    public LoginSessionResult authenticate(AuthenticateUserCommand command) {
         // 1. Load user — return INVALID_CREDENTIALS (not USER_NOT_FOUND) to avoid user enumeration
         User user = userRepository.findByPhoneNumber(command.phoneNumber())
                 .orElseThrow(() -> new DomainException(ErrorCode.INVALID_CREDENTIALS));
@@ -92,32 +76,15 @@ public class AuthenticationService implements AuthenticateUserUseCase {
         user = user.withLockoutState(0, null);
         userRepository.save(user);
 
-        // 5. Look up tenant schema name for JWT routing
-        Tenant tenant = tenantRepository.findById(user.getTenantId())
-                .orElseThrow(() -> new DomainException(ErrorCode.TENANT_NOT_FOUND));
-        String schemaName = tenant.getSchemaName(); // e.g., "kv_abc123"
+        // 5. Load tenant memberships (via JdbcTemplate — no TenantContext needed)
+        List<UserMembershipInfo> memberships =
+                userRepository.findMembershipsWithTenantInfo(user.getId());
 
-        // 6. Generate RS256 access token with schema name as tenantId claim and tenant status
-        // tenantStatus is embedded in JWT so JwtAuthFilter can check SUSPENDED without a DB round-trip
-        String accessToken = jwtTokenProvider.generateAccessToken(
-                user.getId(), schemaName, user.getRole().name(), tenant.getStatus().name());
+        // 6. Generate short-lived loginToken (5min, scope=login_pending)
+        //    This token is NOT usable for API access — JwtAuthFilter rejects scope=login_pending
+        String loginToken = jwtTokenProvider.generateLoginToken(user.getId());
 
-        // 7. Generate opaque refresh token and store its SHA-256 hash
-        String rawRefreshToken = jwtTokenProvider.generateRefreshToken();
-        String tokenHash = hashToken(rawRefreshToken);
-        Instant expiresAt = Instant.now().plus(jwtProperties.getRefreshTokenExpiryDays(), ChronoUnit.DAYS);
-        RefreshToken refreshToken = RefreshToken.create(user.getId(), schemaName, tokenHash, expiresAt);
-        refreshTokenRepository.save(refreshToken);
-
-        // 8. Publish audit event (Observer pattern)
-        eventPublisher.publishEvent(new UserAuthenticatedEvent(
-                user.getId(), schemaName, user.getRole().name(),
-                null, // IP address not available at domain service level
-                Instant.now()));
-
-        long expiresIn = (long) jwtProperties.getAccessTokenExpiryHours() * 3600;
-        return new AuthTokens(accessToken, rawRefreshToken, expiresIn,
-                user.getId(), schemaName, user.getRole().name());
+        return new LoginSessionResult(loginToken, memberships);
     }
 
     // ── Private helpers ────────────────────────────────────────────────────
@@ -139,15 +106,5 @@ public class AuthenticationService implements AuthenticateUserUseCase {
         }
         return user.withLockoutState(newCount, newLockedUntil);
     }
-
-    /** SHA-256 hash of raw token — deterministic for DB lookup. */
-    private String hashToken(String rawToken) {
-        try {
-            var md = java.security.MessageDigest.getInstance("SHA-256");
-            byte[] hash = md.digest(rawToken.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
-        } catch (java.security.NoSuchAlgorithmException e) {
-            throw new RuntimeException("SHA-256 algorithm not available", e);
-        }
-    }
 }
+

@@ -2,8 +2,10 @@ package com.keevo.shared.infrastructure.config;
 
 import com.keevo.identity.auth.adapter.out.persistence.entity.TenantJpaEntity;
 import com.keevo.identity.auth.adapter.out.persistence.entity.UserJpaEntity;
+import com.keevo.identity.auth.adapter.out.persistence.entity.UserTenantMembershipJpaEntity;
 import com.keevo.identity.auth.adapter.out.persistence.jpa.TenantSpringRepository;
 import com.keevo.identity.auth.adapter.out.persistence.jpa.UserSpringRepository;
+import com.keevo.identity.auth.adapter.out.persistence.jpa.UserTenantMembershipSpringRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -52,19 +54,22 @@ public class AdminAccountInitializer implements ApplicationRunner {
     private static final String ADMIN_STATUS        = "ACTIVE";
     private static final String ADMIN_PLAN_TYPE     = "PREMIUM";
 
-    private final TenantSpringRepository tenantSpringRepository;
-    private final UserSpringRepository   userSpringRepository;
-    private final PasswordEncoder        passwordEncoder;
-    private final AdminProperties        adminProperties;
+    private final TenantSpringRepository              tenantSpringRepository;
+    private final UserSpringRepository                userSpringRepository;
+    private final UserTenantMembershipSpringRepository membershipSpringRepository;
+    private final PasswordEncoder                     passwordEncoder;
+    private final AdminProperties                     adminProperties;
 
     public AdminAccountInitializer(TenantSpringRepository tenantSpringRepository,
                                    UserSpringRepository userSpringRepository,
+                                   UserTenantMembershipSpringRepository membershipSpringRepository,
                                    PasswordEncoder passwordEncoder,
                                    AdminProperties adminProperties) {
-        this.tenantSpringRepository = tenantSpringRepository;
-        this.userSpringRepository   = userSpringRepository;
-        this.passwordEncoder        = passwordEncoder;
-        this.adminProperties        = adminProperties;
+        this.tenantSpringRepository  = tenantSpringRepository;
+        this.userSpringRepository    = userSpringRepository;
+        this.membershipSpringRepository = membershipSpringRepository;
+        this.passwordEncoder         = passwordEncoder;
+        this.adminProperties         = adminProperties;
     }
 
     @Override
@@ -97,14 +102,17 @@ public class AdminAccountInitializer implements ApplicationRunner {
 
     private void ensureAdminUser() {
         String phone = adminProperties.phone();
-        if (userSpringRepository.findByPhoneNumber(phone).isEmpty()) {
+        UUID adminUserId;
+        var existingUser = userSpringRepository.findByPhoneNumber(phone);
+        if (existingUser.isEmpty()) {
             String hash = passwordEncoder.encode(adminProperties.password());
+            adminUserId = UUID.randomUUID();
+            // 7-arg constructor: no tenantId (Story 1.7 — tenantId removed from User)
             UserJpaEntity adminUser = new UserJpaEntity(
-                    UUID.randomUUID(),
+                    adminUserId,
                     phone,
                     hash,
                     "SUPER_ADMIN",
-                    ADMIN_TENANT_ID,
                     true,
                     0,
                     null
@@ -113,8 +121,20 @@ public class AdminAccountInitializer implements ApplicationRunner {
             log.info("[AdminInit] Super admin account created for phone {}",
                     maskPhone(phone));
         } else {
+            adminUserId = existingUser.get().getId();
             log.debug("[AdminInit] Super admin account already exists for phone {} — skipping",
                     maskPhone(phone));
+        }
+
+        // Always verify membership exists — crash-recovery guard:
+        // if app crashed after user creation but before membership creation on a previous run,
+        // the next startup would skip the whole block (user exists) leaving admin without membership.
+        boolean hasMembership = membershipSpringRepository
+                .findByUserIdAndTenantId(adminUserId, ADMIN_TENANT_ID).isPresent();
+        if (!hasMembership) {
+            membershipSpringRepository.save(new UserTenantMembershipJpaEntity(
+                    UUID.randomUUID(), adminUserId, ADMIN_TENANT_ID, "SUPER_ADMIN", true));
+            log.info("[AdminInit] SUPER_ADMIN membership created for userId={}", adminUserId);
         }
     }
 

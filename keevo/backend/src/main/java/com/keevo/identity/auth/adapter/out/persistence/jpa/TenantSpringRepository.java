@@ -19,4 +19,7 @@ public interface TenantSpringRepository extends JpaRepository<TenantJpaEntity, U
     boolean existsByCode(String code);
 
     java.util.Optional<TenantJpaEntity> findBySchemaName(String schemaName);
+
+    /** Story 1.7 — needed by SelectTenantService to resolve tenantCode → Tenant. */
+    java.util.Optional<TenantJpaEntity> findByCode(String code);
 }

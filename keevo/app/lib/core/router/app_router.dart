@@ -8,6 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../features/auth/presentation/page/login_page.dart';
 import '../../features/auth/presentation/page/register_page.dart';
+import '../../features/auth/presentation/page/tenant_picker_page.dart';
+import '../../features/auth/domain/model/membership_dto.dart';
 import '../../features/onboarding/domain/model/sector_type.dart';
 import '../../features/onboarding/presentation/page/onboarding_page.dart';
 import '../../features/onboarding/presentation/page/sector_selection_page.dart';
@@ -139,6 +141,19 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/auth/register',
       builder: (_, __) => const RegisterPage(),
+    ),
+
+    // ── Tenant picker (Story 1.7 — AC9: multi-membership users) ─────────
+    GoRoute(
+      path: '/tenant-picker',
+      builder: (_, state) {
+        final extra = state.extra as Map<String, dynamic>?;
+        if (extra == null) return const LoginPage();
+        return TenantPickerPage(
+          loginToken: extra['loginToken'] as String,
+          memberships: (extra['memberships'] as List).cast<MembershipDto>(),
+        );
+      },
     ),
 
     // ── Onboarding ──────────────────────────────────────────

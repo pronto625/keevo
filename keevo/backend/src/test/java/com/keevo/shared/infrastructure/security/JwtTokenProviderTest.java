@@ -121,6 +121,54 @@ class JwtTokenProviderTest {
         assertThat(provider.isTokenExpired(token)).isFalse();
     }
 
+    // ── Login token (Story 1.7) ──────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("generateLoginToken produces RS256 JWT with scope=login_pending and 5min TTL")
+    void should_generate_login_token_with_login_pending_scope() {
+        UUID userId = UUID.randomUUID();
+
+        String loginToken = provider.generateLoginToken(userId);
+
+        Claims claims = provider.parseToken(loginToken);
+        assertThat(claims.getSubject()).isEqualTo(userId.toString());
+        assertThat(claims.get("scope", String.class)).isEqualTo("login_pending");
+        // 5 min TTL: expiration should be roughly between now+4min and now+6min
+        long expiresInMs = claims.getExpiration().getTime() - System.currentTimeMillis();
+        assertThat(expiresInMs).isBetween(4 * 60 * 1000L, 6 * 60 * 1000L);
+    }
+
+    @Test
+    @DisplayName("generateLoginToken does NOT embed tenantId or role claims")
+    void should_generate_login_token_without_tenant_or_role_claims() {
+        UUID userId = UUID.randomUUID();
+
+        String loginToken = provider.generateLoginToken(userId);
+
+        Claims claims = provider.parseToken(loginToken);
+        assertThat(claims.get("tenantId", String.class)).isNull();
+        assertThat(claims.get("role", String.class)).isNull();
+    }
+
+    @Test
+    @DisplayName("extractScope returns login_pending for a loginToken")
+    void should_extract_login_pending_scope_from_login_token() {
+        UUID userId = UUID.randomUUID();
+        String loginToken = provider.generateLoginToken(userId);
+
+        Claims claims = provider.parseToken(loginToken);
+        assertThat(provider.extractScope(claims)).isEqualTo("login_pending");
+    }
+
+    @Test
+    @DisplayName("extractScope returns null for a regular accessToken (no scope claim)")
+    void should_return_null_scope_for_access_token() {
+        String accessToken = provider.generateAccessToken(UUID.randomUUID(), "kv_abc123", "OWNER");
+
+        Claims claims = provider.parseToken(accessToken);
+        assertThat(provider.extractScope(claims)).isNull();
+    }
+
     // ── Refresh token ──────────────────────────────────────────────────────
 
     @Test

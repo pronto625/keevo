@@ -8,6 +8,7 @@ import 'package:mocktail/mocktail.dart';
 
 import 'package:keevo/features/auth/domain/exception/auth_exception.dart';
 import 'package:keevo/features/auth/domain/model/auth_tokens.dart';
+import 'package:keevo/features/auth/domain/model/login_result.dart';
 import 'package:keevo/features/auth/domain/usecase/login_usecase.dart';
 import 'package:keevo/features/auth/presentation/page/login_page.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
@@ -93,13 +94,15 @@ void main() {
       when(() => mockUseCase.execute(
             phoneNumber: any(named: 'phoneNumber'),
             password: any(named: 'password'),
-          )).thenAnswer((_) async => const AuthTokens(
-            accessToken: 'token',
-            refreshToken: 'refresh',
-            userId: 'uid',
-            tenantId: 'kv_abc',
-            role: 'OWNER',
-            expiresIn: 86400,
+          )).thenAnswer((_) async => AuthenticatedResult(
+            const AuthTokens(
+              accessToken: 'token',
+              refreshToken: 'refresh',
+              userId: 'uid',
+              tenantId: 'kv_abc',
+              role: 'OWNER',
+              expiresIn: 86400,
+            ),
           ));
 
       await tester.pumpWidget(buildPage());
@@ -142,7 +145,7 @@ void main() {
     testWidgets('shows loading indicator while login is in progress',
         (tester) async {
       // Use a Completer so no pending fake timers are left when the test ends
-      final completer = Completer<AuthTokens>();
+      final completer = Completer<LoginResult>();
       when(() => mockUseCase.execute(
             phoneNumber: any(named: 'phoneNumber'),
             password: any(named: 'password'),

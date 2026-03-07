@@ -1,15 +1,10 @@
 package com.keevo.identity.auth.application.service;
 
-import com.keevo.identity.auth.domain.model.AuthTokens;
-import com.keevo.identity.auth.domain.model.RefreshToken;
 import com.keevo.identity.auth.domain.model.Role;
-import com.keevo.identity.auth.domain.model.Tenant;
-import com.keevo.identity.auth.domain.model.TenantStatus;
-import com.keevo.identity.auth.domain.model.PlanType;
 import com.keevo.identity.auth.domain.model.User;
+import com.keevo.identity.auth.domain.model.UserMembershipInfo;
 import com.keevo.identity.auth.domain.port.in.AuthenticateUserCommand;
-import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
-import com.keevo.identity.auth.domain.port.out.TenantRepository;
+import com.keevo.identity.auth.domain.port.in.LoginSessionResult;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -22,7 +17,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.security.KeyFactory;
@@ -33,6 +27,7 @@ import java.security.spec.X509EncodedKeySpec;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -41,92 +36,87 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- * AuthenticationServiceTest — TDD tests for authentication and account lockout logic.
+ * AuthenticationServiceTest — TDD tests for Story 1.7 authentication step 1.
  *
- * <p>Test Validity (Test Validity Principle):
- * - {@link JwtTokenProvider} is a REAL instance loaded with test RSA keys.
- *   It is NOT mocked because it is core security logic, not a system boundary.
- *   If {@code generateAccessToken()} is deleted or produces invalid output, these tests fail.
- * - Only true system boundaries are mocked: {@link UserRepository}, {@link TenantRepository},
- *   {@link RefreshTokenRepository} (persistence), {@link PasswordEncoder} (Spring Security),
- *   and {@link ApplicationEventPublisher} (framework event bus).
+ * <p>Step 1 behavior: phone+password → lockout check → loginToken (5min, scope=login_pending)
+ * + membership list. Does NOT issue access/refresh tokens (that is SelectTenantService).
+ *
+ * <p>Test Validity Principle:
+ * - {@link JwtTokenProvider} is a REAL instance — NOT mocked (core security logic).
+ * - Only true system boundaries are mocked: {@link UserRepository}, {@link PasswordEncoder}.
  */
 @ExtendWith(MockitoExtension.class)
-@DisplayName("AuthenticationService")
+@DisplayName("AuthenticationService (step 1 — two-step login)")
 class AuthenticationServiceTest {
 
     @Mock UserRepository userRepository;
-    @Mock TenantRepository tenantRepository;
-    @Mock RefreshTokenRepository refreshTokenRepository;
     @Mock PasswordEncoder passwordEncoder;
-    @Mock ApplicationEventPublisher eventPublisher;
 
-    // Real JwtTokenProvider — NOT mocked. Core security logic must exercise real RSA signing.
     private JwtTokenProvider realJwtTokenProvider;
-    private JwtProperties testJwtProperties;
     private AuthenticationService authService;
 
     @BeforeEach
     void setUp() throws Exception {
         RSAPrivateKey privateKey = loadTestPrivateKey();
-        RSAPublicKey publicKey   = loadTestPublicKey();
-        testJwtProperties = new JwtProperties(24, 30);
-        realJwtTokenProvider = new JwtTokenProvider(privateKey, publicKey, testJwtProperties);
-        authService = new AuthenticationService(
-                userRepository, tenantRepository, refreshTokenRepository,
-                passwordEncoder, realJwtTokenProvider, testJwtProperties, eventPublisher);
+        RSAPublicKey  publicKey  = loadTestPublicKey();
+        JwtProperties props = new JwtProperties(24, 30);
+        realJwtTokenProvider = new JwtTokenProvider(privateKey, publicKey, props);
+        authService = new AuthenticationService(userRepository, passwordEncoder, realJwtTokenProvider);
     }
 
     // ── Happy path ─────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("authenticate with valid credentials returns real RS256 JWT with correct claims")
-    void should_authenticate_valid_credentials_and_return_tokens() {
-        UUID tenantUuid = UUID.randomUUID();
-        User user = buildUser("+22670000001", "$2a$12$hashedpassword", 0, null, tenantUuid);
-        Tenant tenant = buildTenant(tenantUuid, "KV-ABC123", "kv_abc123");
+    @DisplayName("authenticate returns loginToken with scope=login_pending and memberships list")
+    void should_return_login_session_result_with_login_token_and_memberships() {
+        UUID userId = UUID.randomUUID();
+        User user = buildUser(userId, "+22670000001", "$2a$12$hash", 0, null);
+        List<UserMembershipInfo> memberships = List.of(
+                new UserMembershipInfo("KV-ABC123", "My Shop", "OWNER", "kv_abc123"));
+
         when(userRepository.findByPhoneNumber("+22670000001")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("SecurePass1!", user.getPasswordHash())).thenReturn(true);
-        when(tenantRepository.findById(tenantUuid)).thenReturn(Optional.of(tenant));
-        when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(inv -> inv.getArgument(0));
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.findMembershipsWithTenantInfo(userId)).thenReturn(memberships);
 
-        AuthTokens result = authService.authenticate(
+        LoginSessionResult result = authService.authenticate(
                 new AuthenticateUserCommand("+22670000001", "SecurePass1!", null));
 
-        // The access token MUST be a real parseable RS256 JWT — not a stub string
-        Claims claims = realJwtTokenProvider.parseToken(result.accessToken());
-        assertThat(claims.getSubject()).isEqualTo(user.getId().toString());
-        assertThat(claims.get("tenantId", String.class)).isEqualTo("kv_abc123");
-        assertThat(claims.get("role", String.class)).isEqualTo("OWNER");
-        assertThat(claims.getExpiration()).isAfter(java.util.Date.from(Instant.now()));
+        // loginToken MUST be a real parseable RS256 JWT with scope=login_pending
+        Claims claims = realJwtTokenProvider.parseToken(result.loginToken());
+        assertThat(claims.getSubject()).isEqualTo(userId.toString());
+        assertThat(realJwtTokenProvider.extractScope(claims)).isEqualTo("login_pending");
 
-        // Refresh token must be an opaque base64url string (non-empty, URL-safe)
-        assertThat(result.refreshToken()).hasSizeGreaterThanOrEqualTo(80);
-        assertThat(result.refreshToken()).doesNotContain("+", "/", "=");
+        // memberships come from repository
+        assertThat(result.memberships()).hasSize(1);
+        assertThat(result.memberships().get(0).tenantCode()).isEqualTo("KV-ABC123");
+        assertThat(result.memberships().get(0).role()).isEqualTo("OWNER");
 
-        assertThat(result.expiresIn()).isEqualTo(86400L);
-
-        verify(refreshTokenRepository).save(any(RefreshToken.class));
-        // Must reset failedAttempts to 0 on success
+        // failedAttempts reset to 0 on success
         verify(userRepository).save(argThat(u -> u.failedAttempts() == 0 && u.lockedUntil() == null));
     }
 
     @Test
-    @DisplayName("authenticate publishes UserAuthenticatedEvent on success")
-    void should_publish_authenticated_event_on_success() {
-        UUID tenantUuid = UUID.randomUUID();
-        User user = buildUser("+22670000001", "$2a$12$hash", 0, null, tenantUuid);
-        Tenant tenant = buildTenant(tenantUuid, "KV-ABC123", "kv_abc123");
+    @DisplayName("authenticate does NOT publish events and does NOT save refresh tokens (step 1 only)")
+    void should_not_issue_access_token_or_refresh_token_in_step1() {
+        UUID userId = UUID.randomUUID();
+        User user = buildUser(userId, "+22670000001", "$2a$12$hash", 0, null);
         when(userRepository.findByPhoneNumber(any())).thenReturn(Optional.of(user));
         when(passwordEncoder.matches(any(), any())).thenReturn(true);
-        when(tenantRepository.findById(tenantUuid)).thenReturn(Optional.of(tenant));
-        when(refreshTokenRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.findMembershipsWithTenantInfo(userId)).thenReturn(List.of());
 
-        authService.authenticate(new AuthenticateUserCommand("+22670000001", "pass", null));
+        LoginSessionResult result = authService.authenticate(
+                new AuthenticateUserCommand("+22670000001", "pass", null));
 
-        verify(eventPublisher).publishEvent((Object) any());
+        // loginToken must exist but must NOT be usable as an access token
+        assertThat(result.loginToken()).isNotBlank();
+        Claims claims = realJwtTokenProvider.parseToken(result.loginToken());
+        assertThat(realJwtTokenProvider.extractScope(claims)).isEqualTo("login_pending");
+
+        // Only 1 userRepository interaction for save (reset lockout) + 1 for memberships
+        verify(userRepository, times(1)).save(any());
+        verify(userRepository, times(1)).findMembershipsWithTenantInfo(userId);
     }
 
     // ── Invalid credentials ────────────────────────────────────────────────
@@ -134,7 +124,7 @@ class AuthenticationServiceTest {
     @Test
     @DisplayName("authenticate with wrong password throws INVALID_CREDENTIALS")
     void should_throw_invalid_credentials_on_wrong_password() {
-        User user = buildUser("+22670000001", "$2a$12$hash", 0, null, UUID.randomUUID());
+        User user = buildUser(UUID.randomUUID(), "+22670000001", "$2a$12$hash", 0, null);
         when(userRepository.findByPhoneNumber("+22670000001")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("WrongPass", user.getPasswordHash())).thenReturn(false);
         when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -163,7 +153,7 @@ class AuthenticationServiceTest {
     @Test
     @DisplayName("5th consecutive failed attempt locks account for 15 minutes")
     void should_lock_account_after_5_failed_attempts() {
-        User user = buildUser("+22670000001", "$2a$12$hash", 4, null, UUID.randomUUID());
+        User user = buildUser(UUID.randomUUID(), "+22670000001", "$2a$12$hash", 4, null);
         when(userRepository.findByPhoneNumber("+22670000001")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches(any(), any())).thenReturn(false);
         when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -181,8 +171,8 @@ class AuthenticationServiceTest {
     @Test
     @DisplayName("locked account immediately throws ACCOUNT_LOCKED without checking password")
     void should_reject_locked_account_immediately() {
-        User lockedUser = buildUser("+22670000001", "$2a$12$hash", 5,
-                Instant.now().plus(10, ChronoUnit.MINUTES), UUID.randomUUID());
+        User lockedUser = buildUser(UUID.randomUUID(), "+22670000001", "$2a$12$hash",
+                5, Instant.now().plus(10, ChronoUnit.MINUTES));
         when(userRepository.findByPhoneNumber("+22670000001")).thenReturn(Optional.of(lockedUser));
 
         assertThatThrownBy(() -> authService.authenticate(
@@ -197,15 +187,13 @@ class AuthenticationServiceTest {
     @Test
     @DisplayName("expired lockout (lockedUntil in past) allows login attempt")
     void should_allow_login_when_lockout_expired() {
-        UUID tenantUuid = UUID.randomUUID();
-        User expiredLockUser = buildUser("+22670000001", "$2a$12$hash", 5,
-                Instant.now().minus(1, ChronoUnit.MINUTES), tenantUuid);
-        Tenant tenant = buildTenant(tenantUuid, "KV-TEST", "kv_test");
+        UUID userId = UUID.randomUUID();
+        User expiredLockUser = buildUser(userId, "+22670000001", "$2a$12$hash",
+                5, Instant.now().minus(1, ChronoUnit.MINUTES));
         when(userRepository.findByPhoneNumber("+22670000001")).thenReturn(Optional.of(expiredLockUser));
         when(passwordEncoder.matches("CorrectPass", expiredLockUser.getPasswordHash())).thenReturn(true);
-        when(tenantRepository.findById(tenantUuid)).thenReturn(Optional.of(tenant));
-        when(refreshTokenRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.findMembershipsWithTenantInfo(userId)).thenReturn(List.of());
 
         assertThatCode(() -> authService.authenticate(
                 new AuthenticateUserCommand("+22670000001", "CorrectPass", null)))
@@ -214,19 +202,10 @@ class AuthenticationServiceTest {
 
     // ── Helpers ────────────────────────────────────────────────────────────
 
-    private User buildUser(String phone, String pwdHash, int failedAttempts,
-                            Instant lockedUntil, UUID tenantId) {
-        return new User(
-                UUID.randomUUID(), phone, pwdHash,
-                Role.OWNER, tenantId,
-                true, Instant.now(),
-                failedAttempts, lockedUntil
-        );
-    }
-
-    private Tenant buildTenant(UUID id, String code, String schemaName) {
-        return new Tenant(id, code, schemaName,
-                TenantStatus.ACTIVE, PlanType.FREE, Instant.now());
+    private User buildUser(UUID id, String phone, String pwdHash,
+                            int failedAttempts, Instant lockedUntil) {
+        return new User(id, phone, pwdHash, Role.OWNER, true, Instant.now(),
+                failedAttempts, lockedUntil);
     }
 
     private RSAPrivateKey loadTestPrivateKey() throws Exception {
@@ -253,4 +232,3 @@ class AuthenticationServiceTest {
                 .generatePublic(new X509EncodedKeySpec(decoded));
     }
 }
-

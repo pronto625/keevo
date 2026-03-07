@@ -24,6 +24,10 @@ public class TenantJpaEntity extends JpaBaseEntity {
     @Column(name = "schema_name", unique = true, nullable = false, length = 15)
     private String schemaName;
 
+    /** Human-readable tenant name (e.g. "Boutique Simon"). Defaults to code if not set. */
+    @Column(name = "name", length = 100)
+    private String name;
+
     @Column(name = "status", nullable = false, length = 20)
     private String status;
 
@@ -43,9 +47,15 @@ public class TenantJpaEntity extends JpaBaseEntity {
 
     public TenantJpaEntity(UUID id, String code, String schemaName, String status,
                             String planType, int maxStores, int maxProducts, int maxEmployees) {
+        this(id, code, schemaName, code, status, planType, maxStores, maxProducts, maxEmployees);
+    }
+
+    public TenantJpaEntity(UUID id, String code, String schemaName, String name, String status,
+                            String planType, int maxStores, int maxProducts, int maxEmployees) {
         if (id != null) setId(id);
         this.code         = code;
         this.schemaName   = schemaName;
+        this.name         = name;
         this.status       = status;
         this.planType     = planType;
         this.maxStores    = maxStores;
@@ -55,6 +65,7 @@ public class TenantJpaEntity extends JpaBaseEntity {
 
     public String getCode()        { return code; }
     public String getSchemaName()  { return schemaName; }
+    public String getName()        { return name; }
     public String getStatus()      { return status; }
     public String getPlanType()    { return planType; }
     public int    getMaxStores()   { return maxStores; }

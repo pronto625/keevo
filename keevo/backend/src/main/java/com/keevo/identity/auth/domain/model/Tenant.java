@@ -16,18 +16,26 @@ public final class Tenant {
     private final UUID id;
     private final String code;          // KV-ABC123
     private final String schemaName;    // kv_abc123
+    private final String name;          // Human-readable name (e.g. "Boutique Simon")
     private final TenantStatus status;
     private final PlanType planType;
     private final Instant createdAt;
 
+    /** Legacy constructor (name defaults to code for backward compatibility). */
     public Tenant(UUID id, String code, String schemaName,
                   TenantStatus status, PlanType planType, Instant createdAt) {
-        this.id = Objects.requireNonNull(id, "id must not be null");
-        this.code = Objects.requireNonNull(code, "code must not be null");
+        this(id, code, schemaName, code, status, planType, createdAt);
+    }
+
+    public Tenant(UUID id, String code, String schemaName, String name,
+                  TenantStatus status, PlanType planType, Instant createdAt) {
+        this.id         = Objects.requireNonNull(id,         "id must not be null");
+        this.code       = Objects.requireNonNull(code,       "code must not be null");
         this.schemaName = Objects.requireNonNull(schemaName, "schemaName must not be null");
-        this.status = Objects.requireNonNull(status, "status must not be null");
-        this.planType = Objects.requireNonNull(planType, "planType must not be null");
-        this.createdAt = Objects.requireNonNull(createdAt, "createdAt must not be null");
+        this.name       = name != null ? name : code;
+        this.status     = Objects.requireNonNull(status,     "status must not be null");
+        this.planType   = Objects.requireNonNull(planType,   "planType must not be null");
+        this.createdAt  = Objects.requireNonNull(createdAt,  "createdAt must not be null");
     }
 
     /** Derive schema name from tenant code. E.g., KV-ABC123 → kv_abc123 */
@@ -38,6 +46,8 @@ public final class Tenant {
     public UUID getId()             { return id; }
     public String getCode()         { return code; }
     public String getSchemaName()   { return schemaName; }
+    /** Human-readable tenant name. Defaults to code when not explicitly set. */
+    public String getName()         { return name; }
     public TenantStatus getStatus() { return status; }
     public PlanType getPlanType()   { return planType; }
     public Instant getCreatedAt()   { return createdAt; }

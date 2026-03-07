@@ -2,8 +2,10 @@ package com.keevo.shared.infrastructure.config;
 
 import com.keevo.identity.auth.adapter.out.persistence.entity.TenantJpaEntity;
 import com.keevo.identity.auth.adapter.out.persistence.entity.UserJpaEntity;
+import com.keevo.identity.auth.adapter.out.persistence.entity.UserTenantMembershipJpaEntity;
 import com.keevo.identity.auth.adapter.out.persistence.jpa.TenantSpringRepository;
 import com.keevo.identity.auth.adapter.out.persistence.jpa.UserSpringRepository;
+import com.keevo.identity.auth.adapter.out.persistence.jpa.UserTenantMembershipSpringRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -16,6 +18,7 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -32,17 +35,18 @@ import static org.mockito.Mockito.*;
 @DisplayName("AdminAccountInitializer")
 class AdminAccountInitializerTest {
 
-    @Mock TenantSpringRepository tenantRepo;
-    @Mock UserSpringRepository   userRepo;
-    @Mock PasswordEncoder        passwordEncoder;
-    @Mock ApplicationArguments   args;
+    @Mock TenantSpringRepository                   tenantRepo;
+    @Mock UserSpringRepository                     userRepo;
+    @Mock UserTenantMembershipSpringRepository     membershipRepo;
+    @Mock PasswordEncoder                          passwordEncoder;
+    @Mock ApplicationArguments                     args;
 
     private AdminAccountInitializer initializer;
 
     @BeforeEach
     void setUp() {
         AdminProperties props = new AdminProperties("+237600000000", "Admin@1234!");
-        initializer = new AdminAccountInitializer(tenantRepo, userRepo, passwordEncoder, props);
+        initializer = new AdminAccountInitializer(tenantRepo, userRepo, membershipRepo, passwordEncoder, props);
     }
 
     // ── First-boot: nothing exists ─────────────────────────────────────────
@@ -58,6 +62,8 @@ class AdminAccountInitializerTest {
             when(passwordEncoder.encode(anyString())).thenReturn("$2a$10$hashedPassword");
             when(tenantRepo.save(any(TenantJpaEntity.class))).thenAnswer(inv -> inv.getArgument(0));
             when(userRepo.save(any(UserJpaEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(membershipRepo.findByUserIdAndTenantId(any(), any())).thenReturn(Optional.empty());
+            when(membershipRepo.save(any(UserTenantMembershipJpaEntity.class))).thenAnswer(inv -> inv.getArgument(0));
         }
 
         @Test
@@ -87,14 +93,13 @@ class AdminAccountInitializerTest {
         }
 
         @Test
-        @DisplayName("saved user has SUPER_ADMIN role linked to admin tenant")
+        @DisplayName("saved user has SUPER_ADMIN role (Story 1.7 — tenantId removed from User)")
         void userHasCorrectAttributes() {
             initializer.run(args);
             ArgumentCaptor<UserJpaEntity> captor = ArgumentCaptor.forClass(UserJpaEntity.class);
             verify(userRepo).save(captor.capture());
             UserJpaEntity saved = captor.getValue();
             assertThat(saved.getRole()).isEqualTo("SUPER_ADMIN");
-            assertThat(saved.getTenantId()).isEqualTo(AdminAccountInitializer.ADMIN_TENANT_ID);
             assertThat(saved.getPhoneNumber()).isEqualTo("+237600000000");
             assertThat(saved.isActive()).isTrue();
         }
@@ -116,11 +121,19 @@ class AdminAccountInitializerTest {
     @DisplayName("subsequent boot — tenant and user already exist")
     class SubsequentBoot {
 
+        private UUID existingUserId;
+
         @BeforeEach
         void stubPresent() {
+            existingUserId = UUID.randomUUID();
+            UserJpaEntity existingUser = mock(UserJpaEntity.class);
+            when(existingUser.getId()).thenReturn(existingUserId);
             when(tenantRepo.existsById(AdminAccountInitializer.ADMIN_TENANT_ID)).thenReturn(true);
             when(userRepo.findByPhoneNumber(anyString()))
-                    .thenReturn(Optional.of(mock(UserJpaEntity.class)));
+                    .thenReturn(Optional.of(existingUser));
+            // Membership already exists — fully idempotent
+            when(membershipRepo.findByUserIdAndTenantId(any(), any()))
+                    .thenReturn(Optional.of(mock(UserTenantMembershipJpaEntity.class)));
         }
 
         @Test
@@ -138,10 +151,46 @@ class AdminAccountInitializerTest {
         }
 
         @Test
+        @DisplayName("does not save membership again (idempotent)")
+        void doesNotSaveMembershipAgain() {
+            initializer.run(args);
+            verify(membershipRepo, never()).save(any());
+        }
+
+        @Test
         @DisplayName("does not encode password again")
         void doesNotEncodePassword() {
             initializer.run(args);
             verify(passwordEncoder, never()).encode(anyString());
+        }
+    }
+
+    // ── Crash-recovery: user exists but membership was NOT created (M2 idempotence fix) ──
+
+    @Nested
+    @DisplayName("crash recovery — user exists but membership missing")
+    class CrashRecovery {
+
+        @BeforeEach
+        void stubCrashState() {
+            UUID existingUserId = UUID.randomUUID();
+            UserJpaEntity existingUser = mock(UserJpaEntity.class);
+            when(existingUser.getId()).thenReturn(existingUserId);
+            when(tenantRepo.existsById(AdminAccountInitializer.ADMIN_TENANT_ID)).thenReturn(true);
+            when(userRepo.findByPhoneNumber(anyString()))
+                    .thenReturn(Optional.of(existingUser));
+            // Membership is MISSING — simulates crash after user save but before membership save
+            when(membershipRepo.findByUserIdAndTenantId(any(), any())).thenReturn(Optional.empty());
+            when(membershipRepo.save(any(UserTenantMembershipJpaEntity.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+        }
+
+        @Test
+        @DisplayName("re-creates membership without re-creating the user")
+        void recreatesMembershipWithoutRecreatingUser() {
+            initializer.run(args);
+            verify(userRepo, never()).save(any());
+            verify(membershipRepo, times(1)).save(any(UserTenantMembershipJpaEntity.class));
         }
     }
 
@@ -157,6 +206,8 @@ class AdminAccountInitializerTest {
             when(userRepo.findByPhoneNumber(anyString())).thenReturn(Optional.empty());
             when(passwordEncoder.encode(anyString())).thenReturn("$2a$10$hashedPassword");
             when(userRepo.save(any(UserJpaEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(membershipRepo.findByUserIdAndTenantId(any(), any())).thenReturn(Optional.empty());
+            when(membershipRepo.save(any(UserTenantMembershipJpaEntity.class))).thenAnswer(inv -> inv.getArgument(0));
         }
 
         @Test

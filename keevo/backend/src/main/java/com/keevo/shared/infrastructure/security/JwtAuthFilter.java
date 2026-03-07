@@ -48,7 +48,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             "/actuator/health",
             "/api/v1/auth/register",
             "/api/v1/auth/login",
-            "/api/v1/auth/refresh"
+            "/api/v1/auth/refresh",
+            "/api/v1/auth/select-tenant"   // Story 1.7 — AC7: two-step login step 2 is public
     );
 
     /** Ant-style paths (wildcards) that are also public. */
@@ -100,6 +101,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         try {
             Claims claims = jwtTokenProvider.parseToken(token);
+
+            // Story 1.7 — AC4: login tokens (scope=login_pending) must NEVER grant API access.
+            // A loginToken is a short-lived intermediate credential used only for /auth/select-tenant.
+            String scope = jwtTokenProvider.extractScope(claims);
+            if ("login_pending".equals(scope)) {
+                writeError(response, "TOKEN_INVALID");
+                return;
+            }
+
             String tenantId = jwtTokenProvider.extractTenantId(claims);
             String role = jwtTokenProvider.extractRole(claims);
             UUID userId = jwtTokenProvider.extractUserId(claims);

@@ -13,12 +13,12 @@ echo " Keevo — Story 1.6 cURL Integration Tests"
 echo "========================================================"
 echo ""
 
-# Step 1 — Register user + get JWT
+# Step 1 — Register user + get JWT (registration still returns a direct access token)
 echo "Step 1 — Register new tenant and obtain JWT..."
 REGISTER=$(curl -s -X POST "$BASE_URL/api/v1/auth/register" \
   -H "Content-Type: application/json" \
-  -d '{"phone":"+237600001601","password":"Test1234!","firstName":"Simon","lastName":"Kana"}')
-JWT=$(echo "$REGISTER" | jq -r '.data.accessToken // empty')
+  -d '{"phoneNumber":"+237600001601","password":"Test1234!"}')
+JWT=$(echo "$REGISTER" | jq -r '.token // empty')
 [[ -n "$JWT" && "$JWT" != "null" ]] \
   && echo "✅ Step 1 — JWT obtained" \
   || { echo "❌ Step 1 FAILED — Response: $REGISTER"; exit 1; }
@@ -60,16 +60,27 @@ UNAUTH=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/v1/subscription/m
   && echo "✅ Step 4 — No token → 401 UNAUTHORIZED" \
   || { echo "❌ Step 4 FAILED (expected 401, got $UNAUTH)"; exit 1; }
 
-# Step 5 — POST /api/v1/auth/login with same credentials → 200 + JWT
+# Step 5 — Two-step login with registered credentials → 200 + full access token (Story 1.7 flow)
+#   Step 5a: POST /auth/login → loginToken + memberships
+#   Step 5b: POST /auth/select-tenant → full access token
 echo ""
-echo "Step 5 — Login with registered credentials..."
-LOGIN=$(curl -s -X POST "$BASE_URL/api/v1/auth/login" \
+echo "Step 5 — Two-step login with registered credentials..."
+LOGIN5=$(curl -s -X POST "$BASE_URL/api/v1/auth/login" \
   -H "Content-Type: application/json" \
-  -d '{"phone":"+237600001601","password":"Test1234!"}')
-JWT2=$(echo "$LOGIN" | jq -r '.data.accessToken // empty')
+  -d '{"phoneNumber":"+237600001601","password":"Test1234!"}')
+LOGIN_TOKEN5=$(echo "$LOGIN5" | jq -r '.loginToken // empty')
+TENANT_CODE5=$(echo "$LOGIN5" | jq -r '.memberships[0].tenantCode // empty')
+[[ -n "$LOGIN_TOKEN5" && "$LOGIN_TOKEN5" != "null" ]] \
+  && echo "  → Step 5a: loginToken obtained (scope=login_pending)" \
+  || { echo "❌ Step 5 FAILED — login step 1: $LOGIN5"; exit 1; }
+
+SEL5=$(curl -s -X POST "$BASE_URL/api/v1/auth/select-tenant" \
+  -H "Content-Type: application/json" \
+  -d "{\"loginToken\":\"$LOGIN_TOKEN5\",\"tenantCode\":\"$TENANT_CODE5\"}")
+JWT2=$(echo "$SEL5" | jq -r '.accessToken // empty')
 [[ -n "$JWT2" && "$JWT2" != "null" ]] \
-  && echo "✅ Step 5 — Login works, JWT obtained" \
-  || { echo "❌ Step 5 FAILED — Response: $LOGIN"; exit 1; }
+  && echo "✅ Step 5 — Two-step login works, access token obtained" \
+  || { echo "❌ Step 5 FAILED — select-tenant: $SEL5"; exit 1; }
 
 echo ""
 echo "========================================================"

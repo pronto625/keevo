@@ -5,10 +5,14 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * User — Domain model for a registered user.
+ * User — Domain model for a registered user (global identity).
  *
  * <p>Pure Java — NO Spring, JPA, or framework imports.
  * JPA mapping lives in {@code adapter/out/persistence/UserJpaEntity}.
+ *
+ * <p>Story 1.7: {@code tenantId} has been REMOVED from this model.
+ * A user's tenant associations are now stored in {@code public.user_tenant_memberships}
+ * via {@link UserTenantMembership}. A user can belong to N tenants.
  */
 public final class User {
 
@@ -16,39 +20,41 @@ public final class User {
     private final String phoneNumber;
     private final String passwordHash;
     private final Role role;
-    private final UUID tenantId;
     private final boolean active;
     private final Instant createdAt;
     private final int failedAttempts;
     private final Instant lockedUntil;
 
     public User(UUID id, String phoneNumber, String passwordHash,
-                Role role, UUID tenantId, boolean active, Instant createdAt) {
-        this(id, phoneNumber, passwordHash, role, tenantId, active, createdAt, 0, null);
+                Role role, boolean active, Instant createdAt) {
+        this(id, phoneNumber, passwordHash, role, active, createdAt, 0, null);
     }
 
     public User(UUID id, String phoneNumber, String passwordHash,
-                Role role, UUID tenantId, boolean active, Instant createdAt,
+                Role role, boolean active, Instant createdAt,
                 int failedAttempts, Instant lockedUntil) {
-        this.id = Objects.requireNonNull(id, "id must not be null");
-        this.phoneNumber = Objects.requireNonNull(phoneNumber, "phoneNumber must not be null");
-        this.passwordHash = Objects.requireNonNull(passwordHash, "passwordHash must not be null");
-        this.role = Objects.requireNonNull(role, "role must not be null");
-        this.tenantId = Objects.requireNonNull(tenantId, "tenantId must not be null");
-        this.active = active;
-        this.createdAt = Objects.requireNonNull(createdAt, "createdAt must not be null");
+        this.id             = Objects.requireNonNull(id,          "id must not be null");
+        this.phoneNumber    = Objects.requireNonNull(phoneNumber,  "phoneNumber must not be null");
+        this.passwordHash   = Objects.requireNonNull(passwordHash, "passwordHash must not be null");
+        this.role           = Objects.requireNonNull(role,         "role must not be null");
+        this.active         = active;
+        this.createdAt      = Objects.requireNonNull(createdAt,    "createdAt must not be null");
         this.failedAttempts = failedAttempts;
-        this.lockedUntil = lockedUntil;
+        this.lockedUntil    = lockedUntil;
     }
 
-    /** Factory method for creating a new user at registration. */
-    public static User newOwner(String phoneNumber, String passwordHash, UUID tenantId) {
+    /**
+     * Factory method for creating a new user at registration.
+     *
+     * <p>Story 1.7: tenantId parameter REMOVED — role/tenant association is handled
+     * separately via {@link UserTenantMembership#create(UUID, UUID, String)}.
+     */
+    public static User newOwner(String phoneNumber, String passwordHash) {
         return new User(
             UUID.randomUUID(),
             phoneNumber,
             passwordHash,
             Role.OWNER,
-            tenantId,
             true,
             Instant.now(),
             0,
@@ -56,21 +62,20 @@ public final class User {
         );
     }
 
-    public UUID getId()              { return id; }
-    public String getPhoneNumber()   { return phoneNumber; }
-    public String getPasswordHash()  { return passwordHash; }
-    public Role getRole()            { return role; }
-    public UUID getTenantId()        { return tenantId; }
-    public boolean isActive()        { return active; }
-    public Instant getCreatedAt()    { return createdAt; }
+    public UUID    getId()             { return id; }
+    public String  getPhoneNumber()    { return phoneNumber; }
+    public String  getPasswordHash()   { return passwordHash; }
+    public Role    getRole()           { return role; }
+    public boolean isActive()          { return active; }
+    public Instant getCreatedAt()      { return createdAt; }
     /** Record-style accessor for failed login attempt count. */
-    public int failedAttempts()      { return failedAttempts; }
+    public int     failedAttempts()    { return failedAttempts; }
     /** Record-style accessor for account lockout expiry (null = not locked). */
-    public Instant lockedUntil()     { return lockedUntil; }
+    public Instant lockedUntil()       { return lockedUntil; }
 
     /** Returns new User instance with updated failedAttempts and lockedUntil. */
     public User withLockoutState(int newFailedAttempts, Instant newLockedUntil) {
-        return new User(id, phoneNumber, passwordHash, role, tenantId, active, createdAt,
+        return new User(id, phoneNumber, passwordHash, role, active, createdAt,
                         newFailedAttempts, newLockedUntil);
     }
 
@@ -86,10 +91,6 @@ public final class User {
 
     @Override
     public String toString() {
-        // Mask phone number to prevent PII leakage in logs
-        String maskedPhone = phoneNumber != null && phoneNumber.length() > 4
-            ? "***" + phoneNumber.substring(phoneNumber.length() - 4)
-            : "***";
-        return "User{id=" + id + ", phone='" + maskedPhone + "', role=" + role + "}";
+        return "User{id=" + id + ", phone=" + phoneNumber + ", role=" + role + "}";
     }
 }

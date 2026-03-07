@@ -1,4 +1,5 @@
 import '../../domain/model/auth_tokens.dart';
+import '../../domain/model/login_session_response.dart';
 import '../../domain/model/registration_result.dart';
 import '../../domain/repository/auth_repository.dart';
 import '../datasource/remote_auth_datasource.dart';
@@ -25,13 +26,24 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<AuthTokens> login({
+  Future<LoginSessionResponse> login({
     required String phoneNumber,
     required String password,
   }) async {
     return _remoteDataSource.login(
       phoneNumber: phoneNumber,
       password: password,
+    );
+  }
+
+  @override
+  Future<AuthTokens> selectTenant({
+    required String loginToken,
+    required String tenantCode,
+  }) async {
+    return _remoteDataSource.selectTenant(
+      loginToken: loginToken,
+      tenantCode: tenantCode,
     );
   }
 

@@ -3,6 +3,9 @@ import 'package:mocktail/mocktail.dart';
 
 import 'package:keevo/features/auth/domain/exception/auth_exception.dart';
 import 'package:keevo/features/auth/domain/model/auth_tokens.dart';
+import 'package:keevo/features/auth/domain/model/login_result.dart';
+import 'package:keevo/features/auth/domain/model/login_session_response.dart';
+import 'package:keevo/features/auth/domain/model/membership_dto.dart';
 import 'package:keevo/features/auth/domain/repository/auth_repository.dart';
 import 'package:keevo/features/auth/domain/repository/token_storage.dart';
 import 'package:keevo/features/auth/domain/usecase/login_usecase.dart';
@@ -34,12 +37,48 @@ void main() {
     expiresIn: 86400,
   );
 
+  // Single-membership session — triggers auto-select (AC8)
+  final singleMembershipSession = LoginSessionResponse(
+    loginToken: 'login-token',
+    memberships: [
+      const MembershipDto(
+        tenantCode: 'KV-ABC123',
+        tenantName: 'Boutique Simon',
+        role: 'OWNER',
+        schemaName: 'kv_abc123',
+      ),
+    ],
+  );
+
+  // Multi-membership session — returns NeedsTenantSelectionResult (AC9)
+  final multiMembershipSession = LoginSessionResponse(
+    loginToken: 'login-token',
+    memberships: [
+      const MembershipDto(
+        tenantCode: 'KV-ABC123',
+        tenantName: 'Boutique Simon',
+        role: 'OWNER',
+        schemaName: 'kv_abc123',
+      ),
+      const MembershipDto(
+        tenantCode: 'KV-XYZ789',
+        tenantName: 'Boutique Électronique',
+        role: 'OWNER',
+        schemaName: 'kv_xyz789',
+      ),
+    ],
+  );
+
   group('LoginUseCase', () {
     group('execute() — success path', () {
       setUp(() {
         when(() => mockRepository.login(
               phoneNumber: validPhone,
               password: validPassword,
+            )).thenAnswer((_) async => singleMembershipSession);
+        when(() => mockRepository.selectTenant(
+              loginToken: 'login-token',
+              tenantCode: 'KV-ABC123',
             )).thenAnswer((_) async => tokens);
         when(() => mockTokenStorage.saveToken(any())).thenAnswer((_) async {});
         when(() => mockTokenStorage.saveRefreshToken(any()))
@@ -49,13 +88,15 @@ void main() {
             .thenAnswer((_) async {});
       });
 
-      test('returns AuthTokens on valid credentials', () async {
+      test('AC8: single membership → returns AuthenticatedResult', () async {
         final result = await useCase.execute(
           phoneNumber: validPhone,
           password: validPassword,
         );
-        expect(result.accessToken, equals('eyJ.signed.token'));
-        expect(result.role, equals('OWNER'));
+        expect(result, isA<AuthenticatedResult>());
+        final authenticated = result as AuthenticatedResult;
+        expect(authenticated.tokens.accessToken, equals('eyJ.signed.token'));
+        expect(authenticated.tokens.role, equals('OWNER'));
       });
 
       test('AC5: stores all tokens securely in flutter_secure_storage',
@@ -75,7 +116,7 @@ void main() {
         when(() => mockRepository.login(
               phoneNumber: validPhone,
               password: validPassword,
-            )).thenAnswer((_) async => tokens);
+            )).thenAnswer((_) async => singleMembershipSession);
 
         await useCase.execute(
           phoneNumber: '  $validPhone  ',
@@ -86,6 +127,29 @@ void main() {
               phoneNumber: validPhone,
               password: validPassword,
             )).called(1);
+      });
+
+      test('AC9: multiple memberships → returns NeedsTenantSelectionResult without calling selectTenant',
+          () async {
+        when(() => mockRepository.login(
+              phoneNumber: validPhone,
+              password: validPassword,
+            )).thenAnswer((_) async => multiMembershipSession);
+
+        final result = await useCase.execute(
+          phoneNumber: validPhone,
+          password: validPassword,
+        );
+
+        expect(result, isA<NeedsTenantSelectionResult>());
+        final picker = result as NeedsTenantSelectionResult;
+        expect(picker.loginToken, equals('login-token'));
+        expect(picker.memberships, hasLength(2));
+        verifyNever(() => mockRepository.selectTenant(
+              loginToken: any(named: 'loginToken'),
+              tenantCode: any(named: 'tenantCode'),
+            ));
+        verifyNever(() => mockTokenStorage.saveToken(any()));
       });
     });
 

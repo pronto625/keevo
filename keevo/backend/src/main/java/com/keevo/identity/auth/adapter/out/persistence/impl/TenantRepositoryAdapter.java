@@ -48,12 +48,17 @@ public class TenantRepositoryAdapter implements TenantRepository {
         return springRepository.findBySchemaName(schemaName).map(this::toDomain);
     }
 
+    @Override
+    public Optional<Tenant> findByCode(String tenantCode) {
+        return springRepository.findByCode(tenantCode).map(this::toDomain);
+    }
+
     // ── Mapping ──────────────────────────────────────────────────────────────
 
     private TenantJpaEntity toEntity(Tenant t) {
         return new TenantJpaEntity(
             t.getId(), t.getCode(), t.getSchemaName(),
-            t.getStatus().name(), t.getPlanType().name(),
+            t.getName(), t.getStatus().name(), t.getPlanType().name(),
             t.getPlanType().getMaxStores(),
             t.getPlanType().getMaxProducts(),
             t.getPlanType().getMaxEmployees()
@@ -63,6 +68,7 @@ public class TenantRepositoryAdapter implements TenantRepository {
     private Tenant toDomain(TenantJpaEntity e) {
         return new Tenant(
             e.getId(), e.getCode(), e.getSchemaName(),
+            e.getName() != null ? e.getName() : e.getCode(),
             TenantStatus.valueOf(e.getStatus()),
             PlanType.valueOf(e.getPlanType()),
             e.getCreatedAt() != null ? e.getCreatedAt() : Instant.now()

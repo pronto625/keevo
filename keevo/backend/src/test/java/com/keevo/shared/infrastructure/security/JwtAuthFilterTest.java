@@ -173,6 +173,28 @@ class JwtAuthFilterTest {
         assertThat(TenantContext.getCurrentTenant()).isNull();
     }
 
+    // ── Login token scope rejection (Story 1.7 — AC4) ────────────────────────────
+
+    @Test
+    @DisplayName("loginToken with scope=login_pending is rejected with 401 TOKEN_INVALID")
+    void should_reject_login_token_used_as_access_token() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/subscriptions/status");
+        request.addHeader("Authorization", "Bearer login.jwt.token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        UUID userId = UUID.randomUUID();
+        // buildClaims with placeholder tenant — won't be accessed (early return on scope check)
+        Claims mockClaims = buildClaims(userId, "placeholder", "placeholder");
+        when(jwtTokenProvider.parseToken("login.jwt.token")).thenReturn(mockClaims);
+        when(jwtTokenProvider.extractScope(mockClaims)).thenReturn("login_pending");
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("TOKEN_INVALID");
+        verify(filterChain, never()).doFilter(any(), any());
+    }
+
     // ── Suspension guard ───────────────────────────────────────────────────
 
     @Test

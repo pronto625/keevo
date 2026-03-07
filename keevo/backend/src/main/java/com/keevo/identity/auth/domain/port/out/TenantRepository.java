@@ -29,4 +29,10 @@ public interface TenantRepository {
 
     /** Check if a tenant code already exists (for uniqueness during provisioning). */
     boolean existsByCode(String code);
+
+    /**
+     * Story 1.7 — Find a tenant by its public code (e.g., "KV-ABC123").
+     * Used by SelectTenantService to resolve a tenantCode → Tenant before issuing the scoped JWT.
+     */
+    Optional<Tenant> findByCode(String tenantCode);
 }

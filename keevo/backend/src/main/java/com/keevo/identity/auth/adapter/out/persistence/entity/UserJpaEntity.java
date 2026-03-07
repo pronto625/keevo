@@ -14,6 +14,10 @@ import java.util.UUID;
  * <p>Infrastructure layer only — NEVER used in domain or application layer.
  * The table structure is derived automatically from this entity via ddl-auto=update.
  * Domain model: {@link com.keevo.identity.auth.domain.model.User}.
+ *
+ * <p>NOTE Story 1.7: {@code tenant_id} column still exists in DB (dangling) —
+ * Hibernate {@code ddl-auto=update} does not drop columns. The column will be removed
+ * in a future Flyway migration. It is completely ignored by Hibernate (NOT mapped here).
  */
 @Entity
 @Table(name = "users")
@@ -28,8 +32,9 @@ public class UserJpaEntity extends JpaBaseEntity {
     @Column(name = "role", nullable = false, length = 20)
     private String role;
 
-    @Column(name = "tenant_id", nullable = false)
-    private UUID tenantId;
+    // NOTE Story 1.7: tenant_id column intentionally NOT mapped here.
+    // The column remains in public.users DB table as a dangling nullable column.
+    // Hibernate ddl-auto=update will NOT drop it. This is acceptable tech debt for V1.
 
     @Column(name = "is_active", nullable = false)
     private boolean active;
@@ -43,23 +48,22 @@ public class UserJpaEntity extends JpaBaseEntity {
     protected UserJpaEntity() {}
 
     public UserJpaEntity(UUID id, String phoneNumber, String passwordHash,
-                         String role, UUID tenantId, boolean active,
+                         String role, boolean active,
                          int failedAttempts, Instant lockedUntil) {
         if (id != null) setId(id);
         this.phoneNumber    = phoneNumber;
         this.passwordHash   = passwordHash;
         this.role           = role;
-        this.tenantId       = tenantId;
         this.active         = active;
         this.failedAttempts = failedAttempts;
         this.lockedUntil    = lockedUntil;
     }
 
-    public String  getPhoneNumber()  { return phoneNumber; }
-    public String  getPasswordHash() { return passwordHash; }
-    public String  getRole()         { return role; }
-    public UUID    getTenantId()     { return tenantId; }
-    public boolean isActive()        { return active; }
+    public String  getPhoneNumber()    { return phoneNumber; }
+    public String  getPasswordHash()   { return passwordHash; }
+    public String  getRole()           { return role; }
+    public boolean isActive()          { return active; }
     public int     getFailedAttempts() { return failedAttempts; }
-    public Instant getLockedUntil()  { return lockedUntil; }
+    public Instant getLockedUntil()    { return lockedUntil; }
 }
+

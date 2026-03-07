@@ -2,6 +2,8 @@ import 'package:dio/dio.dart';
 
 import '../../domain/exception/auth_exception.dart';
 import '../../domain/model/auth_tokens.dart';
+import '../../domain/model/login_session_response.dart';
+import '../../domain/model/membership_dto.dart';
 import '../../domain/model/registration_result.dart';
 
 /// RemoteAuthDataSource — HTTP adapter to the backend auth API.
@@ -40,11 +42,12 @@ class RemoteAuthDataSource {
     }
   }
 
-  /// POST /api/v1/auth/login
+  /// POST /api/v1/auth/login (Step 1 of two-step login — Story 1.7)
   ///
-  /// Returns [AuthTokens] on success.
+  /// Returns [LoginSessionResponse] with a short-lived loginToken (5 min)
+  /// and the user's tenant memberships.
   /// Throws [AuthException] with INVALID_CREDENTIALS or ACCOUNT_LOCKED.
-  Future<AuthTokens> login({
+  Future<LoginSessionResponse> login({
     required String phoneNumber,
     required String password,
   }) async {
@@ -54,6 +57,28 @@ class RemoteAuthDataSource {
         data: {
           'phoneNumber': phoneNumber,
           'password': password,
+        },
+      );
+      return _mapLoginSession(response.data!);
+    } on DioException catch (e) {
+      throw _mapAuthError(e);
+    }
+  }
+
+  /// POST /api/v1/auth/select-tenant (Step 2 of two-step login — Story 1.7)
+  ///
+  /// Exchanges a valid [loginToken] + [tenantCode] for a full [AuthTokens].
+  /// Throws [AuthException] on TOKEN_EXPIRED, TOKEN_INVALID, TENANT_NOT_FOUND.
+  Future<AuthTokens> selectTenant({
+    required String loginToken,
+    required String tenantCode,
+  }) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/api/v1/auth/select-tenant',
+        data: {
+          'loginToken': loginToken,
+          'tenantCode': tenantCode,
         },
       );
       return _mapAuthTokens(response.data!);
@@ -78,6 +103,23 @@ class RemoteAuthDataSource {
   }
 
   // ── Mapping helpers ─────────────────────────────────────────────────────
+
+  LoginSessionResponse _mapLoginSession(Map<String, dynamic> body) {
+    final rawMemberships = body['memberships'] as List<dynamic>? ?? [];
+    final memberships = rawMemberships.map((m) {
+      final map = m as Map<String, dynamic>;
+      return MembershipDto(
+        tenantCode: map['tenantCode'] as String,
+        tenantName: map['tenantName'] as String,
+        role: map['role'] as String,
+        schemaName: map['schemaName'] as String,
+      );
+    }).toList();
+    return LoginSessionResponse(
+      loginToken: body['loginToken'] as String,
+      memberships: memberships,
+    );
+  }
 
   AuthTokens _mapAuthTokens(Map<String, dynamic> body) {
     return AuthTokens(

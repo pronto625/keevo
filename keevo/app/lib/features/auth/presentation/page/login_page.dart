@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 
 import '../../domain/exception/auth_exception.dart';
+import '../../domain/model/login_result.dart';
 import '../provider/auth_provider.dart';
 
 /// LoginPage — écran d'authentification.
@@ -64,11 +65,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final cs = Theme.of(context).colorScheme;
     final isLoading = asyncState.isLoading;
 
-    // Navigate to /home on successful login
+    // Navigate on successful login — handles both single and multi-membership
     ref.listen(loginProvider, (previous, next) {
-      next.whenData((tokens) {
-        if (tokens != null) {
-          context.go('/pos'); // placeholder until /home is implemented
+      next.whenData((result) {
+        if (result == null) return;
+        switch (result) {
+          case AuthenticatedResult():
+            context.go('/pos');
+          case NeedsTenantSelectionResult(:final loginToken, :final memberships):
+            // AC9: multiple tenants — navigate to picker
+            context.go('/tenant-picker', extra: <String, dynamic>{
+              'loginToken': loginToken,
+              'memberships': memberships,
+            });
         }
       });
     });

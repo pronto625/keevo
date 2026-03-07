@@ -1,4 +1,5 @@
 import '../model/auth_tokens.dart';
+import '../model/login_session_response.dart';
 import '../model/registration_result.dart';
 
 /// AuthRepository — Port interface for authentication operations.
@@ -15,14 +16,22 @@ abstract interface class AuthRepository {
     required String password,
   });
 
-  /// Authenticate with phone + password.
+  /// POST /auth/login — Step 1 of two-step login (Story 1.7).
   ///
-  /// Returns [AuthTokens] on success (access + refresh tokens).
-  /// Throws [AuthException] with domainCode 'INVALID_CREDENTIALS' on wrong password.
-  /// Throws [AuthException] with domainCode 'ACCOUNT_LOCKED' when locked.
-  Future<AuthTokens> login({
+  /// Returns [LoginSessionResponse] with a short-lived loginToken and memberships.
+  /// Throws [AuthException] with INVALID_CREDENTIALS or ACCOUNT_LOCKED.
+  Future<LoginSessionResponse> login({
     required String phoneNumber,
     required String password,
+  });
+
+  /// POST /auth/select-tenant — Step 2 of two-step login (Story 1.7).
+  ///
+  /// Exchanges a [loginToken] + [tenantCode] for a full scoped [AuthTokens].
+  /// Throws [AuthException] on TOKEN_EXPIRED, TOKEN_INVALID, TENANT_NOT_FOUND.
+  Future<AuthTokens> selectTenant({
+    required String loginToken,
+    required String tenantCode,
   });
 
   /// Exchange a valid refresh token for a new [AuthTokens] pair.

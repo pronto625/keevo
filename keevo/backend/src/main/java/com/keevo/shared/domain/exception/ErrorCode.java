@@ -21,6 +21,7 @@ public enum ErrorCode {
     INVALID_CREDENTIALS,
     ACCOUNT_LOCKED,
     TOKEN_EXPIRED,
+    TOKEN_INVALID,              // Story 1.7 — loginToken used as accessToken, or invalid scope
     REFRESH_TOKEN_INVALID,
     UNAUTHORIZED,
 
@@ -28,6 +29,10 @@ public enum ErrorCode {
     TENANT_NOT_FOUND,
     TENANT_ALREADY_EXISTS,
     TENANT_PROVISION_FAILED,
+
+    // ── Membership (Story 1.7) ─────────────────────────────────────
+    MEMBERSHIP_ALREADY_EXISTS,  // UNIQUE(user_id, tenant_id) violated
+    MEMBERSHIP_NOT_FOUND,       // user is not a member of the requested tenant
     // ── Onboarding ────────────────────────────────────────────────────────
     ONBOARDING_ALREADY_COMPLETED,
     SECTOR_TEMPLATE_NOT_FOUND,
