@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.identity.auth.domain.model.UserAuthenticatedEvent;
 import com.keevo.identity.auth.domain.model.UserRegisteredEvent;
 import com.keevo.identity.onboarding.domain.model.OnboardingCompletedEvent;
+import com.keevo.catalog.product.domain.event.ProductCreatedEvent;
+import com.keevo.catalog.product.domain.event.ProductUpdatedEvent;
+import com.keevo.catalog.product.domain.event.ProductArchivedEvent;
 import com.keevo.shared.application.port.AuditPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.slf4j.Logger;
@@ -138,6 +141,78 @@ public class AuditEventListener {
         log.info("AUDIT: onboarding_completed tenantId={} sector={} storeName={} categoriesCreated={} actorId={}",
                 event.tenantId(), event.sectorType(), event.storeName(),
                 event.categoriesCreated(), event.actorId());
+    }
+
+    // ── Product Events (Story 2.1) ───────────────────────────────────────────
+
+    /**
+     * Handle product created event.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
+     */
+    @EventListener
+    public void on(ProductCreatedEvent event) {
+        // Authenticated endpoint — JwtAuthFilter already set TenantContext; NO manual set/clear
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "PRODUCT_CREATED",
+                "Product",
+                event.productId(),
+                null,
+                toJson(Map.of(
+                        "productName", event.productName(),
+                        "productSku",  event.productSku()
+                ))
+        );
+        log.info("AUDIT: product_created productId={} productName={} tenantId={} actorId={}",
+                event.productId(), event.productName(), event.tenantId(), event.actorId());
+    }
+
+    /**
+     * Handle product updated event.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
+     */
+    @EventListener
+    public void on(ProductUpdatedEvent event) {
+        // Authenticated endpoint — JwtAuthFilter already set TenantContext; NO manual set/clear
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "PRODUCT_UPDATED",
+                "Product",
+                event.productId(),
+                event.valueBefore(),  // JSON from event
+                event.valueAfter()    // JSON from event
+        );
+        log.info("AUDIT: product_updated productId={} productName={} tenantId={} actorId={}",
+                event.productId(), event.productName(), event.tenantId(), event.actorId());
+    }
+
+    /**
+     * Handle product archived event.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
+     */
+    @EventListener
+    public void on(ProductArchivedEvent event) {
+        // Authenticated endpoint — JwtAuthFilter already set TenantContext; NO manual set/clear
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "PRODUCT_ARCHIVED",
+                "Product",
+                event.productId(),
+                null,
+                toJson(Map.of(
+                        "productName", event.productName(),
+                        "productSku",  event.productSku(),
+                        "archived",     true
+                ))
+        );
+        log.info("AUDIT: product_archived productId={} productName={} tenantId={} actorId={}",
+                event.productId(), event.productName(), event.tenantId(), event.actorId());
     }
 
     // ── Template Method helper ────────────────────────────────────────────────

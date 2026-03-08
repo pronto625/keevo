@@ -86,8 +86,8 @@ development_status:
   #   5. Move CategoryRepository from identity/onboarding/domain/port/out/ → catalog/category/domain/port/out/
   #      and update the import in OnboardingService accordingly
   #
-  epic-2: backlog
-  2-1-crud-produits-creation-edition-archivage: backlog
+  epic-2: in-progress
+  2-1-crud-produits-creation-edition-archivage: in-progress
   2-2-moteur-de-prix-calcul-de-marge: backlog
   2-3-seuils-de-stock-historique-des-mouvements: backlog
   2-4-import-csv-creation-progressive-de-produits: backlog

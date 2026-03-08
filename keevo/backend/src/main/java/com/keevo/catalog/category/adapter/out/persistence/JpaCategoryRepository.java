@@ -1,9 +1,7 @@
-package com.keevo.identity.onboarding.adapter.out.persistence;
+package com.keevo.catalog.category.adapter.out.persistence;
 
-import com.keevo.catalog.category.adapter.out.persistence.CategoryJpaEntity;
-import com.keevo.catalog.category.adapter.out.persistence.CategoryJpaRepository;
-import com.keevo.identity.onboarding.domain.model.Category;
-import com.keevo.identity.onboarding.domain.port.out.CategoryRepository;
+import com.keevo.catalog.category.domain.model.Category;
+import com.keevo.catalog.category.domain.port.out.CategoryRepository;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -18,11 +16,11 @@ import java.util.stream.Collectors;
  * <p>Architecture: Secondary adapter (driven side) in hexagonal architecture.
  * Maps between domain {@link Category} records and JPA {@link CategoryJpaEntity} objects.
  *
- * <p>Multi-tenant: {@link SchemaAwareMultiTenantConnectionProvider} automatically sets the
+ * <p>Multi-tenant: {@link com.keevo.shared.infrastructure.persistence.SchemaAwareMultiTenantConnectionProvider} automatically sets the
  * correct PostgreSQL {@code search_path} on every Hibernate connection, so no manual
  * schema routing is required here.
  */
-@Component("onboardingJpaCategoryRepository")
+@Component
 public class JpaCategoryRepository implements CategoryRepository {
 
     private final CategoryJpaRepository jpaRepository;
@@ -60,7 +58,7 @@ public class JpaCategoryRepository implements CategoryRepository {
             .collect(Collectors.toList());
     }
 
-    // ── Stubs: implemented in future stories ──────────────────────────────────
+    // ── Implemented: Story 2.1 ─────────────────────────────────────────────────
 
     @Override
     public List<Category> findByParentId(UUID parentId) {
@@ -70,14 +68,37 @@ public class JpaCategoryRepository implements CategoryRepository {
 
     @Override
     public Category toggleActive(UUID id) {
-        // TODO Story 2.1: implement category toggle endpoint
-        throw new UnsupportedOperationException("toggleActive — implemented in Story 2.1");
+        // Load entity, flip isActive, save, return domain object
+        CategoryJpaEntity entity = jpaRepository.findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("Category not found: " + id));
+        
+        entity.setActive(!entity.isActive());
+        entity.setUpdatedAt(Instant.now());
+        
+        CategoryJpaEntity savedEntity = jpaRepository.save(entity);
+        
+        // TODO: emit audit event for category toggle
+        
+        return toDomain(savedEntity);
     }
 
     @Override
     public Category createCustom(String name, UUID parentId) {
-        // TODO Story 2.1: implement merchant custom category creation
-        throw new UnsupportedOperationException("createCustom — implemented in Story 2.1");
+        // Create with isCustom=true, parentId param
+        var entity = new CategoryJpaEntity(
+            name,
+            parentId,
+            true, // isActive = true by default
+            true, // isCustom = true for merchant-created categories
+            Instant.now(),
+            Instant.now()
+        );
+        
+        CategoryJpaEntity savedEntity = jpaRepository.save(entity);
+        
+        // TODO: emit audit event for custom category creation
+        
+        return toDomain(savedEntity);
     }
 
     // ── Mapping helpers ───────────────────────────────────────────────────────

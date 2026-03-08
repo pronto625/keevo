@@ -1,13 +1,13 @@
 package com.keevo.identity.onboarding.application.service;
 
 import com.keevo.identity.onboarding.application.factory.SectorTemplateFactory;
-import com.keevo.identity.onboarding.domain.model.Category;
+import com.keevo.catalog.category.domain.model.Category;
 import com.keevo.identity.onboarding.domain.model.OnboardingCompletedEvent;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.in.CompleteOnboardingCommand;
 import com.keevo.identity.onboarding.domain.port.in.CompleteOnboardingUseCase;
 import com.keevo.identity.onboarding.domain.port.in.OnboardingResult;
-import com.keevo.identity.onboarding.domain.port.out.CategoryRepository;
+import com.keevo.catalog.category.domain.port.out.CategoryRepository;
 import com.keevo.identity.onboarding.domain.port.out.OnboardingStoreRepository;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
 import com.keevo.identity.onboarding.domain.service.SectorTemplateStrategy;

@@ -140,14 +140,14 @@ class TenantSchemaSyncServiceTest {
 
         // getTablesInSchema is called 3 times in doSync:
         //   call 1: SELECT tables in 'public'  → empty (no public tables to mirror)
-        //   call 2: SELECT tables in tenant    → contains audit_log (it already exists)
-        //   call 3: SELECT tables in tenant (ensureRequiredTenantTables check) → contains audit_log
+        //   call 2: SELECT tables in tenant    → contains audit_log + products (both exist)
+        //   call 3: SELECT tables in tenant (ensureRequiredTenantTables check) → contains both
         // We use a PreparedStatement mock that returns different ResultSets per call.
         PreparedStatement tablesStmt2 = mock(PreparedStatement.class);
         PreparedStatement tablesStmt3 = mock(PreparedStatement.class);
         ResultSet tablesRs1 = mock(ResultSet.class); // public schema — empty
-        ResultSet tablesRs2 = mock(ResultSet.class); // tenant schema — has audit_log
-        ResultSet tablesRs3 = mock(ResultSet.class); // tenant schema (3rd check) — has audit_log
+        ResultSet tablesRs2 = mock(ResultSet.class); // tenant schema — has audit_log + products
+        ResultSet tablesRs3 = mock(ResultSet.class); // tenant schema (3rd check) — has audit_log + products
 
         when(connection.prepareStatement(contains("information_schema.tables")))
                 .thenReturn(tablesStmt, tablesStmt2, tablesStmt3);
@@ -156,12 +156,12 @@ class TenantSchemaSyncServiceTest {
         when(tablesRs1.next()).thenReturn(false); // public schema has no tables
 
         when(tablesStmt2.executeQuery()).thenReturn(tablesRs2);
-        when(tablesRs2.next()).thenReturn(true, false); // audit_log present
-        when(tablesRs2.getString("table_name")).thenReturn("audit_log");
+        when(tablesRs2.next()).thenReturn(true, true, false); // audit_log + products present
+        when(tablesRs2.getString("table_name")).thenReturn("audit_log", "products");
 
         when(tablesStmt3.executeQuery()).thenReturn(tablesRs3);
-        when(tablesRs3.next()).thenReturn(true, false); // audit_log present
-        when(tablesRs3.getString("table_name")).thenReturn("audit_log");
+        when(tablesRs3.next()).thenReturn(true, true, false); // audit_log + products present
+        when(tablesRs3.getString("table_name")).thenReturn("audit_log", "products");
 
         service.syncIfNeeded("kv_def456");
 

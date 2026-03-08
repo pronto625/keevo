@@ -1,4 +1,4 @@
-package com.keevo.identity.onboarding.adapter.out.persistence;
+package com.keevo.catalog.category.adapter.out.persistence;
 
 import jakarta.persistence.*;
 
@@ -65,4 +65,8 @@ public class CategoryJpaEntity {
     public boolean isCustom() { return isCustom; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
+
+    // ── Mutators for JPA operations ──────────────────────────────────────────
+    public void setActive(boolean active) { this.isActive = active; }
+    public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
 }

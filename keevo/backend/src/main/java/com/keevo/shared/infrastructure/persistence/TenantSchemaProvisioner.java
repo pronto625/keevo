@@ -97,6 +97,31 @@ public class TenantSchemaProvisioner {
     private static final String DDL_CATEGORIES_IDX_ACTIVE =
             "CREATE INDEX IF NOT EXISTS idx_categories_is_active ON categories(is_active)";
 
+    static final String DDL_PRODUCTS = """
+            CREATE TABLE IF NOT EXISTS products (
+                id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                name         VARCHAR(200) NOT NULL,
+                description  TEXT,
+                sku          VARCHAR(20) NOT NULL,
+                category_id  UUID        REFERENCES categories(id),
+                price        INTEGER     NOT NULL DEFAULT 0,
+                buy_price    INTEGER     NOT NULL DEFAULT 0,
+                stock_quantity INTEGER   NOT NULL DEFAULT 0,
+                photo_url    VARCHAR(500),
+                archived     BOOLEAN     NOT NULL DEFAULT FALSE,
+                status       VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+                created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                
+                CONSTRAINT ck_products_status CHECK (status IN ('ACTIVE', 'DRAFT'))
+            )""";
+
+    private static final String DDL_PRODUCTS_IDX_SKU =
+            "CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku)";
+
+    private static final String DDL_PRODUCTS_IDX_ARCHIVED =
+            "CREATE INDEX IF NOT EXISTS idx_products_archived ON products(archived)";
+
     private static final String DDL_TENANT_PREFERENCES = """
             CREATE TABLE IF NOT EXISTS tenant_preferences (
                 id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -221,6 +246,9 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_CATEGORIES);
             stmt.execute(DDL_CATEGORIES_IDX_PARENT);
             stmt.execute(DDL_CATEGORIES_IDX_ACTIVE);
+            stmt.execute(DDL_PRODUCTS);
+            stmt.execute(DDL_PRODUCTS_IDX_SKU);
+            stmt.execute(DDL_PRODUCTS_IDX_ARCHIVED);
             stmt.execute(DDL_TENANT_PREFERENCES);
             stmt.execute(DDL_AUDIT_LOG);
             stmt.execute(DDL_AUDIT_LOG_IDX_ENTITY);
