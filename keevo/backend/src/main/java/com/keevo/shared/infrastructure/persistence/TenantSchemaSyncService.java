@@ -55,6 +55,18 @@ public class TenantSchemaSyncService {
      */
     private static final Set<String> GLOBAL_ONLY_TABLES = Set.of("tenants");
 
+    /**
+     * Tables that are tenant-schema-specific (not mirrored from {@code public}) but MUST
+     * always be present in every tenant schema. These are created programmatically by
+     * {@link TenantSchemaProvisioner} for new tenants, and by this service for existing ones.
+     *
+     * <p>Key = table name, Value = DDL statement (CREATE TABLE IF NOT EXISTS).
+     */
+    private static final java.util.Map<String, String> REQUIRED_TENANT_TABLES_DDL =
+            java.util.Map.of(
+                    "audit_log", TenantSchemaProvisioner.DDL_AUDIT_LOG
+            );
+
     /** Valid tenant schema pattern — prevents any SQL injection. */
     private static final String SCHEMA_PATTERN = "^kv_[a-z0-9]{6}$";
 
@@ -132,12 +144,38 @@ public class TenantSchemaSyncService {
                     syncColumns(conn, tenantSchema, table);
                 }
 
+                // Step 3 — Ensure required tenant-only tables (not in public) are present
+                ensureRequiredTenantTables(conn, tenantSchema);
+
                 conn.commit();
                 log.debug("Schema sync complete for '{}'", tenantSchema);
 
             } catch (SQLException e) {
                 conn.rollback();
                 throw e;
+            }
+        }
+    }
+
+    // ── Required tenant-only tables ───────────────────────────────────────────
+
+    /**
+     * Ensure all tables in {@link #REQUIRED_TENANT_TABLES_DDL} exist in the given
+     * tenant schema. These tables are not mirrored from {@code public} so they must
+     * be created explicitly using their DDL constants.
+     */
+    private void ensureRequiredTenantTables(Connection conn, String tenantSchema)
+            throws SQLException {
+        Set<String> existing = getTablesInSchema(conn, tenantSchema);
+        for (java.util.Map.Entry<String, String> entry : REQUIRED_TENANT_TABLES_DDL.entrySet()) {
+            if (!existing.contains(entry.getKey())) {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("SET search_path TO \"" + tenantSchema + "\"");
+                    stmt.execute(entry.getValue());
+                    stmt.execute("SET search_path TO public");
+                    log.info("Schema sync [{}]: created required tenant table '{}'",
+                            tenantSchema, entry.getKey());
+                }
             }
         }
     }

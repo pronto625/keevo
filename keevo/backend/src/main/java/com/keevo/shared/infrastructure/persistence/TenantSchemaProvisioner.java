@@ -107,6 +107,26 @@ public class TenantSchemaProvisioner {
                 updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )""";
 
+    // ── Audit log (Story 1.8) ──────────────────────────────────────────────────
+
+    static final String DDL_AUDIT_LOG = """
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id      UUID        NOT NULL,
+                entity_type  VARCHAR(50) NOT NULL,
+                entity_id    UUID        NOT NULL,
+                action       VARCHAR(80) NOT NULL,
+                value_before TEXT,
+                value_after  TEXT,
+                occurred_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )""";
+
+    static final String DDL_AUDIT_LOG_IDX_ENTITY =
+            "CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id)";
+
+    static final String DDL_AUDIT_LOG_IDX_OCCURRED =
+            "CREATE INDEX IF NOT EXISTS idx_audit_log_occurred ON audit_log(occurred_at DESC)";
+
     // ── Seed data ─────────────────────────────────────────────────────────────
 
     private static final String SEED_ROLES = """
@@ -202,6 +222,9 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_CATEGORIES_IDX_PARENT);
             stmt.execute(DDL_CATEGORIES_IDX_ACTIVE);
             stmt.execute(DDL_TENANT_PREFERENCES);
+            stmt.execute(DDL_AUDIT_LOG);
+            stmt.execute(DDL_AUDIT_LOG_IDX_ENTITY);
+            stmt.execute(DDL_AUDIT_LOG_IDX_OCCURRED);
             stmt.execute("SET search_path TO public");
         }
     }

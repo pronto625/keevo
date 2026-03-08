@@ -10,6 +10,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import javax.sql.DataSource;
 import java.sql.*;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -61,17 +62,17 @@ class TenantSchemaSyncServiceTest {
     void should_skip_already_synced_schema() throws Exception {
         // Prime the cache manually via invalidate + sync (we mock DB for first call only)
         when(dataSource.getConnection()).thenReturn(connection);
-        doNothing().when(connection).setAutoCommit(false);
-        doNothing().when(connection).commit();
-        doNothing().when(connection).close();
 
-        // Tables query — return same tables for both public and tenant (nothing to create)
+        // Tables query — return empty tables for all 3 getTablesInSchema calls
+        // (public schema, tenant schema, ensureRequiredTenantTables check)
         when(connection.prepareStatement(contains("information_schema.tables")))
                 .thenReturn(tablesStmt);
         when(tablesStmt.executeQuery()).thenReturn(tablesRs);
-        when(tablesRs.next()).thenReturn(false); // no tables in either schema
+        when(tablesRs.next()).thenReturn(false); // no tables in any schema
 
-        // Columns query — not called since no common tables
+        // createStatement needed for ensureRequiredTenantTables (audit_log missing)
+        when(connection.createStatement()).thenReturn(execStmt);
+
         service.syncIfNeeded("kv_abc123");
 
         // Second call must not open another connection
@@ -84,20 +85,88 @@ class TenantSchemaSyncServiceTest {
     @DisplayName("invalidate clears cache and forces re-sync on next call")
     void should_re_sync_after_invalidate() throws Exception {
         when(dataSource.getConnection()).thenReturn(connection);
-        doNothing().when(connection).setAutoCommit(false);
-        doNothing().when(connection).commit();
-        doNothing().when(connection).close();
 
         when(connection.prepareStatement(contains("information_schema.tables")))
                 .thenReturn(tablesStmt);
         when(tablesStmt.executeQuery()).thenReturn(tablesRs);
         when(tablesRs.next()).thenReturn(false);
 
+        // createStatement needed for ensureRequiredTenantTables (audit_log missing)
+        when(connection.createStatement()).thenReturn(execStmt);
+
         service.syncIfNeeded("kv_abc123");
         service.invalidate("kv_abc123");
         service.syncIfNeeded("kv_abc123");
 
         verify(dataSource, times(2)).getConnection(); // re-synced after invalidate
+    }
+
+    // ── Required tenant-only tables (Story 1.8) ───────────────────────────────
+
+    @Test
+    @DisplayName("syncIfNeeded() creates audit_log table when missing from tenant schema (Story 1.8)")
+    void should_create_audit_log_when_missing() throws Exception {
+        when(dataSource.getConnection()).thenReturn(connection);
+
+        // Tables query — no tables in either schema (simulates fresh tenant without audit_log)
+        when(connection.prepareStatement(contains("information_schema.tables")))
+                .thenReturn(tablesStmt);
+        when(tablesStmt.executeQuery()).thenReturn(tablesRs);
+        when(tablesRs.next()).thenReturn(false); // no tables
+
+        // Statement for SET search_path + DDL execution
+        when(connection.createStatement()).thenReturn(execStmt);
+
+        service.syncIfNeeded("kv_abc123");
+
+        // Verify that the audit_log DDL was executed via Statement
+        // The ensureRequiredTenantTables method sets search_path, executes DDL, then resets
+        org.mockito.ArgumentCaptor<String> sqlCaptor =
+                org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(execStmt, atLeastOnce()).execute(sqlCaptor.capture());
+
+        java.util.List<String> capturedSql = sqlCaptor.getAllValues();
+        boolean auditLogDdlExecuted = capturedSql.stream()
+                .anyMatch(sql -> sql.contains("audit_log") && sql.contains("CREATE TABLE IF NOT EXISTS"));
+        assertThat(auditLogDdlExecuted)
+                .as("Expected audit_log DDL to be executed for tenant schema missing the table")
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("syncIfNeeded() does NOT re-create audit_log if it already exists")
+    void should_not_recreate_audit_log_when_already_present() throws Exception {
+        when(dataSource.getConnection()).thenReturn(connection);
+
+        // getTablesInSchema is called 3 times in doSync:
+        //   call 1: SELECT tables in 'public'  → empty (no public tables to mirror)
+        //   call 2: SELECT tables in tenant    → contains audit_log (it already exists)
+        //   call 3: SELECT tables in tenant (ensureRequiredTenantTables check) → contains audit_log
+        // We use a PreparedStatement mock that returns different ResultSets per call.
+        PreparedStatement tablesStmt2 = mock(PreparedStatement.class);
+        PreparedStatement tablesStmt3 = mock(PreparedStatement.class);
+        ResultSet tablesRs1 = mock(ResultSet.class); // public schema — empty
+        ResultSet tablesRs2 = mock(ResultSet.class); // tenant schema — has audit_log
+        ResultSet tablesRs3 = mock(ResultSet.class); // tenant schema (3rd check) — has audit_log
+
+        when(connection.prepareStatement(contains("information_schema.tables")))
+                .thenReturn(tablesStmt, tablesStmt2, tablesStmt3);
+
+        when(tablesStmt.executeQuery()).thenReturn(tablesRs1);
+        when(tablesRs1.next()).thenReturn(false); // public schema has no tables
+
+        when(tablesStmt2.executeQuery()).thenReturn(tablesRs2);
+        when(tablesRs2.next()).thenReturn(true, false); // audit_log present
+        when(tablesRs2.getString("table_name")).thenReturn("audit_log");
+
+        when(tablesStmt3.executeQuery()).thenReturn(tablesRs3);
+        when(tablesRs3.next()).thenReturn(true, false); // audit_log present
+        when(tablesRs3.getString("table_name")).thenReturn("audit_log");
+
+        service.syncIfNeeded("kv_def456");
+
+        // createStatement should NOT have been called (audit_log already exists)
+        verify(connection, never()).createStatement();
     }
 
     // ── Error handling ────────────────────────────────────────────────────────

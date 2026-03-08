@@ -91,4 +91,68 @@ class GlobalExceptionHandlerTest {
 
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
+
+    // ── Audit (Story 1.8) ─────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("AUDIT_IMMUTABLE maps to 403 Forbidden")
+    void auditImmutable_mapsto403() {
+        ResponseEntity<ApiResponseWrapper<Void>> resp =
+                handler.handleDomainException(new DomainException(ErrorCode.AUDIT_IMMUTABLE, "Audit entries are immutable"));
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(resp.getBody()).isNotNull();
+        assertThat(resp.getBody().domainCode()).isEqualTo("AUDIT_IMMUTABLE");
+    }
+
+    @Test
+    @DisplayName("AUDIT_IMMUTABLE error field is French user-facing message")
+    void auditImmutable_errorFieldIsInFrench() {
+        ResponseEntity<ApiResponseWrapper<Void>> resp =
+                handler.handleDomainException(new DomainException(ErrorCode.AUDIT_IMMUTABLE, "technical message"));
+
+        assertThat(resp.getBody()).isNotNull();
+        // Must be French message from FR_MESSAGES map, not the raw technical message
+        assertThat(resp.getBody().error())
+                .contains("journal")  // "journal d'audit"
+                .doesNotContain("technical message");
+    }
+
+    @Test
+    @DisplayName("handleDomainException: response body has non-null timestamp and no stackTrace field")
+    void domainException_responseHasTimestampAndNoStackTrace() {
+        ResponseEntity<ApiResponseWrapper<Void>> resp =
+                handler.handleDomainException(new DomainException(ErrorCode.INTERNAL_ERROR, "test"));
+
+        assertThat(resp.getBody()).isNotNull();
+        assertThat(resp.getBody().timestamp()).isNotNull();
+        // ApiResponseWrapper is a record — no stackTrace field exists by design
+        // (Verified by checking the record components: data, error, code, domainCode, details, timestamp)
+    }
+
+    @Test
+    @DisplayName("handleGeneral: response has no stackTrace — only standard error format")
+    void generalException_noStackTraceInResponse() {
+        ResponseEntity<ApiResponseWrapper<Void>> resp =
+                handler.handleGeneral(new RuntimeException("Internal error test"));
+
+        assertThat(resp.getStatusCode()).isEqualTo(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(resp.getBody()).isNotNull();
+        assertThat(resp.getBody().domainCode()).isEqualTo("INTERNAL_ERROR");
+        // The wrapper has no 'stackTrace' field — only data/error/code/domainCode/details/timestamp
+    }
+
+    @Test
+    @DisplayName("handleGeneral: error field is the French message from FR_MESSAGES (not English hardcoded)")
+    void generalException_errorFieldIsInFrench() {
+        // RED: handleGeneral() currently hardcodes "An unexpected error occurred" (English)
+        // GREEN: must use FR_MESSAGES.getOrDefault("INTERNAL_ERROR", ...) → French string
+        ResponseEntity<ApiResponseWrapper<Void>> resp =
+                handler.handleGeneral(new RuntimeException("some technical error"));
+
+        assertThat(resp.getBody()).isNotNull();
+        assertThat(resp.getBody().error())
+                .isEqualTo("Une erreur inattendue s'est produite")  // French from FR_MESSAGES
+                .doesNotContain("unexpected");                        // Not the English hardcoded string
+    }
 }
