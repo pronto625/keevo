@@ -92,8 +92,10 @@ class RemoteStockDataSource {
         'size': pageSize,
         if (storeId != null) 'storeId': storeId,
         if (movementType != null) 'type': movementType,
-        if (from != null) 'from': from.toIso8601String(),
-        if (to != null) 'to': to.toIso8601String(),
+        // toUtc() ensures the 'Z' suffix is present so Spring can parse
+        // the value as java.time.Instant (ISO_DATE_TIME without timezone fails).
+        if (from != null) 'from': from.toUtc().toIso8601String(),
+        if (to != null) 'to': to.toUtc().toIso8601String(),
       },
     );
     final content = (response.data!['data']['content'] as List<dynamic>);
