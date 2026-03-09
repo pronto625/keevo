@@ -113,7 +113,16 @@ class _StockHistoryPageState extends ConsumerState<StockHistoryPage> {
     if (picked != null) {
       setState(() {
         _filterFrom = picked.start;
-        _filterTo = picked.end;
+        // End of selected day — include all movements that occurred during it.
+        _filterTo = DateTime(
+          picked.end.year,
+          picked.end.month,
+          picked.end.day,
+          23,
+          59,
+          59,
+          999,
+        );
       });
       _loadHistory(reset: true);
     }

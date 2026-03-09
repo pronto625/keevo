@@ -67,7 +67,7 @@ class StockRepositoryImpl implements StockRepository {
     int pageSize = 20,
   }) async {
     try {
-      return await _remote.getHistory(
+      final movements = await _remote.getHistory(
         productId: productId,
         storeId: storeId,
         movementType: movementType,
@@ -76,6 +76,12 @@ class StockRepositoryImpl implements StockRepository {
         page: page,
         pageSize: pageSize,
       );
+      // Cache remote results locally so offline fallback stays up-to-date
+      // and history survives an app reinstall once connectivity is restored.
+      for (final m in movements) {
+        await _local.upsertMovement(m);
+      }
+      return movements;
     } catch (e) {
       dev.log('[Stock] Remote history failed — using local: $e',
           name: 'StockRepository');

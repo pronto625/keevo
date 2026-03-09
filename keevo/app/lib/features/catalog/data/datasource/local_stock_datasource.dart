@@ -90,8 +90,9 @@ class LocalStockDataSource {
     return rows.map(_movementToModel).toList();
   }
 
+  /// Insert a new movement (from a local mutation — not yet synced).
   Future<void> insertMovement(StockMovementModel movement) async {
-    await _db.into(_db.stockMovements).insert(
+    await _db.into(_db.stockMovements).insertOnConflictUpdate(
       StockMovementsCompanion(
         id: Value(movement.id),
         productId: Value(movement.productId),
@@ -104,6 +105,26 @@ class LocalStockDataSource {
         actorId: Value(movement.actorId),
         reason: Value(movement.notes),
         synced: const Value(false),
+        createdAt: Value(movement.occurredAt),
+      ),
+    );
+  }
+
+  /// Upsert a movement that was fetched from the remote (already synced).
+  Future<void> upsertMovement(StockMovementModel movement) async {
+    await _db.into(_db.stockMovements).insertOnConflictUpdate(
+      StockMovementsCompanion(
+        id: Value(movement.id),
+        productId: Value(movement.productId),
+        variantId: Value(movement.variantId),
+        storeId: Value(movement.storeId),
+        type: Value(movement.movementType),
+        quantityBefore: Value(movement.quantityBefore),
+        quantityDelta: Value(movement.quantityDelta),
+        quantityAfter: Value(movement.quantityAfter),
+        actorId: Value(movement.actorId),
+        reason: Value(movement.notes),
+        synced: const Value(true),
         createdAt: Value(movement.occurredAt),
       ),
     );
