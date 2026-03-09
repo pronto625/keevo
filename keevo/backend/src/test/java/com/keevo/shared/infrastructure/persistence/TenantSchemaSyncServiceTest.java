@@ -140,14 +140,14 @@ class TenantSchemaSyncServiceTest {
 
         // getTablesInSchema is called 3 times in doSync:
         //   call 1: SELECT tables in 'public'  → empty (no public tables to mirror)
-        //   call 2: SELECT tables in tenant    → contains audit_log + products (both exist)
-        //   call 3: SELECT tables in tenant (ensureRequiredTenantTables check) → contains both
-        // We use a PreparedStatement mock that returns different ResultSets per call.
+        //   call 2: SELECT tables in tenant    → contains all 4 required tables (all exist)
+        //   call 3: SELECT tables in tenant (ensureRequiredTenantTables check) → all 4 present
+        // Story 2.3 added stock_levels + stock_movements to REQUIRED_TENANT_TABLES_DDL.
         PreparedStatement tablesStmt2 = mock(PreparedStatement.class);
         PreparedStatement tablesStmt3 = mock(PreparedStatement.class);
         ResultSet tablesRs1 = mock(ResultSet.class); // public schema — empty
-        ResultSet tablesRs2 = mock(ResultSet.class); // tenant schema — has audit_log + products
-        ResultSet tablesRs3 = mock(ResultSet.class); // tenant schema (3rd check) — has audit_log + products
+        ResultSet tablesRs2 = mock(ResultSet.class); // tenant schema — has all 4 required tables
+        ResultSet tablesRs3 = mock(ResultSet.class); // tenant schema (3rd check) — all 4 present
 
         when(connection.prepareStatement(contains("information_schema.tables")))
                 .thenReturn(tablesStmt, tablesStmt2, tablesStmt3);
@@ -156,16 +156,18 @@ class TenantSchemaSyncServiceTest {
         when(tablesRs1.next()).thenReturn(false); // public schema has no tables
 
         when(tablesStmt2.executeQuery()).thenReturn(tablesRs2);
-        when(tablesRs2.next()).thenReturn(true, true, false); // audit_log + products present
-        when(tablesRs2.getString("table_name")).thenReturn("audit_log", "products");
+        when(tablesRs2.next()).thenReturn(true, true, true, true, false); // 4 tables present
+        when(tablesRs2.getString("table_name")).thenReturn(
+                "audit_log", "products", "stock_levels", "stock_movements");
 
         when(tablesStmt3.executeQuery()).thenReturn(tablesRs3);
-        when(tablesRs3.next()).thenReturn(true, true, false); // audit_log + products present
-        when(tablesRs3.getString("table_name")).thenReturn("audit_log", "products");
+        when(tablesRs3.next()).thenReturn(true, true, true, true, false); // 4 tables present
+        when(tablesRs3.getString("table_name")).thenReturn(
+                "audit_log", "products", "stock_levels", "stock_movements");
 
         service.syncIfNeeded("kv_def456");
 
-        // createStatement should NOT have been called (audit_log already exists)
+        // createStatement should NOT have been called (all required tables already exist)
         verify(connection, never()).createStatement();
     }
 

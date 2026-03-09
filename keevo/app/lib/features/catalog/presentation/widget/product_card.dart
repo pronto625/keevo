@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../domain/exception/product_exception.dart';
 import '../../domain/model/product_model.dart';
 import '../provider/product_provider.dart';
+import '../provider/stock_provider.dart';
 
 /// ProductCard — displays a product in the catalogue list.
 ///
@@ -18,6 +19,8 @@ class ProductCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final actions = ref.read(productActionsProvider);
+    final stockState = ref.watch(stockNotifierProvider(product.id));
+    final isLowStock = stockState.levels.any((l) => l.isLow);
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -158,6 +161,35 @@ class ProductCard extends ConsumerWidget {
                                   ],
                                 ),
                               ),
+                            if (isLowStock) ...
+                              [
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.warning_amber_rounded,
+                                        size: 12,
+                                        color: Colors.red,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Stock bas',
+                                        style: theme.textTheme.labelSmall?.copyWith(
+                                          color: Colors.red,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                           ],
                         ),
                       ],

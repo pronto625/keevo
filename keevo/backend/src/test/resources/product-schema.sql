@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS products (
     photo_url    VARCHAR(500),
     archived     BOOLEAN     NOT NULL DEFAULT FALSE,
     status       VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    minimum_threshold INTEGER NOT NULL DEFAULT 0,
     created_at   TIMESTAMP   NOT NULL DEFAULT NOW(),
     updated_at   TIMESTAMP   NOT NULL DEFAULT NOW(),
     

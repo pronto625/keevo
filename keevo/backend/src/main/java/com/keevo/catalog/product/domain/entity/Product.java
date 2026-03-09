@@ -16,6 +16,7 @@ import java.util.regex.Pattern;
  * - price/buyPrice/transportCost as Money value objects (non-negative enforced by Money)
  * - archived default false
  * - status default ACTIVE
+ * - minimumThreshold non-negative integer (Story 2.3)
  */
 public class Product {
     private static final Pattern SKU_PATTERN = Pattern.compile("^KEV-[A-Z0-9]{6}$");
@@ -31,12 +32,27 @@ public class Product {
     private final Integer stockQuantity;
     private final Boolean archived;
     private final ProductStatus status;
+    private final int minimumThreshold; // Story 2.3 — stock alert threshold
     private final Instant createdAt;
     private final Instant updatedAt;
-    
-    public Product(UUID id, String name, String description, String sku, 
+
+    /**
+     * Legacy constructor (backward compat) — minimumThreshold defaults to 0.
+     */
+    public Product(UUID id, String name, String description, String sku,
                   UUID categoryId, Integer price, Integer buyPrice, Integer transportCost, Integer stockQuantity,
-                  Boolean archived, ProductStatus status, 
+                  Boolean archived, ProductStatus status,
+                  Instant createdAt, Instant updatedAt) {
+        this(id, name, description, sku, categoryId, price, buyPrice, transportCost, stockQuantity,
+             archived, status, 0, createdAt, updatedAt);
+    }
+
+    /**
+     * Full constructor with minimumThreshold (Story 2.3).
+     */
+    public Product(UUID id, String name, String description, String sku,
+                  UUID categoryId, Integer price, Integer buyPrice, Integer transportCost, Integer stockQuantity,
+                  Boolean archived, ProductStatus status, Integer minimumThreshold,
                   Instant createdAt, Instant updatedAt) {
         // Validate name
         if (name == null || name.trim().isEmpty()) {
@@ -55,7 +71,12 @@ public class Product {
         if (transportCost != null && transportCost < 0) {
             throw new IllegalArgumentException("Transport cost cannot be negative");
         }
-        
+
+        // minimumThreshold must be non-negative
+        if (minimumThreshold != null && minimumThreshold < 0) {
+            throw new IllegalArgumentException("Minimum threshold cannot be negative");
+        }
+
         this.id = id;
         this.name = name.trim();
         this.description = description;
@@ -67,6 +88,7 @@ public class Product {
         this.stockQuantity = stockQuantity != null ? stockQuantity : 0;
         this.archived = archived != null ? archived : false;
         this.status = status != null ? status : ProductStatus.ACTIVE;
+        this.minimumThreshold = minimumThreshold != null ? minimumThreshold : 0;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -92,9 +114,20 @@ public class Product {
     public Integer getStockQuantity() { return stockQuantity; }
     public Boolean getArchived() { return archived; }
     public ProductStatus getStatus() { return status; }
+    public int getMinimumThreshold() { return minimumThreshold; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
-    
+
+    /**
+     * Copy-with: returns a new Product with an updated minimumThreshold (Story 2.3).
+     * Preserves all other fields; sets updatedAt to now.
+     */
+    public Product withMinimumThreshold(int newThreshold) {
+        return new Product(id, name, description, sku, categoryId,
+            getPriceValue(), getBuyPriceValue(), getTransportCostValue(), stockQuantity,
+            archived, status, newThreshold, createdAt, Instant.now());
+    }
+
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;

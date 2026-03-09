@@ -384,4 +384,68 @@ class ProductTest {
             );
         });
     }
+
+    // ── Story 2.3 — minimumThreshold tests ───────────────────────────────────
+
+    @Test
+    @DisplayName("Should create product with valid minimum threshold")
+    void should_create_product_with_valid_minimum_threshold() {
+        // Given
+        var id = UUID.randomUUID();
+        var now = Instant.now();
+
+        // When — use overloaded constructor with minimumThreshold
+        var product = new Product(id, "Test", null, "KEV-ABC123", null,
+            1000, 500, 100, 10, false, ProductStatus.ACTIVE, 5, now, now);
+
+        // Then
+        assertEquals(5, product.getMinimumThreshold());
+    }
+
+    @Test
+    @DisplayName("Should default minimum threshold to 0 when not provided")
+    void should_default_minimum_threshold_to_zero() {
+        // Given
+        var id = UUID.randomUUID();
+        var now = Instant.now();
+
+        // When — use legacy constructor (no minimumThreshold param)
+        var product = new Product(id, "Test", null, "KEV-ABC123", null,
+            1000, 500, 100, 10, false, ProductStatus.ACTIVE, now, now);
+
+        // Then
+        assertEquals(0, product.getMinimumThreshold());
+    }
+
+    @Test
+    @DisplayName("Should reject negative minimum threshold")
+    void should_reject_negative_minimum_threshold() {
+        // Given / When / Then
+        assertThrows(IllegalArgumentException.class, () -> {
+            new Product(
+                UUID.randomUUID(),
+                "Valid Name",
+                "Description",
+                "KEV-ABC123",
+                UUID.randomUUID(),
+                1000, 500, 100,
+                10,   // stockQuantity
+                false,
+                ProductStatus.ACTIVE,
+                -1,   // INVALID negative minimumThreshold
+                Instant.now(),
+                Instant.now()
+            );
+        });
+    }
+
+    @Test
+    @DisplayName("Should accept zero minimum threshold")
+    void should_accept_zero_minimum_threshold() {
+        var now = Instant.now();
+        // zero threshold = no alerts configured
+        var product = new Product(UUID.randomUUID(), "P", null, "KEV-ABC123", null,
+            0, 0, 0, 0, false, ProductStatus.ACTIVE, 0, now, now);
+        assertEquals(0, product.getMinimumThreshold());
+    }
 }

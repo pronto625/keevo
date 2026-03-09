@@ -9,6 +9,8 @@ import com.keevo.catalog.product.domain.event.ProductCreatedEvent;
 import com.keevo.catalog.product.domain.event.ProductUpdatedEvent;
 import com.keevo.catalog.product.domain.event.ProductArchivedEvent;
 import com.keevo.catalog.product.domain.event.SalePriceOverriddenEvent;
+import com.keevo.catalog.stock.domain.event.StockAdjustedEvent;
+import com.keevo.catalog.stock.domain.event.StockThresholdBreachedEvent;
 import com.keevo.shared.application.port.AuditPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.slf4j.Logger;
@@ -243,6 +245,63 @@ public class AuditEventListener {
         log.info("AUDIT: price_overridden productId={} cataloguePrice={} appliedPrice={} tenantId={} actorId={}",
                 event.productId(), event.cataloguePrice(), event.appliedPrice(),
                 event.tenantId(), event.actorId());
+    }
+
+    // ── Stock Events (Story 2.3) ──────────────────────────────────────────────
+
+    /**
+     * Handle stock adjusted event — records every stock movement in the audit log.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management.
+     */
+    @EventListener
+    public void on(StockAdjustedEvent event) {
+        auditPort.record(
+            event.actorId(),
+            event.tenantId(),
+            "STOCK_ADJUSTED",
+            "StockMovement",
+            event.productId(),
+            toJson(Map.of("quantityBefore", event.quantityBefore())),
+            toJson(Map.of(
+                "movementType",   event.movementType().name(),
+                "quantityChange", event.quantityChange(),
+                "quantityAfter",  event.quantityAfter(),
+                "storeId",        event.storeId().toString(),
+                "notes",          event.notes() != null ? event.notes() : ""
+            ))
+        );
+        log.info("AUDIT: stock_adjusted productId={} type={} before={} change={} after={} tenantId={}",
+            event.productId(), event.movementType(), event.quantityBefore(),
+            event.quantityChange(), event.quantityAfter(), event.tenantId());
+    }
+
+    /**
+     * Handle stock threshold breached event — signals low-stock alert in audit log.
+     *
+     * <p>FCM push notification delivery deferred to Story 8-1.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management.
+     */
+    @EventListener
+    public void on(StockThresholdBreachedEvent event) {
+        auditPort.record(
+            event.actorId(),
+            event.tenantId(),
+            "STOCK_THRESHOLD_BREACHED",
+            "StockAlert",
+            event.productId(),
+            null,
+            toJson(Map.of(
+                "productName",      event.productName(),
+                "storeId",          event.storeId().toString(),
+                "currentQuantity",  event.currentQuantity(),
+                "threshold",        event.threshold()
+            ))
+        );
+        log.warn("AUDIT: stock_threshold_breached productId={} product={} qty={} threshold={} tenantId={}",
+            event.productId(), event.productName(), event.currentQuantity(),
+            event.threshold(), event.tenantId());
     }
 
     // ── Template Method helper ────────────────────────────────────────────────

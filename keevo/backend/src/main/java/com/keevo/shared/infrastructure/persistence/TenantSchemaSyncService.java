@@ -64,8 +64,10 @@ public class TenantSchemaSyncService {
      */
     private static final java.util.Map<String, String> REQUIRED_TENANT_TABLES_DDL =
             java.util.Map.of(
-                    "audit_log", TenantSchemaProvisioner.DDL_AUDIT_LOG,
-                    "products", TenantSchemaProvisioner.DDL_PRODUCTS
+                    "audit_log",        TenantSchemaProvisioner.DDL_AUDIT_LOG,
+                    "products",         TenantSchemaProvisioner.DDL_PRODUCTS,
+                    "stock_levels",     TenantSchemaProvisioner.DDL_STOCK_LEVELS,
+                    "stock_movements",  TenantSchemaProvisioner.DDL_STOCK_MOVEMENTS
             );
 
     /** Valid tenant schema pattern — prevents any SQL injection. */

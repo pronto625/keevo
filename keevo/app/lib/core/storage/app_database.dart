@@ -24,9 +24,8 @@ part 'app_database.g.dart';
 /// Schema version 3: products table extended with description, sku, photoUrl,
 /// archived, status columns (Story 2.1).
 /// Schema version 4: products table extended with transportCost column (Story 2.2).
-///
-/// Usage in production: [AppDatabase(hexKey: key)] — encrypted via SQLCipher.
-/// Usage in tests:      [AppDatabase.forTesting()] — in-memory, unencrypted.
+/// Schema version 5: stock_movements extended with variantId, quantityBefore,
+/// quantityAfter; stock_levels extended with variantId, minimumThreshold (Story 2.3).
 @DriftDatabase(tables: [
   SyncQueue,
   Products,
@@ -49,7 +48,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -78,6 +77,15 @@ class AppDatabase extends _$AppDatabase {
       if (from < 4) {
         // Story 2.2 — add transportCost column for pricing engine.
         await migrator.addColumn(products, products.transportCost);
+      }
+      if (from < 5) {
+        // Story 2.3 — stock movements: add variantId, quantityBefore, quantityAfter.
+        await migrator.addColumn(stockMovements, stockMovements.variantId);
+        await migrator.addColumn(stockMovements, stockMovements.quantityBefore);
+        await migrator.addColumn(stockMovements, stockMovements.quantityAfter);
+        // Story 2.3 — stock levels: add variantId, minimumThreshold.
+        await migrator.addColumn(stockLevels, stockLevels.variantId);
+        await migrator.addColumn(stockLevels, stockLevels.minimumThreshold);
       }
     },
   );

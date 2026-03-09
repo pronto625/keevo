@@ -4,16 +4,28 @@ import 'package:drift/drift.dart';
 ///
 /// Subject to 30-day rolling purge (only synced rows are deleted).
 /// Mirrors [StockAdjustedEvent] backend domain event.
+///
+/// Schema v5 (Story 2.3): added variantId, quantityBefore, quantityAfter.
 class StockMovements extends Table {
   TextColumn get id => text()();
   TextColumn get productId => text()();
+
+  /// Nullable — only set for variant products (Story 2.3).
+  TextColumn get variantId => text().nullable()();
+
   TextColumn get storeId => text()();
 
-  /// Movement type: 'SALE' | 'PURCHASE' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'ADJUSTMENT'
+  /// Movement type: 'SALE' | 'STOCK_ENTRY' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'ADJUSTMENT'
   TextColumn get type => text()();
 
-  /// Signed quantity: positive = stock in, negative = stock out
+  /// Quantity before the operation (Story 2.3).
+  IntColumn get quantityBefore => integer().withDefault(const Constant(0))();
+
+  /// Signed quantity delta: positive = stock in, negative = stock out.
   IntColumn get quantityDelta => integer()();
+
+  /// Quantity after the operation (Story 2.3).
+  IntColumn get quantityAfter => integer().withDefault(const Constant(0))();
 
   TextColumn get actorId => text()();
   TextColumn get reason => text().nullable()();

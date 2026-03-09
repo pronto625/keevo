@@ -1,0 +1,206 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+import '../../../../core/di/providers.dart';
+import '../../../auth/presentation/provider/auth_provider.dart';
+import '../../data/datasource/local_stock_datasource.dart';
+import '../../data/datasource/remote_stock_datasource.dart';
+import '../../data/repository/stock_repository_impl.dart';
+import '../../domain/model/stock_level_model.dart';
+import '../../domain/model/stock_movement_model.dart';
+import '../../domain/repository/stock_repository.dart';
+import '../../domain/usecase/get_stock_history_usecase.dart';
+import '../../domain/usecase/get_stock_level_usecase.dart';
+import '../../domain/usecase/set_threshold_usecase.dart';
+
+part 'stock_provider.g.dart';
+
+// ── Infrastructure providers ──────────────────────────────────────────────────
+
+final localStockDataSourceProvider = Provider<LocalStockDataSource>((ref) {
+  return LocalStockDataSource(ref.watch(appDatabaseProvider));
+});
+
+final remoteStockDataSourceProvider = Provider<RemoteStockDataSource>((ref) {
+  return RemoteStockDataSource(dio: ref.watch(dioProvider));
+});
+
+final stockRepositoryProvider = Provider<StockRepository>((ref) {
+  return StockRepositoryImpl(
+    local: ref.watch(localStockDataSourceProvider),
+    remote: ref.watch(remoteStockDataSourceProvider),
+  );
+});
+
+// ── Use case providers ────────────────────────────────────────────────────────
+
+final getStockLevelUseCaseProvider = Provider<GetStockLevelUseCase>((ref) {
+  return GetStockLevelUseCase(ref.watch(stockRepositoryProvider));
+});
+
+final getStockHistoryUseCaseProvider = Provider<GetStockHistoryUseCase>((ref) {
+  return GetStockHistoryUseCase(ref.watch(stockRepositoryProvider));
+});
+
+final setThresholdUseCaseProvider = Provider<SetThresholdUseCase>((ref) {
+  return SetThresholdUseCase(ref.watch(stockRepositoryProvider));
+});
+
+// ── State: current stock levels for a product ─────────────────────────────────
+
+/// Notifier state for stock management of a specific product.
+class StockState {
+  final List<StockLevelModel> levels;
+  final List<StockMovementModel> movements;
+  final bool isLoading;
+  final String? error;
+  final bool hasMoreHistory;
+
+  const StockState({
+    this.levels = const [],
+    this.movements = const [],
+    this.isLoading = false,
+    this.error,
+    this.hasMoreHistory = true,
+  });
+
+  StockState copyWith({
+    List<StockLevelModel>? levels,
+    List<StockMovementModel>? movements,
+    bool? isLoading,
+    String? error,
+    bool? hasMoreHistory,
+  }) =>
+      StockState(
+        levels: levels ?? this.levels,
+        movements: movements ?? this.movements,
+        isLoading: isLoading ?? this.isLoading,
+        error: error,
+        hasMoreHistory: hasMoreHistory ?? this.hasMoreHistory,
+      );
+}
+
+/// StockNotifier — manages stock levels and movement history for a product.
+///
+/// GoF: Observer — Riverpod notifies all listeners on state change.
+/// Accessed via [stockNotifierProvider](productId).
+///
+/// Story 2.3.
+@riverpod
+class StockNotifier extends _$StockNotifier {
+  late final String _productId;
+
+  @override
+  StockState build(String productId) {
+    _productId = productId;
+    // Load levels on creation
+    Future.microtask(() => _loadLevels());
+    return const StockState(isLoading: true);
+  }
+
+  Future<void> _loadLevels() async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final levels = await ref
+          .read(getStockLevelUseCaseProvider)
+          .execute(_productId);
+      state = state.copyWith(levels: levels, isLoading: false);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+    }
+  }
+
+  /// Loads or refreshes movement history.
+  Future<void> loadHistory({
+    String? storeId,
+    String? movementType,
+    DateTime? from,
+    DateTime? to,
+    int page = 0,
+  }) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final movements = await ref
+          .read(getStockHistoryUseCaseProvider)
+          .execute(_productId,
+              storeId: storeId,
+              movementType: movementType,
+              from: from,
+              to: to,
+              page: page);
+      final hasMore = movements.length == 20;
+      state = state.copyWith(
+        movements: page == 0 ? movements : [...state.movements, ...movements],
+        isLoading: false,
+        hasMoreHistory: hasMore,
+      );
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+    }
+  }
+
+  /// Records a stock entry and refreshes levels.
+  Future<bool> recordEntry({
+    required String storeId,
+    required int quantity,
+    String? notes,
+  }) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      await ref.read(stockRepositoryProvider).recordEntry(
+            productId: _productId,
+            storeId: storeId,
+            quantity: quantity,
+            notes: notes,
+          );
+      await _loadLevels();
+      return true;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+      return false;
+    }
+  }
+
+  /// Adjusts stock to absolute quantity and refreshes.
+  Future<bool> adjustStock({
+    required String storeId,
+    required int newQuantity,
+    required String notes,
+  }) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      await ref.read(stockRepositoryProvider).adjustStock(
+            productId: _productId,
+            storeId: storeId,
+            newQuantity: newQuantity,
+            notes: notes,
+          );
+      await _loadLevels();
+      return true;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+      return false;
+    }
+  }
+
+  /// Sets minimum threshold and refreshes levels.
+  Future<bool> setThreshold(int minimumThreshold) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      await ref.read(setThresholdUseCaseProvider).execute(
+            productId: _productId,
+            minimumThreshold: minimumThreshold,
+          );
+      await _loadLevels();
+      return true;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+      return false;
+    }
+  }
+
+  /// Refreshes both levels and history.
+  Future<void> refresh() async {
+    await _loadLevels();
+  }
+}

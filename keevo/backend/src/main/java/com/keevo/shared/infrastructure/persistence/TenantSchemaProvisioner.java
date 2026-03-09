@@ -121,6 +121,10 @@ public class TenantSchemaProvisioner {
     static final String DDL_PRODUCTS_MIGRATE_TRANSPORT_COST =
             "ALTER TABLE products ADD COLUMN IF NOT EXISTS transport_cost INTEGER NOT NULL DEFAULT 0";
 
+    /** Migration DDL: adds minimum_threshold to existing products tables (idempotent — Story 2.3) */
+    static final String DDL_PRODUCTS_MIGRATE_MINIMUM_THRESHOLD =
+            "ALTER TABLE products ADD COLUMN IF NOT EXISTS minimum_threshold INTEGER NOT NULL DEFAULT 0";
+
     private static final String DDL_PRODUCTS_IDX_SKU =
             "CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku)";
 
@@ -156,6 +160,47 @@ public class TenantSchemaProvisioner {
 
     static final String DDL_AUDIT_LOG_IDX_OCCURRED =
             "CREATE INDEX IF NOT EXISTS idx_audit_log_occurred ON audit_log(occurred_at DESC)";
+
+    // ── Stock levels (Story 2.3) ───────────────────────────────────────────────
+
+    static final String DDL_STOCK_LEVELS = """
+            CREATE TABLE IF NOT EXISTS stock_levels (
+                id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                product_id        UUID        NOT NULL REFERENCES products(id),
+                variant_id        UUID,
+                store_id          UUID        NOT NULL,
+                quantity          INTEGER     NOT NULL DEFAULT 0,
+                updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                CONSTRAINT uq_stock_level UNIQUE (product_id, store_id)
+            )""";
+
+    static final String DDL_STOCK_LEVELS_IDX_PRODUCT =
+            "CREATE INDEX IF NOT EXISTS idx_stock_levels_product_store ON stock_levels(product_id, store_id)";
+
+    // ── Stock movements (Story 2.3) ────────────────────────────────────────────
+
+    static final String DDL_STOCK_MOVEMENTS = """
+            CREATE TABLE IF NOT EXISTS stock_movements (
+                id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                product_id      UUID        NOT NULL REFERENCES products(id),
+                variant_id      UUID,
+                store_id        UUID        NOT NULL,
+                movement_type   VARCHAR(30) NOT NULL,
+                quantity_before INTEGER     NOT NULL,
+                quantity_change INTEGER     NOT NULL,
+                quantity_after  INTEGER     NOT NULL,
+                actor_id        UUID        NOT NULL,
+                notes           TEXT,
+                occurred_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                CONSTRAINT ck_movement_type CHECK (movement_type IN
+                    ('SALE','STOCK_ENTRY','TRANSFER_IN','TRANSFER_OUT','ADJUSTMENT'))
+            )""";
+
+    static final String DDL_STOCK_MOVEMENTS_IDX_PRODUCT =
+            "CREATE INDEX IF NOT EXISTS idx_stock_movements_product ON stock_movements(product_id, occurred_at DESC)";
+
+    static final String DDL_STOCK_MOVEMENTS_IDX_STORE =
+            "CREATE INDEX IF NOT EXISTS idx_stock_movements_store ON stock_movements(store_id, occurred_at DESC)";
 
     // ── Seed data ─────────────────────────────────────────────────────────────
 
@@ -255,10 +300,17 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_PRODUCTS_IDX_SKU);
             stmt.execute(DDL_PRODUCTS_IDX_ARCHIVED);
             stmt.execute(DDL_PRODUCTS_MIGRATE_TRANSPORT_COST); // idempotent: adds transport_cost if missing
+            stmt.execute(DDL_PRODUCTS_MIGRATE_MINIMUM_THRESHOLD); // idempotent: adds minimum_threshold if missing
             stmt.execute(DDL_TENANT_PREFERENCES);
             stmt.execute(DDL_AUDIT_LOG);
             stmt.execute(DDL_AUDIT_LOG_IDX_ENTITY);
             stmt.execute(DDL_AUDIT_LOG_IDX_OCCURRED);
+            // Story 2.3 — stock tables
+            stmt.execute(DDL_STOCK_LEVELS);
+            stmt.execute(DDL_STOCK_LEVELS_IDX_PRODUCT);
+            stmt.execute(DDL_STOCK_MOVEMENTS);
+            stmt.execute(DDL_STOCK_MOVEMENTS_IDX_PRODUCT);
+            stmt.execute(DDL_STOCK_MOVEMENTS_IDX_STORE);
             stmt.execute("SET search_path TO public");
         }
     }

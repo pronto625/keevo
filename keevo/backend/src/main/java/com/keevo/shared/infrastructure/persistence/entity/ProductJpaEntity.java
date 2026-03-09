@@ -43,6 +43,9 @@ public class ProductJpaEntity {
     @Column(name = "stock_quantity", nullable = false)
     private Integer stockQuantity = 0;
 
+    @Column(name = "minimum_threshold", nullable = false)
+    private Integer minimumThreshold = 0;
+
     @Column(name = "photo_url", length = 500)
     private String photoUrl;
 
@@ -65,7 +68,8 @@ public class ProductJpaEntity {
     // Constructor for conversions
     public ProductJpaEntity(UUID id, String name, String description, String sku, 
                            UUID categoryId, Integer price, Integer buyPrice, Integer transportCost,
-                           Integer stockQuantity, String photoUrl, Boolean archived, ProductStatus status,
+                           Integer stockQuantity, Integer minimumThreshold, String photoUrl,
+                           Boolean archived, ProductStatus status,
                            Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.name = name;
@@ -76,6 +80,7 @@ public class ProductJpaEntity {
         this.buyPrice = buyPrice;
         this.transportCost = transportCost != null ? transportCost : 0;
         this.stockQuantity = stockQuantity;
+        this.minimumThreshold = minimumThreshold != null ? minimumThreshold : 0;
         this.photoUrl = photoUrl;
         this.archived = archived;
         this.status = status;
@@ -110,6 +115,9 @@ public class ProductJpaEntity {
 
     public Integer getStockQuantity() { return stockQuantity; }
     public void setStockQuantity(Integer stockQuantity) { this.stockQuantity = stockQuantity; }
+
+    public Integer getMinimumThreshold() { return minimumThreshold; }
+    public void setMinimumThreshold(Integer minimumThreshold) { this.minimumThreshold = minimumThreshold; }
 
     public String getPhotoUrl() { return photoUrl; }
     public void setPhotoUrl(String photoUrl) { this.photoUrl = photoUrl; }

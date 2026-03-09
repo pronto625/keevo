@@ -11,6 +11,8 @@ import '../../domain/model/product_model.dart';
 import '../provider/category_provider.dart';
 import '../provider/product_provider.dart';
 import '../widget/pricing_calculator_widget.dart';
+import '../widget/stock_level_widget.dart';
+import 'stock_history_page.dart';
 
 /// ProductFormPage — Modern Material 3 design for creating/editing products
 class ProductFormPage extends ConsumerStatefulWidget {
@@ -583,6 +585,30 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
                           
                           const SizedBox(height: 32),
                           
+                          // Stock section — only visible when editing an existing product
+                          if (widget.isEditing) ...
+                            [
+                              _SectionHeader(
+                                icon: Icons.inventory_2_outlined,
+                                title: 'Gestion du stock',
+                                color: Colors.teal,
+                              ),
+                              const SizedBox(height: 12),
+                              StockLevelWidget(
+                                productId: widget.product!.id,
+                                onViewHistory: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => StockHistoryPage(
+                                      productId: widget.product!.id,
+                                      productName: widget.product!.name,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                            ],
+
                           // Photo section
                           _PhotoSection(
                             selectedImage: _selectedImage,

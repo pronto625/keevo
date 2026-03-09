@@ -51,6 +51,8 @@ public class GlobalExceptionHandler {
             Map.entry("PLAN_LIMIT_EXCEEDED",       "Limite de votre plan atteinte"),
             Map.entry("RATE_LIMIT_EXCEEDED",       "Trop de requêtes, veuillez patienter"),
             Map.entry("AUDIT_IMMUTABLE",           "Les entrées du journal d'audit ne peuvent pas être modifiées"),
+            Map.entry("INSUFFICIENT_STOCK",        "Stock insuffisant pour cette opération"),
+            Map.entry("STOCK_NOT_FOUND",           "Niveau de stock introuvable"),
             Map.entry("VALIDATION_ERROR",          "Données invalides"),
             Map.entry("INTERNAL_ERROR",            "Une erreur inattendue s'est produite")
     );
@@ -113,7 +115,8 @@ public class GlobalExceptionHandler {
                  "TENANT_ALREADY_EXISTS",
                  "MEMBERSHIP_ALREADY_EXISTS" -> HttpStatus.CONFLICT;
             case "VALIDATION_ERROR", "INVALID_AMOUNT",
-                 "INVALID_PHONE_NUMBER", "INVALID_PASSWORD" -> HttpStatus.UNPROCESSABLE_ENTITY;
+                 "INVALID_PHONE_NUMBER", "INVALID_PASSWORD",
+                 "INSUFFICIENT_STOCK" -> HttpStatus.UNPROCESSABLE_ENTITY;
             case "SECTOR_TEMPLATE_NOT_FOUND",
                  "ONBOARDING_ALREADY_COMPLETED" -> HttpStatus.BAD_REQUEST;
             case "TENANT_PROVISION_FAILED" -> HttpStatus.INTERNAL_SERVER_ERROR;

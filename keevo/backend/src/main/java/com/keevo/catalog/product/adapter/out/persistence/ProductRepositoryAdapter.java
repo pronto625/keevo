@@ -81,6 +81,7 @@ public class ProductRepositoryAdapter implements ProductRepository {
             product.getBuyPriceValue(),
             product.getTransportCostValue(),
             product.getStockQuantity(),
+            product.getMinimumThreshold(),
             null, // photoUrl - future story
             product.getArchived(),
             product.getStatus(),
@@ -102,6 +103,7 @@ public class ProductRepositoryAdapter implements ProductRepository {
             entity.getStockQuantity(),
             entity.getArchived(),
             entity.getStatus(),
+            entity.getMinimumThreshold(),
             entity.getCreatedAt(),
             entity.getUpdatedAt()
         );

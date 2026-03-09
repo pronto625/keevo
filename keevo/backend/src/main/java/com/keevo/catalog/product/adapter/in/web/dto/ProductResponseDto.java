@@ -23,6 +23,7 @@ public record ProductResponseDto(
         Integer stockQuantity,
         boolean archived,
         ProductStatus status,
+        int minimumThreshold,   // Story 2.3
         Instant createdAt,
         Instant updatedAt
 ) {
@@ -42,6 +43,7 @@ public record ProductResponseDto(
                 product.getStockQuantity(),
                 product.getArchived(),
                 product.getStatus(),
+                product.getMinimumThreshold(),
                 product.getCreatedAt(),
                 product.getUpdatedAt()
         );
