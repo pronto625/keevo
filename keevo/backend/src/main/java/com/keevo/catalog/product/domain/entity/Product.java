@@ -1,5 +1,7 @@
 package com.keevo.catalog.product.domain.entity;
 
+import com.keevo.shared.domain.model.Money;
+
 import java.util.UUID;
 import java.time.Instant;
 import java.util.regex.Pattern;
@@ -11,7 +13,7 @@ import java.util.regex.Pattern;
  * - name non-empty
  * - SKU format KEV-[A-Z0-9]{6}
  * - description nullable
- * - price >= 0
+ * - price/buyPrice/transportCost as Money value objects (non-negative enforced by Money)
  * - archived default false
  * - status default ACTIVE
  */
@@ -23,8 +25,9 @@ public class Product {
     private final String description;
     private final String sku;
     private final UUID categoryId;
-    private final Integer price;
-    private final Integer buyPrice;
+    private final Money price;
+    private final Money buyPrice;
+    private final Money transportCost;
     private final Integer stockQuantity;
     private final Boolean archived;
     private final ProductStatus status;
@@ -32,7 +35,7 @@ public class Product {
     private final Instant updatedAt;
     
     public Product(UUID id, String name, String description, String sku, 
-                  UUID categoryId, Integer price, Integer buyPrice, Integer stockQuantity,
+                  UUID categoryId, Integer price, Integer buyPrice, Integer transportCost, Integer stockQuantity,
                   Boolean archived, ProductStatus status, 
                   Instant createdAt, Instant updatedAt) {
         // Validate name
@@ -48,13 +51,19 @@ public class Product {
             throw new IllegalArgumentException("Product SKU must follow format KEV-[A-Z0-9]{6}");
         }
         
+        // transportCost pre-check before Money wrapping (for backward compat. with Integer API)
+        if (transportCost != null && transportCost < 0) {
+            throw new IllegalArgumentException("Transport cost cannot be negative");
+        }
+        
         this.id = id;
         this.name = name.trim();
         this.description = description;
         this.sku = sku;
         this.categoryId = categoryId;
-        this.price = price != null ? price : 0;
-        this.buyPrice = buyPrice != null ? buyPrice : 0;
+        this.price = new Money(price != null ? price : 0);
+        this.buyPrice = new Money(buyPrice != null ? buyPrice : 0);
+        this.transportCost = new Money(transportCost != null ? transportCost : 0);
         this.stockQuantity = stockQuantity != null ? stockQuantity : 0;
         this.archived = archived != null ? archived : false;
         this.status = status != null ? status : ProductStatus.ACTIVE;
@@ -62,14 +71,24 @@ public class Product {
         this.updatedAt = updatedAt;
     }
     
-    // Getters
+    // Getters — expose both Money type and int value for convenience
     public UUID getId() { return id; }
     public String getName() { return name; }
     public String getDescription() { return description; }
     public String getSku() { return sku; }
     public UUID getCategoryId() { return categoryId; }
-    public Integer getPrice() { return price; }
-    public Integer getBuyPrice() { return buyPrice; }
+    /** Returns price as Money value object */
+    public Money getPrice() { return price; }
+    /** Returns price integer value for persistence/DTOs */
+    public int getPriceValue() { return price.value(); }
+    /** Returns buyPrice as Money value object */
+    public Money getBuyPrice() { return buyPrice; }
+    /** Returns buyPrice integer value for persistence/DTOs */
+    public int getBuyPriceValue() { return buyPrice.value(); }
+    /** Returns transportCost as Money value object */
+    public Money getTransportCost() { return transportCost; }
+    /** Returns transportCost integer value for persistence/DTOs */
+    public int getTransportCostValue() { return transportCost.value(); }
     public Integer getStockQuantity() { return stockQuantity; }
     public Boolean getArchived() { return archived; }
     public ProductStatus getStatus() { return status; }

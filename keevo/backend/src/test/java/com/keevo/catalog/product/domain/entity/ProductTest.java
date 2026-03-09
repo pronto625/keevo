@@ -31,7 +31,7 @@ class ProductTest {
         var now = Instant.now();
         
         // When
-        var product = new Product(id, name, description, sku, categoryId, null, null, null, archived, status, now, now);
+        var product = new Product(id, name, description, sku, categoryId, null, null, null, null, archived, status, now, now);
         
         // Then
         assertEquals(id, product.getId());
@@ -58,6 +58,7 @@ class ProductTest {
                 UUID.randomUUID(),
                 null, // price
                 null, // buyPrice
+                null, // transportCost
                 null, // stockQuantity
                 false,
                 ProductStatus.ACTIVE,
@@ -80,6 +81,7 @@ class ProductTest {
                 UUID.randomUUID(),
                 null, // price
                 null, // buyPrice
+                null, // transportCost
                 null, // stockQuantity
                 false,
                 ProductStatus.ACTIVE,
@@ -102,6 +104,7 @@ class ProductTest {
                 UUID.randomUUID(),
                 null, // price
                 null, // buyPrice
+                null, // transportCost
                 null, // stockQuantity
                 false,
                 ProductStatus.ACTIVE,
@@ -124,6 +127,7 @@ class ProductTest {
                 UUID.randomUUID(),
                 null, // price
                 null, // buyPrice
+                null, // transportCost
                 null, // stockQuantity
                 false,
                 ProductStatus.ACTIVE,
@@ -145,6 +149,7 @@ class ProductTest {
             UUID.randomUUID(),
             null, // price
             null, // buyPrice
+            null, // transportCost
             null, // stockQuantity
             false,
             ProductStatus.ACTIVE,
@@ -168,6 +173,7 @@ class ProductTest {
             UUID.randomUUID(),
             null, // price
             null, // buyPrice
+            null, // transportCost
             null, // stockQuantity
             false,
             ProductStatus.ACTIVE,
@@ -192,6 +198,7 @@ class ProductTest {
                 UUID.randomUUID(),
                 null, // price
                 null, // buyPrice
+                null, // transportCost
                 null, // stockQuantity
                 false,
                 ProductStatus.ACTIVE,
@@ -213,6 +220,7 @@ class ProductTest {
             UUID.randomUUID(),
             null, // price
             null, // buyPrice
+            null, // transportCost
             null, // stockQuantity
             false,
             ProductStatus.ACTIVE,
@@ -236,6 +244,7 @@ class ProductTest {
             UUID.randomUUID(),
             null, // price
             null, // buyPrice
+            null, // transportCost
             null, // stockQuantity
             false, // explicitly false
             ProductStatus.ACTIVE,
@@ -259,6 +268,7 @@ class ProductTest {
             UUID.randomUUID(),
             null, // price
             null, // buyPrice
+            null, // transportCost
             null, // stockQuantity
             false,
             ProductStatus.ACTIVE, // explicitly ACTIVE
@@ -268,5 +278,110 @@ class ProductTest {
         
         // Then
         assertEquals(ProductStatus.ACTIVE, product.getStatus());
+    }
+    
+    // ================================
+    // TDD Tests for transportCost field (Task 1.1)
+    // ================================
+    
+    @Test
+    @DisplayName("Should default transportCost to 0 when null")
+    void should_default_transportCost_to_zero_when_null() {
+        // Given/When
+        var product = new Product(
+            UUID.randomUUID(),
+            "Valid Name",
+            "Description",
+            "KEV-ABC123",
+            UUID.randomUUID(),
+            1000, // price
+            500,  // buyPrice
+            null, // transportCost - should default to 0
+            10,   // stockQuantity
+            false,
+            ProductStatus.ACTIVE,
+            Instant.now(),
+            Instant.now()
+        );
+        
+        // Then
+        assertEquals(0, product.getTransportCostValue());
+    }
+    
+    @Test
+    @DisplayName("Should accept valid positive transportCost")
+    void should_accept_valid_positive_transportCost() {
+        // Given
+        var transportCost = 250;
+        
+        // When
+        var product = new Product(
+            UUID.randomUUID(),
+            "Valid Name",
+            "Description",
+            "KEV-ABC123",
+            UUID.randomUUID(),
+            1000, // price
+            500,  // buyPrice
+            transportCost,
+            10,   // stockQuantity
+            false,
+            ProductStatus.ACTIVE,
+            Instant.now(),
+            Instant.now()
+        );
+        
+        // Then
+        assertEquals(transportCost, product.getTransportCostValue());
+    }
+    
+    @Test
+    @DisplayName("Should accept zero transportCost")
+    void should_accept_zero_transportCost() {
+        // Given
+        var transportCost = 0;
+        
+        // When
+        var product = new Product(
+            UUID.randomUUID(),
+            "Valid Name",
+            "Description",
+            "KEV-ABC123",
+            UUID.randomUUID(),
+            1000, // price
+            500,  // buyPrice
+            transportCost,
+            10,   // stockQuantity
+            false,
+            ProductStatus.ACTIVE,
+            Instant.now(),
+            Instant.now()
+        );
+        
+        // Then
+        assertEquals(0, product.getTransportCostValue());
+    }
+    
+    @Test
+    @DisplayName("Should throw exception when transportCost is negative")
+    void should_throw_exception_when_transportCost_is_negative() {
+        // Given/When/Then
+        assertThrows(IllegalArgumentException.class, () -> {
+            new Product(
+                UUID.randomUUID(),
+                "Valid Name",
+                "Description",
+                "KEV-ABC123",
+                UUID.randomUUID(),
+                1000, // price
+                500,  // buyPrice
+                -100, // INVALID negative transportCost
+                10,   // stockQuantity
+                false,
+                ProductStatus.ACTIVE,
+                Instant.now(),
+                Instant.now()
+            );
+        });
     }
 }

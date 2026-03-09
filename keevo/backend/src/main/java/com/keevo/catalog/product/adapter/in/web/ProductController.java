@@ -6,6 +6,7 @@ import com.keevo.catalog.product.adapter.in.web.dto.ProductResponseDto;
 import com.keevo.catalog.product.application.usecase.CreateProductUseCase;
 import com.keevo.catalog.product.application.usecase.UpdateProductUseCase;
 import com.keevo.catalog.product.application.usecase.ArchiveProductUseCase;
+import com.keevo.catalog.product.application.usecase.GetProductPricingUseCase;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
@@ -34,15 +35,18 @@ public class ProductController {
     private final UpdateProductUseCase updateProductUseCase;
     private final ArchiveProductUseCase archiveProductUseCase;
     private final ProductRepository productRepository;
+    private final GetProductPricingUseCase getProductPricingUseCase;
 
     public ProductController(CreateProductUseCase createProductUseCase,
                            UpdateProductUseCase updateProductUseCase,
                            ArchiveProductUseCase archiveProductUseCase,
-                           ProductRepository productRepository) {
+                           ProductRepository productRepository,
+                           GetProductPricingUseCase getProductPricingUseCase) {
         this.createProductUseCase = createProductUseCase;
         this.updateProductUseCase = updateProductUseCase;
         this.archiveProductUseCase = archiveProductUseCase;
         this.productRepository = productRepository;
+        this.getProductPricingUseCase = getProductPricingUseCase;
     }
 
     /**
@@ -63,6 +67,7 @@ public class ProductController {
                 request.categoryId(),
                 request.price(),
                 request.buyPrice(),
+                request.transportCost(),
                 request.stockQuantity(),
                 actorId
         );
@@ -123,6 +128,7 @@ public class ProductController {
                 request.categoryId(),
                 request.price(),
                 request.buyPrice(),
+                request.transportCost(),
                 request.stockQuantity(),
                 actorId
         );
@@ -149,5 +155,24 @@ public class ProductController {
                 .map(product -> ResponseEntity.ok(ApiResponseWrapper.ok(ProductResponseDto.fromDomain(product))))
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(ApiResponseWrapper.error("Produit introuvable", "NOT_FOUND", "PRODUCT_NOT_FOUND", null)));
+    }
+
+    /**
+     * Get product pricing / margin calculation
+     * GET /api/v1/products/{id}/pricing
+     *
+     * <p>Returns real-time margin calculation without modifying the product.
+     * Used by the frontend for live margin display in the product form.
+     */
+    @GetMapping("/{id}/pricing")
+    public ResponseEntity<ApiResponseWrapper<GetProductPricingUseCase.ProductPricingDto>> getProductPricing(
+            @PathVariable UUID id) {
+        try {
+            var pricing = getProductPricingUseCase.execute(id);
+            return ResponseEntity.ok(ApiResponseWrapper.ok(pricing));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponseWrapper.error("Produit introuvable", "NOT_FOUND", "PRODUCT_NOT_FOUND", null));
+        }
     }
 }

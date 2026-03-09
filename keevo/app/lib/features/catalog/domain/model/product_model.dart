@@ -29,6 +29,9 @@ class ProductModel with _$ProductModel {
     /// Buy price in XAF — integer only.
     @Default(0) int buyPrice,
 
+    /// Transport / logistics cost in XAF (story 2.2 — pricing engine).
+    @Default(0) int transportCost,
+
     @Default(0) int stockQuantity,
     String? storeId,
     String? photoUrl,

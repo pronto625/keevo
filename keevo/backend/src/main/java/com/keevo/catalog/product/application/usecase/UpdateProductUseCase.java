@@ -43,6 +43,7 @@ public class UpdateProductUseCase {
         UUID categoryId,
         Integer price,
         Integer buyPrice,
+        Integer transportCost,
         Integer stockQuantity,
         UUID actorId  // Added for audit trail
     ) {}
@@ -74,8 +75,9 @@ public class UpdateProductUseCase {
             dto.description(),
             resolvedSku,
             dto.categoryId() != null ? dto.categoryId() : existing.getCategoryId(),
-            dto.price() != null ? dto.price() : existing.getPrice(),
-            dto.buyPrice() != null ? dto.buyPrice() : existing.getBuyPrice(),
+            dto.price() != null ? dto.price() : existing.getPriceValue(),
+            dto.buyPrice() != null ? dto.buyPrice() : existing.getBuyPriceValue(),
+            dto.transportCost() != null ? dto.transportCost() : existing.getTransportCostValue(),
             dto.stockQuantity() != null ? dto.stockQuantity() : existing.getStockQuantity(),
             existing.getArchived(),
             existing.getStatus(),

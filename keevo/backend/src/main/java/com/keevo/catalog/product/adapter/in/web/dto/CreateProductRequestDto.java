@@ -34,6 +34,9 @@ public record CreateProductRequestDto(
         @Min(value = 0, message = "Le prix d'achat ne peut pas être négatif")
         Integer buyPrice,
         
+        @Min(value = 0, message = "Le coût de transport ne peut pas être négatif")
+        Integer transportCost,
+        
         @Min(value = 0, message = "Le stock ne peut pas être négatif")
         Integer stockQuantity
 ) {}

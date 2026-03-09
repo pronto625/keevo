@@ -3,6 +3,9 @@ package com.keevo.shared.domain.model;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+
 /**
  * Money — XAF value object (CFA Franc).
  *
@@ -50,6 +53,22 @@ public final class Money {
                     "Multiplication factor cannot be negative: " + factor);
         }
         return new Money(this.value * factor);
+    }
+
+    /**
+     * Multiply by a double factor (e.g. 1.3 for +30% margin).
+     * Uses BigDecimal.HALF_UP rounding — XAF has no sub-units.
+     */
+    public Money multiply(double factor) {
+        if (factor < 0) {
+            throw new DomainException(ErrorCode.INVALID_AMOUNT,
+                    "Multiplication factor cannot be negative: " + factor);
+        }
+        int result = BigDecimal.valueOf(this.value)
+                .multiply(BigDecimal.valueOf(factor))
+                .setScale(0, RoundingMode.HALF_UP)
+                .intValue();
+        return new Money(result);
     }
 
     @Override

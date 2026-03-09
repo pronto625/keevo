@@ -23,6 +23,7 @@ part 'app_database.g.dart';
 /// Facade pattern: hides encrypted connection details behind a clean API.
 /// Schema version 3: products table extended with description, sku, photoUrl,
 /// archived, status columns (Story 2.1).
+/// Schema version 4: products table extended with transportCost column (Story 2.2).
 ///
 /// Usage in production: [AppDatabase(hexKey: key)] — encrypted via SQLCipher.
 /// Usage in tests:      [AppDatabase.forTesting()] — in-memory, unencrypted.
@@ -48,7 +49,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -73,6 +74,10 @@ class AppDatabase extends _$AppDatabase {
         await migrator.addColumn(products, products.photoUrl);
         await migrator.addColumn(products, products.archived);
         await migrator.addColumn(products, products.status);
+      }
+      if (from < 4) {
+        // Story 2.2 — add transportCost column for pricing engine.
+        await migrator.addColumn(products, products.transportCost);
       }
     },
   );

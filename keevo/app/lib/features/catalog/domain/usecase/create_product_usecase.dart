@@ -18,6 +18,7 @@ class CreateProductUseCase {
     String? categoryId,
     int price = 0,
     int buyPrice = 0,
+    int transportCost = 0,
     String? photoUrl,
   }) {
     final trimmed = name.trim();
@@ -33,6 +34,12 @@ class CreateProductUseCase {
         message: 'Le prix ne peut pas être négatif',
       );
     }
+    if (transportCost < 0) {
+      throw const ProductException(
+        domainCode: 'VALIDATION_ERROR',
+        message: 'Le coût de transport ne peut pas être négatif',
+      );
+    }
 
     return _repository.create(
       name: trimmed,
@@ -41,6 +48,7 @@ class CreateProductUseCase {
       categoryId: categoryId,
       price: price,
       buyPrice: buyPrice,
+      transportCost: transportCost,
       photoUrl: photoUrl,
     );
   }

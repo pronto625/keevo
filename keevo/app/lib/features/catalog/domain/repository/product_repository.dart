@@ -27,6 +27,7 @@ abstract interface class ProductRepository {
     String? categoryId,
     int price,
     int buyPrice,
+    int transportCost,
     String? photoUrl,
   });
 
@@ -39,6 +40,7 @@ abstract interface class ProductRepository {
     String? categoryId,
     int? price,
     int? buyPrice,
+    int? transportCost,
     String? photoUrl,
   });
 

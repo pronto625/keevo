@@ -52,6 +52,7 @@ class ProductRepositoryAdapterTest {
             UUID.randomUUID(),
             null, // price
             null, // buyPrice
+            null, // transportCost
             null, // stockQuantity
             false,
             ProductStatus.ACTIVE,
@@ -83,6 +84,7 @@ class ProductRepositoryAdapterTest {
             UUID.randomUUID(),
             null, // price
             null, // buyPrice
+            null, // transportCost
             null, // stockQuantity
             false,
             ProductStatus.ACTIVE,
@@ -112,6 +114,7 @@ class ProductRepositoryAdapterTest {
             UUID.randomUUID(),
             null, // price
             null, // buyPrice
+            null, // transportCost
             null, // stockQuantity
             false,
             ProductStatus.ACTIVE,
@@ -140,6 +143,7 @@ class ProductRepositoryAdapterTest {
             UUID.randomUUID(),
             null, // price
             null, // buyPrice
+            null, // transportCost
             null, // stockQuantity
             false, // not archived
             ProductStatus.ACTIVE,
@@ -155,6 +159,7 @@ class ProductRepositoryAdapterTest {
             UUID.randomUUID(),
             null, // price
             null, // buyPrice
+            null, // transportCost
             null, // stockQuantity
             true, // archived
             ProductStatus.ACTIVE,
@@ -186,6 +191,7 @@ class ProductRepositoryAdapterTest {
             UUID.randomUUID(),
             null, // price
             null, // buyPrice
+            null, // transportCost
             null, // stockQuantity
             false,
             ProductStatus.ACTIVE,

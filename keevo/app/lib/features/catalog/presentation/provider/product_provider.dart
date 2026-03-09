@@ -104,6 +104,7 @@ class ProductActions {
     String? categoryId,
     int price = 0,
     int buyPrice = 0,
+    int transportCost = 0,
     String? photoUrl,
   }) async {
     final useCase = _ref.read(createProductUseCaseProvider);
@@ -114,6 +115,7 @@ class ProductActions {
       categoryId: categoryId,
       price: price,
       buyPrice: buyPrice,
+      transportCost: transportCost,
       photoUrl: photoUrl,
     );
     // Invalidate both lists so UI refreshes.
@@ -130,6 +132,7 @@ class ProductActions {
     String? categoryId,
     int? price,
     int? buyPrice,
+    int? transportCost,
     String? photoUrl,
   }) async {
     final useCase = _ref.read(updateProductUseCaseProvider);
@@ -141,6 +144,7 @@ class ProductActions {
       categoryId: categoryId,
       price: price,
       buyPrice: buyPrice,
+      transportCost: transportCost,
       photoUrl: photoUrl,
     );
     _ref.invalidate(productListProvider);

@@ -19,6 +19,7 @@ class UpdateProductUseCase {
     String? categoryId,
     int? price,
     int? buyPrice,
+    int? transportCost,
     String? photoUrl,
   }) {
     if (name != null && name.trim().isEmpty) {
@@ -33,6 +34,12 @@ class UpdateProductUseCase {
         message: 'Le prix ne peut pas être négatif',
       );
     }
+    if (transportCost != null && transportCost < 0) {
+      throw const ProductException(
+        domainCode: 'VALIDATION_ERROR',
+        message: 'Le coût de transport ne peut pas être négatif',
+      );
+    }
 
     return _repository.update(
       id: id,
@@ -42,6 +49,7 @@ class UpdateProductUseCase {
       categoryId: categoryId,
       price: price,
       buyPrice: buyPrice,
+      transportCost: transportCost,
       photoUrl: photoUrl,
     );
   }

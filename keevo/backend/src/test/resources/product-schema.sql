@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS products (
     category_id  UUID,
     price        INTEGER     NOT NULL DEFAULT 0,
     buy_price    INTEGER     NOT NULL DEFAULT 0,
+    transport_cost INTEGER   NOT NULL DEFAULT 0,
     stock_quantity INTEGER   NOT NULL DEFAULT 0,
     photo_url    VARCHAR(500),
     archived     BOOLEAN     NOT NULL DEFAULT FALSE,

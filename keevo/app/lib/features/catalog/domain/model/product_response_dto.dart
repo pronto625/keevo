@@ -17,6 +17,7 @@ class ProductResponseDto with _$ProductResponseDto {
     String? categoryId,
     @Default(0) int price,
     @Default(0) int buyPrice,
+    @Default(0) int transportCost,
     @Default(0) int stockQuantity,
     String? photoUrl,
     @Default(false) bool archived,

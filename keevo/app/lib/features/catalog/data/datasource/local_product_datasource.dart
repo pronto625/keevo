@@ -67,6 +67,7 @@ class LocalProductDataSource {
     String? categoryId,
     int price = 0,
     int buyPrice = 0,
+    int transportCost = 0,
     String? photoUrl,
   }) async {
     final id = _uuid.v4();
@@ -83,6 +84,7 @@ class LocalProductDataSource {
       categoryId: Value(categoryId),
       price: Value(price),
       buyPrice: Value(buyPrice),
+      transportCost: Value(transportCost),
       photoUrl: Value(photoUrl),
       archived: const Value(false),
       status: const Value('ACTIVE'),
@@ -100,6 +102,7 @@ class LocalProductDataSource {
       'categoryId': categoryId,
       'price': price,
       'buyPrice': buyPrice,
+      'transportCost': transportCost,
       'photoUrl': photoUrl,
     });
 
@@ -116,6 +119,7 @@ class LocalProductDataSource {
     String? categoryId,
     int? price,
     int? buyPrice,
+    int? transportCost,
     String? photoUrl,
   }) async {
     final now = DateTime.now();
@@ -130,6 +134,7 @@ class LocalProductDataSource {
           categoryId != null ? Value(categoryId) : const Value.absent(),
       price: price != null ? Value(price) : const Value.absent(),
       buyPrice: buyPrice != null ? Value(buyPrice) : const Value.absent(),
+      transportCost: transportCost != null ? Value(transportCost) : const Value.absent(),
       photoUrl: photoUrl != null ? Value(photoUrl) : const Value.absent(),
       updatedAt: Value(now),
     ));
@@ -142,6 +147,7 @@ class LocalProductDataSource {
       if (categoryId != null) 'categoryId': categoryId,
       if (price != null) 'price': price,
       if (buyPrice != null) 'buyPrice': buyPrice,
+      if (transportCost != null) 'transportCost': transportCost,
       if (photoUrl != null) 'photoUrl': photoUrl,
     });
 
@@ -183,6 +189,7 @@ class LocalProductDataSource {
       categoryId: Value(model.categoryId),
       price: Value(model.price),
       buyPrice: Value(model.buyPrice),
+      transportCost: Value(model.transportCost),
       stockQuantity: Value(model.stockQuantity),
       storeId: Value(model.storeId),
       photoUrl: Value(model.photoUrl),
@@ -214,6 +221,7 @@ class LocalProductDataSource {
         categoryId: row.categoryId,
         price: row.price,
         buyPrice: row.buyPrice,
+        transportCost: row.transportCost,
         stockQuantity: row.stockQuantity,
         storeId: row.storeId,
         photoUrl: row.photoUrl,

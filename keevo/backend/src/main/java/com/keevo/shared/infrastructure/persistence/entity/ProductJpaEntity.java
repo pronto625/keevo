@@ -37,6 +37,9 @@ public class ProductJpaEntity {
     @Column(name = "buy_price", nullable = false)
     private Integer buyPrice = 0;
 
+    @Column(name = "transport_cost", nullable = false)
+    private Integer transportCost = 0;
+
     @Column(name = "stock_quantity", nullable = false)
     private Integer stockQuantity = 0;
 
@@ -61,8 +64,8 @@ public class ProductJpaEntity {
 
     // Constructor for conversions
     public ProductJpaEntity(UUID id, String name, String description, String sku, 
-                           UUID categoryId, Integer price, Integer buyPrice, Integer stockQuantity,
-                           String photoUrl, Boolean archived, ProductStatus status,
+                           UUID categoryId, Integer price, Integer buyPrice, Integer transportCost,
+                           Integer stockQuantity, String photoUrl, Boolean archived, ProductStatus status,
                            Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.name = name;
@@ -71,6 +74,7 @@ public class ProductJpaEntity {
         this.categoryId = categoryId;
         this.price = price;
         this.buyPrice = buyPrice;
+        this.transportCost = transportCost != null ? transportCost : 0;
         this.stockQuantity = stockQuantity;
         this.photoUrl = photoUrl;
         this.archived = archived;
@@ -100,6 +104,9 @@ public class ProductJpaEntity {
 
     public Integer getBuyPrice() { return buyPrice; }
     public void setBuyPrice(Integer buyPrice) { this.buyPrice = buyPrice; }
+
+    public Integer getTransportCost() { return transportCost; }
+    public void setTransportCost(Integer transportCost) { this.transportCost = transportCost; }
 
     public Integer getStockQuantity() { return stockQuantity; }
     public void setStockQuantity(Integer stockQuantity) { this.stockQuantity = stockQuantity; }

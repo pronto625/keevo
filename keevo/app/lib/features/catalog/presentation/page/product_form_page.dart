@@ -10,6 +10,7 @@ import '../../domain/exception/product_exception.dart';
 import '../../domain/model/product_model.dart';
 import '../provider/category_provider.dart';
 import '../provider/product_provider.dart';
+import '../widget/pricing_calculator_widget.dart';
 
 /// ProductFormPage — Modern Material 3 design for creating/editing products
 class ProductFormPage extends ConsumerStatefulWidget {
@@ -38,6 +39,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
   final _skuController = TextEditingController();
   final _priceController = TextEditingController();
   final _buyPriceController = TextEditingController();
+  final _transportCostController = TextEditingController();
 
   String? _selectedCategoryId;
   File? _selectedImage;
@@ -82,6 +84,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
     _skuController.dispose();
     _priceController.dispose();
     _buyPriceController.dispose();
+    _transportCostController.dispose();
     super.dispose();
   }
 
@@ -91,6 +94,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
     _skuController.text = product.sku;
     _priceController.text = product.price.toString();
     _buyPriceController.text = product.buyPrice.toString();
+    _transportCostController.text = product.transportCost.toString();
     _selectedCategoryId = product.categoryId;
   }
 
@@ -233,6 +237,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
           categoryId: _selectedCategoryId,
           price: int.tryParse(_priceController.text) ?? 0,
           buyPrice: int.tryParse(_buyPriceController.text) ?? 0,
+          transportCost: int.tryParse(_transportCostController.text) ?? 0,
         );
       } else {
         await actions.create(
@@ -244,6 +249,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
           categoryId: _selectedCategoryId,
           price: int.tryParse(_priceController.text) ?? 0,
           buyPrice: int.tryParse(_buyPriceController.text) ?? 0,
+          transportCost: int.tryParse(_transportCostController.text) ?? 0,
         );
       }
 
@@ -541,6 +547,38 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
                                 ),
                               ),
                             ],
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // Transport cost field
+                          _ModernTextField(
+                            controller: _transportCostController,
+                            label: 'Coût transport',
+                            hint: '0',
+                            icon: Icons.local_shipping_rounded,
+                            keyboardType: TextInputType.number,
+                            validator: _validatePrice,
+                            suffix: 'XAF',
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // Pricing calculator widget (live margin calculation)
+                          ValueListenableBuilder<TextEditingValue>(
+                            valueListenable: _priceController,
+                            builder: (_, __, ___) => ValueListenableBuilder<TextEditingValue>(
+                              valueListenable: _buyPriceController,
+                              builder: (_, __, ___) => ValueListenableBuilder<TextEditingValue>(
+                                valueListenable: _transportCostController,
+                                builder: (_, __, ___) => PricingCalculatorWidget(
+                                  sellingPrice: int.tryParse(_priceController.text) ?? 0,
+                                  buyPrice: int.tryParse(_buyPriceController.text) ?? 0,
+                                  transportCost: int.tryParse(_transportCostController.text) ?? 0,
+                                ),
+                              ),
+                            ),
                           ),
                           
                           const SizedBox(height: 32),

@@ -20,9 +20,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.keevo.catalog.product.application.usecase.CreateProductUseCase;
 import com.keevo.catalog.product.application.usecase.UpdateProductUseCase;
 import com.keevo.catalog.product.application.usecase.ArchiveProductUseCase;
+import com.keevo.catalog.product.application.usecase.GetProductPricingUseCase;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
+import com.keevo.catalog.product.domain.service.MarginThreshold;
 
 import java.util.UUID;
 import java.time.Instant;
@@ -48,6 +50,9 @@ class ProductControllerTest {
 
     @Mock
     private ProductRepository productRepository;
+
+    @Mock
+    private GetProductPricingUseCase getProductPricingUseCase;
 
     @InjectMocks
     private ProductController productController;
@@ -75,6 +80,7 @@ class ProductControllerTest {
             UUID.randomUUID(),
             null, // price
             null, // buyPrice
+            null, // transportCost
             null, // stockQuantity
             false,
             ProductStatus.ACTIVE,
@@ -215,7 +221,7 @@ class ProductControllerTest {
         UUID productId = UUID.randomUUID();
         Product archivedProduct = new Product(
             productId, "Test Product", "Test Description", "KEV-TST123",
-            UUID.randomUUID(), null, null, null, true, ProductStatus.ACTIVE, Instant.now(), Instant.now()
+            UUID.randomUUID(), null, null, null, null, true, ProductStatus.ACTIVE, Instant.now(), Instant.now()
         );
         when(productRepository.findById(productId)).thenReturn(Optional.of(archivedProduct));
 
@@ -224,6 +230,42 @@ class ProductControllerTest {
                 .andExpect(status().isOk());
 
         verify(archiveProductUseCase).execute(any(ArchiveProductUseCase.ArchiveProductDto.class));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/products/{id}/pricing should return margin calculation")
+    @WithMockUser
+    void should_return_pricing_calculation() throws Exception {
+        // Given
+        UUID productId = UUID.randomUUID();
+        var pricingDto = new GetProductPricingUseCase.ProductPricingDto(
+                productId, 5000, 3000, 500, 3500, 1500, 30.0, false, MarginThreshold.PROFITABLE
+        );
+        when(getProductPricingUseCase.execute(productId)).thenReturn(pricingDto);
+
+        // When/Then
+        mockMvc.perform(get("/api/v1/products/{id}/pricing", productId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.sellingPrice").value(5000))
+                .andExpect(jsonPath("$.data.marginPercentage").value(30.0))
+                .andExpect(jsonPath("$.data.marginThreshold").value("PROFITABLE"))
+                .andExpect(jsonPath("$.data.isLoss").value(false));
+
+        verify(getProductPricingUseCase).execute(productId);
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/products/{id}/pricing should return 404 when product not found")
+    @WithMockUser
+    void should_return_404_for_pricing_when_product_not_found() throws Exception {
+        // Given
+        UUID productId = UUID.randomUUID();
+        when(getProductPricingUseCase.execute(productId))
+                .thenThrow(new IllegalArgumentException("Product not found: " + productId));
+
+        // When/Then
+        mockMvc.perform(get("/api/v1/products/{id}/pricing", productId))
+                .andExpect(status().isNotFound());
     }
 
     // Commented out - security disabled for unit test

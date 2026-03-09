@@ -22,6 +22,9 @@ class Products extends Table {
   /// Buy price in XAF
   IntColumn get buyPrice => integer().withDefault(const Constant(0))();
 
+  /// Transport / logistics cost in XAF (added in story 2.2 — pricing engine)
+  IntColumn get transportCost => integer().withDefault(const Constant(0))();
+
   IntColumn get stockQuantity => integer().withDefault(const Constant(0))();
   TextColumn get storeId => text().nullable()();
 

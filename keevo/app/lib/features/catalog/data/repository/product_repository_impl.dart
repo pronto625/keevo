@@ -39,6 +39,7 @@ class ProductRepositoryImpl implements ProductRepository {
     String? categoryId,
     int price = 0,
     int buyPrice = 0,
+    int transportCost = 0,
     String? photoUrl,
   }) =>
       _local.insert(
@@ -48,6 +49,7 @@ class ProductRepositoryImpl implements ProductRepository {
         categoryId: categoryId,
         price: price,
         buyPrice: buyPrice,
+        transportCost: transportCost,
         photoUrl: photoUrl,
       );
 
@@ -60,6 +62,7 @@ class ProductRepositoryImpl implements ProductRepository {
     String? categoryId,
     int? price,
     int? buyPrice,
+    int? transportCost,
     String? photoUrl,
   }) =>
       _local.updateById(
@@ -70,6 +73,7 @@ class ProductRepositoryImpl implements ProductRepository {
         categoryId: categoryId,
         price: price,
         buyPrice: buyPrice,
+        transportCost: transportCost,
         photoUrl: photoUrl,
       );
 
@@ -91,6 +95,7 @@ class ProductRepositoryImpl implements ProductRepository {
         categoryId: dto.categoryId,
         price: dto.price,
         buyPrice: dto.buyPrice,
+        transportCost: dto.transportCost,
         stockQuantity: dto.stockQuantity,
         photoUrl: dto.photoUrl,
         archived: dto.archived,

@@ -8,6 +8,7 @@ import com.keevo.identity.onboarding.domain.model.OnboardingCompletedEvent;
 import com.keevo.catalog.product.domain.event.ProductCreatedEvent;
 import com.keevo.catalog.product.domain.event.ProductUpdatedEvent;
 import com.keevo.catalog.product.domain.event.ProductArchivedEvent;
+import com.keevo.catalog.product.domain.event.SalePriceOverriddenEvent;
 import com.keevo.shared.application.port.AuditPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.slf4j.Logger;
@@ -213,6 +214,35 @@ public class AuditEventListener {
         );
         log.info("AUDIT: product_archived productId={} productName={} tenantId={} actorId={}",
                 event.productId(), event.productName(), event.tenantId(), event.actorId());
+    }
+
+    /**
+     * Handle sale price override event (Epic 4 — POS).
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
+     *
+     * <p>Records the override in the audit log with entityType="PriceOverride" so that
+     * compliance queries can filter by entity type.
+     */
+    @EventListener
+    public void on(SalePriceOverriddenEvent event) {
+        // Authenticated endpoint — JwtAuthFilter already set TenantContext; NO manual set/clear
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "PRICE_OVERRIDDEN",
+                "PriceOverride",
+                event.productId(),
+                toJson(Map.of("cataloguePrice", event.cataloguePrice())),
+                toJson(Map.of(
+                        "appliedPrice", event.appliedPrice(),
+                        "saleId",       event.saleId() != null ? event.saleId().toString() : null,
+                        "occurredAt",   event.occurredAt().toString()
+                ))
+        );
+        log.info("AUDIT: price_overridden productId={} cataloguePrice={} appliedPrice={} tenantId={} actorId={}",
+                event.productId(), event.cataloguePrice(), event.appliedPrice(),
+                event.tenantId(), event.actorId());
     }
 
     // ── Template Method helper ────────────────────────────────────────────────

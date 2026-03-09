@@ -162,4 +162,40 @@ class ProductAuditEventTest {
     // Note: Since Product endpoints are authenticated (@PreAuthorize("hasRole('USER')")), 
     // JwtAuthFilter has already set TenantContext before these events are published.
     // Therefore, NO manual TenantContext management is needed (unlike UserRegisteredEvent).
+
+    // ── SalePriceOverriddenEvent ──────────────────────────────────────────────
+
+    @Test
+    @DisplayName("on(SalePriceOverriddenEvent) calls auditPort.record() with PRICE_OVERRIDDEN action")
+    void onSalePriceOverridden_callsAuditPort() {
+        // Given
+        UUID productId = UUID.randomUUID();
+        UUID saleId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        String tenantId = "kv_abc123";
+
+        SalePriceOverriddenEvent event = new SalePriceOverriddenEvent(
+                productId,
+                saleId,
+                5000,  // cataloguePrice
+                4500,  // appliedPrice (overridden)
+                actorId,
+                tenantId,
+                Instant.now()
+        );
+
+        // When
+        listener.on(event);
+
+        // Then
+        verify(auditPort).record(
+                eq(actorId),
+                eq(tenantId),
+                eq("PRICE_OVERRIDDEN"),
+                eq("PriceOverride"),
+                eq(productId),
+                any(),   // valueBefore — JSON with cataloguePrice
+                any()    // valueAfter  — JSON with appliedPrice
+        );
+    }
 }

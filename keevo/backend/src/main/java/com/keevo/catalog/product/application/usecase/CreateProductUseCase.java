@@ -44,6 +44,7 @@ public class CreateProductUseCase {
         UUID categoryId,
         Integer price,
         Integer buyPrice,
+        Integer transportCost,
         Integer stockQuantity,
         UUID actorId  // Added for audit trail
     ) {}
@@ -73,6 +74,7 @@ public class CreateProductUseCase {
             dto.categoryId(),
             dto.price(),
             dto.buyPrice(),
+            dto.transportCost() != null ? dto.transportCost() : 0,
             dto.stockQuantity(),
             false, // archived = false (default)
             ProductStatus.ACTIVE, // status = ACTIVE (default for catalogue products)

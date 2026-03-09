@@ -53,6 +53,7 @@ class UpdateProductUseCaseTest {
             UUID.randomUUID(),
             null, // price
             null, // buyPrice
+            null, // transportCost
             null, // stockQuantity
             false,
             ProductStatus.ACTIVE,
@@ -68,6 +69,7 @@ class UpdateProductUseCaseTest {
             UUID.randomUUID(),
             null, // price
             null, // buyPrice
+            null, // transportCost
             null, // stockQuantity
             UUID.randomUUID() // actorId
         );
@@ -97,6 +99,7 @@ class UpdateProductUseCaseTest {
             UUID.randomUUID(),
             null, // price
             null, // buyPrice
+            null, // transportCost
             null, // stockQuantity
             UUID.randomUUID() // actorId
         );

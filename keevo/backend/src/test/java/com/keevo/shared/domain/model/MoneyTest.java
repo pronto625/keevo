@@ -103,6 +103,52 @@ class MoneyTest {
                 .hasMessageContaining("INVALID_AMOUNT");
     }
 
+    // ── multiply(double) — for margin calculations ─────────
+
+    @Test
+    @DisplayName("should multiply by double factor with HALF_UP rounding")
+    void should_multiply_by_double_factor() {
+        // 1000 * 1.3 = 1300 (exact)
+        assertThat(new Money(1000).multiply(1.3).value()).isEqualTo(1300);
+    }
+
+    @Test
+    @DisplayName("should round HALF_UP when multiplying by double (0.5 rounds up)")
+    void should_round_half_up_when_multiplying_by_double() {
+        // 1000 * 1.15 = 1150 (exact)
+        assertThat(new Money(1000).multiply(1.15).value()).isEqualTo(1150);
+    }
+
+    @Test
+    @DisplayName("should round fractional XAF result HALF_UP from double multiply")
+    void should_round_fractional_result_half_up() {
+        // 3 * 0.33333... = 1 (rounds 0.9999... to 1)
+        // More concrete: 100 * 1.115 = 111.5 → rounds to 112
+        assertThat(new Money(100).multiply(1.115).value()).isEqualTo(112);
+    }
+
+    @Test
+    @DisplayName("should return zero when multiplying by 0.0")
+    void should_return_zero_when_multiplying_by_zero_double() {
+        assertThat(new Money(5000).multiply(0.0).value()).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("should reject negative double multiplication factor")
+    void should_reject_negative_double_factor() {
+        assertThatThrownBy(() -> new Money(5000).multiply(-0.5))
+                .isInstanceOf(DomainException.class)
+                .hasMessageContaining("INVALID_AMOUNT");
+    }
+
+    @Test
+    @DisplayName("multiply double and multiply int should be consistent for integer factors")
+    void should_be_consistent_for_integer_factors() {
+        // 2500 * 3 == 2500 * 3.0
+        assertThat(new Money(2500).multiply(3).value())
+                .isEqualTo(new Money(2500).multiply(3.0).value());
+    }
+
     // ── Equality ──────────────────────────────────────────────
 
     @Test
