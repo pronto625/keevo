@@ -30,6 +30,15 @@ class StockLevelWidget extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final stockState = ref.watch(stockNotifierProvider(productId));
+    final primaryStoreAsync = ref.watch(primaryStoreIdProvider);
+
+    // Resolve the effective storeId:
+    // 1. Explicit filter param (set by parent showing a specific store tile)
+    // 2. First level already loaded in local state (fastest path — no network wait)
+    // 3. Primary store from GET /api/v1/tenant/stores (async fallback for new products)
+    final effectiveStoreId = storeId
+        ?? stockState.levels.firstOrNull?.storeId
+        ?? primaryStoreAsync.value;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -55,7 +64,7 @@ class StockLevelWidget extends ConsumerWidget {
                     context,
                     ref,
                     productId: productId,
-                    storeId: storeId,
+                    storeId: effectiveStoreId,
                   ),
                 ),
                 // Adjust button
@@ -66,7 +75,7 @@ class StockLevelWidget extends ConsumerWidget {
                     context,
                     ref,
                     productId: productId,
-                    storeId: storeId,
+                    storeId: effectiveStoreId,
                   ),
                 ),
                 // Threshold config

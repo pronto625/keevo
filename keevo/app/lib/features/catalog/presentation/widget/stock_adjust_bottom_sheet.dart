@@ -54,11 +54,19 @@ class _StockAdjustBottomSheetState
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _loading = true);
 
+    // storeId must be a real UUID — guaranteed by StockLevelWidget (Story 2.3 hotfix)
+    final storeId = widget.storeId;
+    if (storeId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Impossible de déterminer le dépôt. Réessayez.')),
+      );
+      return;
+    }
+
+    setState(() => _loading = true);
     final newQuantity = int.parse(_qtyController.text.trim());
     final notes = _notesController.text.trim();
-    final storeId = widget.storeId ?? 'default';
 
     final success = await ref
         .read(stockNotifierProvider(widget.productId).notifier)

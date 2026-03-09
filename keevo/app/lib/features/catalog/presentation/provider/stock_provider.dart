@@ -15,6 +15,26 @@ import '../../domain/usecase/set_threshold_usecase.dart';
 
 part 'stock_provider.g.dart';
 
+// ── Tenant store provider ─────────────────────────────────────────────────────
+
+/// Resolves the primary (first active) store UUID for the current tenant.
+///
+/// Calls GET /api/v1/tenant/stores and returns the first store's id.
+/// Used by stock entry / adjust bottom sheets that require a real UUID.
+///
+/// Story 2.3 hotfix — Epic 3 will replace with a full store selector.
+final primaryStoreIdProvider = FutureProvider<String?>((ref) async {
+  final dio = ref.watch(dioProvider);
+  try {
+    final response = await dio.get<Map<String, dynamic>>('/api/v1/tenant/stores');
+    final data = response.data!['data'] as List<dynamic>;
+    if (data.isEmpty) return null;
+    return (data.first as Map<String, dynamic>)['id'] as String?;
+  } catch (_) {
+    return null;
+  }
+});
+
 // ── Infrastructure providers ──────────────────────────────────────────────────
 
 final localStockDataSourceProvider = Provider<LocalStockDataSource>((ref) {
