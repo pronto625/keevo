@@ -311,13 +311,27 @@ public class TenantSchemaSyncService {
                 }
 
                 // NOT NULL
-                if ("NO".equals(rs.getString("is_nullable"))) def.append(" NOT NULL");
+                boolean notNull = "NO".equals(rs.getString("is_nullable"));
+                if (notNull) def.append(" NOT NULL");
 
                 // DEFAULT (skip sequence-based defaults — they are created by INCLUDING ALL
                 // for new tables; for ALTER TABLE ADD COLUMN we keep expression defaults)
                 String colDefault = rs.getString("column_default");
                 if (colDefault != null && !colDefault.contains("nextval(")) {
                     def.append(" DEFAULT ").append(colDefault);
+                } else if (colDefault == null && notNull) {
+                    // Safety fallback: NOT NULL column without a DB-level default.
+                    // ALTER TABLE ADD COLUMN without a DEFAULT would fail on non-empty tables.
+                    // We inject a safe zero-value default so the migration is always idempotent.
+                    String safeDefault = switch (dataType) {
+                        case "integer", "bigint", "smallint", "numeric", "decimal" -> "0";
+                        case "boolean"                               -> "false";
+                        case "character varying", "text", "character" -> "''";
+                        default                                       -> null; // no safe fallback
+                    };
+                    if (safeDefault != null) {
+                        def.append(" DEFAULT ").append(safeDefault);
+                    }
                 }
 
                 return def.toString();
