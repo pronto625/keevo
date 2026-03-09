@@ -48,6 +48,9 @@ class ArchiveProductUseCaseTest {
             "Description",
             "KEV-TST123",
             UUID.randomUUID(),
+            null, // price
+            null, // buyPrice
+            null, // stockQuantity
             false, // not archived
             ProductStatus.ACTIVE,
             Instant.now(),

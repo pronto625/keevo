@@ -6,10 +6,14 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../features/auth/domain/model/membership_dto.dart';
 import '../../features/auth/presentation/page/login_page.dart';
 import '../../features/auth/presentation/page/register_page.dart';
 import '../../features/auth/presentation/page/tenant_picker_page.dart';
-import '../../features/auth/domain/model/membership_dto.dart';
+import '../../features/catalog/domain/model/product_model.dart';
+import '../../features/catalog/presentation/page/catalog_page.dart';
+import '../../features/catalog/presentation/page/product_form_page.dart';
+import '../../features/debug/presentation/page/category_debug_page.dart';
 import '../../features/onboarding/domain/model/sector_type.dart';
 import '../../features/onboarding/presentation/page/onboarding_page.dart';
 import '../../features/onboarding/presentation/page/sector_selection_page.dart';
@@ -36,6 +40,23 @@ bool _isValidJwt(String token) {
     return DateTime.now().isBefore(
       DateTime.fromMillisecondsSinceEpoch(exp * 1000),
     );
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Returns true if the JWT payload contains `tenantStatus == "ACTIVE"`,
+/// meaning the onboarding wizard has already been completed on the backend.
+bool _isTenantActive(String token) {
+  final parts = token.split('.');
+  if (parts.length != 3) return false;
+  try {
+    final payload = parts[1];
+    final decoded = utf8.decode(
+      base64Url.decode(base64Url.normalize(payload)),
+    );
+    final data = jsonDecode(decoded) as Map<String, dynamic>;
+    return data['tenantStatus'] == 'ACTIVE';
   } catch (_) {
     return false;
   }
@@ -87,7 +108,19 @@ class _SplashRedirectPageState extends ConsumerState<_SplashRedirectPage> {
     if (token != null && _isValidJwt(token)) {
       if (!mounted) return;
       final prefs = await SharedPreferences.getInstance();
-      final wizardSeen = prefs.getBool(kOnboardingWizardSeenKey) ?? false;
+      var wizardSeen = prefs.getBool(kOnboardingWizardSeenKey) ?? false;
+
+      // If the flag is missing locally, fall back to the JWT payload:
+      // tenantStatus == "ACTIVE" means onboarding was already completed on
+      // a previous install / after a data-clear. Mark it locally and skip
+      // the wizard so the user is never stuck in the onboarding loop.
+      if (!wizardSeen) {
+        wizardSeen = _isTenantActive(token);
+        if (wizardSeen) {
+          await prefs.setBool(kOnboardingWizardSeenKey, true);
+        }
+      }
+
       if (!mounted) return;
       context.go(wizardSeen ? '/pos' : '/onboarding/sector');
       return;
@@ -197,10 +230,22 @@ final GoRouter appRouter = GoRouter(
       ),
     ),
 
-    // ── Products ────────────────────────────────────────────
+    // ── Products / Catalogue ─────────────────────────────────────────────
     GoRoute(
       path: '/products',
-      builder: (_, __) => const _PlaceholderPage(title: 'Products'),
+      builder: (_, __) => const CatalogPage(),
+    ),
+    GoRoute(
+      path: '/products/new',
+      builder: (_, __) => const ProductFormPage(),
+    ),
+    GoRoute(
+      path: '/products/:id/edit',
+      builder: (_, state) {
+        final product = state.extra;
+        if (product is! ProductModel) return const CatalogPage();
+        return ProductFormPage(product: product);
+      },
     ),
 
     // ── Inventory ───────────────────────────────────────────
@@ -230,5 +275,11 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/settings/subscription',
       builder: (_, __) => const SubscriptionPage(),
-    ),  ],
+    ),
+    // ── Debug > Categories ──────────────────────────────────────
+    GoRoute(
+      path: '/debug/categories',
+      builder: (_, __) => const CategoryDebugPage(),
+    ),
+  ],
 );

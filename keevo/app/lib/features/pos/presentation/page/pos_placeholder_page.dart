@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/storage/app_constants.dart';
@@ -101,14 +102,7 @@ class _PosPlaceholderPageState extends ConsumerState<PosPlaceholderPage> {
               const SizedBox(height: 32),
               FilledButton.icon(
                 key: const Key('addFirstProductCta'),
-                onPressed: () {
-                  // TODO Story 4.1: navigate to product creation
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Fonctionnalité disponible dans la prochaine mise à jour.'),
-                    ),
-                  );
-                },
+                onPressed: () => context.push('/products'),
                 icon: const Icon(Icons.add),
                 label: const Text('Ajouter votre premier produit'),
               ),

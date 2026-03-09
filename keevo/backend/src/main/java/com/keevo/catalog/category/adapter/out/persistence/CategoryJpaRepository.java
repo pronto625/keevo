@@ -16,4 +16,7 @@ public interface CategoryJpaRepository extends JpaRepository<CategoryJpaEntity, 
 
     @Query("SELECT c FROM CategoryJpaEntity c WHERE c.isActive = true")
     List<CategoryJpaEntity> findAllActive();
+    
+    @Query("SELECT c FROM CategoryJpaEntity c WHERE c.parentId = :parentId")
+    List<CategoryJpaEntity> findByParentId(UUID parentId);
 }

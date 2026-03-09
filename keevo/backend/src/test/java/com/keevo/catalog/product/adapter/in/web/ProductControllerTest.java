@@ -73,6 +73,9 @@ class ProductControllerTest {
             "Test Description",
             "KEV-TST123",
             UUID.randomUUID(),
+            null, // price
+            null, // buyPrice
+            null, // stockQuantity
             false,
             ProductStatus.ACTIVE,
             Instant.now(),
@@ -210,10 +213,15 @@ class ProductControllerTest {
     void should_archive_product() throws Exception {
         // Given
         UUID productId = UUID.randomUUID();
+        Product archivedProduct = new Product(
+            productId, "Test Product", "Test Description", "KEV-TST123",
+            UUID.randomUUID(), null, null, null, true, ProductStatus.ACTIVE, Instant.now(), Instant.now()
+        );
+        when(productRepository.findById(productId)).thenReturn(Optional.of(archivedProduct));
 
         // When/Then
         mockMvc.perform(patch("/api/v1/products/{id}/archive", productId))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk());
 
         verify(archiveProductUseCase).execute(any(ArchiveProductUseCase.ArchiveProductDto.class));
     }

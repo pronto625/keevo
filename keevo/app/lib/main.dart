@@ -1,9 +1,12 @@
 import 'dart:developer' as dev;
+import 'dart:ffi';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqlite3/open.dart';
 
 import 'core/di/providers.dart';
 import 'core/router/app_router.dart';
@@ -12,6 +15,17 @@ import 'core/theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ── 0. Override SQLite native library loader ────────────────────────────────
+  // sqlcipher_flutter_libs ships libsqlcipher.so on Android, NOT libsqlite3.so.
+  // Without this override, sqlite3 (used by drift) tries to dlopen libsqlite3.so
+  // and crashes with "library not found". Must be done before any DB access.
+  if (Platform.isAndroid) {
+    open.overrideFor(
+      OperatingSystem.android,
+      () => DynamicLibrary.open('libsqlcipher.so'),
+    );
+  }
 
   // ── 1. SharedPreferences (sync read for providers) ─────────────────────────
   final prefs = await SharedPreferences.getInstance();

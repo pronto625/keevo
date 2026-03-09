@@ -1,0 +1,174 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+import '../../../../core/di/providers.dart';
+import '../../../auth/presentation/provider/auth_provider.dart';
+import '../../data/datasource/local_product_datasource.dart';
+import '../../data/datasource/remote_product_datasource.dart';
+import '../../data/repository/product_repository_impl.dart';
+import '../../domain/model/product_model.dart';
+import '../../domain/repository/product_repository.dart';
+import '../../domain/usecase/archive_product_usecase.dart';
+import '../../domain/usecase/create_product_usecase.dart';
+import '../../domain/usecase/get_products_usecase.dart';
+import '../../domain/usecase/unarchive_product_usecase.dart';
+import '../../domain/usecase/update_product_usecase.dart';
+
+part 'product_provider.g.dart';
+
+// ── Infrastructure providers ──────────────────────────────────────────────────
+
+/// Local product datasource — reads/writes Drift Products table.
+final localProductDataSourceProvider = Provider<LocalProductDataSource>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  final syncService = ref.watch(syncServiceProvider);
+  return LocalProductDataSource(db, syncService);
+});
+
+/// Remote product datasource — calls authenticated backend API.
+final remoteProductDataSourceProvider = Provider<RemoteProductDataSource>((ref) {
+  final dio = ref.watch(dioProvider);
+  return RemoteProductDataSource(dio: dio);
+});
+
+/// ProductRepository — offline-first concrete implementation.
+final productRepositoryProvider = Provider<ProductRepository>((ref) {
+  return ProductRepositoryImpl(
+    local: ref.watch(localProductDataSourceProvider),
+    remote: ref.watch(remoteProductDataSourceProvider),
+  );
+});
+
+// ── Use case providers ────────────────────────────────────────────────────────
+
+final getProductsUseCaseProvider = Provider<GetProductsUseCase>((ref) {
+  return GetProductsUseCase(ref.watch(productRepositoryProvider));
+});
+
+final createProductUseCaseProvider = Provider<CreateProductUseCase>((ref) {
+  return CreateProductUseCase(ref.watch(productRepositoryProvider));
+});
+
+final updateProductUseCaseProvider = Provider<UpdateProductUseCase>((ref) {
+  return UpdateProductUseCase(ref.watch(productRepositoryProvider));
+});
+
+final archiveProductUseCaseProvider = Provider<ArchiveProductUseCase>((ref) {
+  return ArchiveProductUseCase(ref.watch(productRepositoryProvider));
+});
+
+final unarchiveProductUseCaseProvider = Provider<UnarchiveProductUseCase>((ref) {
+  return UnarchiveProductUseCase(ref.watch(productRepositoryProvider));
+});
+
+// ── Feature state notifier ────────────────────────────────────────────────────
+
+/// Holds the current search query — updated by the search bar.
+final productSearchQueryProvider = StateProvider<String>((ref) => '');
+
+/// Product list state — reactive to the search query.
+///
+/// AC7: re-executes on every [productSearchQueryProvider] change.
+/// Offline-first: reads from local Drift DB, no network required.
+@riverpod
+Future<List<ProductModel>> productList(ProductListRef ref) async {
+  final query = ref.watch(productSearchQueryProvider);
+  final useCase = ref.watch(getProductsUseCaseProvider);
+  return useCase.execute(query: query.isEmpty ? null : query);
+}
+
+/// Archived products list.
+@riverpod
+Future<List<ProductModel>> archivedProductList(ArchivedProductListRef ref) async {
+  final useCase = ref.watch(getProductsUseCaseProvider);
+  return useCase.executeArchived();
+}
+
+/// Full product list notifier — handles create/update/archive with invalidation.
+///
+/// Usage:
+/// ```dart
+/// ref.read(productActionsProvider).create(name: 'T-Shirt');
+/// ```
+class ProductActions {
+  final Ref _ref;
+
+  const ProductActions(this._ref);
+
+  ProductRepository get _repo => _ref.read(productRepositoryProvider);
+
+  Future<ProductModel> create({
+    required String name,
+    String? description,
+    String? sku,
+    String? categoryId,
+    int price = 0,
+    int buyPrice = 0,
+    String? photoUrl,
+  }) async {
+    final useCase = _ref.read(createProductUseCaseProvider);
+    final result = await useCase.execute(
+      name: name,
+      description: description,
+      sku: sku,
+      categoryId: categoryId,
+      price: price,
+      buyPrice: buyPrice,
+      photoUrl: photoUrl,
+    );
+    // Invalidate both lists so UI refreshes.
+    _ref.invalidate(productListProvider);
+    _ref.invalidate(archivedProductListProvider);
+    return result;
+  }
+
+  Future<ProductModel> update({
+    required String id,
+    String? name,
+    String? description,
+    String? sku,
+    String? categoryId,
+    int? price,
+    int? buyPrice,
+    String? photoUrl,
+  }) async {
+    final useCase = _ref.read(updateProductUseCaseProvider);
+    final result = await useCase.execute(
+      id: id,
+      name: name,
+      description: description,
+      sku: sku,
+      categoryId: categoryId,
+      price: price,
+      buyPrice: buyPrice,
+      photoUrl: photoUrl,
+    );
+    _ref.invalidate(productListProvider);
+    _ref.invalidate(archivedProductListProvider);
+    return result;
+  }
+
+  Future<void> archive(String id) async {
+    final useCase = _ref.read(archiveProductUseCaseProvider);
+    await useCase.execute(id);
+    _ref.invalidate(productListProvider);
+    _ref.invalidate(archivedProductListProvider);
+  }
+
+  Future<void> unarchive(String id) async {
+    final useCase = _ref.read(unarchiveProductUseCaseProvider);
+    await useCase.execute(id);
+    _ref.invalidate(productListProvider);
+    _ref.invalidate(archivedProductListProvider);
+  }
+
+  Future<void> syncFromRemote() async {
+    await _repo.syncFromRemote();
+    _ref.invalidate(productListProvider);
+    _ref.invalidate(archivedProductListProvider);
+  }
+}
+
+final productActionsProvider = Provider<ProductActions>((ref) {
+  return ProductActions(ref);
+});

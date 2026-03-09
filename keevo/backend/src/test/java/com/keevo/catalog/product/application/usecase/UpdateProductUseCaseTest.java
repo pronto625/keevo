@@ -51,6 +51,9 @@ class UpdateProductUseCaseTest {
             "Old Description",
             "KEV-OLD123",
             UUID.randomUUID(),
+            null, // price
+            null, // buyPrice
+            null, // stockQuantity
             false,
             ProductStatus.ACTIVE,
             Instant.now(),
@@ -63,6 +66,9 @@ class UpdateProductUseCaseTest {
             "New Description", 
             "KEV-NEW123",
             UUID.randomUUID(),
+            null, // price
+            null, // buyPrice
+            null, // stockQuantity
             UUID.randomUUID() // actorId
         );
 
@@ -89,6 +95,9 @@ class UpdateProductUseCaseTest {
             "Description",
             "KEV-ABC123",
             UUID.randomUUID(),
+            null, // price
+            null, // buyPrice
+            null, // stockQuantity
             UUID.randomUUID() // actorId
         );
 

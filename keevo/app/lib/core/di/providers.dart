@@ -2,9 +2,14 @@ import 'dart:developer' as dev;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dio/dio.dart';
 
+import '../services/api_service.dart';
 import '../storage/app_database.dart';
+import '../sync/rest_sync_service.dart';
 import '../sync/sync_service.dart';
+import '../../features/catalog/data/datasource/remote_product_datasource.dart';
+import '../../features/auth/presentation/provider/auth_provider.dart';
 
 /// Encryption key provider — overridden in main.dart with the actual key.
 ///
@@ -34,20 +39,21 @@ final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   throw UnimplementedError('Override sharedPreferencesProvider in main.dart');
 });
 
-/// SyncService provider — stub implementation for Epic 1.
-/// Strategy pattern: Epic 5 will replace this with RestSyncService.
-final syncServiceProvider = Provider<SyncService>((ref) => _StubSyncService());
+/// SyncService provider — REST implementation for real synchronization.
+/// Synchronizes products immediately to backend instead of using Epic 5 queue.
+final syncServiceProvider = Provider<SyncService>((ref) {
+  final database = ref.watch(appDatabaseProvider);
+  final dio = ref.watch(dioProvider);
+  final remoteProducts = RemoteProductDataSource(dio: dio);
+  
+  return RestSyncService(
+    database: database,
+    remoteProducts: remoteProducts,
+  );
+});
 
-class _StubSyncService implements SyncService {
-  @override
-  Future<void> push() async {}
-
-  @override
-  Future<void> pull() async {}
-
-  @override
-  Future<void> queueOperation({
-    required String operation,
-    required Map<String, dynamic> payload,
-  }) async {}
-}
+/// ApiService provider — default stub implementation.
+/// Will be overridden where needed to use the authenticated version.
+final apiServiceProvider = Provider<ApiService>((ref) {
+  return StubApiService();
+});

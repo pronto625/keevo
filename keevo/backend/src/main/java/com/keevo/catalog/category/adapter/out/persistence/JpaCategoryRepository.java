@@ -62,8 +62,9 @@ public class JpaCategoryRepository implements CategoryRepository {
 
     @Override
     public List<Category> findByParentId(UUID parentId) {
-        // TODO Story 3.1: implement subcategory tree query
-        throw new UnsupportedOperationException("findByParentId — implemented in Story 3.1");
+        return jpaRepository.findByParentId(parentId).stream()
+            .map(this::toDomain)
+            .collect(Collectors.toList());
     }
 
     @Override

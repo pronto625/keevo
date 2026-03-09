@@ -21,7 +21,8 @@ part 'app_database.g.dart';
 /// AppDatabase — Drift SQLite database encrypted with SQLCipher.
 ///
 /// Facade pattern: hides encrypted connection details behind a clean API.
-/// Schema version 2: added 8 tables beyond the original SyncQueue.
+/// Schema version 3: products table extended with description, sku, photoUrl,
+/// archived, status columns (Story 2.1).
 ///
 /// Usage in production: [AppDatabase(hexKey: key)] — encrypted via SQLCipher.
 /// Usage in tests:      [AppDatabase.forTesting()] — in-memory, unencrypted.
@@ -47,7 +48,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -64,6 +65,14 @@ class AppDatabase extends _$AppDatabase {
         await migrator.createTable(stores);
         await migrator.createTable(users);
         await migrator.createTable(categories);
+      }
+      if (from < 3) {
+        // Story 2.1 — extend products table with catalogue fields.
+        await migrator.addColumn(products, products.description);
+        await migrator.addColumn(products, products.sku);
+        await migrator.addColumn(products, products.photoUrl);
+        await migrator.addColumn(products, products.archived);
+        await migrator.addColumn(products, products.status);
       }
     },
   );
@@ -122,6 +131,7 @@ class AppDatabase extends _$AppDatabase {
 /// to avoid "file is not a database" crash on devices upgrading from old builds.
 LazyDatabase _openEncryptedConnection(String hexKey) {
   return LazyDatabase(() async {
+    // Note: libsqlcipher.so override is done in main() before any DB access.
     final dbFolder = await getApplicationDocumentsDirectory();
     final file = File(p.join(dbFolder.path, 'keevo_v2.sqlite'));
 
@@ -130,7 +140,11 @@ LazyDatabase _openEncryptedConnection(String hexKey) {
       name: 'AppDatabase',
     );
 
-    return NativeDatabase.createInBackground(
+    // NativeDatabase (not createInBackground) — the background isolate variant
+    // does NOT inherit open.overrideFor() from main(), causing sqlite3 to look
+    // for libsqlite3.so (absent) instead of libsqlcipher.so. Running in the
+    // calling isolate where the override is already set fixes the issue.
+    return NativeDatabase(
       file,
       setup: (db) {
         // SQLCipher PRAGMA key — must be set BEFORE any other DB operation.

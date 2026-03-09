@@ -176,12 +176,14 @@ class _OnboardingPageState extends State<OnboardingPage>
                 ),
               ),
 
-              const SizedBox(height: 32),
+              SizedBox(height: size.height * 0.04),
 
               // ── Illustration centrale ─────────────────────────────────
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 48),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: size.width * 0.12,
+                  ),
                   child: _OnboardingIllustration(
                     size: size,
                     primaryColor: cs.primary,
@@ -190,11 +192,16 @@ class _OnboardingPageState extends State<OnboardingPage>
                 ),
               ),
 
-              const SizedBox(height: 24),
+              SizedBox(height: size.height * 0.03),
 
               // ── Bouton bas ────────────────────────────────────────────
               Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+                padding: EdgeInsets.fromLTRB(
+                  size.width * 0.06, 
+                  0, 
+                  size.width * 0.06, 
+                  size.height * 0.04
+                ),
                 child: _StartButton(
                   label: _isFrench
                       ? 'Glisser pour commencer'
@@ -266,38 +273,48 @@ class _OnboardingIllustration extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final isCompact = screenSize.height < 700;
+    
+    // Dimensions adaptatives basées sur la taille d'écran
+    final outerCircleSize = isCompact ? screenSize.width * 0.25 : screenSize.width * 0.3;
+    final innerCircleSize = outerCircleSize * 0.67;
+    final iconSize = outerCircleSize * 0.37;
+    final verticalSpacing = isCompact ? screenSize.height * 0.025 : screenSize.height * 0.035;
+    
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
       children: [
         // Icône centrale stylisée
         Container(
-          width: 160,
-          height: 160,
+          width: outerCircleSize,
+          height: outerCircleSize,
           decoration: BoxDecoration(
             color: primaryColor.withOpacity(0.06),
             shape: BoxShape.circle,
           ),
           child: Center(
             child: Container(
-              width: 110,
-              height: 110,
+              width: innerCircleSize,
+              height: innerCircleSize,
               decoration: BoxDecoration(
                 color: primaryColor.withOpacity(0.12),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.store_rounded,
-                size: 60,
+                size: iconSize,
                 color: primaryColor,
               ),
             ),
           ),
         ),
-        const SizedBox(height: 28),
+        SizedBox(height: verticalSpacing),
         // Feature pills
         Wrap(
-          spacing: 10,
-          runSpacing: 10,
+          spacing: screenSize.width * 0.025,
+          runSpacing: screenSize.width * 0.025,
           alignment: WrapAlignment.center,
           children: [
             _FeaturePill(
@@ -340,22 +357,35 @@ class _FeaturePill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final isCompact = screenSize.height < 700 || screenSize.width < 350;
+    
+    // Dimensions adaptatives
+    final horizontalPadding = screenSize.width * 0.035;
+    final verticalPadding = isCompact ? 6.0 : 8.0;
+    final iconSize = isCompact ? 14.0 : 16.0;
+    final fontSize = isCompact ? 11.0 : 12.0;
+    final borderRadius = isCompact ? 16.0 : 20.0;
+    
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: EdgeInsets.symmetric(
+        horizontal: horizontalPadding, 
+        vertical: verticalPadding
+      ),
       decoration: BoxDecoration(
         color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(borderRadius),
         border: Border.all(color: color.withOpacity(0.2)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 6),
+          Icon(icon, size: iconSize, color: color),
+          SizedBox(width: screenSize.width * 0.015),
           Text(
             label,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: fontSize,
               color: color,
               fontWeight: FontWeight.w500,
             ),

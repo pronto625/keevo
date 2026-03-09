@@ -77,10 +77,10 @@ public class ProductRepositoryAdapter implements ProductRepository {
             product.getDescription(),
             product.getSku(),
             product.getCategoryId(),
-            0, // price - will be set in Story 2.2
-            0, // buyPrice - will be set in Story 2.2  
-            0, // stockQuantity - will be set in Story 2.3
-            null, // photoUrl - will be set in Story 2.1 UI
+            product.getPrice(),
+            product.getBuyPrice(),
+            product.getStockQuantity(),
+            null, // photoUrl - future story
             product.getArchived(),
             product.getStatus(),
             product.getCreatedAt(),
@@ -95,6 +95,9 @@ public class ProductRepositoryAdapter implements ProductRepository {
             entity.getDescription(),
             entity.getSku(),
             entity.getCategoryId(),
+            entity.getPrice(),
+            entity.getBuyPrice(),
+            entity.getStockQuantity(),
             entity.getArchived(),
             entity.getStatus(),
             entity.getCreatedAt(),

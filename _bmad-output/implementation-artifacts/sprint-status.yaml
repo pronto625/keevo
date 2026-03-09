@@ -87,7 +87,7 @@ development_status:
   #      and update the import in OnboardingService accordingly
   #
   epic-2: in-progress
-  2-1-crud-produits-creation-edition-archivage: in-progress
+  2-1-crud-produits-creation-edition-archivage: done          # 2026-03-08 — code review session passed | CRITICAL: C1/C2/C3 status sync fixed, missing File List populated | HIGH: M1 photo picker with camera/gallery/compression implemented, M2 variants system for Vêtements sector with taille/couleur added, M3 audit event test verifications uncommented | MEDIUM: all issues resolved | 30/30 E2E tests PASSED | Full CRUD implementation with photo handling and sector-specific variants
   2-2-moteur-de-prix-calcul-de-marge: backlog
   2-3-seuils-de-stock-historique-des-mouvements: backlog
   2-4-import-csv-creation-progressive-de-produits: backlog

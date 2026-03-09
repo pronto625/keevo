@@ -1,5 +1,6 @@
 package com.keevo.catalog.product.adapter.in.web.dto;
 
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
 import java.util.UUID;
 
@@ -18,5 +19,14 @@ public record UpdateProductRequestDto(
         @Size(min = 10, max = 10, message = "Le SKU doit respecter le format KEV-XXXXXX")
         String sku,
         
-        UUID categoryId
+        UUID categoryId,
+        
+        @Min(value = 0, message = "Le prix ne peut pas être négatif")
+        Integer price,
+        
+        @Min(value = 0, message = "Le prix d'achat ne peut pas être négatif")
+        Integer buyPrice,
+        
+        @Min(value = 0, message = "Le stock ne peut pas être négatif")
+        Integer stockQuantity
 ) {}

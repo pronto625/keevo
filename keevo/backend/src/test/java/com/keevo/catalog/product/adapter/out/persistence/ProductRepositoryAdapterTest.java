@@ -50,6 +50,9 @@ class ProductRepositoryAdapterTest {
             "Test Description",
             "KEV-TST123",
             UUID.randomUUID(),
+            null, // price
+            null, // buyPrice
+            null, // stockQuantity
             false,
             ProductStatus.ACTIVE,
             Instant.now(),
@@ -78,6 +81,9 @@ class ProductRepositoryAdapterTest {
             "Test Description", 
             "KEV-TST124",
             UUID.randomUUID(),
+            null, // price
+            null, // buyPrice
+            null, // stockQuantity
             false,
             ProductStatus.ACTIVE,
             Instant.now(),
@@ -104,6 +110,9 @@ class ProductRepositoryAdapterTest {
             "Test Description",
             "KEV-TST125",
             UUID.randomUUID(),
+            null, // price
+            null, // buyPrice
+            null, // stockQuantity
             false,
             ProductStatus.ACTIVE,
             Instant.now(),
@@ -129,6 +138,9 @@ class ProductRepositoryAdapterTest {
             "Description",
             "KEV-ACT126",
             UUID.randomUUID(),
+            null, // price
+            null, // buyPrice
+            null, // stockQuantity
             false, // not archived
             ProductStatus.ACTIVE,
             Instant.now(),
@@ -141,6 +153,9 @@ class ProductRepositoryAdapterTest {
             "Description",
             "KEV-ARC127",
             UUID.randomUUID(),
+            null, // price
+            null, // buyPrice
+            null, // stockQuantity
             true, // archived
             ProductStatus.ACTIVE,
             Instant.now(),
@@ -169,6 +184,9 @@ class ProductRepositoryAdapterTest {
             "Description",
             "KEV-TST128", 
             UUID.randomUUID(),
+            null, // price
+            null, // buyPrice
+            null, // stockQuantity
             false,
             ProductStatus.ACTIVE,
             Instant.now(),

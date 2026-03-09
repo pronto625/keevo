@@ -36,18 +36,17 @@ void main() {
 
     tearDown(() async => db.close());
 
-    test('schemaVersion is 2', () => expect(db.schemaVersion, 2));
+    test('schemaVersion is 3', () => expect(db.schemaVersion, 3));
 
     test('Products table accepts integer price (XAF — no floats)', () async {
       const id = 'prod-001';
       await db.into(db.products).insert(ProductsCompanion.insert(
         id: id,
         name: 'Chemise bleue',
-        price: 15000,
-        buyPrice: 8000,
-        stockQuantity: 10,
-        storeId: 'store-1',
-        isActive: const Value(true),
+        price: const Value(15000),
+        buyPrice: const Value(8000),
+        stockQuantity: const Value(10),
+        storeId: const Value('store-1'),
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       ));

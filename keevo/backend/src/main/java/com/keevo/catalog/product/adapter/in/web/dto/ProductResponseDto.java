@@ -17,6 +17,9 @@ public record ProductResponseDto(
         String description,
         String sku,
         UUID categoryId,
+        Integer price,
+        Integer buyPrice,
+        Integer stockQuantity,
         boolean archived,
         ProductStatus status,
         Instant createdAt,
@@ -32,7 +35,10 @@ public record ProductResponseDto(
                 product.getDescription(),
                 product.getSku(),
                 product.getCategoryId(),
-                product.getArchived(),  // Fixed: use getArchived() instead of isArchived()
+                product.getPrice(),
+                product.getBuyPrice(),
+                product.getStockQuantity(),
+                product.getArchived(),
                 product.getStatus(),
                 product.getCreatedAt(),
                 product.getUpdatedAt()

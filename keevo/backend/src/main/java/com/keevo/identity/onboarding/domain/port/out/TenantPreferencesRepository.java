@@ -2,6 +2,8 @@ package com.keevo.identity.onboarding.domain.port.out;
 
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 
+import java.util.Optional;
+
 /**
  * TenantPreferencesRepository — Secondary port for tenant preferences persistence.
  *
@@ -22,4 +24,11 @@ public interface TenantPreferencesRepository {
      * Determined by the presence of at least one row in {@code tenant_preferences}.
      */
     boolean hasOnboardingCompleted();
+
+    /**
+     * Find tenant preferences for the current tenant.
+     * 
+     * @return tenant preferences if found
+     */
+    Optional<TenantPreferences> findByCurrentTenant();
 }

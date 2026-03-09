@@ -61,6 +61,9 @@ public class ProductController {
                 request.description(),
                 request.sku(),
                 request.categoryId(),
+                request.price(),
+                request.buyPrice(),
+                request.stockQuantity(),
                 actorId
         );
         
@@ -118,6 +121,9 @@ public class ProductController {
                 request.description(),
                 request.sku(),
                 request.categoryId(),
+                request.price(),
+                request.buyPrice(),
+                request.stockQuantity(),
                 actorId
         );
         
@@ -132,12 +138,16 @@ public class ProductController {
      * PATCH /api/v1/products/{id}/archive
      */
     @PatchMapping("/{id}/archive")
-    public ResponseEntity<Void> archiveProduct(@PathVariable UUID id) {
+    public ResponseEntity<ApiResponseWrapper<ProductResponseDto>> archiveProduct(@PathVariable UUID id) {
         // Extract actorId from SecurityContext — set by JwtAuthFilter
         UUID actorId = (UUID) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         
         var dto = new ArchiveProductUseCase.ArchiveProductDto(id, actorId);
         archiveProductUseCase.execute(dto);
-        return ResponseEntity.noContent().build();
+        // Return the archived product so the caller sees archived=true
+        return productRepository.findById(id)
+                .map(product -> ResponseEntity.ok(ApiResponseWrapper.ok(ProductResponseDto.fromDomain(product))))
+                .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(ApiResponseWrapper.error("Produit introuvable", "NOT_FOUND", "PRODUCT_NOT_FOUND", null)));
     }
 }

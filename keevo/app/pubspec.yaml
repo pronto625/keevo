@@ -26,6 +26,7 @@ dependencies:
 
   # HTTP client
   dio: ^5.7.0
+  http: ^1.1.0
 
   # Code generation (models)
   freezed_annotation: ^2.4.4
@@ -50,6 +51,15 @@ dependencies:
   # Client-side UUID v4 generation (Drift has no @UuidGenerator — generate manually)
   uuid: ^4.4.0
 
+  # sqlite3 API needed at runtime to override the dynamic library loader so that
+  # drift uses libsqlcipher.so (from sqlcipher_flutter_libs) instead of the
+  # default libsqlite3.so that is NOT bundled with sqlcipher_flutter_libs.
+  sqlite3: ^2.4.7
+
+  # Image handling (AC3: photo picker and compression)
+  image_picker: ^1.0.7
+  image: ^4.1.7
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -67,9 +77,8 @@ dev_dependencies:
   # Testing
   mocktail: ^1.0.4
 
-  # SQLite3 library access for Linux desktop test environment
-  # (sqlcipher_flutter_libs doesn't ship native libs for desktop — we load system SQLite)
-  sqlite3: ^2.4.7
+  # sqlite3 is now a main dependency — kept here only for the record.
+  # sqlite3: ^2.4.7  # moved to dependencies
 
 flutter:
   uses-material-design: true

@@ -11,6 +11,7 @@ import java.util.regex.Pattern;
  * - name non-empty
  * - SKU format KEV-[A-Z0-9]{6}
  * - description nullable
+ * - price >= 0
  * - archived default false
  * - status default ACTIVE
  */
@@ -22,13 +23,17 @@ public class Product {
     private final String description;
     private final String sku;
     private final UUID categoryId;
+    private final Integer price;
+    private final Integer buyPrice;
+    private final Integer stockQuantity;
     private final Boolean archived;
     private final ProductStatus status;
     private final Instant createdAt;
     private final Instant updatedAt;
     
     public Product(UUID id, String name, String description, String sku, 
-                  UUID categoryId, Boolean archived, ProductStatus status, 
+                  UUID categoryId, Integer price, Integer buyPrice, Integer stockQuantity,
+                  Boolean archived, ProductStatus status, 
                   Instant createdAt, Instant updatedAt) {
         // Validate name
         if (name == null || name.trim().isEmpty()) {
@@ -48,6 +53,9 @@ public class Product {
         this.description = description;
         this.sku = sku;
         this.categoryId = categoryId;
+        this.price = price != null ? price : 0;
+        this.buyPrice = buyPrice != null ? buyPrice : 0;
+        this.stockQuantity = stockQuantity != null ? stockQuantity : 0;
         this.archived = archived != null ? archived : false;
         this.status = status != null ? status : ProductStatus.ACTIVE;
         this.createdAt = createdAt;
@@ -60,6 +68,9 @@ public class Product {
     public String getDescription() { return description; }
     public String getSku() { return sku; }
     public UUID getCategoryId() { return categoryId; }
+    public Integer getPrice() { return price; }
+    public Integer getBuyPrice() { return buyPrice; }
+    public Integer getStockQuantity() { return stockQuantity; }
     public Boolean getArchived() { return archived; }
     public ProductStatus getStatus() { return status; }
     public Instant getCreatedAt() { return createdAt; }
@@ -84,6 +95,7 @@ public class Product {
                 "id=" + id +
                 ", name='" + name + '\'' +
                 ", sku='" + sku + '\'' +
+                ", price=" + price +
                 ", archived=" + archived +
                 ", status=" + status +
                 '}';

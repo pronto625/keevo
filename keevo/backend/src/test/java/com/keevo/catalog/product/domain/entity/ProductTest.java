@@ -31,7 +31,7 @@ class ProductTest {
         var now = Instant.now();
         
         // When
-        var product = new Product(id, name, description, sku, categoryId, archived, status, now, now);
+        var product = new Product(id, name, description, sku, categoryId, null, null, null, archived, status, now, now);
         
         // Then
         assertEquals(id, product.getId());
@@ -56,6 +56,9 @@ class ProductTest {
                 "Description",
                 "KEV-ABC123",
                 UUID.randomUUID(),
+                null, // price
+                null, // buyPrice
+                null, // stockQuantity
                 false,
                 ProductStatus.ACTIVE,
                 Instant.now(),
@@ -75,6 +78,9 @@ class ProductTest {
                 "Description", 
                 "KEV-ABC123",
                 UUID.randomUUID(),
+                null, // price
+                null, // buyPrice
+                null, // stockQuantity
                 false,
                 ProductStatus.ACTIVE,
                 Instant.now(),
@@ -94,6 +100,9 @@ class ProductTest {
                 "Description",
                 "KEV-ABC123", 
                 UUID.randomUUID(),
+                null, // price
+                null, // buyPrice
+                null, // stockQuantity
                 false,
                 ProductStatus.ACTIVE,
                 Instant.now(),
@@ -113,6 +122,9 @@ class ProductTest {
                 "Description",
                 "INVALID-SKU", // invalid SKU format
                 UUID.randomUUID(),
+                null, // price
+                null, // buyPrice
+                null, // stockQuantity
                 false,
                 ProductStatus.ACTIVE,
                 Instant.now(),
@@ -131,6 +143,9 @@ class ProductTest {
             "Description", 
             "KEV-ABC123", // valid SKU
             UUID.randomUUID(),
+            null, // price
+            null, // buyPrice
+            null, // stockQuantity
             false,
             ProductStatus.ACTIVE,
             Instant.now(),
@@ -151,6 +166,9 @@ class ProductTest {
             "Description",
             "KEV-123XYZ", // valid SKU with numbers first
             UUID.randomUUID(),
+            null, // price
+            null, // buyPrice
+            null, // stockQuantity
             false,
             ProductStatus.ACTIVE,
             Instant.now(),
@@ -172,6 +190,9 @@ class ProductTest {
                 "Description",
                 null, // null SKU
                 UUID.randomUUID(),
+                null, // price
+                null, // buyPrice
+                null, // stockQuantity
                 false,
                 ProductStatus.ACTIVE,
                 Instant.now(),
@@ -190,6 +211,9 @@ class ProductTest {
             null, // null description is allowed
             "KEV-ABC123",
             UUID.randomUUID(),
+            null, // price
+            null, // buyPrice
+            null, // stockQuantity
             false,
             ProductStatus.ACTIVE,
             Instant.now(),
@@ -210,6 +234,9 @@ class ProductTest {
             "Description",
             "KEV-ABC123",
             UUID.randomUUID(),
+            null, // price
+            null, // buyPrice
+            null, // stockQuantity
             false, // explicitly false
             ProductStatus.ACTIVE,
             Instant.now(),
@@ -230,6 +257,9 @@ class ProductTest {
             "Description",
             "KEV-ABC123",
             UUID.randomUUID(),
+            null, // price
+            null, // buyPrice
+            null, // stockQuantity
             false,
             ProductStatus.ACTIVE, // explicitly ACTIVE
             Instant.now(),

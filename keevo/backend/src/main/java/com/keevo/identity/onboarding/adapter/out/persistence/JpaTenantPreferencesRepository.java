@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.time.LocalTime;
+import java.util.Optional;
 
 /**
  * JpaTenantPreferencesRepository — Persistence adapter for TenantPreferencesRepository port.
@@ -41,6 +42,12 @@ public class JpaTenantPreferencesRepository implements TenantPreferencesReposito
     @Override
     public boolean hasOnboardingCompleted() {
         return jpaRepository.count() > 0;
+    }
+
+    @Override
+    public Optional<TenantPreferences> findByCurrentTenant() {
+        return jpaRepository.findTopByOrderByCreatedAtDesc()
+            .map(this::toDomain);
     }
 
     private TenantPreferences toDomain(TenantPreferencesJpaEntity entity) {

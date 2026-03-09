@@ -42,6 +42,9 @@ public class CreateProductUseCase {
         String description, 
         String sku,
         UUID categoryId,
+        Integer price,
+        Integer buyPrice,
+        Integer stockQuantity,
         UUID actorId  // Added for audit trail
     ) {}
 
@@ -68,6 +71,9 @@ public class CreateProductUseCase {
             dto.description(),
             sku,
             dto.categoryId(),
+            dto.price(),
+            dto.buyPrice(),
+            dto.stockQuantity(),
             false, // archived = false (default)
             ProductStatus.ACTIVE, // status = ACTIVE (default for catalogue products)
             now, // createdAt
@@ -96,9 +102,6 @@ public class CreateProductUseCase {
     private void validateInput(CreateProductDto dto) {
         if (dto.name() == null || dto.name().trim().isEmpty()) {
             throw new IllegalArgumentException("Product name cannot be null or empty");
-        }
-        if (dto.categoryId() == null) {
-            throw new IllegalArgumentException("Product categoryId cannot be null");
         }
     }
 

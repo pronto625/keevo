@@ -13,7 +13,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.Map;
 
 /**
  * UpdateProductUseCase — Business logic for updating products
@@ -42,6 +41,9 @@ public class UpdateProductUseCase {
         String description,
         String sku,
         UUID categoryId,
+        Integer price,
+        Integer buyPrice,
+        Integer stockQuantity,
         UUID actorId  // Added for audit trail
     ) {}
 
@@ -55,20 +57,26 @@ public class UpdateProductUseCase {
             throw new IllegalArgumentException("Product name cannot be null or empty");
         }
 
-        // Validate SKU uniqueness (if changed)
-        if (!existing.getSku().equals(dto.sku())) {
-            if (productRepository.findBySku(dto.sku()).isPresent()) {
-                throw new IllegalArgumentException("Product with SKU '" + dto.sku() + "' already exists");
+        // Resolve SKU: keep existing if not provided
+        String resolvedSku = (dto.sku() != null) ? dto.sku() : existing.getSku();
+
+        // Validate SKU uniqueness (only if SKU actually changed)
+        if (!existing.getSku().equals(resolvedSku)) {
+            if (productRepository.findBySku(resolvedSku).isPresent()) {
+                throw new IllegalArgumentException("Product with SKU '" + resolvedSku + "' already exists");
             }
         }
 
-        // Create updated product
+        // Create updated product (null-safe: preserve existing values if not provided)
         var updated = new Product(
             existing.getId(),
             dto.name().trim(),
             dto.description(),
-            dto.sku(),
-            dto.categoryId(),
+            resolvedSku,
+            dto.categoryId() != null ? dto.categoryId() : existing.getCategoryId(),
+            dto.price() != null ? dto.price() : existing.getPrice(),
+            dto.buyPrice() != null ? dto.buyPrice() : existing.getBuyPrice(),
+            dto.stockQuantity() != null ? dto.stockQuantity() : existing.getStockQuantity(),
             existing.getArchived(),
             existing.getStatus(),
             existing.getCreatedAt(),
@@ -102,17 +110,18 @@ public class UpdateProductUseCase {
      */
     private String toJson(Product product) {
         try {
-            return objectMapper.writeValueAsString(Map.of(
-                "id", product.getId(),
-                "name", product.getName(),
-                "description", product.getDescription(),
-                "sku", product.getSku(),
-                "categoryId", product.getCategoryId(),
-                "archived", product.getArchived(),
-                "status", product.getStatus(),
-                "createdAt", product.getCreatedAt(),
-                "updatedAt", product.getUpdatedAt()
-            ));
+            // Use HashMap to allow null values (Map.of disallows null)
+            var map = new java.util.HashMap<String, Object>();
+            map.put("id", product.getId());
+            map.put("name", product.getName());
+            map.put("description", product.getDescription());
+            map.put("sku", product.getSku());
+            map.put("categoryId", product.getCategoryId());
+            map.put("archived", product.getArchived());
+            map.put("status", product.getStatus());
+            map.put("createdAt", product.getCreatedAt());
+            map.put("updatedAt", product.getUpdatedAt());
+            return objectMapper.writeValueAsString(map);
         } catch (JsonProcessingException e) {
             return "{}";
         }
