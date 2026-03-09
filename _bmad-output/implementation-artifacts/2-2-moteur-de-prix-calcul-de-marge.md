@@ -349,69 +349,36 @@ public class BasicMarginStrategy implements PricingStrategy {
 
 ### Agent Model Used
 
-GitHub Copilot + Claude Sonnet 4.6
+GitHub Copilot + Claude Sonnet 4
 
 ### Debug Log References
 
-_None_
+_To be filled by dev agent during implementation_
 
 ### Completion Notes List
 
-- AC2 margin formula: uses `totalCost` as denominator (markup-on-cost), not `sellingPrice` — matches AC2 example (5000+500=5500, (2500/5500)×100=45.5%). Fixed in PricingCalculator.java, PricingCalculatorTest.java, and pricing_calculator_widget.dart during code review.
-- AC2 warning banner: added explicit "⚠ Prix de vente inférieur au coût — vous vendez à perte" container in PricingCalculatorWidget when isLoss=true.
-- Flutter: no separate pricing_notifier.dart created — PricingCalculatorWidget is stateless pure-Dart (ValueListenableBuilder in product_form_page.dart handles real-time updates, no Riverpod notifier needed).
-- Drift schema migrated to v4, schemaVersion test updated accordingly.
-- `category_provider_test` failures are pre-existing SecureStorage binding issue, unrelated to story 2.2.
-- SalePriceOverriddenEvent placed in `catalog/product/domain/event/` (not `shared/`) — will be moved to `shared/` in Epic 4 when POS consumes it.
-- GetProductPricingUseCase: IllegalArgumentException replaced by DomainException(PRODUCT_NOT_FOUND) for proper 404 mapping.
+_To be filled by dev agent during implementation_
 
 ### File List
 
-**Backend — Main:**
-- [x] `catalog/product/domain/entity/Product.java` — Added transportCost Money field
-- [x] `shared/domain/model/Money.java` — Added `multiply(double)` method with BigDecimal HALF_UP rounding
-- [x] `catalog/product/domain/service/PricingCalculator.java` — Margin calculation (totalCost base, AC2-compliant)
-- [x] `catalog/product/domain/service/MarginCalculation.java` — Record: totalCost, grossMarginXaf, marginPercentage, isLoss
-- [x] `catalog/product/domain/service/MarginThreshold.java` — Enum: LOSS/LOW/MODERATE/PROFITABLE with color
-- [x] `catalog/product/application/usecase/GetProductPricingUseCase.java` — Pricing query use case
-- [x] `catalog/product/application/usecase/CreateProductUseCase.java` — Updated: accepts transportCost
-- [x] `catalog/product/application/usecase/UpdateProductUseCase.java` — Updated: accepts transportCost
-- [x] `catalog/product/adapter/in/web/ProductController.java` — Updated: transportCost + GET /pricing endpoint
-- [x] `catalog/product/adapter/in/web/dto/CreateProductRequestDto.java` — Added transportCost field
-- [x] `catalog/product/adapter/in/web/dto/UpdateProductRequestDto.java` — Added transportCost field
-- [x] `catalog/product/adapter/in/web/dto/ProductResponseDto.java` — Added margin fields
-- [x] `catalog/product/adapter/out/persistence/ProductRepositoryAdapter.java` — Updated: transportCost mapping
-- [x] `shared/infrastructure/persistence/entity/ProductJpaEntity.java` — Added transport_cost column
-- [x] `shared/infrastructure/persistence/TenantSchemaProvisioner.java` — Added transport_cost DDL
-- [x] `catalog/product/domain/event/SalePriceOverriddenEvent.java` — New audit event (Epic 4 placeholder)
-- [x] `shared/infrastructure/web/AuditEventListener.java` — Added SalePriceOverriddenEvent handler
+**Backend Files (TDD Required):**
+- [ ] `catalog/product/domain/entity/Product.java` — Add transportCost field
+- [ ] `shared/domain/valueobject/Money.java` — New XAF currency value object
+- [ ] `catalog/product/domain/service/PricingCalculator.java` — Margin calculation service  
+- [ ] `catalog/product/application/usecase/GetProductPricingUseCase.java` — Pricing query use case
+- [ ] `catalog/product/adapter/in/web/ProductController.java` — Update pricing endpoints
+- [ ] `shared/infrastructure/persistence/schema/TenantSchemaProvisioner.java` — Add transport_cost column
+- [ ] Test files for ALL above classes (write BEFORE implementation)
 
-**Backend — Tests:**
-- [x] `shared/domain/model/MoneyTest.java` — Updated: multiply(double) tests
-- [x] `catalog/product/domain/service/PricingCalculatorTest.java` — Full TDD suite (AC2-compliant formula)
-- [x] `catalog/product/domain/service/MarginThresholdTest.java` — Threshold boundary tests
-- [x] `catalog/product/application/usecase/GetProductPricingUseCaseTest.java` — Use case tests
-- [x] `catalog/product/application/usecase/UpdateProductUseCaseTest.java` — Updated with pricing
-- [x] `catalog/product/application/usecase/ArchiveProductUseCaseTest.java` — No-regression update
-- [x] `catalog/product/adapter/in/web/ProductControllerTest.java` — Updated with pricing endpoints
-- [x] `catalog/product/adapter/out/persistence/ProductRepositoryAdapterTest.java` — transportCost schema test
-- [x] `catalog/product/domain/entity/ProductTest.java` — transportCost validation tests
-- [x] `catalog/product/domain/event/ProductAuditEventTest.java` — Audit event tests
-- [x] `test/resources/product-schema.sql` — Added transport_cost column
+**Frontend Files (TDD Required):**
+- [ ] `lib/domain/product/entity/product.dart` — Add transportCost field
+- [ ] `lib/core/storage/products_table.dart` — Add transportCost column + migration
+- [ ] `lib/presentation/product/widgets/pricing_calculator_widget.dart` — Real-time calculation UI
+- [ ] `lib/application/product/notifier/pricing_notifier.dart` — State management for pricing
+- [ ] `lib/presentation/product/pages/create_product_page.dart` — Update pricing section
+- [ ] `lib/presentation/product/pages/edit_product_page.dart` — Update pricing section  
+- [ ] Test files for ALL above classes (write BEFORE implementation)
 
-**Frontend — Main:**
-- [x] `lib/features/catalog/domain/model/product_model.dart` — Added transportCost field (Freezed)
-- [x] `lib/features/catalog/domain/model/product_response_dto.dart` — Added transportCost + margin fields
-- [x] `lib/features/catalog/domain/repository/product_repository.dart` — Updated port contract
-- [x] `lib/features/catalog/data/repository/product_repository_impl.dart` — Updated implementation
-- [x] `lib/features/catalog/data/datasource/local_product_datasource.dart` — Updated: transportCost
-- [x] `lib/features/catalog/domain/usecase/create_product_usecase.dart` — Added transportCost param
-- [x] `lib/features/catalog/domain/usecase/update_product_usecase.dart` — Added transportCost param
-- [x] `lib/features/catalog/presentation/provider/product_provider.dart` — Updated ProductActions
-- [x] `lib/features/catalog/presentation/page/product_form_page.dart` — Added _transportCostController + PricingCalculatorWidget
-- [x] `lib/features/catalog/presentation/widget/pricing_calculator_widget.dart` — NEW: real-time margin widget (AC2-compliant formula + loss warning banner)
-- [x] `lib/core/storage/products_table.dart` — Drift schema: added transportCost column + v4 migration
-- [x] `lib/core/storage/app_database.dart` — schemaVersion bumped to 4
-
-**Frontend — Tests:**
-- [x] `test/core/storage/app_database_test.dart` — schemaVersion v4 test
+**Audit Integration:**
+- [ ] `shared/domain/event/SalePriceOverriddenEvent.java` — New audit event (for future POS)
+- [ ] `shared/infrastructure/audit/AuditEventListener.java` — Handle price override events
