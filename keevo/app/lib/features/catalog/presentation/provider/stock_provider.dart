@@ -72,7 +72,11 @@ final setThresholdUseCaseProvider = Provider<SetThresholdUseCase>((ref) {
 class StockState {
   final List<StockLevelModel> levels;
   final List<StockMovementModel> movements;
+  /// True while fetching stock levels, recording entry/adjust/threshold.
   final bool isLoading;
+  /// True while fetching movement history — independent of [isLoading]
+  /// so the history page spinner is not affected by level load races.
+  final bool isLoadingHistory;
   final String? error;
   final bool hasMoreHistory;
 
@@ -80,6 +84,7 @@ class StockState {
     this.levels = const [],
     this.movements = const [],
     this.isLoading = false,
+    this.isLoadingHistory = false,
     this.error,
     this.hasMoreHistory = true,
   });
@@ -88,6 +93,7 @@ class StockState {
     List<StockLevelModel>? levels,
     List<StockMovementModel>? movements,
     bool? isLoading,
+    bool? isLoadingHistory,
     String? error,
     bool? hasMoreHistory,
   }) =>
@@ -95,6 +101,7 @@ class StockState {
         levels: levels ?? this.levels,
         movements: movements ?? this.movements,
         isLoading: isLoading ?? this.isLoading,
+        isLoadingHistory: isLoadingHistory ?? this.isLoadingHistory,
         error: error,
         hasMoreHistory: hasMoreHistory ?? this.hasMoreHistory,
       );
@@ -131,6 +138,9 @@ class StockNotifier extends _$StockNotifier {
   }
 
   /// Loads or refreshes movement history.
+  ///
+  /// Uses [isLoadingHistory] — independent from [isLoading] (levels flag) —
+  /// so concurrent level loading does not reset the history spinner.
   Future<void> loadHistory({
     String? storeId,
     String? movementType,
@@ -138,7 +148,7 @@ class StockNotifier extends _$StockNotifier {
     DateTime? to,
     int page = 0,
   }) async {
-    state = state.copyWith(isLoading: true, error: null);
+    state = state.copyWith(isLoadingHistory: true, error: null);
     try {
       final movements = await ref
           .read(getStockHistoryUseCaseProvider)
@@ -151,11 +161,11 @@ class StockNotifier extends _$StockNotifier {
       final hasMore = movements.length == 20;
       state = state.copyWith(
         movements: page == 0 ? movements : [...state.movements, ...movements],
-        isLoading: false,
+        isLoadingHistory: false,
         hasMoreHistory: hasMore,
       );
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(isLoadingHistory: false, error: e.toString());
     }
   }
 

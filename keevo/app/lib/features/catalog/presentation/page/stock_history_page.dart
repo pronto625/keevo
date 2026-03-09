@@ -74,7 +74,7 @@ class _StockHistoryPageState extends ConsumerState<StockHistoryPage> {
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 100) {
       final state = ref.read(stockNotifierProvider(widget.productId));
-      if (!state.isLoading && state.hasMoreHistory) {
+      if (!state.isLoadingHistory && state.hasMoreHistory) {
         _page++;
         ref
             .read(stockNotifierProvider(widget.productId).notifier)
@@ -167,7 +167,7 @@ class _StockHistoryPageState extends ConsumerState<StockHistoryPage> {
       ),
       body: RefreshIndicator(
         onRefresh: () async => _loadHistory(reset: true),
-        child: stockState.movements.isEmpty && stockState.isLoading
+        child: stockState.movements.isEmpty && stockState.isLoadingHistory
             ? const Center(child: CircularProgressIndicator())
             : stockState.movements.isEmpty
                 ? const Center(
