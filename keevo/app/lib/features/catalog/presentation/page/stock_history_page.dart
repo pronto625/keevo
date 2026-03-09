@@ -47,7 +47,11 @@ class _StockHistoryPageState extends ConsumerState<StockHistoryPage> {
   @override
   void initState() {
     super.initState();
-    _loadHistory();
+    // Use microtask to defer state mutation until after the first build.
+    // Calling loadHistory() directly from initState() triggers
+    // state.copyWith() while the widget tree is building, which
+    // Riverpod forbids ("Tried to modify a provider while building").
+    Future.microtask(_loadHistory);
     _scrollController.addListener(_onScroll);
   }
 
