@@ -53,6 +53,8 @@ public class GlobalExceptionHandler {
             Map.entry("AUDIT_IMMUTABLE",           "Les entrées du journal d'audit ne peuvent pas être modifiées"),
             Map.entry("INSUFFICIENT_STOCK",        "Stock insuffisant pour cette opération"),
             Map.entry("STOCK_NOT_FOUND",           "Niveau de stock introuvable"),
+            Map.entry("CLIENT_NOT_FOUND",          "Client introuvable"),
+            Map.entry("SUPPLIER_NOT_FOUND",        "Fournisseur introuvable"),
             Map.entry("VALIDATION_ERROR",          "Données invalides"),
             Map.entry("INTERNAL_ERROR",            "Une erreur inattendue s'est produite")
     );
@@ -104,6 +106,7 @@ public class GlobalExceptionHandler {
         return switch (domainCode) {
             case "USER_NOT_FOUND", "TENANT_NOT_FOUND",
                  "PRODUCT_NOT_FOUND", "CATEGORY_NOT_FOUND",
+                 "CLIENT_NOT_FOUND", "SUPPLIER_NOT_FOUND",
                  "STOCK_NOT_FOUND", "STORE_NOT_FOUND",
                  "MEMBERSHIP_NOT_FOUND",
                  "NOT_FOUND" -> HttpStatus.NOT_FOUND;

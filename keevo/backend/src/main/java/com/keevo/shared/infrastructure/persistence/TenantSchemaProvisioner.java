@@ -202,6 +202,74 @@ public class TenantSchemaProvisioner {
     static final String DDL_STOCK_MOVEMENTS_IDX_STORE =
             "CREATE INDEX IF NOT EXISTS idx_stock_movements_store ON stock_movements(store_id, occurred_at DESC)";
 
+    // ── Clients (Story 2.5) ────────────────────────────────────────────────────
+
+    static final String DDL_CLIENTS = """
+            CREATE TABLE IF NOT EXISTS clients (
+                id         UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+                name       VARCHAR(200) NOT NULL,
+                phone      VARCHAR(30)  NOT NULL,
+                email      VARCHAR(255),
+                notes      TEXT,
+                archived   BOOLEAN      NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+            )""";
+
+    static final String DDL_CLIENTS_IDX_NAME =
+            "CREATE INDEX IF NOT EXISTS idx_clients_name ON clients(name)";
+
+    static final String DDL_CLIENTS_IDX_ARCHIVED =
+            "CREATE INDEX IF NOT EXISTS idx_clients_archived ON clients(archived)";
+
+    // ── Suppliers (Story 2.5) ──────────────────────────────────────────────────
+
+    static final String DDL_SUPPLIERS = """
+            CREATE TABLE IF NOT EXISTS suppliers (
+                id         UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+                name       VARCHAR(200) NOT NULL,
+                phone      VARCHAR(30)  NOT NULL,
+                email      VARCHAR(255),
+                archived   BOOLEAN      NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+            )""";
+
+    static final String DDL_SUPPLIERS_IDX_NAME =
+            "CREATE INDEX IF NOT EXISTS idx_suppliers_name ON suppliers(name)";
+
+    // ── Product-Suppliers join (Story 2.5) ─────────────────────────────────────
+
+    static final String DDL_PRODUCT_SUPPLIERS = """
+            CREATE TABLE IF NOT EXISTS product_suppliers (
+                product_id  UUID NOT NULL REFERENCES products(id),
+                supplier_id UUID NOT NULL REFERENCES suppliers(id),
+                PRIMARY KEY (product_id, supplier_id)
+            )""";
+
+    static final String DDL_PRODUCT_SUPPLIERS_IDX_SUPPLIER =
+            "CREATE INDEX IF NOT EXISTS idx_product_suppliers_supplier ON product_suppliers(supplier_id)";
+
+    // ── Sales (Story 2.5) — created here so client_id FK can reference clients ─
+
+    static final String DDL_SALES = """
+            CREATE TABLE IF NOT EXISTS sales (
+                id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                store_id     UUID        NOT NULL,
+                employee_id  UUID        NOT NULL,
+                client_id    UUID        REFERENCES clients(id),
+                total_amount INTEGER     NOT NULL DEFAULT 0,
+                payment_mode VARCHAR(30) NOT NULL DEFAULT 'CASH',
+                created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )""";
+
+    /** Migration DDL: adds client_id to existing sales tables (idempotent — Story 2.5) */
+    static final String DDL_SALES_MIGRATE_CLIENT_ID =
+            "ALTER TABLE sales ADD COLUMN IF NOT EXISTS client_id UUID REFERENCES clients(id)";
+
+    static final String DDL_SALES_IDX_CLIENT =
+            "CREATE INDEX IF NOT EXISTS idx_sales_client_id ON sales(client_id)";
+
     // ── Seed data ─────────────────────────────────────────────────────────────
 
     private static final String SEED_ROLES = """
@@ -311,6 +379,17 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_STOCK_MOVEMENTS);
             stmt.execute(DDL_STOCK_MOVEMENTS_IDX_PRODUCT);
             stmt.execute(DDL_STOCK_MOVEMENTS_IDX_STORE);
+            // Story 2.5 — contact tables (clients before sales for FK constraint)
+            stmt.execute(DDL_CLIENTS);
+            stmt.execute(DDL_CLIENTS_IDX_NAME);
+            stmt.execute(DDL_CLIENTS_IDX_ARCHIVED);
+            stmt.execute(DDL_SUPPLIERS);
+            stmt.execute(DDL_SUPPLIERS_IDX_NAME);
+            stmt.execute(DDL_PRODUCT_SUPPLIERS);
+            stmt.execute(DDL_PRODUCT_SUPPLIERS_IDX_SUPPLIER);
+            stmt.execute(DDL_SALES);
+            stmt.execute(DDL_SALES_MIGRATE_CLIENT_ID); // idempotent: adds client_id if missing
+            stmt.execute(DDL_SALES_IDX_CLIENT);
             stmt.execute("SET search_path TO public");
         }
     }

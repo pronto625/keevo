@@ -5,6 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.identity.auth.domain.model.UserAuthenticatedEvent;
 import com.keevo.identity.auth.domain.model.UserRegisteredEvent;
 import com.keevo.identity.onboarding.domain.model.OnboardingCompletedEvent;
+import com.keevo.catalog.contact.domain.event.ClientArchivedEvent;
+import com.keevo.catalog.contact.domain.event.ClientCreatedEvent;
+import com.keevo.catalog.contact.domain.event.SupplierArchivedEvent;
+import com.keevo.catalog.contact.domain.event.SupplierCreatedEvent;
 import com.keevo.catalog.product.domain.event.ProductCreatedEvent;
 import com.keevo.catalog.product.domain.event.ProductUpdatedEvent;
 import com.keevo.catalog.product.domain.event.ProductArchivedEvent;
@@ -302,6 +306,88 @@ public class AuditEventListener {
         log.warn("AUDIT: stock_threshold_breached productId={} product={} qty={} threshold={} tenantId={}",
             event.productId(), event.productName(), event.currentQuantity(),
             event.threshold(), event.tenantId());
+    }
+
+    // ── Contact Events (Story 2.5) ────────────────────────────────────────────
+
+    /**
+     * Handle client created event.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management.
+     */
+    @EventListener
+    public void on(ClientCreatedEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "CLIENT_CREATED",
+                "Client",
+                event.clientId(),
+                null,
+                toJson(Map.of("name", event.name()))
+        );
+        log.info("AUDIT: client_created clientId={} tenantId={} actorId={}",
+                event.clientId(), event.tenantId(), event.actorId());
+    }
+
+    /**
+     * Handle client archived event.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management.
+     */
+    @EventListener
+    public void on(ClientArchivedEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "CLIENT_ARCHIVED",
+                "Client",
+                event.clientId(),
+                null,
+                toJson(Map.of("name", event.name(), "archived", true))
+        );
+        log.info("AUDIT: client_archived clientId={} tenantId={} actorId={}",
+                event.clientId(), event.tenantId(), event.actorId());
+    }
+
+    /**
+     * Handle supplier created event.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management.
+     */
+    @EventListener
+    public void on(SupplierCreatedEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "SUPPLIER_CREATED",
+                "Supplier",
+                event.supplierId(),
+                null,
+                toJson(Map.of("name", event.name()))
+        );
+        log.info("AUDIT: supplier_created supplierId={} tenantId={} actorId={}",
+                event.supplierId(), event.tenantId(), event.actorId());
+    }
+
+    /**
+     * Handle supplier archived event.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management.
+     */
+    @EventListener
+    public void on(SupplierArchivedEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "SUPPLIER_ARCHIVED",
+                "Supplier",
+                event.supplierId(),
+                null,
+                toJson(Map.of("name", event.name(), "archived", true))
+        );
+        log.info("AUDIT: supplier_archived supplierId={} tenantId={} actorId={}",
+                event.supplierId(), event.tenantId(), event.actorId());
     }
 
     // ── Template Method helper ────────────────────────────────────────────────

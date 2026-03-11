@@ -15,6 +15,10 @@ class Sales extends Table {
   /// Payment mode: 'CASH' | 'MOBILE_MONEY'
   TextColumn get paymentMode => text()();
 
+  /// Optional link to a client — nullable (walk-in sales have no client).
+  /// Added in Story 2.5 — Gestion Clients & Fournisseurs.
+  TextColumn get clientId => text().nullable()();
+
   BoolColumn get synced => boolean().withDefault(const Constant(false))();
   DateTimeColumn get syncedAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime()();

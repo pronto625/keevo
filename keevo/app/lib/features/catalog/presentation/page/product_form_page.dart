@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../contact/domain/model/supplier_model.dart';
+import '../../../contact/presentation/provider/contact_provider.dart';
 import '../../domain/exception/product_exception.dart';
 import '../../domain/model/product_model.dart';
 import '../provider/category_provider.dart';
@@ -608,6 +610,18 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
                               ),
                               const SizedBox(height: 24),
                             ],
+
+                          // Supplier section — only visible when editing an existing product
+                          if (widget.isEditing) ...[
+                            _SectionHeader(
+                              icon: Icons.local_shipping_rounded,
+                              title: 'Fournisseur',
+                              color: Colors.orange,
+                            ),
+                            const SizedBox(height: 12),
+                            _SupplierTile(productId: widget.product!.id),
+                            const SizedBox(height: 24),
+                          ],
 
                           // Photo section
                           _PhotoSection(
@@ -1227,6 +1241,164 @@ class UpperCaseTextFormatter extends TextInputFormatter {
     return TextEditingValue(
       text: newValue.text.toUpperCase(),
       selection: newValue.selection,
+    );
+  }
+}
+
+/// Displays the supplier linked to a product (edit mode only).
+///
+/// Uses [productSupplierProvider] to fetch the supplier via
+/// GET /api/v1/products/{productId}/supplier. Shows a tap-to-navigate card
+/// when a supplier is found, or a neutral chip when none is linked.
+class _SupplierTile extends ConsumerWidget {
+  final String productId;
+  const _SupplierTile({required this.productId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final supplierAsync = ref.watch(productSupplierProvider(productId));
+    final theme = Theme.of(context);
+
+    return supplierAsync.when(
+      loading: () => Container(
+        height: 72,
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: theme.colorScheme.outline.withOpacity(0.2)),
+        ),
+        child: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (_, __) => Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.errorContainer.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: theme.colorScheme.error.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.error_outline_rounded, color: theme.colorScheme.error),
+            const SizedBox(width: 12),
+            Text(
+              'Impossible de charger le fournisseur',
+              style: TextStyle(color: theme.colorScheme.error),
+            ),
+          ],
+        ),
+      ),
+      data: (supplier) => supplier == null
+          ? _NoSupplierCard(theme: theme)
+          : _SupplierCard(supplier: supplier, theme: theme),
+    );
+  }
+}
+
+class _NoSupplierCard extends StatelessWidget {
+  final ThemeData theme;
+  const _NoSupplierCard({required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.local_shipping_outlined,
+              color: Colors.orange,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            'Aucun fournisseur lié',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SupplierCard extends StatelessWidget {
+  final SupplierModel supplier;
+  final ThemeData theme;
+  const _SupplierCard({required this.supplier, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => context.push('/suppliers/${supplier.id}', extra: supplier),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.orange.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.orange.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.orange.shade400, Colors.orange.shade700],
+                ),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.local_shipping_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    supplier.name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (supplier.phone.isNotEmpty)
+                    Text(
+                      supplier.phone,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 16,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

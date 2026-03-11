@@ -39,6 +39,8 @@ public enum ErrorCode {
     // ── Catalog ───────────────────────────────────────────────────
     PRODUCT_NOT_FOUND,
     CATEGORY_NOT_FOUND,
+    CLIENT_NOT_FOUND,
+    SUPPLIER_NOT_FOUND,
 
     // ── Inventory ─────────────────────────────────────────────────
     INSUFFICIENT_STOCK,

@@ -102,7 +102,7 @@ class _PosPlaceholderPageState extends ConsumerState<PosPlaceholderPage> {
               const SizedBox(height: 32),
               FilledButton.icon(
                 key: const Key('addFirstProductCta'),
-                onPressed: () => context.push('/products'),
+                onPressed: () => context.go('/products'),
                 icon: const Icon(Icons.add),
                 label: const Text('Ajouter votre premier produit'),
               ),

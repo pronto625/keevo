@@ -13,6 +13,12 @@ import '../../features/auth/presentation/page/tenant_picker_page.dart';
 import '../../features/catalog/domain/model/product_model.dart';
 import '../../features/catalog/presentation/page/catalog_page.dart';
 import '../../features/catalog/presentation/page/product_form_page.dart';
+import '../../features/contact/domain/model/client_model.dart';
+import '../../features/contact/domain/model/supplier_model.dart';
+import '../../features/contact/presentation/page/client_form_page.dart';
+import '../../features/contact/presentation/page/client_list_page.dart';
+import '../../features/contact/presentation/page/supplier_form_page.dart';
+import '../../features/contact/presentation/page/supplier_list_page.dart';
 import '../../features/debug/presentation/page/category_debug_page.dart';
 import '../../features/onboarding/domain/model/sector_type.dart';
 import '../../features/onboarding/presentation/page/onboarding_page.dart';
@@ -22,6 +28,7 @@ import '../../features/onboarding/presentation/page/terms_page.dart';
 import '../../features/pos/presentation/page/pos_placeholder_page.dart';
 import '../../features/settings/presentation/page/subscription_page.dart';
 import '../di/providers.dart';
+import '../scaffold/main_shell.dart';
 import '../storage/app_constants.dart';
 
 /// Returns true only if [token] is a structurally valid JWT **and** its `exp`
@@ -218,23 +225,40 @@ final GoRouter appRouter = GoRouter(
       },
     ),
 
-    // ── POS ─────────────────────────────────────────────────
-    // AC5: fade transition — no lateral slide when landing from onboarding
-    GoRoute(
-      path: '/pos',
-      pageBuilder: (_, state) => CustomTransitionPage(
-        key: state.pageKey,
-        child: const PosPlaceholderPage(),
-        transitionsBuilder: (_, animation, __, child) =>
-            FadeTransition(opacity: animation, child: child),
-      ),
+    // ── Main shell — persistent BottomNavigationBar ─────────────────────────
+    // Wraps Caisse / Catalogue / Clients / Fournisseurs with a shared nav bar.
+    // Sub-routes (form pages) are declared outside this shell so they push
+    // as full-screen pages without the nav bar.
+    ShellRoute(
+      builder: (context, state, child) => MainShell(child: child),
+      routes: [
+        // ── Caisse (POS) ───────────────────────────────────────────────────
+        GoRoute(
+          path: '/pos',
+          builder: (_, __) => const PosPlaceholderPage(),
+        ),
+
+        // ── Catalogue ──────────────────────────────────────────────────────
+        GoRoute(
+          path: '/products',
+          builder: (_, __) => const CatalogPage(),
+        ),
+
+        // ── Clients ────────────────────────────────────────────────────────
+        GoRoute(
+          path: '/clients',
+          builder: (_, __) => const ClientListPage(),
+        ),
+
+        // ── Fournisseurs ───────────────────────────────────────────────────
+        GoRoute(
+          path: '/suppliers',
+          builder: (_, __) => const SupplierListPage(),
+        ),
+      ],
     ),
 
-    // ── Products / Catalogue ─────────────────────────────────────────────
-    GoRoute(
-      path: '/products',
-      builder: (_, __) => const CatalogPage(),
-    ),
+    // ── Products sub-routes (full-screen, no nav bar) ─────────────────────
     GoRoute(
       path: '/products/new',
       builder: (_, __) => const ProductFormPage(),
@@ -245,6 +269,34 @@ final GoRouter appRouter = GoRouter(
         final product = state.extra;
         if (product is! ProductModel) return const CatalogPage();
         return ProductFormPage(product: product);
+      },
+    ),
+
+    // ── Clients sub-routes (full-screen, no nav bar) ─────────────────────
+    GoRoute(
+      path: '/clients/new',
+      builder: (_, __) => const ClientFormPage(),
+    ),
+    GoRoute(
+      path: '/clients/:id',
+      builder: (_, state) {
+        final client = state.extra;
+        if (client is! ClientModel) return const ClientListPage();
+        return ClientFormPage(existing: client);
+      },
+    ),
+
+    // ── Suppliers sub-routes (full-screen, no nav bar) ────────────────────
+    GoRoute(
+      path: '/suppliers/new',
+      builder: (_, __) => const SupplierFormPage(),
+    ),
+    GoRoute(
+      path: '/suppliers/:id',
+      builder: (_, state) {
+        final supplier = state.extra;
+        if (supplier is! SupplierModel) return const SupplierListPage();
+        return SupplierFormPage(supplier: supplier);
       },
     ),
 

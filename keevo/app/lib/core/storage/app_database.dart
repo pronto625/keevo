@@ -7,12 +7,15 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'categories_table.dart';
+import 'clients_table.dart';
+import 'product_suppliers_table.dart';
 import 'products_table.dart';
 import 'sale_items_table.dart';
 import 'sales_table.dart';
 import 'stock_levels_table.dart';
 import 'stock_movements_table.dart';
 import 'stores_table.dart';
+import 'suppliers_table.dart';
 import 'sync_queue_table.dart';
 import 'users_table.dart';
 
@@ -26,6 +29,8 @@ part 'app_database.g.dart';
 /// Schema version 4: products table extended with transportCost column (Story 2.2).
 /// Schema version 5: stock_movements extended with variantId, quantityBefore,
 /// quantityAfter; stock_levels extended with variantId, minimumThreshold (Story 2.3).
+/// Schema version 6: clients, suppliers, product_suppliers tables added;
+/// sales extended with clientId column (Story 2.5).
 @DriftDatabase(tables: [
   SyncQueue,
   Products,
@@ -36,6 +41,9 @@ part 'app_database.g.dart';
   Stores,
   Users,
   Categories,
+  Clients,
+  Suppliers,
+  ProductSuppliers,
 ])
 class AppDatabase extends _$AppDatabase {
   /// Production constructor — uses SQLCipher encrypted file database.
@@ -48,7 +56,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -86,6 +94,14 @@ class AppDatabase extends _$AppDatabase {
         // Story 2.3 — stock levels: add variantId, minimumThreshold.
         await migrator.addColumn(stockLevels, stockLevels.variantId);
         await migrator.addColumn(stockLevels, stockLevels.minimumThreshold);
+      }
+      if (from < 6) {
+        // Story 2.5 — client & supplier contact book.
+        await migrator.createTable(clients);
+        await migrator.createTable(suppliers);
+        await migrator.createTable(productSuppliers);
+        // Story 2.5 — link sales to clients (nullable).
+        await migrator.addColumn(sales, sales.clientId);
       }
     },
   );

@@ -1,5 +1,7 @@
 package com.keevo.catalog.product.adapter.in.web;
 
+import com.keevo.catalog.contact.adapter.in.web.dto.SupplierResponseDto;
+import com.keevo.catalog.contact.application.usecase.GetSupplierByProductUseCase;
 import com.keevo.catalog.product.adapter.in.web.dto.CreateProductRequestDto;
 import com.keevo.catalog.product.adapter.in.web.dto.UpdateProductRequestDto;
 import com.keevo.catalog.product.adapter.in.web.dto.ProductResponseDto;
@@ -36,17 +38,20 @@ public class ProductController {
     private final ArchiveProductUseCase archiveProductUseCase;
     private final ProductRepository productRepository;
     private final GetProductPricingUseCase getProductPricingUseCase;
+    private final GetSupplierByProductUseCase getSupplierByProductUseCase;
 
     public ProductController(CreateProductUseCase createProductUseCase,
                            UpdateProductUseCase updateProductUseCase,
                            ArchiveProductUseCase archiveProductUseCase,
                            ProductRepository productRepository,
-                           GetProductPricingUseCase getProductPricingUseCase) {
+                           GetProductPricingUseCase getProductPricingUseCase,
+                           GetSupplierByProductUseCase getSupplierByProductUseCase) {
         this.createProductUseCase = createProductUseCase;
         this.updateProductUseCase = updateProductUseCase;
         this.archiveProductUseCase = archiveProductUseCase;
         this.productRepository = productRepository;
         this.getProductPricingUseCase = getProductPricingUseCase;
+        this.getSupplierByProductUseCase = getSupplierByProductUseCase;
     }
 
     /**
@@ -155,6 +160,25 @@ public class ProductController {
                 .map(product -> ResponseEntity.ok(ApiResponseWrapper.ok(ProductResponseDto.fromDomain(product))))
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(ApiResponseWrapper.error("Produit introuvable", "NOT_FOUND", "PRODUCT_NOT_FOUND", null)));
+    }
+
+    /**
+     * Get supplier linked to a product (AC5 — Story 2.5)
+     * GET /api/v1/products/{productId}/supplier
+     *
+     * <p>Returns the supplier that supplies this product (from {@code product_suppliers}).
+     * Returns 404 if no supplier is linked.
+     */
+    @GetMapping("/{productId}/supplier")
+    public ResponseEntity<ApiResponseWrapper<SupplierResponseDto>> getProductSupplier(
+            @PathVariable UUID productId) {
+        return getSupplierByProductUseCase.execute(productId)
+                .map(supplier -> ResponseEntity.ok(
+                        ApiResponseWrapper.ok(SupplierResponseDto.fromDomain(supplier))))
+                .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(ApiResponseWrapper.error(
+                                "Aucun fournisseur lié à ce produit",
+                                "NOT_FOUND", "SUPPLIER_NOT_FOUND", null)));
     }
 
     /**
