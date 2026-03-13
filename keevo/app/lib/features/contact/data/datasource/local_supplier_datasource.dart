@@ -16,7 +16,14 @@ class LocalSupplierDataSource {
               : s.archived.equals(false))
           ..orderBy([(s) => OrderingTerm.asc(s.name)]))
         .get();
-    return rows.map(_toModel).toList();
+    final allLinks = await _db.select(_db.productSuppliers).get();
+    final linksBySupplier = <String, List<String>>{};
+    for (final l in allLinks) {
+      linksBySupplier.putIfAbsent(l.supplierId, () => []).add(l.productId);
+    }
+    return rows
+        .map((r) => _toModel(r, productIds: linksBySupplier[r.id] ?? []))
+        .toList();
   }
 
   Future<List<SupplierModel>> search(String query) async {
@@ -26,7 +33,14 @@ class LocalSupplierDataSource {
               s.archived.equals(false) & s.name.lower().like(q))
           ..orderBy([(s) => OrderingTerm.asc(s.name)]))
         .get();
-    return rows.map(_toModel).toList();
+    final allLinks = await _db.select(_db.productSuppliers).get();
+    final linksBySupplier = <String, List<String>>{};
+    for (final l in allLinks) {
+      linksBySupplier.putIfAbsent(l.supplierId, () => []).add(l.productId);
+    }
+    return rows
+        .map((r) => _toModel(r, productIds: linksBySupplier[r.id] ?? []))
+        .toList();
   }
 
   Future<SupplierModel?> getById(String id) async {

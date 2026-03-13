@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../provider/product_provider.dart';
+import '../widget/draft_validation_banner.dart';
 import '../widget/product_card.dart';
 
 /// CatalogPage — product catalogue with search and tabs (Active / Archivés).
@@ -134,6 +135,32 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
                                 tooltip: 'Synchroniser',
                               ),
                             ),
+                            const SizedBox(width: 4),
+                            // Menu "..." — CSV import (AC1/AC5)
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: PopupMenuButton<String>(
+                                icon: const Icon(Icons.more_vert, color: Colors.white),
+                                onSelected: (value) {
+                                  if (value == 'import') {
+                                    context.push('/products/import');
+                                  }
+                                },
+                                itemBuilder: (_) => [
+                                  const PopupMenuItem(
+                                    value: 'import',
+                                    child: ListTile(
+                                      leading: Icon(Icons.upload_file),
+                                      title: Text('Importer CSV'),
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -194,6 +221,25 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
                 ),
                 onChanged: _onSearchChanged,
               ),
+            ),
+          ),
+          // DraftValidationBanner — AC10: amber alert for pending drafts (Owner only)
+          SliverToBoxAdapter(
+            child: DraftValidationBanner(
+              onTap: () {
+                // Filter product list to show only DRAFT products.
+                // For now, show a tab switch cue — full filtering in Epic 4.
+                ref.read(productSearchQueryProvider.notifier).state = '';
+                _tabController.animateTo(0);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                        '🔶 Filtrez par "brouillon" pour voir les produits à valider'),
+                    behavior: SnackBarBehavior.floating,
+                    duration: Duration(seconds: 3),
+                  ),
+                );
+              },
             ),
           ),
           // TabBar moderne

@@ -4,6 +4,8 @@ import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
 import com.keevo.catalog.product.domain.event.ProductCreatedEvent;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -46,8 +48,18 @@ public class CreateProductUseCase {
         Integer buyPrice,
         Integer transportCost,
         Integer stockQuantity,
-        UUID actorId  // Added for audit trail
-    ) {}
+        UUID actorId,  // Added for audit trail
+        Integer minimumThreshold  // Story 2.4: CSV import can set initial threshold
+    ) {
+        /** Backward-compatible constructor without minimumThreshold (defaults to 0). */
+        public CreateProductDto(
+                String name, String description, String sku, UUID categoryId,
+                Integer price, Integer buyPrice, Integer transportCost,
+                Integer stockQuantity, UUID actorId) {
+            this(name, description, sku, categoryId, price, buyPrice, transportCost,
+                 stockQuantity, actorId, 0);
+        }
+    }
 
     /**
      * Execute product creation
@@ -59,6 +71,12 @@ public class CreateProductUseCase {
     public Product execute(CreateProductDto dto) {
         // Validate input
         validateInput(dto);
+
+        // Name uniqueness check (AC8 — Story 2.4)
+        if (productRepository.existsByName(dto.name())) {
+            throw new DomainException(ErrorCode.PRODUCT_NAME_ALREADY_EXISTS,
+                    "Un produit avec le nom '" + dto.name() + "' existe déjà dans votre catalogue");
+        }
 
         // Generate or validate SKU
         String sku = dto.sku() != null ? dto.sku() : generateSku();
@@ -78,6 +96,7 @@ public class CreateProductUseCase {
             dto.stockQuantity(),
             false, // archived = false (default)
             ProductStatus.ACTIVE, // status = ACTIVE (default for catalogue products)
+            dto.minimumThreshold() != null ? dto.minimumThreshold() : 0,
             now, // createdAt
             now  // updatedAt
         );

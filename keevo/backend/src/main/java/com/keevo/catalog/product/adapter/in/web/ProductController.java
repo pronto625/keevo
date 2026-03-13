@@ -2,6 +2,7 @@ package com.keevo.catalog.product.adapter.in.web;
 
 import com.keevo.catalog.contact.adapter.in.web.dto.SupplierResponseDto;
 import com.keevo.catalog.contact.application.usecase.GetSupplierByProductUseCase;
+import com.keevo.catalog.contact.application.usecase.GetSupplierProfileUseCase;
 import com.keevo.catalog.product.adapter.in.web.dto.CreateProductRequestDto;
 import com.keevo.catalog.product.adapter.in.web.dto.UpdateProductRequestDto;
 import com.keevo.catalog.product.adapter.in.web.dto.ProductResponseDto;
@@ -39,19 +40,22 @@ public class ProductController {
     private final ProductRepository productRepository;
     private final GetProductPricingUseCase getProductPricingUseCase;
     private final GetSupplierByProductUseCase getSupplierByProductUseCase;
+    private final GetSupplierProfileUseCase getSupplierProfileUseCase;
 
     public ProductController(CreateProductUseCase createProductUseCase,
                            UpdateProductUseCase updateProductUseCase,
                            ArchiveProductUseCase archiveProductUseCase,
                            ProductRepository productRepository,
                            GetProductPricingUseCase getProductPricingUseCase,
-                           GetSupplierByProductUseCase getSupplierByProductUseCase) {
+                           GetSupplierByProductUseCase getSupplierByProductUseCase,
+                           GetSupplierProfileUseCase getSupplierProfileUseCase) {
         this.createProductUseCase = createProductUseCase;
         this.updateProductUseCase = updateProductUseCase;
         this.archiveProductUseCase = archiveProductUseCase;
         this.productRepository = productRepository;
         this.getProductPricingUseCase = getProductPricingUseCase;
         this.getSupplierByProductUseCase = getSupplierByProductUseCase;
+        this.getSupplierProfileUseCase = getSupplierProfileUseCase;
     }
 
     /**
@@ -173,8 +177,11 @@ public class ProductController {
     public ResponseEntity<ApiResponseWrapper<SupplierResponseDto>> getProductSupplier(
             @PathVariable UUID productId) {
         return getSupplierByProductUseCase.execute(productId)
-                .map(supplier -> ResponseEntity.ok(
-                        ApiResponseWrapper.ok(SupplierResponseDto.fromDomain(supplier))))
+                .map(supplier -> {
+                    var profile = getSupplierProfileUseCase.execute(supplier.id());
+                    return ResponseEntity.ok(
+                            ApiResponseWrapper.ok(SupplierResponseDto.fromDomain(supplier, profile.productIds())));
+                })
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(ApiResponseWrapper.error(
                                 "Aucun fournisseur lié à ce produit",

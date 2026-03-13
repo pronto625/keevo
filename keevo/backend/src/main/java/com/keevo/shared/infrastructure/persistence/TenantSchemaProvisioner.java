@@ -131,6 +131,10 @@ public class TenantSchemaProvisioner {
     private static final String DDL_PRODUCTS_IDX_ARCHIVED =
             "CREATE INDEX IF NOT EXISTS idx_products_archived ON products(archived)";
 
+    /** Story 2.4 — case-insensitive unique constraint on product name (safety net at DB level) */
+    static final String DDL_PRODUCTS_UQ_NAME =
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_products_name ON products(lower(name))";
+
     private static final String DDL_TENANT_PREFERENCES = """
             CREATE TABLE IF NOT EXISTS tenant_preferences (
                 id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -270,6 +274,25 @@ public class TenantSchemaProvisioner {
     static final String DDL_SALES_IDX_CLIENT =
             "CREATE INDEX IF NOT EXISTS idx_sales_client_id ON sales(client_id)";
 
+    // ── Draft Notifications (Story 2.4) ──────────────────────────────────────
+
+    static final String DDL_DRAFT_NOTIFICATIONS = """
+            CREATE TABLE IF NOT EXISTS draft_notifications (
+                id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                product_id   UUID        NOT NULL,
+                product_name VARCHAR(255) NOT NULL,
+                actor_id     UUID        NOT NULL,
+                tenant_id    UUID        NOT NULL,
+                acknowledged BOOLEAN     NOT NULL DEFAULT FALSE,
+                created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )""";
+
+    static final String DDL_DRAFT_NOTIFICATIONS_IDX_PRODUCT =
+            "CREATE INDEX IF NOT EXISTS idx_draft_notif_product ON draft_notifications(product_id)";
+
+    static final String DDL_DRAFT_NOTIFICATIONS_IDX_PENDING =
+            "CREATE INDEX IF NOT EXISTS idx_draft_notif_pending ON draft_notifications(acknowledged) WHERE acknowledged = FALSE";
+
     // ── Seed data ─────────────────────────────────────────────────────────────
 
     private static final String SEED_ROLES = """
@@ -369,6 +392,7 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_PRODUCTS_IDX_ARCHIVED);
             stmt.execute(DDL_PRODUCTS_MIGRATE_TRANSPORT_COST); // idempotent: adds transport_cost if missing
             stmt.execute(DDL_PRODUCTS_MIGRATE_MINIMUM_THRESHOLD); // idempotent: adds minimum_threshold if missing
+            stmt.execute(DDL_PRODUCTS_UQ_NAME); // Story 2.4 — case-insensitive unique name index
             stmt.execute(DDL_TENANT_PREFERENCES);
             stmt.execute(DDL_AUDIT_LOG);
             stmt.execute(DDL_AUDIT_LOG_IDX_ENTITY);
@@ -390,6 +414,10 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_SALES);
             stmt.execute(DDL_SALES_MIGRATE_CLIENT_ID); // idempotent: adds client_id if missing
             stmt.execute(DDL_SALES_IDX_CLIENT);
+            // Story 2.4 — draft notifications
+            stmt.execute(DDL_DRAFT_NOTIFICATIONS);
+            stmt.execute(DDL_DRAFT_NOTIFICATIONS_IDX_PRODUCT);
+            stmt.execute(DDL_DRAFT_NOTIFICATIONS_IDX_PENDING);
             stmt.execute("SET search_path TO public");
         }
     }

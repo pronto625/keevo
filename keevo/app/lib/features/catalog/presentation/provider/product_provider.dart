@@ -4,6 +4,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../../core/di/providers.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
 import '../../data/datasource/local_product_datasource.dart';
+import '../../data/datasource/remote_csv_import_datasource.dart';
 import '../../data/datasource/remote_product_datasource.dart';
 import '../../data/repository/product_repository_impl.dart';
 import '../../domain/model/product_model.dart';
@@ -31,11 +32,19 @@ final remoteProductDataSourceProvider = Provider<RemoteProductDataSource>((ref) 
   return RemoteProductDataSource(dio: dio);
 });
 
+/// Remote CSV import datasource — CSV upload, template, draft creation.
+final remoteCsvImportDataSourceProvider =
+    Provider<RemoteCsvImportDataSource>((ref) {
+  final dio = ref.watch(dioProvider);
+  return RemoteCsvImportDataSource(dio: dio);
+});
+
 /// ProductRepository — offline-first concrete implementation.
 final productRepositoryProvider = Provider<ProductRepository>((ref) {
   return ProductRepositoryImpl(
     local: ref.watch(localProductDataSourceProvider),
     remote: ref.watch(remoteProductDataSourceProvider),
+    remoteCsv: ref.watch(remoteCsvImportDataSourceProvider),
   );
 });
 
@@ -77,7 +86,32 @@ Future<List<ProductModel>> productList(ProductListRef ref) async {
   return useCase.execute(query: query.isEmpty ? null : query);
 }
 
+/// Sync-first product list — for pickers shown before the catalog page is visited.
+///
+/// Always pulls from remote before returning local data, ensuring the picker
+/// is populated even if the catalog page has never been opened.
+@riverpod
+Future<List<ProductModel>> productListForPicker(ProductListForPickerRef ref) async {
+  final repo = ref.watch(productRepositoryProvider);
+  await repo.syncFromRemote();
+  final useCase = ref.watch(getProductsUseCaseProvider);
+  return useCase.execute();
+}
+
 /// Archived products list.
+
+/// Pending DRAFT products count — drives AC10 nav badge and banner.
+///
+/// Queries the local Drift DB directly. Re-evaluates when
+/// [productListProvider] is invalidated (e.g., after sync or promotion).
+final pendingDraftsCountProvider = FutureProvider.autoDispose<int>((ref) async {
+  final local = ref.watch(localProductDataSourceProvider);
+  // Re-run this provider when the product list changes.
+  await ref
+      .watch(productListProvider.future)
+      .catchError((_) => <ProductModel>[]);
+  return local.countDrafts();
+});
 @riverpod
 Future<List<ProductModel>> archivedProductList(ArchivedProductListRef ref) async {
   final useCase = ref.watch(getProductsUseCaseProvider);

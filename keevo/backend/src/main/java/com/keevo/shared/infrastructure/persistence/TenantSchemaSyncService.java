@@ -64,13 +64,14 @@ public class TenantSchemaSyncService {
      */
     private static final java.util.Map<String, String> REQUIRED_TENANT_TABLES_DDL =
             java.util.Map.of(
-                    "audit_log",         TenantSchemaProvisioner.DDL_AUDIT_LOG,
-                    "products",          TenantSchemaProvisioner.DDL_PRODUCTS,
-                    "stock_levels",      TenantSchemaProvisioner.DDL_STOCK_LEVELS,
-                    "stock_movements",   TenantSchemaProvisioner.DDL_STOCK_MOVEMENTS,
-                    "clients",           TenantSchemaProvisioner.DDL_CLIENTS,
-                    "suppliers",         TenantSchemaProvisioner.DDL_SUPPLIERS,
-                    "product_suppliers", TenantSchemaProvisioner.DDL_PRODUCT_SUPPLIERS
+                    "audit_log",             TenantSchemaProvisioner.DDL_AUDIT_LOG,
+                    "products",              TenantSchemaProvisioner.DDL_PRODUCTS,
+                    "stock_levels",          TenantSchemaProvisioner.DDL_STOCK_LEVELS,
+                    "stock_movements",       TenantSchemaProvisioner.DDL_STOCK_MOVEMENTS,
+                    "clients",               TenantSchemaProvisioner.DDL_CLIENTS,
+                    "suppliers",             TenantSchemaProvisioner.DDL_SUPPLIERS,
+                    "product_suppliers",     TenantSchemaProvisioner.DDL_PRODUCT_SUPPLIERS,
+                    "draft_notifications",   TenantSchemaProvisioner.DDL_DRAFT_NOTIFICATIONS
             );
 
     /** Valid tenant schema pattern — prevents any SQL injection. */
@@ -153,6 +154,9 @@ public class TenantSchemaSyncService {
                 // Step 3 — Ensure required tenant-only tables (not in public) are present
                 ensureRequiredTenantTables(conn, tenantSchema);
 
+                // Step 4 — Apply idempotent index migrations (Story 2.4: uq_products_name)
+                ensureRequiredIndexes(conn, tenantSchema);
+
                 conn.commit();
                 log.debug("Schema sync complete for '{}'", tenantSchema);
 
@@ -183,6 +187,20 @@ public class TenantSchemaSyncService {
                             tenantSchema, entry.getKey());
                 }
             }
+        }
+    }
+
+    /**
+     * Apply idempotent index migrations that are not auto-managed by column sync.
+     * Story 2.4: uq_products_name (functional unique index on lower(name)).
+     */
+    private void ensureRequiredIndexes(Connection conn, String tenantSchema) throws SQLException {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("SET search_path TO \"" + tenantSchema + "\"");
+            stmt.execute(TenantSchemaProvisioner.DDL_PRODUCTS_UQ_NAME);
+            stmt.execute(TenantSchemaProvisioner.DDL_DRAFT_NOTIFICATIONS_IDX_PRODUCT);
+            stmt.execute(TenantSchemaProvisioner.DDL_DRAFT_NOTIFICATIONS_IDX_PENDING);
+            stmt.execute("SET search_path TO public");
         }
     }
 

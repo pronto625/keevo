@@ -40,8 +40,13 @@ class SupplierRepositoryImpl implements SupplierRepository {
         if (email != null) 'email': email,
         if (productIds.isNotEmpty) 'productIds': productIds,
       });
-      await _local.upsert(remote);
-      return remote;
+      // Merge productIds from caller: remote DTO may omit them if backend
+      // version doesn't return them yet.
+      final merged = remote.productIds.isNotEmpty
+          ? remote
+          : remote.copyWith(productIds: productIds);
+      await _local.upsert(merged);
+      return merged;
     } catch (e) {
       dev.log('SupplierRepository.create: offline — local only: $e');
       final now = DateTime.now();
@@ -87,8 +92,14 @@ class SupplierRepositoryImpl implements SupplierRepository {
         if (email != null) 'email': email,
         if (productIds != null) 'productIds': productIds,
       });
-      await _local.upsert(remote);
-      return remote;
+      // Merge productIds: remote DTO may omit them (backend version mismatch).
+      // Priority: remote (if non-empty) > caller-supplied > existing local.
+      final resolvedIds = remote.productIds.isNotEmpty
+          ? remote.productIds
+          : (productIds ?? existing?.productIds ?? const []);
+      final merged = remote.copyWith(productIds: resolvedIds);
+      await _local.upsert(merged);
+      return merged;
     } catch (e) {
       dev.log('SupplierRepository.update: offline — local only: $e');
       await _local.upsert(updated);

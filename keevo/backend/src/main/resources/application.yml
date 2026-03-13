@@ -35,6 +35,12 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
 
+  # Multipart upload — Story 2.4 CSV import
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 12MB
+
   # Flyway — disabled. Public schema DDL is handled by ddl-auto=update.
   # Tenant schema DDL is handled programmatically by TenantSchemaProvisioner.
   flyway:

@@ -64,8 +64,11 @@ public class SupplierController {
             @RequestParam(defaultValue = "false") boolean includeArchived) {
         var suppliers = getSuppliersUseCase.execute(
                 new GetSuppliersUseCase.GetSuppliersQuery(search, includeArchived));
-        return ResponseEntity.ok(ApiResponseWrapper.ok(
-                suppliers.stream().map(SupplierResponseDto::fromDomain).toList()));
+        var dtos = suppliers.stream()
+                .map(s -> SupplierResponseDto.fromDomain(s,
+                        getSupplierProfileUseCase.execute(s.id()).productIds()))
+                .toList();
+        return ResponseEntity.ok(ApiResponseWrapper.ok(dtos));
     }
 
     /** GET /api/v1/suppliers/{id} */
@@ -92,7 +95,9 @@ public class SupplierController {
         var cmd = new UpdateSupplierUseCase.UpdateSupplierCommand(
                 id, request.name(), request.phone(), request.email(), request.productIds(), actorId);
         var supplier = updateSupplierUseCase.execute(cmd);
-        return ResponseEntity.ok(ApiResponseWrapper.ok(SupplierResponseDto.fromDomain(supplier)));
+        var productIds = getSupplierProfileUseCase.execute(id).productIds();
+        return ResponseEntity.ok(ApiResponseWrapper.ok(
+                SupplierResponseDto.fromDomain(supplier, productIds)));
     }
 
     /** DELETE /api/v1/suppliers/{id} (soft delete) */

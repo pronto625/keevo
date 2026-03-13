@@ -16,17 +16,26 @@ import java.util.Optional;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
+import com.keevo.messaging.notification.domain.model.DraftPendingValidation;
+import com.keevo.messaging.notification.domain.port.out.DraftNotificationRepository;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
+import org.mockito.MockedStatic;
 import org.springframework.context.ApplicationEventPublisher;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
- * Basic TDD Test for UpdateProductUseCase
+ * TDD tests for UpdateProductUseCase — covers basic update + Story 2.4 DRAFT promotion.
  */
 @ExtendWith(MockitoExtension.class)
 class UpdateProductUseCaseTest {
 
     @Mock
     private ProductRepository productRepository;
+    
+    @Mock
+    private DraftNotificationRepository draftNotificationRepository;
     
     @Mock
     private ApplicationEventPublisher eventPublisher;
@@ -38,7 +47,7 @@ class UpdateProductUseCaseTest {
 
     @BeforeEach
     void setUp() {
-        useCase = new UpdateProductUseCase(productRepository, eventPublisher, objectMapper);
+        useCase = new UpdateProductUseCase(productRepository, draftNotificationRepository, eventPublisher, objectMapper);
     }
 
     @Test
@@ -110,5 +119,82 @@ class UpdateProductUseCaseTest {
         assertThrows(IllegalArgumentException.class, () -> {
             useCase.execute(dto);
         });
+    }
+
+    // ── Story 2.4: DRAFT → ACTIVE promotion ──────────────────────────────────
+
+    @Test
+    void shouldPromoteDraftToActiveWhenOwnerUpdatesWithAllRequiredFields() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+
+            var productId = UUID.randomUUID();
+            var categoryId = UUID.randomUUID();
+            var draftProduct = new Product(
+                    productId, "Produit", null, "KEV-DRF001", categoryId,
+                    5000, 0, 0, 0, false, ProductStatus.DRAFT, 0,
+                    Instant.now(), Instant.now());
+
+            var dto = new UpdateProductUseCase.UpdateProductDto(
+                    productId, "Produit", null, "KEV-DRF001", categoryId,
+                    5000, null, null, null, UUID.randomUUID(), "OWNER");
+
+            when(productRepository.findById(productId)).thenReturn(Optional.of(draftProduct));
+            when(productRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+            when(draftNotificationRepository.findByProductId(productId)).thenReturn(Optional.empty());
+
+            var result = useCase.execute(dto);
+
+            assertEquals(ProductStatus.ACTIVE, result.getStatus(),
+                    "DRAFT doit être promu ACTIVE quand l'OWNER soumet tous les champs requis");
+        }
+    }
+
+    @Test
+    void shouldThrowForbiddenWhenEmployeeTriesToPromoteDraft() {
+        var productId = UUID.randomUUID();
+        var draftProduct = new Product(
+                productId, "Produit Brouillon", null, "KEV-EMP001", UUID.randomUUID(),
+                5000, 0, 0, 0, false, ProductStatus.DRAFT, 0,
+                Instant.now(), Instant.now());
+
+        var dto = new UpdateProductUseCase.UpdateProductDto(
+                productId, "Produit Brouillon", null, "KEV-EMP001", UUID.randomUUID(),
+                5000, null, null, null, UUID.randomUUID(), "EMPLOYEE");
+
+        when(productRepository.findById(productId)).thenReturn(Optional.of(draftProduct));
+
+        var ex = assertThrows(DomainException.class, () -> useCase.execute(dto));
+        assertEquals(ErrorCode.FORBIDDEN.name(), ex.getDomainCode());
+    }
+
+    @Test
+    void shouldAcknowledgeDraftNotificationWhenOwnerPromotesDraft() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+
+            var productId = UUID.randomUUID();
+            var categoryId = UUID.randomUUID();
+            var draftProduct = new Product(
+                    productId, "Article", null, "KEV-ACK001", categoryId,
+                    3000, 0, 0, 0, false, ProductStatus.DRAFT, 0,
+                    Instant.now(), Instant.now());
+
+            var actorId = UUID.randomUUID();
+            var dto = new UpdateProductUseCase.UpdateProductDto(
+                    productId, "Article", null, "KEV-ACK001", categoryId,
+                    3000, null, null, null, actorId, "OWNER");
+
+            var pending = DraftPendingValidation.create(productId, "Article", actorId,
+                    UUID.nameUUIDFromBytes("kv_test".getBytes()));
+
+            when(productRepository.findById(productId)).thenReturn(Optional.of(draftProduct));
+            when(productRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+            when(draftNotificationRepository.findByProductId(productId)).thenReturn(Optional.of(pending));
+
+            useCase.execute(dto);
+
+            verify(draftNotificationRepository).saveUpdated(argThat(DraftPendingValidation::isAcknowledged));
+        }
     }
 }

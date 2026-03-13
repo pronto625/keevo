@@ -140,6 +140,13 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- Story 2.4: CSV import -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-csv</artifactId>
+            <version>1.10.0</version>
+        </dependency>
+
     </dependencies>
 
     <build>

@@ -140,15 +140,16 @@ class TenantSchemaSyncServiceTest {
 
         // getTablesInSchema is called 3 times in doSync:
         //   call 1: SELECT tables in 'public'  → empty (no public tables to mirror)
-        //   call 2: SELECT tables in tenant    → contains all 7 required tables (all exist)
-        //   call 3: SELECT tables in tenant (ensureRequiredTenantTables check) → all 7 present
-        // Story 2.3 added stock_levels + stock_movements to REQUIRED_TENANT_TABLES_DDL.
+        //   call 2: SELECT tables in tenant    → contains all 8 required tables (all exist)
+        //   call 3: SELECT tables in tenant (ensureRequiredTenantTables check) → all 8 present
+        // Story 2.3 added stock_levels + stock_movements.
         // Story 2.5 added clients, suppliers, product_suppliers.
+        // Story 2.4 added draft_notifications.
         PreparedStatement tablesStmt2 = mock(PreparedStatement.class);
         PreparedStatement tablesStmt3 = mock(PreparedStatement.class);
         ResultSet tablesRs1 = mock(ResultSet.class); // public schema — empty
-        ResultSet tablesRs2 = mock(ResultSet.class); // tenant schema — has all 7 required tables
-        ResultSet tablesRs3 = mock(ResultSet.class); // tenant schema (3rd check) — all 7 present
+        ResultSet tablesRs2 = mock(ResultSet.class); // tenant schema — has all 8 required tables
+        ResultSet tablesRs3 = mock(ResultSet.class); // tenant schema (3rd check) — all 8 present
 
         when(connection.prepareStatement(contains("information_schema.tables")))
                 .thenReturn(tablesStmt, tablesStmt2, tablesStmt3);
@@ -157,21 +158,34 @@ class TenantSchemaSyncServiceTest {
         when(tablesRs1.next()).thenReturn(false); // public schema has no tables
 
         when(tablesStmt2.executeQuery()).thenReturn(tablesRs2);
-        when(tablesRs2.next()).thenReturn(true, true, true, true, true, true, true, false); // 7 tables
+        when(tablesRs2.next()).thenReturn(true, true, true, true, true, true, true, true, false); // 8 tables
         when(tablesRs2.getString("table_name")).thenReturn(
                 "audit_log", "products", "stock_levels", "stock_movements",
-                "clients", "suppliers", "product_suppliers");
+                "clients", "suppliers", "product_suppliers", "draft_notifications");
 
         when(tablesStmt3.executeQuery()).thenReturn(tablesRs3);
-        when(tablesRs3.next()).thenReturn(true, true, true, true, true, true, true, false); // 7 tables
+        when(tablesRs3.next()).thenReturn(true, true, true, true, true, true, true, true, false); // 8 tables
         when(tablesRs3.getString("table_name")).thenReturn(
                 "audit_log", "products", "stock_levels", "stock_movements",
-                "clients", "suppliers", "product_suppliers");
+                "clients", "suppliers", "product_suppliers", "draft_notifications");
+
+        // ensureRequiredIndexes() always runs (idempotent index DDL) and uses createStatement()
+        when(connection.createStatement()).thenReturn(execStmt);
 
         service.syncIfNeeded("kv_def456");
 
-        // createStatement should NOT have been called (all required tables already exist)
-        verify(connection, never()).createStatement();
+        // createStatement() IS called for ensureRequiredIndexes (index DDL is always applied)
+        verify(connection, atLeastOnce()).createStatement();
+
+        // But no CREATE TABLE DDL should have been executed — all tables already exist
+        org.mockito.ArgumentCaptor<String> sqlCaptor =
+                org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(execStmt, atLeastOnce()).execute(sqlCaptor.capture());
+        boolean createTableExecuted = sqlCaptor.getAllValues().stream()
+                .anyMatch(sql -> sql.toUpperCase().contains("CREATE TABLE"));
+        assertThat(createTableExecuted)
+                .as("No CREATE TABLE DDL should be executed when all tables already exist")
+                .isFalse();
     }
 
     // ── Error handling ────────────────────────────────────────────────────────

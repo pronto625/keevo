@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import '../model/csv_import_result.dart';
 import '../model/product_model.dart';
 
 /// ProductRepository — port (abstract interface) for product CRUD.
@@ -52,4 +55,25 @@ abstract interface class ProductRepository {
 
   /// Pull latest products from backend and merge into local DB.
   Future<void> syncFromRemote();
+
+  /// Upload CSV bytes to backend for bulk import (AC2 — requires connectivity).
+  Future<CsvImportResult> importCsv({
+    required Uint8List csvBytes,
+    required String fileName,
+    required Map<String, String> columnMapping,
+  });
+
+  /// Download the CSV import template from backend (AC5).
+  Future<Uint8List> downloadCsvTemplate();
+
+  /// Create a product with DRAFT status for on-the-fly POS creation (AC6).
+  Future<ProductModel> createDraft({
+    required String name,
+    required int priceVente,
+    required String categoryId,
+    int stockQuantity,
+  });
+
+  /// Count DRAFT products in local DB — drives AC10 nav badge.
+  Future<int> countDrafts();
 }

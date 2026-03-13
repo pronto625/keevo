@@ -40,8 +40,8 @@ public enum ErrorCode {
     PRODUCT_NOT_FOUND,
     CATEGORY_NOT_FOUND,
     CLIENT_NOT_FOUND,
-    SUPPLIER_NOT_FOUND,
-
+    SUPPLIER_NOT_FOUND,    PRODUCT_NAME_ALREADY_EXISTS, // Story 2.4 — name uniqueness (DRAFT or ACTIVE)
+    CSV_PARSE_ERROR,             // Story 2.4 — malformed CSV file (422)
     // ── Inventory ─────────────────────────────────────────────────
     INSUFFICIENT_STOCK,
     STOCK_NOT_FOUND,
@@ -54,6 +54,7 @@ public enum ErrorCode {
     OFFLINE_LIMIT_EXCEEDED,
 
     // ── Subscription / Plan Limits ────────────────────────────────
+    SUBSCRIPTION_NOT_FOUND, // HTTP 404 — no active subscription for tenant (Story 2.4)
     PLAN_LIMIT_EXCEEDED,    // HTTP 403 — store/product/employee limit reached on Free plan
     ACCOUNT_SUSPENDED,      // HTTP 403 — tenant status = SUSPENDED (manual admin lockout)
     RATE_LIMIT_EXCEEDED,    // HTTP 429 — >100 req/min per tenant

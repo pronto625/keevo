@@ -60,6 +60,11 @@ public class ProductRepositoryAdapter implements ProductRepository {
     }
 
     @Override
+    public boolean existsByName(String name) {
+        return springRepository.existsByNameIgnoreCase(name == null ? "" : name.trim());
+    }
+
+    @Override
     public void archive(UUID id) {
         springRepository.findById(id).ifPresent(product -> {
             product.setArchived(true);

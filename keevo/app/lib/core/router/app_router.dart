@@ -12,6 +12,7 @@ import '../../features/auth/presentation/page/register_page.dart';
 import '../../features/auth/presentation/page/tenant_picker_page.dart';
 import '../../features/catalog/domain/model/product_model.dart';
 import '../../features/catalog/presentation/page/catalog_page.dart';
+import '../../features/catalog/presentation/page/csv_import_page.dart';
 import '../../features/catalog/presentation/page/product_form_page.dart';
 import '../../features/contact/domain/model/client_model.dart';
 import '../../features/contact/domain/model/supplier_model.dart';
@@ -259,6 +260,10 @@ final GoRouter appRouter = GoRouter(
     ),
 
     // ── Products sub-routes (full-screen, no nav bar) ─────────────────────
+    GoRoute(
+      path: '/products/import',
+      builder: (_, __) => const CsvImportPage(),
+    ),
     GoRoute(
       path: '/products/new',
       builder: (_, __) => const ProductFormPage(),

@@ -285,6 +285,7 @@ class _SupplierFormPageState extends ConsumerState<SupplierFormPage>
                           const SizedBox(height: 12),
                           _ProductSelector(
                             selectedIds: _selectedProductIds,
+                            currentSupplierId: widget.supplier?.id,
                             onChanged: (ids) => setState(() => _selectedProductIds = ids),
                           ),
 
@@ -498,15 +499,21 @@ class _SaveButton extends StatelessWidget {
 /// Shows a summary of selected products and opens a bottom sheet to pick more.
 class _ProductSelector extends ConsumerWidget {
   final List<String> selectedIds;
+  final String? currentSupplierId;
   final ValueChanged<List<String>> onChanged;
 
-  const _ProductSelector({required this.selectedIds, required this.onChanged});
+  const _ProductSelector({
+    required this.selectedIds,
+    required this.onChanged,
+    this.currentSupplierId,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final primary = theme.colorScheme.primary;
-    final productsAsync = ref.watch(productListProvider);
+    final productsAsync = ref.watch(productListForPickerProvider);
+    final suppliersAsync = ref.watch(supplierListNotifierProvider);
 
     return productsAsync.when(
       loading: () => Container(
@@ -521,6 +528,16 @@ class _ProductSelector extends ConsumerWidget {
       data: (products) {
         final active = products.where((p) => !p.archived).toList();
         final selected = active.where((p) => selectedIds.contains(p.id)).toList();
+
+        // Compute product IDs already taken by OTHER suppliers
+        final takenByOthers = <String>{};
+        suppliersAsync.whenData((suppliers) {
+          for (final s in suppliers) {
+            if (s.id != currentSupplierId) {
+              takenByOthers.addAll(s.productIds);
+            }
+          }
+        });
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -555,7 +572,7 @@ class _ProductSelector extends ConsumerWidget {
 
             // Add button
             OutlinedButton.icon(
-              onPressed: () => _openPicker(context, active),
+              onPressed: () => _openPicker(context, active, takenByOthers),
               icon: Icon(
                 selected.isEmpty ? Icons.add_rounded : Icons.edit_rounded,
                 size: 18,
@@ -579,7 +596,7 @@ class _ProductSelector extends ConsumerWidget {
     );
   }
 
-  Future<void> _openPicker(BuildContext context, List<ProductModel> products) async {
+  Future<void> _openPicker(BuildContext context, List<ProductModel> products, Set<String> takenByOthers) async {
     final result = await showModalBottomSheet<List<String>>(
       context: context,
       isScrollControlled: true,
@@ -587,6 +604,7 @@ class _ProductSelector extends ConsumerWidget {
       builder: (_) => _ProductPickerSheet(
         products: products,
         initialSelected: selectedIds,
+        takenProductIds: takenByOthers,
       ),
     );
     if (result != null) {
@@ -599,10 +617,12 @@ class _ProductSelector extends ConsumerWidget {
 class _ProductPickerSheet extends StatefulWidget {
   final List<ProductModel> products;
   final List<String> initialSelected;
+  final Set<String> takenProductIds;
 
   const _ProductPickerSheet({
     required this.products,
     required this.initialSelected,
+    this.takenProductIds = const {},
   });
 
   @override
@@ -712,9 +732,10 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
                       itemBuilder: (_, i) {
                         final product = filtered[i];
                         final isSelected = _selected.contains(product.id);
+                        final isTaken = widget.takenProductIds.contains(product.id);
                         return CheckboxListTile(
                           value: isSelected,
-                          onChanged: (_) {
+                          onChanged: isTaken ? null : (_) {
                             setState(() {
                               if (isSelected) {
                                 _selected.remove(product.id);
@@ -725,18 +746,31 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
                           },
                           title: Text(
                             product.name,
-                            style: const TextStyle(fontWeight: FontWeight.w500),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w500,
+                              color: isTaken
+                                  ? theme.colorScheme.onSurface.withOpacity(0.38)
+                                  : null,
+                            ),
                           ),
-                          subtitle: product.price > 0
+                          subtitle: isTaken
                               ? Text(
-                                  '${product.price.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]} ')} XAF',
+                                  'Déjà associé à un autre fournisseur',
                                   style: TextStyle(
-                                    color: primary,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
+                                    fontSize: 11,
+                                    color: theme.colorScheme.onSurface.withOpacity(0.38),
                                   ),
                                 )
-                              : null,
+                              : product.price > 0
+                                  ? Text(
+                                      '${product.price.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]} ')} XAF',
+                                      style: TextStyle(
+                                        color: primary,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    )
+                                  : null,
                           activeColor: primary,
                           checkboxShape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(6),

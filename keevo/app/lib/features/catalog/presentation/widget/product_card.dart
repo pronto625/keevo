@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../domain/exception/product_exception.dart';
 import '../../domain/model/product_model.dart';
+import '../../domain/model/product_status.dart';
 import '../provider/product_provider.dart';
 import '../provider/stock_provider.dart';
 
@@ -135,6 +136,7 @@ class ProductCard extends ConsumerWidget {
                             ),
                             const Spacer(),
                             // Indicateur d'état
+                            // Badge Archivé
                             if (product.archived)
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -161,6 +163,34 @@ class ProductCard extends ConsumerWidget {
                                   ],
                                 ),
                               ),
+                            // Badge 🔶 Brouillon (AC6 — DRAFT status)
+                            if (product.status == ProductStatus.draft) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFCC419)
+                                      .withOpacity(0.18),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text('🔶', style: TextStyle(fontSize: 10)),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Brouillon',
+                                      style:
+                                          theme.textTheme.labelSmall?.copyWith(
+                                        color: const Color(0xFFF08C00),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                             if (isLowStock) ...
                               [
                                 const SizedBox(width: 6),

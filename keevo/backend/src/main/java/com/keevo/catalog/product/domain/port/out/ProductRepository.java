@@ -59,11 +59,18 @@ public interface ProductRepository {
      * @return Optional containing the product if found, empty otherwise
      */
     Optional<Product> findBySku(String sku);
-    
+
+    /**
+     * Returns true if a product with the given name exists for this tenant,
+     * regardless of status (DRAFT or ACTIVE). Case-insensitive, trimmed.
+     * Used to enforce the no-duplicate name invariant (AC8 — Story 2.4).
+     */
+    boolean existsByName(String name);
+
     /**
      * Archives a product (soft delete)
      * Sets archived=true without physically removing the data.
-     * 
+     *
      * @param id the product ID to archive
      */
     void archive(UUID id);

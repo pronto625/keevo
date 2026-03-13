@@ -55,7 +55,9 @@ public class GlobalExceptionHandler {
             Map.entry("STOCK_NOT_FOUND",           "Niveau de stock introuvable"),
             Map.entry("CLIENT_NOT_FOUND",          "Client introuvable"),
             Map.entry("SUPPLIER_NOT_FOUND",        "Fournisseur introuvable"),
-            Map.entry("VALIDATION_ERROR",          "Données invalides"),
+            Map.entry("SUBSCRIPTION_NOT_FOUND",    "Aucun abonnement actif trouvé"),
+            Map.entry("PRODUCT_NAME_ALREADY_EXISTS", "Un produit avec ce nom existe déjà dans votre catalogue"),
+            Map.entry("CSV_PARSE_ERROR",           "Erreur de lecture du fichier CSV"),            Map.entry("VALIDATION_ERROR",          "Données invalides"),
             Map.entry("INTERNAL_ERROR",            "Une erreur inattendue s'est produite")
     );
 
@@ -109,6 +111,7 @@ public class GlobalExceptionHandler {
                  "CLIENT_NOT_FOUND", "SUPPLIER_NOT_FOUND",
                  "STOCK_NOT_FOUND", "STORE_NOT_FOUND",
                  "MEMBERSHIP_NOT_FOUND",
+                 "SUBSCRIPTION_NOT_FOUND",
                  "NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "UNAUTHORIZED", "TOKEN_EXPIRED",
                  "TOKEN_INVALID",
@@ -116,13 +119,15 @@ public class GlobalExceptionHandler {
                  "REFRESH_TOKEN_INVALID" -> HttpStatus.UNAUTHORIZED;
             case "EMAIL_ALREADY_EXISTS", "USER_ALREADY_EXISTS",
                  "TENANT_ALREADY_EXISTS",
-                 "MEMBERSHIP_ALREADY_EXISTS" -> HttpStatus.CONFLICT;
+                 "MEMBERSHIP_ALREADY_EXISTS",
+                 "PRODUCT_NAME_ALREADY_EXISTS" -> HttpStatus.CONFLICT;  // Story 2.4
             case "VALIDATION_ERROR", "INVALID_AMOUNT",
                  "INVALID_PHONE_NUMBER", "INVALID_PASSWORD",
                  "INSUFFICIENT_STOCK" -> HttpStatus.UNPROCESSABLE_ENTITY;
             case "SECTOR_TEMPLATE_NOT_FOUND",
                  "ONBOARDING_ALREADY_COMPLETED" -> HttpStatus.BAD_REQUEST;
             case "TENANT_PROVISION_FAILED" -> HttpStatus.INTERNAL_SERVER_ERROR;
+            case "CSV_PARSE_ERROR" -> HttpStatus.UNPROCESSABLE_ENTITY;  // Story 2.4 malformed CSV
             case "PLAN_LIMIT_EXCEEDED",
                  "ACCOUNT_SUSPENDED",
                  "AUDIT_IMMUTABLE",

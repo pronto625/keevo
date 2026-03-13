@@ -179,6 +179,64 @@ class LocalProductDataSource {
     await _enqueueSync('UNARCHIVE_PRODUCT', {'productId': id});
   }
 
+  /// Count DRAFT (non-archived) products in local DB.
+  ///
+  /// Used by [pendingDraftsCountProvider] to drive AC10 nav badge.
+  Future<int> countDrafts() async {
+    final countExpr = _db.products.id.count();
+    final query = _db.selectOnly(_db.products)
+      ..addColumns([countExpr])
+      ..where(
+        _db.products.status.equals('DRAFT') &
+            _db.products.archived.equals(false),
+      );
+    final result = await query.getSingle();
+    return result.read(countExpr) ?? 0;
+  }
+
+  /// Insert a product with DRAFT status for on-the-fly POS creation (AC6).
+  Future<ProductModel> insertDraft({
+    required String name,
+    required int priceVente,
+    required String categoryId,
+    int stockQuantity = 0,
+  }) async {
+    final id = _uuid.v4();
+    final now = DateTime.now();
+    final effectiveSku =
+        'KEV-${_uuid.v4().replaceAll('-', '').substring(0, 6).toUpperCase()}';
+
+    final companion = ProductsCompanion.insert(
+      id: id,
+      name: name,
+      description: const Value(null),
+      sku: Value(effectiveSku),
+      categoryId: Value(categoryId),
+      price: Value(priceVente),
+      buyPrice: const Value(0),
+      transportCost: const Value(0),
+      photoUrl: const Value(null),
+      archived: const Value(false),
+      status: const Value('DRAFT'),
+      createdAt: now,
+      updatedAt: now,
+    );
+    await _db.into(_db.products).insert(companion);
+
+    await _enqueueSync('CREATE_DRAFT_PRODUCT', {
+      'id': id,
+      'name': name,
+      'priceVente': priceVente,
+      'categoryId': categoryId,
+      if (stockQuantity > 0) 'stockQuantity': stockQuantity,
+    });
+
+    return _toModel(
+      await (_db.select(_db.products)..where((p) => p.id.equals(id)))
+          .getSingle(),
+    );
+  }
+
   /// Upsert a product synced from backend.
   Future<void> upsert(ProductModel model) async {
     await _db.into(_db.products).insertOnConflictUpdate(ProductsCompanion(

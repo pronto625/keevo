@@ -28,4 +28,11 @@ public interface ProductSpringRepository extends JpaRepository<ProductJpaEntity,
      * Find product by SKU (unique per tenant)
      */
     Optional<ProductJpaEntity> findBySku(String sku);
+
+    /**
+     * Check name uniqueness (case-insensitive) — Story 2.4.
+     * Uses LOWER() functional index on products(lower(name)).
+     */
+    @Query("SELECT COUNT(p) > 0 FROM ProductJpaEntity p WHERE LOWER(p.name) = LOWER(:name)")
+    boolean existsByNameIgnoreCase(@Param("name") String name);
 }

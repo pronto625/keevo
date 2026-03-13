@@ -1,8 +1,12 @@
 package com.keevo.catalog.product.application.usecase;
 
 import com.keevo.catalog.product.domain.entity.Product;
+import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
 import com.keevo.catalog.product.domain.event.ProductUpdatedEvent;
+import com.keevo.messaging.notification.domain.port.out.DraftNotificationRepository;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -11,42 +15,62 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
- * UpdateProductUseCase — Business logic for updating products
+ * UpdateProductUseCase — Business logic for updating products.
+ *
+ * <p>Story 2.4 (AC6): if the product is currently in DRAFT status and the caller
+ * is an OWNER, the status is promoted to ACTIVE. Only OWNERs may promote a draft.
+ * The corresponding {@link com.keevo.messaging.notification.domain.model.DraftPendingValidation}
+ * record is acknowledged so it disappears from the badge counter.
  */
 @Service
 public class UpdateProductUseCase {
 
-    private final ProductRepository productRepository;
-    private final ApplicationEventPublisher eventPublisher;
-    private final ObjectMapper objectMapper;
+    private final ProductRepository           productRepository;
+    private final DraftNotificationRepository draftRepository;
+    private final ApplicationEventPublisher   eventPublisher;
+    private final ObjectMapper                objectMapper;
 
-    public UpdateProductUseCase(ProductRepository productRepository, 
-                               ApplicationEventPublisher eventPublisher,
-                               ObjectMapper objectMapper) {
+    public UpdateProductUseCase(ProductRepository productRepository,
+                                DraftNotificationRepository draftRepository,
+                                ApplicationEventPublisher eventPublisher,
+                                ObjectMapper objectMapper) {
         this.productRepository = productRepository;
-        this.eventPublisher = eventPublisher;
-        this.objectMapper = objectMapper;
+        this.draftRepository   = draftRepository;
+        this.eventPublisher    = eventPublisher;
+        this.objectMapper      = objectMapper;
     }
 
     /**
-     * DTO for update product request
+     * DTO for update product request.
+     *
+     * <p>{@code actorRole}: "OWNER" or "EMPLOYEE". Required for DRAFT→ACTIVE guard (Story 2.4).
+     * Use the existing 10-arg constructor from controllers; the new field defaults to "OWNER"
+     * via the backward-compatible constructor.
      */
     public record UpdateProductDto(
-        UUID id,
-        String name,
-        String description,
-        String sku,
-        UUID categoryId,
+        UUID    id,
+        String  name,
+        String  description,
+        String  sku,
+        UUID    categoryId,
         Integer price,
         Integer buyPrice,
         Integer transportCost,
         Integer stockQuantity,
-        UUID actorId  // Added for audit trail
-    ) {}
+        UUID    actorId,
+        String  actorRole     // "OWNER" or "EMPLOYEE" — Story 2.4 draft promotion guard
+    ) {
+        /** Backward-compatible constructor: actorRole defaults to "OWNER". */
+        public UpdateProductDto(UUID id, String name, String description, String sku,
+                                UUID categoryId, Integer price, Integer buyPrice,
+                                Integer transportCost, Integer stockQuantity, UUID actorId) {
+            this(id, name, description, sku, categoryId, price, buyPrice,
+                 transportCost, stockQuantity, actorId, "OWNER");
+        }
+    }
 
     public Product execute(UpdateProductDto dto) {
         // Find existing product
@@ -58,6 +82,13 @@ public class UpdateProductUseCase {
             throw new IllegalArgumentException("Product name cannot be null or empty");
         }
 
+        // Story 2.4 (AC6): DRAFT → ACTIVE promotion requires OWNER role
+        boolean isPromotion = existing.getStatus() == ProductStatus.DRAFT;
+        if (isPromotion && !"OWNER".equals(dto.actorRole())) {
+            throw new DomainException(ErrorCode.FORBIDDEN,
+                    "Seul le propriétaire peut valider un produit en brouillon");
+        }
+
         // Resolve SKU: keep existing if not provided
         String resolvedSku = (dto.sku() != null) ? dto.sku() : existing.getSku();
 
@@ -67,6 +98,9 @@ public class UpdateProductUseCase {
                 throw new IllegalArgumentException("Product with SKU '" + resolvedSku + "' already exists");
             }
         }
+
+        // Resolve status: DRAFT → ACTIVE when owner updates; otherwise preserve
+        ProductStatus resolvedStatus = isPromotion ? ProductStatus.ACTIVE : existing.getStatus();
 
         // Create updated product (null-safe: preserve existing values if not provided)
         var updated = new Product(
@@ -80,14 +114,23 @@ public class UpdateProductUseCase {
             dto.transportCost() != null ? dto.transportCost() : existing.getTransportCostValue(),
             dto.stockQuantity() != null ? dto.stockQuantity() : existing.getStockQuantity(),
             existing.getArchived(),
-            existing.getStatus(),
+            resolvedStatus,
+            existing.getMinimumThreshold(),
             existing.getCreatedAt(),
             Instant.now() // updatedAt refreshed
         );
 
         // Save and publish event
         var saved = productRepository.save(updated);
-        
+
+        // Acknowledge draft notification so the badge counter decrements (AC6)
+        if (isPromotion) {
+            draftRepository.findByProductId(saved.getId()).ifPresent(draft -> {
+                draft.acknowledge();
+                draftRepository.saveUpdated(draft);
+            });
+        }
+
         // Publish domain event for audit trail with valueBefore/valueAfter
         String tenantId = TenantContext.getCurrentTenant();
         String valueBefore = toJson(existing);
