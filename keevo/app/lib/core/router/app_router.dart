@@ -27,7 +27,9 @@ import '../../features/onboarding/presentation/page/sector_selection_page.dart';
 import '../../features/onboarding/presentation/page/shop_name_page.dart';
 import '../../features/onboarding/presentation/page/terms_page.dart';
 import '../../features/pos/presentation/page/pos_placeholder_page.dart';
+import '../../features/settings/presentation/page/settings_page.dart';
 import '../../features/settings/presentation/page/subscription_page.dart';
+import '../../features/stores/presentation/page/stores_list_page.dart';
 import '../di/providers.dart';
 import '../scaffold/main_shell.dart';
 import '../storage/app_constants.dart';
@@ -256,6 +258,12 @@ final GoRouter appRouter = GoRouter(
           path: '/suppliers',
           builder: (_, __) => const SupplierListPage(),
         ),
+
+        // ── Plus > Paramètres (UX spec: 4ème onglet ‘Plus’) ──────────────────────
+        GoRoute(
+          path: '/settings',
+          builder: (_, __) => const SettingsPage(),
+        ),
       ],
     ),
 
@@ -311,24 +319,17 @@ final GoRouter appRouter = GoRouter(
       builder: (_, __) => const _PlaceholderPage(title: 'Inventory'),
     ),
 
-    // ── Stores ──────────────────────────────────────────────
-    GoRoute(
-      path: '/stores',
-      builder: (_, __) => const _PlaceholderPage(title: 'Stores'),
-    ),
-
-    // ── Reports ─────────────────────────────────────────────
     GoRoute(
       path: '/reports',
       builder: (_, __) => const _PlaceholderPage(title: 'Reports'),
     ),
 
-    // ── Settings ────────────────────────────────────────────
+    // ── Settings > Boutiques (full-screen, nav bar hidden) ────────────────
     GoRoute(
-      path: '/settings',
-      builder: (_, __) => const _PlaceholderPage(title: 'Settings'),
+      path: '/stores',
+      builder: (_, __) => const StoresListPage(),
     ),
-    // ── Settings > Subscription ──────────────────────────────
+    // ── Settings > Subscription (full-screen, nav bar hidden) ────────────
     GoRoute(
       path: '/settings/subscription',
       builder: (_, __) => const SubscriptionPage(),

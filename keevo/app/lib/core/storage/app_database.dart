@@ -31,6 +31,7 @@ part 'app_database.g.dart';
 /// quantityAfter; stock_levels extended with variantId, minimumThreshold (Story 2.3).
 /// Schema version 6: clients, suppliers, product_suppliers tables added;
 /// sales extended with clientId column (Story 2.5).
+/// Schema version 7: stores extended with type, address, phone columns (Story 3.1).
 @DriftDatabase(tables: [
   SyncQueue,
   Products,
@@ -56,7 +57,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -102,6 +103,12 @@ class AppDatabase extends _$AppDatabase {
         await migrator.createTable(productSuppliers);
         // Story 2.5 — link sales to clients (nullable).
         await migrator.addColumn(sales, sales.clientId);
+      }
+      if (from < 7) {
+        // Story 3.1 — stores: add type, address, phone fields.
+        await migrator.addColumn(stores, stores.type);
+        await migrator.addColumn(stores, stores.address);
+        await migrator.addColumn(stores, stores.phone);
       }
     },
   );

@@ -75,10 +75,30 @@ public class TenantSchemaProvisioner {
             CREATE TABLE IF NOT EXISTS stores (
                 id         UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
                 name       VARCHAR(100) NOT NULL,
+                address    VARCHAR(255),
+                phone      VARCHAR(30),
+                type       VARCHAR(10)  NOT NULL DEFAULT 'STORE'
+                             CHECK (type IN ('STORE', 'WAREHOUSE')),
                 is_active  BOOLEAN      NOT NULL DEFAULT TRUE,
                 created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
                 updated_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
             )""";
+
+    /** Migration DDL: adds address to existing stores tables (idempotent — Story 3.1) */
+    static final String DDL_STORES_MIGRATE_ADDRESS =
+            "ALTER TABLE stores ADD COLUMN IF NOT EXISTS address VARCHAR(255)";
+
+    /** Migration DDL: adds phone to existing stores tables (idempotent — Story 3.1) */
+    static final String DDL_STORES_MIGRATE_PHONE =
+            "ALTER TABLE stores ADD COLUMN IF NOT EXISTS phone VARCHAR(30)";
+
+    /** Migration DDL: adds type to existing stores tables (idempotent — Story 3.1) */
+    static final String DDL_STORES_MIGRATE_TYPE =
+            "ALTER TABLE stores ADD COLUMN IF NOT EXISTS type VARCHAR(10) NOT NULL DEFAULT 'STORE' " +
+            "CHECK (type IN ('STORE', 'WAREHOUSE'))";
+
+    static final String DDL_STORES_IDX_TYPE =
+            "CREATE INDEX IF NOT EXISTS idx_stores_type ON stores(type)";
 
     private static final String DDL_CATEGORIES = """
             CREATE TABLE IF NOT EXISTS categories (
@@ -384,6 +404,10 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_ROLES);
             stmt.execute(DDL_USER_ROLES);
             stmt.execute(DDL_STORES);
+            stmt.execute(DDL_STORES_MIGRATE_ADDRESS);  // idempotent: adds address if missing
+            stmt.execute(DDL_STORES_MIGRATE_PHONE);    // idempotent: adds phone if missing
+            stmt.execute(DDL_STORES_MIGRATE_TYPE);     // idempotent: adds type if missing
+            stmt.execute(DDL_STORES_IDX_TYPE);
             stmt.execute(DDL_CATEGORIES);
             stmt.execute(DDL_CATEGORIES_IDX_PARENT);
             stmt.execute(DDL_CATEGORIES_IDX_ACTIVE);

@@ -6,6 +6,7 @@ import '../../features/catalog/presentation/provider/product_provider.dart';
 
 /// MainShell — persistent bottom navigation scaffold wrapping the 4 main sections.
 ///
+/// UX spec: 4 onglets: Vendre / Stock / Rapports / Plus (Plus → /settings)
 /// Routes inside the ShellRoute (/pos, /products, /clients, /suppliers) are
 /// displayed as the [child] body while the [NavigationBar] stays visible.
 /// Sub-routes (form pages) push on top of the shell and don't show the nav bar.
@@ -17,6 +18,7 @@ class MainShell extends ConsumerWidget {
     if (location.startsWith('/products')) return 1;
     if (location.startsWith('/clients')) return 2;
     if (location.startsWith('/suppliers')) return 3;
+    if (location.startsWith('/settings')) return 4;
     return 0; // /pos and anything else
   }
 
@@ -41,6 +43,8 @@ class MainShell extends ConsumerWidget {
               context.go('/clients');
             case 3:
               context.go('/suppliers');
+            case 4:
+              context.go('/settings');
           }
         },
         destinations: [
@@ -75,6 +79,11 @@ class MainShell extends ConsumerWidget {
             icon: Icon(Icons.local_shipping_outlined),
             selectedIcon: Icon(Icons.local_shipping_rounded),
             label: 'Fournisseurs',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.more_horiz_outlined),
+            selectedIcon: Icon(Icons.more_horiz_rounded),
+            label: 'Plus',
           ),
         ],
       ),

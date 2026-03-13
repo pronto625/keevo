@@ -15,6 +15,9 @@ import com.keevo.catalog.product.domain.event.ProductArchivedEvent;
 import com.keevo.catalog.product.domain.event.SalePriceOverriddenEvent;
 import com.keevo.catalog.stock.domain.event.StockAdjustedEvent;
 import com.keevo.catalog.stock.domain.event.StockThresholdBreachedEvent;
+import com.keevo.store.store.domain.event.StoreCreatedEvent;
+import com.keevo.store.store.domain.event.StoreDeactivatedEvent;
+import com.keevo.store.store.domain.event.StoreUpdatedEvent;
 import com.keevo.shared.application.port.AuditPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.slf4j.Logger;
@@ -388,6 +391,68 @@ public class AuditEventListener {
         );
         log.info("AUDIT: supplier_archived supplierId={} tenantId={} actorId={}",
                 event.supplierId(), event.tenantId(), event.actorId());
+    }
+
+    // ── Store Events (Story 3.1) ──────────────────────────────────────────────
+
+    /**
+     * Handle store created event.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
+     */
+    @EventListener
+    public void on(StoreCreatedEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "STORE_CREATED",
+                "Store",
+                event.storeId(),
+                null,
+                toJson(Map.of("name", event.name(), "type", event.type().name()))
+        );
+        log.info("AUDIT: store_created storeId={} name={} type={} tenantId={} actorId={}",
+                event.storeId(), event.name(), event.type(), event.tenantId(), event.actorId());
+    }
+
+    /**
+     * Handle store updated event.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
+     */
+    @EventListener
+    public void on(StoreUpdatedEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "STORE_UPDATED",
+                "Store",
+                event.storeId(),
+                null,
+                toJson(Map.of("newName", event.newName()))
+        );
+        log.info("AUDIT: store_updated storeId={} newName={} tenantId={} actorId={}",
+                event.storeId(), event.newName(), event.tenantId(), event.actorId());
+    }
+
+    /**
+     * Handle store deactivated event.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
+     */
+    @EventListener
+    public void on(StoreDeactivatedEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "STORE_DEACTIVATED",
+                "Store",
+                event.storeId(),
+                null,
+                toJson(Map.of("name", event.name(), "deactivated", true))
+        );
+        log.info("AUDIT: store_deactivated storeId={} name={} tenantId={} actorId={}",
+                event.storeId(), event.name(), event.tenantId(), event.actorId());
     }
 
     // ── Template Method helper ────────────────────────────────────────────────

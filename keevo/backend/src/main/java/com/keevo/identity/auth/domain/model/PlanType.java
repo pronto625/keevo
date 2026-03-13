@@ -7,8 +7,8 @@ package com.keevo.identity.auth.domain.model;
  */
 public enum PlanType {
 
-    /** Free plan — limited to 1 store, 500 products, 3 employees */
-    FREE(1, 500, 3),
+    /** Free plan — limited to 3 stores, 500 products, 3 employees (Story 3.1: maxStores updated 1→3) */
+    FREE(3, 500, 3),
     /** 6-month Premium Trial — unlimited limits; auto-downgrades to FREE on expiry (Story 1.6) */
     PREMIUM_TRIAL(Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE),
     /** Paid Premium plan — unlimited limits; activated after payment (Story 1.6+) */

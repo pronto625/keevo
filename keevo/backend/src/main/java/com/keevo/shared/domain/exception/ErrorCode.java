@@ -48,6 +48,7 @@ public enum ErrorCode {
 
     // ── Store ─────────────────────────────────────────────────────
     STORE_NOT_FOUND,
+    WAREHOUSE_ALREADY_EXISTS,  // HTTP 409 — tenant already has one warehouse (Story 3.1)
 
     // ── Sync ──────────────────────────────────────────────────────
     SYNC_CONFLICT,
