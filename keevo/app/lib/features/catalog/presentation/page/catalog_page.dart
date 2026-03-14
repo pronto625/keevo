@@ -103,6 +103,21 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
                                 ],
                               ),
                             ),
+                            // Vue Stock multi-boutiques (Story 3.2)
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: IconButton(
+                                icon: const Icon(Icons.warehouse_outlined,
+                                    color: Colors.white),
+                                tooltip: 'Vue stock multi-boutiques',
+                                onPressed: () =>
+                                    context.push('/stock/overview'),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
                             // Bouton de synchronisation moderne
                             Container(
                               decoration: BoxDecoration(

@@ -99,9 +99,9 @@ class RemoteProductDataSource {
           message: 'Produit introuvable',
           statusCode: 404,
         ),
-      409 => const ProductException(
-          domainCode: 'SKU_ALREADY_EXISTS',
-          message: 'Cette référence SKU est déjà utilisée',
+      409 => ProductException(
+          domainCode: domainCode,
+          message: message.isNotEmpty ? message : 'Conflit : ressource déjà existante',
           statusCode: 409,
         ),
       _ => ProductException(

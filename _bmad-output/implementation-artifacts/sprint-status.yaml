@@ -99,7 +99,7 @@ development_status:
   # ─────────────────────────────────────────────────────────
   epic-3: in-progress
   3-1-creation-configuration-des-boutiques-et-warehouse: done          # 2026-03-13 — code review passed | H1: /stores moved from bottom nav to Settings (SettingsPage created, AC6-compliant) | M1: @NotBlank on CreateStoreRequestDto+UpdateStoreRequestDto | M2/M3: File List fixed (AuditEventListener web/ path + main_shell.dart) | M4: POST_stores_withoutAuthContext test added | 44 backend tests GREEN | 29 Flutter tests GREEN
-  3-2-vue-centralisee-des-stocks-multi-boutiques: backlog
+  3-2-vue-centralisee-des-stocks-multi-boutiques: done                  # 2026-03-14 — code review PASSED + all fixes applied | H1: SliverLayoutBuilder responsive grid (1/2/3 cols) | H2: _ProductList paginated ConsumerStatefulWidget + "Voir plus" | H3: search tile tap → highlightedStoreIdProvider → StoreStockCard auto-expand + Scrollable.ensureVisible | H4: 19 widget tests, 48/48 GREEN | C1: File List populated | M2: Drift sort CASE fixed (AND qty>0) | L1: withOpacity→withValues (11 fixes) | L2: Flexible wrappers
   3-3-transferts-inter-boutiques-avec-tracabilite-complete: backlog
   3-4-verification-de-disponibilite-cross-boutique: backlog
   3-5-invitation-employes-roles-assignation-boutique: backlog  # ⚠️ DEPENDS ON 1-7: employee invitation inserts into public.user_tenant_memberships (N:N model). Story 1.7 must be done before implementing this.

@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import '../../domain/exception/product_exception.dart';
 import '../../domain/model/csv_import_result.dart';
 import '../../domain/model/product_model.dart';
 import '../../domain/model/product_response_dto.dart';
@@ -68,8 +69,11 @@ class ProductRepositoryImpl implements ProductRepository {
       final model = _dtoToModel(dto);
       await _local.upsert(model);
       return model;
+    } on ProductException {
+      // Business/validation error from backend — re-throw so the UI can display it.
+      rethrow;
     } catch (_) {
-      // Offline fallback: write local only (sync engine will push later).
+      // Network unavailable or unexpected error — offline fallback.
       return _local.insert(
         name: name,
         description: description,

@@ -30,6 +30,7 @@ import '../../features/pos/presentation/page/pos_placeholder_page.dart';
 import '../../features/settings/presentation/page/settings_page.dart';
 import '../../features/settings/presentation/page/subscription_page.dart';
 import '../../features/stores/presentation/page/stores_list_page.dart';
+import '../../features/inventory/presentation/page/global_stock_overview_page.dart';
 import '../di/providers.dart';
 import '../scaffold/main_shell.dart';
 import '../storage/app_constants.dart';
@@ -333,6 +334,11 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/settings/subscription',
       builder: (_, __) => const SubscriptionPage(),
+    ),
+    // ── Stock overview (full-screen, no nav bar) ─────────────────────────
+    GoRoute(
+      path: '/stock/overview',
+      builder: (_, __) => const GlobalStockOverviewPage(),
     ),
     // ── Debug > Categories ──────────────────────────────────────
     GoRoute(

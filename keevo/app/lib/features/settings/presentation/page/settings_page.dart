@@ -87,6 +87,15 @@ class SettingsPage extends StatelessWidget {
                     ),
                     const _Divider(),
                     _SettingsTile(
+                      icon: Icons.inventory_2_rounded,
+                      iconColor: const Color(0xFF20C997),
+                      iconBg: const Color(0xFFD3F9D8),
+                      title: 'Stock multi-boutiques',
+                      subtitle: 'Vue centralisée des stocks par boutique',
+                      onTap: () => context.push('/stock/overview'),
+                    ),
+                    const _Divider(),
+                    _SettingsTile(
                       icon: Icons.card_membership_rounded,
                       iconColor: const Color(0xFF9B59B6),
                       iconBg: const Color(0xFFF3E5F5),

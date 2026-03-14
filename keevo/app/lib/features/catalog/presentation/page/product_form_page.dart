@@ -304,6 +304,24 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
           ),
         );
       }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 12),
+                Expanded(child: Text('Erreur inattendue : $e')),
+              ],
+            ),
+            backgroundColor: Colors.red.shade900,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
