@@ -16,6 +16,7 @@ import 'stock_levels_table.dart';
 import 'stock_movements_table.dart';
 import 'stores_table.dart';
 import 'suppliers_table.dart';
+import 'stock_transfers_table.dart';
 import 'sync_queue_table.dart';
 import 'users_table.dart';
 
@@ -32,6 +33,7 @@ part 'app_database.g.dart';
 /// Schema version 6: clients, suppliers, product_suppliers tables added;
 /// sales extended with clientId column (Story 2.5).
 /// Schema version 7: stores extended with type, address, phone columns (Story 3.1).
+/// Schema version 8: stock_transfers table added (Story 3.3).
 @DriftDatabase(tables: [
   SyncQueue,
   Products,
@@ -45,6 +47,7 @@ part 'app_database.g.dart';
   Clients,
   Suppliers,
   ProductSuppliers,
+  StockTransfers,
 ])
 class AppDatabase extends _$AppDatabase {
   /// Production constructor — uses SQLCipher encrypted file database.
@@ -57,7 +60,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -109,6 +112,10 @@ class AppDatabase extends _$AppDatabase {
         await migrator.addColumn(stores, stores.type);
         await migrator.addColumn(stores, stores.address);
         await migrator.addColumn(stores, stores.phone);
+      }
+      if (from < 8) {
+        // Story 3.3 — inter-store stock transfers table.
+        await migrator.createTable(stockTransfers);
       }
     },
   );

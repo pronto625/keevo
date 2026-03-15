@@ -31,6 +31,7 @@ import '../../features/settings/presentation/page/settings_page.dart';
 import '../../features/settings/presentation/page/subscription_page.dart';
 import '../../features/stores/presentation/page/stores_list_page.dart';
 import '../../features/inventory/presentation/page/global_stock_overview_page.dart';
+import '../../features/inventory/presentation/page/transfer_history_page.dart';
 import '../di/providers.dart';
 import '../scaffold/main_shell.dart';
 import '../storage/app_constants.dart';
@@ -339,8 +340,11 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/stock/overview',
       builder: (_, __) => const GlobalStockOverviewPage(),
-    ),
-    // ── Debug > Categories ──────────────────────────────────────
+    ),    // ── Transfer history (Story 3.3) ─────────────────────────────────
+    GoRoute(
+      path: '/stock/transfers',
+      builder: (_, __) => const TransferHistoryPage(),
+    ),    // ── Debug > Categories ──────────────────────────────────────
     GoRoute(
       path: '/debug/categories',
       builder: (_, __) => const CategoryDebugPage(),

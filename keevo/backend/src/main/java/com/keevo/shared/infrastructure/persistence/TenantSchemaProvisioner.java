@@ -226,6 +226,41 @@ public class TenantSchemaProvisioner {
     static final String DDL_STOCK_MOVEMENTS_IDX_STORE =
             "CREATE INDEX IF NOT EXISTS idx_stock_movements_store ON stock_movements(store_id, occurred_at DESC)";
 
+    // ── Stock transfers (Story 3.3) ────────────────────────────────────────────
+
+    static final String DDL_STOCK_TRANSFERS = """
+            CREATE TABLE IF NOT EXISTS stock_transfers (
+                id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                source_store_id      UUID        NOT NULL,
+                destination_store_id UUID        NOT NULL,
+                product_id           UUID        NOT NULL REFERENCES products(id),
+                variant_id           UUID,
+                quantity             INTEGER     NOT NULL,
+                actor_id             UUID        NOT NULL,
+                occurred_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                status               VARCHAR(20) NOT NULL DEFAULT 'COMPLETED'
+                                         CHECK (status IN ('COMPLETED','PENDING_SYNC','CONFLICT','IN_TRANSIT')),
+                notes                TEXT
+            )""";
+
+    /** Migration DDL: adds IN_TRANSIT to status CHECK constraint (idempotent — Story 3.3 hotfix) */
+    static final String DDL_STOCK_TRANSFERS_MIGRATE_IN_TRANSIT = """
+            DO $$ BEGIN
+                ALTER TABLE stock_transfers DROP CONSTRAINT IF EXISTS stock_transfers_status_check;
+                ALTER TABLE stock_transfers ADD CONSTRAINT stock_transfers_status_check
+                    CHECK (status IN ('COMPLETED','PENDING_SYNC','CONFLICT','IN_TRANSIT'));
+            EXCEPTION WHEN duplicate_object THEN NULL;
+            END $$""";
+
+    static final String DDL_STOCK_TRANSFERS_IDX_SOURCE =
+            "CREATE INDEX IF NOT EXISTS idx_stock_transfers_source ON stock_transfers(source_store_id, occurred_at DESC)";
+
+    static final String DDL_STOCK_TRANSFERS_IDX_DEST =
+            "CREATE INDEX IF NOT EXISTS idx_stock_transfers_dest ON stock_transfers(destination_store_id, occurred_at DESC)";
+
+    static final String DDL_STOCK_TRANSFERS_IDX_PRODUCT =
+            "CREATE INDEX IF NOT EXISTS idx_stock_transfers_product ON stock_transfers(product_id, occurred_at DESC)";
+
     // ── Clients (Story 2.5) ────────────────────────────────────────────────────
 
     static final String DDL_CLIENTS = """
@@ -427,6 +462,12 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_STOCK_MOVEMENTS);
             stmt.execute(DDL_STOCK_MOVEMENTS_IDX_PRODUCT);
             stmt.execute(DDL_STOCK_MOVEMENTS_IDX_STORE);
+            // Story 3.3 — stock transfers
+            stmt.execute(DDL_STOCK_TRANSFERS);
+            stmt.execute(DDL_STOCK_TRANSFERS_MIGRATE_IN_TRANSIT); // idempotent: adds IN_TRANSIT to status constraint
+            stmt.execute(DDL_STOCK_TRANSFERS_IDX_SOURCE);
+            stmt.execute(DDL_STOCK_TRANSFERS_IDX_DEST);
+            stmt.execute(DDL_STOCK_TRANSFERS_IDX_PRODUCT);
             // Story 2.5 — contact tables (clients before sales for FK constraint)
             stmt.execute(DDL_CLIENTS);
             stmt.execute(DDL_CLIENTS_IDX_NAME);

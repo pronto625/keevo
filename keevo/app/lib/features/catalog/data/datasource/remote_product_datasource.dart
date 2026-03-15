@@ -72,6 +72,9 @@ class RemoteProductDataSource {
     }
   }
   ProductException _mapError(DioException e) {
+    // No response = connection refused / timeout — let it propagate so the
+    // repository can apply the offline fallback instead of showing an error.
+    if (e.response == null) throw e;
     final statusCode = e.response?.statusCode;
     final domainCode =
         e.response?.data?['domainCode'] as String? ?? 'UNKNOWN';

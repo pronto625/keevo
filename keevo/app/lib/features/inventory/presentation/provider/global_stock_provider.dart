@@ -72,3 +72,5 @@ Future<List<StoreProductStockModel>> stockSearchResults(
 /// The matching [StoreStockCard] will auto-expand and scroll into view, then
 /// this is cleared back to null.
 final highlightedStoreIdProvider = StateProvider<String?>((ref) => null);
+
+

@@ -58,6 +58,16 @@ class LocalProductDataSource {
     return rows.map(_toModel).toList();
   }
 
+  /// Returns the set of product IDs that have a stock level entry for [storeId].
+  /// Used to filter the catalogue when an active store is selected.
+  Future<Set<String>> getProductIdsInStore(String storeId) async {
+    const sql =
+        'SELECT DISTINCT product_id FROM stock_levels WHERE store_id = ?';
+    final rows = await _db
+        .customSelect(sql, variables: [Variable.withString(storeId)]).get();
+    return rows.map((r) => r.read<String>('product_id')).toSet();
+  }
+
   // ── Write operations ─────────────────────────────────────────────────────
 
   Future<ProductModel> insert({

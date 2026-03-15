@@ -99,6 +99,9 @@ class RemoteStoreDataSource {
   }
 
   StoreException _mapError(DioException e) {
+    // No response = network/connection error — let it propagate as-is so the
+    // repository can distinguish it from a business error and apply offline fallback.
+    if (e.response == null) throw e;
     final domainCode = e.response?.data?['domainCode'] as String? ?? 'UNKNOWN';
     final message = e.response?.data?['error'] as String? ?? 'Erreur inconnue';
     return switch (domainCode) {

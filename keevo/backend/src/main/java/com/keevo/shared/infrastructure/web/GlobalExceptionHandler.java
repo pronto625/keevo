@@ -59,6 +59,8 @@ public class GlobalExceptionHandler {
             Map.entry("PRODUCT_NAME_ALREADY_EXISTS", "Un produit avec ce nom existe déjà dans votre catalogue"),
             Map.entry("WAREHOUSE_ALREADY_EXISTS",   "Vous avez déjà un warehouse. Un seul warehouse est autorisé par compte."),
             Map.entry("STORE_NOT_FOUND",             "Boutique introuvable"),
+            Map.entry("STORE_NOT_ACTIVE",           "Cette boutique est désactivée"),
+            Map.entry("SAME_SOURCE_DESTINATION",    "Source et destination doivent être différentes"),
             Map.entry("CSV_PARSE_ERROR",           "Erreur de lecture du fichier CSV"),            Map.entry("VALIDATION_ERROR",          "Données invalides"),
             Map.entry("INTERNAL_ERROR",            "Une erreur inattendue s'est produite")
     );
@@ -126,7 +128,9 @@ public class GlobalExceptionHandler {
                  "WAREHOUSE_ALREADY_EXISTS" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1
             case "VALIDATION_ERROR", "INVALID_AMOUNT",
                  "INVALID_PHONE_NUMBER", "INVALID_PASSWORD",
-                 "INSUFFICIENT_STOCK" -> HttpStatus.UNPROCESSABLE_ENTITY;
+                 "INSUFFICIENT_STOCK",
+                 "STORE_NOT_ACTIVE",
+                 "SAME_SOURCE_DESTINATION" -> HttpStatus.UNPROCESSABLE_ENTITY;
             case "SECTOR_TEMPLATE_NOT_FOUND",
                  "ONBOARDING_ALREADY_COMPLETED" -> HttpStatus.BAD_REQUEST;
             case "TENANT_PROVISION_FAILED" -> HttpStatus.INTERNAL_SERVER_ERROR;

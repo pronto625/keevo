@@ -2,10 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/sync/sync_status.dart';
 import '../../../../core/sync/sync_status_provider.dart';
+import '../../../stores/presentation/provider/store_provider.dart';
+import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../provider/global_stock_provider.dart';
 import '../widget/store_product_stock_tile.dart';
 import '../widget/store_stock_card.dart';
@@ -81,6 +84,12 @@ class _GlobalStockOverviewPageState
             elevation: 0,
             backgroundColor: Colors.transparent,
             actions: [
+              // Story 3.3 — navigate to transfer history
+              IconButton(
+                icon: const Icon(Icons.swap_horiz_rounded, color: Colors.white),
+                onPressed: () => context.push('/stock/transfers'),
+                tooltip: 'Historique des transferts',
+              ),
               IconButton(
                 icon: _isRefreshing
                     ? const SizedBox(
@@ -307,8 +316,28 @@ class _OverviewSliver extends ConsumerWidget {
           );
         }
 
+        final selectedStoreId = ref.watch(activeStoreIdProvider);
+        final visibleStores = selectedStoreId == null
+            ? stores
+            : stores.where((s) => s.storeId == selectedStoreId).toList();
         final totalValue =
-            stores.fold<int>(0, (sum, s) => sum + s.totalValueXaf);
+            visibleStores.fold<int>(0, (sum, s) => sum + s.totalValueXaf);
+
+        if (visibleStores.isEmpty) {
+          return SliverFillRemaining(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('🏷️', style: TextStyle(fontSize: 48)),
+                  const SizedBox(height: 12),
+                  Text('Aucun produit pour cette boutique.',
+                      style: theme.textTheme.titleMedium),
+                ],
+              ),
+            ),
+          );
+        }
 
         return SliverMainAxisGroup(slivers: [
           // AC5 — responsive grid: 1 col (<600px), 2 col (600–840px), 3 col (≥840px)
@@ -321,8 +350,8 @@ class _OverviewSliver extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate(
-                      (_, i) => StoreStockCard(summary: stores[i]),
-                      childCount: stores.length,
+                      (_, i) => StoreStockCard(summary: visibleStores[i]),
+                      childCount: visibleStores.length,
                     ),
                   ),
                 );
@@ -337,8 +366,8 @@ class _OverviewSliver extends ConsumerWidget {
                     childAspectRatio: 1.5,
                   ),
                   delegate: SliverChildBuilderDelegate(
-                    (_, i) => StoreStockCard(summary: stores[i]),
-                    childCount: stores.length,
+                    (_, i) => StoreStockCard(summary: visibleStores[i]),
+                    childCount: visibleStores.length,
                   ),
                 ),
               );

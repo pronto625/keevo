@@ -1,5 +1,6 @@
 import 'dart:developer' as dev;
 
+import '../../domain/exception/store_exception.dart';
 import '../../domain/model/store_model.dart';
 import '../../domain/model/store_type.dart';
 import '../../domain/repository/store_repository.dart';
@@ -31,16 +32,36 @@ class StoreRepositoryImpl implements StoreRepository {
     String? address,
     String? phone,
   }) async {
-    // Always go remote first for create — plan & warehouse-uniqueness checks
-    // live on the server and cannot be replicated offline safely.
-    final remote = await _remote.create(
-      name: name,
-      type: type,
-      address: address,
-      phone: phone,
-    );
-    await _local.upsert(remote);
-    return remote;
+    // Remote-first: backend enforces plan limits and warehouse uniqueness.
+    try {
+      final remote = await _remote.create(
+        name: name,
+        type: type,
+        address: address,
+        phone: phone,
+      );
+      await _local.upsert(remote);
+      return remote;
+    } on StoreException {
+      // Business error (PLAN_LIMIT_EXCEEDED, WAREHOUSE_ALREADY_EXISTS…) — re-throw.
+      rethrow;
+    } catch (e) {
+      // Network unavailable — optimistic local creation.
+      dev.log('StoreRepository.createStore: offline — local only: $e');
+      final now = DateTime.now();
+      final local = StoreModel(
+        id: 'local-${now.millisecondsSinceEpoch}',
+        name: name,
+        type: type,
+        address: address,
+        phone: phone,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      );
+      await _local.upsert(local);
+      return local;
+    }
   }
 
   @override

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/model/stock_level_model.dart';
 import '../provider/stock_provider.dart';
+import '../../../stores/presentation/provider/active_store_provider.dart';
+import '../../../stores/presentation/provider/store_provider.dart';
 import 'stock_entry_bottom_sheet.dart';
 import 'stock_adjust_bottom_sheet.dart';
 import 'stock_threshold_bottom_sheet.dart';
@@ -31,12 +33,23 @@ class StockLevelWidget extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final stockState = ref.watch(stockNotifierProvider(productId));
     final primaryStoreAsync = ref.watch(primaryStoreIdProvider);
+    final activeStoreId = ref.watch(activeStoreIdProvider);
+    final storesAsync = ref.watch(storeListNotifierProvider);
+    final stores = storesAsync.valueOrNull ?? [];
+
+    // Helper: resolve store name from id, fallback to truncated id.
+    String storeName(String id) {
+      return stores.where((s) => s.id == id).firstOrNull?.name
+          ?? '${id.substring(0, 8)}…';
+    }
 
     // Resolve the effective storeId:
     // 1. Explicit filter param (set by parent showing a specific store tile)
-    // 2. First level already loaded in local state (fastest path — no network wait)
-    // 3. Primary store from GET /api/v1/tenant/stores (async fallback for new products)
+    // 2. Active store selected in Settings (persisted preference)
+    // 3. First level already loaded in local state (fastest path — no network wait)
+    // 4. Primary store from GET /api/v1/tenant/stores (async fallback for new products)
     final effectiveStoreId = storeId
+        ?? activeStoreId
         ?? stockState.levels.firstOrNull?.storeId
         ?? primaryStoreAsync.value;
 
@@ -121,8 +134,17 @@ class StockLevelWidget extends ConsumerWidget {
           )
         else
           ...stockState.levels
-              .where((l) => storeId == null || l.storeId == storeId)
-              .map((level) => _StockLevelTile(level: level)),
+              .where((l) {
+                // If an explicit store filter is provided, apply it.
+                if (storeId != null) return l.storeId == storeId;
+                // If an active store is set in Settings, show only that store.
+                if (activeStoreId != null) return l.storeId == activeStoreId;
+                return true;
+              })
+              .map((level) => _StockLevelTile(
+                    level: level,
+                    storeName: storeName(level.storeId),
+                  )),
       ],
     );
   }
@@ -131,8 +153,9 @@ class StockLevelWidget extends ConsumerWidget {
 /// Single store row in the stock level widget.
 class _StockLevelTile extends StatelessWidget {
   final StockLevelModel level;
+  final String storeName;
 
-  const _StockLevelTile({required this.level});
+  const _StockLevelTile({required this.level, required this.storeName});
 
   @override
   Widget build(BuildContext context) {
@@ -154,7 +177,7 @@ class _StockLevelTile extends StatelessWidget {
         ),
       ),
       title: Text(
-        'Dépôt: ${level.storeId.substring(0, 8)}…',
+        storeName,
         style: const TextStyle(fontSize: 13),
       ),
       subtitle: level.minimumThreshold > 0

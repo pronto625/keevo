@@ -9,6 +9,7 @@ import '../../data/datasource/remote_product_datasource.dart';
 import '../../data/repository/product_repository_impl.dart';
 import '../../domain/model/product_model.dart';
 import '../../domain/repository/product_repository.dart';
+import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../domain/usecase/archive_product_usecase.dart';
 import '../../domain/usecase/create_product_usecase.dart';
 import '../../domain/usecase/get_products_usecase.dart';
@@ -82,8 +83,15 @@ final productSearchQueryProvider = StateProvider<String>((ref) => '');
 @riverpod
 Future<List<ProductModel>> productList(ProductListRef ref) async {
   final query = ref.watch(productSearchQueryProvider);
+  final activeStoreId = ref.watch(activeStoreIdProvider);
   final useCase = ref.watch(getProductsUseCaseProvider);
-  return useCase.execute(query: query.isEmpty ? null : query);
+  var products = await useCase.execute(query: query.isEmpty ? null : query);
+  if (activeStoreId != null) {
+    final local = ref.watch(localProductDataSourceProvider);
+    final storeProductIds = await local.getProductIdsInStore(activeStoreId);
+    products = products.where((p) => storeProductIds.contains(p.id)).toList();
+  }
+  return products;
 }
 
 /// Sync-first product list — for pickers shown before the catalog page is visited.

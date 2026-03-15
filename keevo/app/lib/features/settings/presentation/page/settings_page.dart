@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../stores/domain/model/store_model.dart';
+import '../../../stores/domain/model/store_type.dart';
+import '../../../stores/presentation/provider/active_store_provider.dart';
+import '../../../stores/presentation/provider/store_provider.dart';
 
 /// SettingsPage — "Plus" tab → Paramètres.
 ///
@@ -85,6 +90,8 @@ class SettingsPage extends StatelessWidget {
                       subtitle: 'Boutiques, entrepôts et types',
                       onTap: () => context.push('/stores'),
                     ),
+                    const _Divider(),
+                    const _ActiveStoreTile(),
                     const _Divider(),
                     _SettingsTile(
                       icon: Icons.inventory_2_rounded,
@@ -326,5 +333,161 @@ class _Divider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Divider(indent: 70, endIndent: 0, height: 1, thickness: 0.5);
+  }
+}
+
+// ── Boutique active tile ────────────────────────────────────────────────────
+
+class _ActiveStoreTile extends ConsumerWidget {
+  const _ActiveStoreTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final activeStoreId = ref.watch(activeStoreIdProvider);
+    final storesAsync = ref.watch(storeListNotifierProvider);
+
+    final subtitle = storesAsync.maybeWhen(
+      data: (stores) {
+        if (activeStoreId == null) return 'Toutes les boutiques';
+        return stores.where((s) => s.id == activeStoreId).firstOrNull?.name ??
+            'Boutique inconnue';
+      },
+      orElse: () => activeStoreId != null ? 'Chargement...' : 'Toutes les boutiques',
+    );
+
+    return _SettingsTile(
+      icon: Icons.store_rounded,
+      iconColor: const Color(0xFF0CA678),
+      iconBg: const Color(0xFFD3F9D8),
+      title: 'Boutique active',
+      subtitle: subtitle,
+      onTap: () => _showStorePicker(
+        context,
+        ref,
+        activeStoreId,
+        storesAsync.valueOrNull ?? [],
+      ),
+    );
+  }
+
+  void _showStorePicker(
+    BuildContext context,
+    WidgetRef ref,
+    String? activeStoreId,
+    List<StoreModel> stores,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) => _StorePickerSheet(
+        stores: stores,
+        activeStoreId: activeStoreId,
+        onSelect: (id) {
+          ref.read(activeStoreIdProvider.notifier).setActiveStore(id);
+          Navigator.pop(sheetCtx);
+        },
+      ),
+    );
+  }
+}
+
+class _StorePickerSheet extends StatelessWidget {
+  final List<StoreModel> stores;
+  final String? activeStoreId;
+  final void Function(String?) onSelect;
+
+  const _StorePickerSheet({
+    required this.stores,
+    required this.activeStoreId,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle bar
+          Container(
+            margin: const EdgeInsets.only(top: 12),
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.outlineVariant,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Boutique active',
+                style: theme.textTheme.titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+          const Divider(height: 1),
+          // "Toutes les boutiques" option
+          ListTile(
+            leading: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: const Color(0xFFD0EBFF),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.all_inclusive,
+                  color: Color(0xFF228BE6), size: 20),
+            ),
+            title: const Text('Toutes les boutiques'),
+            subtitle: const Text('Afficher tous les produits'),
+            trailing: activeStoreId == null
+                ? Icon(Icons.check_circle, color: theme.colorScheme.primary)
+                : null,
+            onTap: () => onSelect(null),
+          ),
+          const Divider(height: 1, indent: 72),
+          // Active store rows
+          ...stores.map(
+            (store) => ListTile(
+              leading: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: store.type == StoreType.warehouse
+                      ? const Color(0xFFFFF3CD)
+                      : const Color(0xFFD3F9D8),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  store.type == StoreType.warehouse
+                      ? Icons.warehouse_rounded
+                      : Icons.storefront_rounded,
+                  color: store.type == StoreType.warehouse
+                      ? const Color(0xFFE67700)
+                      : const Color(0xFF0CA678),
+                  size: 20,
+                ),
+              ),
+              title: Text(store.name),
+              subtitle: Text(store.type.displayName),
+              trailing: store.id == activeStoreId
+                  ? Icon(Icons.check_circle, color: theme.colorScheme.primary)
+                  : null,
+              onTap: () => onSelect(store.id),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
   }
 }

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../provider/product_provider.dart';
+import '../../../stores/presentation/provider/active_store_provider.dart';
+import '../../../stores/presentation/provider/store_provider.dart';
 import '../widget/draft_validation_banner.dart';
 import '../widget/product_card.dart';
 
@@ -49,6 +51,15 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
+    final activeStoreId = ref.watch(activeStoreIdProvider);
+    final storesAsync = ref.watch(storeListNotifierProvider);
+    final activeStoreName = storesAsync.maybeWhen(
+      data: (stores) => activeStoreId == null
+          ? null
+          : stores.where((s) => s.id == activeStoreId).firstOrNull?.name,
+      orElse: () => null,
+    );
     
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
@@ -95,7 +106,9 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Gérez vos produits facilement',
+                                    activeStoreName != null
+                                        ? '🏪 $activeStoreName'
+                                        : 'Gérez vos produits facilement',
                                     style: theme.textTheme.bodyMedium?.copyWith(
                                       color: Colors.white.withOpacity(0.9),
                                     ),

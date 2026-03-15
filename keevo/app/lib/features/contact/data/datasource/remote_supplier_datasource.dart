@@ -88,6 +88,7 @@ class RemoteSupplierDataSource {
   }
 
   ContactException _mapError(DioException e) {
+    if (e.response == null) throw e; // réseau indisponible — le repository gère le fallback
     final domainCode =
         e.response?.data?['domainCode'] as String? ?? 'UNKNOWN';
     final message =

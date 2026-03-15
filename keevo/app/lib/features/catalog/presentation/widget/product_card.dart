@@ -7,6 +7,7 @@ import '../../domain/model/product_model.dart';
 import '../../domain/model/product_status.dart';
 import '../provider/product_provider.dart';
 import '../provider/stock_provider.dart';
+import '../../../stores/presentation/provider/active_store_provider.dart';
 
 /// ProductCard — displays a product in the catalogue list.
 ///
@@ -21,7 +22,15 @@ class ProductCard extends ConsumerWidget {
     final theme = Theme.of(context);
     final actions = ref.read(productActionsProvider);
     final stockState = ref.watch(stockNotifierProvider(product.id));
+    final activeStoreId = ref.watch(activeStoreIdProvider);
     final isLowStock = stockState.levels.any((l) => l.isLow);
+
+    // Compute visible stock: for active store only, or total across all stores.
+    final visibleLevels = activeStoreId == null
+        ? stockState.levels
+        : stockState.levels.where((l) => l.storeId == activeStoreId).toList();
+    final totalStock = visibleLevels.fold<int>(0, (sum, l) => sum + l.quantity);
+    final hasStockData = stockState.levels.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -134,6 +143,46 @@ class ProductCard extends ConsumerWidget {
                                 ),
                               ),
                             ),
+                            const SizedBox(width: 8),
+                            // Stock badge
+                            if (hasStockData)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: totalStock == 0
+                                      ? Colors.red.withOpacity(0.1)
+                                      : isLowStock
+                                          ? Colors.orange.withOpacity(0.1)
+                                          : Colors.teal.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.inventory_2_outlined,
+                                      size: 12,
+                                      color: totalStock == 0
+                                          ? Colors.red
+                                          : isLowStock
+                                              ? Colors.orange
+                                              : Colors.teal,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '$totalStock',
+                                      style: theme.textTheme.labelSmall?.copyWith(
+                                        color: totalStock == 0
+                                            ? Colors.red
+                                            : isLowStock
+                                                ? Colors.orange
+                                                : Colors.teal,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             const Spacer(),
                             // Indicateur d'état
                             // Badge Archivé

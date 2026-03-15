@@ -50,6 +50,12 @@ public enum ErrorCode {
     STORE_NOT_FOUND,
     WAREHOUSE_ALREADY_EXISTS,  // HTTP 409 — tenant already has one warehouse (Story 3.1)
 
+    // ── Transfer (Story 3.3) ──────────────────────────────────────────────────
+    STORE_NOT_ACTIVE,           // HTTP 422 — source or destination store is deactivated
+    SAME_SOURCE_DESTINATION,    // HTTP 422 — sourceStoreId == destinationStoreId
+    TRANSFER_NOT_FOUND,         // HTTP 404 — transfer id does not exist (two-step flow)
+    TRANSFER_INVALID_STATUS,    // HTTP 422 — transfer is not IN_TRANSIT, cannot be completed
+
     // ── Sync ──────────────────────────────────────────────────────
     SYNC_CONFLICT,
     OFFLINE_LIMIT_EXCEEDED,

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../domain/model/stock_movement_model.dart';
 import '../provider/stock_provider.dart';
+import '../../../stores/presentation/provider/active_store_provider.dart';
 
 /// StockHistoryPage — full-screen paginated stock movement history.
 ///
@@ -47,6 +48,8 @@ class _StockHistoryPageState extends ConsumerState<StockHistoryPage> {
   @override
   void initState() {
     super.initState();
+    // Pre-filter by active store if one is selected in Settings.
+    _filterStoreId = ref.read(activeStoreIdProvider);
     // Use microtask to defer state mutation until after the first build.
     // Calling loadHistory() directly from initState() triggers
     // state.copyWith() while the widget tree is building, which
