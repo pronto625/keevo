@@ -9,6 +9,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -59,6 +60,7 @@ public class GlobalExceptionHandler {
             Map.entry("PRODUCT_NAME_ALREADY_EXISTS", "Un produit avec ce nom existe déjà dans votre catalogue"),
             Map.entry("WAREHOUSE_ALREADY_EXISTS",   "Vous avez déjà un warehouse. Un seul warehouse est autorisé par compte."),
             Map.entry("STORE_NOT_FOUND",             "Boutique introuvable"),
+            Map.entry("PRODUCT_NOT_FOUND",           "Produit introuvable"),
             Map.entry("STORE_NOT_ACTIVE",           "Cette boutique est désactivée"),
             Map.entry("SAME_SOURCE_DESTINATION",    "Source et destination doivent être différentes"),
             Map.entry("CSV_PARSE_ERROR",           "Erreur de lecture du fichier CSV"),            Map.entry("VALIDATION_ERROR",          "Données invalides"),
@@ -91,6 +93,18 @@ public class GlobalExceptionHandler {
                         HttpStatus.UNPROCESSABLE_ENTITY.name(),
                         "VALIDATION_ERROR",
                         fieldErrors
+                ));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponseWrapper<Void>> handleTypeMismatch(
+            MethodArgumentTypeMismatchException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponseWrapper.error(
+                        "Paramètre invalide : " + ex.getName(),
+                        HttpStatus.BAD_REQUEST.name(),
+                        "VALIDATION_ERROR",
+                        null
                 ));
     }
 

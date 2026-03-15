@@ -1,3 +1,4 @@
+import '../model/cross_store_availability_model.dart';
 import '../model/stock_level_model.dart';
 import '../model/stock_movement_model.dart';
 
@@ -29,6 +30,14 @@ abstract class StockRepository {
     int page = 0,
     int pageSize = 20,
   });
+
+  // ── Cross-store availability ───────────────────────────────────────────────
+
+  /// Returns availability for [productId] across all active stores (Story 3.4).
+  ///
+  /// Online-first with 3 s timeout; falls back to local Drift data on error.
+  Future<CrossStoreAvailabilityModel> getCrossStoreAvailability(
+      String productId);
 
   // ── Mutations ─────────────────────────────────────────────────────────────
 

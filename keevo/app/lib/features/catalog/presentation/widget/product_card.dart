@@ -8,6 +8,7 @@ import '../../domain/model/product_status.dart';
 import '../provider/product_provider.dart';
 import '../provider/stock_provider.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
+import 'cross_store_availability_bottom_sheet.dart';
 
 /// ProductCard — displays a product in the catalogue list.
 ///
@@ -433,6 +434,21 @@ class ProductCard extends ConsumerWidget {
                 onTap: () {
                   Navigator.pop(context);
                   context.push('/products/${product.id}/edit', extra: product);
+                },
+              ),
+              _buildMenuOption(
+                context,
+                icon: Icons.store_outlined,
+                title: 'Disponibilité cross-boutique',
+                subtitle: 'Voir le stock dans toutes les boutiques',
+                color: Colors.teal,
+                onTap: () {
+                  Navigator.pop(context);
+                  showCrossStoreAvailabilitySheet(
+                    context: context,
+                    productId: product.id,
+                    productName: product.name,
+                  );
                 },
               ),
               if (!product.archived)

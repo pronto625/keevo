@@ -39,6 +39,16 @@ final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   throw UnimplementedError('Override sharedPreferencesProvider in main.dart');
 });
 
+/// Current user role for the active tenant: 'OWNER' | 'EMPLOYEE' | null.
+///
+/// Persisted by [TenantPickerPage] and [LoginUseCase] after tenant selection.
+/// Story 3.4 — AC3.
+const kUserRoleKey = 'user_role';
+
+final currentUserRoleProvider = Provider<String?>((ref) {
+  return ref.watch(sharedPreferencesProvider).getString(kUserRoleKey);
+});
+
 /// SyncService provider — REST implementation for real synchronization.
 /// Synchronizes products immediately to backend instead of using Epic 5 queue.
 final syncServiceProvider = Provider<SyncService>((ref) {

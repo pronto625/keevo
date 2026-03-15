@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/di/providers.dart';
 import '../../domain/exception/auth_exception.dart';
 import '../../domain/model/membership_dto.dart';
 import '../provider/auth_provider.dart';
@@ -29,6 +30,10 @@ class _TenantPickerPageState extends ConsumerState<TenantPickerPage> {
 
   Future<void> _selectTenant(MembershipDto membership) async {
     setState(() => _selectingCode = membership.tenantCode);
+    // Persist role for Story 3.4 (currentUserRoleProvider)
+    await ref
+        .read(sharedPreferencesProvider)
+        .setString(kUserRoleKey, membership.role);
     await ref.read(selectTenantProvider.notifier).select(
           loginToken: widget.loginToken,
           tenantCode: membership.tenantCode,

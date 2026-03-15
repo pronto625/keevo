@@ -100,13 +100,33 @@ So that I can rebalance inventory across locations and always know exactly where
 **When** he taps "Nouveau transfert" in the Stock module
 **Then** a transfer form appears with: Source (dropdown of active stores + warehouse), Destination (dropdown — excludes Source), Product (searchable from Catalogue), Variant (if applicable), Quantity (positive integer)
 
+> ⚠️ **Two-step transfer flow (as implemented):** A transfer goes through two distinct steps — Envoi (Step 1) and Réception (Step 2). This reflects physical reality: stock leaves the source before it arrives at the destination. The destination manager must explicitly receive the stock to confirm arrival.
+
+**Step 1 — Envoi :**
+
 **Given** Simon fills in the transfer form and taps "Confirmer"
 **When** the transfer is submitted
 **Then** the backend validates: source store has sufficient quantity (`currentQty ≥ requestedQty`)
-**And** if validation passes: source stock is decremented by the transferred quantity, destination stock is incremented by the same quantity — atomically in a single transaction
-**And** a `StockTransferredEvent` is emitted with: `sourceStoreId`, `destinationStoreId`, `productId`, `variantId`, `quantity`, `actorId`, `occurredAt`
-**And** two `stock_movement` audit entries are created: one TRANSFER_OUT on source, one TRANSFER_IN on destination
-**And** a success SnackBar: "Transfert effectué : [qty] × [product] → [destination store]"
+**And** if validation passes, atomically:
+  - source stock is **decremented** by the transferred quantity
+  - a `TRANSFER_OUT` movement is created on the source store
+  - a `stock_transfers` record is created with `status = IN_TRANSIT`
+**And** a success SnackBar: "[qty] × [product] → [destination store]"
+**And** the transfer appears in the history list of the destination store with badge 🚚 En transit
+**And** a "Réceptionner le stock" button is visible on the transfer tile (destination store only)
+
+**Step 2 — Réception (AC7) :**
+
+**Given** the destination store manager sees a transfer tile with status IN_TRANSIT
+**When** he taps "Réceptionner le stock"
+**Then** the backend validates that the transfer status is still IN_TRANSIT
+**And** if valid, atomically:
+  - destination stock is **incremented** by the transferred quantity
+  - a `TRANSFER_IN` movement is created on the destination store
+  - the `stock_transfers` record is updated to `status = COMPLETED`
+**And** a success SnackBar: "Stock réceptionné : [qty]× [product]"
+**And** all stock/catalog views refresh immediately (cache invalidation cascade)
+**If** transfer was already COMPLETED (concurrent session): silent refresh, no error shown
 
 **Given** Simon tries to transfer more units than available
 **When** he submits the form with quantity exceeding source stock
@@ -117,14 +137,26 @@ So that I can rebalance inventory across locations and always know exactly where
 **When** the form is submitted while offline
 **Then** the transfer is validated locally against the Drift stock data
 **And** the operation is queued in `sync_queue` with type `STOCK_TRANSFER`
-**And** source and destination stock levels are updated locally immediately
-**And** the transfer is visible in the transfer history with a "En attente de sync" badge
+**And** source stock level is decremented locally immediately (destination credited on Step 2)
+**And** a `stock_transfers` local record is created with `status = PENDING_SYNC`
+**And** the transfer is visible in the transfer history with badge ⏳ En attente de sync
 **And** on reconnection, the server re-validates and either commits or reports a conflict
+**Note:** Réception (Step 2) requires an active network connection — it is blocked offline
+
+**Status values as implemented:**
+
+| Status | Badge | When |
+|--------|-------|------|
+| `IN_TRANSIT` | 🚚 En transit | After Step 1 (backend) |
+| `COMPLETED` | ✅ Effectué | After Step 2 (backend) |
+| `PENDING_SYNC` | ⏳ En attente | Offline Step 1, awaiting sync |
+| `CONFLICT` | ❌ Conflit | Sync conflict (Epic 5) |
 
 **Given** Simon views the transfer history
 **When** he navigates to Stock > Historique des transferts
-**Then** all transfers are listed in reverse chronological order with: date, source → destination, product + variant, quantity, actor name, status (Completed / Pending Sync / Conflict)
-**And** he can filter by date range, store, or product
+**Then** all transfers are listed in reverse chronological order with: date, source → destination, product + variant, quantity, status badge, and a "Réceptionner" button on IN_TRANSIT tiles
+**And** if a store is active (activeStoreId set), only transfers where that store is the **destination** are shown
+**And** he can filter by status chip (Tous / En transit / Effectués / En attente / Conflits)
 **And** the history is available offline from local Drift data
 
 ---

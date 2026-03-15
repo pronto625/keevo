@@ -69,6 +69,9 @@ dependencies:
   # File picker: CSV import (Story 2.4)
   file_picker: ^10.0.0
 
+  # URL launcher (WhatsApp deeplink, Story 3.4)
+  url_launcher: ^6.3.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

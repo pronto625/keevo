@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../catalog/presentation/widget/cross_store_availability_bottom_sheet.dart';
 import '../../domain/model/store_product_stock_model.dart';
 import '../../domain/model/store_stock_summary_model.dart';
 import '../provider/global_stock_provider.dart';
@@ -314,7 +315,16 @@ class _ProductListState extends ConsumerState<_ProductList> {
     } else {
       content = Column(
         children: [
-          ..._items.map((e) => StoreProductStockTile(entry: e)),
+          ..._items.map(
+            (e) => StoreProductStockTile(
+              entry: e,
+              onTap: () => showCrossStoreAvailabilitySheet(
+                context: context,
+                productId: e.productId,
+                productName: e.productName,
+              ),
+            ),
+          ),
           if (_hasMore) ...[
             if (_isLoading)
               const Padding(

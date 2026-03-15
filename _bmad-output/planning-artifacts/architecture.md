@@ -194,7 +194,7 @@ src/main/java/com/keevo/
 │
 ├── inventory/                       # DOMAIN: Stock Management
 │   ├── stock/                       # MODULE: Stock tracking
-│   ├── transfer/                    # MODULE: Inter-store transfers
+│   ├── transfer/                    # MODULE: Inter-store transfers (planned — Story 3.3 impl in catalog/stock/)
 │   └── counting/                    # MODULE: Physical inventory
 │
 ├── store/                           # DOMAIN: Multi-Store
@@ -827,7 +827,12 @@ backend/
 │   │   └── payment/                   # MODULE: Payments & cash
 │   ├── inventory/                     # DOMAIN: Stock Management
 │   │   ├── stock/                     # MODULE: Stock tracking per store
-│   │   ├── transfer/                  # MODULE: Inter-store transfers
+│   │   │                              #   ⚠️  Inter-store transfers implemented HERE (catalog/stock/)
+│   │   │                              #   not in inventory/transfer/ — Story 3.3 reuses StockOperationService
+│   │   │                              #   Tables: stock_transfers (IN_TRANSIT→COMPLETED two-step),
+│   │   │                              #           stock_movements (TRANSFER_OUT step1, TRANSFER_IN step2)
+│   │   │                              #   API: POST /stock/transfers (step1) · POST /stock/transfers/{id}/complete (step2)
+│   │   ├── transfer/                  # MODULE: Inter-store transfers (placeholder — logic in catalog/stock/)
 │   │   └── counting/                  # MODULE: Physical inventory counting
 │   ├── store/                         # DOMAIN: Multi-Store
 │   │   ├── store/                     # MODULE: Store CRUD & settings
@@ -893,7 +898,8 @@ app/
 | FR21-29: Products | `catalog/product/`, `category/`, `variant/` | `products/` |
 | FR30-36: Multi-Store | `store/store/`, `store/warehouse/` | `stores/` |
 | FR37-44: POS | `commerce/pos/`, `sale/`, `payment/` | `pos/` |
-| FR45-49: Inventory | `inventory/stock/`, `counting/` | `inventory/` |
+| FR45-49: Inventory | `catalog/stock/` (stock tracking + inter-store transfers — Story 3.3) | `inventory/` |
+> ⚠️ Inter-store transfers (FR32, Story 3.3) are in `catalog/stock/` (not `inventory/transfer/`) — they reuse `StockOperationService`. Two-step flow: `ExecuteTransferService` (TRANSFER_OUT, → IN_TRANSIT) + `CompleteTransferService` (TRANSFER_IN, → COMPLETED).
 | FR50-56: Reports | `reporting/dashboard/`, `report/` | `reports/` |
 | FR57-64: WhatsApp & Alerts | `messaging/whatsapp/`, `notification/` | — (push) |
 | FR65-68: User Management | `identity/user/` | `settings/` |

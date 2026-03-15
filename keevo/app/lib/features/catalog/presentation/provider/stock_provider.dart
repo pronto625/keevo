@@ -115,11 +115,8 @@ class StockState {
 /// Story 2.3.
 @riverpod
 class StockNotifier extends _$StockNotifier {
-  late final String _productId;
-
   @override
   StockState build(String productId) {
-    _productId = productId;
     // Load levels on creation
     Future.microtask(() => _loadLevels());
     return const StockState(isLoading: true);
@@ -130,7 +127,7 @@ class StockNotifier extends _$StockNotifier {
     try {
       final levels = await ref
           .read(getStockLevelUseCaseProvider)
-          .execute(_productId);
+          .execute(productId);
       state = state.copyWith(levels: levels, isLoading: false);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
@@ -152,7 +149,7 @@ class StockNotifier extends _$StockNotifier {
     try {
       final movements = await ref
           .read(getStockHistoryUseCaseProvider)
-          .execute(_productId,
+          .execute(productId,
               storeId: storeId,
               movementType: movementType,
               from: from,
@@ -178,7 +175,7 @@ class StockNotifier extends _$StockNotifier {
     state = state.copyWith(isLoading: true, error: null);
     try {
       await ref.read(stockRepositoryProvider).recordEntry(
-            productId: _productId,
+            productId: productId,
             storeId: storeId,
             quantity: quantity,
             notes: notes,
@@ -200,7 +197,7 @@ class StockNotifier extends _$StockNotifier {
     state = state.copyWith(isLoading: true, error: null);
     try {
       await ref.read(stockRepositoryProvider).adjustStock(
-            productId: _productId,
+            productId: productId,
             storeId: storeId,
             newQuantity: newQuantity,
             notes: notes,
@@ -218,7 +215,7 @@ class StockNotifier extends _$StockNotifier {
     state = state.copyWith(isLoading: true, error: null);
     try {
       await ref.read(setThresholdUseCaseProvider).execute(
-            productId: _productId,
+            productId: productId,
             minimumThreshold: minimumThreshold,
           );
       await _loadLevels();

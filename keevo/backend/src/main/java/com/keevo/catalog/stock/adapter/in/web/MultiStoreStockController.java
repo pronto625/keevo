@@ -1,7 +1,10 @@
 package com.keevo.catalog.stock.adapter.in.web;
 
+import com.keevo.catalog.stock.adapter.in.web.dto.CrossStoreAvailabilityResponseDto;
 import com.keevo.catalog.stock.adapter.in.web.dto.StoreProductStockEntryDto;
 import com.keevo.catalog.stock.adapter.in.web.dto.StoreStockSummaryDto;
+import com.keevo.catalog.stock.domain.port.in.GetCrossStoreAvailabilityQuery;
+import com.keevo.catalog.stock.domain.port.in.GetCrossStoreAvailabilityUseCase;
 import com.keevo.catalog.stock.domain.port.in.GetMultiStoreOverviewQuery;
 import com.keevo.catalog.stock.domain.port.in.GetMultiStoreOverviewUseCase;
 import com.keevo.catalog.stock.domain.port.in.GetStoreStockDetailQuery;
@@ -21,11 +24,12 @@ import java.util.UUID;
  * MultiStoreStockController — centralized multi-store stock overview endpoints.
  *
  * <pre>
- * GET /api/v1/stock/overview                                → all active stores summary
+ * GET /api/v1/stock/overview                                         → all active stores summary
  * GET /api/v1/stock/stores/{storeId}/products?page&size&sortLowFirst → store product stock list
+ * GET /api/v1/stock/products/{productId}/availability                → cross-store availability
  * </pre>
  *
- * Story 3.2.
+ * Stories 3.2 & 3.4.
  */
 @Tag(name = "Multi-Store Stock", description = "Centralized multi-store stock overview")
 @RestController
@@ -33,13 +37,16 @@ import java.util.UUID;
 @PreAuthorize("hasRole('USER')")
 public class MultiStoreStockController {
 
-    private final GetMultiStoreOverviewUseCase overviewUseCase;
-    private final GetStoreStockDetailUseCase   detailUseCase;
+    private final GetMultiStoreOverviewUseCase     overviewUseCase;
+    private final GetStoreStockDetailUseCase       detailUseCase;
+    private final GetCrossStoreAvailabilityUseCase availabilityUseCase;
 
     public MultiStoreStockController(GetMultiStoreOverviewUseCase overviewUseCase,
-                                     GetStoreStockDetailUseCase detailUseCase) {
-        this.overviewUseCase = overviewUseCase;
-        this.detailUseCase   = detailUseCase;
+                                     GetStoreStockDetailUseCase detailUseCase,
+                                     GetCrossStoreAvailabilityUseCase availabilityUseCase) {
+        this.overviewUseCase     = overviewUseCase;
+        this.detailUseCase       = detailUseCase;
+        this.availabilityUseCase = availabilityUseCase;
     }
 
     @Operation(summary = "Get stock summary for all active stores + warehouse")
@@ -68,5 +75,13 @@ public class MultiStoreStockController {
                 .map(StoreProductStockEntryDto::from);
 
         return ResponseEntity.ok(ApiResponseWrapper.ok(result));
+    }
+
+    @Operation(summary = "Get product stock availability across all active stores")
+    @GetMapping("/products/{productId}/availability")
+    public ResponseEntity<ApiResponseWrapper<CrossStoreAvailabilityResponseDto>> getProductAvailability(
+            @PathVariable UUID productId) {
+        var result = availabilityUseCase.execute(new GetCrossStoreAvailabilityQuery(productId));
+        return ResponseEntity.ok(ApiResponseWrapper.ok(CrossStoreAvailabilityResponseDto.from(result)));
     }
 }

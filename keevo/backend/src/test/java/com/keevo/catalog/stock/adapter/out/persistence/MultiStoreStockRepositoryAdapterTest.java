@@ -2,7 +2,10 @@ package com.keevo.catalog.stock.adapter.out.persistence;
 
 import com.keevo.catalog.stock.domain.model.StoreProductStockEntry;
 import com.keevo.catalog.stock.domain.model.StoreStockSummary;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.domain.model.StoreType;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -39,6 +42,16 @@ class MultiStoreStockRepositoryAdapterTest {
     private MultiStoreStockRepositoryAdapter adapter;
 
     private final UUID storeId = UUID.randomUUID();
+
+    @BeforeEach
+    void setUp() {
+        TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @AfterEach
+    void tearDown() {
+        TenantContext.clear();
+    }
 
     @Test
     void getStoreOverviews_returnsOneRow_perActiveStore() {

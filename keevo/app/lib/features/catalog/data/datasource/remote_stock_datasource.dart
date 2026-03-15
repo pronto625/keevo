@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../../domain/model/cross_store_availability_model.dart';
 import '../../domain/model/stock_level_model.dart';
 import '../../domain/model/stock_movement_model.dart';
 
@@ -12,6 +13,19 @@ class RemoteStockDataSource {
   final Dio _dio;
 
   const RemoteStockDataSource({required Dio dio}) : _dio = dio;
+
+  /// GET /api/v1/stock/products/{productId}/availability (Story 3.4 — AC1).
+  ///
+  /// Times out after 3 s so the caller can fall back to local cache quickly.
+  Future<CrossStoreAvailabilityModel> fetchCrossStoreAvailability(
+      String productId) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/v1/stock/products/$productId/availability',
+      options: Options(receiveTimeout: const Duration(seconds: 3)),
+    );
+    return CrossStoreAvailabilityModel.fromJson(
+        response.data!['data'] as Map<String, dynamic>);
+  }
 
   /// GET /api/v1/products/{productId}/stock
   Future<List<StockLevelModel>> getLevels(String productId) async {

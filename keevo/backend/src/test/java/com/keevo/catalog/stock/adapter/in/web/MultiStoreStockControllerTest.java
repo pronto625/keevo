@@ -1,11 +1,17 @@
 package com.keevo.catalog.stock.adapter.in.web;
 
+import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.stock.application.usecase.GetMultiStoreOverviewService;
 import com.keevo.catalog.stock.application.usecase.GetStoreStockDetailService;
+import com.keevo.catalog.stock.domain.model.CrossStoreAvailabilityEntry;
 import com.keevo.catalog.stock.domain.model.StoreProductStockEntry;
 import com.keevo.catalog.stock.domain.model.StoreStockSummary;
+import com.keevo.catalog.stock.domain.port.in.GetCrossStoreAvailabilityUseCase;
 import com.keevo.catalog.stock.domain.port.in.GetMultiStoreOverviewUseCase;
 import com.keevo.catalog.stock.domain.port.in.GetStoreStockDetailUseCase;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
 import com.keevo.store.store.domain.model.StoreType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,6 +24,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -28,13 +35,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * MultiStoreStockControllerTest — unit tests for MultiStoreStockController REST endpoints.
- * Story 3.2. TDD RED phase.
+ * Stories 3.2 & 3.4. TDD RED phase.
  */
 @ExtendWith(MockitoExtension.class)
 class MultiStoreStockControllerTest {
 
-    @Mock private GetMultiStoreOverviewUseCase overviewUseCase;
-    @Mock private GetStoreStockDetailUseCase   detailUseCase;
+    @Mock private GetMultiStoreOverviewUseCase     overviewUseCase;
+    @Mock private GetStoreStockDetailUseCase       detailUseCase;
+    @Mock private GetCrossStoreAvailabilityUseCase availabilityUseCase;
 
     @InjectMocks private MultiStoreStockController controller;
 
@@ -43,7 +51,9 @@ class MultiStoreStockControllerTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
     }
 
     private StoreStockSummary sampleSummary() {
@@ -103,5 +113,53 @@ class MultiStoreStockControllerTest {
                 .param("size", "999"))
             .andExpect(status().isOk());
         // Size will be clamped to 25 internally
+    }
+
+    // ── Story 3.4: Cross-store product availability ───────────────────────────
+
+    private final UUID productId = UUID.randomUUID();
+
+    private CrossStoreAvailabilityEntry sampleAvailabilityEntry(int qty) {
+        return new CrossStoreAvailabilityEntry(
+                storeId, "Boutique A", StoreType.STORE, qty, 2, qty > 0 && qty <= 2, Instant.now());
+    }
+
+    private Product sampleProduct() {
+        return new Product(productId, "Produit Test", null, "KEV-ABCDEF",
+                null, 1000, 500, 0, 0, false, null, 0, Instant.now(), Instant.now());
+    }
+
+    @Test
+    void GET_products_productId_availability_shouldReturn200_withEntries() throws Exception {
+        var entries = List.of(sampleAvailabilityEntry(5), sampleAvailabilityEntry(0));
+        var result  = new GetCrossStoreAvailabilityUseCase.Result(sampleProduct(), entries);
+        when(availabilityUseCase.execute(any())).thenReturn(result);
+
+        mockMvc.perform(get("/api/v1/stock/products/{productId}/availability", productId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.productId").value(productId.toString()))
+            .andExpect(jsonPath("$.data.productName").value("Produit Test"))
+            .andExpect(jsonPath("$.data.entries").isArray())
+            .andExpect(jsonPath("$.data.entries.length()").value(2));
+    }
+
+    @Test
+    void GET_products_productId_availability_shouldReturn404_whenProductNotFound() throws Exception {
+        when(availabilityUseCase.execute(any()))
+                .thenThrow(new DomainException(ErrorCode.PRODUCT_NOT_FOUND, "not found"));
+
+        mockMvc.perform(get("/api/v1/stock/products/{productId}/availability", productId))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void GET_products_productId_availability_shouldReturn200_withEmptyEntries_whenNoStores() throws Exception {
+        var result = new GetCrossStoreAvailabilityUseCase.Result(sampleProduct(), List.of());
+        when(availabilityUseCase.execute(any())).thenReturn(result);
+
+        mockMvc.perform(get("/api/v1/stock/products/{productId}/availability", productId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.entries").isArray())
+            .andExpect(jsonPath("$.data.entries").isEmpty());
     }
 }

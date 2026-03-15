@@ -1,5 +1,6 @@
 import 'dart:developer' as dev;
 
+import '../../domain/model/cross_store_availability_model.dart';
 import '../../domain/model/stock_level_model.dart';
 import '../../domain/model/stock_movement_model.dart';
 import '../../domain/repository/stock_repository.dart';
@@ -51,6 +52,33 @@ class StockRepositoryImpl implements StockRepository {
       return matching.isNotEmpty ? matching.first : null;
     } catch (e) {
       return _local.getLevelByStore(productId, storeId);
+    }
+  }
+
+  // ── Cross-store availability (Story 3.4) ─────────────────────────────────
+
+  @override
+  Future<CrossStoreAvailabilityModel> getCrossStoreAvailability(
+      String productId) async {
+    try {
+      final model = await _remote.fetchCrossStoreAvailability(productId);
+      // AC2: update local Drift cache on remote success
+      // Use sync_ prefix + productId_storeId to match Story 3.2 cache convention
+      for (final entry in model.entries) {
+        await _local.upsertLevel(StockLevelModel(
+          id: 'sync_${productId}_${entry.storeId}',
+          productId: productId,
+          storeId: entry.storeId,
+          quantity: entry.quantity,
+          minimumThreshold: entry.minimumThreshold,
+          updatedAt: model.refreshedAt,
+        ));
+      }
+      return model;
+    } catch (e) {
+      dev.log('[Stock] Remote getCrossStoreAvailability failed — using local cache: $e',
+          name: 'StockRepository');
+      return _local.getLocalAvailability(productId);
     }
   }
 

@@ -168,12 +168,21 @@ class Login extends _$Login {
     required String password,
   }) async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(
+    final result = await AsyncValue.guard(
       () => ref.read(loginUseCaseProvider).execute(
             phoneNumber: phoneNumber,
             password: password,
           ),
     );
+    // Persist role for Story 3.4 (currentUserRoleProvider).
+    result.whenData((loginResult) {
+      if (loginResult is AuthenticatedResult) {
+        ref
+            .read(sharedPreferencesProvider)
+            .setString(kUserRoleKey, loginResult.tokens.role);
+      }
+    });
+    state = result;
   }
 
   /// Reset state to initial (e.g. after navigation or error dismissal).
@@ -199,12 +208,21 @@ class SelectTenant extends _$SelectTenant {
     required String tenantCode,
   }) async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(
+    final result = await AsyncValue.guard(
       () => ref.read(selectTenantUseCaseProvider).execute(
             loginToken: loginToken,
             tenantCode: tenantCode,
           ),
     );
+    // Persist role for Story 3.4 (currentUserRoleProvider).
+    result.whenData((tokens) {
+      if (tokens != null) {
+        ref
+            .read(sharedPreferencesProvider)
+            .setString(kUserRoleKey, tokens.role);
+      }
+    });
+    state = result;
   }
 
   /// Reset state to initial.

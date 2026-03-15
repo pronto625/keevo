@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../../../core/storage/app_database.dart';
+import '../../domain/model/cross_store_availability_model.dart';
 import '../../domain/model/stock_level_model.dart';
 import '../../domain/model/stock_movement_model.dart';
 
@@ -57,6 +58,50 @@ class LocalStockDataSource {
           minimumThreshold: Value(minimumThreshold),
           updatedAt: Value(DateTime.now()),
         ));
+  }
+
+  // ── Cross-store availability (Story 3.4) ─────────────────────────────────
+
+  /// Builds a [CrossStoreAvailabilityModel] from Drift by joining active stores
+  /// with their stock level for [productId].
+  ///
+  /// Stores without a stock record are included with quantity = 0.
+  Future<CrossStoreAvailabilityModel> getLocalAvailability(
+      String productId) async {
+    final stores = await (_db.select(_db.stores)
+          ..where((s) => s.isActive.equals(true))
+          ..orderBy([(s) => OrderingTerm.asc(s.createdAt)]))
+        .get();
+
+    final levels = await (_db.select(_db.stockLevels)
+          ..where((l) => l.productId.equals(productId)))
+        .get();
+
+    final levelByStore = {
+      for (final l in levels) l.storeId: l,
+    };
+
+    final entries = stores.map((s) {
+      final level = levelByStore[s.id];
+      final qty = level?.quantity ?? 0;
+      final minThreshold = level?.minimumThreshold ?? 0;
+      final isLow = qty > 0 && minThreshold > 0 && qty <= minThreshold;
+      return CrossStoreAvailabilityEntry(
+        storeId: s.id,
+        storeName: s.name,
+        storeType: s.type,
+        quantity: qty,
+        minimumThreshold: minThreshold,
+        isLow: isLow,
+      );
+    }).toList();
+
+    return CrossStoreAvailabilityModel(
+      productId: productId,
+      productName: '',
+      entries: entries,
+      refreshedAt: DateTime.now(),
+    );
   }
 
   // ── Stock Movements ───────────────────────────────────────────────────────

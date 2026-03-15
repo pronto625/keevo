@@ -1,5 +1,6 @@
 package com.keevo.catalog.stock.domain.port.out;
 
+import com.keevo.catalog.stock.domain.model.CrossStoreAvailabilityEntry;
 import com.keevo.catalog.stock.domain.model.StoreProductStockEntry;
 import com.keevo.catalog.stock.domain.model.StoreStockSummary;
 import org.springframework.data.domain.Page;
@@ -13,7 +14,7 @@ import java.util.UUID;
  *
  * <p>Implementation uses native SQL (JdbcTemplate) to avoid cross-module
  * JPA entity imports (stores/products/stock_levels are in separate modules).
- * Story 3.2.
+ * Story 3.2. Extended in Story 3.4 with cross-store availability query.
  */
 public interface MultiStoreStockRepository {
 
@@ -28,4 +29,12 @@ public interface MultiStoreStockRepository {
      * Sort: low/critical first (when sortLowFirst), then alphabetical by product name.
      */
     Page<StoreProductStockEntry> getStoreStockDetail(UUID storeId, boolean sortLowFirst, Pageable pageable);
+
+    /**
+     * Returns stock availability for {@code productId} across ALL active stores.
+     * Includes stores with quantity = 0.
+     * Sorted by store created_at ASC (consistent ordering; client sorts by quantity).
+     * Story 3.4.
+     */
+    List<CrossStoreAvailabilityEntry> getProductAvailability(UUID productId);
 }

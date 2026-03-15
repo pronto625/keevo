@@ -43,7 +43,7 @@
 **Gestion Multi-Boutiques & Warehouse (FR30–FR36)**
 - FR30: Un propriétaire peut créer et gérer plusieurs boutiques + un warehouse principal
 - FR31: Un propriétaire peut visualiser les niveaux de stock de toutes ses boutiques en temps réel sur une vue centralisée
-- FR32: Un propriétaire peut initier un transfert de stock entre boutiques avec traçabilité complète
+- FR32: Un propriétaire peut initier un transfert de stock entre boutiques avec traçabilité complète — **flux deux-étapes** : Envoi (source décrémentée, statut IN_TRANSIT) puis Réception (destination incrémentée, statut COMPLETED)
 - FR33: Un employé peut vérifier la disponibilité d'un produit dans toutes les boutiques du tenant
 - FR34: Un propriétaire peut utiliser le warehouse comme point d'origine et de distribution des stocks
 - FR35: Un propriétaire peut assigner un employé à une boutique spécifique

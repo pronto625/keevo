@@ -57,8 +57,8 @@ class LocalMultiStoreStockDataSource {
   }) async {
     final offset = page * size;
     final orderClause = sortLowFirst
-        ? 'CASE WHEN sl.minimum_threshold > 0 AND sl.quantity > 0 AND sl.quantity <= sl.minimum_threshold THEN 0 '
-            'WHEN sl.quantity = 0 THEN 1 ELSE 2 END ASC, p.name ASC'
+        ? 'CASE WHEN minimum_threshold > 0 AND quantity > 0 AND quantity <= minimum_threshold THEN 0 '
+            'WHEN quantity = 0 THEN 1 ELSE 2 END ASC, p.name ASC'
         : 'p.name ASC';
 
     final sql = '''
@@ -67,11 +67,12 @@ class LocalMultiStoreStockDataSource {
         p.name  AS product_name,
         sl.variant_id,
         sl.store_id,
-        sl.quantity,
-        sl.minimum_threshold
+        MAX(sl.quantity)          AS quantity,
+        MAX(sl.minimum_threshold) AS minimum_threshold
       FROM stock_levels sl
       JOIN products p ON p.id = sl.product_id
       WHERE sl.store_id = ? AND p.archived = 0
+      GROUP BY p.id, p.name, sl.variant_id, sl.store_id
       ORDER BY $orderClause
       LIMIT $size OFFSET $offset
     ''';
@@ -89,12 +90,13 @@ class LocalMultiStoreStockDataSource {
         p.name  AS product_name,
         sl.variant_id,
         sl.store_id,
-        sl.quantity,
-        sl.minimum_threshold
+        MAX(sl.quantity)          AS quantity,
+        MAX(sl.minimum_threshold) AS minimum_threshold
       FROM stock_levels sl
       JOIN products p ON p.id = sl.product_id
       JOIN stores   s ON s.id = sl.store_id AND s.is_active = 1
       WHERE p.name LIKE ? AND p.archived = 0
+      GROUP BY p.id, p.name, sl.variant_id, sl.store_id
       ORDER BY p.name ASC, s.name ASC
     ''';
     final rows = await _db.customSelect(
