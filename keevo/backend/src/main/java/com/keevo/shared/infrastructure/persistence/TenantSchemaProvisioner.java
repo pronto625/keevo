@@ -329,6 +329,28 @@ public class TenantSchemaProvisioner {
     static final String DDL_SALES_IDX_CLIENT =
             "CREATE INDEX IF NOT EXISTS idx_sales_client_id ON sales(client_id)";
 
+    // ── Employees (Story 3.5) ─────────────────────────────────────────────────
+
+    static final String DDL_EMPLOYEES = """
+            CREATE TABLE IF NOT EXISTS employees (
+                id                       UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id                  UUID         NOT NULL,
+                store_id                 UUID         NOT NULL,
+                first_name               VARCHAR(100) NOT NULL,
+                last_name                VARCHAR(100) NOT NULL,
+                status                   VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE'
+                                             CHECK (status IN ('ACTIVE','INACTIVE')),
+                password_change_required BOOLEAN      NOT NULL DEFAULT TRUE,
+                created_at               TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                updated_at               TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+            )""";
+
+    static final String DDL_EMPLOYEES_IDX_USER =
+            "CREATE INDEX IF NOT EXISTS idx_employees_user_id ON employees(user_id)";
+
+    static final String DDL_EMPLOYEES_IDX_STORE =
+            "CREATE INDEX IF NOT EXISTS idx_employees_store_id ON employees(store_id)";
+
     // ── Draft Notifications (Story 2.4) ──────────────────────────────────────
 
     static final String DDL_DRAFT_NOTIFICATIONS = """
@@ -479,6 +501,10 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_SALES);
             stmt.execute(DDL_SALES_MIGRATE_CLIENT_ID); // idempotent: adds client_id if missing
             stmt.execute(DDL_SALES_IDX_CLIENT);
+            // Story 3.5 — employees
+            stmt.execute(DDL_EMPLOYEES);
+            stmt.execute(DDL_EMPLOYEES_IDX_USER);
+            stmt.execute(DDL_EMPLOYEES_IDX_STORE);
             // Story 2.4 — draft notifications
             stmt.execute(DDL_DRAFT_NOTIFICATIONS);
             stmt.execute(DDL_DRAFT_NOTIFICATIONS_IDX_PRODUCT);

@@ -63,15 +63,16 @@ public class TenantSchemaSyncService {
      * <p>Key = table name, Value = DDL statement (CREATE TABLE IF NOT EXISTS).
      */
     private static final java.util.Map<String, String> REQUIRED_TENANT_TABLES_DDL =
-            java.util.Map.of(
-                    "audit_log",             TenantSchemaProvisioner.DDL_AUDIT_LOG,
-                    "products",              TenantSchemaProvisioner.DDL_PRODUCTS,
-                    "stock_levels",          TenantSchemaProvisioner.DDL_STOCK_LEVELS,
-                    "stock_movements",       TenantSchemaProvisioner.DDL_STOCK_MOVEMENTS,
-                    "clients",               TenantSchemaProvisioner.DDL_CLIENTS,
-                    "suppliers",             TenantSchemaProvisioner.DDL_SUPPLIERS,
-                    "product_suppliers",     TenantSchemaProvisioner.DDL_PRODUCT_SUPPLIERS,
-                    "draft_notifications",   TenantSchemaProvisioner.DDL_DRAFT_NOTIFICATIONS
+            java.util.Map.ofEntries(
+                    java.util.Map.entry("audit_log",             TenantSchemaProvisioner.DDL_AUDIT_LOG),
+                    java.util.Map.entry("products",              TenantSchemaProvisioner.DDL_PRODUCTS),
+                    java.util.Map.entry("stock_levels",          TenantSchemaProvisioner.DDL_STOCK_LEVELS),
+                    java.util.Map.entry("stock_movements",       TenantSchemaProvisioner.DDL_STOCK_MOVEMENTS),
+                    java.util.Map.entry("clients",               TenantSchemaProvisioner.DDL_CLIENTS),
+                    java.util.Map.entry("suppliers",             TenantSchemaProvisioner.DDL_SUPPLIERS),
+                    java.util.Map.entry("product_suppliers",     TenantSchemaProvisioner.DDL_PRODUCT_SUPPLIERS),
+                    java.util.Map.entry("draft_notifications",   TenantSchemaProvisioner.DDL_DRAFT_NOTIFICATIONS),
+                    java.util.Map.entry("employees",             TenantSchemaProvisioner.DDL_EMPLOYEES)
             );
 
     /** Valid tenant schema pattern — prevents any SQL injection. */

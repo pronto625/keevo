@@ -148,8 +148,8 @@ class TenantSchemaSyncServiceTest {
         PreparedStatement tablesStmt2 = mock(PreparedStatement.class);
         PreparedStatement tablesStmt3 = mock(PreparedStatement.class);
         ResultSet tablesRs1 = mock(ResultSet.class); // public schema — empty
-        ResultSet tablesRs2 = mock(ResultSet.class); // tenant schema — has all 8 required tables
-        ResultSet tablesRs3 = mock(ResultSet.class); // tenant schema (3rd check) — all 8 present
+        ResultSet tablesRs2 = mock(ResultSet.class); // tenant schema — has all 9 required tables
+        ResultSet tablesRs3 = mock(ResultSet.class); // tenant schema (3rd check) — all 9 present
 
         when(connection.prepareStatement(contains("information_schema.tables")))
                 .thenReturn(tablesStmt, tablesStmt2, tablesStmt3);
@@ -158,16 +158,16 @@ class TenantSchemaSyncServiceTest {
         when(tablesRs1.next()).thenReturn(false); // public schema has no tables
 
         when(tablesStmt2.executeQuery()).thenReturn(tablesRs2);
-        when(tablesRs2.next()).thenReturn(true, true, true, true, true, true, true, true, false); // 8 tables
+        when(tablesRs2.next()).thenReturn(true, true, true, true, true, true, true, true, true, false); // 9 tables
         when(tablesRs2.getString("table_name")).thenReturn(
                 "audit_log", "products", "stock_levels", "stock_movements",
-                "clients", "suppliers", "product_suppliers", "draft_notifications");
+                "clients", "suppliers", "product_suppliers", "draft_notifications", "employees");
 
         when(tablesStmt3.executeQuery()).thenReturn(tablesRs3);
-        when(tablesRs3.next()).thenReturn(true, true, true, true, true, true, true, true, false); // 8 tables
+        when(tablesRs3.next()).thenReturn(true, true, true, true, true, true, true, true, true, false); // 9 tables
         when(tablesRs3.getString("table_name")).thenReturn(
                 "audit_log", "products", "stock_levels", "stock_movements",
-                "clients", "suppliers", "product_suppliers", "draft_notifications");
+                "clients", "suppliers", "product_suppliers", "draft_notifications", "employees");
 
         // ensureRequiredIndexes() always runs (idempotent index DDL) and uses createStatement()
         when(connection.createStatement()).thenReturn(execStmt);

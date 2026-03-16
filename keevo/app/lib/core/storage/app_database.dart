@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:sqlite3/sqlite3.dart' as sql;
 
 import 'categories_table.dart';
 import 'clients_table.dart';
@@ -182,6 +183,32 @@ LazyDatabase _openEncryptedConnection(String hexKey) {
       '[DB] Opening encrypted DB at ${file.path}',
       name: 'AppDatabase',
     );
+
+    // ── Key-mismatch guard ───────────────────────────────────────────
+    // If the DB file exists but the encryption key no longer matches
+    // (e.g. debug reinstall where FlutterSecureStorage was reset),
+    // delete the stale file so Drift can recreate a fresh DB.
+    if (file.existsSync()) {
+      try {
+        final probe = sql.sqlite3.open(file.path);
+        try {
+          probe.execute("PRAGMA key = \"x'$hexKey'\"");
+          probe.select('PRAGMA page_count');
+        } finally {
+          probe.dispose();
+        }
+      } on sql.SqliteException catch (e) {
+        dev.log(
+          '[DB] ⚠️ Key mismatch (${e.message}) — deleting stale DB for re-creation',
+          name: 'AppDatabase',
+        );
+        file.deleteSync();
+        final wal = File('${file.path}-wal');
+        final shm = File('${file.path}-shm');
+        if (wal.existsSync()) wal.deleteSync();
+        if (shm.existsSync()) shm.deleteSync();
+      }
+    }
 
     // NativeDatabase (not createInBackground) — the background isolate variant
     // does NOT inherit open.overrideFor() from main(), causing sqlite3 to look

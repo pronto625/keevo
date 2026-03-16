@@ -6,6 +6,7 @@ import '../../data/repository/employee_repository_impl.dart';
 import '../../domain/model/create_employee_result.dart';
 import '../../domain/model/employee_model.dart';
 import '../../domain/repository/employee_repository.dart';
+import '../../domain/usecase/create_employee_usecase.dart';
 
 part 'employee_provider.g.dart';
 
@@ -17,6 +18,10 @@ final remoteEmployeeDataSourceProvider = Provider<RemoteEmployeeDataSource>((ref
 
 final employeeRepositoryProvider = Provider<EmployeeRepository>((ref) {
   return EmployeeRepositoryImpl(ref.watch(remoteEmployeeDataSourceProvider));
+});
+
+final createEmployeeUseCaseProvider = Provider<CreateEmployeeUseCase>((ref) {
+  return CreateEmployeeUseCase(ref.watch(employeeRepositoryProvider));
 });
 
 // ── Employee list ──────────────────────────────────────────────────────────
@@ -51,7 +56,7 @@ class CreateEmployee extends _$CreateEmployee {
   }) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(
-      () => ref.read(employeeRepositoryProvider).createEmployee(
+      () => ref.read(createEmployeeUseCaseProvider).execute(
             firstName: firstName,
             lastName: lastName,
             phoneNumber: phoneNumber,

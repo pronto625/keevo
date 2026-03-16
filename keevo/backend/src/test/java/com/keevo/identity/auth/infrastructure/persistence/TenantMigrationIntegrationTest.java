@@ -41,7 +41,7 @@ class TenantMigrationIntegrationTest {
     // sync_queue, notifications are provisioned by later epic stories.
     private static final Set<String> REQUIRED_TABLES = Set.of(
             "users", "subscriptions", "roles", "user_roles",
-            "stores", "categories", "tenant_preferences"
+            "stores", "categories", "tenant_preferences", "employees"
     );
 
     private static DataSource dataSource;
