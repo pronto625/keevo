@@ -32,10 +32,22 @@ class AuditEntryDto with _$AuditEntryDto {
     /// UUID of the user who triggered the action.
     required String userId,
 
+    /// Phone number of the actor — resolved by the backend via JOIN with public.users.
+    /// Null only in edge cases (e.g. user deleted after the audit entry was recorded).
+    String? actorPhone,
+
     /// Timestamp of the audit entry (UTC).
     required DateTime occurredAt,
   }) = _AuditEntryDto;
 
   factory AuditEntryDto.fromJson(Map<String, dynamic> json) =>
       _$AuditEntryDtoFromJson(json);
+}
+
+/// AuditPageResult — result of a paginated audit history request.
+class AuditPageResult {
+  final List<AuditEntryDto> entries;
+  final bool hasMore;
+
+  const AuditPageResult({required this.entries, required this.hasMore});
 }

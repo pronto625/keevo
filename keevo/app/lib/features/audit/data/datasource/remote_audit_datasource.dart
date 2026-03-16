@@ -5,25 +5,25 @@ import '../../domain/model/audit_entry_dto.dart';
 
 /// RemoteAuditDataSource — HTTP adapter to GET /api/v1/audit.
 ///
-/// Builds query parameters from nullable filters — omits null values.
-/// Returns raw List<AuditEntryDto> mapped from the backend response.
-/// Maps DioException HTTP errors to [AuditException].
+/// Sends paginated requests with [page] and [size] query parameters.
+/// Returns [AuditPageResult] mapped from the backend paginated response.
 class RemoteAuditDataSource {
   final Dio _dio;
 
   RemoteAuditDataSource({required Dio dio}) : _dio = dio;
 
-  /// GET /api/v1/audit
+  /// GET /api/v1/audit?page=N&size=N[&entityType=X][&entityId=Y]
   ///
-  /// Query parameters are built from non-null arguments:
-  /// - both present → `?entityType=X&entityId=Y`
-  /// - only entityType → `?entityType=X`
-  /// - neither → no query params (full tenant log)
-  Future<List<AuditEntryDto>> getAuditHistory({
+  /// Response format: { "data": { "entries": [...], "hasMore": bool, "page": N, "size": N } }
+  Future<AuditPageResult> getAuditHistoryPage({
+    required int page,
+    required int size,
     String? entityType,
     String? entityId,
   }) async {
-    final queryParams = <String, String>{
+    final queryParams = <String, dynamic>{
+      'page': page,
+      'size': size,
       if (entityType != null) 'entityType': entityType,
       if (entityId != null) 'entityId': entityId,
     };
@@ -31,14 +31,19 @@ class RemoteAuditDataSource {
     try {
       final response = await _dio.get<Map<String, dynamic>>(
         '/api/v1/audit',
-        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+        queryParameters: queryParams,
       );
 
       final body = response.data!;
-      final dataList = body['data'] as List<dynamic>;
-      return dataList
-          .map((e) => AuditEntryDto.fromJson(e as Map<String, dynamic>))
-          .toList();
+      final data = body['data'] as Map<String, dynamic>;
+      final dataList = data['entries'] as List<dynamic>;
+      final hasMore = data['hasMore'] as bool;
+      return AuditPageResult(
+        entries: dataList
+            .map((e) => AuditEntryDto.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        hasMore: hasMore,
+      );
     } on DioException catch (e) {
       throw _mapError(e);
     }

@@ -193,68 +193,96 @@ So that I can offer the customer an alternative location when my store is out of
 
 ---
 
-## Story 3.5: Invitation Employés, Rôles & Assignation Boutique
+## Story 3.5: Création Employés, Rôles & Assignation Boutique
 
 As a proprietor (Simon),
-I want to invite my employees via WhatsApp or a unique link, assign them to specific stores, and manage their roles,
-So that each employee has access only to their assigned store and I maintain full control over permissions.
+I want to create employee accounts directly by entering their personal information, so that each employee receives a temporary generated password, can log in immediately, and is forced to set their own password on first login following our existing two-step login flow.
 
 **Acceptance Criteria:**
 
-**Given** Simon navigates to Paramètres > Équipe
-**When** he taps "Inviter un employé"
-**Then** a form appears with: Prénom + Nom (required), Numéro WhatsApp (required), Boutique assignée (required — dropdown of active stores), Rôle (EMPLOYEE — currently the only non-owner role)
-**And** on submit, the system generates a unique invitation token (UUID, expires in 48h)
-**And** an invitation WhatsApp message is sent to the provided number via `WhatsAppPort` with: "Bonjour [Name], Simon vous invite à rejoindre [Business Name] sur Keevo. Cliquez ici pour créer votre accès : [invitation link]"
-**And** if WhatsApp delivery fails, a fallback invitation link is shown to Simon for manual sharing
+**AC1 — Owner creates an employee account**
 
-**Given** Free plan limit is 5 employees
-**When** Simon attempts to invite a 6th employee
-**Then** the invite is blocked: HTTP 403 `{ "domainCode": "PLAN_LIMIT_EXCEEDED", "details": { "entity": "employees", "limit": 5, "current": 5 } }`
+**Given** Simon navigates to Paramètres > Équipe
+**When** he taps "Ajouter un employé"
+**Then** a form appears with: Prénom (required), Nom (required), Numéro de téléphone (required — same IntlPhoneField as registration), Boutique assignée (required — dropdown of active stores), Rôle (EMPLOYEE — currently the only non-owner role)
+**And** on submit, the backend:
+  - creates a `public.users` entry with the provided phone number and a system-generated temporary password (bcrypt cost 12)
+  - inserts a `public.user_tenant_memberships` row: `(newUserId, tenantId, role='EMPLOYEE', is_active=true)`
+  - inserts a `kv_xxx.employees` row with: `id` (UUID), `userId`, `storeId`, `firstName`, `lastName`, `status: ACTIVE`, `passwordChangeRequired: true`, `createdAt`
+  - emits an `EmployeeCreatedEvent` in the audit log with `actorId` (Simon), `targetUserId`, `storeId`, `occurredAt`
+**And** a success bottom sheet is shown to Simon displaying:
+  - Employee name and assigned store
+  - The generated temporary password in full (cleartext, one-time display only)
+  - A "Copier le mot de passe" button and a warning: "Ce mot de passe ne sera plus affiché. Communiquez-le à l'employé par vos propres moyens."
+**And** the temporary password is NEVER stored in plaintext after this display — only the bcrypt hash is persisted
+
+**AC2 — Plan limit enforcement**
+
+**Given** the Free plan limit is 5 employees
+**When** Simon attempts to create a 6th employee
+**Then** the creation is blocked: HTTP 403 `{ "domainCode": "PLAN_LIMIT_EXCEEDED", "details": { "entity": "employees", "limit": 5, "current": 5 } }`
 **And** the Flutter app shows the upgrade bottom sheet
 
-**Given** Loïc receives the invitation link and opens it
-**When** he taps the link and the app opens (or web fallback)
-**Then** he is prompted to set his password (minimum 8 characters, must include at least one number)
-**And** this first login triggers a forced password change flow — Loïc cannot use the app until he sets his own password
-**And** the invitation token is consumed (single-use — cannot be reused after first activation)
-**And** Loïc's account is created with role `EMPLOYEE`, assigned to the specified store, status `ACTIVE`, `passwordChangeRequired: true`
-**And** a `EmployeeInviteAcceptedEvent` is emitted in the audit log
+**AC3 — Employee first login: phone + temporary password**
 
-**Given** Loïc has accepted the invitation but not yet set his password
-**When** he attempts to navigate to any screen other than the password-setup screen
-**Then** all navigation is blocked — a full-screen mandatory form forces the password change before any other screen is accessible (no back navigation, no skip)
+**Given** Loïc has received his phone number and temporary password from Simon (via any out-of-band channel)
+**When** he opens Keevo and enters his phone number and the temporary password on the login screen
+**Then** the standard two-step login flow executes (Story 1.7):
+  - Step 1: `POST /auth/login` verifies credentials → returns `loginToken` + `memberships` array
+  - Step 2: Flutter auto-calls `POST /auth/select-tenant` (single membership → no picker shown)
+**And** the final `accessToken` JWT contains: `userId`, `tenantId`, `role: EMPLOYEE`, `storeId`, `passwordChangeRequired: true`
+**And** the Flutter app detects the `passwordChangeRequired: true` flag in the JWT or login response
+**And** navigation is intercepted — Loïc is redirected to the **PasswordChangePage** before any other screen is accessible (no back navigation, no skip)
+
+**AC4 — Forced password change on first login**
+
+**Given** Loïc is on the PasswordChangePage (triggered by `passwordChangeRequired: true`)
+**When** he submits a new password
+**Then** the new password must meet minimum requirements: ≥ 8 characters, at least one number
+**And** `POST /api/v1/auth/change-password` is called with `{ "currentPassword": "<temp>", "newPassword": "<chosen>" }`
+**And** on success, the backend:
+  - updates the bcrypt hash in `public.users`
+  - sets `passwordChangeRequired: false` in `kv_xxx.employees`
+  - emits `EmployeePasswordSetEvent` in the audit log with `actorId` (Loïc), `occurredAt`
 **And** the backend enforces this server-side: all non-auth API requests return HTTP 403 `{ "domainCode": "PASSWORD_CHANGE_REQUIRED" }` while `passwordChangeRequired: true`
-**And** upon successful password submission, `passwordChangeRequired` is set to `false` and Loïc is redirected to the POS screen (his default landing)
-**And** a `EmployeePasswordSetEvent` is emitted in the audit log with `actorId` (Loïc), `occurredAt`
+**And** upon successful password change, new tokens are issued (refreshed JWT without the `passwordChangeRequired` flag) and Loïc is redirected to the POS screen (his default landing)
 
-> 🔒 **Security note:** This forced-change flow is required by the UX spec (Flows 2 & 21) and is a mandatory security control — the temporary invitation credential must never be the permanent credential.
+> 🔒 **Security note:** The forced-change flow is a mandatory security control — the temporary credential generated by the owner must never remain the permanent credential. The backend enforces this independently of the Flutter guard.
 
-**Given** Loïc's account is active and he logs in
+**AC5 — Employee access restrictions**
+
+**Given** Loïc's account is active and he has completed the password change
 **When** he accesses any feature
-**Then** he is limited to operations on his assigned store only — his JWTs `storeId` claim restricts all backend queries
+**Then** he is limited to operations on his assigned store only — his JWT's `storeId` claim restricts all backend queries
 **And** stock views, POS, and inventory show ONLY data for his assigned store
-**And** he cannot view reports, manage products catalogue, create stores, or invite other employees
-**And** the navigation menu hides all OWNER-only sections automatically based on his role
+**And** he cannot view reports, manage the product catalogue, create stores, or create other employees
+**And** the navigation menu hides all OWNER-only sections automatically based on his `role: EMPLOYEE` claim
+
+**AC6 — Reassign employee to another store**
 
 **Given** Simon wants to reassign an employee to a different store
-**When** he taps an employee's name and selects "Modifier l'assignation"
+**When** he taps the employee's name and selects "Modifier l'assignation"
 **Then** a dropdown shows all active stores and he can select a new one
-**And** on save, the employee's `storeId` is updated
-**And** next time Loïc makes any API request, the server validates the updated assignment via the refreshed JWT (forced re-login if token was issued before the change)
-**And** a `EmployeeStoreReassignedEvent` is emitted
+**And** on save, the employee's `storeId` is updated in `kv_xxx.employees`
+**And** next API request from Loïc using a previously issued JWT is rejected with HTTP 401 `{ "domainCode": "STORE_REASSIGNED" }` — forcing a re-login to obtain a JWT with the updated `storeId`
+**And** a `EmployeeStoreReassignedEvent` is emitted in the audit log
 
-**Given** the invitation was sent but Loïc hasn't accepted after 48 hours
-**When** Simon views the team list
-**Then** the pending invitation shows a "Expiré" badge
-**And** Simon can tap "Renvoyer l'invitation" to generate a new token and resend the WhatsApp message
-**And** the expired token is invalidated immediately on regeneration
+**AC7 — Revoke employee access**
 
 **Given** Simon needs to revoke an employee's access immediately
 **When** he taps the employee and selects "Désactiver l'accès"
-**Then** the employee's status is set to `INACTIVE`
-**And** all active sessions for that employee are invalidated within 5 minutes (JWT blacklist or refresh token revocation)
-**And** next API request from that employee returns HTTP 401 `{ "domainCode": "ACCOUNT_INACTIVE" }`
+**Then** the employee's status is set to `INACTIVE` in `kv_xxx.employees`
+**And** the `user_tenant_memberships` row for that employee in this tenant is set to `is_active: false`
+**And** all active sessions for that employee are invalidated within 5 minutes (refresh token revocation)
+**And** the next API request from that employee returns HTTP 401 `{ "domainCode": "ACCOUNT_INACTIVE" }`
 **And** a `EmployeeDeactivatedEvent` is emitted in the audit log
+
+**AC8 — Employee list view**
+
+**Given** Simon navigates to Paramètres > Équipe
+**When** the team screen loads
+**Then** all employees (ACTIVE and INACTIVE) are listed with: name, assigned store, status badge (Actif / Inactif), and a "Mot de passe non changé" badge if `passwordChangeRequired: true` is still set
+**And** INACTIVE employees are shown at the bottom of the list
+**And** Simon can tap any employee to view details, reassign store, or deactivate
 
 ---

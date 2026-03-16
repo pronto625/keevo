@@ -42,7 +42,7 @@ class JwtAuthFilterTest {
 
     @BeforeEach
     void setUp() {
-        filter = new JwtAuthFilter(jwtTokenProvider, new ObjectMapper(), tenantSchemaSyncService);
+        filter = new JwtAuthFilter(jwtTokenProvider, new ObjectMapper(), tenantSchemaSyncService, null);
     }
 
     // ── Missing Authorization header ───────────────────────────────────────

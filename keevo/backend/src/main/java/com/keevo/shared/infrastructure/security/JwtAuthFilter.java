@@ -10,8 +10,10 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -60,16 +62,24 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
 
+    /** Paths where passwordChangeRequired check is skipped (employee CAN access these). */
+    private static final Set<String> PASSWORD_CHANGE_ALLOWED = Set.of(
+            "/api/v1/auth/change-password"
+    );
+
     private final JwtTokenProvider jwtTokenProvider;
     private final ObjectMapper objectMapper;
     private final TenantSchemaSyncService tenantSchemaSyncService;
+    private final JdbcTemplate jdbcTemplate;
 
     public JwtAuthFilter(JwtTokenProvider jwtTokenProvider,
                          ObjectMapper objectMapper,
-                         TenantSchemaSyncService tenantSchemaSyncService) {
+                         TenantSchemaSyncService tenantSchemaSyncService,
+                         JdbcTemplate jdbcTemplate) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.objectMapper = objectMapper;
         this.tenantSchemaSyncService = tenantSchemaSyncService;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     /**
@@ -130,6 +140,40 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
             // Sync tenant schema against public (no-op if already done this JVM lifetime)
             tenantSchemaSyncService.syncIfNeeded(tenantId);
+
+            // Story 3.5 — EMPLOYEE runtime guards (DB-backed, runs AFTER TenantContext is set).
+            if ("EMPLOYEE".equals(role)) {
+                try {
+                    Map<String, Object> empRow = jdbcTemplate.queryForMap(
+                            "SELECT store_id, status, password_change_required FROM \""
+                            + tenantId + "\".employees WHERE user_id = ? LIMIT 1", userId);
+
+                    if ("INACTIVE".equals(empRow.get("status"))) {
+                        writeError(response, "ACCOUNT_INACTIVE");
+                        return;
+                    }
+
+                    UUID jwtStoreId = jwtTokenProvider.extractStoreId(claims);
+                    UUID dbStoreId = (UUID) empRow.get("store_id");
+                    // Reject if storeId is absent from JWT (pre-3.5 token) or doesn't match DB.
+                    if (!java.util.Objects.equals(dbStoreId, jwtStoreId)) {
+                        writeError(response, "STORE_REASSIGNED");
+                        return;
+                    }
+
+                    Boolean pwdChangeReq = (Boolean) empRow.get("password_change_required");
+                    String path = request.getRequestURI();
+                    if (Boolean.TRUE.equals(pwdChangeReq)
+                            && !PASSWORD_CHANGE_ALLOWED.contains(path)) {
+                        writeErrorWithStatus(response, "PASSWORD_CHANGE_REQUIRED",
+                                HttpServletResponse.SC_FORBIDDEN);
+                        return;
+                    }
+                } catch (EmptyResultDataAccessException ex) {
+                    writeError(response, "ACCOUNT_INACTIVE");
+                    return;
+                }
+            }
 
             // Populate Spring Security context
             var auth = new UsernamePasswordAuthenticationToken(

@@ -24,6 +24,7 @@ import java.util.UUID;
 @Entity
 @Table(
     name = "user_tenant_memberships",
+    schema = "public",
     uniqueConstraints = @UniqueConstraint(
         name = "uk_user_tenant_memberships_user_tenant",
         columnNames = {"user_id", "tenant_id"}
@@ -58,4 +59,5 @@ public class UserTenantMembershipJpaEntity extends JpaBaseEntity {
     public UUID    getTenantId() { return tenantId; }
     public String  getRole()     { return role; }
     public boolean isActive()    { return active; }
+    public void    setActive(boolean active) { this.active = active; }
 }

@@ -24,6 +24,7 @@ import java.util.UUID;
 
 import static org.hamcrest.Matchers.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
@@ -81,34 +82,35 @@ class AuditControllerTest {
             UUID userId   = UUID.randomUUID();
             Instant now   = Instant.now();
 
-            when(auditPort.findByEntityTypeAndEntityId("Product", entityId))
-                    .thenReturn(List.of(new AuditPort.AuditEntryRecord(
+            when(auditPort.findByEntityTypeAndEntityId("Product", entityId, 0, 20))
+                    .thenReturn(new AuditPort.AuditPage(List.of(new AuditPort.AuditEntryRecord(
                             UUID.randomUUID(), "Product", entityId, "PRODUCT_CREATED",
-                            null, "{\"name\":\"test\"}", userId, now)));
+                            null, "{\"name\":\"test\"}", userId, "+237690000001", now)), false));
 
             mockMvc.perform(get("/api/v1/audit")
                             .param("entityType", "Product")
                             .param("entityId", entityId.toString()))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data", hasSize(1)))
-                    .andExpect(jsonPath("$.data[0].entityType").value("Product"))
-                    .andExpect(jsonPath("$.data[0].entityId").value(entityId.toString()))
-                    .andExpect(jsonPath("$.data[0].action").value("PRODUCT_CREATED"))
-                    .andExpect(jsonPath("$.data[0].userId").value(userId.toString()));
+                    .andExpect(jsonPath("$.data.entries", hasSize(1)))
+                    .andExpect(jsonPath("$.data.entries[0].entityType").value("Product"))
+                    .andExpect(jsonPath("$.data.entries[0].entityId").value(entityId.toString()))
+                    .andExpect(jsonPath("$.data.entries[0].action").value("PRODUCT_CREATED"))
+                    .andExpect(jsonPath("$.data.entries[0].userId").value(userId.toString()))
+                    .andExpect(jsonPath("$.data.hasMore").value(false));
         }
 
         @Test
         @DisplayName("→ 200 with empty array when no matching entries exist")
         void returns200WithEmptyList() throws Exception {
             UUID entityId = UUID.randomUUID();
-            when(auditPort.findByEntityTypeAndEntityId(eq("Product"), any(UUID.class)))
-                    .thenReturn(List.of());
+            when(auditPort.findByEntityTypeAndEntityId(eq("Product"), any(UUID.class), eq(0), eq(20)))
+                    .thenReturn(new AuditPort.AuditPage(List.of(), false));
 
             mockMvc.perform(get("/api/v1/audit")
                             .param("entityType", "Product")
                             .param("entityId", entityId.toString()))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data", hasSize(0)));
+                    .andExpect(jsonPath("$.data.entries", hasSize(0)));
         }
     }
 
@@ -126,17 +128,17 @@ class AuditControllerTest {
             UUID userId   = UUID.randomUUID();
             UUID entityId = UUID.randomUUID();
 
-            when(auditPort.findByEntityType("User"))
-                    .thenReturn(List.of(new AuditPort.AuditEntryRecord(
+            when(auditPort.findByEntityType("User", 0, 20))
+                    .thenReturn(new AuditPort.AuditPage(List.of(new AuditPort.AuditEntryRecord(
                             UUID.randomUUID(), "User", entityId, "USER_REGISTERED",
-                            null, "{}", userId, Instant.now())));
+                            null, "{}", userId, "+237690000001", Instant.now())), false));
 
             mockMvc.perform(get("/api/v1/audit")
                             .param("entityType", "User"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data", hasSize(1)))
-                    .andExpect(jsonPath("$.data[0].entityType").value("User"))
-                    .andExpect(jsonPath("$.data[0].action").value("USER_REGISTERED"));
+                    .andExpect(jsonPath("$.data.entries", hasSize(1)))
+                    .andExpect(jsonPath("$.data.entries[0].entityType").value("User"))
+                    .andExpect(jsonPath("$.data.entries[0].action").value("USER_REGISTERED"));
         }
     }
 
@@ -154,29 +156,29 @@ class AuditControllerTest {
             UUID userId = UUID.randomUUID();
             UUID entityId = UUID.randomUUID();
 
-            when(auditPort.findAll())
-                    .thenReturn(List.of(
+            when(auditPort.findAll(0, 20))
+                    .thenReturn(new AuditPort.AuditPage(List.of(
                             new AuditPort.AuditEntryRecord(
                                     UUID.randomUUID(), "User", userId, "USER_REGISTERED",
-                                    null, "{}", userId, Instant.now()),
+                                    null, "{}", userId, "+237690000001", Instant.now()),
                             new AuditPort.AuditEntryRecord(
                                     UUID.randomUUID(), "Tenant", entityId, "ONBOARDING_COMPLETED",
-                                    null, "{}", userId, Instant.now())
-                    ));
+                                    null, "{}", userId, "+237690000001", Instant.now())
+                    ), false));
 
             mockMvc.perform(get("/api/v1/audit"))
                     .andExpect(status().isOk())  // MUST NOT be 400
-                    .andExpect(jsonPath("$.data", hasSize(2)));
+                    .andExpect(jsonPath("$.data.entries", hasSize(2)));
         }
 
         @Test
         @DisplayName("→ 200 with empty list when no audit entries exist (full tenant log is empty)")
         void returns200WithEmptyFullLog() throws Exception {
-            when(auditPort.findAll()).thenReturn(List.of());
+            when(auditPort.findAll(0, 20)).thenReturn(new AuditPort.AuditPage(List.of(), false));
 
             mockMvc.perform(get("/api/v1/audit"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data", hasSize(0)));
+                    .andExpect(jsonPath("$.data.entries", hasSize(0)));
         }
     }
 
@@ -254,20 +256,20 @@ class AuditControllerTest {
         UUID userId   = UUID.randomUUID();
         Instant now   = Instant.now();
 
-        when(auditPort.findAll())
-                .thenReturn(List.of(new AuditPort.AuditEntryRecord(
+        when(auditPort.findAll(0, 20))
+                .thenReturn(new AuditPort.AuditPage(List.of(new AuditPort.AuditEntryRecord(
                         id, "Product", entityId, "PRODUCT_CREATED",
-                        "{\"old\":\"value\"}", "{\"new\":\"value\"}", userId, now)));
+                        "{\"old\":\"value\"}", "{\"new\":\"value\"}", userId, "+237690000001", now)), false));
 
         mockMvc.perform(get("/api/v1/audit"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].id").value(id.toString()))
-                .andExpect(jsonPath("$.data[0].entityType").value("Product"))
-                .andExpect(jsonPath("$.data[0].entityId").value(entityId.toString()))
-                .andExpect(jsonPath("$.data[0].action").value("PRODUCT_CREATED"))
-                .andExpect(jsonPath("$.data[0].valueBefore").value("{\"old\":\"value\"}"))
-                .andExpect(jsonPath("$.data[0].valueAfter").value("{\"new\":\"value\"}"))
-                .andExpect(jsonPath("$.data[0].userId").value(userId.toString()))
-                .andExpect(jsonPath("$.data[0].occurredAt").isNotEmpty());
+                .andExpect(jsonPath("$.data.entries[0].id").value(id.toString()))
+                .andExpect(jsonPath("$.data.entries[0].entityType").value("Product"))
+                .andExpect(jsonPath("$.data.entries[0].entityId").value(entityId.toString()))
+                .andExpect(jsonPath("$.data.entries[0].action").value("PRODUCT_CREATED"))
+                .andExpect(jsonPath("$.data.entries[0].valueBefore").value("{\"old\":\"value\"}"))
+                .andExpect(jsonPath("$.data.entries[0].valueAfter").value("{\"new\":\"value\"}"))
+                .andExpect(jsonPath("$.data.entries[0].userId").value(userId.toString()))
+                .andExpect(jsonPath("$.data.entries[0].occurredAt").isNotEmpty());
     }
 }

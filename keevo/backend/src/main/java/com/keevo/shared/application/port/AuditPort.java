@@ -39,32 +39,44 @@ public interface AuditPort {
     );
 
     /**
-     * Query audit entries filtered by both entityType and entityId.
+     * Query audit entries (paginated) filtered by both entityType and entityId.
      * Results are sorted {@code occurredAt DESC}.
      *
      * @param entityType entity type filter (required)
      * @param entityId   entity UUID filter (required)
-     * @return matching audit entries for the current tenant (TenantContext)
+     * @param page       zero-based page index
+     * @param size       number of entries per page
+     * @return paginated result with entries and hasMore flag
      */
-    List<AuditEntryRecord> findByEntityTypeAndEntityId(String entityType, UUID entityId);
+    AuditPage findByEntityTypeAndEntityId(String entityType, UUID entityId, int page, int size);
 
     /**
-     * Query audit entries filtered by entityType only.
+     * Query audit entries (paginated) filtered by entityType only.
      * Results are sorted {@code occurredAt DESC}.
      *
      * @param entityType entity type filter (required)
-     * @return all entries of the given type for the current tenant
+     * @param page       zero-based page index
+     * @param size       number of entries per page
+     * @return paginated result with entries and hasMore flag
      */
-    List<AuditEntryRecord> findByEntityType(String entityType);
+    AuditPage findByEntityType(String entityType, int page, int size);
 
     /**
-     * Retrieve the complete audit log for the current tenant.
+     * Retrieve a paginated slice of the complete audit log for the current tenant.
      * Results are sorted {@code occurredAt DESC}.
      * Tenant isolation is guaranteed by TenantContext + schema routing.
      *
-     * @return all audit entries for the current tenant schema
+     * @param page zero-based page index
+     * @param size number of entries per page
+     * @return paginated result with entries and hasMore flag
      */
-    List<AuditEntryRecord> findAll();
+    AuditPage findAll(int page, int size);
+
+    /**
+     * Paginated query result — entries for the requested page and a flag
+     * indicating whether a next page exists.
+     */
+    record AuditPage(List<AuditEntryRecord> entries, boolean hasMore) {}
 
     /**
      * AuditEntryRecord — port-layer aggregate snapshot of a single audit log entry.
@@ -79,6 +91,7 @@ public interface AuditPort {
             String valueBefore,
             String valueAfter,
             UUID userId,
+            String actorPhone,
             java.time.Instant occurredAt
     ) {}
 }

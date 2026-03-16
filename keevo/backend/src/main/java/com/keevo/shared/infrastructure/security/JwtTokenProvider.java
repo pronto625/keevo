@@ -79,6 +79,39 @@ public class JwtTokenProvider {
     }
 
     /**
+     * Generate a signed RS256 JWT with storeId and passwordChangeRequired claims.
+     * Story 3.5 — EMPLOYEE tokens include store assignment and forced-change flag.
+     *
+     * @param userId                  subject (user UUID)
+     * @param tenantId                tenant schema name
+     * @param role                    user role
+     * @param tenantStatus            tenant status
+     * @param storeId                 assigned store UUID (null for OWNER)
+     * @param passwordChangeRequired  true if employee must change password
+     * @return compact JWT string
+     */
+    public String generateAccessToken(UUID userId, String tenantId, String role,
+                                       String tenantStatus, UUID storeId,
+                                       boolean passwordChangeRequired) {
+        Instant now = Instant.now();
+        var builder = Jwts.builder()
+                .subject(userId.toString())
+                .claim("tenantId", tenantId)
+                .claim("role", role)
+                .claim("tenantStatus", tenantStatus)
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plus(jwtProperties.getAccessTokenExpiryHours(), ChronoUnit.HOURS)))
+                .signWith(privateKey, Jwts.SIG.RS256);
+        if (storeId != null) {
+            builder.claim("storeId", storeId.toString());
+        }
+        if (passwordChangeRequired) {
+            builder.claim("passwordChangeRequired", true);
+        }
+        return builder.compact();
+    }
+
+    /**
      * Generate a short-lived RS256 JWT login token (Story 1.7 two-step login).
      *
      * <p>This token has a 5-minute TTL and carries {@code scope = "login_pending"}.
@@ -161,6 +194,18 @@ public class JwtTokenProvider {
     public String extractTenantStatus(Claims claims) {
         String status = claims.get("tenantStatus", String.class);
         return status != null ? status : "ACTIVE";
+    }
+
+    /** Extract storeId from parsed claims. Returns null if absent (OWNER tokens). */
+    public UUID extractStoreId(Claims claims) {
+        String storeId = claims.get("storeId", String.class);
+        return storeId != null ? UUID.fromString(storeId) : null;
+    }
+
+    /** Extract passwordChangeRequired from parsed claims. Returns false if absent. */
+    public boolean extractPasswordChangeRequired(Claims claims) {
+        Boolean val = claims.get("passwordChangeRequired", Boolean.class);
+        return val != null && val;
     }
 
     /**

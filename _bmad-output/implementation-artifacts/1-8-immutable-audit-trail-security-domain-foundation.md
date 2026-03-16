@@ -161,8 +161,10 @@ The controller and event listener interact only with the clean `AuditPort` inter
     - **All queries are tenant-safe**: the schema routing via `SchemaAwareMultiTenantConnectionProvider` guarantees each call reads ONLY the current `TenantContext` schema
   - [x] 2.9 — Create `shared/infrastructure/persistence/impl/AuditLogRepositoryAdapter.java`:
     - Implements `AuditPort`
-    - Injects `AuditLogSpringRepository`
-    - `record()`: builds `AuditLogJpaEntity` and calls `repository.save(entity)` — synchronous, within caller's transaction; entity is always saved into the schema currently held by `TenantContext`
+    - Injects `AuditLogSpringRepository` (for `record()` only) AND `EntityManager` (for queries)
+    - `record()`: builds `AuditLogJpaEntity` and calls `repository.save(entity)` with `@Transactional(propagation = REQUIRES_NEW)`
+    - Query methods use `EntityManager.createNativeQuery()` with a `LEFT JOIN public.users u ON a.user_id = u.id` to resolve `u.phone_number` as `actorPhone`
+    - Native SQL column order: `[0]=id::text, [1]=entity_type, [2]=entity_id::text, [3]=action, [4]=value_before, [5]=value_after, [6]=user_id::text, [7]=occurred_at, [8]=phone_number`
     - Method `findByEntityTypeAndEntityId(String entityType, UUID entityId)`: filtered query → list of `AuditEntryRecord`
     - Method `findByEntityType(String entityType)`: entityType-only filter → list of `AuditEntryRecord`
     - Method `findAll()`: full tenant log → list of `AuditEntryRecord` (tenant-safe via schema routing)
@@ -268,7 +270,8 @@ The controller and event listener interact only with the clean `AuditPort` inter
       - neither → `findAll()` (full tenant log — safe because TenantContext scopes the schema)
     - `DELETE /{id}` → `throw new DomainException(ErrorCode.AUDIT_IMMUTABLE, "Audit entries are immutable")`
     - `PUT /{id}` → same `AUDIT_IMMUTABLE` throw
-    - Response DTO: `AuditEntryResponse(id, entityType, entityId, action, valueBefore, valueAfter, userId, occurredAt)` — Java record in `dto/` sub-package
+    - Response DTO: `AuditEntryResponse(id, entityType, entityId, action, valueBefore, valueAfter, userId, actorPhone, occurredAt)` — Java record in `dto/` sub-package
+      - `actorPhone`: resolved by backend via `LEFT JOIN public.users` — the phone number of the actor, null if user was deleted after the fact
   - [x] 5.3 — Create `shared/infrastructure/web/mcp/AuditMcpPlaceholder.java`: empty `.gitkeep` equivalent — `// MCP adapter placeholder — to be implemented in V2 MCP migration`
   - [x] 5.4 — Make tests GREEN
 
@@ -615,7 +618,17 @@ Claude Sonnet 4.6 (GitHub Copilot)
 - `keevo/scripts/e2e/e2e-story-1-8.py`
 
 **Backend — Modified files:**
-- `keevo/backend/src/main/java/com/keevo/shared/application/port/AuditPort.java` — added `valueBefore`, `valueAfter`, query methods, `AuditEntryRecord`
+    record AuditEntryRecord(
+            UUID id,
+            String entityType,
+            UUID entityId,
+            String action,
+            String valueBefore,
+            String valueAfter,
+            UUID userId,
+            String actorPhone,   // resolved via LEFT JOIN public.users — null if user deleted
+            Instant occurredAt
+    ) {}
 - `keevo/backend/src/main/java/com/keevo/shared/infrastructure/web/AuditEventListener.java` — real persistence with TenantContext management
 - `keevo/backend/src/main/java/com/keevo/shared/infrastructure/web/GlobalExceptionHandler.java` — French messages map + `AUDIT_IMMUTABLE` → 403
 - `keevo/backend/src/main/java/com/keevo/shared/domain/exception/ErrorCode.java` — added `AUDIT_IMMUTABLE`

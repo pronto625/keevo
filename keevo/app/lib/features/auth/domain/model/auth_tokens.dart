@@ -29,5 +29,11 @@ class AuthTokens with _$AuthTokens {
 
     /// Access token lifetime in seconds (defaults to 86400 = 24h).
     required int expiresIn,
+
+    /// Assigned store UUID (null for OWNER) — Story 3.5.
+    String? storeId,
+
+    /// True if employee must change password on first login — Story 3.5.
+    @Default(false) bool passwordChangeRequired,
   }) = _AuthTokens;
 }

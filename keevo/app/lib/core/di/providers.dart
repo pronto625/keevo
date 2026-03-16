@@ -1,6 +1,7 @@
 import 'dart:developer' as dev;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
 
@@ -47,6 +48,28 @@ const kUserRoleKey = 'user_role';
 
 final currentUserRoleProvider = Provider<String?>((ref) {
   return ref.watch(sharedPreferencesProvider).getString(kUserRoleKey);
+});
+
+/// Current user phone number (e.g. +237600000000) — set at login.
+const kUserPhoneKey = 'user_phone';
+
+final currentUserPhoneProvider = Provider<String?>((ref) {
+  return ref.watch(sharedPreferencesProvider).getString(kUserPhoneKey);
+});
+
+/// Current user ID (UUID) — read from FlutterSecureStorage (key: 'user_id').
+/// Used in audit trail to mark entries made by the current user as "Vous".
+final currentUserIdProvider = FutureProvider<String?>((ref) async {
+  const storage = FlutterSecureStorage();
+  return storage.read(key: 'user_id');
+});
+
+/// Password change required flag — Story 3.5.
+/// Stored in SharedPreferences (not secret, just a UI routing flag).
+const kPasswordChangeRequiredKey = 'pwd_change_req';
+
+final passwordChangeRequiredProvider = Provider<bool>((ref) {
+  return ref.watch(sharedPreferencesProvider).getBool(kPasswordChangeRequiredKey) ?? false;
 });
 
 /// SyncService provider — REST implementation for real synchronization.

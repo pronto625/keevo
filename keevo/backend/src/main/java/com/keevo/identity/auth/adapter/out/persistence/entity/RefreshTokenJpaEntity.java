@@ -18,7 +18,7 @@ import java.util.UUID;
  * Domain model: {@link com.keevo.identity.auth.domain.model.RefreshToken}.
  */
 @Entity
-@Table(name = "refresh_tokens")
+@Table(name = "refresh_tokens", schema = "public")
 public class RefreshTokenJpaEntity extends JpaBaseEntity {
 
     @Column(name = "user_id", nullable = false)

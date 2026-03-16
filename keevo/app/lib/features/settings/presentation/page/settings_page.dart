@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/di/providers.dart';
+import '../../../../core/storage/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../stores/domain/model/store_model.dart';
 import '../../../stores/domain/model/store_type.dart';
@@ -12,13 +15,17 @@ import '../../../stores/presentation/provider/store_provider.dart';
 ///
 /// UX spec: Plus > Paramètres → Boutiques, Abonnement, Notifications, Aide.
 /// Gradient header Indigo Sky, cards 16dp radius, Material 3.
-class SettingsPage extends StatelessWidget {
+/// AC5: EMPLOYEE sees only Aide & Support section. OWNER-only tiles hidden.
+class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final role = ref.watch(currentUserRoleProvider);
+    final phone = ref.watch(currentUserPhoneProvider);
+    final isOwner = role == 'OWNER';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
@@ -40,28 +47,61 @@ class SettingsPage extends StatelessWidget {
                     end: Alignment.bottomRight,
                   ),
                 ),
-                child: const SafeArea(
+                child: SafeArea(
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(20, 16, 20, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                    child: Row(
                       children: [
-                        Text(
-                          'Plus',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 0.5,
+                        // Avatar circle
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withAlpha(51),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.person_rounded,
+                            color: Colors.white,
+                            size: 28,
                           ),
                         ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Paramètres',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                phone ?? 'Chargement...',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: isOwner
+                                      ? const Color(0xFFFFE066)
+                                      : Colors.white.withAlpha(51),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  isOwner ? 'Propriétaire' : 'Employé',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: isOwner
+                                        ? const Color(0xFF664D03)
+                                        : Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -77,7 +117,8 @@ class SettingsPage extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                // ── Section : Gestion ───────────────────────────────────
+                // ── Section : Gestion (OWNER only — AC5) ────────────────
+                if (isOwner) ...[
                 const _SectionLabel('Gestion'),
                 const SizedBox(height: 8),
                 _SettingsCard(
@@ -110,10 +151,28 @@ class SettingsPage extends StatelessWidget {
                       subtitle: 'Plan actif, limites et mise à niveau',
                       onTap: () => context.push('/settings/subscription'),
                     ),
+                    const _Divider(),
+                    _SettingsTile(
+                      icon: Icons.group_rounded,
+                      iconColor: const Color(0xFF3B82F6),
+                      iconBg: const Color(0xFFDBEAFE),
+                      title: 'Équipe',
+                      subtitle: 'Employés, rôles et accès',
+                      onTap: () => context.push('/settings/team'),
+                    ),
+                    const _Divider(),
+                    _SettingsTile(
+                      icon: Icons.history_rounded,
+                      iconColor: const Color(0xFF6F42C1),
+                      iconBg: const Color(0xFFF0E6FF),
+                      title: 'Journal d\'audit',
+                      subtitle: 'Historique complet des opérations',
+                      onTap: () => context.push('/audit'),
+                    ),
                   ],
                 ),
-
                 const SizedBox(height: 20),
+                ],
 
                 // ── Section : Préférences ────────────────────────────────
                 const _SectionLabel('Préférences'),
@@ -171,6 +230,15 @@ class SettingsPage extends StatelessWidget {
                   ],
                 ),
 
+                const SizedBox(height: 20),
+
+                // ── Déconnexion ──────────────────────────────────────────
+                _SettingsCard(
+                  children: [
+                    _LogoutTile(onLogout: () => _logout(context, ref)),
+                  ],
+                ),
+
                 const SizedBox(height: 24),
                 Center(
                   child: Text(
@@ -188,9 +256,94 @@ class SettingsPage extends StatelessWidget {
       ),
     );
   }
+
+  Future<void> _logout(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Se déconnecter ?'),
+        content: const Text(
+            'Vous devrez vous reconnecter pour accéder à votre compte.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Déconnecter'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    const storage = FlutterSecureStorage();
+    await storage.deleteAll();
+
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.remove(kUserRoleKey);
+    await prefs.remove(kUserPhoneKey);
+    await prefs.remove(kPasswordChangeRequiredKey);
+    await prefs.remove(kOnboardingWizardSeenKey);
+
+    ref.invalidate(currentUserRoleProvider);
+    ref.invalidate(currentUserPhoneProvider);
+
+    if (context.mounted) context.go('/auth/login');
+  }
 }
 
 // ── Private widgets ─────────────────────────────────────────────────────────
+
+class _LogoutTile extends StatelessWidget {
+  final VoidCallback onLogout;
+  const _LogoutTile({required this.onLogout});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onLogout,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFE3E3),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.logout_rounded,
+                  color: Colors.red,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Text(
+                  'Se déconnecter',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.red,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _SectionLabel extends StatelessWidget {
   final String text;

@@ -15,6 +15,7 @@ import '../../domain/model/login_result.dart';
 import '../../domain/model/registration_result.dart';
 import '../../domain/repository/auth_repository.dart';
 import '../../domain/repository/token_storage.dart';
+import '../../domain/usecase/change_password_usecase.dart';
 import '../../domain/usecase/login_usecase.dart';
 import '../../domain/usecase/register_user_usecase.dart';
 import '../../domain/usecase/select_tenant_usecase.dart';
@@ -120,6 +121,14 @@ final selectTenantUseCaseProvider = Provider<SelectTenantUseCase>((ref) {
   );
 });
 
+/// Change password use case provider (Story 3.5 — AC4).
+final changePasswordUseCaseProvider = Provider<ChangePasswordUseCase>((ref) {
+  return ChangePasswordUseCase(
+    ref.watch(authRepositoryProvider),
+    ref.watch(tokenStorageProvider),
+  );
+});
+
 // ── Registration AsyncNotifier (Riverpod code-gen) ───────────────────────────
 
 /// [Registration] manages the async registration lifecycle.
@@ -174,12 +183,15 @@ class Login extends _$Login {
             password: password,
           ),
     );
-    // Persist role for Story 3.4 (currentUserRoleProvider).
+    // Persist role + phone; invalidate providers so UI rebuilds immediately.
     result.whenData((loginResult) {
       if (loginResult is AuthenticatedResult) {
-        ref
-            .read(sharedPreferencesProvider)
-            .setString(kUserRoleKey, loginResult.tokens.role);
+        final prefs = ref.read(sharedPreferencesProvider);
+        prefs.setString(kUserRoleKey, loginResult.tokens.role);
+        prefs.setString(kUserPhoneKey, phoneNumber);
+        prefs.setBool(kPasswordChangeRequiredKey, loginResult.tokens.passwordChangeRequired);
+        ref.invalidate(currentUserRoleProvider);
+        ref.invalidate(currentUserPhoneProvider);
       }
     });
     state = result;
@@ -214,12 +226,14 @@ class SelectTenant extends _$SelectTenant {
             tenantCode: tenantCode,
           ),
     );
-    // Persist role for Story 3.4 (currentUserRoleProvider).
+    // Persist role; invalidate provider so SettingsPage role-guard rebuilds.
     result.whenData((tokens) {
       if (tokens != null) {
-        ref
-            .read(sharedPreferencesProvider)
-            .setString(kUserRoleKey, tokens.role);
+        final prefs = ref.read(sharedPreferencesProvider);
+        prefs.setString(kUserRoleKey, tokens.role);
+        prefs.setBool(kPasswordChangeRequiredKey, tokens.passwordChangeRequired);
+        ref.invalidate(currentUserRoleProvider);
+        ref.invalidate(currentUserPhoneProvider);
       }
     });
     state = result;
@@ -227,6 +241,41 @@ class SelectTenant extends _$SelectTenant {
 
   /// Reset state to initial.
   void reset() => state = const AsyncData(null);
+}
+
+// ── ChangePassword AsyncNotifier (Riverpod code-gen) ─────────────────────────
+
+/// [ChangePassword] manages the async password change lifecycle (Story 3.5, AC4).
+///
+/// State: [AsyncValue<AuthTokens?>]
+/// - Initial / reset: AsyncData(null)
+/// - Loading: AsyncLoading()
+/// - Success: AsyncData(AuthTokens(...))
+/// - Error: AsyncError(exception, stackTrace)
+@riverpod
+class ChangePassword extends _$ChangePassword {
+  @override
+  FutureOr<AuthTokens?> build() => null;
+
+  Future<void> change({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    state = const AsyncLoading();
+    final result = await AsyncValue.guard(
+      () => ref.read(changePasswordUseCaseProvider).execute(
+            currentPassword: currentPassword,
+            newPassword: newPassword,
+          ),
+    );
+    // Clear the password change required flag on success
+    result.whenData((tokens) {
+      if (tokens != null) {
+        ref.read(sharedPreferencesProvider).setBool(kPasswordChangeRequiredKey, false);
+      }
+    });
+    state = result;
+  }
 }
 
 

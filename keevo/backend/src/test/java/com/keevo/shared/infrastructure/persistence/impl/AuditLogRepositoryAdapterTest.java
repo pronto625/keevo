@@ -3,6 +3,8 @@ package com.keevo.shared.infrastructure.persistence.impl;
 import com.keevo.shared.application.port.AuditPort;
 import com.keevo.shared.infrastructure.persistence.entity.AuditLogJpaEntity;
 import com.keevo.shared.infrastructure.persistence.jpa.AuditLogSpringRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.Query;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -11,26 +13,25 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 /**
  * AuditLogRepositoryAdapterTest — TDD tests for AuditLogRepositoryAdapter.
  *
- * <p>RED → GREEN:
- * - RED: AuditLogRepositoryAdapter, AuditLogJpaEntity, AuditLogSpringRepository don't exist yet.
- * - GREEN: After implementing those classes, all tests pass.
- *
- * <p>Verifies:
- * - record() builds entity correctly and calls repository.save()
- * - findByEntityTypeAndEntityId() delegates to Spring repo and maps results
- * - findByEntityType() filters by entityType only
- * - findAll() returns full tenant log
+ * <p>record() still uses AuditLogSpringRepository.save() — mocked directly.
+ * Query methods (findBy*, findAll) use EntityManager.createNativeQuery() with
+ * a LEFT JOIN public.users — results are Object[] rows with indices:
+ *   [0]=id, [1]=entityType, [2]=entityId, [3]=action,
+ *   [4]=valueBefore, [5]=valueAfter, [6]=userId, [7]=occurredAt, [8]=actorPhone
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AuditLogRepositoryAdapter")
@@ -39,14 +40,25 @@ class AuditLogRepositoryAdapterTest {
     @Mock
     AuditLogSpringRepository auditLogSpringRepository;
 
+    @Mock
+    EntityManager entityManager;
+
+    @Mock
+    Query nativeQuery;
+
     AuditLogRepositoryAdapter adapter;
 
     @BeforeEach
     void setUp() {
-        adapter = new AuditLogRepositoryAdapter(auditLogSpringRepository);
+        adapter = new AuditLogRepositoryAdapter(auditLogSpringRepository, entityManager);
+        // Default stub: createNativeQuery returns chainable mock
+        lenient().when(entityManager.createNativeQuery(anyString())).thenReturn(nativeQuery);
+        lenient().when(nativeQuery.setParameter(anyString(), any())).thenReturn(nativeQuery);
+        lenient().when(nativeQuery.setFirstResult(anyInt())).thenReturn(nativeQuery);
+        lenient().when(nativeQuery.setMaxResults(anyInt())).thenReturn(nativeQuery);
     }
 
-    // ── record() ──────────────────────────────────────────────────────────────
+    // ── record() ──────────────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("record() calls repository.save() with all fields populated")
@@ -87,84 +99,126 @@ class AuditLogRepositoryAdapterTest {
         assertThat(saved.getValueAfter()).isEqualTo("{\"price\":150}");
     }
 
-    // ── findByEntityTypeAndEntityId() ─────────────────────────────────────────
+    // ── findByEntityTypeAndEntityId() ─────────────────────────────────────────────
 
     @Test
-    @DisplayName("findByEntityTypeAndEntityId() delegates to Spring repo and maps to AuditEntryRecord")
+    @DisplayName("findByEntityTypeAndEntityId() executes native query and maps Object[] rows")
     void findByEntityTypeAndEntityId_mapsCorrectly() {
         UUID entityId = UUID.randomUUID();
         UUID userId   = UUID.randomUUID();
         Instant now   = Instant.now();
+        String phone  = "+237690000001";
 
-        AuditLogJpaEntity entity = buildEntity(userId, "User", entityId, "USER_REGISTERED", null, "{}", now);
-        when(auditLogSpringRepository.findByEntityTypeAndEntityIdOrderByOccurredAtDesc("User", entityId))
-                .thenReturn(List.of(entity));
+        when(nativeQuery.getResultList())
+                .thenReturn(rows(buildRow(UUID.randomUUID(), "User", entityId,
+                        "USER_REGISTERED", null, "{}", userId, now, phone)));
 
-        List<AuditPort.AuditEntryRecord> results = adapter.findByEntityTypeAndEntityId("User", entityId);
+        AuditPort.AuditPage page = adapter.findByEntityTypeAndEntityId("User", entityId, 0, 20);
 
-        assertThat(results).hasSize(1);
-        AuditPort.AuditEntryRecord record = results.get(0);
+        verify(nativeQuery).setParameter("entityType", "User");
+        verify(nativeQuery).setParameter("entityId", entityId.toString());
+        verify(nativeQuery).setFirstResult(0);
+        verify(nativeQuery).setMaxResults(21);
+
+        assertThat(page.entries()).hasSize(1);
+        assertThat(page.hasMore()).isFalse();
+        AuditPort.AuditEntryRecord record = page.entries().get(0);
         assertThat(record.entityType()).isEqualTo("User");
         assertThat(record.entityId()).isEqualTo(entityId);
         assertThat(record.action()).isEqualTo("USER_REGISTERED");
         assertThat(record.userId()).isEqualTo(userId);
         assertThat(record.valueBefore()).isNull();
         assertThat(record.valueAfter()).isEqualTo("{}");
+        assertThat(record.actorPhone()).isEqualTo(phone);
         assertThat(record.occurredAt()).isEqualTo(now);
     }
 
     @Test
     @DisplayName("findByEntityTypeAndEntityId() returns empty list when no entries found")
     void findByEntityTypeAndEntityId_returnsEmptyList() {
-        UUID entityId = UUID.randomUUID();
-        when(auditLogSpringRepository.findByEntityTypeAndEntityIdOrderByOccurredAtDesc("Product", entityId))
-                .thenReturn(List.of());
+        when(nativeQuery.getResultList()).thenReturn(List.of());
 
-        List<AuditPort.AuditEntryRecord> results = adapter.findByEntityTypeAndEntityId("Product", entityId);
+        AuditPort.AuditPage page =
+                adapter.findByEntityTypeAndEntityId("Product", UUID.randomUUID(), 0, 20);
 
-        assertThat(results).isEmpty();
+        assertThat(page.entries()).isEmpty();
+        assertThat(page.hasMore()).isFalse();
     }
 
-    // ── findByEntityType() ────────────────────────────────────────────────────
+    // ── findByEntityType() ────────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("findByEntityType() delegates to entityType-only query and maps results")
+    @DisplayName("findByEntityType() executes native query with entityType filter and maps results")
     void findByEntityType_mapsCorrectly() {
         UUID userId   = UUID.randomUUID();
         UUID entityId = UUID.randomUUID();
         Instant now   = Instant.now();
 
-        AuditLogJpaEntity entity = buildEntity(userId, "User", entityId, "USER_REGISTERED", null, "{}", now);
-        when(auditLogSpringRepository.findByEntityTypeOrderByOccurredAtDesc("User"))
-                .thenReturn(List.of(entity));
+        when(nativeQuery.getResultList())
+                .thenReturn(rows(buildRow(UUID.randomUUID(), "User", entityId,
+                        "USER_REGISTERED", null, "{}", userId, now, null)));
 
-        List<AuditPort.AuditEntryRecord> results = adapter.findByEntityType("User");
+        AuditPort.AuditPage page = adapter.findByEntityType("User", 0, 20);
 
-        assertThat(results).hasSize(1);
-        assertThat(results.get(0).entityType()).isEqualTo("User");
+        verify(nativeQuery).setParameter("entityType", "User");
+        assertThat(page.entries()).hasSize(1);
+        assertThat(page.entries().get(0).entityType()).isEqualTo("User");
+        assertThat(page.entries().get(0).actorPhone()).isNull(); // LEFT JOIN may return null
+        assertThat(page.hasMore()).isFalse();
     }
 
-    // ── findAll() ────────────────────────────────────────────────────────────
+    // ── findAll() ─────────────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("findAll() returns full tenant log from Spring repo")
+    @DisplayName("findAll() executes native query with no filter and returns full tenant log")
     void findAll_returnsFullTenantLog() {
         UUID userId1  = UUID.randomUUID();
         UUID userId2  = UUID.randomUUID();
         Instant now   = Instant.now();
 
-        when(auditLogSpringRepository.findAllByOrderByOccurredAtDesc())
-                .thenReturn(List.of(
-                        buildEntity(userId1, "User",    UUID.randomUUID(), "USER_REGISTERED",    null, "{}", now),
-                        buildEntity(userId2, "Product", UUID.randomUUID(), "PRODUCT_CREATED", null, "{}", now)
+        when(nativeQuery.getResultList())
+                .thenReturn(rows(
+                        buildRow(UUID.randomUUID(), "User",    UUID.randomUUID(), "USER_REGISTERED",  null, "{}", userId1, now, "+237690000001"),
+                        buildRow(UUID.randomUUID(), "Product", UUID.randomUUID(), "PRODUCT_CREATED", null, "{}", userId2, now, "+237690000002")
                 ));
 
-        List<AuditPort.AuditEntryRecord> results = adapter.findAll();
+        AuditPort.AuditPage page = adapter.findAll(0, 20);
 
-        assertThat(results).hasSize(2);
+        assertThat(page.entries()).hasSize(2);
+        assertThat(page.hasMore()).isFalse();
+        assertThat(page.entries().get(0).actorPhone()).isEqualTo("+237690000001");
+        assertThat(page.entries().get(1).actorPhone()).isEqualTo("+237690000002");
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // ── Helpers ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Build an Object[] row matching the SELECT_WITH_PHONE native query column order:
+     * [0]=id::text, [1]=entity_type, [2]=entity_id::text, [3]=action,
+     * [4]=value_before, [5]=value_after, [6]=user_id::text, [7]=occurred_at, [8]=phone_number
+     */
+    private Object[] buildRow(UUID id, String entityType, UUID entityId, String action,
+                              String valueBefore, String valueAfter, UUID userId,
+                              Instant occurredAt, String actorPhone) {
+        return new Object[]{
+                id.toString(),
+                entityType,
+                entityId.toString(),
+                action,
+                valueBefore,
+                valueAfter,
+                userId.toString(),
+                Timestamp.from(occurredAt),
+                actorPhone
+        };
+    }
+
+    /** Builds a List<Object[]> without null-spreading that List.of(Object[]) would cause. */
+    private List<Object[]> rows(Object[]... rows) {
+        List<Object[]> list = new ArrayList<>();
+        for (Object[] row : rows) list.add(row);
+        return list;
+    }
 
     private AuditLogJpaEntity buildEntity(UUID userId, String entityType, UUID entityId,
                                           String action, String valueBefore, String valueAfter,

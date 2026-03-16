@@ -30,8 +30,8 @@ class PlanTypeTest {
     }
 
     @Test
-    @DisplayName("FREE plan should allow up to 3 employees")
-    void freePlan_shouldAllowUpTo3Employees() {
-        assertThat(PlanType.FREE.getMaxEmployees()).isEqualTo(3);
+    @DisplayName("FREE plan should allow up to 5 employees")
+    void freePlan_shouldAllowUpTo5Employees() {
+        assertThat(PlanType.FREE.getMaxEmployees()).isEqualTo(5);
     }
 }

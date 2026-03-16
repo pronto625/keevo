@@ -3,6 +3,7 @@ package com.keevo.shared.infrastructure.persistence.impl;
 import com.keevo.shared.application.port.AuditPort;
 import com.keevo.shared.infrastructure.persistence.entity.AuditLogJpaEntity;
 import com.keevo.shared.infrastructure.persistence.jpa.AuditLogSpringRepository;
+import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,10 +36,21 @@ import java.util.UUID;
 @Component
 public class AuditLogRepositoryAdapter implements AuditPort {
 
-    private final AuditLogSpringRepository repository;
+    private static final String SELECT_WITH_PHONE = """
+            SELECT a.id::text, a.entity_type, a.entity_id::text, a.action,
+                   a.value_before, a.value_after, a.user_id::text, a.occurred_at,
+                   u.phone_number
+            FROM audit_log a
+            LEFT JOIN public.users u ON a.user_id = u.id
+            """;
 
-    public AuditLogRepositoryAdapter(AuditLogSpringRepository repository) {
-        this.repository = repository;
+    private final AuditLogSpringRepository repository;
+    private final EntityManager            entityManager;
+
+    public AuditLogRepositoryAdapter(AuditLogSpringRepository repository,
+                                     EntityManager entityManager) {
+        this.repository    = repository;
+        this.entityManager = entityManager;
     }
 
     // ── AuditPort: command ────────────────────────────────────────────────────
@@ -78,50 +90,77 @@ public class AuditLogRepositoryAdapter implements AuditPort {
         repository.save(entity);
     }
 
-    // ── AuditPort: queries ────────────────────────────────────────────────────
+    // ── AuditPort: queries (native SQL — LEFT JOIN public.users for actorPhone) ──
 
     @Override
     @Transactional(readOnly = true)
-    public List<AuditEntryRecord> findByEntityTypeAndEntityId(String entityType, UUID entityId) {
-        return repository
-                .findByEntityTypeAndEntityIdOrderByOccurredAtDesc(entityType, entityId)
-                .stream()
-                .map(this::toRecord)
-                .toList();
+    public AuditPage findByEntityTypeAndEntityId(String entityType, UUID entityId, int page, int size) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entityManager.createNativeQuery(
+                SELECT_WITH_PHONE +
+                "WHERE a.entity_type = :entityType AND a.entity_id = :entityId::uuid " +
+                "ORDER BY a.occurred_at DESC")
+                .setParameter("entityType", entityType)
+                .setParameter("entityId", entityId.toString())
+                .setFirstResult(page * size)
+                .setMaxResults(size + 1)
+                .getResultList();
+        return toPage(rows, size);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<AuditEntryRecord> findByEntityType(String entityType) {
-        return repository
-                .findByEntityTypeOrderByOccurredAtDesc(entityType)
-                .stream()
-                .map(this::toRecord)
-                .toList();
+    public AuditPage findByEntityType(String entityType, int page, int size) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entityManager.createNativeQuery(
+                SELECT_WITH_PHONE +
+                "WHERE a.entity_type = :entityType " +
+                "ORDER BY a.occurred_at DESC")
+                .setParameter("entityType", entityType)
+                .setFirstResult(page * size)
+                .setMaxResults(size + 1)
+                .getResultList();
+        return toPage(rows, size);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<AuditEntryRecord> findAll() {
-        return repository
-                .findAllByOrderByOccurredAtDesc()
-                .stream()
-                .map(this::toRecord)
-                .toList();
+    public AuditPage findAll(int page, int size) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entityManager.createNativeQuery(
+                SELECT_WITH_PHONE + "ORDER BY a.occurred_at DESC")
+                .setFirstResult(page * size)
+                .setMaxResults(size + 1)
+                .getResultList();
+        return toPage(rows, size);
     }
 
     // ── Mapping ───────────────────────────────────────────────────────────────
 
-    private AuditEntryRecord toRecord(AuditLogJpaEntity e) {
-        return new AuditEntryRecord(
-                e.getId(),
-                e.getEntityType(),
-                e.getEntityId(),
-                e.getAction(),
-                e.getValueBefore(),
-                e.getValueAfter(),
-                e.getUserId(),
-                e.getOccurredAt()
-        );
+    private AuditPage toPage(List<Object[]> rows, int size) {
+        boolean hasMore = rows.size() > size;
+        return new AuditPage(mapRows(hasMore ? rows.subList(0, size) : rows), hasMore);
+    }
+
+    private List<AuditEntryRecord> mapRows(List<Object[]> rows) {
+        return rows.stream().map(r -> new AuditEntryRecord(
+                UUID.fromString((String) r[0]),   // id
+                (String) r[1],                    // entityType
+                UUID.fromString((String) r[2]),   // entityId
+                (String) r[3],                    // action
+                (String) r[4],                    // valueBefore (nullable)
+                (String) r[5],                    // valueAfter (nullable)
+                UUID.fromString((String) r[6]),   // userId
+                (String) r[8],                    // actorPhone (nullable — LEFT JOIN)
+                toInstant(r[7])                   // occurredAt
+        )).toList();
+    }
+
+    private static Instant toInstant(Object o) {
+        if (o instanceof Instant i)                       return i;
+        if (o instanceof java.sql.Timestamp ts)           return ts.toInstant();
+        if (o instanceof java.time.OffsetDateTime odt)    return odt.toInstant();
+        if (o instanceof java.time.LocalDateTime ldt)     return ldt.toInstant(java.time.ZoneOffset.UTC);
+        throw new IllegalStateException("Cannot convert " + o.getClass() + " to Instant");
     }
 }

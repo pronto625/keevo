@@ -3,20 +3,21 @@ import '../../domain/model/audit_entry_dto.dart';
 import '../../domain/repository/audit_repository.dart';
 
 /// AuditRepositoryImpl — concrete Strategy implementation of [AuditRepository].
-///
-/// Delegates HTTP fetching to [RemoteAuditDataSource] and maps the result
-/// directly — no additional transformation needed (DTOs match the domain model).
 class AuditRepositoryImpl implements AuditRepository {
   final RemoteAuditDataSource _dataSource;
 
   AuditRepositoryImpl(this._dataSource);
 
   @override
-  Future<List<AuditEntryDto>> getAuditHistory({
+  Future<AuditPageResult> getAuditHistoryPage({
+    required int page,
+    required int size,
     String? entityType,
     String? entityId,
   }) {
-    return _dataSource.getAuditHistory(
+    return _dataSource.getAuditHistoryPage(
+      page: page,
+      size: size,
       entityType: entityType,
       entityId: entityId,
     );

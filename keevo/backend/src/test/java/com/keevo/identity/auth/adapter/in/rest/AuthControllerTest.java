@@ -15,6 +15,7 @@ import com.keevo.identity.auth.domain.port.in.RegisterUserUseCase;
 import com.keevo.identity.auth.domain.port.in.RegistrationResult;
 import com.keevo.identity.auth.domain.port.in.SelectTenantCommand;
 import com.keevo.identity.auth.domain.port.in.SelectTenantUseCase;
+import com.keevo.identity.employee.domain.port.in.ChangePasswordUseCase;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.JwtAuthFilter;
@@ -58,6 +59,7 @@ class AuthControllerTest {
     @MockBean AuthenticateUserUseCase authenticateUserUseCase;
     @MockBean SelectTenantUseCase   selectTenantUseCase;
     @MockBean RefreshTokenUseCase   refreshTokenUseCase;
+    @MockBean ChangePasswordUseCase changePasswordUseCase;
     @MockBean JwtAuthFilter         jwtAuthFilter;
 
     @BeforeEach

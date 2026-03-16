@@ -15,11 +15,17 @@ abstract interface class TokenStorage {
   /// Persist the tenant ID (schema name, e.g. kv_xxxxxx).
   Future<void> saveTenantId(String tenantId);
 
+  /// Persist the assigned store ID (EMPLOYEE only) — Story 3.5.
+  Future<void> saveStoreId(String? storeId);
+
   /// Retrieve the stored JWT access token (null if not set).
   Future<String?> getToken();
 
   /// Retrieve the stored refresh token (null if not set).
   Future<String?> getRefreshToken();
+
+  /// Retrieve the stored store ID (null for OWNER) — Story 3.5.
+  Future<String?> getStoreId();
 
   /// Clear all stored credentials (for logout or refresh failure).
   Future<void> clearAll();

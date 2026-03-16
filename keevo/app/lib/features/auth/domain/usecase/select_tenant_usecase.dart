@@ -35,6 +35,7 @@ class SelectTenantUseCase {
       _tokenStorage.saveRefreshToken(tokens.refreshToken),
       _tokenStorage.saveUserId(tokens.userId),
       _tokenStorage.saveTenantId(tokens.tenantId),
+      _tokenStorage.saveStoreId(tokens.storeId),
     ]);
 
     return tokens;

@@ -51,4 +51,15 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<AuthTokens> refreshToken(String rawRefreshToken) async {
     return _remoteDataSource.refreshToken(rawRefreshToken);
   }
+
+  @override
+  Future<AuthTokens> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    return _remoteDataSource.changePassword(
+      currentPassword: currentPassword,
+      newPassword: newPassword,
+    );
+  }
 }

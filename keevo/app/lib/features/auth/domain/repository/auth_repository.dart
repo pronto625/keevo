@@ -38,4 +38,13 @@ abstract interface class AuthRepository {
   ///
   /// Throws [AuthException] with domainCode 'REFRESH_TOKEN_INVALID' if expired/revoked.
   Future<AuthTokens> refreshToken(String rawRefreshToken);
+
+  /// POST /auth/change-password — Story 3.5 AC4.
+  ///
+  /// Changes the employee's password and returns fresh [AuthTokens].
+  /// Throws [AuthException] with INVALID_CREDENTIALS or VALIDATION_FAILED.
+  Future<AuthTokens> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  });
 }

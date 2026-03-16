@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../features/auth/domain/model/membership_dto.dart';
 import '../../features/auth/presentation/page/login_page.dart';
+import '../../features/auth/presentation/page/password_change_page.dart';
 import '../../features/auth/presentation/page/register_page.dart';
 import '../../features/auth/presentation/page/tenant_picker_page.dart';
 import '../../features/catalog/domain/model/product_model.dart';
@@ -32,6 +33,9 @@ import '../../features/settings/presentation/page/subscription_page.dart';
 import '../../features/stores/presentation/page/stores_list_page.dart';
 import '../../features/inventory/presentation/page/global_stock_overview_page.dart';
 import '../../features/inventory/presentation/page/transfer_history_page.dart';
+import '../../features/team/presentation/page/team_page.dart';
+import '../../features/audit/presentation/page/audit_page.dart';
+import '../../features/team/presentation/page/create_employee_page.dart';
 import '../di/providers.dart';
 import '../scaffold/main_shell.dart';
 import '../storage/app_constants.dart';
@@ -134,6 +138,18 @@ class _SplashRedirectPageState extends ConsumerState<_SplashRedirectPage> {
       }
 
       if (!mounted) return;
+
+      // Story 3.5 AC4: password change guard — redirect employee to
+      // change-password page before any other screen is accessible.
+      if (wizardSeen) {
+        final pwdChangeRequired =
+            prefs.getBool(kPasswordChangeRequiredKey) ?? false;
+        if (pwdChangeRequired) {
+          context.go('/auth/change-password');
+          return;
+        }
+      }
+
       context.go(wizardSeen ? '/pos' : '/onboarding/sector');
       return;
     }
@@ -160,10 +176,38 @@ class _SplashRedirectPageState extends ConsumerState<_SplashRedirectPage> {
   }
 }
 
+/// OWNER-only route prefixes — EMPLOYEE users are redirected to /pos (AC5).
+const _ownerOnlyPrefixes = [
+  '/products',
+  '/clients',
+  '/suppliers',
+  '/stores',
+  '/settings/subscription',
+  '/settings/team',
+  '/reports',
+  '/audit',
+];
+
 /// Application router — all feature routes registered here.
 /// Each route points to a placeholder until the feature story is implemented.
+///
+/// AC5 — EMPLOYEE role-based restriction (layered enforcement):
+/// 1. Route guard: top-level redirect below blocks EMPLOYEE from OWNER-only routes
+/// 2. Navigation bar filtering in MainShell (EMPLOYEE sees only Caisse + Plus)
+/// 3. Settings tiles hiding in SettingsPage (Gestion section hidden for EMPLOYEE)
+/// 4. Backend enforcement via JwtAuthFilter (403 for EMPLOYEE on OWNER-only endpoints)
 final GoRouter appRouter = GoRouter(
   initialLocation: '/splash',
+  redirect: (context, state) async {
+    final path = state.uri.path;
+    if (!_ownerOnlyPrefixes.any((prefix) => path.startsWith(prefix))) {
+      return null;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final role = prefs.getString(kUserRoleKey);
+    if (role == 'EMPLOYEE') return '/pos';
+    return null;
+  },
   routes: [
     // ── Splash / redirect logique premier lancement ──────────
     GoRoute(
@@ -186,6 +230,12 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/auth/register',
       builder: (_, __) => const RegisterPage(),
+    ),
+
+    // ── Password change (Story 3.5 — full-screen, no bottom nav) ─────────
+    GoRoute(
+      path: '/auth/change-password',
+      builder: (_, __) => const PasswordChangePage(),
     ),
 
     // ── Tenant picker (Story 1.7 — AC9: multi-membership users) ─────────
@@ -335,6 +385,20 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/settings/subscription',
       builder: (_, __) => const SubscriptionPage(),
+    ),
+    // ── Settings > Team (Story 3.5 — full-screen, nav bar hidden) ────────
+    GoRoute(
+      path: '/settings/team',
+      builder: (_, __) => const TeamPage(),
+    ),
+    GoRoute(
+      path: '/settings/team/new',
+      builder: (_, __) => const CreateEmployeePage(),
+    ),
+    // ── Audit trail (OWNER only — full-screen, no nav bar) ────────────────
+    GoRoute(
+      path: '/audit',
+      builder: (_, __) => const AuditPage(),
     ),
     // ── Stock overview (full-screen, no nav bar) ─────────────────────────
     GoRoute(

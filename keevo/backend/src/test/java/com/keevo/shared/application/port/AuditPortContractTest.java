@@ -29,16 +29,16 @@ class AuditPortContractTest {
                                String valueBefore, String valueAfter) {
             }
             @Override
-            public List<AuditEntryRecord> findByEntityTypeAndEntityId(String entityType, UUID entityId) {
-                return List.of();
+            public AuditPage findByEntityTypeAndEntityId(String entityType, UUID entityId, int page, int size) {
+                return new AuditPage(List.of(), false);
             }
             @Override
-            public List<AuditEntryRecord> findByEntityType(String entityType) {
-                return List.of();
+            public AuditPage findByEntityType(String entityType, int page, int size) {
+                return new AuditPage(List.of(), false);
             }
             @Override
-            public List<AuditEntryRecord> findAll() {
-                return List.of();
+            public AuditPage findAll(int page, int size) {
+                return new AuditPage(List.of(), false);
             }
         };
         assertNotNull(port, "AuditPort instance must be creatable as anonymous implementation");
@@ -55,16 +55,16 @@ class AuditPortContractTest {
                 // no-op
             }
             @Override
-            public List<AuditEntryRecord> findByEntityTypeAndEntityId(String entityType, UUID entityId) {
-                return List.of();
+            public AuditPage findByEntityTypeAndEntityId(String entityType, UUID entityId, int page, int size) {
+                return new AuditPage(List.of(), false);
             }
             @Override
-            public List<AuditEntryRecord> findByEntityType(String entityType) {
-                return List.of();
+            public AuditPage findByEntityType(String entityType, int page, int size) {
+                return new AuditPage(List.of(), false);
             }
             @Override
-            public List<AuditEntryRecord> findAll() {
-                return List.of();
+            public AuditPage findAll(int page, int size) {
+                return new AuditPage(List.of(), false);
             }
         };
         // Should not throw — null valueBefore is valid for creation/registration events

@@ -63,7 +63,13 @@ public class GlobalExceptionHandler {
             Map.entry("PRODUCT_NOT_FOUND",           "Produit introuvable"),
             Map.entry("STORE_NOT_ACTIVE",           "Cette boutique est désactivée"),
             Map.entry("SAME_SOURCE_DESTINATION",    "Source et destination doivent être différentes"),
-            Map.entry("CSV_PARSE_ERROR",           "Erreur de lecture du fichier CSV"),            Map.entry("VALIDATION_ERROR",          "Données invalides"),
+            Map.entry("CSV_PARSE_ERROR",           "Erreur de lecture du fichier CSV"),
+            Map.entry("EMPLOYEE_NOT_FOUND",        "Employé introuvable"),
+            Map.entry("PASSWORD_CHANGE_REQUIRED",  "Vous devez changer votre mot de passe avant de continuer"),
+            Map.entry("STORE_REASSIGNED",          "Votre boutique a été modifiée, veuillez vous reconnecter"),
+            Map.entry("ACCOUNT_INACTIVE",          "Ce compte a été désactivé"),
+            Map.entry("VALIDATION_FAILED",         "Données invalides"),
+            Map.entry("VALIDATION_ERROR",          "Données invalides"),
             Map.entry("INTERNAL_ERROR",            "Une erreur inattendue s'est produite")
     );
 
@@ -128,13 +134,16 @@ public class GlobalExceptionHandler {
                  "PRODUCT_NOT_FOUND", "CATEGORY_NOT_FOUND",
                  "CLIENT_NOT_FOUND", "SUPPLIER_NOT_FOUND",
                  "STOCK_NOT_FOUND", "STORE_NOT_FOUND",
+                 "EMPLOYEE_NOT_FOUND",
                  "MEMBERSHIP_NOT_FOUND",
                  "SUBSCRIPTION_NOT_FOUND",
                  "NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "UNAUTHORIZED", "TOKEN_EXPIRED",
                  "TOKEN_INVALID",
                  "INVALID_CREDENTIALS", "ACCOUNT_LOCKED",
-                 "REFRESH_TOKEN_INVALID" -> HttpStatus.UNAUTHORIZED;
+                 "REFRESH_TOKEN_INVALID",
+                 "ACCOUNT_INACTIVE",
+                 "STORE_REASSIGNED" -> HttpStatus.UNAUTHORIZED;
             case "EMAIL_ALREADY_EXISTS", "USER_ALREADY_EXISTS",
                  "TENANT_ALREADY_EXISTS",
                  "MEMBERSHIP_ALREADY_EXISTS",
@@ -144,6 +153,7 @@ public class GlobalExceptionHandler {
                  "INVALID_PHONE_NUMBER", "INVALID_PASSWORD",
                  "INSUFFICIENT_STOCK",
                  "STORE_NOT_ACTIVE",
+                 "VALIDATION_FAILED",
                  "SAME_SOURCE_DESTINATION" -> HttpStatus.UNPROCESSABLE_ENTITY;
             case "SECTOR_TEMPLATE_NOT_FOUND",
                  "ONBOARDING_ALREADY_COMPLETED" -> HttpStatus.BAD_REQUEST;
@@ -152,6 +162,7 @@ public class GlobalExceptionHandler {
             case "PLAN_LIMIT_EXCEEDED",
                  "ACCOUNT_SUSPENDED",
                  "AUDIT_IMMUTABLE",
+                 "PASSWORD_CHANGE_REQUIRED",
                  "FORBIDDEN" -> HttpStatus.FORBIDDEN;   // H2 fix: role mismatch is 403, not 401; AUDIT_IMMUTABLE = immutable log
             case "RATE_LIMIT_EXCEEDED" -> HttpStatus.TOO_MANY_REQUESTS;
             default -> HttpStatus.INTERNAL_SERVER_ERROR;

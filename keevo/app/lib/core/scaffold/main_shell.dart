@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../di/providers.dart';
 import '../../features/catalog/presentation/provider/product_provider.dart';
 
-/// MainShell — persistent bottom navigation scaffold wrapping the 4 main sections.
+/// MainShell — persistent bottom navigation scaffold wrapping the main sections.
 ///
-/// UX spec: 4 onglets: Vendre / Stock / Rapports / Plus (Plus → /settings)
+/// UX spec: OWNER sees 5 onglets: Caisse / Catalogue / Clients / Fournisseurs / Plus
+/// EMPLOYEE sees 2 onglets: Caisse / Plus (AC5 — restricted navigation)
+///
 /// Routes inside the ShellRoute (/pos, /products, /clients, /suppliers) are
 /// displayed as the [child] body while the [NavigationBar] stays visible.
 /// Sub-routes (form pages) push on top of the shell and don't show the nav bar.
@@ -14,78 +17,77 @@ class MainShell extends ConsumerWidget {
   final Widget child;
   const MainShell({required this.child, super.key});
 
-  static int _tabIndex(String location) {
-    if (location.startsWith('/products')) return 1;
-    if (location.startsWith('/clients')) return 2;
-    if (location.startsWith('/suppliers')) return 3;
-    if (location.startsWith('/settings')) return 4;
-    return 0; // /pos and anything else
+  /// OWNER tab routes — full navigation
+  static const _ownerRoutes = ['/pos', '/products', '/clients', '/suppliers', '/settings'];
+
+  /// EMPLOYEE tab routes — restricted to POS + settings only (AC5)
+  static const _employeeRoutes = ['/pos', '/settings'];
+
+  static int _tabIndex(String location, List<String> routes) {
+    for (int i = routes.length - 1; i >= 0; i--) {
+      if (location.startsWith(routes[i])) return i;
+    }
+    return 0;
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final location = GoRouterState.of(context).uri.toString();
-    final index = _tabIndex(location);
+    final role = ref.watch(currentUserRoleProvider);
+    final isEmployee = role == 'EMPLOYEE';
+    final routes = isEmployee ? _employeeRoutes : _ownerRoutes;
+    final index = _tabIndex(location, routes);
     final draftCountAsync = ref.watch(pendingDraftsCountProvider);
     final draftCount = draftCountAsync.valueOrNull ?? 0;
+
+    final destinations = <NavigationDestination>[
+      const NavigationDestination(
+        icon: Icon(Icons.point_of_sale_outlined),
+        selectedIcon: Icon(Icons.point_of_sale_rounded),
+        label: 'Caisse',
+      ),
+      if (!isEmployee) ...[
+        NavigationDestination(
+          icon: Badge(
+            label: Text(draftCount > 9 ? '9+' : '$draftCount'),
+            isLabelVisible: draftCount > 0,
+            backgroundColor: const Color(0xFFFCC419),
+            textColor: Colors.black87,
+            child: const Icon(Icons.inventory_2_outlined),
+          ),
+          selectedIcon: Badge(
+            label: Text(draftCount > 9 ? '9+' : '$draftCount'),
+            isLabelVisible: draftCount > 0,
+            backgroundColor: const Color(0xFFFCC419),
+            textColor: Colors.black87,
+            child: const Icon(Icons.inventory_2_rounded),
+          ),
+          label: 'Catalogue',
+        ),
+        const NavigationDestination(
+          icon: Icon(Icons.people_outline_rounded),
+          selectedIcon: Icon(Icons.people_rounded),
+          label: 'Clients',
+        ),
+        const NavigationDestination(
+          icon: Icon(Icons.local_shipping_outlined),
+          selectedIcon: Icon(Icons.local_shipping_rounded),
+          label: 'Fournisseurs',
+        ),
+      ],
+      const NavigationDestination(
+        icon: Icon(Icons.more_horiz_outlined),
+        selectedIcon: Icon(Icons.more_horiz_rounded),
+        label: 'Plus',
+      ),
+    ];
 
     return Scaffold(
       body: child,
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
-        onDestinationSelected: (i) {
-          switch (i) {
-            case 0:
-              context.go('/pos');
-            case 1:
-              context.go('/products');
-            case 2:
-              context.go('/clients');
-            case 3:
-              context.go('/suppliers');
-            case 4:
-              context.go('/settings');
-          }
-        },
-        destinations: [
-          const NavigationDestination(
-            icon: Icon(Icons.point_of_sale_outlined),
-            selectedIcon: Icon(Icons.point_of_sale_rounded),
-            label: 'Caisse',
-          ),
-          NavigationDestination(
-            icon: Badge(
-              label: Text(draftCount > 9 ? '9+' : '$draftCount'),
-              isLabelVisible: draftCount > 0,
-              backgroundColor: const Color(0xFFFCC419), // colorWarning
-              textColor: Colors.black87,
-              child: const Icon(Icons.inventory_2_outlined),
-            ),
-            selectedIcon: Badge(
-              label: Text(draftCount > 9 ? '9+' : '$draftCount'),
-              isLabelVisible: draftCount > 0,
-              backgroundColor: const Color(0xFFFCC419),
-              textColor: Colors.black87,
-              child: const Icon(Icons.inventory_2_rounded),
-            ),
-            label: 'Catalogue',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.people_outline_rounded),
-            selectedIcon: Icon(Icons.people_rounded),
-            label: 'Clients',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.local_shipping_outlined),
-            selectedIcon: Icon(Icons.local_shipping_rounded),
-            label: 'Fournisseurs',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.more_horiz_outlined),
-            selectedIcon: Icon(Icons.more_horiz_rounded),
-            label: 'Plus',
-          ),
-        ],
+        onDestinationSelected: (i) => context.go(routes[i]),
+        destinations: destinations,
       ),
     );
   }

@@ -53,6 +53,24 @@ public class UserMembershipRepositoryAdapter implements UserMembershipRepository
                 .map(this::toDomain);
     }
 
+    @Override
+    public void deactivateByUserId(UUID userId) {
+        List<UserTenantMembershipJpaEntity> memberships = springRepository.findByUserId(userId);
+        for (UserTenantMembershipJpaEntity m : memberships) {
+            m.setActive(false);
+            springRepository.save(m);
+        }
+    }
+
+    @Override
+    public void reactivateByUserId(UUID userId) {
+        List<UserTenantMembershipJpaEntity> memberships = springRepository.findByUserId(userId);
+        for (UserTenantMembershipJpaEntity m : memberships) {
+            m.setActive(true);
+            springRepository.save(m);
+        }
+    }
+
     // ── Mapping ──────────────────────────────────────────────────────────────
 
     private UserTenantMembershipJpaEntity toEntity(UserTenantMembership m) {

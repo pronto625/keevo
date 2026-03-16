@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/di/providers.dart';
 import '../../../../core/storage/app_constants.dart';
 import '../../../../features/sync_indicator/presentation/widget/sync_indicator.dart';
 import '../../../onboarding/domain/model/sector_type.dart';
@@ -70,6 +71,8 @@ class _PosPlaceholderPageState extends ConsumerState<PosPlaceholderPage> {
   @override
   Widget build(BuildContext context) {
     final sector = _sectorType;
+    final role = ref.watch(currentUserRoleProvider);
+    final isEmployee = role == 'EMPLOYEE';
     return Scaffold(
       appBar: AppBar(
         title: const Text('Point de Vente'),
@@ -95,17 +98,21 @@ class _PosPlaceholderPageState extends ConsumerState<PosPlaceholderPage> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Commencez par ajouter vos produits pour activer la caisse.',
+                isEmployee
+                    ? 'Aucun produit configuré. Contactez votre responsable.'
+                    : 'Commencez par ajouter vos produits pour activer la caisse.',
                 style: Theme.of(context).textTheme.bodyMedium,
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 32),
-              FilledButton.icon(
-                key: const Key('addFirstProductCta'),
-                onPressed: () => context.go('/products'),
-                icon: const Icon(Icons.add),
-                label: const Text('Ajouter votre premier produit'),
-              ),
+              if (!isEmployee) ...[
+                const SizedBox(height: 32),
+                FilledButton.icon(
+                  key: const Key('addFirstProductCta'),
+                  onPressed: () => context.go('/products'),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Ajouter votre premier produit'),
+                ),
+              ],
             ],
           ),
         ),

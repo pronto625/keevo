@@ -18,11 +18,13 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -46,19 +48,22 @@ public class SelectTenantService implements SelectTenantUseCase {
     private final JwtTokenProvider        jwtTokenProvider;
     private final JwtProperties           jwtProperties;
     private final ApplicationEventPublisher eventPublisher;
+    private final JdbcTemplate            jdbcTemplate;
 
     public SelectTenantService(TenantRepository tenantRepository,
                                 UserMembershipRepository membershipRepository,
                                 RefreshTokenRepository refreshTokenRepository,
                                 JwtTokenProvider jwtTokenProvider,
                                 JwtProperties jwtProperties,
-                                ApplicationEventPublisher eventPublisher) {
+                                ApplicationEventPublisher eventPublisher,
+                                JdbcTemplate jdbcTemplate) {
         this.tenantRepository    = tenantRepository;
         this.membershipRepository = membershipRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.jwtTokenProvider    = jwtTokenProvider;
         this.jwtProperties       = jwtProperties;
         this.eventPublisher      = eventPublisher;
+        this.jdbcTemplate        = jdbcTemplate;
     }
 
     @Override
@@ -82,8 +87,24 @@ public class SelectTenantService implements SelectTenantUseCase {
         String role       = membership.getRole();
 
         // Step 5 — Generate full RS256 access token (24h, scope=access / no scope claim)
+        // Story 3.5: EMPLOYEE tokens include storeId and passwordChangeRequired claims.
+        UUID storeId = null;
+        boolean passwordChangeRequired = false;
+        if ("EMPLOYEE".equals(role)) {
+            try {
+                Map<String, Object> empRow = jdbcTemplate.queryForMap(
+                        "SELECT store_id, password_change_required FROM \""
+                        + schemaName + "\".employees WHERE user_id = ? LIMIT 1", userId);
+                storeId = (UUID) empRow.get("store_id");
+                passwordChangeRequired = Boolean.TRUE.equals(empRow.get("password_change_required"));
+            } catch (org.springframework.dao.EmptyResultDataAccessException ignored) {
+                // Employee row does not exist yet — should not happen in normal flow
+            }
+        }
+
         String accessToken = jwtTokenProvider.generateAccessToken(
-                userId, schemaName, role, tenant.getStatus().name());
+                userId, schemaName, role, tenant.getStatus().name(),
+                storeId, passwordChangeRequired);
 
         // Step 6 — Generate opaque refresh token and persist its SHA-256 hash
         String rawRefreshToken = jwtTokenProvider.generateRefreshToken();
@@ -97,7 +118,8 @@ public class SelectTenantService implements SelectTenantUseCase {
                 userId, schemaName, role, null, Instant.now()));
 
         long expiresIn = (long) jwtProperties.getAccessTokenExpiryHours() * 3600;
-        return new AuthTokens(accessToken, rawRefreshToken, expiresIn, userId, schemaName, role);
+        return new AuthTokens(accessToken, rawRefreshToken, expiresIn, userId, schemaName, role,
+                storeId != null ? storeId.toString() : null, passwordChangeRequired);
     }
 
     // ── Private helpers ─────────────────────────────────────────────────────

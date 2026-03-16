@@ -4,13 +4,13 @@ import com.keevo.shared.application.port.AuditPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.dto.AuditEntryResponse;
+import com.keevo.shared.infrastructure.web.dto.AuditPageResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -47,21 +47,28 @@ public class AuditController {
     }
 
     /**
-     * Query audit entries with optional filters.
+     * Query audit entries (paginated) with optional filters.
      *
-     * <p>Both params are optional (required=false) — a missing param is not an error (AC3).
+     * <p>Pagination: {@code page} (0-based, default 0) and {@code size} (default 20).
+     * Response includes {@code hasMore=true} when a next page exists.
+     *
+     * <p>Both entityType/entityId params are optional — a missing param is not an error (AC3).
      * Routing: both → filtered | entityType only → type filter | none → full tenant log.
      *
      * @param entityType optional entity type filter (e.g. "Product", "User")
      * @param entityId   optional entity UUID filter — ignored if entityType is absent
-     * @return HTTP 200 with list of audit entries sorted occurredAt DESC
+     * @param page       zero-based page index (default 0)
+     * @param size       page size, max entries per response (default 20)
+     * @return HTTP 200 with paginated audit entries sorted occurredAt DESC
      */
     @GetMapping
-    public ResponseEntity<ApiResponseWrapper<List<AuditEntryResponse>>> getAuditHistory(
+    public ResponseEntity<ApiResponseWrapper<AuditPageResponse>> getAuditHistory(
             @RequestParam(required = false) String entityType,
-            @RequestParam(required = false) String entityId) {
+            @RequestParam(required = false) String entityId,
+            @RequestParam(defaultValue = "0")  int page,
+            @RequestParam(defaultValue = "20") int size) {
 
-        List<AuditPort.AuditEntryRecord> records;
+        AuditPort.AuditPage auditPage;
 
         if (entityType != null && entityId != null) {
             // Branch 1: both filters present — validate UUID format before delegating
@@ -73,18 +80,21 @@ public class AuditController {
                 throw new DomainException(ErrorCode.VALIDATION_ERROR,
                         "entityId doit être un UUID valide (format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)");
             }
-            records = auditPort.findByEntityTypeAndEntityId(entityType, entityUuid);
+            auditPage = auditPort.findByEntityTypeAndEntityId(entityType, entityUuid, page, size);
         } else if (entityType != null) {
             // Branch 2: entity type only
-            records = auditPort.findByEntityType(entityType);
+            auditPage = auditPort.findByEntityType(entityType, page, size);
         } else {
             // Branch 3: no filters — full tenant log (safe: schema routing scopes to caller's tenant)
-            records = auditPort.findAll();
+            auditPage = auditPort.findAll(page, size);
         }
 
-        List<AuditEntryResponse> response = records.stream()
-                .map(AuditEntryResponse::fromRecord)
-                .toList();
+        AuditPageResponse response = new AuditPageResponse(
+                auditPage.entries().stream().map(AuditEntryResponse::fromRecord).toList(),
+                auditPage.hasMore(),
+                page,
+                size
+        );
 
         return ResponseEntity.ok(ApiResponseWrapper.ok(response));
     }

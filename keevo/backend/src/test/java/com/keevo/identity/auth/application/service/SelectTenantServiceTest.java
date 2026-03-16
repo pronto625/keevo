@@ -68,7 +68,7 @@ class SelectTenantServiceTest {
         realJwtProvider = new JwtTokenProvider(privateKey, publicKey, props);
         selectTenantService = new SelectTenantService(
                 tenantRepository, membershipRepository,
-                refreshTokenRepository, realJwtProvider, props, eventPublisher);
+                refreshTokenRepository, realJwtProvider, props, eventPublisher, null);
     }
 
     // ── Happy path ─────────────────────────────────────────────────────────

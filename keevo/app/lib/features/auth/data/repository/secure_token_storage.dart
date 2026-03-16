@@ -13,6 +13,7 @@ class SecureTokenStorage implements TokenStorage {
   static const _keyRefreshToken = 'refresh_token';
   static const _keyUserId = 'user_id';
   static const _keyTenantId = 'tenant_id';
+  static const _keyStoreId = 'store_id';
 
   const SecureTokenStorage(this._storage);
 
@@ -33,10 +34,19 @@ class SecureTokenStorage implements TokenStorage {
       _storage.write(key: _keyTenantId, value: tenantId);
 
   @override
+  Future<void> saveStoreId(String? storeId) =>
+      storeId != null
+          ? _storage.write(key: _keyStoreId, value: storeId)
+          : _storage.delete(key: _keyStoreId);
+
+  @override
   Future<String?> getToken() => _storage.read(key: _keyToken);
 
   @override
   Future<String?> getRefreshToken() => _storage.read(key: _keyRefreshToken);
+
+  @override
+  Future<String?> getStoreId() => _storage.read(key: _keyStoreId);
 
   @override
   Future<void> clearAll() => _storage.deleteAll();

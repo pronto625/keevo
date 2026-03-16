@@ -21,6 +21,7 @@ public record AuditEntryResponse(
         String    valueBefore,
         String    valueAfter,
         UUID      userId,
+        String    actorPhone,
         Instant   occurredAt
 ) {
 
@@ -36,6 +37,7 @@ public record AuditEntryResponse(
                 r.valueBefore(),
                 r.valueAfter(),
                 r.userId(),
+                r.actorPhone(),
                 r.occurredAt()
         );
     }

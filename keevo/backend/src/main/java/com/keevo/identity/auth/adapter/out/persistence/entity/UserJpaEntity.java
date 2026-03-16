@@ -20,7 +20,7 @@ import java.util.UUID;
  * in a future Flyway migration. It is completely ignored by Hibernate (NOT mapped here).
  */
 @Entity
-@Table(name = "users")
+@Table(name = "users", schema = "public")
 public class UserJpaEntity extends JpaBaseEntity {
 
     @Column(name = "phone_number", unique = true, nullable = false, length = 20)

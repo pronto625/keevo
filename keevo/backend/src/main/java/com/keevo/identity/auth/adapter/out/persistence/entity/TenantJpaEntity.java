@@ -15,7 +15,7 @@ import java.util.UUID;
  * Domain model: {@link com.keevo.identity.auth.domain.model.Tenant}.
  */
 @Entity
-@Table(name = "tenants")
+@Table(name = "tenants", schema = "public")
 public class TenantJpaEntity extends JpaBaseEntity {
 
     @Column(name = "code", unique = true, nullable = false, length = 10)

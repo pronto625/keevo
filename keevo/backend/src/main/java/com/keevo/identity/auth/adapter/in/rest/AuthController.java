@@ -7,6 +7,7 @@ import com.keevo.identity.auth.adapter.in.rest.dto.RefreshRequest;
 import com.keevo.identity.auth.adapter.in.rest.dto.RegistrationRequest;
 import com.keevo.identity.auth.adapter.in.rest.dto.RegistrationResponse;
 import com.keevo.identity.auth.adapter.in.rest.dto.SelectTenantRequest;
+import com.keevo.identity.auth.adapter.in.rest.dto.ChangePasswordRequestDto;
 import com.keevo.identity.auth.domain.model.AuthTokens;
 import com.keevo.identity.auth.domain.model.UserMembershipInfo;
 import com.keevo.identity.auth.domain.port.in.AuthenticateUserCommand;
@@ -18,6 +19,8 @@ import com.keevo.identity.auth.domain.port.in.RegisterUserUseCase;
 import com.keevo.identity.auth.domain.port.in.RegistrationResult;
 import com.keevo.identity.auth.domain.port.in.SelectTenantCommand;
 import com.keevo.identity.auth.domain.port.in.SelectTenantUseCase;
+import com.keevo.identity.employee.domain.port.in.ChangePasswordCommand;
+import com.keevo.identity.employee.domain.port.in.ChangePasswordUseCase;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -28,12 +31,14 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * AuthController — REST adapter for authentication endpoints.
@@ -58,15 +63,18 @@ public class AuthController {
     private final AuthenticateUserUseCase authenticateUserUseCase;
     private final SelectTenantUseCase    selectTenantUseCase;
     private final RefreshTokenUseCase    refreshTokenUseCase;
+    private final ChangePasswordUseCase  changePasswordUseCase;
 
     public AuthController(RegisterUserUseCase registerUserUseCase,
                           AuthenticateUserUseCase authenticateUserUseCase,
                           SelectTenantUseCase selectTenantUseCase,
-                          RefreshTokenUseCase refreshTokenUseCase) {
+                          RefreshTokenUseCase refreshTokenUseCase,
+                          ChangePasswordUseCase changePasswordUseCase) {
         this.registerUserUseCase    = registerUserUseCase;
         this.authenticateUserUseCase = authenticateUserUseCase;
         this.selectTenantUseCase    = selectTenantUseCase;
         this.refreshTokenUseCase    = refreshTokenUseCase;
+        this.changePasswordUseCase  = changePasswordUseCase;
     }
 
     @Operation(
@@ -206,6 +214,30 @@ public class AuthController {
         return ResponseEntity.ok(toLoginResponse(tokens));
     }
 
+    // ── Change Password (Story 3.5) ──────────────────────────────────────────
+
+    @Operation(
+        summary = "Change password (employee forced change)",
+        description = """
+            Story 3.5 — AC4: Employee forced password change on first login.
+            Requires valid JWT (any role). Updates bcrypt hash, clears passwordChangeRequired flag,
+            revokes old tokens, and returns new JWT + refresh token.
+            """
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Password changed — new tokens issued"),
+        @ApiResponse(responseCode = "401", description = "Current password wrong"),
+        @ApiResponse(responseCode = "422", description = "New password does not meet requirements")
+    })
+    @PostMapping("/change-password")
+    public ResponseEntity<LoginResponse> changePassword(
+            @Valid @RequestBody ChangePasswordRequestDto request) {
+        UUID userId = (UUID) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        AuthTokens tokens = changePasswordUseCase.execute(
+                new ChangePasswordCommand(userId, request.currentPassword(), request.newPassword()));
+        return ResponseEntity.ok(toLoginResponse(tokens));
+    }
+
     // ── Mapping helpers ───────────────────────────────────────────────────────
 
     private LoginSessionResponse toLoginSessionResponse(LoginSessionResult result) {
@@ -223,7 +255,9 @@ public class AuthController {
             tokens.userId(),
             tokens.tenantId(),
             tokens.role(),
-            tokens.expiresIn()
+            tokens.expiresIn(),
+            tokens.storeId(),
+            tokens.passwordChangeRequired()
         );
     }
 }

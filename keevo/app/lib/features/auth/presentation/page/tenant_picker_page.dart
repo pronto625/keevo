@@ -60,7 +60,13 @@ class _TenantPickerPageState extends ConsumerState<TenantPickerPage> {
     // Navigate to /pos on successful tenant selection
     ref.listen(selectTenantProvider, (_, next) {
       next.whenData((tokens) {
-        if (tokens != null) context.go('/pos');
+        if (tokens != null) {
+          if (tokens.passwordChangeRequired) {
+            context.go('/auth/change-password');
+          } else {
+            context.go('/pos');
+          }
+        }
       });
     });
 

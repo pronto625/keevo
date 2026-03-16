@@ -62,6 +62,23 @@ public final class User {
         );
     }
 
+    /**
+     * Factory method for creating an employee user account (Story 3.5).
+     * Role is EMPLOYEE; active from creation.
+     */
+    public static User newEmployee(String phoneNumber, String passwordHash) {
+        return new User(
+            UUID.randomUUID(),
+            phoneNumber,
+            passwordHash,
+            Role.EMPLOYEE,
+            true,
+            Instant.now(),
+            0,
+            null
+        );
+    }
+
     public UUID    getId()             { return id; }
     public String  getPhoneNumber()    { return phoneNumber; }
     public String  getPasswordHash()   { return passwordHash; }
@@ -77,6 +94,12 @@ public final class User {
     public User withLockoutState(int newFailedAttempts, Instant newLockedUntil) {
         return new User(id, phoneNumber, passwordHash, role, active, createdAt,
                         newFailedAttempts, newLockedUntil);
+    }
+
+    /** Returns new User instance with updated password hash (Story 3.5). */
+    public User withPasswordHash(String newPasswordHash) {
+        return new User(id, phoneNumber, newPasswordHash, role, active, createdAt,
+                        failedAttempts, lockedUntil);
     }
 
     @Override

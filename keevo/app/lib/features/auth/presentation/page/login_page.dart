@@ -70,8 +70,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       next.whenData((result) {
         if (result == null) return;
         switch (result) {
-          case AuthenticatedResult():
-            context.go('/pos');
+          case AuthenticatedResult(:final tokens):
+            if (tokens.passwordChangeRequired) {
+              context.go('/auth/change-password');
+            } else {
+              context.go('/pos');
+            }
           case NeedsTenantSelectionResult(:final loginToken, :final memberships):
             // AC9: multiple tenants — navigate to picker
             context.go('/tenant-picker', extra: <String, dynamic>{

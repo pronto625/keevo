@@ -25,4 +25,16 @@ public interface UserMembershipRepository {
 
     /** Find a specific membership entry for (userId, tenantId). */
     Optional<UserTenantMembership> findByUserIdAndTenantId(UUID userId, UUID tenantId);
+
+    /**
+     * Deactivate all memberships for a user (set is_active = false).
+     * Story 3.5 — employee deactivation.
+     */
+    void deactivateByUserId(UUID userId);
+
+    /**
+     * Reactivate all memberships for a user (set is_active = true).
+     * Story 3.5 — employee reactivation.
+     */
+    void reactivateByUserId(UUID userId);
 }

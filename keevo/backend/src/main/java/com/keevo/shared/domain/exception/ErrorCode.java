@@ -46,6 +46,12 @@ public enum ErrorCode {
     INSUFFICIENT_STOCK,
     STOCK_NOT_FOUND,
 
+    // ── Employee (Story 3.5) ──────────────────────────────────────
+    EMPLOYEE_NOT_FOUND,
+    PASSWORD_CHANGE_REQUIRED,
+    STORE_REASSIGNED,
+    ACCOUNT_INACTIVE,
+
     // ── Store ─────────────────────────────────────────────────────
     STORE_NOT_FOUND,
     WAREHOUSE_ALREADY_EXISTS,  // HTTP 409 — tenant already has one warehouse (Story 3.1)
@@ -69,6 +75,7 @@ public enum ErrorCode {
     AUDIT_IMMUTABLE,        // HTTP 403 — attempt to modify or delete an immutable audit entry
     // ── Generic ───────────────────────────────────────────────────
     NOT_FOUND,
+    VALIDATION_FAILED,
     VALIDATION_ERROR,
     INTERNAL_ERROR,
     /**

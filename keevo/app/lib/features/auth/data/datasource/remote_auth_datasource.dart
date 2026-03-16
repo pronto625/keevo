@@ -102,6 +102,27 @@ class RemoteAuthDataSource {
     }
   }
 
+  /// POST /api/v1/auth/change-password (Story 3.5 — AC4)
+  ///
+  /// Changes the employee's password and returns fresh [AuthTokens].
+  Future<AuthTokens> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/api/v1/auth/change-password',
+        data: {
+          'currentPassword': currentPassword,
+          'newPassword': newPassword,
+        },
+      );
+      return _mapAuthTokens(response.data!);
+    } on DioException catch (e) {
+      throw _mapAuthError(e);
+    }
+  }
+
   // ── Mapping helpers ─────────────────────────────────────────────────────
 
   LoginSessionResponse _mapLoginSession(Map<String, dynamic> body) {
@@ -129,6 +150,8 @@ class RemoteAuthDataSource {
       tenantId: body['tenantId'] as String,
       role: body['role'] as String,
       expiresIn: body['expiresIn'] as int,
+      storeId: body['storeId'] as String?,
+      passwordChangeRequired: body['passwordChangeRequired'] as bool? ?? false,
     );
   }
 
