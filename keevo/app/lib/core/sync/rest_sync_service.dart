@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:developer' as dev;
 
+import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
@@ -15,11 +16,13 @@ import 'sync_service.dart';
 class RestSyncService implements SyncService {
   final AppDatabase _database;
   final RemoteProductDataSource _remoteProducts;
+  final Dio _dio;
 
   RestSyncService({
     required AppDatabase database, 
     required RemoteProductDataSource remoteProducts,
-  }) : _database = database, _remoteProducts = remoteProducts;
+    required Dio dio,
+  }) : _database = database, _remoteProducts = remoteProducts, _dio = dio;
 
   @override
   Future<void> push() async {
@@ -79,6 +82,21 @@ class RestSyncService implements SyncService {
         dev.log('📦 Unarchiving product $productId via API', name: 'RestSync');
         await _remoteProducts.unarchive(productId);
         dev.log('✅ Product unarchived successfully', name: 'RestSync');
+        break;
+
+      case 'CREATE_SALE':
+        dev.log('💰 Pushing sale via API', name: 'RestSync');
+        await _dio.post('/api/v1/sales', data: payload);
+        // Mark sale as synced locally
+        final saleId = payload['saleId'] as String?;
+        if (saleId != null) {
+          await (_database.update(_database.sales)
+                ..where((s) => s.id.equals(saleId)))
+              .write(const SalesCompanion(
+            synced: Value(true),
+          ));
+        }
+        dev.log('✅ Sale pushed successfully', name: 'RestSync');
         break;
         
       default:

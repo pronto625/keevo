@@ -108,8 +108,8 @@ development_status:
   # ─────────────────────────────────────────────────────────
   # Epic 4: Point de Vente (POS)
   # ─────────────────────────────────────────────────────────
-  epic-4: backlog
-  4-1-enregistrement-de-vente-flux-pos-core: backlog
+  epic-4: in-progress
+  4-1-enregistrement-de-vente-flux-pos-core: done
   4-2-reductions-prix-modifiable-en-panier: backlog
   4-3-cloture-journaliere-historique-des-ventes: backlog
   4-4-annulation-correction-de-vente: backlog

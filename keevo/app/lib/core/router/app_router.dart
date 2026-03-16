@@ -27,7 +27,9 @@ import '../../features/onboarding/presentation/page/onboarding_page.dart';
 import '../../features/onboarding/presentation/page/sector_selection_page.dart';
 import '../../features/onboarding/presentation/page/shop_name_page.dart';
 import '../../features/onboarding/presentation/page/terms_page.dart';
-import '../../features/pos/presentation/page/pos_placeholder_page.dart';
+import '../../features/pos/presentation/page/pos_page.dart';
+import '../../features/pos/presentation/page/checkout_page.dart';
+import '../../features/pos/presentation/page/sale_success_page.dart';
 import '../../features/settings/presentation/page/settings_page.dart';
 import '../../features/settings/presentation/page/subscription_page.dart';
 import '../../features/stores/presentation/page/stores_list_page.dart';
@@ -290,7 +292,7 @@ final GoRouter appRouter = GoRouter(
         // ── Caisse (POS) ───────────────────────────────────────────────────
         GoRoute(
           path: '/pos',
-          builder: (_, __) => const PosPlaceholderPage(),
+          builder: (_, __) => const PosPage(),
         ),
 
         // ── Catalogue ──────────────────────────────────────────────────────
@@ -317,6 +319,20 @@ final GoRouter appRouter = GoRouter(
           builder: (_, __) => const SettingsPage(),
         ),
       ],
+    ),
+
+    // ── POS sub-routes (full-screen, no nav bar) ──────────────────────────
+    GoRoute(
+      path: '/pos/checkout',
+      builder: (_, __) => const CheckoutPage(),
+    ),
+    GoRoute(
+      path: '/pos/success',
+      builder: (_, state) {
+        final totalStr = state.uri.queryParameters['total'];
+        final total = int.tryParse(totalStr ?? '') ?? 0;
+        return SaleSuccessPage(totalAmount: total);
+      },
     ),
 
     // ── Products sub-routes (full-screen, no nav bar) ─────────────────────

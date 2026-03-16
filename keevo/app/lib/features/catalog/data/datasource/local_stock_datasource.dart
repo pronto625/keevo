@@ -38,16 +38,24 @@ class LocalStockDataSource {
   }
 
   Future<void> upsertLevel(StockLevelModel level) async {
-    await _db.into(_db.stockLevels).insertOnConflictUpdate(
-      StockLevelsCompanion(
-        id: Value(level.id),
-        productId: Value(level.productId),
-        variantId: Value(level.variantId),
-        storeId: Value(level.storeId),
-        quantity: Value(level.quantity),
-        minimumThreshold: Value(level.minimumThreshold),
-        updatedAt: Value(level.updatedAt),
-      ),
+    // Use raw SQL to upsert on (product_id, store_id) unique index (schema v10)
+    // instead of the PK `id` — prevents duplicate rows when backend rotates UUIDs.
+    await _db.customStatement(
+      'INSERT INTO stock_levels (id, product_id, variant_id, store_id, quantity, minimum_threshold, updated_at) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?) '
+      'ON CONFLICT(product_id, store_id) DO UPDATE SET '
+      'id = excluded.id, variant_id = excluded.variant_id, '
+      'quantity = excluded.quantity, minimum_threshold = excluded.minimum_threshold, '
+      'updated_at = excluded.updated_at',
+      [
+        level.id,
+        level.productId,
+        level.variantId,
+        level.storeId,
+        level.quantity,
+        level.minimumThreshold,
+        level.updatedAt.toIso8601String(),
+      ],
     );
   }
 

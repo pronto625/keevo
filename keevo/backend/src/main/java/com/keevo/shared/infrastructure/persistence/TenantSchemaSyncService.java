@@ -72,7 +72,8 @@ public class TenantSchemaSyncService {
                     java.util.Map.entry("suppliers",             TenantSchemaProvisioner.DDL_SUPPLIERS),
                     java.util.Map.entry("product_suppliers",     TenantSchemaProvisioner.DDL_PRODUCT_SUPPLIERS),
                     java.util.Map.entry("draft_notifications",   TenantSchemaProvisioner.DDL_DRAFT_NOTIFICATIONS),
-                    java.util.Map.entry("employees",             TenantSchemaProvisioner.DDL_EMPLOYEES)
+                    java.util.Map.entry("employees",             TenantSchemaProvisioner.DDL_EMPLOYEES),
+                    java.util.Map.entry("sale_items",            TenantSchemaProvisioner.DDL_SALE_ITEMS)
             );
 
     /** Valid tenant schema pattern — prevents any SQL injection. */

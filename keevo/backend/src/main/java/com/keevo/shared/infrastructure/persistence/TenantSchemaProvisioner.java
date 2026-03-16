@@ -329,6 +329,30 @@ public class TenantSchemaProvisioner {
     static final String DDL_SALES_IDX_CLIENT =
             "CREATE INDEX IF NOT EXISTS idx_sales_client_id ON sales(client_id)";
 
+    // ── Sale migrations (Story 4.1) ──────────────────────────────────────────
+
+    static final String DDL_SALES_MIGRATE_STATUS =
+            "ALTER TABLE sales ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'COMPLETED' CHECK (status IN ('COMPLETED','CANCELLED'))";
+
+    static final String DDL_SALES_MIGRATE_OCCURRED_AT =
+            "ALTER TABLE sales ADD COLUMN IF NOT EXISTS occurred_at TIMESTAMPTZ";
+
+    static final String DDL_SALE_ITEMS = """
+            CREATE TABLE IF NOT EXISTS sale_items (
+                id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                sale_id           UUID        NOT NULL REFERENCES sales(id),
+                product_id        UUID        NOT NULL,
+                variant_id        UUID,
+                product_name      VARCHAR(255) NOT NULL,
+                applied_unit_price INTEGER    NOT NULL,
+                quantity          INTEGER     NOT NULL CHECK (quantity > 0),
+                subtotal          INTEGER     NOT NULL,
+                created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )""";
+
+    static final String DDL_SALE_ITEMS_IDX_SALE =
+            "CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id ON sale_items(sale_id)";
+
     // ── Employees (Story 3.5) ─────────────────────────────────────────────────
 
     static final String DDL_EMPLOYEES = """
@@ -501,6 +525,11 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_SALES);
             stmt.execute(DDL_SALES_MIGRATE_CLIENT_ID); // idempotent: adds client_id if missing
             stmt.execute(DDL_SALES_IDX_CLIENT);
+            // Story 4.1 — sale_items + sale migrations
+            stmt.execute(DDL_SALES_MIGRATE_STATUS);
+            stmt.execute(DDL_SALES_MIGRATE_OCCURRED_AT);
+            stmt.execute(DDL_SALE_ITEMS);
+            stmt.execute(DDL_SALE_ITEMS_IDX_SALE);
             // Story 3.5 — employees
             stmt.execute(DDL_EMPLOYEES);
             stmt.execute(DDL_EMPLOYEES_IDX_USER);

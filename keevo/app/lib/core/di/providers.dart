@@ -82,6 +82,7 @@ final syncServiceProvider = Provider<SyncService>((ref) {
   return RestSyncService(
     database: database,
     remoteProducts: remoteProducts,
+    dio: dio,
   );
 });
 

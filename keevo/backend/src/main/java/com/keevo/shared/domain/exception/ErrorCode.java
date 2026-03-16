@@ -62,6 +62,10 @@ public enum ErrorCode {
     TRANSFER_NOT_FOUND,         // HTTP 404 — transfer id does not exist (two-step flow)
     TRANSFER_INVALID_STATUS,    // HTTP 422 — transfer is not IN_TRANSIT, cannot be completed
 
+    // ── Sale (Story 4.1) ──────────────────────────────────────────
+    SALE_NOT_FOUND,
+    SALE_ALREADY_EXISTS,
+
     // ── Sync ──────────────────────────────────────────────────────
     SYNC_CONFLICT,
     OFFLINE_LIMIT_EXCEEDED,

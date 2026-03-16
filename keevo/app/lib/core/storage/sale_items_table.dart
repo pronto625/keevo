@@ -9,6 +9,9 @@ class SaleItems extends Table {
   TextColumn get saleId => text()();
   TextColumn get productId => text()();
 
+  /// Optional variant ID — nullable. Added in Story 4.1.
+  TextColumn get variantId => text().nullable()();
+
   /// Snapshot of the product name at sale time
   TextColumn get productName => text()();
 

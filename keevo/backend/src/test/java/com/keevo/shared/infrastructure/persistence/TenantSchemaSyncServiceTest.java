@@ -145,11 +145,12 @@ class TenantSchemaSyncServiceTest {
         // Story 2.3 added stock_levels + stock_movements.
         // Story 2.5 added clients, suppliers, product_suppliers.
         // Story 2.4 added draft_notifications.
+        // Story 4.1 added sale_items.
         PreparedStatement tablesStmt2 = mock(PreparedStatement.class);
         PreparedStatement tablesStmt3 = mock(PreparedStatement.class);
         ResultSet tablesRs1 = mock(ResultSet.class); // public schema — empty
-        ResultSet tablesRs2 = mock(ResultSet.class); // tenant schema — has all 9 required tables
-        ResultSet tablesRs3 = mock(ResultSet.class); // tenant schema (3rd check) — all 9 present
+        ResultSet tablesRs2 = mock(ResultSet.class); // tenant schema — has all 10 required tables
+        ResultSet tablesRs3 = mock(ResultSet.class); // tenant schema (3rd check) — all 10 present
 
         when(connection.prepareStatement(contains("information_schema.tables")))
                 .thenReturn(tablesStmt, tablesStmt2, tablesStmt3);
@@ -158,16 +159,16 @@ class TenantSchemaSyncServiceTest {
         when(tablesRs1.next()).thenReturn(false); // public schema has no tables
 
         when(tablesStmt2.executeQuery()).thenReturn(tablesRs2);
-        when(tablesRs2.next()).thenReturn(true, true, true, true, true, true, true, true, true, false); // 9 tables
+        when(tablesRs2.next()).thenReturn(true, true, true, true, true, true, true, true, true, true, false); // 10 tables
         when(tablesRs2.getString("table_name")).thenReturn(
                 "audit_log", "products", "stock_levels", "stock_movements",
-                "clients", "suppliers", "product_suppliers", "draft_notifications", "employees");
+                "clients", "suppliers", "product_suppliers", "draft_notifications", "employees", "sale_items");
 
         when(tablesStmt3.executeQuery()).thenReturn(tablesRs3);
-        when(tablesRs3.next()).thenReturn(true, true, true, true, true, true, true, true, true, false); // 9 tables
+        when(tablesRs3.next()).thenReturn(true, true, true, true, true, true, true, true, true, true, false); // 10 tables
         when(tablesRs3.getString("table_name")).thenReturn(
                 "audit_log", "products", "stock_levels", "stock_movements",
-                "clients", "suppliers", "product_suppliers", "draft_notifications", "employees");
+                "clients", "suppliers", "product_suppliers", "draft_notifications", "employees", "sale_items");
 
         // ensureRequiredIndexes() always runs (idempotent index DDL) and uses createStatement()
         when(connection.createStatement()).thenReturn(execStmt);

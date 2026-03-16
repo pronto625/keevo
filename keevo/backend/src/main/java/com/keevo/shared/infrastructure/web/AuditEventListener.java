@@ -15,6 +15,7 @@ import com.keevo.catalog.product.domain.event.ProductArchivedEvent;
 import com.keevo.catalog.product.domain.event.SalePriceOverriddenEvent;
 import com.keevo.catalog.stock.domain.event.StockAdjustedEvent;
 import com.keevo.catalog.stock.domain.event.StockThresholdBreachedEvent;
+import com.keevo.commerce.sale.domain.model.SaleCompletedEvent;
 import com.keevo.store.store.domain.event.StoreCreatedEvent;
 import com.keevo.store.store.domain.event.StoreDeactivatedEvent;
 import com.keevo.store.store.domain.event.StoreUpdatedEvent;
@@ -453,6 +454,32 @@ public class AuditEventListener {
         );
         log.info("AUDIT: store_deactivated storeId={} name={} tenantId={} actorId={}",
                 event.storeId(), event.name(), event.tenantId(), event.actorId());
+    }
+
+    // ── Sale events (Story 4.1) ──────────────────────────────────────────────
+
+    /**
+     * Handle sale completed event.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
+     */
+    @EventListener
+    public void on(SaleCompletedEvent event) {
+        auditPort.record(
+                event.getActorId(),
+                event.getTenantId(),
+                "SALE_COMPLETED",
+                "Sale",
+                event.getSaleId(),
+                null,
+                toJson(Map.of(
+                        "storeId",       event.getStoreId().toString(),
+                        "totalAmount",   event.getTotalAmount(),
+                        "itemsSnapshot", event.getItemsSnapshot()
+                ))
+        );
+        log.info("AUDIT: sale_completed saleId={} storeId={} total={} tenantId={} actorId={}",
+                event.getSaleId(), event.getStoreId(), event.getTotalAmount(), event.getTenantId(), event.getActorId());
     }
 
     // ── Template Method helper ────────────────────────────────────────────────

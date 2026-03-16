@@ -35,6 +35,8 @@ part 'app_database.g.dart';
 /// sales extended with clientId column (Story 2.5).
 /// Schema version 7: stores extended with type, address, phone columns (Story 3.1).
 /// Schema version 8: stock_transfers table added (Story 3.3).
+/// Schema version 9: sales extended with status, occurredAt; sale_items extended with variantId (Story 4.1).
+/// Schema version 10: stock_levels UNIQUE index on (product_id, store_id) + deduplicate (Story 4.1 POS fix).
 @DriftDatabase(tables: [
   SyncQueue,
   Products,
@@ -61,7 +63,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -117,6 +119,44 @@ class AppDatabase extends _$AppDatabase {
       if (from < 8) {
         // Story 3.3 — inter-store stock transfers table.
         await migrator.createTable(stockTransfers);
+      }
+      if (from < 9) {
+        // Story 4.1 — POS sale recording fields.
+        await migrator.addColumn(sales, sales.status);
+        await migrator.addColumn(sales, sales.occurredAt);
+        await migrator.addColumn(saleItems, saleItems.variantId);
+      }
+      if (from < 10) {
+        // Deduplicate stock_levels: keep only the most recent row per (product_id, store_id).
+        await customStatement(
+          'DELETE FROM stock_levels WHERE rowid NOT IN ('
+          '  SELECT MAX(rowid) FROM stock_levels GROUP BY product_id, store_id'
+          ')',
+        );
+        // Add unique index to prevent future duplicates.
+        await customStatement(
+          'CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_levels_product_store '
+          'ON stock_levels (product_id, store_id)',
+        );
+      }
+      if (from < 11) {
+        // Fix: stock_levels.updated_at was stored as epoch seconds by raw SQL
+        // in upsertLevel, but storeDateTimeValuesAsText expects ISO-8601 text.
+        // Column has TEXT affinity, so SQLite stored the int as text "1773533337".
+        // Match numeric-only values (no '-' means not ISO-8601).
+        await customStatement(
+          "UPDATE stock_levels "
+          "SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(updated_at AS INTEGER), 'unixepoch') "
+          "WHERE updated_at GLOB '[0-9]*' AND updated_at NOT LIKE '%-%'",
+        );
+      }
+      if (from < 12) {
+        // Re-run for devices where v11 ran with the wrong typeof() condition.
+        await customStatement(
+          "UPDATE stock_levels "
+          "SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(updated_at AS INTEGER), 'unixepoch') "
+          "WHERE updated_at GLOB '[0-9]*' AND updated_at NOT LIKE '%-%'",
+        );
       }
     },
   );

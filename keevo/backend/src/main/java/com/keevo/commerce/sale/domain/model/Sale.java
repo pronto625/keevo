@@ -1,0 +1,52 @@
+package com.keevo.commerce.sale.domain.model;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * Sale — aggregate root representing a POS transaction.
+ * Pure Java — no Spring.
+ */
+public class Sale {
+
+    private final UUID id;
+    private final UUID storeId;
+    private final UUID employeeId;
+    private final UUID clientId;  // nullable
+    private final PaymentMode paymentMode;
+    private final int totalAmount; // XAF integer
+    private final SaleStatus status;
+    private final Instant occurredAt;
+    private final Instant createdAt;
+    private final List<SaleItem> items;
+
+    public Sale(UUID id, UUID storeId, UUID employeeId, UUID clientId,
+                PaymentMode paymentMode, int totalAmount, SaleStatus status,
+                Instant occurredAt, Instant createdAt, List<SaleItem> items) {
+        if (totalAmount < 0) {
+            throw new IllegalArgumentException("Total amount must be non-negative, got: " + totalAmount);
+        }
+        this.id = id;
+        this.storeId = storeId;
+        this.employeeId = employeeId;
+        this.clientId = clientId;
+        this.paymentMode = paymentMode;
+        this.totalAmount = totalAmount;
+        this.status = status;
+        this.occurredAt = occurredAt;
+        this.createdAt = createdAt;
+        this.items = items != null ? List.copyOf(items) : List.of();
+    }
+
+    public UUID getId() { return id; }
+    public UUID getStoreId() { return storeId; }
+    public UUID getEmployeeId() { return employeeId; }
+    public UUID getClientId() { return clientId; }
+    public PaymentMode getPaymentMode() { return paymentMode; }
+    public int getTotalAmount() { return totalAmount; }
+    public SaleStatus getStatus() { return status; }
+    public Instant getOccurredAt() { return occurredAt; }
+    public Instant getCreatedAt() { return createdAt; }
+    public List<SaleItem> getItems() { return items; }
+}

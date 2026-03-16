@@ -68,6 +68,8 @@ public class GlobalExceptionHandler {
             Map.entry("PASSWORD_CHANGE_REQUIRED",  "Vous devez changer votre mot de passe avant de continuer"),
             Map.entry("STORE_REASSIGNED",          "Votre boutique a été modifiée, veuillez vous reconnecter"),
             Map.entry("ACCOUNT_INACTIVE",          "Ce compte a été désactivé"),
+            Map.entry("SALE_NOT_FOUND",            "Vente introuvable"),
+            Map.entry("SALE_ALREADY_EXISTS",       "Cette vente a déjà été enregistrée"),
             Map.entry("VALIDATION_FAILED",         "Données invalides"),
             Map.entry("VALIDATION_ERROR",          "Données invalides"),
             Map.entry("INTERNAL_ERROR",            "Une erreur inattendue s'est produite")
@@ -137,6 +139,7 @@ public class GlobalExceptionHandler {
                  "EMPLOYEE_NOT_FOUND",
                  "MEMBERSHIP_NOT_FOUND",
                  "SUBSCRIPTION_NOT_FOUND",
+                 "SALE_NOT_FOUND",
                  "NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "UNAUTHORIZED", "TOKEN_EXPIRED",
                  "TOKEN_INVALID",
@@ -148,7 +151,8 @@ public class GlobalExceptionHandler {
                  "TENANT_ALREADY_EXISTS",
                  "MEMBERSHIP_ALREADY_EXISTS",
                  "PRODUCT_NAME_ALREADY_EXISTS",
-                 "WAREHOUSE_ALREADY_EXISTS" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1
+                 "WAREHOUSE_ALREADY_EXISTS",
+                 "SALE_ALREADY_EXISTS" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1
             case "VALIDATION_ERROR", "INVALID_AMOUNT",
                  "INVALID_PHONE_NUMBER", "INVALID_PASSWORD",
                  "INSUFFICIENT_STOCK",

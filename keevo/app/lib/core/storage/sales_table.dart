@@ -19,6 +19,12 @@ class Sales extends Table {
   /// Added in Story 2.5 — Gestion Clients & Fournisseurs.
   TextColumn get clientId => text().nullable()();
 
+  /// Sale status: 'COMPLETED' | 'CANCELLED'. Added in Story 4.1.
+  TextColumn get status => text().withDefault(const Constant('COMPLETED')).nullable()();
+
+  /// Exact timestamp of sale occurrence. Added in Story 4.1.
+  DateTimeColumn get occurredAt => dateTime().nullable()();
+
   BoolColumn get synced => boolean().withDefault(const Constant(false))();
   DateTimeColumn get syncedAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime()();
