@@ -1,4 +1,3 @@
-import 'package:drift/drift.dart' show QueryRow, Variable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +11,8 @@ import '../../../onboarding/domain/model/sector_type.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../domain/model/cart_item.dart';
 import '../provider/cart_provider.dart';
+import '../provider/pos_providers.dart';
+import '../provider/pos_search_provider.dart';
 import '../widget/cart_bottom_sheet.dart';
 import '../widget/cart_pill.dart';
 import '../widget/product_card.dart';
@@ -64,51 +65,112 @@ class _PosPageState extends ConsumerState<PosPage> {
     final isEmployee = role == 'EMPLOYEE';
     final cart = ref.watch(cartProvider);
     final cartNotifier = ref.read(cartProvider.notifier);
+    final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Point de Vente'),
-        actions: const [SyncIndicator()],
-      ),
       body: Stack(
         children: [
-          Column(
-            children: [
-              // Search bar
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: SearchBar(
-                  controller: _searchController,
-                  hintText: 'Rechercher un produit…',
-                  leading: const Icon(Icons.search),
-                  trailing: [
-                    if (_searchQuery.isNotEmpty)
-                      IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                        },
+          CustomScrollView(
+            slivers: [
+              // Modern gradient AppBar with search
+              SliverAppBar(
+                floating: true,
+                snap: true,
+                expandedHeight: 120,
+                backgroundColor: const Color(0xFF3B5BDB),
+                flexibleSpace: FlexibleSpaceBar(
+                  background: Container(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF3B5BDB), Color(0xFF4DABF7)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
-                  ],
-                  onChanged: (value) => setState(() => _searchQuery = value),
+                    ),
+                    child: SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  'Point de Vente',
+                                  style: theme.textTheme.titleLarge?.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const Spacer(),
+                                const SyncIndicator(),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            // Search bar
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(14),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.08),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: TextField(
+                                controller: _searchController,
+                                decoration: InputDecoration(
+                                  hintText: 'Rechercher un produit…',
+                                  hintStyle: TextStyle(
+                                    color: Colors.grey.shade400,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                  prefixIcon: Icon(Icons.search_rounded,
+                                      color: Colors.grey.shade400),
+                                  suffixIcon: _searchQuery.isNotEmpty
+                                      ? IconButton(
+                                          icon: Icon(Icons.close_rounded,
+                                              color: Colors.grey.shade500, size: 20),
+                                          onPressed: () {
+                                            _searchController.clear();
+                                            setState(() => _searchQuery = '');
+                                            ref.read(posSearchProvider.notifier).clear();
+                                          },
+                                        )
+                                      : null,
+                                  border: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 14),
+                                ),
+                                onChanged: (value) {
+                                  setState(() => _searchQuery = value);
+                                  ref.read(posSearchProvider.notifier).search(value, storeId);
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
               // Product grid or search results
-              Expanded(
-                child: _searchQuery.isNotEmpty
-                    ? _SearchResults(
-                        query: _searchQuery,
-                        storeId: storeId,
-                        onAddToCart: (p) => _addProductToCart(p, cartNotifier),
-                      )
-                    : _AllProductsGrid(
-                        storeId: storeId,
-                        sectorType: _sectorType,
-                        isEmployee: isEmployee,
-                        onAddToCart: (p) => _addProductToCart(p, cartNotifier),
-                      ),
-              ),
+              _searchQuery.isNotEmpty
+                  ? _SearchResultsSliver(
+                      onAddToCart: (p) => _addProductToCart(p, cartNotifier),
+                    )
+                  : _FrequentProductsSliver(
+                      storeId: storeId,
+                      sectorType: _sectorType,
+                      isEmployee: isEmployee,
+                      onAddToCart: (p) => _addProductToCart(p, cartNotifier),
+                    ),
+              // Bottom padding for cart pill
+              const SliverPadding(padding: EdgeInsets.only(bottom: 80)),
             ],
           ),
           // Cart pill
@@ -136,7 +198,7 @@ class _PosPageState extends ConsumerState<PosPage> {
   }
 
   void _addProductToCart(
-      _ProductGridItem product, CartNotifier cartNotifier) {
+      PosProductResult product, CartNotifier cartNotifier) {
     HapticFeedback.lightImpact();
     cartNotifier.addItem(CartItem(
       id: product.id,
@@ -149,31 +211,15 @@ class _PosPageState extends ConsumerState<PosPage> {
   }
 }
 
-/// Internal data class for product grid display.
-class _ProductGridItem {
-  final String id;
-  final String name;
-  final int price;
-  final int stock;
-  final String? photoUrl;
-
-  const _ProductGridItem({
-    required this.id,
-    required this.name,
-    required this.price,
-    required this.stock,
-    this.photoUrl,
-  });
-}
-
-/// Grid of ALL products for the active store (or all stores).
-class _AllProductsGrid extends ConsumerStatefulWidget {
+/// Grid of frequently sold products (AC1 — sale_items.quantity DESC, limit 12).
+/// Falls back to all products if no sales exist yet.
+class _FrequentProductsSliver extends ConsumerWidget {
   final String? storeId;
   final SectorType? sectorType;
   final bool isEmployee;
-  final void Function(_ProductGridItem) onAddToCart;
+  final void Function(PosProductResult) onAddToCart;
 
-  const _AllProductsGrid({
+  const _FrequentProductsSliver({
     required this.storeId,
     required this.sectorType,
     required this.isEmployee,
@@ -181,243 +227,130 @@ class _AllProductsGrid extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<_AllProductsGrid> createState() => _AllProductsGridState();
-}
-
-class _AllProductsGridState extends ConsumerState<_AllProductsGrid> {
-  late Future<List<_ProductGridItem>> _productsFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _productsFuture = _loadAllProducts();
-  }
-
-  @override
-  void didUpdateWidget(_AllProductsGrid old) {
-    super.didUpdateWidget(old);
-    if (old.storeId != widget.storeId) {
-      _productsFuture = _loadAllProducts();
-    }
-  }
-
-  Future<List<_ProductGridItem>> _loadAllProducts() async {
-    final db = ref.read(appDatabaseProvider);
-    final sid = widget.storeId;
-    final List<QueryRow> rows;
-    if (sid != null) {
-      rows = await db.customSelect(
-        'SELECT p.id, p.name, p.price, p.photo_url, '
-        'COALESCE(d.quantity, 0) as stock '
-        'FROM products p '
-        'LEFT JOIN ('
-        '  SELECT sl.product_id, sl.quantity '
-        '  FROM stock_levels sl '
-        '  WHERE sl.store_id = ? '
-        '  GROUP BY sl.product_id '
-        '  HAVING sl.updated_at = MAX(sl.updated_at)'
-        ') d ON d.product_id = p.id '
-        'ORDER BY (CASE WHEN COALESCE(d.quantity, 0) > 0 THEN 0 ELSE 1 END) ASC, p.name ASC '
-        'LIMIT 100',
-        variables: [Variable.withString(sid)],
-      ).get();
-    } else {
-      rows = await db.customSelect(
-        'SELECT p.id, p.name, p.price, p.photo_url, '
-        'COALESCE(agg.total_stock, 0) as stock '
-        'FROM products p '
-        'LEFT JOIN ('
-        '  SELECT d.product_id, SUM(d.quantity) as total_stock '
-        '  FROM ('
-        '    SELECT sl.product_id, sl.store_id, sl.quantity '
-        '    FROM stock_levels sl '
-        '    GROUP BY sl.product_id, sl.store_id '
-        '    HAVING sl.updated_at = MAX(sl.updated_at)'
-        '  ) d '
-        '  GROUP BY d.product_id'
-        ') agg ON agg.product_id = p.id '
-        'ORDER BY (CASE WHEN COALESCE(agg.total_stock, 0) > 0 THEN 0 ELSE 1 END) ASC, p.name ASC '
-        'LIMIT 100',
-      ).get();
-    }
-    return rows
-        .map((r) => _ProductGridItem(
-              id: r.read<String>('id'),
-              name: r.read<String>('name'),
-              price: r.read<int>('price'),
-              stock: r.read<int>('stock'),
-              photoUrl: r.readNullable<String>('photo_url'),
-            ))
-        .toList();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<List<_ProductGridItem>>(
-      future: _productsFuture,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final products = snapshot.data!;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asyncProducts = ref.watch(frequentProductsProvider(storeId));
+    return asyncProducts.when(
+      loading: () => const SliverFillRemaining(
+        child: Center(child: CircularProgressIndicator()),
+      ),
+      error: (e, _) => SliverFillRemaining(
+        child: Center(child: Text('Erreur: $e')),
+      ),
+      data: (products) {
         if (products.isEmpty) {
-          return _EmptyState(
-            sectorType: widget.sectorType,
-            isEmployee: widget.isEmployee,
+          return SliverFillRemaining(
+            child: _EmptyState(
+              sectorType: sectorType,
+              isEmployee: isEmployee,
+            ),
           );
         }
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final crossAxisCount = constraints.maxWidth < 600
-                ? 2
-                : constraints.maxWidth < 1200
-                    ? 3
-                    : 4;
-            return GridView.builder(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 80),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: crossAxisCount,
-                childAspectRatio: 0.85,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
-              ),
-              itemCount: products.length,
-              itemBuilder: (context, index) {
-                final p = products[index];
-                return ProductCard(
-                  name: p.name,
-                  price: p.price,
-                  stockQuantity: p.stock,
-                  photoUrl: p.photoUrl,
-                  onTap: () => widget.onAddToCart(p),
-                );
-              },
-            );
-          },
+        return SliverPadding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          sliver: SliverLayoutBuilder(
+            builder: (context, constraints) {
+              final crossAxisCount = constraints.crossAxisExtent < 600
+                  ? 2
+                  : constraints.crossAxisExtent < 1200
+                      ? 3
+                      : 4;
+              return SliverGrid(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final p = products[index];
+                    return ProductCard(
+                      name: p.name,
+                      price: p.price,
+                      stockQuantity: p.stock,
+                      photoUrl: p.photoUrl,
+                      onTap: () => onAddToCart(p),
+                    );
+                  },
+                  childCount: products.length,
+                ),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
+                  childAspectRatio: 0.88,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                ),
+              );
+            },
+          ),
         );
       },
     );
   }
 }
 
-/// Search results list.
-class _SearchResults extends ConsumerWidget {
-  final String query;
-  final String? storeId;
-  final void Function(_ProductGridItem) onAddToCart;
+/// Search results driven by PosSearchNotifier (AC2).
+class _SearchResultsSliver extends ConsumerWidget {
+  final void Function(PosProductResult) onAddToCart;
 
-  const _SearchResults({
-    required this.query,
-    required this.storeId,
-    required this.onAddToCart,
-  });
+  const _SearchResultsSliver({required this.onAddToCart});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final db = ref.watch(appDatabaseProvider);
-
-    return FutureBuilder<List<_ProductGridItem>>(
-      future: _search(db, query, storeId),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final results = snapshot.data!;
+    final searchState = ref.watch(posSearchProvider);
+    return searchState.when(
+      loading: () => const SliverFillRemaining(
+        child: Center(child: CircularProgressIndicator()),
+      ),
+      error: (e, _) => SliverFillRemaining(
+        child: Center(child: Text('Erreur: $e')),
+      ),
+      data: (results) {
         if (results.isEmpty) {
-          return const Center(
-            child: Text('Aucun produit trouvé'),
+          return SliverFillRemaining(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.search_off_rounded,
+                      size: 48, color: Colors.grey.shade300),
+                  const SizedBox(height: 12),
+                  Text('Aucun produit trouvé',
+                      style: TextStyle(color: Colors.grey.shade500)),
+                ],
+              ),
+            ),
           );
         }
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final crossAxisCount = constraints.maxWidth < 600
-                ? 2
-                : constraints.maxWidth < 1200
-                    ? 3
-                    : 4;
-            return GridView.builder(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 80),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: crossAxisCount,
-                childAspectRatio: 0.85,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
-              ),
-              itemCount: results.length,
-              itemBuilder: (context, index) {
-                final p = results[index];
-                return ProductCard(
-                  name: p.name,
-                  price: p.price,
-                  stockQuantity: p.stock,
-                  photoUrl: p.photoUrl,
-                  onTap: () => onAddToCart(p),
-                );
-              },
-            );
-          },
+        return SliverPadding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          sliver: SliverLayoutBuilder(
+            builder: (context, constraints) {
+              final crossAxisCount = constraints.crossAxisExtent < 600
+                  ? 2
+                  : constraints.crossAxisExtent < 1200
+                      ? 3
+                      : 4;
+              return SliverGrid(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final p = results[index];
+                    return ProductCard(
+                      name: p.name,
+                      price: p.price,
+                      stockQuantity: p.stock,
+                      photoUrl: p.photoUrl,
+                      onTap: () => onAddToCart(p),
+                    );
+                  },
+                  childCount: results.length,
+                ),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
+                  childAspectRatio: 0.88,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                ),
+              );
+            },
+          ),
         );
       },
     );
-  }
-
-  Future<List<_ProductGridItem>> _search(
-      dynamic db, String query, String? storeId) async {
-    final lowerQuery = '%${query.toLowerCase()}%';
-    final List<QueryRow> rows;
-    if (storeId != null) {
-      rows = await db.customSelect(
-        'SELECT p.id, p.name, p.price, p.photo_url, '
-        'COALESCE(d.quantity, 0) as stock '
-        'FROM products p '
-        'LEFT JOIN ('
-        '  SELECT sl.product_id, sl.quantity '
-        '  FROM stock_levels sl '
-        '  WHERE sl.store_id = ? '
-        '  GROUP BY sl.product_id '
-        '  HAVING sl.updated_at = MAX(sl.updated_at)'
-        ') d ON d.product_id = p.id '
-        'WHERE LOWER(p.name) LIKE ? '
-        'ORDER BY (CASE WHEN COALESCE(d.quantity, 0) > 0 THEN 0 ELSE 1 END) ASC, p.name ASC '
-        'LIMIT 50',
-        variables: [
-          Variable.withString(storeId),
-          Variable.withString(lowerQuery),
-        ],
-      ).get();
-    } else {
-      rows = await db.customSelect(
-        'SELECT p.id, p.name, p.price, p.photo_url, '
-        'COALESCE(agg.total_stock, 0) as stock '
-        'FROM products p '
-        'LEFT JOIN ('
-        '  SELECT d.product_id, SUM(d.quantity) as total_stock '
-        '  FROM ('
-        '    SELECT sl.product_id, sl.store_id, sl.quantity '
-        '    FROM stock_levels sl '
-        '    GROUP BY sl.product_id, sl.store_id '
-        '    HAVING sl.updated_at = MAX(sl.updated_at)'
-        '  ) d '
-        '  GROUP BY d.product_id'
-        ') agg ON agg.product_id = p.id '
-        'WHERE LOWER(p.name) LIKE ? '
-        'ORDER BY (CASE WHEN COALESCE(agg.total_stock, 0) > 0 THEN 0 ELSE 1 END) ASC, p.name ASC '
-        'LIMIT 50',
-        variables: [
-          Variable.withString(lowerQuery),
-        ],
-      ).get();
-    }
-
-    return rows
-        .map((r) => _ProductGridItem(
-              id: r.read<String>('id'),
-              name: r.read<String>('name'),
-              price: r.read<int>('price'),
-              stock: r.read<int>('stock'),
-              photoUrl: r.readNullable<String>('photo_url'),
-            ))
-        .toList();
   }
 }
 

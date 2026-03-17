@@ -86,6 +86,22 @@ class RestSyncService implements SyncService {
 
       case 'CREATE_SALE':
         dev.log('💰 Pushing sale via API', name: 'RestSync');
+        // Enrich storeId if missing (stale queue entries from older code)
+        if (payload['storeId'] == null) {
+          final saleId = payload['saleId'] as String?;
+          if (saleId != null) {
+            final localSale = await (_database.select(_database.sales)
+                  ..where((s) => s.id.equals(saleId)))
+                .getSingleOrNull();
+            if (localSale != null) {
+              payload['storeId'] = localSale.storeId;
+            }
+          }
+          if (payload['storeId'] == null) {
+            dev.log('⚠️ CREATE_SALE missing storeId, skipping stale entry', name: 'RestSync');
+            return;
+          }
+        }
         await _dio.post('/api/v1/sales', data: payload);
         // Mark sale as synced locally
         final saleId = payload['saleId'] as String?;
@@ -110,7 +126,16 @@ class RestSyncService implements SyncService {
     // Elle récupère les données du backend et les met à jour en local
     try {
       final products = await _remoteProducts.getAll();
-      
+
+      // Preserve local-only photoUrl values (backend doesn't store images)
+      final localProducts = await _database.select(_database.products).get();
+      final photoUrlMap = <String, String>{};
+      for (final p in localProducts) {
+        if (p.photoUrl != null && p.photoUrl!.isNotEmpty) {
+          photoUrlMap[p.id] = p.photoUrl!;
+        }
+      }
+
       // Vider la table locale et la repeupler (stratégie simple)
       await _database.transaction(() async {
         await _database.delete(_database.products).go();
@@ -126,7 +151,7 @@ class RestSyncService implements SyncService {
               price: Value(productDto.price),
               buyPrice: Value(productDto.buyPrice),
               stockQuantity: Value(productDto.stockQuantity),
-              photoUrl: Value(productDto.photoUrl),
+              photoUrl: Value(productDto.photoUrl ?? photoUrlMap[productDto.id]),
               archived: Value(productDto.archived),
               status: Value(productDto.status),
               createdAt: DateTime.parse(productDto.createdAt),
@@ -135,6 +160,38 @@ class RestSyncService implements SyncService {
           );
         }
       });
+
+      // Sync stock_levels for each product so POS has fresh data
+      for (final productDto in products) {
+        try {
+          final resp = await _dio.get<Map<String, dynamic>>(
+            '/api/v1/products/${productDto.id}/stock',
+          );
+          final levels = (resp.data!['data'] as List<dynamic>);
+          for (final l in levels) {
+            final map = l as Map<String, dynamic>;
+            await _database.customStatement(
+              'INSERT INTO stock_levels (id, product_id, variant_id, store_id, quantity, minimum_threshold, updated_at) '
+              'VALUES (?, ?, ?, ?, ?, ?, ?) '
+              'ON CONFLICT(product_id, store_id) DO UPDATE SET '
+              'id = excluded.id, variant_id = excluded.variant_id, '
+              'quantity = excluded.quantity, minimum_threshold = excluded.minimum_threshold, '
+              'updated_at = excluded.updated_at',
+              [
+                map['id'] as String,
+                map['productId'] as String,
+                map['variantId'],
+                map['storeId'] as String,
+                map['quantity'] as int,
+                (map['minimumThreshold'] as int?) ?? 0,
+                (map['updatedAt'] as String?) ?? DateTime.now().toIso8601String(),
+              ],
+            );
+          }
+        } catch (e) {
+          dev.log('⚠️ Stock sync failed for ${productDto.id}: $e', name: 'RestSync');
+        }
+      }
     } catch (e) {
       print('Pull sync failed: $e');
       rethrow;

@@ -109,7 +109,7 @@ development_status:
   # Epic 4: Point de Vente (POS)
   # ─────────────────────────────────────────────────────────
   epic-4: in-progress
-  4-1-enregistrement-de-vente-flux-pos-core: done
+  4-1-enregistrement-de-vente-flux-pos-core: done  # code review PASSED (adversarial) | C1-C7: pos_search_provider.dart created, frequentProductsProvider added, 4 missing test files created (21 tests) | H1: _AllProductsGrid→_FrequentProductsGrid (sale_items DESC) | H2: inline SQL→PosSearchNotifier provider | H3: _ClientAutocomplete added to CheckoutPage (AC5) | M1/M2: File List + Completion Notes populated | 76/77 POS tests GREEN (1 pre-existing deprecated placeholder failure)
   4-2-reductions-prix-modifiable-en-panier: done  # code review PASSED (adversarial) | M1: Sale.java discount bypass on 0-subtotal fixed (removed && subtotalSum > 0 guard) | H4: TenantSchemaSyncService missing discount_amount/catalogue_unit_price migrations added to ensureRequiredIndexes() | H3: CheckoutPage AC4 Montant reçu + monnaie rendue implemented | H2: 3 missing widget test files created (cart_bottom_sheet_test, discount_sheet_test, checkout_page_test — 16 widget tests) | H1: Tasks 7-14 marked [x], status → done, File List populated | 663/663 backend tests GREEN (0 failures, 2 pre-existing errors unrelated)
   4-3-cloture-journaliere-historique-des-ventes: backlog
   4-4-annulation-correction-de-vente: backlog

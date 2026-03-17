@@ -51,9 +51,8 @@ void main() {
           _buildApp(items: [_item(price: 10000, qty: 1)], discount: 2000));
       await tester.pumpAndSettle();
 
-      // Subtotal label and discount label should appear
-      expect(find.text('Réduction'), findsOneWidget);
-      expect(find.text('Total à payer'), findsOneWidget);
+      // Discount shown as pill inside the hero gradient card
+      expect(find.textContaining('Réduction'), findsOneWidget);
     });
 
     testWidgets('shows simple total when no discount', (tester) async {
@@ -69,11 +68,11 @@ void main() {
       await tester.pumpWidget(_buildApp(items: [_item(price: 10000, qty: 1)]));
       await tester.pumpAndSettle();
 
-      // Select Espèces
-      await tester.tap(find.text('💵 Espèces'));
+      // Select Espèces (no emoji in new UI)
+      await tester.tap(find.text('Espèces'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Montant reçu'), findsOneWidget);
+      expect(find.text('Montant reçu (optionnel)'), findsOneWidget);
     });
 
     testWidgets('change calculation with Espèces', (tester) async {
@@ -81,11 +80,12 @@ void main() {
       await tester.pumpAndSettle();
 
       // Select Espèces
-      await tester.tap(find.text('💵 Espèces'));
+      await tester.tap(find.text('Espèces'));
       await tester.pumpAndSettle();
 
       // Enter montant reçu = 15000 (total = 10000)
-      await tester.enterText(find.bySemanticsLabel('Montant reçu'), '15000');
+      await tester.enterText(
+          find.bySemanticsLabel('Montant reçu (optionnel)'), '15000');
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Monnaie à rendre'), findsOneWidget);
@@ -96,31 +96,31 @@ void main() {
       await tester.pumpWidget(_buildApp(items: [_item(price: 10000, qty: 1)]));
       await tester.pumpAndSettle();
 
-      final button = tester.widget<FilledButton>(find.widgetWithText(
-        FilledButton,
-        'Valider la vente',
-      ));
-      expect(button.onPressed, isNull);
+      // InkWell wraps the button — when disabled its onTap is null
+      final inkWell = tester.widget<InkWell>(
+          find.ancestor(
+            of: find.text('Valider la vente'),
+            matching: find.byType(InkWell),
+          ));
+      expect(inkWell.onTap, isNull);
     });
 
     testWidgets(
-        'Valider button disabled when Espèces selected but Montant reçu insufficient',
+        'Valider button enabled when Espèces selected even without Montant reçu',
         (tester) async {
       await tester.pumpWidget(_buildApp(items: [_item(price: 10000, qty: 1)]));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('💵 Espèces'));
+      await tester.tap(find.text('Espèces'));
       await tester.pumpAndSettle();
 
-      // Enter insufficient amount
-      await tester.enterText(find.bySemanticsLabel('Montant reçu'), '5000');
-      await tester.pumpAndSettle();
-
-      final button = tester.widget<FilledButton>(find.widgetWithText(
-        FilledButton,
-        'Valider la vente',
-      ));
-      expect(button.onPressed, isNull);
+      // Montant reçu is now optional — button should be enabled
+      final inkWell = tester.widget<InkWell>(
+          find.ancestor(
+            of: find.text('Valider la vente'),
+            matching: find.byType(InkWell),
+          ));
+      expect(inkWell.onTap, isNotNull);
     });
   });
 }

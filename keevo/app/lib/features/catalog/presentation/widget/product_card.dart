@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -314,10 +316,7 @@ class ProductCard extends ConsumerWidget {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
-          child: Image.network(
-            product.photoUrl!,
-            fit: BoxFit.cover,
-          ),
+          child: _buildProductImage(product.photoUrl!, theme),
         ),
       );
     }
@@ -709,6 +708,48 @@ class ProductCard extends ConsumerWidget {
             child: const Text('Désarchiver'),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildProductImage(String url, ThemeData theme) {
+    if (url.startsWith('/')) {
+      final file = File(url);
+      if (file.existsSync()) {
+        return Image.file(file, fit: BoxFit.cover);
+      }
+    }
+    return Image.network(url, fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => _buildInitials(theme),
+    );
+  }
+
+  Widget _buildInitials(ThemeData theme) {
+    final initials = product.name.isNotEmpty
+        ? product.name.characters.first.toUpperCase()
+        : '?';
+    return Container(
+      width: 60,
+      height: 60,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            theme.colorScheme.primary,
+            theme.colorScheme.primary.withOpacity(0.7),
+          ],
+        ),
+      ),
+      child: Center(
+        child: Text(
+          initials,
+          style: theme.textTheme.headlineSmall?.copyWith(
+            color: theme.colorScheme.onPrimary,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
     );
   }

@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 
 import '../../../contact/domain/model/supplier_model.dart';
 import '../../../contact/presentation/provider/contact_provider.dart';
@@ -222,6 +224,21 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
     return null;
   }
 
+  /// Copies the selected image to the app's persistent documents directory.
+  /// Returns the local file path, or null if no image selected.
+  Future<String?> _persistImage(String productId) async {
+    if (_selectedImage == null) return null;
+    final dir = await getApplicationDocumentsDirectory();
+    final imgDir = Directory(p.join(dir.path, 'product_images'));
+    if (!imgDir.existsSync()) imgDir.createSync(recursive: true);
+    final ext = p.extension(_selectedImage!.path).isNotEmpty
+        ? p.extension(_selectedImage!.path)
+        : '.jpg';
+    final dest = File(p.join(imgDir.path, '$productId$ext'));
+    await _selectedImage!.copy(dest.path);
+    return dest.path;
+  }
+
   Future<void> _onSave() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -231,6 +248,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
       final actions = ref.read(productActionsProvider);
       
       if (widget.isEditing && widget.product != null) {
+        final photoUrl = await _persistImage(widget.product!.id);
         await actions.update(
           id: widget.product!.id,
           name: _nameController.text.trim(),
@@ -242,8 +260,13 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
           price: int.tryParse(_priceController.text) ?? 0,
           buyPrice: int.tryParse(_buyPriceController.text) ?? 0,
           transportCost: int.tryParse(_transportCostController.text) ?? 0,
+          photoUrl: photoUrl,
         );
       } else {
+        // Generate a temporary ID for the image filename; after create, the
+        // real product ID is returned and the image path is already persisted.
+        final tempId = DateTime.now().millisecondsSinceEpoch.toString();
+        final photoUrl = await _persistImage(tempId);
         await actions.create(
           name: _nameController.text.trim(),
           description: _descriptionController.text.trim().isEmpty 
@@ -254,6 +277,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
           price: int.tryParse(_priceController.text) ?? 0,
           buyPrice: int.tryParse(_buyPriceController.text) ?? 0,
           transportCost: int.tryParse(_transportCostController.text) ?? 0,
+          photoUrl: photoUrl,
         );
       }
 
@@ -644,6 +668,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
                           // Photo section
                           _PhotoSection(
                             selectedImage: _selectedImage,
+                            existingPhotoUrl: widget.product?.photoUrl,
                             onTap: _showPhotoOptions,
                             onRemove: () => setState(() => _selectedImage = null),
                           ),
@@ -976,14 +1001,19 @@ class _ErrorDropdown extends StatelessWidget {
 
 class _PhotoSection extends StatelessWidget {
   final File? selectedImage;
+  final String? existingPhotoUrl;
   final VoidCallback onTap;
   final VoidCallback onRemove;
 
   const _PhotoSection({
     this.selectedImage,
+    this.existingPhotoUrl,
     required this.onTap,
     required this.onRemove,
   });
+
+  bool get _hasPhoto => selectedImage != null || 
+      (existingPhotoUrl != null && existingPhotoUrl!.isNotEmpty);
 
   @override
   Widget build(BuildContext context) {
@@ -996,66 +1026,95 @@ class _PhotoSection extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(16),
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(20),
-        leading: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                Colors.amber.shade400,
-                Colors.orange.shade600,
-              ],
+      child: Column(
+        children: [
+          if (_hasPhoto)
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              child: SizedBox(
+                width: double.infinity,
+                height: 160,
+                child: selectedImage != null
+                    ? Image.file(selectedImage!, fit: BoxFit.cover)
+                    : _buildExistingImage(),
+              ),
             ),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Icon(
-            Icons.photo_camera_rounded,
-            color: Colors.white,
-            size: 24,
-          ),
-        ),
-        title: Text(
-          selectedImage != null ? 'Photo sélectionnée ✓' : 'Ajouter une photo',
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 16,
-          ),
-        ),
-        subtitle: selectedImage != null 
-            ? Text(
-                'Taille: ${(selectedImage!.lengthSync() / 1024).toStringAsFixed(1)} KB',
-                style: TextStyle(
-                  color: Colors.green.shade600,
-                  fontWeight: FontWeight.w500,
+          ListTile(
+            contentPadding: const EdgeInsets.all(20),
+            leading: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.amber.shade400,
+                    Colors.orange.shade600,
+                  ],
                 ),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ) 
-            : Text(
-                'Appuyez pour choisir une photo de votre produit',
-                style: TextStyle(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 2,
+                borderRadius: BorderRadius.circular(12),
               ),
-        trailing: selectedImage != null 
-            ? IconButton(
-                icon: Icon(
-                  Icons.clear_rounded,
-                  color: theme.colorScheme.error,
-                ),
-                onPressed: onRemove,
-                tooltip: 'Supprimer la photo',
-              )
-            : Icon(
-                Icons.add_photo_alternate_rounded,
-                color: theme.colorScheme.primary,
+              child: const Icon(
+                Icons.photo_camera_rounded,
+                color: Colors.white,
+                size: 24,
               ),
-        onTap: onTap,
+            ),
+            title: Text(
+              _hasPhoto ? 'Photo sélectionnée ✓' : 'Ajouter une photo',
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+              ),
+            ),
+            subtitle: selectedImage != null 
+                ? Text(
+                    'Taille: ${(selectedImage!.lengthSync() / 1024).toStringAsFixed(1)} KB',
+                    style: TextStyle(
+                      color: Colors.green.shade600,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ) 
+                : Text(
+                    _hasPhoto
+                        ? 'Appuyez pour changer la photo'
+                        : 'Appuyez pour choisir une photo de votre produit',
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
+                  ),
+            trailing: _hasPhoto
+                ? IconButton(
+                    icon: Icon(
+                      Icons.clear_rounded,
+                      color: theme.colorScheme.error,
+                    ),
+                    onPressed: onRemove,
+                    tooltip: 'Supprimer la photo',
+                  )
+                : Icon(
+                    Icons.add_photo_alternate_rounded,
+                    color: theme.colorScheme.primary,
+                  ),
+            onTap: onTap,
+          ),
+        ],
       ),
     );
+  }
+
+  Widget _buildExistingImage() {
+    final url = existingPhotoUrl!;
+    if (url.startsWith('/')) {
+      final file = File(url);
+      if (file.existsSync()) return Image.file(file, fit: BoxFit.cover);
+    }
+    return Image.network(url, fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => const Center(
+          child: Icon(Icons.broken_image_rounded, size: 40, color: Colors.grey),
+        ));
   }
 }
 

@@ -16,7 +16,7 @@ void main() {
         onEncaisser: () {},
       )));
       await tester.pumpAndSettle();
-      expect(find.byType(FilledButton), findsNothing);
+      expect(find.text('Encaisser'), findsNothing);
     });
 
     testWidgets('visible when itemCount > 0', (tester) async {
@@ -26,7 +26,7 @@ void main() {
         onEncaisser: () {},
       )));
       await tester.pumpAndSettle();
-      expect(find.byType(FilledButton), findsOneWidget);
+      expect(find.text('Encaisser'), findsOneWidget);
     });
 
     testWidgets('displays item count and total', (tester) async {
@@ -36,8 +36,9 @@ void main() {
         onEncaisser: () {},
       )));
       await tester.pumpAndSettle();
-      expect(find.textContaining('2 articles'), findsOneWidget);
-      expect(find.textContaining('Encaisser'), findsOneWidget);
+      // Count shown as badge number, no longer "2 articles"
+      expect(find.text('2'), findsOneWidget);
+      expect(find.text('Encaisser'), findsOneWidget);
     });
 
     testWidgets('singular article for 1 item', (tester) async {
@@ -47,7 +48,8 @@ void main() {
         onEncaisser: () {},
       )));
       await tester.pumpAndSettle();
-      expect(find.textContaining('1 article'), findsOneWidget);
+      // Count shown as badge number
+      expect(find.text('1'), findsOneWidget);
     });
 
     testWidgets('onEncaisser callback fires on tap', (tester) async {
@@ -58,7 +60,7 @@ void main() {
         onEncaisser: () => tapped = true,
       )));
       await tester.pumpAndSettle();
-      await tester.tap(find.byType(FilledButton));
+      await tester.tap(find.text('Encaisser'));
       expect(tapped, isTrue);
     });
   });

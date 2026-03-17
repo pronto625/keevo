@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
@@ -13,9 +14,11 @@ class SaleSuccessPage extends StatefulWidget {
 }
 
 class _SaleSuccessPageState extends State<SaleSuccessPage>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
+    with TickerProviderStateMixin {
+  late final AnimationController _fadeCtrl;
+  late final AnimationController _scaleCtrl;
   late final Animation<double> _fadeIn;
+  late final Animation<double> _scale;
 
   static final _currencyFormat =
       NumberFormat.currency(locale: 'fr_CM', symbol: 'FCFA', decimalDigits: 0);
@@ -23,51 +26,93 @@ class _SaleSuccessPageState extends State<SaleSuccessPage>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 200),
-    );
-    _fadeIn = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
-    _controller.forward();
+    HapticFeedback.mediumImpact();
 
-    Future.delayed(const Duration(milliseconds: 1500), () {
+    _fadeCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _scaleCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    _fadeIn = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
+    _scale = CurvedAnimation(parent: _scaleCtrl, curve: Curves.elasticOut);
+
+    _fadeCtrl.forward();
+    _scaleCtrl.forward();
+
+    Future.delayed(const Duration(milliseconds: 1800), () {
       if (mounted) context.go('/pos');
     });
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _fadeCtrl.dispose();
+    _scaleCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF51CF66),
-      body: FadeTransition(
-        opacity: _fadeIn,
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text('✅', style: TextStyle(fontSize: 72)),
-              const SizedBox(height: 24),
-              Text(
-                'Vente enregistrée',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF51CF66), Color(0xFF37B24D)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: FadeTransition(
+          opacity: _fadeIn,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ScaleTransition(
+                  scale: _scale,
+                  child: Container(
+                    width: 96,
+                    height: 96,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.check_rounded,
+                      size: 56,
                       color: Colors.white,
-                      fontWeight: FontWeight.bold,
                     ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                _currencyFormat.format(widget.totalAmount),
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      color: Colors.white.withValues(alpha: 0.9),
-                    ),
-              ),
-            ],
+                  ),
+                ),
+                const SizedBox(height: 28),
+                Text(
+                  'Vente enregistrée !',
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.5,
+                      ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: Text(
+                    _currencyFormat.format(widget.totalAmount),
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -1,10 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../catalog/presentation/provider/stock_provider.dart';
 import '../../domain/model/cart_item.dart';
 import '../../domain/model/payment_mode_enum.dart';
 import '../../domain/model/sale_model.dart';
 import 'cart_provider.dart';
 import 'pos_providers.dart';
+import 'pos_search_provider.dart';
 
 /// Sealed state for RecordSaleNotifier.
 sealed class RecordSaleState {
@@ -67,6 +69,11 @@ class RecordSaleNotifier extends Notifier<RecordSaleState> {
       );
 
       ref.read(cartProvider.notifier).clearCart();
+      // Invalidate product/stock providers so POS grid shows updated stock
+      ref.invalidate(frequentProductsProvider);
+      ref.invalidate(posSearchProvider);
+      // Also invalidate the catalog stock providers for price/stock consistency
+      ref.invalidate(stockNotifierProvider);
       state = RecordSaleSuccess(sale);
     } catch (e) {
       state = RecordSaleError(e.toString());

@@ -910,4 +910,46 @@ Claude Sonnet 4.6 (GitHub Copilot)
 
 ### Completion Notes List
 
+- Code review (adversarial) 2026-03-17: 7 CRITICAL + 3 HIGH + 2 MEDIUM issues found and fixed
+- C1/C7: `pos_search_provider.dart` created — `PosSearchNotifier` Riverpod provider for AC2 fuzzy search
+- C2: `pos_search_provider_test.dart` created — 3 tests
+- C3: `pos_page_test.dart` created — 5 widget tests (search bar, frequent grid, cartPill hidden/visible, haptic)
+- C4: `local_sale_datasource_test.dart` created — 7 contract tests
+- C5: `sale_repository_impl_test.dart` created — 6 tests (online/offline/sync queue/markSynced)
+- C6: `frequentProductsProvider` added to `pos_providers.dart` — FutureProvider.family for AC1
+- H1: `_AllProductsGrid` replaced by `_FrequentProductsGrid` using `frequentProductsProvider` (sale_items.quantity DESC, limit 12)
+- H2: `_SearchResults` inline SQL replaced by `PosSearchNotifier` provider (architectural compliance)
+- H3: `_ClientAutocomplete` widget added to `CheckoutPage` (AC5 client selector)
+- M1/M2: File List populated
+
 ### File List
+
+**New files (code review):**
+- `app/lib/features/pos/presentation/provider/pos_search_provider.dart` — PosSearchNotifier + PosProductResult
+- `app/test/features/pos/presentation/provider/pos_search_provider_test.dart` — 3 tests
+- `app/test/features/pos/presentation/page/pos_page_test.dart` — 5 widget tests
+- `app/test/features/pos/data/datasource/local_sale_datasource_test.dart` — 7 contract tests
+- `app/test/features/pos/data/repository/sale_repository_impl_test.dart` — 6 tests
+
+**Modified files (code review):**
+- `app/lib/features/pos/presentation/provider/pos_providers.dart` — added frequentProductsProvider, posSearchProvider export
+- `app/lib/features/pos/presentation/page/pos_page.dart` — refactored to use PosSearchNotifier + frequentProductsProvider
+- `app/lib/features/pos/presentation/page/checkout_page.dart` — added _ClientAutocomplete widget (AC5)
+
+**Original implementation files (commit 9630e89):**
+- Backend: Sale.java, SaleItem.java, SaleFactory.java, PaymentMode.java, SaleStatus.java, SaleCompletedEvent.java
+- Backend: RecordSaleUseCase.java, RecordSaleCommand.java, SaleRepository.java
+- Backend: RecordSaleService.java, SaleController.java, SaleRepositoryAdapter.java
+- Backend: SaleJpaEntity.java, SaleItemJpaEntity.java, SaleSpringRepository.java
+- Backend: RecordSaleRequestDto.java, SaleItemRequestDto.java, RecordSaleResponseDto.java
+- Backend: TenantSchemaProvisioner.java (DDL_SALE_ITEMS, DDL_SALES_MIGRATE_*), TenantSchemaSyncService.java
+- Backend Tests: SaleTest.java, SaleItemTest.java, RecordSaleServiceTest.java, SaleControllerTest.java, SaleRepositoryAdapterTest.java
+- Flutter: cart_item.dart, sale_model.dart, payment_mode_enum.dart, sale_repository.dart, record_sale_usecase.dart
+- Flutter: local_sale_datasource.dart, remote_sale_datasource.dart, sale_repository_impl.dart
+- Flutter: cart_provider.dart, record_sale_notifier.dart, pos_providers.dart
+- Flutter: pos_page.dart, checkout_page.dart, sale_success_page.dart
+- Flutter: cart_pill.dart, cart_bottom_sheet.dart, product_card.dart, product_initials_avatar.dart
+- Flutter: app_database.dart (schema v9), app_router.dart
+- Flutter Tests: cart_item_test.dart, cart_provider_test.dart, record_sale_notifier_test.dart
+- Flutter Tests: cart_pill_test.dart, product_card_test.dart, pos_page_smoke_test.dart
+- Backend: curl-tests-story-4-1.sh

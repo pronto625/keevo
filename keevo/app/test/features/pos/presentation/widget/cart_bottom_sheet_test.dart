@@ -139,10 +139,10 @@ void main() {
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Prix modifié'), findsOneWidget);
+      expect(find.text('modifié'), findsOneWidget);
     });
 
-    testWidgets('no Prix modifié label when price is same', (tester) async {
+    testWidgets('no modifié label when price is same', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
@@ -164,14 +164,19 @@ void main() {
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Prix modifié'), findsNothing);
+      expect(find.text('modifié'), findsNothing);
     });
 
     testWidgets('Encaisser button disabled when cart empty', (tester) async {
       await pumpSheet(tester, onEncaisser: () {});
 
-      final button = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Encaisser'));
-      expect(button.onPressed, isNull);
+      // InkWell wraps the Encaisser button — when cart is empty onTap is null
+      final inkWell = tester.widget<InkWell>(
+          find.ancestor(
+            of: find.text('Encaisser'),
+            matching: find.byType(InkWell),
+          ));
+      expect(inkWell.onTap, isNull);
     });
   });
 }

@@ -248,7 +248,19 @@ class LocalProductDataSource {
   }
 
   /// Upsert a product synced from backend.
+  ///
+  /// Preserves local-only [photoUrl] when the incoming model has none
+  /// (backend does not store product images).
   Future<void> upsert(ProductModel model) async {
+    // If incoming photoUrl is null, preserve any existing local value.
+    String? effectivePhotoUrl = model.photoUrl;
+    if (effectivePhotoUrl == null) {
+      final existing = await (_db.select(_db.products)
+            ..where((p) => p.id.equals(model.id)))
+          .getSingleOrNull();
+      effectivePhotoUrl = existing?.photoUrl;
+    }
+
     await _db.into(_db.products).insertOnConflictUpdate(ProductsCompanion(
       id: Value(model.id),
       name: Value(model.name),
@@ -260,7 +272,7 @@ class LocalProductDataSource {
       transportCost: Value(model.transportCost),
       stockQuantity: Value(model.stockQuantity),
       storeId: Value(model.storeId),
-      photoUrl: Value(model.photoUrl),
+      photoUrl: Value(effectivePhotoUrl),
       archived: Value(model.archived),
       status: Value(model.status.value),
       createdAt: Value(model.createdAt),
