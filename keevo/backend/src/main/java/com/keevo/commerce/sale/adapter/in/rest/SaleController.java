@@ -67,22 +67,27 @@ public class SaleController {
                 request.clientId(),
                 request.paymentMode(),
                 request.mobileMoneyRef(),
+                request.discountAmount(),
                 request.items().stream()
                         .map(i -> new SaleItemCommand(
                                 i.productId(), i.variantId(), i.productName(),
-                                i.appliedUnitPrice(), i.quantity()))
+                                i.catalogueUnitPrice(), i.appliedUnitPrice(), i.quantity()))
                         .toList()
         );
 
         recordSaleUseCase.recordSale(command);
 
-        // Build response from command data (sale was created via SaleFactory)
+        // Build response — totalAmount = subtotal − discountAmount
+        int subtotal = command.items().stream()
+                .mapToInt(i -> i.appliedUnitPrice() * i.quantity())
+                .sum();
+        int totalAmount = subtotal - command.discountAmount();
+
         var response = new RecordSaleResponseDto(
                 request.saleId(),
                 "COMPLETED",
-                command.items().stream()
-                        .mapToInt(i -> i.appliedUnitPrice() * i.quantity())
-                        .sum(),
+                totalAmount,
+                request.discountAmount(),
                 java.time.Instant.now()
         );
 

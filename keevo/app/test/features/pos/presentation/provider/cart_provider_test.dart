@@ -74,5 +74,40 @@ void main() {
       notifier().addItem(_item(id: 'p2', price: 300, qty: 3)); // 900
       expect(notifier().totalAmount, 1900);
     });
+
+    // Story 4.2 — price override + discount
+    test('updatePrice updates appliedUnitPrice', () {
+      notifier().addItem(_item(price: 500));
+      notifier().updatePrice('p1', 400);
+      expect(state().first.appliedUnitPrice, 400);
+      expect(state().first.unitPrice, 500); // catalogue unchanged
+    });
+
+    test('setDiscount updates discountAmount', () {
+      notifier().addItem(_item(price: 1000, qty: 2)); // 2000
+      final ok = notifier().setDiscount(500);
+      expect(ok, isTrue);
+      expect(notifier().discountAmount, 500);
+    });
+
+    test('clearCart resets discount', () {
+      notifier().addItem(_item(price: 1000, qty: 2));
+      notifier().setDiscount(500);
+      notifier().clearCart();
+      expect(notifier().discountAmount, 0);
+    });
+
+    test('finalTotal is subtotal minus discount', () {
+      notifier().addItem(_item(price: 1000, qty: 3)); // 3000
+      notifier().setDiscount(500);
+      expect(notifier().finalTotal, 2500);
+    });
+
+    test('setDiscount exceeds subtotal is rejected', () {
+      notifier().addItem(_item(price: 1000, qty: 1)); // 1000
+      final ok = notifier().setDiscount(2000);
+      expect(ok, isFalse);
+      expect(notifier().discountAmount, 0); // unchanged
+    });
   });
 }

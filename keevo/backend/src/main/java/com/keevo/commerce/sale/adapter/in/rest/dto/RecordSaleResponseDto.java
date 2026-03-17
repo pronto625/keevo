@@ -7,5 +7,6 @@ public record RecordSaleResponseDto(
         UUID id,
         String status,
         int totalAmount,
+        int discountAmount,
         Instant occurredAt
 ) {}

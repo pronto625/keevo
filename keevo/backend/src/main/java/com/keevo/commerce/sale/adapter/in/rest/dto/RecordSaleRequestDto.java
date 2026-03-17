@@ -2,6 +2,7 @@ package com.keevo.commerce.sale.adapter.in.rest.dto;
 
 import com.keevo.commerce.sale.domain.model.PaymentMode;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 
@@ -14,5 +15,6 @@ public record RecordSaleRequestDto(
         UUID clientId,
         String mobileMoneyRef,
         UUID storeId,
+        @Min(0) int discountAmount,              // Story 4.2 — default 0
         @NotEmpty @Valid List<SaleItemRequestDto> items
 ) {}

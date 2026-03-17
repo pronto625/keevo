@@ -38,9 +38,9 @@ class SaleRepositoryAdapterTest {
 
     private Sale sampleSale() {
         var item = new SaleItem(UUID.randomUUID(), SALE_ID, PRODUCT_ID, null,
-                "Produit A", 1500, 2);
+                "Produit A", 1500, 1500, 2);
         return new Sale(SALE_ID, STORE_ID, EMPLOYEE_ID, null,
-                PaymentMode.CASH, 3000, SaleStatus.COMPLETED,
+                PaymentMode.CASH, 3000, 0, SaleStatus.COMPLETED,
                 Instant.now(), Instant.now(), List.of(item));
     }
 
@@ -69,5 +69,23 @@ class SaleRepositoryAdapterTest {
         adapter.save(sampleSale());
         assertThat(adapter.existsById(SALE_ID)).isTrue();
         assertThat(adapter.existsById(UUID.randomUUID())).isFalse();
+    }
+
+    // ── Story 4.2 — Discount persistence ─────────────────────────────────────
+
+    @Test
+    void save_persistsSaleWithDiscountAmount() {
+        var item = new SaleItem(UUID.randomUUID(), SALE_ID, PRODUCT_ID, null,
+                "Produit A", 5000, 5000, 2);
+        var sale = new Sale(SALE_ID, STORE_ID, EMPLOYEE_ID, null,
+                PaymentMode.CASH, 9500, 500, SaleStatus.COMPLETED,
+                Instant.now(), Instant.now(), List.of(item));
+
+        adapter.save(sale);
+
+        var found = springRepository.findById(SALE_ID);
+        assertThat(found).isPresent();
+        assertThat(found.get().getDiscountAmount()).isEqualTo(500);
+        assertThat(found.get().getTotalAmount()).isEqualTo(9500);
     }
 }

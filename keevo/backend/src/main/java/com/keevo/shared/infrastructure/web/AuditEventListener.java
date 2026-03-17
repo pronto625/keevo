@@ -246,6 +246,7 @@ public class AuditEventListener {
                 toJson(Map.of("cataloguePrice", event.cataloguePrice())),
                 toJson(Map.of(
                         "appliedPrice", event.appliedPrice(),
+                        "productName",  event.productName() != null ? event.productName() : "",
                         "saleId",       event.saleId() != null ? event.saleId().toString() : null,
                         "occurredAt",   event.occurredAt().toString()
                 ))
@@ -473,13 +474,15 @@ public class AuditEventListener {
                 event.getSaleId(),
                 null,
                 toJson(Map.of(
-                        "storeId",       event.getStoreId().toString(),
-                        "totalAmount",   event.getTotalAmount(),
-                        "itemsSnapshot", event.getItemsSnapshot()
+                        "storeId",        event.getStoreId().toString(),
+                        "totalAmount",    event.getTotalAmount(),
+                        "discountAmount", event.getDiscountAmount(),
+                        "itemsSnapshot",  event.getItemsSnapshot()
                 ))
         );
-        log.info("AUDIT: sale_completed saleId={} storeId={} total={} tenantId={} actorId={}",
-                event.getSaleId(), event.getStoreId(), event.getTotalAmount(), event.getTenantId(), event.getActorId());
+        log.info("AUDIT: sale_completed saleId={} storeId={} total={} discount={} tenantId={} actorId={}",
+                event.getSaleId(), event.getStoreId(), event.getTotalAmount(),
+                event.getDiscountAmount(), event.getTenantId(), event.getActorId());
     }
 
     // ── Template Method helper ────────────────────────────────────────────────

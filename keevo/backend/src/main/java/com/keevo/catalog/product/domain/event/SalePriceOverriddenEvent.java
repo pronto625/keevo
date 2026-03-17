@@ -25,6 +25,7 @@ import java.util.UUID;
 public record SalePriceOverriddenEvent(
         UUID productId,
         UUID saleId,
+        String productName,       // Story 4.2 — for audit readability
         int cataloguePrice,
         int appliedPrice,
         UUID actorId,

@@ -686,6 +686,32 @@ Mark public endpoints explicitly with `@SecurityRequirements` to remove it.
 - Payload: `{ entityId, tenantId, userId, occurredAt, data }`
 - Listener: `{Domain}EventListener` → `AuditEventListener`
 
+**Domain Event Registry — Canonical Locations:**
+
+Events are placed in the domain that **owns the concept**, even if other domains publish them. Before creating a new event, check this registry.
+
+| Event | Package | Created in | Audit Action | Audit EntityType | Notes |
+|---|---|---|---|---|---|
+| `UserRegisteredEvent` | `identity.auth.domain.model` | Story 1.2 | `USER_REGISTERED` | `User` | PUBLIC endpoint → listener manages TenantContext |
+| `UserAuthenticatedEvent` | `identity.auth.domain.model` | Story 1.3 | `USER_AUTHENTICATED` | `User` | PUBLIC endpoint → listener manages TenantContext |
+| `OnboardingCompletedEvent` | `identity.onboarding.domain.model` | Story 1.4 | `ONBOARDING_COMPLETED` | `Tenant` | Authenticated |
+| `ProductCreatedEvent` | `catalog.product.domain.event` | Story 2.1 | `PRODUCT_CREATED` | `Product` | |
+| `ProductUpdatedEvent` | `catalog.product.domain.event` | Story 2.1 | `PRODUCT_UPDATED` | `Product` | |
+| `ProductArchivedEvent` | `catalog.product.domain.event` | Story 2.1 | `PRODUCT_ARCHIVED` | `Product` | |
+| `SalePriceOverriddenEvent` | `catalog.product.domain.event` | Story 2.2 | `PRICE_OVERRIDDEN` | `PriceOverride` | Published by `RecordSaleService` (commerce domain) — lives in catalog because it's a pricing concept |
+| `StockAdjustedEvent` | `catalog.stock.domain.event` | Story 2.3 | `STOCK_ADJUSTED` | `StockMovement` | |
+| `StockThresholdBreachedEvent` | `catalog.stock.domain.event` | Story 2.3 | `STOCK_THRESHOLD_BREACHED` | `StockLevel` | |
+| `ClientCreatedEvent` | `catalog.contact.domain.event` | Story 2.5 | `CLIENT_CREATED` | `Client` | |
+| `ClientArchivedEvent` | `catalog.contact.domain.event` | Story 2.5 | `CLIENT_ARCHIVED` | `Client` | |
+| `SupplierCreatedEvent` | `catalog.contact.domain.event` | Story 2.5 | `SUPPLIER_CREATED` | `Supplier` | |
+| `SupplierArchivedEvent` | `catalog.contact.domain.event` | Story 2.5 | `SUPPLIER_ARCHIVED` | `Supplier` | |
+| `StoreCreatedEvent` | `store.store.domain.event` | Story 3.1 | `STORE_CREATED` | `Store` | |
+| `StoreUpdatedEvent` | `store.store.domain.event` | Story 3.1 | `STORE_UPDATED` | `Store` | |
+| `StoreDeactivatedEvent` | `store.store.domain.event` | Story 3.1 | `STORE_DEACTIVATED` | `Store` | |
+| `SaleCompletedEvent` | `commerce.sale.domain.model` | Story 4.1 | `SALE_COMPLETED` | `Sale` | +`discountAmount` added in Story 4.2 |
+
+> **Rule**: Never create a duplicate event in another package. If an event already exists, extend it. Use this registry to check before creating any `*Event.java`.
+
 **Riverpod State (Flutter):**
 - `@riverpod` annotation for all providers
 - State immutable (Freezed ou Dart 3 records)
@@ -708,6 +734,36 @@ Mark public endpoints explicitly with `@SecurityRequirements` to remove it.
 - Conflicts stock: delta-based (somme des deltas)
 - Conflicts autres: last-write-wins par timestamp
 - Retry: backoff exponentiel (2s, 4s, 8s, 16s, max 5 min)
+
+**Write-Through Pattern (Flutter → Backend) — CRITICAL for all transactional features:**
+
+Every transactional write (sales, stock movements, transfers) follows this exact pipeline:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ 1. LocalDataSource.insertAll() — single Drift transaction:        │
+│    ├─ Insert main record (e.g. sales)                             │
+│    ├─ Insert child records (e.g. sale_items)                      │
+│    ├─ Update stock_levels                                         │
+│    ├─ Insert stock_movements                                      │
+│    └─ Enqueue sync_queue entry with _buildPayload() JSON          │
+│                                                                   │
+│ 2. RemoteDataSource.push() — unawaited background call:           │
+│    ├─ POST to backend REST API                                    │
+│    ├─ On success (201): mark synced + remove sync_queue entry     │
+│    └─ On failure: log + leave in sync_queue for later retry       │
+│                                                                   │
+│ 3. Epic 5 SyncService — handles offline retry:                    │
+│    └─ Reads pending sync_queue entries + replays _buildPayload()  │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**⚠️ INVARIANT**: `_buildPayload()` (in each `LocalDataSource`) and `RemoteDataSource.push()` MUST produce **identical JSON structures** matching the backend DTO contract. When adding fields to a backend DTO (e.g. `discountAmount` on `RecordSaleRequestDto`), you MUST update THREE places in Flutter:
+1. `LocalDataSource.insertAll()` → Drift companion fields
+2. `LocalDataSource._buildPayload()` → sync_queue JSON (for offline replay)
+3. `RemoteDataSource.push()` → Dio POST body (for immediate push)
+
+Failing to update `_buildPayload()` causes offline-created records to sync without the new fields — silent data loss.
 
 **Local Data Retention Policy (Drift — device storage):**
 

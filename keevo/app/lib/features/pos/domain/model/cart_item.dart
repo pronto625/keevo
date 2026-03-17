@@ -25,6 +25,8 @@ class CartItem {
 
   int get subtotal => appliedUnitPrice * quantity;
 
+  bool get isPriceOverridden => appliedUnitPrice != unitPrice;
+
   CartItem copyWith({int? quantity, int? appliedUnitPrice}) {
     return CartItem(
       id: id,

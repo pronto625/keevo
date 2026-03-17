@@ -15,17 +15,19 @@ public class SaleCompletedEvent {
     private final String tenantId;
     private final UUID storeId;
     private final int totalAmount;
+    private final int discountAmount; // Story 4.2
     private final String itemsSnapshot; // JSON
     private final Instant occurredAt;
 
     public SaleCompletedEvent(UUID saleId, UUID actorId, String tenantId,
-                              UUID storeId, int totalAmount,
+                              UUID storeId, int totalAmount, int discountAmount,
                               String itemsSnapshot, Instant occurredAt) {
         this.saleId = saleId;
         this.actorId = actorId;
         this.tenantId = tenantId;
         this.storeId = storeId;
         this.totalAmount = totalAmount;
+        this.discountAmount = discountAmount;
         this.itemsSnapshot = itemsSnapshot;
         this.occurredAt = occurredAt;
     }
@@ -35,6 +37,7 @@ public class SaleCompletedEvent {
     public String getTenantId() { return tenantId; }
     public UUID getStoreId() { return storeId; }
     public int getTotalAmount() { return totalAmount; }
+    public int getDiscountAmount() { return discountAmount; }
     public String getItemsSnapshot() { return itemsSnapshot; }
     public Instant getOccurredAt() { return occurredAt; }
 }

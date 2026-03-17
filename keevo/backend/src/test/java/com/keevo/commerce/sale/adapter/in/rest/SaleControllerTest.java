@@ -83,9 +83,11 @@ class SaleControllerTest {
         return mapper.writeValueAsString(Map.of(
                 "saleId", saleId,
                 "paymentMode", "CASH",
+                "discountAmount", 0,
                 "items", List.of(Map.of(
                         "productId", productId,
                         "productName", "Produit Test",
+                        "catalogueUnitPrice", 1500,
                         "appliedUnitPrice", 1500,
                         "quantity", 2
                 ))
@@ -157,5 +159,85 @@ class SaleControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validPayload()))
                 .andExpect(status().isForbidden());
+    }
+
+    // ── Story 4.2 — Discount + Price Override endpoint tests ─────────────────
+
+    @Test
+    void POST_sales_withDiscount_returns201() throws Exception {
+        mockJwt("EMPLOYEE");
+
+        String payload = mapper.writeValueAsString(Map.of(
+                "saleId", UUID.randomUUID(),
+                "paymentMode", "CASH",
+                "discountAmount", 1500,
+                "items", List.of(Map.of(
+                        "productId", productId,
+                        "productName", "Produit Test",
+                        "catalogueUnitPrice", 5000,
+                        "appliedUnitPrice", 5000,
+                        "quantity", 3
+                ))
+        ));
+
+        mockMvc.perform(post("/api/v1/sales")
+                        .header("Authorization", "Bearer fake-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.discountAmount").value(1500))
+                .andExpect(jsonPath("$.data.totalAmount").value(13500)); // 15000 - 1500
+
+        verify(recordSaleUseCase).recordSale(any());
+    }
+
+    @Test
+    void POST_sales_withPriceOverride_returns201() throws Exception {
+        mockJwt("EMPLOYEE");
+
+        String payload = mapper.writeValueAsString(Map.of(
+                "saleId", UUID.randomUUID(),
+                "paymentMode", "CASH",
+                "discountAmount", 0,
+                "items", List.of(Map.of(
+                        "productId", productId,
+                        "productName", "Produit Test",
+                        "catalogueUnitPrice", 5000,
+                        "appliedUnitPrice", 4000,
+                        "quantity", 2
+                ))
+        ));
+
+        mockMvc.perform(post("/api/v1/sales")
+                        .header("Authorization", "Bearer fake-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.totalAmount").value(8000));
+    }
+
+    @Test
+    void POST_sales_withNegativeDiscount_returns400() throws Exception {
+        authenticateAs("EMPLOYEE");
+
+        String payload = mapper.writeValueAsString(Map.of(
+                "saleId", UUID.randomUUID(),
+                "paymentMode", "CASH",
+                "discountAmount", -500,
+                "items", List.of(Map.of(
+                        "productId", productId,
+                        "productName", "Produit Test",
+                        "catalogueUnitPrice", 5000,
+                        "appliedUnitPrice", 5000,
+                        "quantity", 1
+                ))
+        ));
+
+        mockMvc.perform(post("/api/v1/sales")
+                        .header("Authorization", "Bearer fake-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isUnprocessableEntity()); // @Min(0) maps to 422
     }
 }

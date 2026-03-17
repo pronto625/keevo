@@ -18,6 +18,7 @@ public interface RecordSaleUseCase {
             UUID clientId,         // nullable
             PaymentMode paymentMode,
             String mobileMoneyRef, // nullable
+            int discountAmount,    // Story 4.2 — 0 if no discount
             List<SaleItemCommand> items
     ) {}
 
@@ -25,7 +26,8 @@ public interface RecordSaleUseCase {
             UUID productId,
             UUID variantId,   // nullable
             String productName,
-            int appliedUnitPrice,
+            int catalogueUnitPrice,  // Story 4.2 — original catalogue price
+            int appliedUnitPrice,    // may differ if overridden
             int quantity
     ) {}
 

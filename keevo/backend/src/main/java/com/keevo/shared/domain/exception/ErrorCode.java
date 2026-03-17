@@ -66,6 +66,9 @@ public enum ErrorCode {
     SALE_NOT_FOUND,
     SALE_ALREADY_EXISTS,
 
+    // ── Sale (Story 4.2) ──────────────────────────────────────────
+    DISCOUNT_EXCEEDS_SUBTOTAL,   // HTTP 422 — discount > sum of item subtotals
+
     // ── Sync ──────────────────────────────────────────────────────
     SYNC_CONFLICT,
     OFFLINE_LIMIT_EXCEEDED,

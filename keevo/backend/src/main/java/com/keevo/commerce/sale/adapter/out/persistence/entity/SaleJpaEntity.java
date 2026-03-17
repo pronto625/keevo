@@ -26,6 +26,9 @@ public class SaleJpaEntity {
     @Column(name = "total_amount", nullable = false)
     private int totalAmount;
 
+    @Column(name = "discount_amount", nullable = false)
+    private int discountAmount = 0;
+
     @Column(name = "payment_mode", nullable = false, length = 30)
     private String paymentMode;
 
@@ -54,6 +57,8 @@ public class SaleJpaEntity {
     public void setClientId(UUID clientId) { this.clientId = clientId; }
     public int getTotalAmount() { return totalAmount; }
     public void setTotalAmount(int totalAmount) { this.totalAmount = totalAmount; }
+    public int getDiscountAmount() { return discountAmount; }
+    public void setDiscountAmount(int discountAmount) { this.discountAmount = discountAmount; }
     public String getPaymentMode() { return paymentMode; }
     public void setPaymentMode(String paymentMode) { this.paymentMode = paymentMode; }
     public String getStatus() { return status; }

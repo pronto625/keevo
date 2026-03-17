@@ -22,6 +22,7 @@ class LocalSaleDataSource {
         storeId: sale.storeId,
         employeeId: sale.employeeId,
         totalAmount: sale.totalAmount,
+        discountAmount: Value(sale.discountAmount),
         paymentMode: sale.paymentMode.value,
         clientId: Value(sale.clientId),
         status: Value(sale.status),
@@ -37,6 +38,7 @@ class LocalSaleDataSource {
           productId: item.productId,
           productName: item.productName,
           unitPrice: item.appliedUnitPrice,
+          catalogueUnitPrice: Value(item.catalogueUnitPrice),
           quantity: item.quantity,
           subtotal: item.subtotal,
           variantId: Value(item.variantId),
@@ -123,11 +125,13 @@ class LocalSaleDataSource {
         'paymentMode': sale.paymentMode.value,
         'mobileMoneyRef': sale.mobileMoneyRef,
         'clientId': sale.clientId,
+        'discountAmount': sale.discountAmount,
         'items': sale.items
             .map((i) => {
                   'productId': i.productId,
                   'variantId': i.variantId,
                   'productName': i.productName,
+                  'catalogueUnitPrice': i.catalogueUnitPrice,
                   'appliedUnitPrice': i.appliedUnitPrice,
                   'quantity': i.quantity,
                 })

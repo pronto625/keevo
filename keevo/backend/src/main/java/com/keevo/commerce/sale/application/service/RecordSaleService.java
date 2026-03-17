@@ -2,6 +2,7 @@ package com.keevo.commerce.sale.application.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.keevo.catalog.product.domain.event.SalePriceOverriddenEvent;
 import com.keevo.catalog.stock.domain.entity.StockLevel;
 import com.keevo.catalog.stock.domain.port.out.StockLevelRepository;
 import com.keevo.catalog.stock.domain.service.StockOperationService;
@@ -18,6 +19,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -66,7 +68,7 @@ public class RecordSaleService implements RecordSaleUseCase {
             }
         }
 
-        // Create Sale aggregate via factory
+        // Create Sale aggregate via factory (totalAmount = subtotal − discountAmount)
         Sale sale = SaleFactory.from(command);
 
         // Persist sale + items (single transaction)
@@ -85,13 +87,30 @@ public class RecordSaleService implements RecordSaleUseCase {
             );
         }
 
-        // Publish event (Observer pattern — AuditEventListener subscribes)
+        // Story 4.2 — Publish SalePriceOverriddenEvent for each overridden item
+        for (var item : command.items()) {
+            if (item.catalogueUnitPrice() != item.appliedUnitPrice()) {
+                eventPublisher.publishEvent(new SalePriceOverriddenEvent(
+                        item.productId(),
+                        sale.getId(),
+                        item.productName(),
+                        item.catalogueUnitPrice(),
+                        item.appliedUnitPrice(),
+                        command.actorId(),
+                        TenantContext.getCurrentTenant(),
+                        Instant.now()
+                ));
+            }
+        }
+
+        // Publish SaleCompletedEvent (Observer pattern — AuditEventListener subscribes)
         eventPublisher.publishEvent(new SaleCompletedEvent(
                 sale.getId(),
                 command.actorId(),
                 TenantContext.getCurrentTenant(),
                 command.storeId(),
                 sale.getTotalAmount(),
+                sale.getDiscountAmount(),
                 serializeItems(command),
                 sale.getOccurredAt()
         ));

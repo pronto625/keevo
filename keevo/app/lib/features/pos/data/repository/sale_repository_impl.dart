@@ -64,6 +64,7 @@ class SaleRepositoryImpl implements SaleRepository {
           orElse: () => PaymentModeEnum.cash,
         ),
         totalAmount: row.totalAmount,
+        discountAmount: row.discountAmount,
         status: row.status ?? 'COMPLETED',
         items: items
             .map((i) => SaleItemModel(
@@ -71,6 +72,7 @@ class SaleRepositoryImpl implements SaleRepository {
                   productId: i.productId,
                   variantId: i.variantId,
                   productName: i.productName,
+                  catalogueUnitPrice: i.catalogueUnitPrice,
                   appliedUnitPrice: i.unitPrice,
                   quantity: i.quantity,
                   subtotal: i.subtotal,

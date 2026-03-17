@@ -1,6 +1,7 @@
 package com.keevo.commerce.sale.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.keevo.catalog.product.domain.event.SalePriceOverriddenEvent;
 import com.keevo.catalog.stock.domain.entity.StockLevel;
 import com.keevo.catalog.stock.domain.port.out.StockLevelRepository;
 import com.keevo.catalog.stock.domain.service.StockOperationService;
@@ -11,6 +12,8 @@ import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase.RecordSaleComman
 import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase.SaleItemCommand;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
 import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -47,16 +50,22 @@ class RecordSaleServiceTest {
 
     @BeforeEach
     void setUp() {
+        TenantContext.setCurrentTenant("kv_abc123");
         service = new RecordSaleService(
                 saleRepository, stockLevelRepository, stockOperationService,
                 eventPublisher, new ObjectMapper());
     }
 
+    @AfterEach
+    void tearDown() {
+        TenantContext.clear();
+    }
+
     private RecordSaleCommand validCommand() {
         return new RecordSaleCommand(
                 SALE_ID, ACTOR_ID, STORE_ID, null,
-                PaymentMode.CASH, null,
-                List.of(new SaleItemCommand(PRODUCT_ID, null, "Produit A", 1500, 2))
+                PaymentMode.CASH, null, 0,
+                List.of(new SaleItemCommand(PRODUCT_ID, null, "Produit A", 1500, 1500, 2))
         );
     }
 
@@ -129,5 +138,121 @@ class RecordSaleServiceTest {
         verify(saleRepository).save(saleCaptor.capture());
         assertThat(saleCaptor.getValue().getStatus())
                 .isEqualTo(com.keevo.commerce.sale.domain.model.SaleStatus.COMPLETED);
+    }
+
+    // ── Story 4.2 — Discount + Price Override tests ──────────────────────────
+
+    @Test
+    void recordSale_withDiscount_savesDiscountAmount() {
+        when(saleRepository.existsById(SALE_ID)).thenReturn(false);
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
+                .thenReturn(Optional.of(stockLevel(10)));
+
+        var command = new RecordSaleCommand(
+                SALE_ID, ACTOR_ID, STORE_ID, null,
+                PaymentMode.CASH, null, 500,
+                List.of(new SaleItemCommand(PRODUCT_ID, null, "Produit A", 1500, 1500, 2))
+        );
+
+        service.recordSale(command);
+
+        var saleCaptor = ArgumentCaptor.forClass(com.keevo.commerce.sale.domain.model.Sale.class);
+        verify(saleRepository).save(saleCaptor.capture());
+        assertThat(saleCaptor.getValue().getDiscountAmount()).isEqualTo(500);
+        assertThat(saleCaptor.getValue().getTotalAmount()).isEqualTo(2500); // 3000 - 500
+    }
+
+    @Test
+    void recordSale_withPriceOverride_publishesSalePriceOverriddenEvent() {
+        when(saleRepository.existsById(SALE_ID)).thenReturn(false);
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
+                .thenReturn(Optional.of(stockLevel(10)));
+
+        // catalogueUnitPrice=5000, appliedUnitPrice=4000 → price override
+        var command = new RecordSaleCommand(
+                SALE_ID, ACTOR_ID, STORE_ID, null,
+                PaymentMode.CASH, null, 0,
+                List.of(new SaleItemCommand(PRODUCT_ID, null, "Produit Test", 5000, 4000, 1))
+        );
+
+        service.recordSale(command);
+
+        var eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, atLeast(2)).publishEvent(eventCaptor.capture());
+
+        var overrideEvents = eventCaptor.getAllValues().stream()
+                .filter(e -> e instanceof SalePriceOverriddenEvent)
+                .map(e -> (SalePriceOverriddenEvent) e)
+                .toList();
+        assertThat(overrideEvents).hasSize(1);
+        assertThat(overrideEvents.get(0).cataloguePrice()).isEqualTo(5000);
+        assertThat(overrideEvents.get(0).appliedPrice()).isEqualTo(4000);
+        assertThat(overrideEvents.get(0).productName()).isEqualTo("Produit Test");
+    }
+
+    @Test
+    void recordSale_noPriceOverride_doesNotPublishOverriddenEvent() {
+        when(saleRepository.existsById(SALE_ID)).thenReturn(false);
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
+                .thenReturn(Optional.of(stockLevel(10)));
+
+        // same catalogue and applied → no override
+        var command = new RecordSaleCommand(
+                SALE_ID, ACTOR_ID, STORE_ID, null,
+                PaymentMode.CASH, null, 0,
+                List.of(new SaleItemCommand(PRODUCT_ID, null, "Produit A", 1500, 1500, 2))
+        );
+
+        service.recordSale(command);
+
+        var eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getAllValues()).noneMatch(e -> e instanceof SalePriceOverriddenEvent);
+    }
+
+    @Test
+    void recordSale_withDiscountAmount_setsCorrectTotalAmount() {
+        when(saleRepository.existsById(SALE_ID)).thenReturn(false);
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
+                .thenReturn(Optional.of(stockLevel(10)));
+
+        var command = new RecordSaleCommand(
+                SALE_ID, ACTOR_ID, STORE_ID, null,
+                PaymentMode.CASH, null, 1000,
+                List.of(new SaleItemCommand(PRODUCT_ID, null, "Produit A", 5000, 5000, 2))
+        );
+
+        service.recordSale(command);
+
+        var saleCaptor = ArgumentCaptor.forClass(com.keevo.commerce.sale.domain.model.Sale.class);
+        verify(saleRepository).save(saleCaptor.capture());
+        // subtotal = 10000, discountAmount = 1000, totalAmount = 9000
+        assertThat(saleCaptor.getValue().getTotalAmount()).isEqualTo(9000);
+    }
+
+    @Test
+    void recordSale_publishesSaleCompletedEvent_withDiscountAmount() {
+        when(saleRepository.existsById(SALE_ID)).thenReturn(false);
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
+                .thenReturn(Optional.of(stockLevel(10)));
+
+        var command = new RecordSaleCommand(
+                SALE_ID, ACTOR_ID, STORE_ID, null,
+                PaymentMode.CASH, null, 500,
+                List.of(new SaleItemCommand(PRODUCT_ID, null, "Produit A", 1500, 1500, 2))
+        );
+
+        service.recordSale(command);
+
+        var eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, atLeastOnce()).publishEvent(eventCaptor.capture());
+
+        var completedEvents = eventCaptor.getAllValues().stream()
+                .filter(e -> e instanceof SaleCompletedEvent)
+                .map(e -> (SaleCompletedEvent) e)
+                .toList();
+        assertThat(completedEvents).hasSize(1);
+        assertThat(completedEvents.get(0).getDiscountAmount()).isEqualTo(500);
+        assertThat(completedEvents.get(0).getTotalAmount()).isEqualTo(2500); // 3000 - 500
     }
 }

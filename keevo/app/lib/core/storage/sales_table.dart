@@ -12,6 +12,9 @@ class Sales extends Table {
   /// Total XAF amount (integer)
   IntColumn get totalAmount => integer()();
 
+  /// Discount applied to the entire order (XAF integer, default 0). Story 4.2.
+  IntColumn get discountAmount => integer().withDefault(const Constant(0))();
+
   /// Payment mode: 'CASH' | 'MOBILE_MONEY'
   TextColumn get paymentMode => text()();
 

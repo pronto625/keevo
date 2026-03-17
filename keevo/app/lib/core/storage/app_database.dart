@@ -63,7 +63,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -157,6 +157,11 @@ class AppDatabase extends _$AppDatabase {
           "SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(updated_at AS INTEGER), 'unixepoch') "
           "WHERE updated_at GLOB '[0-9]*' AND updated_at NOT LIKE '%-%'",
         );
+      }
+      if (from < 13) {
+        // Story 4.2 — discount & catalogue price fields.
+        await migrator.addColumn(sales, sales.discountAmount);
+        await migrator.addColumn(saleItems, saleItems.catalogueUnitPrice);
       }
     },
   );

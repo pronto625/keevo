@@ -20,6 +20,7 @@ class RecordSaleUseCase {
     required String employeeId,
     String? clientId,
     String? mobileRef,
+    int discountAmount = 0,
   }) async {
     final now = DateTime.now();
     final saleId = const Uuid().v4();
@@ -29,10 +30,13 @@ class RecordSaleUseCase {
       productId: c.productId,
       variantId: c.variantId,
       productName: c.productName,
+      catalogueUnitPrice: c.unitPrice,
       appliedUnitPrice: c.appliedUnitPrice,
       quantity: c.quantity,
       subtotal: c.subtotal,
     )).toList();
+
+    final subtotal = items.fold(0, (sum, i) => sum + i.subtotal);
 
     final sale = Sale(
       id: saleId,
@@ -41,7 +45,8 @@ class RecordSaleUseCase {
       clientId: clientId,
       paymentMode: mode,
       mobileMoneyRef: mobileRef,
-      totalAmount: items.fold(0, (sum, i) => sum + i.subtotal),
+      totalAmount: subtotal - discountAmount,
+      discountAmount: discountAmount,
       items: items,
       occurredAt: now,
       createdAt: now,

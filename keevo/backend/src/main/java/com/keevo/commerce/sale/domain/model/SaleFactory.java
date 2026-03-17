@@ -21,9 +21,11 @@ public final class SaleFactory {
                 .map(itemCmd -> toSaleItem(command.saleId(), itemCmd))
                 .toList();
 
-        int totalAmount = items.stream()
+        int subtotalSum = items.stream()
                 .mapToInt(SaleItem::getSubtotal)
                 .sum();
+
+        int totalAmount = subtotalSum - command.discountAmount();
 
         return new Sale(
                 command.saleId(),
@@ -32,6 +34,7 @@ public final class SaleFactory {
                 command.clientId(),
                 command.paymentMode(),
                 totalAmount,
+                command.discountAmount(),
                 SaleStatus.COMPLETED,
                 now,
                 now,
@@ -46,6 +49,7 @@ public final class SaleFactory {
                 cmd.productId(),
                 cmd.variantId(),
                 cmd.productName(),
+                cmd.catalogueUnitPrice(),
                 cmd.appliedUnitPrice(),
                 cmd.quantity()
         );

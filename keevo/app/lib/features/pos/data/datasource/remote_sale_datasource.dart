@@ -21,11 +21,13 @@ class RemoteSaleDataSource {
         'paymentMode': sale.paymentMode.value,
         'mobileMoneyRef': sale.mobileMoneyRef,
         'clientId': sale.clientId,
+        'discountAmount': sale.discountAmount,
         'items': sale.items
             .map((i) => {
                   'productId': i.productId,
                   'variantId': i.variantId,
                   'productName': i.productName,
+                  'catalogueUnitPrice': i.catalogueUnitPrice,
                   'appliedUnitPrice': i.appliedUnitPrice,
                   'quantity': i.quantity,
                 })

@@ -44,6 +44,7 @@ public class SaleRepositoryAdapter implements SaleRepository {
         entity.setEmployeeId(sale.getEmployeeId());
         entity.setClientId(sale.getClientId());
         entity.setTotalAmount(sale.getTotalAmount());
+        entity.setDiscountAmount(sale.getDiscountAmount());
         entity.setPaymentMode(sale.getPaymentMode().name());
         entity.setStatus(sale.getStatus().name());
         entity.setOccurredAt(sale.getOccurredAt());
@@ -63,6 +64,7 @@ public class SaleRepositoryAdapter implements SaleRepository {
         entity.setProductId(item.getProductId());
         entity.setVariantId(item.getVariantId());
         entity.setProductName(item.getProductName());
+        entity.setCatalogueUnitPrice(item.getCatalogueUnitPrice());
         entity.setAppliedUnitPrice(item.getAppliedUnitPrice());
         entity.setQuantity(item.getQuantity());
         entity.setSubtotal(item.getSubtotal());
@@ -81,6 +83,7 @@ public class SaleRepositoryAdapter implements SaleRepository {
                 entity.getClientId(),
                 PaymentMode.valueOf(entity.getPaymentMode()),
                 entity.getTotalAmount(),
+                entity.getDiscountAmount(),
                 SaleStatus.valueOf(entity.getStatus()),
                 entity.getOccurredAt(),
                 entity.getCreatedAt(),
@@ -95,6 +98,7 @@ public class SaleRepositoryAdapter implements SaleRepository {
                 entity.getProductId(),
                 entity.getVariantId(),
                 entity.getProductName(),
+                entity.getCatalogueUnitPrice(),
                 entity.getAppliedUnitPrice(),
                 entity.getQuantity()
         );

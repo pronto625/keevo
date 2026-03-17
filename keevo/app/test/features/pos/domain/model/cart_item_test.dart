@@ -43,5 +43,44 @@ void main() {
         throwsA(isA<AssertionError>()),
       );
     });
+
+    // Story 4.2 — price override tests
+    test('copyWith updates appliedUnitPrice', () {
+      final item = CartItem(
+        id: 'p1',
+        productId: 'p1',
+        productName: 'Savon',
+        unitPrice: 500,
+        appliedUnitPrice: 500,
+        quantity: 1,
+      );
+      final updated = item.copyWith(appliedUnitPrice: 400);
+      expect(updated.appliedUnitPrice, 400);
+      expect(updated.unitPrice, 500); // catalogue unchanged
+    });
+
+    test('isPriceOverridden true when different', () {
+      final item = CartItem(
+        id: 'p1',
+        productId: 'p1',
+        productName: 'Savon',
+        unitPrice: 500,
+        appliedUnitPrice: 400,
+        quantity: 1,
+      );
+      expect(item.isPriceOverridden, isTrue);
+    });
+
+    test('isPriceOverridden false when same', () {
+      final item = CartItem(
+        id: 'p1',
+        productId: 'p1',
+        productName: 'Savon',
+        unitPrice: 500,
+        appliedUnitPrice: 500,
+        quantity: 1,
+      );
+      expect(item.isPriceOverridden, isFalse);
+    });
   });
 }

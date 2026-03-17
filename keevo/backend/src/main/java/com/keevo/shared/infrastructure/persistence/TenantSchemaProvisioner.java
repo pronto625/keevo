@@ -353,6 +353,13 @@ public class TenantSchemaProvisioner {
     static final String DDL_SALE_ITEMS_IDX_SALE =
             "CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id ON sale_items(sale_id)";
 
+    // ── Sale discount (Story 4.2) ──────────────────────────────────────────
+    static final String DDL_SALES_MIGRATE_DISCOUNT_AMOUNT =
+            "ALTER TABLE sales ADD COLUMN IF NOT EXISTS discount_amount INTEGER NOT NULL DEFAULT 0";
+
+    static final String DDL_SALE_ITEMS_MIGRATE_CATALOGUE_PRICE =
+            "ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS catalogue_unit_price INTEGER NOT NULL DEFAULT 0";
+
     // ── Employees (Story 3.5) ─────────────────────────────────────────────────
 
     static final String DDL_EMPLOYEES = """
@@ -530,6 +537,9 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_SALES_MIGRATE_OCCURRED_AT);
             stmt.execute(DDL_SALE_ITEMS);
             stmt.execute(DDL_SALE_ITEMS_IDX_SALE);
+            // Story 4.2 — sale discount + catalogue price migrations
+            stmt.execute(DDL_SALES_MIGRATE_DISCOUNT_AMOUNT);
+            stmt.execute(DDL_SALE_ITEMS_MIGRATE_CATALOGUE_PRICE);
             // Story 3.5 — employees
             stmt.execute(DDL_EMPLOYEES);
             stmt.execute(DDL_EMPLOYEES_IDX_USER);

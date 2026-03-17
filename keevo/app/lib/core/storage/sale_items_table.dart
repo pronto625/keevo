@@ -18,6 +18,9 @@ class SaleItems extends Table {
   /// Unit price at sale time in XAF
   IntColumn get unitPrice => integer()();
 
+  /// Catalogue price at sale time (Story 4.2). For audit: delta = catalogueUnitPrice - unitPrice.
+  IntColumn get catalogueUnitPrice => integer().withDefault(const Constant(0))();
+
   IntColumn get quantity => integer()();
 
   /// Pre-computed subtotal in XAF (unitPrice × quantity)

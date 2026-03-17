@@ -4,6 +4,8 @@ import '../../domain/model/cart_item.dart';
 
 /// CartNotifier — manages the POS shopping cart state.
 class CartNotifier extends Notifier<List<CartItem>> {
+  int _discountAmount = 0;
+
   @override
   List<CartItem> build() => [];
 
@@ -33,9 +35,27 @@ class CartNotifier extends Notifier<List<CartItem>> {
     state = state.map((c) => c.id == id ? c.copyWith(quantity: qty) : c).toList();
   }
 
-  void clearCart() => state = [];
+  void updatePrice(String id, int newPrice) {
+    state = state.map((c) => c.id == id ? c.copyWith(appliedUnitPrice: newPrice) : c).toList();
+  }
+
+  bool setDiscount(int amount) {
+    if (amount > totalAmount) return false;
+    _discountAmount = amount.clamp(0, totalAmount);
+    ref.notifyListeners();
+    return true;
+  }
+
+  int get discountAmount => _discountAmount;
 
   int get totalAmount => state.fold(0, (sum, c) => sum + c.subtotal);
+
+  int get finalTotal => (totalAmount - _discountAmount).clamp(0, totalAmount);
+
+  void clearCart() {
+    _discountAmount = 0;
+    state = [];
+  }
 }
 
 final cartProvider =

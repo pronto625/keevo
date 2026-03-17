@@ -6,6 +6,7 @@ class SaleItemModel {
   final String productId;
   final String? variantId;
   final String productName;
+  final int catalogueUnitPrice;
   final int appliedUnitPrice;
   final int quantity;
   final int subtotal;
@@ -15,6 +16,7 @@ class SaleItemModel {
     required this.productId,
     this.variantId,
     required this.productName,
+    required this.catalogueUnitPrice,
     required this.appliedUnitPrice,
     required this.quantity,
     required this.subtotal,
@@ -30,6 +32,7 @@ class Sale {
   final PaymentModeEnum paymentMode;
   final String? mobileMoneyRef;
   final int totalAmount;
+  final int discountAmount;
   final String status;
   final List<SaleItemModel> items;
   final DateTime occurredAt;
@@ -43,6 +46,7 @@ class Sale {
     required this.paymentMode,
     this.mobileMoneyRef,
     required this.totalAmount,
+    this.discountAmount = 0,
     this.status = 'COMPLETED',
     required this.items,
     required this.occurredAt,

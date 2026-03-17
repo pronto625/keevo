@@ -55,6 +55,7 @@ class RecordSaleNotifier extends Notifier<RecordSaleState> {
       }
 
       final useCase = ref.read(recordSaleUseCaseProvider);
+      final discountAmount = ref.read(cartProvider.notifier).discountAmount;
       final sale = await useCase.execute(
         cart: cart,
         mode: mode,
@@ -62,6 +63,7 @@ class RecordSaleNotifier extends Notifier<RecordSaleState> {
         employeeId: employeeId,
         clientId: clientId,
         mobileRef: mobileRef,
+        discountAmount: discountAmount,
       );
 
       ref.read(cartProvider.notifier).clearCart();

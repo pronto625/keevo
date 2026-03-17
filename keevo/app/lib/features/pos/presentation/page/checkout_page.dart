@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -21,15 +22,25 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   PaymentModeEnum? _selectedMode;
   String? _mobileMoneyRef;
   bool _isSubmitting = false;
+  final _montantRecuController = TextEditingController();
+  int? _montantRecu;
 
   static final _currencyFormat =
       NumberFormat.currency(locale: 'fr_CM', symbol: 'FCFA', decimalDigits: 0);
 
   @override
+  void dispose() {
+    _montantRecuController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final cart = ref.watch(cartProvider);
     final cartNotifier = ref.read(cartProvider.notifier);
-    final total = cartNotifier.totalAmount;
+    final subtotal = cartNotifier.totalAmount;
+    final discountAmount = cartNotifier.discountAmount;
+    final finalTotal = cartNotifier.finalTotal;
     final saleState = ref.watch(recordSaleNotifierProvider);
 
     ref.listen<RecordSaleState>(recordSaleNotifierProvider, (_, state) {
@@ -54,21 +65,67 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Cart summary
+            // Cart summary with breakdown
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Column(
                   children: [
-                    Text('${cart.length} article${cart.length > 1 ? 's' : ''}',
-                        style: Theme.of(context).textTheme.titleMedium),
-                    Text(
-                      _currencyFormat.format(total),
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                            '${cart.length} article${cart.length > 1 ? 's' : ''}',
+                            style: Theme.of(context).textTheme.titleMedium),
+                        Text(_currencyFormat.format(subtotal),
+                            style: Theme.of(context).textTheme.bodyLarge),
+                      ],
                     ),
+                    if (discountAmount > 0) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Réduction',
+                              style: TextStyle(color: Colors.red.shade700)),
+                          Text('−${_currencyFormat.format(discountAmount)}',
+                              style: TextStyle(color: Colors.red.shade700)),
+                        ],
+                      ),
+                      const Divider(height: 16),
+                    ],
+                    if (discountAmount > 0)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Total à payer',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.bold)),
+                          Text(
+                            _currencyFormat.format(finalTotal),
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      )
+                    else
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const SizedBox.shrink(),
+                          Text(
+                            _currencyFormat.format(finalTotal),
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
                   ],
                 ),
               ),
@@ -101,6 +158,40 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               ],
             ),
 
+            // Espèces: Montant reçu + monnaie rendue (AC4)
+            if (_selectedMode == PaymentModeEnum.cash) ...[
+              const SizedBox(height: 16),
+              TextField(
+                controller: _montantRecuController,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                ],
+                decoration: InputDecoration(
+                  labelText: 'Montant reçu',
+                  hintText: 'Ex: ${finalTotal}',
+                  suffixText: 'FCFA',
+                  border: const OutlineInputBorder(),
+                  errorText: _montantRecu != null && _montantRecu! < finalTotal
+                      ? 'Le montant reçu doit être ≥ ${_currencyFormat.format(finalTotal)}'
+                      : null,
+                ),
+                onChanged: (v) {
+                  setState(() => _montantRecu = int.tryParse(v));
+                },
+              ),
+              if (_montantRecu != null && _montantRecu! >= finalTotal) ...[  
+                const SizedBox(height: 8),
+                Text(
+                  'Monnaie à rendre: ${_currencyFormat.format(_montantRecu! - finalTotal)}',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF3B5BDB),
+                      ),
+                ),
+              ],
+            ],
+
             // Mobile money ref field
             if (_selectedMode == PaymentModeEnum.mobileMoney) ...[
               const SizedBox(height: 16),
@@ -122,7 +213,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               child: FilledButton(
                 onPressed: _selectedMode == null ||
                         _isSubmitting ||
-                        saleState is RecordSaleLoading
+                        saleState is RecordSaleLoading ||
+                        (_selectedMode == PaymentModeEnum.cash &&
+                            (_montantRecu == null || _montantRecu! < finalTotal))
                     ? null
                     : _submit,
                 style: FilledButton.styleFrom(

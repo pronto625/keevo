@@ -177,6 +177,7 @@ class ProductAuditEventTest {
         SalePriceOverriddenEvent event = new SalePriceOverriddenEvent(
                 productId,
                 saleId,
+                "Produit Test",  // productName (Story 4.2)
                 5000,  // cataloguePrice
                 4500,  // appliedPrice (overridden)
                 actorId,

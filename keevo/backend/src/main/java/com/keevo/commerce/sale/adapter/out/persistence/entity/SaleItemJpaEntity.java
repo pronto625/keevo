@@ -25,6 +25,9 @@ public class SaleItemJpaEntity {
     @Column(name = "product_name", nullable = false, length = 255)
     private String productName;
 
+    @Column(name = "catalogue_unit_price", nullable = false)
+    private int catalogueUnitPrice;
+
     @Column(name = "applied_unit_price", nullable = false)
     private int appliedUnitPrice;
 
@@ -50,6 +53,8 @@ public class SaleItemJpaEntity {
     public void setVariantId(UUID variantId) { this.variantId = variantId; }
     public String getProductName() { return productName; }
     public void setProductName(String productName) { this.productName = productName; }
+    public int getCatalogueUnitPrice() { return catalogueUnitPrice; }
+    public void setCatalogueUnitPrice(int catalogueUnitPrice) { this.catalogueUnitPrice = catalogueUnitPrice; }
     public int getAppliedUnitPrice() { return appliedUnitPrice; }
     public void setAppliedUnitPrice(int appliedUnitPrice) { this.appliedUnitPrice = appliedUnitPrice; }
     public int getQuantity() { return quantity; }

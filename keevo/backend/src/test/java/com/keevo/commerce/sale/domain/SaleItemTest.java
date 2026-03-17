@@ -15,19 +15,19 @@ class SaleItemTest {
     @Test
     void SaleItem_subtotal_equalsPriceTimesQuantity() {
         var item = new SaleItem(UUID.randomUUID(), SALE_ID, UUID.randomUUID(), null,
-                "Produit A", 1500, 3);
+                "Produit A", 1500, 1500, 3);
         assertThat(item.getSubtotal()).isEqualTo(4500);
     }
 
     @Test
     void SaleItem_quantity_throwsOnZeroOrNegative() {
         assertThatThrownBy(() -> new SaleItem(UUID.randomUUID(), SALE_ID,
-                UUID.randomUUID(), null, "Produit A", 1500, 0))
+                UUID.randomUUID(), null, "Produit A", 1500, 1500, 0))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("positive");
 
         assertThatThrownBy(() -> new SaleItem(UUID.randomUUID(), SALE_ID,
-                UUID.randomUUID(), null, "Produit A", 1500, -1))
+                UUID.randomUUID(), null, "Produit A", 1500, 1500, -1))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("positive");
     }
