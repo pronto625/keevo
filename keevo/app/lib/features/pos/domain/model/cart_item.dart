@@ -11,6 +11,7 @@ class CartItem {
   final int unitPrice; // catalogue price (XAF)
   final int appliedUnitPrice; // = unitPrice in 4.1
   final int quantity;
+  final String productStatus; // 'ACTIVE' or 'DRAFT' (Story 4.3)
 
   CartItem({
     required this.id,
@@ -21,13 +22,16 @@ class CartItem {
     required this.unitPrice,
     required this.appliedUnitPrice,
     required this.quantity,
+    this.productStatus = 'ACTIVE',
   }) : assert(quantity > 0, 'quantity must be > 0');
 
   int get subtotal => appliedUnitPrice * quantity;
 
   bool get isPriceOverridden => appliedUnitPrice != unitPrice;
 
-  CartItem copyWith({int? quantity, int? appliedUnitPrice}) {
+  bool get isDraft => productStatus == 'DRAFT';
+
+  CartItem copyWith({int? quantity, int? appliedUnitPrice, String? productStatus}) {
     return CartItem(
       id: id,
       productId: productId,
@@ -37,6 +41,7 @@ class CartItem {
       unitPrice: unitPrice,
       appliedUnitPrice: appliedUnitPrice ?? this.appliedUnitPrice,
       quantity: quantity ?? this.quantity,
+      productStatus: productStatus ?? this.productStatus,
     );
   }
 }

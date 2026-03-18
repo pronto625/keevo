@@ -24,10 +24,15 @@ class PosProductResult {
 ///
 /// Returns results sorted with out-of-stock products at the bottom (AC2).
 class PosSearchNotifier extends Notifier<AsyncValue<List<PosProductResult>>> {
+  String _lastQuery = '';
+
+  String get lastQuery => _lastQuery;
+
   @override
   AsyncValue<List<PosProductResult>> build() => const AsyncData([]);
 
   Future<void> search(String query, String? storeId) async {
+    _lastQuery = query;
     if (query.length < 2) {
       state = const AsyncData([]);
       return;
@@ -48,10 +53,9 @@ class PosSearchNotifier extends Notifier<AsyncValue<List<PosProductResult>>> {
           '  SELECT sl.product_id, sl.quantity '
           '  FROM stock_levels sl '
           '  WHERE sl.store_id = ? '
-          '  GROUP BY sl.product_id '
-          '  HAVING sl.updated_at = MAX(sl.updated_at)'
+          '  GROUP BY sl.product_id'
           ') d ON d.product_id = p.id '
-          'WHERE LOWER(p.name) LIKE ? '
+          'WHERE p.archived = 0 AND p.status = \'ACTIVE\' AND LOWER(p.name) LIKE ? '
           'ORDER BY (CASE WHEN COALESCE(d.quantity, 0) > 0 THEN 0 ELSE 1 END) ASC, p.name ASC '
           'LIMIT 50',
           variables: [
@@ -69,12 +73,11 @@ class PosSearchNotifier extends Notifier<AsyncValue<List<PosProductResult>>> {
           '  FROM ('
           '    SELECT sl.product_id, sl.store_id, sl.quantity '
           '    FROM stock_levels sl '
-          '    GROUP BY sl.product_id, sl.store_id '
-          '    HAVING sl.updated_at = MAX(sl.updated_at)'
+          '    GROUP BY sl.product_id, sl.store_id'
           '  ) d '
           '  GROUP BY d.product_id'
           ') agg ON agg.product_id = p.id '
-          'WHERE LOWER(p.name) LIKE ? '
+          'WHERE p.archived = 0 AND p.status = \'ACTIVE\' AND LOWER(p.name) LIKE ? '
           'ORDER BY (CASE WHEN COALESCE(agg.total_stock, 0) > 0 THEN 0 ELSE 1 END) ASC, p.name ASC '
           'LIMIT 50',
           variables: [

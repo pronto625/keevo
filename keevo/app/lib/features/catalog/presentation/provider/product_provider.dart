@@ -8,6 +8,7 @@ import '../../data/datasource/remote_csv_import_datasource.dart';
 import '../../data/datasource/remote_product_datasource.dart';
 import '../../data/repository/product_repository_impl.dart';
 import '../../domain/model/product_model.dart';
+import '../../domain/model/product_status.dart';
 import '../../domain/repository/product_repository.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../domain/usecase/archive_product_usecase.dart';
@@ -76,6 +77,9 @@ final unarchiveProductUseCaseProvider = Provider<UnarchiveProductUseCase>((ref) 
 /// Holds the current search query — updated by the search bar.
 final productSearchQueryProvider = StateProvider<String>((ref) => '');
 
+/// When true, the active products tab shows only DRAFT products.
+final showDraftsOnlyProvider = StateProvider<bool>((ref) => false);
+
 /// Product list state — reactive to the search query.
 ///
 /// AC7: re-executes on every [productSearchQueryProvider] change.
@@ -89,7 +93,19 @@ Future<List<ProductModel>> productList(ProductListRef ref) async {
   if (activeStoreId != null) {
     final local = ref.watch(localProductDataSourceProvider);
     final storeProductIds = await local.getProductIdsInStore(activeStoreId);
-    products = products.where((p) => storeProductIds.contains(p.id)).toList();
+    final productsWithStock = await local.getProductIdsWithStock();
+    // Include: products with stock in this store, DRAFTs (never have stock),
+    // and brand-new ACTIVE products with no stock anywhere (just promoted).
+    products = products
+        .where((p) =>
+            storeProductIds.contains(p.id) ||
+            p.status == ProductStatus.draft ||
+            !productsWithStock.contains(p.id))
+        .toList();
+  }
+  final draftsOnly = ref.watch(showDraftsOnlyProvider);
+  if (draftsOnly) {
+    products = products.where((p) => p.status == ProductStatus.draft).toList();
   }
   return products;
 }
@@ -192,6 +208,16 @@ class ProductActions {
     _ref.invalidate(productListProvider);
     _ref.invalidate(archivedProductListProvider);
     return result;
+  }
+
+  /// Promote a DRAFT product to ACTIVE (OWNER-only).
+  /// Returns the final product ID (may differ if backend assigned a new ID).
+  Future<String> promoteToActive(String id) async {
+    final newId = await _repo.promoteToActive(id);
+    _ref.invalidate(productListProvider);
+    _ref.invalidate(archivedProductListProvider);
+    _ref.invalidate(pendingDraftsCountProvider);
+    return newId;
   }
 
   Future<void> archive(String id) async {

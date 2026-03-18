@@ -7,12 +7,14 @@ import 'package:intl/intl.dart';
 class CartPill extends StatelessWidget {
   final int itemCount;
   final int totalAmount;
+  final bool hasDraftProducts;
   final VoidCallback onEncaisser;
 
   const CartPill({
     super.key,
     required this.itemCount,
     required this.totalAmount,
+    this.hasDraftProducts = false,
     required this.onEncaisser,
   });
 
@@ -40,15 +42,23 @@ class CartPill extends StatelessWidget {
                   width: double.infinity,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF3B5BDB), Color(0xFF4DABF7)],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ),
+                      gradient: hasDraftProducts
+                          ? LinearGradient(
+                              colors: [Colors.amber.shade700, Colors.amber.shade500],
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                            )
+                          : const LinearGradient(
+                              colors: [Color(0xFF3B5BDB), Color(0xFF4DABF7)],
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                            ),
                       borderRadius: BorderRadius.circular(28),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF3B5BDB).withValues(alpha: 0.35),
+                          color: hasDraftProducts
+                              ? Colors.amber.shade700.withValues(alpha: 0.35)
+                              : const Color(0xFF3B5BDB).withValues(alpha: 0.35),
                           blurRadius: 16,
                           offset: const Offset(0, 6),
                         ),
@@ -92,8 +102,8 @@ class CartPill extends StatelessWidget {
                                 ),
                               ),
                               // CTA
-                              const Text(
-                                'Encaisser',
+                              Text(
+                                hasDraftProducts ? '🔶 Vente brouillon' : 'Encaisser',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.w600,

@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../di/providers.dart';
 import '../../features/catalog/presentation/provider/product_provider.dart';
+import '../../features/pos/presentation/provider/pos_providers.dart';
+import '../../features/stores/presentation/provider/active_store_provider.dart';
 
 /// MainShell — persistent bottom navigation scaffold wrapping the main sections.
 ///
@@ -40,10 +42,27 @@ class MainShell extends ConsumerWidget {
     final draftCountAsync = ref.watch(pendingDraftsCountProvider);
     final draftCount = draftCountAsync.valueOrNull ?? 0;
 
+    final storeId = ref.watch(activeStoreIdProvider);
+    final pendingSalesCount = isEmployee
+        ? 0
+        : (ref.watch(pendingSalesCountProvider(storeId)).valueOrNull ?? 0);
+
     final destinations = <NavigationDestination>[
-      const NavigationDestination(
-        icon: Icon(Icons.point_of_sale_outlined),
-        selectedIcon: Icon(Icons.point_of_sale_rounded),
+      NavigationDestination(
+        icon: Badge(
+          label: Text(pendingSalesCount > 9 ? '9+' : '$pendingSalesCount'),
+          isLabelVisible: pendingSalesCount > 0,
+          backgroundColor: Colors.amber,
+          textColor: Colors.black87,
+          child: const Icon(Icons.point_of_sale_outlined),
+        ),
+        selectedIcon: Badge(
+          label: Text(pendingSalesCount > 9 ? '9+' : '$pendingSalesCount'),
+          isLabelVisible: pendingSalesCount > 0,
+          backgroundColor: Colors.amber,
+          textColor: Colors.black87,
+          child: const Icon(Icons.point_of_sale_rounded),
+        ),
         label: 'Caisse',
       ),
       if (!isEmployee) ...[

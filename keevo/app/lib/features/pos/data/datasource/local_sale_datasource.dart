@@ -46,38 +46,40 @@ class LocalSaleDataSource {
         ));
       }
 
-      // 3. Decrement stock levels + insert stock movements
-      for (final item in sale.items) {
-        final stockRow = await (_db.select(_db.stockLevels)
-              ..where((s) =>
-                  s.productId.equals(item.productId) &
-                  s.storeId.equals(sale.storeId)))
-            .getSingleOrNull();
-
-        final quantityBefore = stockRow?.quantity ?? 0;
-        final quantityAfter = (quantityBefore - item.quantity).clamp(0, quantityBefore);
-
-        if (stockRow != null) {
-          await (_db.update(_db.stockLevels)
+      // 3. Decrement stock levels + insert stock movements (skip for PENDING_VALIDATION)
+      if (sale.status != 'PENDING_VALIDATION') {
+        for (final item in sale.items) {
+          final stockRow = await (_db.select(_db.stockLevels)
                 ..where((s) =>
                     s.productId.equals(item.productId) &
                     s.storeId.equals(sale.storeId)))
-              .write(StockLevelsCompanion(
-            quantity: Value(quantityAfter),
+              .getSingleOrNull();
+
+          final quantityBefore = stockRow?.quantity ?? 0;
+          final quantityAfter = (quantityBefore - item.quantity).clamp(0, quantityBefore);
+
+          if (stockRow != null) {
+            await (_db.update(_db.stockLevels)
+                  ..where((s) =>
+                      s.productId.equals(item.productId) &
+                      s.storeId.equals(sale.storeId)))
+                .write(StockLevelsCompanion(
+              quantity: Value(quantityAfter),
+            ));
+          }
+
+          await _db.into(_db.stockMovements).insert(StockMovementsCompanion.insert(
+            id: const Uuid().v4(),
+            productId: item.productId,
+            storeId: sale.storeId,
+            type: 'SALE',
+            quantityDelta: -item.quantity,
+            actorId: sale.employeeId,
+            quantityBefore: Value(quantityBefore),
+            quantityAfter: Value(quantityAfter),
+            createdAt: sale.createdAt,
           ));
         }
-
-        await _db.into(_db.stockMovements).insert(StockMovementsCompanion.insert(
-          id: const Uuid().v4(),
-          productId: item.productId,
-          storeId: sale.storeId,
-          type: 'SALE',
-          quantityDelta: -item.quantity,
-          actorId: sale.employeeId,
-          quantityBefore: Value(quantityBefore),
-          quantityAfter: Value(quantityAfter),
-          createdAt: sale.createdAt,
-        ));
       }
 
       // 4. Enqueue for sync
@@ -126,6 +128,7 @@ class LocalSaleDataSource {
         'mobileMoneyRef': sale.mobileMoneyRef,
         'clientId': sale.clientId,
         'discountAmount': sale.discountAmount,
+        'status': sale.status,
         'items': sale.items
             .map((i) => {
                   'productId': i.productId,
@@ -137,4 +140,138 @@ class LocalSaleDataSource {
                 })
             .toList(),
       };
+
+  /// Query pending validation sales for a store.
+  Future<List<Map<String, dynamic>>> getPendingSaleRows(String storeId) async {
+    final rows = await (_db.select(_db.sales)
+          ..where((s) =>
+              s.storeId.equals(storeId) &
+              s.status.equals('PENDING_VALIDATION'))
+          ..orderBy([(s) => OrderingTerm.desc(s.createdAt)]))
+        .get();
+    return rows
+        .map((r) => {
+              'id': r.id,
+              'storeId': r.storeId,
+              'employeeId': r.employeeId,
+              'clientId': r.clientId,
+              'totalAmount': r.totalAmount,
+              'discountAmount': r.discountAmount,
+              'paymentMode': r.paymentMode,
+              'status': r.status,
+              'createdAt': r.createdAt.toIso8601String(),
+            })
+        .toList();
+  }
+
+  /// Update sale status locally.
+  Future<void> updateSaleStatus(String saleId, String newStatus) async {
+    await (_db.update(_db.sales)
+          ..where((s) => s.id.equals(saleId)))
+        .write(SalesCompanion(status: Value(newStatus)));
+  }
+
+  /// Cascade-validate pending sales after a DRAFT product is activated.
+  ///
+  /// Finds all PENDING_VALIDATION sales in [storeId] that contain [productId],
+  /// checks that every other product in each sale is ACTIVE, then marks the
+  /// sale COMPLETED and decrements stocks for all items (negative stock is
+  /// allowed for the ex-draft product).
+  ///
+  /// Returns the number of sales that were validated.
+  Future<int> cascadeValidatePendingSales(
+      String productId, String storeId, String actorId) async {
+    final pendingRows = await _db.customSelect(
+      'SELECT DISTINCT s.id FROM sales s '
+      'INNER JOIN sale_items si ON si.sale_id = s.id '
+      'WHERE s.store_id = ? AND s.status = ? AND si.product_id = ?',
+      variables: [
+        Variable.withString(storeId),
+        Variable.withString('PENDING_VALIDATION'),
+        Variable.withString(productId),
+      ],
+    ).get();
+
+    int validated = 0;
+    for (final row in pendingRows) {
+      final saleId = row.read<String>('id');
+      final items = await (_db.select(_db.saleItems)
+            ..where((i) => i.saleId.equals(saleId)))
+          .get();
+
+      // Verify all OTHER products in the sale are ACTIVE.
+      bool allActive = true;
+      for (final item in items) {
+        if (item.productId == productId) continue;
+        final count = await _db.customSelect(
+          "SELECT COUNT(*) as cnt FROM products WHERE id = ? AND status = 'ACTIVE' AND archived = 0",
+          variables: [Variable.withString(item.productId)],
+        ).getSingle();
+        if ((count.read<int>('cnt')) == 0) {
+          allActive = false;
+          break;
+        }
+      }
+      if (!allActive) continue;
+
+      // All products active — validate and decrement.
+      await _db.transaction(() async {
+        await (_db.update(_db.sales)
+              ..where((s) => s.id.equals(saleId)))
+            .write(SalesCompanion(status: const Value('COMPLETED')));
+
+        final now = DateTime.now();
+        for (final item in items) {
+          final stockRow = await (_db.select(_db.stockLevels)
+                ..where((s) =>
+                    s.productId.equals(item.productId) &
+                    s.storeId.equals(storeId)))
+              .getSingleOrNull();
+
+          final qBefore = stockRow?.quantity ?? 0;
+          final qAfter = qBefore - item.quantity; // negative allowed for ex-draft
+
+          if (stockRow != null) {
+            await (_db.update(_db.stockLevels)
+                  ..where((s) =>
+                      s.productId.equals(item.productId) &
+                      s.storeId.equals(storeId)))
+                .write(StockLevelsCompanion(quantity: Value(qAfter)));
+          }
+
+          await _db.into(_db.stockMovements).insert(StockMovementsCompanion.insert(
+            id: const Uuid().v4(),
+            productId: item.productId,
+            storeId: storeId,
+            type: 'SALE',
+            quantityDelta: -item.quantity,
+            actorId: actorId,
+            quantityBefore: Value(qBefore),
+            quantityAfter: Value(qAfter),
+            createdAt: now,
+          ));
+        }
+      });
+      validated++;
+    }
+    return validated;
+  }
+
+  /// Count pending validation sales.
+  Future<int> countPendingSales(String? storeId) async {
+    final String sql;
+    final List<Variable> variables;
+    if (storeId != null) {
+      sql = 'SELECT COUNT(*) as cnt FROM sales WHERE store_id = ? AND status = ?';
+      variables = [
+        Variable.withString(storeId),
+        Variable.withString('PENDING_VALIDATION'),
+      ];
+    } else {
+      sql = 'SELECT COUNT(*) as cnt FROM sales WHERE status = ?';
+      variables = [Variable.withString('PENDING_VALIDATION')];
+    }
+    final rows = await _db.customSelect(sql, variables: variables).getSingle();
+    return rows.read<int>('cnt');
+  }
 }

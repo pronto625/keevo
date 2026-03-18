@@ -38,5 +38,8 @@ public record CreateProductRequestDto(
         Integer transportCost,
         
         @Min(value = 0, message = "Le stock ne peut pas être négatif")
-        Integer stockQuantity
+        Integer stockQuantity,
+
+        /// Optional status — defaults to ACTIVE. Story 4.3: POS can create DRAFT products.
+        String status
 ) {}

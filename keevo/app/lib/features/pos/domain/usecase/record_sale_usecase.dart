@@ -21,6 +21,7 @@ class RecordSaleUseCase {
     String? clientId,
     String? mobileRef,
     int discountAmount = 0,
+    String status = 'COMPLETED',
   }) async {
     final now = DateTime.now();
     final saleId = const Uuid().v4();
@@ -47,6 +48,7 @@ class RecordSaleUseCase {
       mobileMoneyRef: mobileRef,
       totalAmount: subtotal - discountAmount,
       discountAmount: discountAmount,
+      status: status,
       items: items,
       occurredAt: now,
       createdAt: now,

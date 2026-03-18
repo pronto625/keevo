@@ -47,7 +47,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
     ref.listen<RecordSaleState>(recordSaleNotifierProvider, (_, state) {
       if (state is RecordSaleSuccess) {
-        context.go('/pos/success?total=${state.sale.totalAmount}');
+        context.go('/pos/success?total=${state.sale.totalAmount}&status=${state.sale.status}');
       } else if (state is RecordSaleError) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

@@ -353,6 +353,12 @@ public class TenantSchemaProvisioner {
     static final String DDL_SALE_ITEMS_IDX_SALE =
             "CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id ON sale_items(sale_id)";
 
+    // ── Sale status V2 (Story 4.3) — add PENDING_VALIDATION to CHECK constraint
+    static final String DDL_SALES_DROP_STATUS_CHECK =
+            "ALTER TABLE sales DROP CONSTRAINT IF EXISTS sales_status_check";
+    static final String DDL_SALES_ADD_STATUS_CHECK_V2 =
+            "ALTER TABLE sales ADD CONSTRAINT sales_status_check CHECK (status IN ('COMPLETED','CANCELLED','PENDING_VALIDATION'))";
+
     // ── Sale discount (Story 4.2) ──────────────────────────────────────────
     static final String DDL_SALES_MIGRATE_DISCOUNT_AMOUNT =
             "ALTER TABLE sales ADD COLUMN IF NOT EXISTS discount_amount INTEGER NOT NULL DEFAULT 0";
@@ -537,6 +543,9 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_SALES_MIGRATE_OCCURRED_AT);
             stmt.execute(DDL_SALE_ITEMS);
             stmt.execute(DDL_SALE_ITEMS_IDX_SALE);
+            // Story 4.3 — expand CHECK constraint to include PENDING_VALIDATION
+            stmt.execute(DDL_SALES_DROP_STATUS_CHECK);
+            stmt.execute(DDL_SALES_ADD_STATUS_CHECK_V2);
             // Story 4.2 — sale discount + catalogue price migrations
             stmt.execute(DDL_SALES_MIGRATE_DISCOUNT_AMOUNT);
             stmt.execute(DDL_SALE_ITEMS_MIGRATE_CATALOGUE_PRICE);

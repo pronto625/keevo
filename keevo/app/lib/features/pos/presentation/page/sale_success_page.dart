@@ -6,8 +6,13 @@ import 'package:intl/intl.dart';
 /// SaleSuccessPage — full-screen confirmation after a sale is recorded.
 class SaleSuccessPage extends StatefulWidget {
   final int totalAmount;
+  final String saleStatus;
 
-  const SaleSuccessPage({super.key, required this.totalAmount});
+  const SaleSuccessPage({
+    super.key,
+    required this.totalAmount,
+    this.saleStatus = 'COMPLETED',
+  });
 
   @override
   State<SaleSuccessPage> createState() => _SaleSuccessPageState();
@@ -56,11 +61,14 @@ class _SaleSuccessPageState extends State<SaleSuccessPage>
 
   @override
   Widget build(BuildContext context) {
+    final isPending = widget.saleStatus == 'PENDING_VALIDATION';
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFF51CF66), Color(0xFF37B24D)],
+            colors: isPending
+                ? [Colors.amber.shade600, Colors.amber.shade800]
+                : const [Color(0xFF51CF66), Color(0xFF37B24D)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -89,7 +97,7 @@ class _SaleSuccessPageState extends State<SaleSuccessPage>
                 ),
                 const SizedBox(height: 28),
                 Text(
-                  'Vente enregistrée !',
+                  isPending ? '🔶 Vente en attente' : 'Vente enregistrée !',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                         color: Colors.white,
                         fontWeight: FontWeight.w800,

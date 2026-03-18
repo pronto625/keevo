@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -183,7 +184,10 @@ class StockNotifier extends _$StockNotifier {
       await _loadLevels();
       return true;
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      final msg = e is DioException && e.response?.statusCode == 404
+          ? 'Produit introuvable sur le serveur. Validez le brouillon d\'abord.'
+          : e.toString();
+      state = state.copyWith(isLoading: false, error: msg);
       return false;
     }
   }

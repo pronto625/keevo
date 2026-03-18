@@ -13,7 +13,7 @@ Simon peut créer et gérer plusieurs boutiques + warehouse, consulter les stock
 **FRs couverts :** FR30–FR36, FR65–FR66
 
 ## Epic 4: Point de Vente (POS)
-Loïc peut enregistrer une vente en ≤3 taps, vérifier la dispo cross-boutique, accepter les paiements (cash/MoMo), appliquer des réductions, clôturer sa journée en 1 tap. Simon peut corriger ou annuler les ventes.
+Loïc peut enregistrer une vente en ≤3 taps, vérifier la dispo cross-boutique, accepter les paiements (cash/MoMo), appliquer des réductions, vendre des produits inexistants (brouillons validés par l'admin), clôturer sa journée en 1 tap. Simon peut valider les ventes brouillons, corriger ou annuler les ventes.
 **FRs couverts :** FR37–FR44, FR88, FR90
 
 ## Epic 5: Moteur de Synchronisation Offline-First

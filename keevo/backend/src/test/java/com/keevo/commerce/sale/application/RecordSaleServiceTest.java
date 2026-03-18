@@ -8,6 +8,8 @@ import com.keevo.catalog.stock.domain.service.StockOperationService;
 import com.keevo.commerce.sale.application.service.RecordSaleService;
 import com.keevo.commerce.sale.domain.model.PaymentMode;
 import com.keevo.commerce.sale.domain.model.SaleCompletedEvent;
+import com.keevo.commerce.sale.domain.model.SalePendingValidationEvent;
+import com.keevo.commerce.sale.domain.model.SaleStatus;
 import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase.RecordSaleCommand;
 import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase.SaleItemCommand;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
@@ -254,5 +256,65 @@ class RecordSaleServiceTest {
         assertThat(completedEvents).hasSize(1);
         assertThat(completedEvents.get(0).getDiscountAmount()).isEqualTo(500);
         assertThat(completedEvents.get(0).getTotalAmount()).isEqualTo(2500); // 3000 - 500
+    }
+
+    // ── Story 4.3 — PENDING_VALIDATION tests ────────────────────────────────
+
+    private RecordSaleCommand pendingCommand() {
+        return new RecordSaleCommand(
+                SALE_ID, ACTOR_ID, STORE_ID, null,
+                PaymentMode.CASH, null, 0,
+                SaleStatus.PENDING_VALIDATION,
+                List.of(new SaleItemCommand(PRODUCT_ID, null, "Produit Draft", 3000, 3000, 2))
+        );
+    }
+
+    @Test
+    void recordSale_withPendingValidation_doesNotDecrementStock() {
+        when(saleRepository.existsById(SALE_ID)).thenReturn(false);
+
+        service.recordSale(pendingCommand());
+
+        verify(saleRepository).save(any());
+        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
+        verify(stockLevelRepository, never()).findByProductAndStore(any(), any());
+    }
+
+    @Test
+    void recordSale_withPendingValidation_publishesSalePendingValidationEvent() {
+        when(saleRepository.existsById(SALE_ID)).thenReturn(false);
+
+        service.recordSale(pendingCommand());
+
+        var eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, atLeastOnce()).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getAllValues()).anyMatch(e -> e instanceof SalePendingValidationEvent);
+        assertThat(eventCaptor.getAllValues()).noneMatch(e -> e instanceof SaleCompletedEvent);
+    }
+
+    @Test
+    void recordSale_withPendingValidation_noStockAvailabilityCheck() {
+        when(saleRepository.existsById(SALE_ID)).thenReturn(false);
+
+        // Should NOT throw INSUFFICIENT_STOCK — draft products have stock=0
+        service.recordSale(pendingCommand());
+
+        verify(saleRepository).save(any());
+    }
+
+    @Test
+    void recordSale_withCompleted_existingBehaviorUnchanged() {
+        when(saleRepository.existsById(SALE_ID)).thenReturn(false);
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
+                .thenReturn(Optional.of(stockLevel(10)));
+
+        service.recordSale(validCommand());
+
+        verify(saleRepository).save(any());
+        verify(stockOperationService).recordOperation(
+                eq(PRODUCT_ID), any(), eq(STORE_ID), any(), eq(-2), eq(ACTOR_ID), any());
+        var eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, atLeastOnce()).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getAllValues()).anyMatch(e -> e instanceof SaleCompletedEvent);
     }
 }

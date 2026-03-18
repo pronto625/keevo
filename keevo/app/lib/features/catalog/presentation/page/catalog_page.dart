@@ -255,21 +255,38 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
           SliverToBoxAdapter(
             child: DraftValidationBanner(
               onTap: () {
-                // Filter product list to show only DRAFT products.
-                // For now, show a tab switch cue — full filtering in Epic 4.
-                ref.read(productSearchQueryProvider.notifier).state = '';
+                // Toggle drafts-only filter and switch to the Actifs tab.
+                final current = ref.read(showDraftsOnlyProvider);
+                ref.read(showDraftsOnlyProvider.notifier).state = !current;
                 _tabController.animateTo(0);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                        '🔶 Filtrez par "brouillon" pour voir les produits à valider'),
-                    behavior: SnackBarBehavior.floating,
-                    duration: Duration(seconds: 3),
-                  ),
-                );
               },
             ),
           ),
+          // Active drafts filter indicator
+          if (ref.watch(showDraftsOnlyProvider))
+            SliverToBoxAdapter(
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Row(
+                  children: [
+                    Chip(
+                      avatar: const Icon(Icons.filter_alt_rounded,
+                          size: 18, color: Colors.orange),
+                      label: const Text('Brouillons uniquement'),
+                      deleteIcon: const Icon(Icons.close, size: 18),
+                      onDeleted: () {
+                        ref.read(showDraftsOnlyProvider.notifier).state = false;
+                      },
+                      backgroundColor: Colors.orange.withOpacity(0.12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        side: BorderSide(color: Colors.orange.withOpacity(0.3)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           // TabBar moderne
           SliverPersistentHeader(
             pinned: true,

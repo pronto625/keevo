@@ -78,7 +78,9 @@ public class ProductController {
                 request.buyPrice(),
                 request.transportCost(),
                 request.stockQuantity(),
-                actorId
+                actorId,
+                0,
+                request.status()
         );
         
         Product product = createProductUseCase.execute(dto);
@@ -142,10 +144,14 @@ public class ProductController {
                 actorId
         );
         
-        Product product = updateProductUseCase.execute(dto);
-        ProductResponseDto response = ProductResponseDto.fromDomain(product);
-        
-        return ResponseEntity.ok(ApiResponseWrapper.ok(response));
+        try {
+            Product product = updateProductUseCase.execute(dto);
+            ProductResponseDto response = ProductResponseDto.fromDomain(product);
+            return ResponseEntity.ok(ApiResponseWrapper.ok(response));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponseWrapper.error("Produit introuvable", "NOT_FOUND", "PRODUCT_NOT_FOUND", null));
+        }
     }
 
     /**

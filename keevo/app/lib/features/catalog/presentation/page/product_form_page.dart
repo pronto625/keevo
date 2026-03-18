@@ -12,6 +12,7 @@ import '../../../contact/domain/model/supplier_model.dart';
 import '../../../contact/presentation/provider/contact_provider.dart';
 import '../../domain/exception/product_exception.dart';
 import '../../domain/model/product_model.dart';
+import '../../domain/model/product_status.dart';
 import '../provider/category_provider.dart';
 import '../provider/product_provider.dart';
 import '../widget/pricing_calculator_widget.dart';
@@ -638,18 +639,44 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
                                 color: Colors.teal,
                               ),
                               const SizedBox(height: 12),
-                              StockLevelWidget(
-                                productId: widget.product!.id,
-                                onViewHistory: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => StockHistoryPage(
-                                      productId: widget.product!.id,
-                                      productName: widget.product!.name,
+                              if (widget.product?.status == ProductStatus.draft)
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                        color: Colors.orange.withOpacity(0.3)),
+                                  ),
+                                  child: const Row(
+                                    children: [
+                                      Icon(Icons.info_outline,
+                                          color: Colors.orange, size: 20),
+                                      SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'Validez ce brouillon pour gérer son stock.',
+                                          style: TextStyle(
+                                              color: Colors.orange,
+                                              fontWeight: FontWeight.w500),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              else
+                                StockLevelWidget(
+                                  productId: widget.product!.id,
+                                  onViewHistory: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => StockHistoryPage(
+                                        productId: widget.product!.id,
+                                        productName: widget.product!.name,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
                               const SizedBox(height: 24),
                             ],
 

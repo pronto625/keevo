@@ -47,6 +47,10 @@ abstract interface class ProductRepository {
     String? photoUrl,
   });
 
+  /// Promote a DRAFT product to ACTIVE (OWNER-only).
+  /// Returns the final product ID (may differ if backend assigned a new ID).
+  Future<String> promoteToActive(String id);
+
   /// Archive a product (soft delete — sets archived=true).
   Future<void> archive(String id);
 

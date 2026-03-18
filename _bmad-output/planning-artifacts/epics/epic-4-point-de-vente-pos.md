@@ -1,6 +1,6 @@
 # Epic 4: Point de Vente (POS)
 
-Loïc peut enregistrer une vente en ≤3 taps avec feedback < 200ms, vérifier la disponibilité cross-boutique, accepter les paiements cash ou Mobile Money, appliquer des réductions, clôturer sa journée en 1 tap avec résumé automatique. Simon peut corriger ou annuler toute vente avec justification obligatoire et réajustement automatique du stock.
+Loïc peut enregistrer une vente en ≤3 taps avec feedback < 200ms, vérifier la disponibilité cross-boutique, accepter les paiements cash ou Mobile Money, appliquer des réductions, vendre des produits qui n'existent pas encore (brouillons validés par Simon), clôturer sa journée en 1 tap avec résumé automatique. Simon peut valider les ventes brouillons, corriger ou annuler toute vente avec justification obligatoire et réajustement automatique du stock.
 
 **FRs couverts :** FR37–FR44, FR88, FR90
 
@@ -107,7 +107,119 @@ So that I can handle negotiations, promotions, and special prices for loyal cust
 
 ---
 
-## Story 4.3: Clôture Journalière & Historique des Ventes
+## Story 4.3: Vente Brouillon — Produits Draft & Validation Admin
+
+As an employee (Loïc),
+I want to record a sale with products that don't exist yet in the catalogue, saved as a pending sale,
+So that I can serve customers from day 0 without waiting for the full catalogue setup, and Simon can validate the sale once the products are confirmed.
+
+**Acceptance Criteria:**
+
+**Given** Loïc searches for a product in the POS and no matching product is found
+**When** the search results list is empty
+**Then** a CTA appears: "Produit introuvable — Créer '[searched name]' à la volée ?"
+**And** tapping the CTA opens the existing `CreateDraftProductBottomSheet` pre-filled with the searched name
+**And** the created DRAFT product is immediately added to the cart with `stockQuantity: 0` (the product doesn't physically exist in stock yet — it's day 0)
+**And** the DRAFT product is visible in POS search for subsequent sales
+
+**Given** the cart contains at least one product with `status: DRAFT`
+**When** Loïc views the CartPill or the expanded CartBottomSheet
+**Then** the "Encaisser" button label changes to "🔶 Vente brouillon"
+**And** each DRAFT product row in the cart shows a "🔶 Brouillon" badge next to the product name
+**And** the CartPill shows an orange tint/border instead of the default style
+**And** a small informational text appears at the top of the CartBottomSheet: "Cette vente contient des produits en brouillon. Elle sera validée quand l'admin les confirmera."
+
+**Given** Loïc confirms payment on a cart containing at least one DRAFT product
+**When** he taps "Vente brouillon" (the modified Encaisser button)
+**Then** the sale is recorded in the local Drift `sales` table with `status: PENDING_VALIDATION` (new enum value)
+**And** each cart item is recorded normally in `sale_items`
+**And** stock levels are NOT decremented for ANY item in the sale (not just DRAFT ones — the entire sale is pending, stock impact is deferred until validation)
+**And** NO `StockMovement` records are created at this point
+**And** a `SalePendingValidationEvent` is emitted with: `saleId`, `storeId`, `actorId`, `draftProductIds[]`, `totalAmount`, `occurredAt`
+**And** the operation is queued in `sync_queue` for backend sync
+**And** the success screen shows: "🔶 Vente en attente — [total] FCFA" with an amber confirmation (not lime-green)
+**And** after 1.5s the POS resets to empty
+
+**Given** Loïc confirms payment on a cart with ONLY `status: ACTIVE` products
+**When** he taps "Encaisser"
+**Then** the existing flow from Story 4.1 applies unchanged — `status: COMPLETED`, stock decremented immediately
+
+**Given** the backend receives a sale with `status: PENDING_VALIDATION`
+**When** `POST /api/v1/sales` is called
+**Then** the backend accepts the sale with `status = PENDING_VALIDATION`
+**And** stock is NOT decremented server-side
+**And** `SaleStatus.PENDING_VALIDATION` is a valid enum value in `SaleStatus.java`
+**And** the DDL constraint on `sales.status` is updated: `CHECK (status IN ('COMPLETED', 'CANCELLED', 'PENDING_VALIDATION'))`
+**And** `TenantSchemaSyncService` migrates the CHECK constraint for existing tenants
+
+**Given** Simon (OWNER) navigates to the POS area
+**When** there are sales with `status: PENDING_VALIDATION`
+**Then** a badge on the POS navigation shows the count of pending sales (amber, same style as draft products badge)
+**And** Simon can access "Ventes en attente" from the POS menu (OWNER-only — hidden for EMPLOYEE)
+**And** the pending sales list shows: date, employee name, total, number of items, number of DRAFT products still pending
+**And** tapping a pending sale opens its detail showing all items with a badge indicating which products are DRAFT vs ACTIVE
+**And** each DRAFT product row has a direct link "Valider ce produit →" that navigates to `/products/{id}/edit`
+**And** `GET /api/v1/sales/pending` returns all `PENDING_VALIDATION` sales for the tenant (OWNER-only, HTTP 403 for EMPLOYEE)
+
+**Given** Simon promotes a DRAFT product to ACTIVE via `PATCH /api/v1/products/{id}` (existing Story 2.4 AC7)
+**When** the promotion succeeds
+**Then** `UpdateProductUseCase` calls `SaleValidationCascadeService.onProductActivated(productId)`
+**And** the cascade service queries all `PENDING_VALIDATION` sales containing this `productId`
+**And** for each such sale: if ALL products referenced in `sale_items` now have `status: ACTIVE` → the sale transitions to `COMPLETED`
+**And** on transition to `COMPLETED`: stock is decremented for ALL items in the sale (via `StockOperationService`, movement type `SALE`), and a `SaleCompletedEvent` is emitted
+**And** a `SaleAutoValidatedEvent` is emitted with: `saleId`, `triggerProductId`, `actorId` (the OWNER who validated the product), `occurredAt`
+**And** the transition is atomic (single `@Transactional`)
+**And** if NOT all products are ACTIVE yet → the sale stays `PENDING_VALIDATION` (no partial activation)
+
+**Given** Simon promotes a DRAFT product to ACTIVE but the product had `stockQuantity = 0`
+**When** the cascade would validate a pending sale
+**Then** the validation is BLOCKED — the sale stays `PENDING_VALIDATION`
+**And** a notification is sent to Simon: "⚠ Vente #{saleId short} en attente : le produit '{productName}' n'a pas de stock. Saisissez une entrée de stock avant validation."
+**And** Simon must perform a stock entry (`STOCK_ENTRY` movement) for the product BEFORE the cascade can complete
+**And** the cascade re-checks on every stock-modifying operation (stock entry, transfer-in) for products linked to `PENDING_VALIDATION` sales
+
+**Given** Simon wants to force-validate a pending sale even if some products are still DRAFT
+**When** he taps "Valider manuellement" on a `PENDING_VALIDATION` sale detail
+**Then** a mandatory justification field is required (minimum 10 characters)
+**And** on confirmation: the sale transitions to `COMPLETED` regardless of product statuses
+**And** stock is decremented for all items — if a product has insufficient stock, stock goes to 0 (not negative) and a `StockForcedZeroEvent` is emitted
+**And** a `SaleManuallyValidatedEvent` is emitted with: `saleId`, `actorId`, `justification`, `forcedProducts[]` (list of products that were still DRAFT or had insufficient stock)
+**And** this endpoint is `POST /api/v1/sales/{id}/validate` — OWNER-only (HTTP 403 for EMPLOYEE)
+
+**Given** Simon wants to cancel a pending sale
+**When** he taps "Annuler" on a `PENDING_VALIDATION` sale detail
+**Then** a mandatory justification field is required (minimum 10 characters)
+**And** on confirmation: the sale transitions to `CANCELLED`
+**And** NO stock restoration is needed (stock was never decremented)
+**And** a `SaleCancelledEvent` is emitted with: `saleId`, `actorId`, `justification`, `occurredAt`
+**And** this action is available for both `PENDING_VALIDATION` and `COMPLETED` sales (Story 4.5 covers COMPLETED cancellation with stock restoration)
+
+**Given** a sale has been `PENDING_VALIDATION` for more than 48 hours
+**When** the reminder check runs (daily at 09:00 local time)
+**Then** a notification is sent to Simon: "🔶 Rappel : {count} vente(s) en attente de validation depuis plus de 48h"
+**And** the notification includes a deep link to the pending sales list
+**And** after 7 days: a stronger notification: "⚠ {count} vente(s) en attente depuis 7 jours — validez ou annulez-les"
+**And** the sales are NEVER auto-cancelled — only Simon can decide
+
+**Given** the day-close flow (Story 4.4) runs
+**When** generating the daily summary
+**Then** `PENDING_VALIDATION` sales are EXCLUDED from the revenue calculation and sale count
+**And** the day-close report includes a separate line: "🔶 {count} vente(s) en attente de validation — {total} FCFA (non comptabilisé)"
+
+**Given** all operations happen offline
+**When** Loïc creates a draft product + pending sale offline, and Simon validates the product offline
+**Then** the cascade validation executes locally in Drift: sale status updated, stock decremented locally
+**And** all operations are queued in `sync_queue` with their respective types
+**And** on sync: backend applies the same sequence atomically
+
+**Given** an audit review of pending sales
+**When** any status transition occurs
+**Then** `SalePendingValidationEvent` (creation), `SaleAutoValidatedEvent` (cascade), `SaleManuallyValidatedEvent` (forced), `SaleCancelledEvent` (annulation) are all recorded in the immutable audit log
+**And** each event includes full `actorId`, `justification` (if applicable), `occurredAt`, and relevant product/sale IDs
+
+---
+
+## Story 4.4: Clôture Journalière & Historique des Ventes
 
 As an employee (Loïc),
 I want to close my day in 1 tap and see my own sales history,
@@ -161,7 +273,7 @@ So that I can end my shift properly without any manual accounting and track my o
 
 ---
 
-## Story 4.4: Annulation & Correction de Vente
+## Story 4.5: Annulation & Correction de Vente
 
 As a proprietor (Simon),
 I want to cancel or correct any sale with a mandatory justification,
@@ -205,7 +317,7 @@ So that errors are corrected with full accountability and stock is automatically
 
 ---
 
-## Story 4.5: Leaderboard Vendeurs & Historique Global
+## Story 4.6: Leaderboard Vendeurs & Historique Global
 
 As a proprietor (Simon),
 I want to see my employees' sales performance ranked in a leaderboard and consult the full store sales history,
@@ -239,6 +351,6 @@ So that I can recognize top performers, identify coaching opportunities, and mon
 **And** he can filter by: employee, payment mode, date range, client
 **And** he can search by sale amount range (e.g., "> 10 000 FCFA")
 **And** the history loads offline from local Drift data
-**And** tapping any sale opens the full sale detail with the "Annuler / Corriger" option (Story 4.4)
+**And** tapping any sale opens the full sale detail with the "Annuler / Corriger" option (Story 4.5)
 
 ---

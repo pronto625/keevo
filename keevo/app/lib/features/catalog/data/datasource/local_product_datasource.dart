@@ -68,6 +68,14 @@ class LocalProductDataSource {
     return rows.map((r) => r.read<String>('product_id')).toSet();
   }
 
+  /// Returns all product IDs that have at least one stock_levels entry (any store).
+  /// Used to distinguish brand-new products (no stock yet) from products with stock.
+  Future<Set<String>> getProductIdsWithStock() async {
+    const sql = 'SELECT DISTINCT product_id FROM stock_levels';
+    final rows = await _db.customSelect(sql).get();
+    return rows.map((r) => r.read<String>('product_id')).toSet();
+  }
+
   // ── Write operations ─────────────────────────────────────────────────────
 
   Future<ProductModel> insert({
@@ -187,6 +195,48 @@ class LocalProductDataSource {
       updatedAt: Value(now),
     ));
     await _enqueueSync('UNARCHIVE_PRODUCT', {'productId': id});
+  }
+
+  /// Promote a DRAFT product to ACTIVE locally.
+  Future<void> promoteToActive(String id) async {
+    final now = DateTime.now();
+    await (_db.update(_db.products)
+          ..where((p) => p.id.equals(id)))
+        .write(ProductsCompanion(
+      status: const Value('ACTIVE'),
+      updatedAt: Value(now),
+    ));
+  }
+
+  /// Delete a product by ID (used when replacing a local draft with backend-assigned product).
+  Future<void> deleteById(String id) async {
+    await (_db.delete(_db.products)..where((p) => p.id.equals(id))).go();
+  }
+
+  /// Update product_id in sale_items when a draft is promoted to a new backend-assigned ID.
+  /// Preserves the pending-sale link after ID remapping.
+  /// Also patches CREATE_SALE entries in sync_queue so the backend receives the new ID.
+  Future<void> updateProductIdInSaleItems(String oldId, String newId) async {
+    if (oldId == newId) return;
+    await _db.customUpdate(
+      'UPDATE sale_items SET product_id = ? WHERE product_id = ?',
+      variables: [
+        Variable.withString(newId),
+        Variable.withString(oldId),
+      ],
+      updates: {_db.saleItems},
+    );
+    // Patch sync_queue payloads that reference the old product ID.
+    await _db.customUpdate(
+      "UPDATE sync_queue SET payload = REPLACE(payload, ?, ?) "
+      "WHERE operation = 'CREATE_SALE' AND payload LIKE ?",
+      variables: [
+        Variable.withString(oldId),
+        Variable.withString(newId),
+        Variable.withString('%$oldId%'),
+      ],
+      updates: {_db.syncQueue},
+    );
   }
 
   /// Count DRAFT (non-archived) products in local DB.

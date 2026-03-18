@@ -202,6 +202,9 @@ public class TenantSchemaSyncService {
             stmt.execute(TenantSchemaProvisioner.DDL_PRODUCTS_UQ_NAME);
             stmt.execute(TenantSchemaProvisioner.DDL_DRAFT_NOTIFICATIONS_IDX_PRODUCT);
             stmt.execute(TenantSchemaProvisioner.DDL_DRAFT_NOTIFICATIONS_IDX_PENDING);
+            // Story 4.3 — expand CHECK constraint to include PENDING_VALIDATION
+            stmt.execute(TenantSchemaProvisioner.DDL_SALES_DROP_STATUS_CHECK);
+            stmt.execute(TenantSchemaProvisioner.DDL_SALES_ADD_STATUS_CHECK_V2);
             // Story 4.2 — idempotent ALTER migrations for sale discount + catalogue price
             stmt.execute(TenantSchemaProvisioner.DDL_SALES_MIGRATE_DISCOUNT_AMOUNT);
             stmt.execute(TenantSchemaProvisioner.DDL_SALE_ITEMS_MIGRATE_CATALOGUE_PRICE);

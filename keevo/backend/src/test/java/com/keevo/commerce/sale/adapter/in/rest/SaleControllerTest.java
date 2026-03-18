@@ -217,6 +217,50 @@ class SaleControllerTest {
                 .andExpect(jsonPath("$.data.totalAmount").value(8000));
     }
 
+    // ── Story 4.3 — PENDING_VALIDATION sale endpoint tests ─────────────────
+
+    @Test
+    void POST_sales_withPendingValidation_returns201() throws Exception {
+        mockJwt("EMPLOYEE");
+
+        String payload = mapper.writeValueAsString(Map.of(
+                "saleId", saleId,
+                "paymentMode", "CASH",
+                "discountAmount", 0,
+                "status", "PENDING_VALIDATION",
+                "items", List.of(Map.of(
+                        "productId", productId,
+                        "productName", "Produit Draft",
+                        "catalogueUnitPrice", 2000,
+                        "appliedUnitPrice", 2000,
+                        "quantity", 1
+                ))
+        ));
+
+        mockMvc.perform(post("/api/v1/sales")
+                        .header("Authorization", "Bearer fake-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.status").value("PENDING_VALIDATION"))
+                .andExpect(jsonPath("$.data.totalAmount").value(2000));
+
+        verify(recordSaleUseCase).recordSale(any());
+    }
+
+    @Test
+    void POST_sales_withoutStatus_defaults_toCOMPLETED() throws Exception {
+        mockJwt("EMPLOYEE");
+
+        // No "status" field → defaults to COMPLETED
+        mockMvc.perform(post("/api/v1/sales")
+                        .header("Authorization", "Bearer fake-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validPayload()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"));
+    }
+
     @Test
     void POST_sales_withNegativeDiscount_returns400() throws Exception {
         authenticateAs("EMPLOYEE");

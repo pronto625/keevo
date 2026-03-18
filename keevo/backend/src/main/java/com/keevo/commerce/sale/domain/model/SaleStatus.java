@@ -6,5 +6,6 @@ package com.keevo.commerce.sale.domain.model;
  */
 public enum SaleStatus {
     COMPLETED,
-    CANCELLED
+    CANCELLED,
+    PENDING_VALIDATION
 }

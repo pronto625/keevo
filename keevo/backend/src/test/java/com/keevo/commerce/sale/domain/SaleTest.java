@@ -95,4 +95,40 @@ class SaleTest {
                 PaymentMode.CASH, 0, 999999, SaleStatus.COMPLETED, NOW, NOW, List.of(item)))
                 .isInstanceOf(DomainException.class);
     }
+
+    // ── Story 4.3 — PENDING_VALIDATION tests ─────────────────────────────────
+
+    @Test
+    void Sale_create_withPendingValidationStatus_setsCorrectStatus() {
+        var items = List.of(
+                new SaleItem(UUID.randomUUID(), SALE_ID, UUID.randomUUID(), null,
+                        "Produit Draft", 3000, 3000, 1));
+        var sale = new Sale(SALE_ID, STORE_ID, EMPLOYEE_ID, null,
+                PaymentMode.CASH, 3000, 0, SaleStatus.PENDING_VALIDATION, NOW, NOW, items);
+
+        assertThat(sale.getStatus()).isEqualTo(SaleStatus.PENDING_VALIDATION);
+    }
+
+    @Test
+    void Sale_create_withPendingValidation_setsAllFields() {
+        UUID clientId = UUID.randomUUID();
+        var items = List.of(
+                new SaleItem(UUID.randomUUID(), SALE_ID, UUID.randomUUID(), null,
+                        "Produit Draft", 3000, 3000, 2),
+                new SaleItem(UUID.randomUUID(), SALE_ID, UUID.randomUUID(), null,
+                        "Produit Actif", 5000, 5000, 1));
+        var sale = new Sale(SALE_ID, STORE_ID, EMPLOYEE_ID, clientId,
+                PaymentMode.MOBILE_MONEY, 11000, 0, SaleStatus.PENDING_VALIDATION, NOW, NOW, items);
+
+        assertThat(sale.getId()).isEqualTo(SALE_ID);
+        assertThat(sale.getStoreId()).isEqualTo(STORE_ID);
+        assertThat(sale.getEmployeeId()).isEqualTo(EMPLOYEE_ID);
+        assertThat(sale.getClientId()).isEqualTo(clientId);
+        assertThat(sale.getPaymentMode()).isEqualTo(PaymentMode.MOBILE_MONEY);
+        assertThat(sale.getTotalAmount()).isEqualTo(11000);
+        assertThat(sale.getDiscountAmount()).isEqualTo(0);
+        assertThat(sale.getStatus()).isEqualTo(SaleStatus.PENDING_VALIDATION);
+        assertThat(sale.getOccurredAt()).isEqualTo(NOW);
+        assertThat(sale.getItems()).hasSize(2);
+    }
 }

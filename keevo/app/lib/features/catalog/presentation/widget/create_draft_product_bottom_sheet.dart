@@ -1,9 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/exception/product_exception.dart';
+import '../../domain/model/product_model.dart';
 import '../provider/category_provider.dart';
 import '../provider/product_provider.dart';
+
+/// Result returned by the bottom sheet: either a new draft product or an
+/// existing product the user chose, plus the quantity for the sale.
+class DraftCreationResult {
+  final ProductModel product;
+  final int quantity;
+  const DraftCreationResult({required this.product, required this.quantity});
+}
 
 /// CreateDraftProductBottomSheet — on-the-fly DRAFT product creation (AC6).
 ///
@@ -36,17 +47,60 @@ class CreateDraftProductBottomSheet extends ConsumerStatefulWidget {
 class _CreateDraftProductBottomSheetState
     extends ConsumerState<CreateDraftProductBottomSheet> {
   final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nameController;
   final _priceController = TextEditingController();
   final _quantityController = TextEditingController(text: '1');
   String? _selectedCategoryId;
   bool _isLoading = false;
   String? _errorMessage;
 
+  /// Existing products matching the typed name (debounced search).
+  List<ProductModel> _nameSuggestions = [];
+  Timer? _debounce;
+
+  bool get _isNameEditable => widget.prefillName.isEmpty;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.prefillName);
+    if (_isNameEditable) {
+      _nameController.addListener(_onNameChanged);
+    }
+  }
+
   @override
   void dispose() {
+    _debounce?.cancel();
+    _nameController.dispose();
     _priceController.dispose();
     _quantityController.dispose();
     super.dispose();
+  }
+
+  void _onNameChanged() {
+    _debounce?.cancel();
+    final query = _nameController.text.trim();
+    if (query.length < 2) {
+      if (_nameSuggestions.isNotEmpty) {
+        setState(() => _nameSuggestions = []);
+      }
+      return;
+    }
+    _debounce = Timer(const Duration(milliseconds: 300), () async {
+      final repo = ref.read(productRepositoryProvider);
+      final results = await repo.search(query);
+      if (mounted) {
+        setState(() => _nameSuggestions = results.take(5).toList());
+      }
+    });
+  }
+
+  void _selectExistingProduct(ProductModel product) {
+    final qty = int.tryParse(_quantityController.text.trim()) ?? 1;
+    Navigator.of(context).pop(
+      DraftCreationResult(product: product, quantity: qty < 1 ? 1 : qty),
+    );
   }
 
   Future<void> _submit() async {
@@ -66,17 +120,20 @@ class _CreateDraftProductBottomSheetState
       final qty = int.tryParse(_quantityController.text.trim()) ?? 1;
 
       final product = await repo.createDraft(
-        name: widget.prefillName,
+        name: _nameController.text.trim(),
         priceVente: int.parse(_priceController.text.trim()),
         categoryId: _selectedCategoryId!,
-        stockQuantity: qty,
       );
 
       // Refresh product list so the DRAFT badge appears in catalogue.
       ref.invalidate(productListProvider);
       ref.invalidate(pendingDraftsCountProvider);
 
-      if (mounted) Navigator.of(context).pop(product);
+      if (mounted) {
+        Navigator.of(context).pop(
+          DraftCreationResult(product: product, quantity: qty < 1 ? 1 : qty),
+        );
+      }
     } on ProductException catch (e) {
       setState(() => _errorMessage = e.message);
     } catch (e) {
@@ -128,29 +185,91 @@ class _CreateDraftProductBottomSheetState
               ),
               const SizedBox(height: 24),
 
-              // Product name (read-only — pre-filled from POS search)
+              // Product name
               TextFormField(
-                initialValue: widget.prefillName,
-                readOnly: true,
+                controller: _nameController,
+                readOnly: !_isNameEditable,
+                autofocus: _isNameEditable,
                 decoration: InputDecoration(
                   labelText: 'Nom du produit',
-                  filled: true,
-                  fillColor:
-                      theme.colorScheme.surfaceVariant.withOpacity(0.5),
+                  filled: !_isNameEditable,
+                  fillColor: _isNameEditable
+                      ? null
+                      : theme.colorScheme.surfaceVariant.withOpacity(0.5),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
+                    borderSide: _isNameEditable ? const BorderSide() : BorderSide.none,
                   ),
-                  suffixIcon: const Icon(Icons.lock_outline, size: 16),
+                  suffixIcon: _isNameEditable
+                      ? null
+                      : const Icon(Icons.lock_outline, size: 16),
                 ),
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) {
+                    return 'Le nom du produit est requis';
+                  }
+                  return null;
+                },
               ),
+
+              // Existing product suggestions
+              if (_nameSuggestions.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.amber.shade200),
+                  ),
+                  padding: const EdgeInsets.all(8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Produit(s) existant(s) :',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: Colors.amber.shade800,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      ..._nameSuggestions.map((p) => InkWell(
+                            onTap: () => _selectExistingProduct(p),
+                            borderRadius: BorderRadius.circular(6),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 6, horizontal: 4),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.check_circle_outline,
+                                      size: 18, color: Colors.green),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      '${p.name} — ${p.price} FCFA',
+                                      style: theme.textTheme.bodyMedium,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Sélectionner',
+                                    style: theme.textTheme.labelSmall
+                                        ?.copyWith(color: Colors.blue),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
 
               // Price de vente (required)
               TextFormField(
                 controller: _priceController,
                 keyboardType: TextInputType.number,
-                autofocus: true,
+                autofocus: !_isNameEditable,
                 decoration: InputDecoration(
                   labelText: 'Prix de vente (XAF) *',
                   border: OutlineInputBorder(

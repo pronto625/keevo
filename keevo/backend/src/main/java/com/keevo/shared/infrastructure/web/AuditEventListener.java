@@ -12,10 +12,11 @@ import com.keevo.catalog.contact.domain.event.SupplierCreatedEvent;
 import com.keevo.catalog.product.domain.event.ProductCreatedEvent;
 import com.keevo.catalog.product.domain.event.ProductUpdatedEvent;
 import com.keevo.catalog.product.domain.event.ProductArchivedEvent;
+import com.keevo.catalog.product.domain.event.ProductActivatedEvent;
 import com.keevo.catalog.product.domain.event.SalePriceOverriddenEvent;
 import com.keevo.catalog.stock.domain.event.StockAdjustedEvent;
 import com.keevo.catalog.stock.domain.event.StockThresholdBreachedEvent;
-import com.keevo.commerce.sale.domain.model.SaleCompletedEvent;
+import com.keevo.commerce.sale.domain.model.*;
 import com.keevo.store.store.domain.event.StoreCreatedEvent;
 import com.keevo.store.store.domain.event.StoreDeactivatedEvent;
 import com.keevo.store.store.domain.event.StoreUpdatedEvent;
@@ -27,6 +28,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * AuditEventListener — Listens to domain events and writes immutable entries to the audit log.
@@ -483,6 +485,109 @@ public class AuditEventListener {
         log.info("AUDIT: sale_completed saleId={} storeId={} total={} discount={} tenantId={} actorId={}",
                 event.getSaleId(), event.getStoreId(), event.getTotalAmount(),
                 event.getDiscountAmount(), event.getTenantId(), event.getActorId());
+    }
+
+    // ── Story 4.3 — Pending validation events ───────────────────────────────────
+
+    @EventListener
+    public void on(ProductActivatedEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "PRODUCT_ACTIVATED",
+                "Product",
+                event.productId(),
+                null,
+                toJson(Map.of("productId", event.productId().toString()))
+        );
+        log.info("AUDIT: product_activated productId={} tenantId={} actorId={}",
+                event.productId(), event.tenantId(), event.actorId());
+    }
+
+    @EventListener
+    public void on(SalePendingValidationEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "SALE_PENDING_VALIDATION",
+                "Sale",
+                event.saleId(),
+                null,
+                toJson(Map.of(
+                        "storeId", event.storeId().toString(),
+                        "draftProductIds", event.draftProductIds().stream().map(UUID::toString).toList(),
+                        "totalAmount", event.totalAmount()
+                ))
+        );
+        log.info("AUDIT: sale_pending_validation saleId={} tenantId={} actorId={}",
+                event.saleId(), event.tenantId(), event.actorId());
+    }
+
+    @EventListener
+    public void on(SaleAutoValidatedEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "SALE_AUTO_VALIDATED",
+                "Sale",
+                event.saleId(),
+                null,
+                toJson(Map.of("triggerProductId", event.triggerProductId().toString()))
+        );
+        log.info("AUDIT: sale_auto_validated saleId={} triggeredBy={} tenantId={}",
+                event.saleId(), event.triggerProductId(), event.tenantId());
+    }
+
+    @EventListener
+    public void on(SaleManuallyValidatedEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "SALE_MANUALLY_VALIDATED",
+                "Sale",
+                event.saleId(),
+                null,
+                toJson(Map.of(
+                        "justification", event.justification(),
+                        "forcedProducts", event.forcedProducts().stream().map(UUID::toString).toList()
+                ))
+        );
+        log.info("AUDIT: sale_manually_validated saleId={} forcedProducts={} tenantId={}",
+                event.saleId(), event.forcedProducts().size(), event.tenantId());
+    }
+
+    @EventListener
+    public void on(SaleCancelledEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "SALE_CANCELLED",
+                "Sale",
+                event.saleId(),
+                null,
+                toJson(Map.of("justification", event.justification()))
+        );
+        log.info("AUDIT: sale_cancelled saleId={} tenantId={} actorId={}",
+                event.saleId(), event.tenantId(), event.actorId());
+    }
+
+    @EventListener
+    public void on(StockForcedZeroEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "STOCK_FORCED_ZERO",
+                "StockLevel",
+                event.productId(),
+                null,
+                toJson(Map.of(
+                        "storeId", event.storeId().toString(),
+                        "requestedQuantity", event.requestedQuantity(),
+                        "availableQuantity", event.availableQuantity()
+                ))
+        );
+        log.info("AUDIT: stock_forced_zero productId={} storeId={} requested={} available={}",
+                event.productId(), event.storeId(), event.requestedQuantity(), event.availableQuantity());
     }
 
     // ── Template Method helper ────────────────────────────────────────────────

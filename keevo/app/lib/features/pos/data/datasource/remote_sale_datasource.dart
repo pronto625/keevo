@@ -22,6 +22,7 @@ class RemoteSaleDataSource {
         'mobileMoneyRef': sale.mobileMoneyRef,
         'clientId': sale.clientId,
         'discountAmount': sale.discountAmount,
+        if (sale.status == 'PENDING_VALIDATION') 'status': sale.status,
         'items': sale.items
             .map((i) => {
                   'productId': i.productId,
@@ -33,6 +34,30 @@ class RemoteSaleDataSource {
                 })
             .toList(),
       },
+    );
+  }
+
+  /// POST /api/v1/sales/{id}/validate — OWNER-only.
+  Future<void> validateSale(String saleId, String justification,
+      {Map<String, String>? productIdRemappings,
+      Map<String, int>? initialStockEntries}) async {
+    await _dio.post(
+      '/api/v1/sales/$saleId/validate',
+      data: {
+        'justification': justification,
+        if (productIdRemappings != null && productIdRemappings.isNotEmpty)
+          'productIdRemappings': productIdRemappings,
+        if (initialStockEntries != null && initialStockEntries.isNotEmpty)
+          'initialStockEntries': initialStockEntries,
+      },
+    );
+  }
+
+  /// POST /api/v1/sales/{id}/cancel — OWNER-only.
+  Future<void> cancelSale(String saleId, String justification) async {
+    await _dio.post(
+      '/api/v1/sales/$saleId/cancel',
+      data: {'justification': justification},
     );
   }
 }

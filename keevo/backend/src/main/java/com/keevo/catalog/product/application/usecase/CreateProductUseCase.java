@@ -49,15 +49,24 @@ public class CreateProductUseCase {
         Integer transportCost,
         Integer stockQuantity,
         UUID actorId,  // Added for audit trail
-        Integer minimumThreshold  // Story 2.4: CSV import can set initial threshold
+        Integer minimumThreshold,  // Story 2.4: CSV import can set initial threshold
+        String status  // Story 4.3: POS draft creation — "DRAFT" or null (defaults to ACTIVE)
     ) {
-        /** Backward-compatible constructor without minimumThreshold (defaults to 0). */
+        /** Backward-compatible constructor without minimumThreshold + status. */
         public CreateProductDto(
                 String name, String description, String sku, UUID categoryId,
                 Integer price, Integer buyPrice, Integer transportCost,
                 Integer stockQuantity, UUID actorId) {
             this(name, description, sku, categoryId, price, buyPrice, transportCost,
-                 stockQuantity, actorId, 0);
+                 stockQuantity, actorId, 0, null);
+        }
+        /** Backward-compatible constructor without status. */
+        public CreateProductDto(
+                String name, String description, String sku, UUID categoryId,
+                Integer price, Integer buyPrice, Integer transportCost,
+                Integer stockQuantity, UUID actorId, Integer minimumThreshold) {
+            this(name, description, sku, categoryId, price, buyPrice, transportCost,
+                 stockQuantity, actorId, minimumThreshold, null);
         }
     }
 
@@ -95,7 +104,7 @@ public class CreateProductUseCase {
             dto.transportCost() != null ? dto.transportCost() : 0,
             dto.stockQuantity(),
             false, // archived = false (default)
-            ProductStatus.ACTIVE, // status = ACTIVE (default for catalogue products)
+            "DRAFT".equalsIgnoreCase(dto.status()) ? ProductStatus.DRAFT : ProductStatus.ACTIVE,
             dto.minimumThreshold() != null ? dto.minimumThreshold() : 0,
             now, // createdAt
             now  // updatedAt

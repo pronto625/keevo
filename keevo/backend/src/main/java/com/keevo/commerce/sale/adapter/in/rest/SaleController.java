@@ -3,6 +3,7 @@ package com.keevo.commerce.sale.adapter.in.rest;
 import com.keevo.commerce.sale.adapter.in.rest.dto.RecordSaleRequestDto;
 import com.keevo.commerce.sale.adapter.in.rest.dto.RecordSaleResponseDto;
 import com.keevo.commerce.sale.domain.model.SaleFactory;
+import com.keevo.commerce.sale.domain.model.SaleStatus;
 import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase;
 import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase.RecordSaleCommand;
 import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase.SaleItemCommand;
@@ -60,6 +61,9 @@ public class SaleController {
             throw new DomainException(ErrorCode.FORBIDDEN, "No store context available");
         }
 
+        SaleStatus requestedStatus = request.status() != null
+                ? SaleStatus.valueOf(request.status()) : null;
+
         var command = new RecordSaleCommand(
                 request.saleId(),
                 actorId,
@@ -68,6 +72,7 @@ public class SaleController {
                 request.paymentMode(),
                 request.mobileMoneyRef(),
                 request.discountAmount(),
+                requestedStatus,
                 request.items().stream()
                         .map(i -> new SaleItemCommand(
                                 i.productId(), i.variantId(), i.productName(),
@@ -83,9 +88,12 @@ public class SaleController {
                 .sum();
         int totalAmount = subtotal - command.discountAmount();
 
+        String responseStatus = requestedStatus == SaleStatus.PENDING_VALIDATION
+                ? "PENDING_VALIDATION" : "COMPLETED";
+
         var response = new RecordSaleResponseDto(
                 request.saleId(),
-                "COMPLETED",
+                responseStatus,
                 totalAmount,
                 request.discountAmount(),
                 java.time.Instant.now()

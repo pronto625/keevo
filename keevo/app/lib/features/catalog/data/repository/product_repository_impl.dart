@@ -56,6 +56,20 @@ class ProductRepositoryImpl implements ProductRepository {
     // Remote first: backend assigns canonical UUID and SKU.
     // On success, upsert locally with the backend-assigned ID so that
     // syncFromRemote() won't create a duplicate on next launch.
+
+    // Check local name uniqueness first
+    final existing = await _local.search(name);
+    final duplicate = existing.any(
+      (p) => p.name.toLowerCase() == name.toLowerCase(),
+    );
+    if (duplicate) {
+      throw const ProductException(
+        domainCode: 'PRODUCT_NAME_ALREADY_EXISTS',
+        message: 'Un produit avec ce nom existe déjà',
+        statusCode: 409,
+      );
+    }
+
     try {
       final dto = await _remote.create({
         'name': name,
@@ -66,7 +80,8 @@ class ProductRepositoryImpl implements ProductRepository {
         'buyPrice': buyPrice,
         'transportCost': transportCost,
       });
-      final model = _dtoToModel(dto);
+      // Merge local photoUrl into the backend model (images are device-local).
+      final model = _dtoToModel(dto).copyWith(photoUrl: photoUrl);
       await _local.upsert(model);
       return model;
     } on ProductException {
@@ -130,6 +145,62 @@ class ProductRepositoryImpl implements ProductRepository {
   }
 
   @override
+  Future<String> promoteToActive(String id) async {
+    final product = await _local.getById(id);
+    if (product == null) return id;
+    try {
+      // Backend auto-promotes DRAFT→ACTIVE on any PATCH update.
+      final dto = await _remote.update(id, {'name': product.name});
+      final model = _dtoToModel(dto);
+      await _local.upsert(model);
+      return model.id;
+    } catch (_) {
+      // PATCH failed — product may only exist locally (offline draft).
+      // Try creating it as a full (ACTIVE) product on the backend.
+      try {
+        final dto = await _remote.create({
+          'name': product.name,
+          if (product.description != null) 'description': product.description,
+          if (product.categoryId != null) 'categoryId': product.categoryId,
+          'price': product.price,
+          'buyPrice': product.buyPrice,
+          'transportCost': product.transportCost,
+        });
+        final newModel = _dtoToModel(dto);
+        // Remap sale_items references before deleting the old draft.
+        await _local.updateProductIdInSaleItems(id, newModel.id);
+        // Replace the local draft with the backend-assigned product.
+        await _local.deleteById(id);
+        await _local.upsert(newModel);
+        return newModel.id;
+      } catch (_) {
+        // CREATE failed (likely name already exists on backend).
+        // Try to find the existing backend product by name and remap.
+        try {
+          final remoteDtos = await _remote.getAll();
+          final match = remoteDtos.cast<ProductResponseDto?>().firstWhere(
+            (dto) =>
+                dto!.name.toLowerCase() == product.name.toLowerCase(),
+            orElse: () => null,
+          );
+          if (match != null) {
+            final existingModel = _dtoToModel(match);
+            await _local.updateProductIdInSaleItems(id, existingModel.id);
+            await _local.deleteById(id);
+            await _local.upsert(existingModel);
+            return existingModel.id;
+          }
+        } catch (_) {
+          // Sync also failed — fully offline.
+        }
+        // Fully offline — promote locally, sync later.
+        await _local.promoteToActive(id);
+        return id;
+      }
+    }
+  }
+
+  @override
   Future<void> archive(String id) async {
     await _local.archiveById(id);
     try {
@@ -185,17 +256,31 @@ class ProductRepositoryImpl implements ProductRepository {
     required String categoryId,
     int stockQuantity = 0,
   }) async {
+    // Check local name uniqueness before hitting the backend
+    final existing = await _local.search(name);
+    final duplicate = existing.any(
+      (p) => p.name.toLowerCase() == name.toLowerCase(),
+    );
+    if (duplicate) {
+      throw const ProductException(
+        domainCode: 'PRODUCT_NAME_ALREADY_EXISTS',
+        message: 'Un produit avec ce nom existe déjà',
+        statusCode: 409,
+      );
+    }
+
     try {
       final dto = await _remoteCsv.createDraft({
         'name': name,
-        'priceVente': priceVente,
+        'price': priceVente,
         'categoryId': categoryId,
         if (stockQuantity > 0) 'stockQuantity': stockQuantity,
       });
       final model = _dtoToModel(dto);
       await _local.upsert(model);
       return model;
-    } catch (_) {
+    } catch (e) {
+      if (e is ProductException) rethrow;
       // Offline fallback: write locally as DRAFT, sync queue will push later.
       return _local.insertDraft(
         name: name,

@@ -73,6 +73,9 @@ public class GlobalExceptionHandler {
             Map.entry("VALIDATION_FAILED",         "Données invalides"),
             Map.entry("VALIDATION_ERROR",          "Données invalides"),
             Map.entry("DISCOUNT_EXCEEDS_SUBTOTAL","La réduction dépasse le sous-total"),
+            Map.entry("SALE_NOT_PENDING",          "Cette vente n'est pas en attente de validation"),
+            Map.entry("JUSTIFICATION_REQUIRED",    "Une justification est requise"),
+            Map.entry("JUSTIFICATION_TOO_SHORT",   "La justification doit contenir au moins 10 caractères"),
             Map.entry("INTERNAL_ERROR",            "Une erreur inattendue s'est produite")
     );
 
@@ -160,7 +163,10 @@ public class GlobalExceptionHandler {
                  "STORE_NOT_ACTIVE",
                  "VALIDATION_FAILED",
                  "SAME_SOURCE_DESTINATION",
-                 "DISCOUNT_EXCEEDS_SUBTOTAL" -> HttpStatus.UNPROCESSABLE_ENTITY;
+                 "DISCOUNT_EXCEEDS_SUBTOTAL",
+                 "SALE_NOT_PENDING" -> HttpStatus.UNPROCESSABLE_ENTITY;
+            case "JUSTIFICATION_REQUIRED",
+                 "JUSTIFICATION_TOO_SHORT" -> HttpStatus.BAD_REQUEST;
             case "SECTOR_TEMPLATE_NOT_FOUND",
                  "ONBOARDING_ALREADY_COMPLETED" -> HttpStatus.BAD_REQUEST;
             case "TENANT_PROVISION_FAILED" -> HttpStatus.INTERNAL_SERVER_ERROR;

@@ -16,5 +16,6 @@ public record RecordSaleRequestDto(
         String mobileMoneyRef,
         UUID storeId,
         @Min(0) int discountAmount,              // Story 4.2 — default 0
+        String status,                             // Story 4.3 — nullable: "PENDING_VALIDATION" or null (defaults to COMPLETED)
         @NotEmpty @Valid List<SaleItemRequestDto> items
 ) {}

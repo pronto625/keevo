@@ -69,6 +69,11 @@ public enum ErrorCode {
     // ── Sale (Story 4.2) ──────────────────────────────────────────
     DISCOUNT_EXCEEDS_SUBTOTAL,   // HTTP 422 — discount > sum of item subtotals
 
+    // ── Sale (Story 4.3) ──────────────────────────────────────────
+    SALE_NOT_PENDING,              // HTTP 422 — trying to validate/cancel a non-pending sale
+    JUSTIFICATION_REQUIRED,        // HTTP 400 — missing justification
+    JUSTIFICATION_TOO_SHORT,       // HTTP 400 — justification < 10 chars
+
     // ── Sync ──────────────────────────────────────────────────────
     SYNC_CONFLICT,
     OFFLINE_LIMIT_EXCEEDED,

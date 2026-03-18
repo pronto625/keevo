@@ -52,6 +52,11 @@ class CartNotifier extends Notifier<List<CartItem>> {
 
   int get finalTotal => (totalAmount - _discountAmount).clamp(0, totalAmount);
 
+  bool get hasDraftProducts => state.any((c) => c.isDraft);
+
+  List<String> get draftProductIds =>
+      state.where((c) => c.isDraft).map((c) => c.productId).toList();
+
   void clearCart() {
     _discountAmount = 0;
     state = [];

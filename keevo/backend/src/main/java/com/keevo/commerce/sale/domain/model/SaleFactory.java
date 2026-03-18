@@ -16,6 +16,10 @@ public final class SaleFactory {
     private SaleFactory() {}
 
     public static Sale from(RecordSaleCommand command) {
+        return from(command, SaleStatus.COMPLETED);
+    }
+
+    public static Sale from(RecordSaleCommand command, SaleStatus statusOverride) {
         Instant now = Instant.now();
         List<SaleItem> items = command.items().stream()
                 .map(itemCmd -> toSaleItem(command.saleId(), itemCmd))
@@ -35,7 +39,7 @@ public final class SaleFactory {
                 command.paymentMode(),
                 totalAmount,
                 command.discountAmount(),
-                SaleStatus.COMPLETED,
+                statusOverride,
                 now,
                 now,
                 items

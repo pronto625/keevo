@@ -105,4 +105,72 @@ class SaleRepositoryImpl implements SaleRepository {
 
     return results.map((r) => r.read<String>('product_id')).toList();
   }
+
+  @override
+  Future<List<Sale>> getPendingSales(String? storeId) async {
+    final query = _db.select(_db.sales)
+      ..where((s) {
+        final cond = s.status.equals('PENDING_VALIDATION');
+        return storeId != null ? cond & s.storeId.equals(storeId) : cond;
+      })
+      ..orderBy([(s) => OrderingTerm.desc(s.createdAt)]);
+    final rows = await query.get();
+
+    final sales = <Sale>[];
+    for (final row in rows) {
+      final items = await (_db.select(_db.saleItems)
+            ..where((i) => i.saleId.equals(row.id)))
+          .get();
+
+      sales.add(Sale(
+        id: row.id,
+        storeId: row.storeId,
+        employeeId: row.employeeId,
+        clientId: row.clientId,
+        paymentMode: PaymentModeEnum.values.firstWhere(
+          (m) => m.value == row.paymentMode,
+          orElse: () => PaymentModeEnum.cash,
+        ),
+        totalAmount: row.totalAmount,
+        discountAmount: row.discountAmount,
+        status: 'PENDING_VALIDATION',
+        items: items
+            .map((i) => SaleItemModel(
+                  id: i.id,
+                  productId: i.productId,
+                  variantId: i.variantId,
+                  productName: i.productName,
+                  catalogueUnitPrice: i.catalogueUnitPrice,
+                  appliedUnitPrice: i.unitPrice,
+                  quantity: i.quantity,
+                  subtotal: i.subtotal,
+                ))
+            .toList(),
+        occurredAt: row.occurredAt ?? row.createdAt,
+        createdAt: row.createdAt,
+      ));
+    }
+    return sales;
+  }
+
+  @override
+  Future<int> countPendingSales(String? storeId) async {
+    return _local.countPendingSales(storeId);
+  }
+
+  @override
+  Future<void> validateSale(String saleId, String justification,
+      {Map<String, String>? productIdRemappings,
+      Map<String, int>? initialStockEntries}) async {
+    await _remote.validateSale(saleId, justification,
+        productIdRemappings: productIdRemappings,
+        initialStockEntries: initialStockEntries);
+    await _local.updateSaleStatus(saleId, 'COMPLETED');
+  }
+
+  @override
+  Future<void> cancelSale(String saleId, String justification) async {
+    await _remote.cancelSale(saleId, justification);
+    await _local.updateSaleStatus(saleId, 'CANCELLED');
+  }
 }

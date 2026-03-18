@@ -34,6 +34,7 @@ class CartBottomSheet extends ConsumerWidget {
     final subtotal = notifier.totalAmount;
     final discountAmount = notifier.discountAmount;
     final finalTotal = notifier.finalTotal;
+    final hasDrafts = notifier.hasDraftProducts;
     final theme = Theme.of(context);
 
     return DraggableScrollableSheet(
@@ -107,6 +108,31 @@ class CartBottomSheet extends ConsumerWidget {
               ),
             ),
             Divider(color: Colors.grey.shade200),
+            if (hasDrafts)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.amber.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.amber.shade700, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Cette vente contient des produits en brouillon. Elle sera validée quand l\'admin les confirmera.',
+                        style: TextStyle(
+                          color: Colors.amber.shade900,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Expanded(
               child: ListView.separated(
                 controller: scrollController,
@@ -187,16 +213,22 @@ class CartBottomSheet extends ConsumerWidget {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: cart.isNotEmpty
-                        ? const LinearGradient(
-                            colors: [Color(0xFF3B5BDB), Color(0xFF4DABF7)],
-                          )
+                        ? (hasDrafts
+                            ? LinearGradient(
+                                colors: [Colors.amber.shade700, Colors.amber.shade500],
+                              )
+                            : const LinearGradient(
+                                colors: [Color(0xFF3B5BDB), Color(0xFF4DABF7)],
+                              ))
                         : null,
                     color: cart.isEmpty ? Colors.grey.shade300 : null,
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: cart.isNotEmpty
                         ? [
                             BoxShadow(
-                              color: const Color(0xFF3B5BDB).withValues(alpha: 0.3),
+                              color: hasDrafts
+                                  ? Colors.amber.shade700.withValues(alpha: 0.3)
+                                  : const Color(0xFF3B5BDB).withValues(alpha: 0.3),
                               blurRadius: 12,
                               offset: const Offset(0, 4),
                             ),
@@ -209,9 +241,9 @@ class CartBottomSheet extends ConsumerWidget {
                     child: InkWell(
                       onTap: cart.isEmpty ? null : onEncaisser,
                       borderRadius: BorderRadius.circular(16),
-                      child: const Center(
+                      child: Center(
                         child: Text(
-                          'Encaisser',
+                          hasDrafts ? '🔶 Vente brouillon' : 'Encaisser',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 16,

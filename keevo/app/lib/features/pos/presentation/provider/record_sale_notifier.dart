@@ -46,18 +46,24 @@ class RecordSaleNotifier extends Notifier<RecordSaleState> {
   }) async {
     state = const RecordSaleLoading();
     try {
-      // Local stock check
-      final localDs = ref.read(localSaleDataSourceProvider);
-      for (final item in cart) {
-        final available = await localDs.getAvailableStock(item.productId, storeId);
-        if (available < item.quantity) {
-          state = const RecordSaleError('INSUFFICIENT_STOCK');
-          return;
+      final cartNotifier = ref.read(cartProvider.notifier);
+      final hasDrafts = cartNotifier.hasDraftProducts;
+      final status = hasDrafts ? 'PENDING_VALIDATION' : 'COMPLETED';
+
+      // Local stock check — skip for PENDING_VALIDATION sales (no stock decrement)
+      if (!hasDrafts) {
+        final localDs = ref.read(localSaleDataSourceProvider);
+        for (final item in cart) {
+          final available = await localDs.getAvailableStock(item.productId, storeId);
+          if (available < item.quantity) {
+            state = const RecordSaleError('INSUFFICIENT_STOCK');
+            return;
+          }
         }
       }
 
       final useCase = ref.read(recordSaleUseCaseProvider);
-      final discountAmount = ref.read(cartProvider.notifier).discountAmount;
+      final discountAmount = cartNotifier.discountAmount;
       final sale = await useCase.execute(
         cart: cart,
         mode: mode,
@@ -66,6 +72,7 @@ class RecordSaleNotifier extends Notifier<RecordSaleState> {
         clientId: clientId,
         mobileRef: mobileRef,
         discountAmount: discountAmount,
+        status: status,
       );
 
       ref.read(cartProvider.notifier).clearCart();

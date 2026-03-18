@@ -10,6 +10,8 @@ import '../../domain/model/product_status.dart';
 import '../provider/product_provider.dart';
 import '../provider/stock_provider.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
+import '../../../pos/presentation/provider/pos_providers.dart';
+import '../../../../core/di/providers.dart';
 import 'cross_store_availability_bottom_sheet.dart';
 
 /// ProductCard — displays a product in the catalogue list.
@@ -379,6 +381,7 @@ class ProductCard extends ConsumerWidget {
           ],
         ),
         child: SafeArea(
+          bottom: false,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -423,6 +426,20 @@ class ProductCard extends ConsumerWidget {
                 ),
               ),
               const Divider(height: 1),
+              // Option: Valider (DRAFT + OWNER only)
+              if (product.status == ProductStatus.draft &&
+                  ref.read(currentUserRoleProvider) == 'OWNER')
+                _buildMenuOption(
+                  context,
+                  icon: Icons.check_circle_rounded,
+                  title: 'Valider ce produit',
+                  subtitle: 'Promouvoir de Brouillon → Actif',
+                  color: Colors.green,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _confirmPromote(context, ref);
+                  },
+                ),
               // Options
               _buildMenuOption(
                 context,
@@ -532,6 +549,148 @@ class ProductCard extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  void _confirmPromote(BuildContext context, WidgetRef ref) {
+    final actions = ref.read(productActionsProvider);
+    final storeId = ref.read(activeStoreIdProvider);
+    final stockController = TextEditingController();
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.check_circle_rounded, color: Colors.green, size: 28),
+              SizedBox(width: 12),
+              Expanded(child: Text('Valider ce produit ?')),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Ce brouillon deviendra un produit actif, visible dans le catalogue et le POS.',
+                style: TextStyle(height: 1.4),
+              ),
+              if (storeId != null) ...[
+                const SizedBox(height: 16),
+                TextField(
+                  controller: stockController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Stock initial',
+                    hintText: '0',
+                    suffixText: 'unités',
+                    helperText:
+                        'Entrez la quantité disponible (doit couvrir les ventes en attente)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(
+                'Annuler',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final initialStock = int.tryParse(stockController.text) ?? 0;
+                // Capture all provider reads BEFORE async gap —
+                // the ProductCard will be disposed once productListProvider
+                // is invalidated (draft removed from list).
+                final stockRepo = ref.read(stockRepositoryProvider);
+                final localSaleDs = ref.read(localSaleDataSourceProvider);
+                final actorIdFuture = ref.read(currentUserIdProvider.future);
+                final container = ProviderScope.containerOf(context);
+                Navigator.pop(ctx);
+                try {
+                  final originalId = product.id;
+                  final newId = await actions.promoteToActive(originalId);
+                  if (initialStock > 0 && storeId != null) {
+                    await stockRepo.recordEntry(
+                          productId: newId,
+                          storeId: storeId,
+                          quantity: initialStock,
+                          notes: 'Stock initial à la validation du brouillon',
+                        );
+                    container.invalidate(stockNotifierProvider(newId));
+                    container.invalidate(productListProvider);
+                  }
+                  // Cascade: auto-validate pending sales that contained this draft.
+                  if (storeId != null) {
+                    final actorId = await actorIdFuture ?? '';
+                    final validated = await localSaleDs
+                        .cascadeValidatePendingSales(newId, storeId, actorId);
+                    if (validated > 0) {
+                      container.invalidate(pendingSalesProvider(storeId));
+                      container.invalidate(pendingSalesCountProvider(storeId));
+                      container.invalidate(stockNotifierProvider(newId));
+                    }
+                  }
+                  container.read(showDraftsOnlyProvider.notifier).state = false;
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Row(
+                          children: [
+                            Icon(Icons.check_circle, color: Colors.white),
+                            SizedBox(width: 8),
+                            Text('Produit validé avec succès'),
+                          ],
+                        ),
+                        backgroundColor: Colors.green,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    );
+                  }
+                } on ProductException catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Row(
+                          children: [
+                            const Icon(Icons.error, color: Colors.white),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(e.message)),
+                          ],
+                        ),
+                        backgroundColor: Colors.red,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    );
+                  }
+                }
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.green,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text('Valider'),
+            ),
+          ],
+        ),
+      ),
+    ).whenComplete(() => stockController.dispose());
   }
 
   void _confirmArchive(BuildContext context, ProductActions actions) {

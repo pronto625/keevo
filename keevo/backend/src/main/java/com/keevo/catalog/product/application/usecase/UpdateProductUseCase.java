@@ -3,6 +3,7 @@ package com.keevo.catalog.product.application.usecase;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
+import com.keevo.catalog.product.domain.event.ProductActivatedEvent;
 import com.keevo.catalog.product.domain.event.ProductUpdatedEvent;
 import com.keevo.messaging.notification.domain.port.out.DraftNotificationRepository;
 import com.keevo.shared.domain.exception.DomainException;
@@ -122,6 +123,7 @@ public class UpdateProductUseCase {
 
         // Save and publish event
         var saved = productRepository.save(updated);
+        String tenantId = TenantContext.getCurrentTenant();
 
         // Acknowledge draft notification so the badge counter decrements (AC6)
         if (isPromotion) {
@@ -129,10 +131,13 @@ public class UpdateProductUseCase {
                 draft.acknowledge();
                 draftRepository.saveUpdated(draft);
             });
+
+            // Story 4.3 — publish ProductActivatedEvent for cascade auto-validation
+            eventPublisher.publishEvent(new ProductActivatedEvent(
+                    saved.getId(), dto.actorId(), tenantId, Instant.now()));
         }
 
         // Publish domain event for audit trail with valueBefore/valueAfter
-        String tenantId = TenantContext.getCurrentTenant();
         String valueBefore = toJson(existing);
         String valueAfter = toJson(saved);
         

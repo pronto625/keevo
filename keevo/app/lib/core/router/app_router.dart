@@ -29,7 +29,10 @@ import '../../features/onboarding/presentation/page/shop_name_page.dart';
 import '../../features/onboarding/presentation/page/terms_page.dart';
 import '../../features/pos/presentation/page/pos_page.dart';
 import '../../features/pos/presentation/page/checkout_page.dart';
+import '../../features/pos/presentation/page/pending_sales_page.dart';
+import '../../features/pos/presentation/page/pending_sale_detail_page.dart';
 import '../../features/pos/presentation/page/sale_success_page.dart';
+import '../../features/pos/domain/model/sale_model.dart';
 import '../../features/settings/presentation/page/settings_page.dart';
 import '../../features/settings/presentation/page/subscription_page.dart';
 import '../../features/stores/presentation/page/stores_list_page.dart';
@@ -331,7 +334,22 @@ final GoRouter appRouter = GoRouter(
       builder: (_, state) {
         final totalStr = state.uri.queryParameters['total'];
         final total = int.tryParse(totalStr ?? '') ?? 0;
-        return SaleSuccessPage(totalAmount: total);
+        final status = state.uri.queryParameters['status'] ?? 'COMPLETED';
+        return SaleSuccessPage(totalAmount: total, saleStatus: status);
+      },
+    ),
+
+    // ── Pending sales (OWNER only) — Story 4.3 ──────────────────────────
+    GoRoute(
+      path: '/pos/pending',
+      builder: (_, __) => const PendingSalesPage(),
+    ),
+    GoRoute(
+      path: '/pos/pending/:id',
+      builder: (_, state) {
+        final saleId = state.pathParameters['id'] ?? '';
+        final sale = state.extra;
+        return PendingSaleDetailPage(saleId: saleId, sale: sale as Sale?);
       },
     ),
 

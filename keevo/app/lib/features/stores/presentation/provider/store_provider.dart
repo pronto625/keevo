@@ -36,7 +36,12 @@ final storeRepositoryProvider = Provider<StoreRepository>((ref) {
 class StoreListNotifier extends _$StoreListNotifier {
   @override
   Future<List<StoreModel>> build() async {
-    return ref.watch(storeRepositoryProvider).getStores();
+    final repo = ref.watch(storeRepositoryProvider);
+    // Sync from remote so local DB is populated (silent fail if offline)
+    try {
+      await repo.syncFromRemote();
+    } catch (_) {}
+    return repo.getStores();
   }
 
   Future<void> refresh({bool includeInactive = false}) async {

@@ -7,6 +7,8 @@ import com.keevo.commerce.sale.domain.model.*;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -102,5 +104,40 @@ public class SaleRepositoryAdapter implements SaleRepository {
                 entity.getAppliedUnitPrice(),
                 entity.getQuantity()
         );
+    }
+
+    @Override
+    public List<Sale> findPendingByProductId(UUID productId) {
+        return springRepository.findPendingByProductId(productId).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Sale> findByStatus(SaleStatus status) {
+        return springRepository.findByStatus(status.name()).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
+    public void updateStatus(UUID saleId, SaleStatus newStatus) {
+        springRepository.findById(saleId).ifPresent(entity -> {
+            entity.setStatus(newStatus.name());
+            springRepository.save(entity);
+        });
+    }
+
+    @Override
+    public void remapItemProductIds(UUID saleId, Map<UUID, UUID> remappings) {
+        springRepository.findById(saleId).ifPresent(entity -> {
+            for (SaleItemJpaEntity item : entity.getItems()) {
+                UUID newId = remappings.get(item.getProductId());
+                if (newId != null) {
+                    item.setProductId(newId);
+                }
+            }
+            springRepository.save(entity);
+        });
     }
 }
