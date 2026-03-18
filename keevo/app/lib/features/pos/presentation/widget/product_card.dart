@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'product_initials_avatar.dart';
 
 /// ProductCard — displays a product in the POS grid.
+/// Modern card design: image fills the top zone, info bar at bottom.
 class ProductCard extends StatefulWidget {
   final String name;
   final int price;
@@ -61,6 +62,8 @@ class _ProductCardState extends State<ProductCard>
   Widget build(BuildContext context) {
     final isOutOfStock = widget.stockQuantity <= 0;
     final theme = Theme.of(context);
+    final avatarColor =
+        kAvatarColors[widget.name.hashCode.abs() % kAvatarColors.length];
 
     return AnimatedBuilder(
       animation: _scaleCtrl,
@@ -72,14 +75,11 @@ class _ProductCardState extends State<ProductCard>
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
             ),
           ],
         ),
@@ -89,101 +89,92 @@ class _ProductCardState extends State<ProductCard>
           child: InkWell(
             onTap: isOutOfStock ? null : _handleTap,
             borderRadius: BorderRadius.circular(16),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Product image or initials
-                  Stack(
-                    children: [
-                      if (widget.photoUrl != null)
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: _buildImage(
-                            widget.photoUrl!,
-                            width: 52,
-                            height: 52,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // ── Zone 1: Image / Initials — fills the top ──
+                Expanded(
+                  flex: 3,
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(16),
+                    ),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        // Background: image or gradient with initials
+                        if (widget.photoUrl != null &&
+                            widget.photoUrl!.isNotEmpty)
+                          _buildImage(widget.photoUrl!)
+                        else
+                          _buildInitialsBackground(avatarColor),
+
+                        // Dim overlay when out of stock
+                        if (isOutOfStock)
+                          Container(
+                            color: Colors.black.withValues(alpha: 0.35),
                           ),
-                        )
-                      else
-                        ProductInitialsAvatar(name: widget.name, radius: 26),
-                      if (isOutOfStock)
-                        Positioned(
-                          right: -2,
-                          top: -2,
-                          child: Container(
-                            padding: const EdgeInsets.all(2),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFFA5252),
-                              shape: BoxShape.circle,
+
+                        // Out-of-stock cross icon
+                        if (isOutOfStock)
+                          Positioned(
+                            top: 6,
+                            right: 6,
+                            child: Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFA5252),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Icon(Icons.close_rounded,
+                                  size: 12, color: Colors.white),
                             ),
-                            child: const Icon(Icons.close, size: 10, color: Colors.white),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // ── Zone 2: Info bar — compact bottom section ──
+                Expanded(
+                  flex: 2,
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Product name
+                        Text(
+                          widget.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            height: 1.2,
+                            letterSpacing: -0.1,
                           ),
                         ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  // Product name
-                  Text(
-                    widget.name,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w500,
-                      height: 1.2,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  // Price
-                  Text(
-                    _currencyFormat.format(widget.price),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF3B5BDB),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  // Stock indicator
-                  if (isOutOfStock)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFA5252).withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        'Rupture',
-                        style: TextStyle(
-                          color: Color(0xFFFA5252),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                        const SizedBox(height: 3),
+                        // Price
+                        Text(
+                          _currencyFormat.format(widget.price),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF3B5BDB),
+                            fontSize: 13,
+                            height: 1.1,
+                          ),
                         ),
-                      ),
-                    )
-                  else
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: widget.stockQuantity <= 5
-                            ? const Color(0xFFFCC419).withValues(alpha: 0.15)
-                            : const Color(0xFF51CF66).withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '${widget.stockQuantity} en stock',
-                        style: TextStyle(
-                          color: widget.stockQuantity <= 5
-                              ? const Color(0xFFE67700)
-                              : const Color(0xFF2B8A3E),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                        const SizedBox(height: 5),
+                        // Stock badge
+                        _buildStockBadge(),
+                      ],
                     ),
-                ],
-              ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -191,17 +182,94 @@ class _ProductCardState extends State<ProductCard>
     );
   }
 
-  Widget _buildImage(String url, {required double width, required double height}) {
+  Widget _buildInitialsBackground(Color color) {
+    final initials = widget.name
+        .trim()
+        .split(' ')
+        .take(2)
+        .where((w) => w.isNotEmpty)
+        .map((w) => w[0].toUpperCase())
+        .join();
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            color,
+            color.withValues(alpha: 0.7),
+          ],
+        ),
+      ),
+      child: Center(
+        child: Text(
+          initials,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 28,
+            letterSpacing: 1,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStockBadge() {
+    final isOutOfStock = widget.stockQuantity <= 0;
+    if (isOutOfStock) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFA5252).withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Text(
+          'Rupture',
+          style: TextStyle(
+            color: Color(0xFFFA5252),
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
+    }
+    final isLow = widget.stockQuantity <= 5;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: isLow
+            ? const Color(0xFFFCC419).withValues(alpha: 0.15)
+            : const Color(0xFF51CF66).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        '${widget.stockQuantity} en stock',
+        style: TextStyle(
+          color: isLow ? const Color(0xFFE67700) : const Color(0xFF2B8A3E),
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImage(String url) {
     if (url.startsWith('/')) {
       final file = File(url);
       if (file.existsSync()) {
-        return Image.file(file, width: width, height: height, fit: BoxFit.cover);
+        return Image.file(file, fit: BoxFit.cover);
       }
     }
     return Image.network(
-      url, width: width, height: height, fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) =>
-          ProductInitialsAvatar(name: widget.name, radius: width / 2),
+      url,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) {
+        final color =
+            kAvatarColors[widget.name.hashCode.abs() % kAvatarColors.length];
+        return _buildInitialsBackground(color);
+      },
     );
   }
 }

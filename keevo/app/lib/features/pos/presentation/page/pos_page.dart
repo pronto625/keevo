@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/storage/app_constants.dart';
 import '../../../../features/sync_indicator/presentation/widget/sync_indicator.dart';
+import '../../../catalog/presentation/widget/create_draft_product_bottom_sheet.dart';
 import '../../../onboarding/domain/model/sector_type.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../domain/model/cart_item.dart';
@@ -68,6 +69,16 @@ class _PosPageState extends ConsumerState<PosPage> {
     final theme = Theme.of(context);
 
     return Scaffold(
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 56),
+        child: FloatingActionButton(
+          heroTag: 'pos_create_draft',
+          backgroundColor: Colors.amber.shade700,
+          onPressed: () => _createDraftAndAddToCart(context, ref, ''),
+          tooltip: 'Créer un produit à la volée',
+          child: const Icon(Icons.add_rounded, color: Colors.white),
+        ),
+      ),
       body: Stack(
         children: [
           CustomScrollView(
@@ -158,10 +169,13 @@ class _PosPageState extends ConsumerState<PosPage> {
                   ),
                 ),
               ),
+              // Pending sales banner (OWNER only)
+              if (!isEmployee) _PendingSalesBanner(storeId: storeId),
               // Product grid or search results
               _searchQuery.isNotEmpty
                   ? _SearchResultsSliver(
                       onAddToCart: (p) => _addProductToCart(p, cartNotifier),
+                      onCreateDraft: _createDraftAndAddToCart,
                     )
                   : _FrequentProductsSliver(
                       storeId: storeId,
@@ -181,6 +195,7 @@ class _PosPageState extends ConsumerState<PosPage> {
             child: CartPill(
               itemCount: cart.length,
               totalAmount: cartNotifier.totalAmount,
+              hasDraftProducts: cartNotifier.hasDraftProducts,
               onEncaisser: () {
                 CartBottomSheet.show(
                   context,
@@ -198,7 +213,8 @@ class _PosPageState extends ConsumerState<PosPage> {
   }
 
   void _addProductToCart(
-      PosProductResult product, CartNotifier cartNotifier) {
+      PosProductResult product, CartNotifier cartNotifier,
+      {String productStatus = 'ACTIVE'}) {
     HapticFeedback.lightImpact();
     cartNotifier.addItem(CartItem(
       id: product.id,
@@ -207,7 +223,31 @@ class _PosPageState extends ConsumerState<PosPage> {
       unitPrice: product.price,
       appliedUnitPrice: product.price,
       quantity: 1,
+      productStatus: productStatus,
     ));
+  }
+
+  /// Story 4.3 — Create a draft product and add it to the cart.
+  Future<void> _createDraftAndAddToCart(
+      BuildContext ctx, WidgetRef widgetRef, String query) async {
+    final result = await showModalBottomSheet<DraftCreationResult>(
+      context: ctx,
+      isScrollControlled: true,
+      builder: (_) => CreateDraftProductBottomSheet(prefillName: query),
+    );
+    if (result != null && ctx.mounted) {
+      final cartNotifier = widgetRef.read(cartProvider.notifier);
+      HapticFeedback.lightImpact();
+      cartNotifier.addItem(CartItem(
+        id: result.product.id,
+        productId: result.product.id,
+        productName: result.product.name,
+        unitPrice: result.product.price,
+        appliedUnitPrice: result.product.price,
+        quantity: result.quantity,
+        productStatus: result.product.status.name.toUpperCase(),
+      ));
+    }
   }
 }
 
@@ -270,9 +310,9 @@ class _FrequentProductsSliver extends ConsumerWidget {
                 ),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: crossAxisCount,
-                  childAspectRatio: 0.88,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
+                  childAspectRatio: 0.75,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
                 ),
               );
             },
@@ -286,8 +326,12 @@ class _FrequentProductsSliver extends ConsumerWidget {
 /// Search results driven by PosSearchNotifier (AC2).
 class _SearchResultsSliver extends ConsumerWidget {
   final void Function(PosProductResult) onAddToCart;
+  final void Function(BuildContext, WidgetRef, String) onCreateDraft;
 
-  const _SearchResultsSliver({required this.onAddToCart});
+  const _SearchResultsSliver({
+    required this.onAddToCart,
+    required this.onCreateDraft,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -301,6 +345,7 @@ class _SearchResultsSliver extends ConsumerWidget {
       ),
       data: (results) {
         if (results.isEmpty) {
+          final lastQuery = ref.read(posSearchProvider.notifier).lastQuery;
           return SliverFillRemaining(
             child: Center(
               child: Column(
@@ -311,6 +356,15 @@ class _SearchResultsSliver extends ConsumerWidget {
                   const SizedBox(height: 12),
                   Text('Aucun produit trouvé',
                       style: TextStyle(color: Colors.grey.shade500)),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    icon: const Icon(Icons.add_circle_outline),
+                    label: Text("Créer '$lastQuery' à la volée"),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.amber.shade700,
+                    ),
+                    onPressed: () => onCreateDraft(context, ref, lastQuery),
+                  ),
                 ],
               ),
             ),
@@ -341,9 +395,9 @@ class _SearchResultsSliver extends ConsumerWidget {
                 ),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: crossAxisCount,
-                  childAspectRatio: 0.88,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
+                  childAspectRatio: 0.75,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
                 ),
               );
             },
@@ -396,6 +450,53 @@ class _EmptyState extends StatelessWidget {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Tappable banner that appears when there are pending-validation sales.
+class _PendingSalesBanner extends ConsumerWidget {
+  final String? storeId;
+  const _PendingSalesBanner({required this.storeId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final count =
+        ref.watch(pendingSalesCountProvider(storeId)).valueOrNull ?? 0;
+    if (count == 0) return const SliverToBoxAdapter(child: SizedBox.shrink());
+
+    return SliverToBoxAdapter(
+      child: GestureDetector(
+        onTap: () => context.push('/pos/pending'),
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.amber.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.amber.shade300),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.pending_actions_rounded,
+                  color: Colors.amber.shade800, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '$count vente${count > 1 ? 's' : ''} en attente de validation',
+                  style: TextStyle(
+                    color: Colors.amber.shade900,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded,
+                  color: Colors.amber.shade700, size: 20),
+            ],
+          ),
         ),
       ),
     );
