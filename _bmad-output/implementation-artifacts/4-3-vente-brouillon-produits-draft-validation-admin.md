@@ -1292,6 +1292,17 @@ Claude Opus 4.6
   - Backend: `ValidateSaleRequestDto.java`, `ValidateSaleUseCase.java` (5-arg command + compat constructors), `ValidateSaleService.java` (Step 1: initial stock entries before decrement), `PendingSaleController.java` (passes initialStockEntries)
   - Flutter: `pending_sale_detail_page.dart` (removed `recordEntry` call, dialog returns `(String, int)` tuple, `_doValidate` collects `initialStockEntries`), `sale_repository.dart`, `sale_repository_impl.dart`, `remote_sale_datasource.dart` (all propagate `initialStockEntries`)
 
+#### HOTFIX-12: Redesign POS ProductCard — image full-frame layout
+
+- **Symptom**: POS grid cards showed a small 56px circular avatar centered in the card with padding, text below — wasted space, not visually appealing
+- **Root cause**: Design choice from initial implementation; user requested a modern e-commerce style card
+- **Fix**: Complete `ProductCard` widget redesign:
+  - **Zone 1 (top, flex:3)**: Image/avatar fills the entire top area via `ClipRRect` + `StackFit.expand`. Initials → full-width gradient background (two-tone from `kAvatarColors`) with large 28px initials centered. Images: `BoxFit.cover`. Out-of-stock overlay + red ✕ badge top-right.
+  - **Zone 2 (bottom, flex:2)**: Product name (bold, 1 line, ellipsis), price (13px bold blue), stock badge (green/orange/red pill) — left-aligned.
+  - Grid `childAspectRatio` adjusted `0.88 → 0.75`, spacing `10 → 12px` (both grid sliver sections)
+  - Removed `border` (outline variant), kept shadow only (6% opacity, blur 10)
+- **Files**: `keevo/app/lib/features/pos/presentation/widget/product_card.dart`, `keevo/app/lib/features/pos/presentation/page/pos_page.dart`
+
 #### Test results post-hotfixes 6-11
 
 - Backend: `ValidateSaleServiceTest` (9/9 GREEN), `PendingSaleControllerTest` (9/9 GREEN) = 18/18 targeted tests
