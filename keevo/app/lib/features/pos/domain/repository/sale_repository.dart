@@ -1,4 +1,5 @@
 import '../model/sale_model.dart';
+import '../model/sales_history_filter.dart';
 
 /// SaleRepository — port interface for sale persistence + sync.
 abstract interface class SaleRepository {
@@ -7,6 +8,11 @@ abstract interface class SaleRepository {
 
   /// Sales for today's close of day (Story 4.3 stub).
   Future<List<Sale>> getSalesForToday(String storeId);
+
+  /// Sales history with date range filter (Story 4.4).
+  ///
+  /// Returns sales matching the filter criteria, sorted by occurredAt DESC.
+  Future<List<Sale>> getSalesHistory(SalesHistoryFilter filter);
 
   /// Most frequently sold product IDs for POS grid.
   Future<List<String>> getFrequentProductIds(String storeId, {int limit = 12});
@@ -28,4 +34,7 @@ abstract interface class SaleRepository {
 
   /// Cancel a pending sale (OWNER-only, Story 4.3).
   Future<void> cancelSale(String saleId, String justification);
+
+  /// Get a single sale by ID (Story 4.4 — Sale Detail Page).
+  Future<Sale?> getSaleById(String saleId);
 }

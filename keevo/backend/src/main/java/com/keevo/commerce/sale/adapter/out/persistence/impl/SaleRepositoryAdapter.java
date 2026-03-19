@@ -5,8 +5,11 @@ import com.keevo.commerce.sale.adapter.out.persistence.entity.SaleJpaEntity;
 import com.keevo.commerce.sale.adapter.out.persistence.jpa.SaleSpringRepository;
 import com.keevo.commerce.sale.domain.model.*;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -139,5 +142,37 @@ public class SaleRepositoryAdapter implements SaleRepository {
             }
             springRepository.save(entity);
         });
+    }
+
+    // ── Story 4.4 — Sales History queries ─────────────────────────────────────
+
+    @Override
+    public Page<Sale> findByStoreIdAndEmployeeIdAndDateRange(UUID storeId, UUID employeeId,
+                                                              Instant from, Instant to, Pageable pageable) {
+        return springRepository.findByStoreIdAndEmployeeIdAndOccurredAtBetween(
+                storeId, employeeId, from, to, pageable
+        ).map(this::toDomain);
+    }
+
+    @Override
+    public Page<Sale> findByStoreIdAndDateRange(UUID storeId, Instant from, Instant to, Pageable pageable) {
+        return springRepository.findByStoreIdAndOccurredAtBetween(storeId, from, to, pageable)
+                .map(this::toDomain);
+    }
+
+    @Override
+    public Page<Sale> findByStoreIdAndDateRangeAndStatus(UUID storeId, Instant from, Instant to,
+                                                          SaleStatus status, Pageable pageable) {
+        return springRepository.findByStoreIdAndOccurredAtBetweenAndStatus(
+                storeId, from, to, status.name(), pageable
+        ).map(this::toDomain);
+    }
+
+    @Override
+    public boolean existsByStoreIdAndDateRangeAndStatus(UUID storeId, Instant from, Instant to,
+                                                         SaleStatus status) {
+        return springRepository.existsByStoreIdAndOccurredAtBetweenAndStatus(
+                storeId, from, to, status.name()
+        );
     }
 }

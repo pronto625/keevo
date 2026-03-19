@@ -52,6 +52,13 @@ final pendingSalesCountProvider =
   return repo.countPendingSales(storeId);
 });
 
+/// Single sale by ID for detail page (Story 4.4).
+final saleByIdProvider =
+    FutureProvider.autoDispose.family<Sale?, String>((ref, saleId) async {
+  final repo = ref.watch(saleRepositoryProvider);
+  return repo.getSaleById(saleId);
+});
+
 /// Active employee/user ID — read from FlutterSecureStorage.
 final activeEmployeeIdProvider = FutureProvider<String?>((ref) async {
   return ref.watch(currentUserIdProvider.future);

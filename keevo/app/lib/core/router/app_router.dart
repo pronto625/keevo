@@ -32,6 +32,8 @@ import '../../features/pos/presentation/page/checkout_page.dart';
 import '../../features/pos/presentation/page/pending_sales_page.dart';
 import '../../features/pos/presentation/page/pending_sale_detail_page.dart';
 import '../../features/pos/presentation/page/sale_success_page.dart';
+import '../../features/pos/presentation/page/sales_history_page.dart';
+import '../../features/pos/presentation/page/sale_detail_page.dart';
 import '../../features/pos/domain/model/sale_model.dart';
 import '../../features/settings/presentation/page/settings_page.dart';
 import '../../features/settings/presentation/page/subscription_page.dart';
@@ -350,6 +352,19 @@ final GoRouter appRouter = GoRouter(
         final saleId = state.pathParameters['id'] ?? '';
         final sale = state.extra;
         return PendingSaleDetailPage(saleId: saleId, sale: sale as Sale?);
+      },
+    ),
+
+    // ── Sales History (Story 4.4 AC7) ────────────────────────────────────
+    GoRoute(
+      path: '/pos/sales-history',
+      builder: (_, __) => const SalesHistoryPage(),
+    ),
+    GoRoute(
+      path: '/pos/sales-history/:id',
+      builder: (_, state) {
+        final saleId = state.pathParameters['id'] ?? '';
+        return SaleDetailPage(saleId: saleId);
       },
     ),
 

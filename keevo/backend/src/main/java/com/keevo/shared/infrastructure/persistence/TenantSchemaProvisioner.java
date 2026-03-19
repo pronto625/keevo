@@ -415,6 +415,38 @@ public class TenantSchemaProvisioner {
                 ('EMPLOYEE', '{"pos": true, "inventory_view": true, "stock_view": true}'::jsonb)
             ON CONFLICT (name) DO NOTHING""";
 
+    // ── Day Closures (Story 4.4) ───────────────────────────────────────────────
+
+    static final String DDL_DAY_CLOSURES = """
+            CREATE TABLE IF NOT EXISTS day_closures (
+                id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+                store_id            UUID         NOT NULL,
+                actor_id            UUID,
+                closed_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                closure_date        DATE         NOT NULL,
+                is_automatic        BOOLEAN      NOT NULL DEFAULT FALSE,
+                tenant_id           VARCHAR(64),
+                total_sales         INTEGER      NOT NULL DEFAULT 0,
+                total_revenue       INTEGER      NOT NULL DEFAULT 0,
+                top_product_id      VARCHAR(64),
+                top_product_name    VARCHAR(255),
+                top_product_qty     INTEGER      NOT NULL DEFAULT 0,
+                cash_amount         INTEGER      NOT NULL DEFAULT 0,
+                momo_amount         INTEGER      NOT NULL DEFAULT 0,
+                pending_sales_count INTEGER      NOT NULL DEFAULT 0,
+                pending_sales_total INTEGER      NOT NULL DEFAULT 0,
+                CONSTRAINT uq_day_closure_store_date UNIQUE (store_id, closure_date)
+            )""";
+
+    static final String DDL_DAY_CLOSURES_IDX_STORE_DATE =
+            "CREATE INDEX IF NOT EXISTS idx_day_closures_store_date ON day_closures(store_id, closure_date DESC)";
+
+    static final String DDL_SALES_IDX_STORE_OCCURRED_AT =
+            "CREATE INDEX IF NOT EXISTS idx_sales_store_occurred_at ON sales(store_id, occurred_at)";
+
+    static final String DDL_SALES_IDX_STORE_EMPLOYEE_OCCURRED_AT =
+            "CREATE INDEX IF NOT EXISTS idx_sales_store_employee_occurred ON sales(store_id, employee_id, occurred_at)";
+
     // SPEC CHANGE 2026-03-06: new tenants start on 6-month PREMIUM_TRIAL (unlimited limits)
     // WHERE NOT EXISTS ensures idempotency — provision() can be called multiple times safely.
     private static final String SEED_SUBSCRIPTION = """
@@ -557,6 +589,11 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_DRAFT_NOTIFICATIONS);
             stmt.execute(DDL_DRAFT_NOTIFICATIONS_IDX_PRODUCT);
             stmt.execute(DDL_DRAFT_NOTIFICATIONS_IDX_PENDING);
+            // Story 4.4 — day closures + sales history indexes
+            stmt.execute(DDL_DAY_CLOSURES);
+            stmt.execute(DDL_DAY_CLOSURES_IDX_STORE_DATE);
+            stmt.execute(DDL_SALES_IDX_STORE_OCCURRED_AT);
+            stmt.execute(DDL_SALES_IDX_STORE_EMPLOYEE_OCCURRED_AT);
             stmt.execute("SET search_path TO public");
         }
     }

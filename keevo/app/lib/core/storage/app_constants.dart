@@ -34,3 +34,11 @@ const String kFirstOfflineDateKey = 'first_offline_date_ms';
 // Timestamp (milliseconds since epoch) of the last successful sync.
 // Displayed in the SyncIndicator bottom sheet (AC4).
 const String kLastSyncTimestampKey = 'last_sync_timestamp_ms';
+
+// Date (YYYY-MM-DD) of the last day closure.
+// Used to detect automatic closures for snackbar notification.
+const String kLastClosureDate = 'last_closure_date';
+
+// Date (YYYY-MM-DD) when auto-closure notification was last shown.
+// Ensures the snackbar is shown only once per day.
+const String kAutoClosureNotifiedDate = 'auto_closure_notified_date';

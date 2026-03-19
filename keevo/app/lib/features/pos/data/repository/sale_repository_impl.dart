@@ -6,6 +6,7 @@ import 'package:drift/drift.dart';
 import '../../../../core/storage/app_database.dart' hide Sale, SaleItem;
 import '../../domain/model/payment_mode_enum.dart';
 import '../../domain/model/sale_model.dart';
+import '../../domain/model/sales_history_filter.dart';
 import '../../domain/repository/sale_repository.dart';
 import '../datasource/local_sale_datasource.dart';
 import '../datasource/remote_sale_datasource.dart';
@@ -172,5 +173,94 @@ class SaleRepositoryImpl implements SaleRepository {
   Future<void> cancelSale(String saleId, String justification) async {
     await _remote.cancelSale(saleId, justification);
     await _local.updateSaleStatus(saleId, 'CANCELLED');
+  }
+
+  @override
+  Future<List<Sale>> getSalesHistory(SalesHistoryFilter filter) async {
+    // Query sales within date range for the store and employee
+    final rows = await (_db.select(_db.sales)
+          ..where((s) =>
+              s.storeId.equals(filter.storeId) &
+              s.employeeId.equals(filter.employeeId) &
+              s.occurredAt.isBetweenValues(filter.from, filter.to))
+          ..orderBy([(s) => OrderingTerm.desc(s.occurredAt)]))
+        .get();
+
+    final sales = <Sale>[];
+    for (final row in rows) {
+      final items = await (_db.select(_db.saleItems)
+            ..where((i) => i.saleId.equals(row.id)))
+          .get();
+
+      sales.add(Sale(
+        id: row.id,
+        storeId: row.storeId,
+        employeeId: row.employeeId,
+        clientId: row.clientId,
+        paymentMode: PaymentModeEnum.values.firstWhere(
+          (m) => m.value == row.paymentMode,
+          orElse: () => PaymentModeEnum.cash,
+        ),
+        totalAmount: row.totalAmount,
+        discountAmount: row.discountAmount,
+        status: row.status ?? 'COMPLETED',
+        items: items
+            .map((i) => SaleItemModel(
+                  id: i.id,
+                  productId: i.productId,
+                  variantId: i.variantId,
+                  productName: i.productName,
+                  catalogueUnitPrice: i.catalogueUnitPrice,
+                  appliedUnitPrice: i.unitPrice,
+                  quantity: i.quantity,
+                  subtotal: i.subtotal,
+                ))
+            .toList(),
+        occurredAt: row.occurredAt ?? row.createdAt,
+        createdAt: row.createdAt,
+      ));
+    }
+    return sales;
+  }
+
+  @override
+  Future<Sale?> getSaleById(String saleId) async {
+    final row = await (_db.select(_db.sales)
+          ..where((s) => s.id.equals(saleId)))
+        .getSingleOrNull();
+
+    if (row == null) return null;
+
+    final items = await (_db.select(_db.saleItems)
+          ..where((i) => i.saleId.equals(saleId)))
+        .get();
+
+    return Sale(
+      id: row.id,
+      storeId: row.storeId,
+      employeeId: row.employeeId,
+      clientId: row.clientId,
+      paymentMode: PaymentModeEnum.values.firstWhere(
+        (m) => m.value == row.paymentMode,
+        orElse: () => PaymentModeEnum.cash,
+      ),
+      totalAmount: row.totalAmount,
+      discountAmount: row.discountAmount,
+      status: row.status ?? 'COMPLETED',
+      items: items
+          .map((i) => SaleItemModel(
+                id: i.id,
+                productId: i.productId,
+                variantId: i.variantId,
+                productName: i.productName,
+                catalogueUnitPrice: i.catalogueUnitPrice,
+                appliedUnitPrice: i.unitPrice,
+                quantity: i.quantity,
+                subtotal: i.subtotal,
+              ))
+          .toList(),
+      occurredAt: row.occurredAt ?? row.createdAt,
+      createdAt: row.createdAt,
+    );
   }
 }

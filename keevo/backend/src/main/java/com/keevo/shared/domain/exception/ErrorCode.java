@@ -74,6 +74,9 @@ public enum ErrorCode {
     JUSTIFICATION_REQUIRED,        // HTTP 400 — missing justification
     JUSTIFICATION_TOO_SHORT,       // HTTP 400 — justification < 10 chars
 
+    // ── Sale (Story 4.4) ──────────────────────────────────────────
+    DAY_ALREADY_CLOSED,            // HTTP 409 — day closure already exists for storeId + date
+
     // ── Sync ──────────────────────────────────────────────────────
     SYNC_CONFLICT,
     OFFLINE_LIMIT_EXCEEDED,

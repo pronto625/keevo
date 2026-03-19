@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -76,7 +77,9 @@ public class GlobalExceptionHandler {
             Map.entry("SALE_NOT_PENDING",          "Cette vente n'est pas en attente de validation"),
             Map.entry("JUSTIFICATION_REQUIRED",    "Une justification est requise"),
             Map.entry("JUSTIFICATION_TOO_SHORT",   "La justification doit contenir au moins 10 caractères"),
-            Map.entry("INTERNAL_ERROR",            "Une erreur inattendue s'est produite")
+            Map.entry("INTERNAL_ERROR",            "Une erreur inattendue s'est produite"),
+            Map.entry("DAY_ALREADY_CLOSED",        "La journée a déjà été clôturée pour cette boutique"),
+            Map.entry("MISSING_PARAMETER",         "Paramètre requis manquant")
     );
 
     @ExceptionHandler(DomainException.class)
@@ -120,6 +123,18 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiResponseWrapper<Void>> handleMissingParam(
+            MissingServletRequestParameterException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponseWrapper.error(
+                        "Paramètre requis manquant : " + ex.getParameterName(),
+                        HttpStatus.BAD_REQUEST.name(),
+                        "MISSING_PARAMETER",
+                        null
+                ));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponseWrapper<Void>> handleGeneral(Exception ex) {
         log.error("Unhandled exception — {}: {}", ex.getClass().getSimpleName(), ex.getMessage(), ex);
@@ -156,7 +171,8 @@ public class GlobalExceptionHandler {
                  "MEMBERSHIP_ALREADY_EXISTS",
                  "PRODUCT_NAME_ALREADY_EXISTS",
                  "WAREHOUSE_ALREADY_EXISTS",
-                 "SALE_ALREADY_EXISTS" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1
+                 "SALE_ALREADY_EXISTS",
+                 "DAY_ALREADY_CLOSED" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4
             case "VALIDATION_ERROR", "INVALID_AMOUNT",
                  "INVALID_PHONE_NUMBER", "INVALID_PASSWORD",
                  "INSUFFICIENT_STOCK",

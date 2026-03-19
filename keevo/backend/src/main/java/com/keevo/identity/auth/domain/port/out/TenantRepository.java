@@ -35,4 +35,10 @@ public interface TenantRepository {
      * Used by SelectTenantService to resolve a tenantCode → Tenant before issuing the scoped JWT.
      */
     Optional<Tenant> findByCode(String tenantCode);
+
+    /**
+     * Story 4.4 — Find all tenants for auto-closure scheduling.
+     * Returns all tenants regardless of status (scheduler filters by ACTIVE).
+     */
+    java.util.List<Tenant> findAll();
 }

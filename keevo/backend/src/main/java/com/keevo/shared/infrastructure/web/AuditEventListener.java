@@ -590,6 +590,36 @@ public class AuditEventListener {
                 event.productId(), event.storeId(), event.requestedQuantity(), event.availableQuantity());
     }
 
+    // ── Day Closure Events (Story 4.4) ───────────────────────────────────────
+
+    /**
+     * Handle day closed event — records the day closure in the audit log.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
+     */
+    @EventListener
+    public void on(DayClosedEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "DAY_CLOSED",
+                "DayClosure",
+                event.closureId(),
+                null,
+                toJson(Map.of(
+                        "storeId", event.storeId().toString(),
+                        "isAutomatic", event.isAutomatic(),
+                        "totalSales", event.summary().totalSales(),
+                        "totalRevenue", event.summary().totalRevenue(),
+                        "occurredAt", event.occurredAt().toString()
+                ))
+        );
+        log.info("AUDIT: day_closed closureId={} storeId={} isAutomatic={} totalSales={} totalRevenue={} tenantId={} actorId={}",
+                event.closureId(), event.storeId(), event.isAutomatic(),
+                event.summary().totalSales(), event.summary().totalRevenue(),
+                event.tenantId(), event.actorId());
+    }
+
     // ── Template Method helper ────────────────────────────────────────────────
 
     /**

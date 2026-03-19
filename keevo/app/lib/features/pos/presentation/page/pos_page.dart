@@ -16,6 +16,7 @@ import '../provider/pos_providers.dart';
 import '../provider/pos_search_provider.dart';
 import '../widget/cart_bottom_sheet.dart';
 import '../widget/cart_pill.dart';
+import '../widget/pos_speed_dial.dart';
 import '../widget/product_card.dart';
 
 /// PosPage — main POS screen with product search, grid, and cart pill.
@@ -37,6 +38,7 @@ class _PosPageState extends ConsumerState<PosPage> {
   void initState() {
     super.initState();
     _loadSectorType();
+    _checkAutoClosureNotification();
   }
 
   Future<void> _loadSectorType() async {
@@ -50,6 +52,42 @@ class _PosPageState extends ConsumerState<PosPage> {
         );
       });
     }
+  }
+
+  /// AC6 — Show auto-closure notification snackbar once after scheduler closes day
+  Future<void> _checkAutoClosureNotification() async {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+
+      final prefs = await SharedPreferences.getInstance();
+      final today = DateTime.now();
+      final todayStr = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+      final notifiedDate = prefs.getString(kAutoClosureNotifiedDate);
+
+      // Check if we need to show notification (not shown today yet)
+      if (notifiedDate != todayStr) {
+        // Check for auto-closure message from provider
+        // For now, we'll use a simple approach: if day was closed automatically yesterday
+        // and user opens app today, show the notification
+        final lastClosureDate = prefs.getString(kLastClosureDate);
+        
+        if (lastClosureDate != null && lastClosureDate != todayStr && mounted) {
+          final yesterday = today.subtract(const Duration(days: 1));
+          final yesterdayStr = '${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}';
+          
+          if (lastClosureDate == yesterdayStr) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Votre journée du $lastClosureDate a été clôturée automatiquement.'),
+                backgroundColor: Colors.orange,
+                duration: const Duration(seconds: 5),
+              ),
+            );
+            await prefs.setString(kAutoClosureNotifiedDate, todayStr);
+          }
+        }
+      }
+    });
   }
 
   @override
@@ -71,12 +109,9 @@ class _PosPageState extends ConsumerState<PosPage> {
     return Scaffold(
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: 56),
-        child: FloatingActionButton(
-          heroTag: 'pos_create_draft',
-          backgroundColor: Colors.amber.shade700,
-          onPressed: () => _createDraftAndAddToCart(context, ref, ''),
-          tooltip: 'Créer un produit à la volée',
-          child: const Icon(Icons.add_rounded, color: Colors.white),
+        child: PosSpeedDial(
+          storeId: storeId,
+          onCreateDraft: () => _createDraftAndAddToCart(context, ref, ''),
         ),
       ),
       body: Stack(
@@ -114,6 +149,13 @@ class _PosPageState extends ConsumerState<PosPage> {
                                   ),
                                 ),
                                 const Spacer(),
+                                // Mes Ventes — Story 4.4 AC7
+                                IconButton(
+                                  icon: const Icon(Icons.receipt_long, color: Colors.white),
+                                  tooltip: 'Mes Ventes',
+                                  onPressed: () => context.go('/pos/sales-history'),
+                                ),
+                                const SizedBox(width: 8),
                                 const SyncIndicator(),
                               ],
                             ),

@@ -84,6 +84,23 @@ class RestSyncService implements SyncService {
         dev.log('✅ Product unarchived successfully', name: 'RestSync');
         break;
 
+      case 'CREATE_DAY_CLOSURE':
+        dev.log('🌙 Pushing day closure via API', name: 'RestSync');
+        // Backend CloseDayRequestDto only needs storeId — backend recalculates summary
+        final closurePayload = {'storeId': payload['storeId']};
+        await _dio.post('/api/v1/day-closures', data: closurePayload);
+        // Mark closure as synced locally
+        final closureId = payload['id'] as String?;
+        if (closureId != null) {
+          await (_database.update(_database.dayClosures)
+                ..where((c) => c.id.equals(closureId)))
+              .write(const DayClosuresCompanion(
+            synced: Value(true),
+          ));
+        }
+        dev.log('✅ Day closure pushed successfully', name: 'RestSync');
+        break;
+
       case 'CREATE_SALE':
         dev.log('💰 Pushing sale via API', name: 'RestSync');
         // Enrich storeId if missing (stale queue entries from older code)

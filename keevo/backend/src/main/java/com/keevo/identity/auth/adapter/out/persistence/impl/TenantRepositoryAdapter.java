@@ -74,4 +74,11 @@ public class TenantRepositoryAdapter implements TenantRepository {
             e.getCreatedAt() != null ? e.getCreatedAt() : Instant.now()
         );
     }
+
+    @Override
+    public java.util.List<Tenant> findAll() {
+        return springRepository.findAll().stream()
+                .map(this::toDomain)
+                .toList();
+    }
 }

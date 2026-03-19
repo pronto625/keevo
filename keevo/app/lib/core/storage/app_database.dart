@@ -9,6 +9,7 @@ import 'package:sqlite3/sqlite3.dart' as sql;
 
 import 'categories_table.dart';
 import 'clients_table.dart';
+import 'day_closures_table.dart';
 import 'product_suppliers_table.dart';
 import 'products_table.dart';
 import 'sale_items_table.dart';
@@ -37,6 +38,7 @@ part 'app_database.g.dart';
 /// Schema version 8: stock_transfers table added (Story 3.3).
 /// Schema version 9: sales extended with status, occurredAt; sale_items extended with variantId (Story 4.1).
 /// Schema version 10: stock_levels UNIQUE index on (product_id, store_id) + deduplicate (Story 4.1 POS fix).
+/// Schema version 14: day_closures table added (Story 4.4).
 @DriftDatabase(tables: [
   SyncQueue,
   Products,
@@ -51,6 +53,7 @@ part 'app_database.g.dart';
   Suppliers,
   ProductSuppliers,
   StockTransfers,
+  DayClosures,
 ])
 class AppDatabase extends _$AppDatabase {
   /// Production constructor — uses SQLCipher encrypted file database.
@@ -63,7 +66,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -162,6 +165,15 @@ class AppDatabase extends _$AppDatabase {
         // Story 4.2 — discount & catalogue price fields.
         await migrator.addColumn(sales, sales.discountAmount);
         await migrator.addColumn(saleItems, saleItems.catalogueUnitPrice);
+      }
+      if (from < 14) {
+        // Story 4.4 — day closures table.
+        await migrator.createTable(dayClosures);
+        // Index for efficient lookup by store + date.
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_day_closures_store_closed '
+          'ON day_closures (store_id, closed_at)',
+        );
       }
     },
   );

@@ -73,7 +73,8 @@ public class TenantSchemaSyncService {
                     java.util.Map.entry("product_suppliers",     TenantSchemaProvisioner.DDL_PRODUCT_SUPPLIERS),
                     java.util.Map.entry("draft_notifications",   TenantSchemaProvisioner.DDL_DRAFT_NOTIFICATIONS),
                     java.util.Map.entry("employees",             TenantSchemaProvisioner.DDL_EMPLOYEES),
-                    java.util.Map.entry("sale_items",            TenantSchemaProvisioner.DDL_SALE_ITEMS)
+                    java.util.Map.entry("sale_items",            TenantSchemaProvisioner.DDL_SALE_ITEMS),
+                    java.util.Map.entry("day_closures",          TenantSchemaProvisioner.DDL_DAY_CLOSURES)
             );
 
     /** Valid tenant schema pattern — prevents any SQL injection. */
@@ -208,6 +209,10 @@ public class TenantSchemaSyncService {
             // Story 4.2 — idempotent ALTER migrations for sale discount + catalogue price
             stmt.execute(TenantSchemaProvisioner.DDL_SALES_MIGRATE_DISCOUNT_AMOUNT);
             stmt.execute(TenantSchemaProvisioner.DDL_SALE_ITEMS_MIGRATE_CATALOGUE_PRICE);
+            // Story 4.4 — day closure + sales history indexes
+            stmt.execute(TenantSchemaProvisioner.DDL_DAY_CLOSURES_IDX_STORE_DATE);
+            stmt.execute(TenantSchemaProvisioner.DDL_SALES_IDX_STORE_OCCURRED_AT);
+            stmt.execute(TenantSchemaProvisioner.DDL_SALES_IDX_STORE_EMPLOYEE_OCCURRED_AT);
             stmt.execute("SET search_path TO public");
         }
     }
