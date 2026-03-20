@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../../../core/di/providers.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
@@ -31,7 +30,7 @@ enum DayCloseButtonState {
 
 final localDayClosureDataSourceProvider = Provider<LocalDayClosureDataSource>((ref) {
   final db = ref.watch(appDatabaseProvider);
-  return LocalDayClosureDataSource(db, const Uuid());
+  return LocalDayClosureDataSource(db);
 });
 
 final remoteDayClosureDataSourceProvider = Provider<RemoteDayClosureDataSource>((ref) {
@@ -48,6 +47,8 @@ final dayClosureRepositoryProvider = Provider<DayClosureRepository>((ref) {
   return DayClosureRepositoryImpl(
     localDataSource: localDataSource,
     remoteDataSource: remoteDataSource,
+    connectivity: ref.watch(connectivityServiceProvider),
+    syncService: ref.watch(syncServiceProvider),
   );
 });
 
@@ -123,13 +124,6 @@ class CloseDayNotifier extends StateNotifier<AsyncValue<DayClosureSummary?>> {
       _ref.invalidate(dayClosureStateProvider);
       _ref.invalidate(todaySalesCountProvider);
       _ref.invalidate(todaySummaryProvider);
-      // Trigger sync immediately to push closure to backend
-      try {
-        final syncService = _ref.read(syncServiceProvider);
-        await syncService.push();
-      } catch (_) {
-        // Sync failure is non-blocking — will retry on next sync
-      }
     } catch (e, st) {
       state = AsyncValue.error(e, st);
       rethrow;

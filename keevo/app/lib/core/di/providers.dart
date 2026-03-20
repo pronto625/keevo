@@ -7,6 +7,8 @@ import 'package:dio/dio.dart';
 
 import '../services/api_service.dart';
 import '../storage/app_database.dart';
+import '../sync/connectivity_service.dart';
+import '../sync/connectivity_service_impl.dart';
 import '../sync/rest_sync_service.dart';
 import '../sync/sync_service.dart';
 import '../../features/catalog/data/datasource/remote_product_datasource.dart';
@@ -72,8 +74,9 @@ final passwordChangeRequiredProvider = Provider<bool>((ref) {
   return ref.watch(sharedPreferencesProvider).getBool(kPasswordChangeRequiredKey) ?? false;
 });
 
-/// SyncService provider — REST implementation for real synchronization.
-/// Synchronizes products immediately to backend instead of using Epic 5 queue.
+/// SyncService provider — REST implementation for offline queue batch push sync.
+/// Online writes go backend-first via individual REST endpoints;
+/// this service replays the offline safety-net queue via POST /api/v1/sync/push.
 final syncServiceProvider = Provider<SyncService>((ref) {
   final database = ref.watch(appDatabaseProvider);
   final dio = ref.watch(dioProvider);
@@ -83,7 +86,14 @@ final syncServiceProvider = Provider<SyncService>((ref) {
     database: database,
     remoteProducts: remoteProducts,
     dio: dio,
+    secureStorage: const FlutterSecureStorage(),
   );
+});
+
+/// ConnectivityService provider — production implementation using connectivity_plus.
+/// Used by repositories to check if device is online before write operations.
+final connectivityServiceProvider = Provider<ConnectivityService>((ref) {
+  return ConnectivityServiceImpl();
 });
 
 /// ApiService provider — default stub implementation.

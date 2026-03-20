@@ -74,4 +74,12 @@ public interface ProductRepository {
      * @param id the product ID to archive
      */
     void archive(UUID id);
+
+    /**
+     * Unarchives a product (restores from soft delete)
+     * Sets archived=false to restore the product.
+     *
+     * @param id the product ID to unarchive
+     */
+    void unarchive(UUID id);
 }

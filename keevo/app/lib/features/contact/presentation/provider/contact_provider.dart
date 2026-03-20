@@ -39,6 +39,8 @@ final clientRepositoryProvider = Provider<ClientRepository>((ref) {
   return ClientRepositoryImpl(
     local: ref.watch(localClientDataSourceProvider),
     remote: ref.watch(remoteClientDataSourceProvider),
+    connectivity: ref.watch(connectivityServiceProvider),
+    syncService: ref.watch(syncServiceProvider),
   );
 });
 
@@ -46,6 +48,8 @@ final supplierRepositoryProvider = Provider<SupplierRepository>((ref) {
   return SupplierRepositoryImpl(
     local: ref.watch(localSupplierDataSourceProvider),
     remote: ref.watch(remoteSupplierDataSourceProvider),
+    connectivity: ref.watch(connectivityServiceProvider),
+    syncService: ref.watch(syncServiceProvider),
   );
 });
 

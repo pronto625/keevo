@@ -1,7 +1,4 @@
-import 'dart:convert';
-
 import 'package:drift/drift.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../../../core/storage/app_database.dart';
 import '../../domain/model/day_closure_model.dart' as domain;
@@ -11,56 +8,32 @@ import '../../domain/model/day_closure_model.dart' as domain;
 /// Story 4.4 — Clôture Journalière & Historique des Ventes.
 class LocalDayClosureDataSource {
   final AppDatabase _db;
-  final Uuid _uuid;
 
-  LocalDayClosureDataSource(this._db, [Uuid? uuid]) : _uuid = uuid ?? const Uuid();
+  LocalDayClosureDataSource(this._db);
 
-  /// Insert a closure record and enqueue for sync.
-  Future<void> insertClosure(domain.DayClosure closure) async {
-    await _db.transaction(() async {
-      // 1. Insert day_closures record
-      await _db.into(_db.dayClosures).insert(DayClosuresCompanion.insert(
-        id: closure.id,
-        storeId: closure.storeId,
-        actorId: closure.actorId,
-        closedAt: closure.closedAt,
-        totalSales: closure.summary.totalSales,
-        totalRevenue: closure.summary.totalRevenue,
-        topProductId: Value(closure.summary.topProductId),
-        topProductName: Value(closure.summary.topProductName),
-        topProductQty: Value(closure.summary.topProductQty),
-        cashAmount: closure.summary.cashAmount,
-        momoAmount: closure.summary.momoAmount,
-        pendingSalesCount: closure.summary.pendingSalesCount,
-        pendingSalesTotal: closure.summary.pendingSalesTotal,
-        isAutomatic: Value(closure.isAutomatic),
-        synced: const Value(false),
-        createdAt: DateTime.now(),
-      ));
-
-      // 2. Enqueue for sync
-      await _db.into(_db.syncQueue).insert(SyncQueueCompanion.insert(
-        id: _uuid.v4(),
-        operation: 'CREATE_DAY_CLOSURE',
-        payload: jsonEncode({
-          'id': closure.id,
-          'storeId': closure.storeId,
-          'actorId': closure.actorId,
-          'closedAt': closure.closedAt.toIso8601String(),
-          'totalSales': closure.summary.totalSales,
-          'totalRevenue': closure.summary.totalRevenue,
-          'topProductId': closure.summary.topProductId,
-          'topProductName': closure.summary.topProductName,
-          'topProductQty': closure.summary.topProductQty,
-          'cashAmount': closure.summary.cashAmount,
-          'momoAmount': closure.summary.momoAmount,
-          'pendingSalesCount': closure.summary.pendingSalesCount,
-          'pendingSalesTotal': closure.summary.pendingSalesTotal,
-          'isAutomatic': closure.isAutomatic,
-        }),
-        createdAt: DateTime.now(),
-      ));
-    });
+  /// Insert a closure record.
+  ///
+  /// [synced] controls the initial sync state — true when backend confirmed,
+  /// false when saving offline (sync_queue managed by repository layer).
+  Future<void> insertClosure(domain.DayClosure closure, {bool synced = false}) async {
+    await _db.into(_db.dayClosures).insert(DayClosuresCompanion.insert(
+      id: closure.id,
+      storeId: closure.storeId,
+      actorId: closure.actorId,
+      closedAt: closure.closedAt,
+      totalSales: closure.summary.totalSales,
+      totalRevenue: closure.summary.totalRevenue,
+      topProductId: Value(closure.summary.topProductId),
+      topProductName: Value(closure.summary.topProductName),
+      topProductQty: Value(closure.summary.topProductQty),
+      cashAmount: closure.summary.cashAmount,
+      momoAmount: closure.summary.momoAmount,
+      pendingSalesCount: closure.summary.pendingSalesCount,
+      pendingSalesTotal: closure.summary.pendingSalesTotal,
+      isAutomatic: Value(closure.isAutomatic),
+      synced: Value(synced),
+      createdAt: DateTime.now(),
+    ));
   }
 
   /// Check if a closure exists for today.

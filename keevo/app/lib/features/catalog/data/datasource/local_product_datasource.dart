@@ -157,18 +157,6 @@ class LocalProductDataSource {
       updatedAt: Value(now),
     ));
 
-    await _enqueueSync('UPDATE_PRODUCT', {
-      'id': id,
-      if (name != null) 'name': name,
-      if (description != null) 'description': description,
-      if (sku != null) 'sku': sku,
-      if (categoryId != null) 'categoryId': categoryId,
-      if (price != null) 'price': price,
-      if (buyPrice != null) 'buyPrice': buyPrice,
-      if (transportCost != null) 'transportCost': transportCost,
-      if (photoUrl != null) 'photoUrl': photoUrl,
-    });
-
     return _toModel(await (_db.select(_db.products)
           ..where((p) => p.id.equals(id)))
         .getSingle());
@@ -182,7 +170,6 @@ class LocalProductDataSource {
       archived: const Value(true),
       updatedAt: Value(now),
     ));
-    await _enqueueSync('ARCHIVE_PRODUCT', {'productId': id});
   }
 
   /// Unarchive a product (restore to active state).
@@ -194,7 +181,6 @@ class LocalProductDataSource {
       archived: const Value(false),
       updatedAt: Value(now),
     ));
-    await _enqueueSync('UNARCHIVE_PRODUCT', {'productId': id});
   }
 
   /// Promote a DRAFT product to ACTIVE locally.

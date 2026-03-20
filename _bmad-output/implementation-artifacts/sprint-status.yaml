@@ -120,8 +120,8 @@ development_status:
   # ─────────────────────────────────────────────────────────
   # Epic 5: Moteur de Synchronisation Offline-First
   # ─────────────────────────────────────────────────────────
-  epic-5: backlog
-  5-1-push-sync-envoi-par-lot-des-operations-en-file: backlog
+  epic-5: in-progress
+  5-1-push-sync-envoi-par-lot-des-operations-en-file: in-progress    # 2026-03-20 — dev started
   5-2-pull-sync-telechargement-delta-fusion-locale: backlog
   5-3-resolution-de-conflits-delta-stock-last-write-wins: backlog
   5-4-limite-7-jours-hors-ligne-gate-de-deverrouillage: backlog

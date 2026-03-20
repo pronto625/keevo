@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
@@ -13,8 +12,11 @@ class LocalSaleDataSource {
 
   const LocalSaleDataSource(this._db);
 
-  /// Atomically persist: sale, sale_items, stock decrements, stock movements, sync_queue.
-  Future<void> insertAll(Sale sale) async {
+  /// Atomically persist: sale, sale_items, stock decrements, stock movements.
+  ///
+  /// [synced] controls the initial sync state — true when backend confirmed,
+  /// false when saving offline (sync_queue managed by repository layer).
+  Future<void> insertAll(Sale sale, {bool synced = false}) async {
     await _db.transaction(() async {
       // 1. Insert sale
       await _db.into(_db.sales).insert(SalesCompanion.insert(
@@ -28,6 +30,7 @@ class LocalSaleDataSource {
         status: Value(sale.status),
         occurredAt: Value(sale.occurredAt),
         createdAt: sale.createdAt,
+        synced: Value(synced),
       ));
 
       // 2. Insert sale items
@@ -81,14 +84,6 @@ class LocalSaleDataSource {
           ));
         }
       }
-
-      // 4. Enqueue for sync
-      await _db.into(_db.syncQueue).insert(SyncQueueCompanion.insert(
-        id: const Uuid().v4(),
-        operation: 'CREATE_SALE',
-        payload: jsonEncode(_buildPayload(sale)),
-        createdAt: sale.createdAt,
-      ));
     });
   }
 
@@ -120,26 +115,6 @@ class LocalSaleDataSource {
         .getSingleOrNull();
     return row?.quantity ?? 0;
   }
-
-  Map<String, dynamic> _buildPayload(Sale sale) => {
-        'saleId': sale.id,
-        'storeId': sale.storeId,
-        'paymentMode': sale.paymentMode.value,
-        'mobileMoneyRef': sale.mobileMoneyRef,
-        'clientId': sale.clientId,
-        'discountAmount': sale.discountAmount,
-        'status': sale.status,
-        'items': sale.items
-            .map((i) => {
-                  'productId': i.productId,
-                  'variantId': i.variantId,
-                  'productName': i.productName,
-                  'catalogueUnitPrice': i.catalogueUnitPrice,
-                  'appliedUnitPrice': i.appliedUnitPrice,
-                  'quantity': i.quantity,
-                })
-            .toList(),
-      };
 
   /// Query pending validation sales for a store.
   Future<List<Map<String, dynamic>>> getPendingSaleRows(String storeId) async {

@@ -1,6 +1,8 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../../core/di/providers.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
+import '../../data/datasource/local_employee_datasource.dart';
 import '../../data/datasource/remote_employee_datasource.dart';
 import '../../data/repository/employee_repository_impl.dart';
 import '../../domain/model/create_employee_result.dart';
@@ -16,8 +18,17 @@ final remoteEmployeeDataSourceProvider = Provider<RemoteEmployeeDataSource>((ref
   return RemoteEmployeeDataSource(dio: ref.watch(dioProvider));
 });
 
+final localEmployeeDataSourceProvider = Provider<LocalEmployeeDataSource>((ref) {
+  return LocalEmployeeDataSource(ref.watch(appDatabaseProvider));
+});
+
 final employeeRepositoryProvider = Provider<EmployeeRepository>((ref) {
-  return EmployeeRepositoryImpl(ref.watch(remoteEmployeeDataSourceProvider));
+  return EmployeeRepositoryImpl(
+    remote: ref.watch(remoteEmployeeDataSourceProvider),
+    local: ref.watch(localEmployeeDataSourceProvider),
+    connectivity: ref.watch(connectivityServiceProvider),
+    syncService: ref.watch(syncServiceProvider),
+  );
 });
 
 final createEmployeeUseCaseProvider = Provider<CreateEmployeeUseCase>((ref) {

@@ -1,146 +1,135 @@
 import 'dart:convert';
 import 'dart:developer' as dev;
+import 'dart:math';
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../features/catalog/data/datasource/remote_product_datasource.dart';
 import '../storage/app_database.dart';
 import 'sync_service.dart';
 
-/// RestSyncService — Implémentation REST basique pour synchroniser les produits.
-/// 
-/// Cette implémentation synchronise immédiatement les opérations vers le backend
-/// au lieu d'utiliser une queue complexe (Epic 5 feature).
+/// RestSyncService — REST implementation for offline queue batch push sync.
+///
+/// push() replays queued offline operations as unified batches to
+/// POST /api/v1/sync/push. Online writes go directly to individual
+/// REST endpoints (backend-first pattern) — this service only handles
+/// the offline safety-net queue.
 class RestSyncService implements SyncService {
   final AppDatabase _database;
   final RemoteProductDataSource _remoteProducts;
   final Dio _dio;
+  final FlutterSecureStorage _secureStorage;
 
   RestSyncService({
-    required AppDatabase database, 
+    required AppDatabase database,
     required RemoteProductDataSource remoteProducts,
     required Dio dio,
-  }) : _database = database, _remoteProducts = remoteProducts, _dio = dio;
+    required FlutterSecureStorage secureStorage,
+  })  : _database = database,
+        _remoteProducts = remoteProducts,
+        _dio = dio,
+        _secureStorage = secureStorage;
 
   @override
   Future<void> push() async {
-    dev.log('🔄 RestSyncService.push() - Starting sync check', name: 'RestSync');
-    
-    // Récupérer toutes les opérations en attente
-    final pendingOps = await _database.select(_database.syncQueue).get();
-    
+    final pendingOps = await (_database.select(_database.syncQueue)
+          ..where((t) => t.synced.equals(false))
+          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+        .get();
+
+    if (pendingOps.isEmpty) return;
+
     dev.log('📦 Found ${pendingOps.length} pending operations', name: 'RestSync');
-    
-    for (final op in pendingOps) {
-      try {
-        dev.log('⚡ Executing sync operation: ${op.operation}', name: 'RestSync');
-        await _executeSyncOperation(op);
-        
-        // Supprimer l'opération réussie de la queue
-        await (_database.delete(_database.syncQueue)
-              ..where((t) => t.id.equals(op.id))).go();
-              
-        dev.log('✅ Sync operation completed: ${op.operation}', name: 'RestSync');
-      } catch (e) {
-        // En cas d'erreur, on laisse l'opération dans la queue pour retry
-        dev.log('❌ Sync failed for operation ${op.id}: $e', name: 'RestSync');
-      }
+
+    // Batch in groups of 50
+    for (var i = 0; i < pendingOps.length; i += 50) {
+      final batch = pendingOps.sublist(i, min(i + 50, pendingOps.length));
+      await _pushBatch(batch);
     }
   }
 
-  Future<void> _executeSyncOperation(SyncQueueData op) async {
-    final payload = jsonDecode(op.payload) as Map<String, dynamic>;
-    
-    dev.log('📋 Executing ${op.operation} with payload: ${payload.length} fields', name: 'RestSync');
-    
-    switch (op.operation) {
-      case 'CREATE_PRODUCT':
-        dev.log('🆕 Creating product via API', name: 'RestSync');
-        await _remoteProducts.create(payload);
-        dev.log('✅ Product created successfully', name: 'RestSync');
-        break;
-        
-      case 'UPDATE_PRODUCT':
-        final productId = payload['productId'] as String;
-        payload.remove('productId'); // RemoteAPI n'attend pas l'ID dans le payload
-        dev.log('📝 Updating product $productId via API', name: 'RestSync');
-        await _remoteProducts.update(productId, payload);
-        dev.log('✅ Product updated successfully', name: 'RestSync');
-        break;
-        
-      case 'ARCHIVE_PRODUCT':
-        final productId = payload['productId'] as String;
-        dev.log('🗄️ Archiving product $productId via API', name: 'RestSync');
-        await _remoteProducts.archive(productId);
-        dev.log('✅ Product archived successfully', name: 'RestSync');
-        break;
-        
-      case 'UNARCHIVE_PRODUCT':
-        final productId = payload['productId'] as String;
-        dev.log('📦 Unarchiving product $productId via API', name: 'RestSync');
-        await _remoteProducts.unarchive(productId);
-        dev.log('✅ Product unarchived successfully', name: 'RestSync');
-        break;
+  Future<void> _pushBatch(List<SyncQueueData> ops) async {
+    final payload = {
+      'deviceId': await _getDeviceId(),
+      'operations': ops.map((op) {
+        final decoded = jsonDecode(op.payload) as Map<String, dynamic>;
+        return {
+          'operationId': op.id,
+          'operationType': op.operation,
+          'entityId': op.entityId,
+          'payload': decoded,
+          'clientTimestamp': op.createdAt.toUtc().toIso8601String(),
+        };
+      }).toList(),
+    };
 
-      case 'CREATE_DAY_CLOSURE':
-        dev.log('🌙 Pushing day closure via API', name: 'RestSync');
-        // Backend CloseDayRequestDto only needs storeId — backend recalculates summary
-        final closurePayload = {'storeId': payload['storeId']};
-        await _dio.post('/api/v1/day-closures', data: closurePayload);
-        // Mark closure as synced locally
-        final closureId = payload['id'] as String?;
-        if (closureId != null) {
-          await (_database.update(_database.dayClosures)
-                ..where((c) => c.id.equals(closureId)))
-              .write(const DayClosuresCompanion(
-            synced: Value(true),
-          ));
-        }
-        dev.log('✅ Day closure pushed successfully', name: 'RestSync');
-        break;
+    try {
+      final response = await _dio.post('/api/v1/sync/push', data: payload);
+      final results = (response.data['data']['results'] as List)
+          .cast<Map<String, dynamic>>();
 
-      case 'CREATE_SALE':
-        dev.log('💰 Pushing sale via API', name: 'RestSync');
-        // Enrich storeId if missing (stale queue entries from older code)
-        if (payload['storeId'] == null) {
-          final saleId = payload['saleId'] as String?;
-          if (saleId != null) {
-            final localSale = await (_database.select(_database.sales)
-                  ..where((s) => s.id.equals(saleId)))
-                .getSingleOrNull();
-            if (localSale != null) {
-              payload['storeId'] = localSale.storeId;
-            }
-          }
-          if (payload['storeId'] == null) {
-            dev.log('⚠️ CREATE_SALE missing storeId, skipping stale entry', name: 'RestSync');
-            return;
-          }
-        }
-        await _dio.post('/api/v1/sales', data: payload);
-        // Mark sale as synced locally
-        final saleId = payload['saleId'] as String?;
-        if (saleId != null) {
-          await (_database.update(_database.sales)
-                ..where((s) => s.id.equals(saleId)))
-              .write(const SalesCompanion(
-            synced: Value(true),
+      for (final result in results) {
+        final opId = result['operationId'] as String;
+        final status = result['status'] as String;
+
+        if (status == 'APPLIED' || status == 'DUPLICATE') {
+          await (_database.delete(_database.syncQueue)
+                ..where((t) => t.id.equals(opId)))
+              .go();
+        } else if (status == 'REJECTED') {
+          final currentOp = ops.firstWhere((o) => o.id == opId);
+          await (_database.update(_database.syncQueue)
+                ..where((t) => t.id.equals(opId)))
+              .write(SyncQueueCompanion(
+            retryCount: Value(currentOp.retryCount + 1),
+            lastAttemptAt: Value(DateTime.now()),
           ));
+        } else if (status == 'CONFLICT') {
+          // Server processed it — remove from queue (conflict resolution in Story 5.3)
+          await (_database.delete(_database.syncQueue)
+                ..where((t) => t.id.equals(opId)))
+              .go();
         }
-        dev.log('✅ Sale pushed successfully', name: 'RestSync');
-        break;
-        
-      default:
-        dev.log('❓ Unknown sync operation: ${op.operation}', name: 'RestSync');
+      }
+    } on DioException {
+      // Network error — increment retry on all ops in this batch
+      for (final op in ops) {
+        await (_database.update(_database.syncQueue)
+              ..where((t) => t.id.equals(op.id)))
+            .write(SyncQueueCompanion(
+          retryCount: Value(op.retryCount + 1),
+          lastAttemptAt: Value(DateTime.now()),
+        ));
+      }
+      rethrow;
     }
+  }
+
+  @override
+  Future<bool> hasPendingOperations() async {
+    final count = await (_database.selectOnly(_database.syncQueue)
+          ..addColumns([_database.syncQueue.id.count()])
+          ..where(_database.syncQueue.synced.equals(false)))
+        .map((row) => row.read(_database.syncQueue.id.count()))
+        .getSingle();
+    return (count ?? 0) > 0;
+  }
+
+  Future<String> _getDeviceId() async {
+    const key = 'keevo_device_id';
+    var deviceId = await _secureStorage.read(key: key);
+    if (deviceId == null) {
+      deviceId = const Uuid().v4();
+      await _secureStorage.write(key: key, value: deviceId);
+    }
+    return deviceId;
   }
 
   @override
   Future<void> pull() async {
-    // Cette méthode est appelée par la synchronisation automatique
-    // Elle récupère les données du backend et les met à jour en local
     try {
       final products = await _remoteProducts.getAll();
 
@@ -153,10 +142,9 @@ class RestSyncService implements SyncService {
         }
       }
 
-      // Vider la table locale et la repeupler (stratégie simple)
       await _database.transaction(() async {
         await _database.delete(_database.products).go();
-        
+
         for (final productDto in products) {
           await _database.into(_database.products).insert(
             ProductsCompanion.insert(
@@ -219,29 +207,22 @@ class RestSyncService implements SyncService {
   Future<void> queueOperation({
     required String operation,
     required Map<String, dynamic> payload,
+    String? entityId,
   }) async {
     const uuid = Uuid();
-    
+
     dev.log('📥 Queueing operation: $operation', name: 'RestSync');
-    
-    // Ajouter l'opération à la queue pour sync plus tard
+
     await _database.into(_database.syncQueue).insert(
       SyncQueueCompanion.insert(
         id: uuid.v4(),
         operation: operation,
         payload: jsonEncode(payload),
         createdAt: DateTime.now(),
+        entityId: Value(entityId),
       ),
     );
-    
-    dev.log('✅ Operation queued, attempting immediate sync', name: 'RestSync');
-    
-    // Tenter de synchroniser immédiatement (best effort)
-    try {
-      await push();
-    } catch (e) {
-      // Si ça échoue, l'opération reste dans la queue pour retry plus tard
-      dev.log('⚠️ Immediate sync failed, will retry later: $e', name: 'RestSync');
-    }
+
+    dev.log('✅ Operation queued — SyncTriggerNotifier will handle push', name: 'RestSync');
   }
 }

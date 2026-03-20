@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:keevo/core/sync/sync_service.dart';
 import 'package:keevo/features/inventory/data/datasource/local_multi_store_stock_datasource.dart';
 import 'package:keevo/features/inventory/data/datasource/remote_multi_store_stock_datasource.dart';
 import 'package:keevo/features/inventory/data/repository/multi_store_stock_repository_impl.dart';
@@ -9,10 +10,12 @@ import 'package:keevo/features/inventory/domain/model/store_stock_summary_model.
 
 class _MockLocalDs extends Mock implements LocalMultiStoreStockDataSource {}
 class _MockRemoteDs extends Mock implements RemoteMultiStoreStockDataSource {}
+class _MockSyncService extends Mock implements SyncService {}
 
 void main() {
   late _MockLocalDs local;
   late _MockRemoteDs remote;
+  late _MockSyncService syncService;
   late MultiStoreStockRepositoryImpl repo;
 
   final summaries = [
@@ -32,7 +35,11 @@ void main() {
   setUp(() {
     local = _MockLocalDs();
     remote = _MockRemoteDs();
-    repo = MultiStoreStockRepositoryImpl(local: local, remote: remote);
+    syncService = _MockSyncService();
+    when(() => syncService.hasPendingOperations()).thenAnswer((_) async => false);
+    repo = MultiStoreStockRepositoryImpl(
+      local: local, remote: remote, syncService: syncService,
+    );
   });
 
   group('MultiStoreStockRepositoryImpl (Story 3.2 — Task 12)', () {
@@ -90,6 +97,30 @@ void main() {
 
       expect(result, products);
       verifyNever(() => remote.getOverview());
+    });
+
+    test('getOverview() returns local data when pending operations exist', () async {
+      when(() => syncService.hasPendingOperations()).thenAnswer((_) async => true);
+      when(() => local.getStoreOverviews()).thenAnswer((_) async => summaries);
+
+      final result = await repo.getOverview();
+
+      expect(result, summaries);
+      verifyNever(() => remote.getOverview());
+      verify(() => local.getStoreOverviews()).called(1);
+    });
+
+    test('getStoreStockDetail() returns local data when pending operations exist', () async {
+      when(() => syncService.hasPendingOperations()).thenAnswer((_) async => true);
+      when(() => local.getStoreStockDetail('s1', page: 0, size: 25, sortLowFirst: true))
+          .thenAnswer((_) async => products);
+
+      final result = await repo.getStoreStockDetail('s1');
+
+      expect(result, products);
+      verifyNever(() => remote.getStoreStockDetail(any(), page: any(named: 'page'),
+          size: any(named: 'size'), sortLowFirst: any(named: 'sortLowFirst')));
+      verifyNever(() => local.upsertStockLevels(any(), any()));
     });
   });
 }

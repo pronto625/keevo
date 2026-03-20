@@ -10,6 +10,7 @@ import 'package:sqlite3/sqlite3.dart' as sql;
 import 'categories_table.dart';
 import 'clients_table.dart';
 import 'day_closures_table.dart';
+import 'employees_table.dart';
 import 'product_suppliers_table.dart';
 import 'products_table.dart';
 import 'sale_items_table.dart';
@@ -39,6 +40,7 @@ part 'app_database.g.dart';
 /// Schema version 9: sales extended with status, occurredAt; sale_items extended with variantId (Story 4.1).
 /// Schema version 10: stock_levels UNIQUE index on (product_id, store_id) + deduplicate (Story 4.1 POS fix).
 /// Schema version 14: day_closures table added (Story 4.4).
+/// Schema version 16: employees table added (Story 5.1).
 @DriftDatabase(tables: [
   SyncQueue,
   Products,
@@ -54,6 +56,7 @@ part 'app_database.g.dart';
   ProductSuppliers,
   StockTransfers,
   DayClosures,
+  Employees,
 ])
 class AppDatabase extends _$AppDatabase {
   /// Production constructor — uses SQLCipher encrypted file database.
@@ -66,7 +69,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -174,6 +177,16 @@ class AppDatabase extends _$AppDatabase {
           'CREATE INDEX IF NOT EXISTS idx_day_closures_store_closed '
           'ON day_closures (store_id, closed_at)',
         );
+      }
+      if (from < 15) {
+        // Story 5.1 — sync_queue: add retryCount, lastAttemptAt, entityId for batch push.
+        await migrator.addColumn(syncQueue, syncQueue.retryCount);
+        await migrator.addColumn(syncQueue, syncQueue.lastAttemptAt);
+        await migrator.addColumn(syncQueue, syncQueue.entityId);
+      }
+      if (from < 16) {
+        // Story 5.1 — employees table for offline support.
+        await migrator.createTable(employees);
       }
     },
   );

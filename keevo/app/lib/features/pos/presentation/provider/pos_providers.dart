@@ -30,6 +30,8 @@ final saleRepositoryProvider = Provider<SaleRepository>((ref) {
     ref.watch(localSaleDataSourceProvider),
     ref.watch(remoteSaleDataSourceProvider),
     ref.watch(appDatabaseProvider),
+    connectivity: ref.watch(connectivityServiceProvider),
+    syncService: ref.watch(syncServiceProvider),
   );
 });
 

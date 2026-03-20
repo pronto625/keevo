@@ -31,6 +31,7 @@ final multiStoreStockRepositoryProvider =
   return MultiStoreStockRepositoryImpl(
     local: ref.watch(localMultiStoreStockDsProvider),
     remote: ref.watch(remoteMultiStoreStockDsProvider),
+    syncService: ref.watch(syncServiceProvider),
   );
 });
 

@@ -6,29 +6,35 @@ import '../../domain/model/product_model.dart';
 import '../../domain/model/product_response_dto.dart';
 import '../../domain/model/product_status.dart';
 import '../../domain/repository/product_repository.dart';
+import '../../../../core/sync/connectivity_service.dart';
+import '../../../../core/sync/sync_service.dart';
 import '../datasource/local_product_datasource.dart';
 import '../datasource/remote_csv_import_datasource.dart';
 import '../datasource/remote_product_datasource.dart';
 
-/// ProductRepositoryImpl — write-through Strategy implementation.
+/// ProductRepositoryImpl — Backend-first write-through Strategy implementation.
 ///
 /// ALL reads come from local Drift DB — no network required.
-/// Writes go to the backend first (source of truth), then update
-/// the local cache so the UI reflects the persisted state.
-/// This prevents data loss on app reinstall until Epic 5 sync engine
-/// is implemented.
+/// Writes go to the backend first (source of truth) when online,
+/// fall back to local + sync_queue when offline.
 class ProductRepositoryImpl implements ProductRepository {
   final LocalProductDataSource _local;
   final RemoteProductDataSource _remote;
   final RemoteCsvImportDataSource _remoteCsv;
+  final ConnectivityService _connectivity;
+  final SyncService _syncService;
 
   const ProductRepositoryImpl({
     required LocalProductDataSource local,
     required RemoteProductDataSource remote,
     required RemoteCsvImportDataSource remoteCsv,
+    required ConnectivityService connectivity,
+    required SyncService syncService,
   })  : _local = local,
         _remote = remote,
-        _remoteCsv = remoteCsv;
+        _remoteCsv = remoteCsv,
+        _connectivity = connectivity,
+        _syncService = syncService;
 
   @override
   Future<List<ProductModel>> getAll() => _local.getAll();
@@ -114,114 +120,190 @@ class ProductRepositoryImpl implements ProductRepository {
     int? transportCost,
     String? photoUrl,
   }) async {
-    // Local first for immediate UI feedback, then push to backend.
-    final localResult = await _local.updateById(
-      id: id,
-      name: name,
-      description: description,
-      sku: sku,
-      categoryId: categoryId,
-      price: price,
-      buyPrice: buyPrice,
-      transportCost: transportCost,
-      photoUrl: photoUrl,
-    );
-    try {
-      final payload = <String, dynamic>{
-        if (name != null) 'name': name,
-        if (description != null) 'description': description,
-        if (sku != null) 'sku': sku,
-        if (categoryId != null) 'categoryId': categoryId,
-        if (price != null) 'price': price,
-        if (buyPrice != null) 'buyPrice': buyPrice,
-        if (transportCost != null) 'transportCost': transportCost,
-        if (photoUrl != null) 'photoUrl': photoUrl,
-      };
-      if (payload.isNotEmpty) await _remote.update(id, payload);
-    } catch (_) {
-      // Offline — local update stays; sync engine (Epic 5) will push later.
+    final payload = <String, dynamic>{
+      if (name != null) 'name': name,
+      if (description != null) 'description': description,
+      if (sku != null) 'sku': sku,
+      if (categoryId != null) 'categoryId': categoryId,
+      if (price != null) 'price': price,
+      if (buyPrice != null) 'buyPrice': buyPrice,
+      if (transportCost != null) 'transportCost': transportCost,
+      if (photoUrl != null) 'photoUrl': photoUrl,
+    };
+
+    if (await _connectivity.isOnline()) {
+      try {
+        if (payload.isNotEmpty) {
+          final dto = await _remote.update(id, payload);
+          final model = _dtoToModel(dto).copyWith(photoUrl: photoUrl);
+          await _local.upsert(model);
+          return model;
+        }
+        return (await _local.getById(id))!;
+      } catch (_) {
+        // Fallback: save local + enqueue
+        final localResult = await _local.updateById(
+          id: id, name: name, description: description, sku: sku,
+          categoryId: categoryId, price: price, buyPrice: buyPrice,
+          transportCost: transportCost, photoUrl: photoUrl,
+        );
+        await _syncService.queueOperation(
+          operation: 'UPDATE_PRODUCT',
+          payload: {'productId': id, ...payload},
+          entityId: id,
+        );
+        return localResult;
+      }
+    } else {
+      final localResult = await _local.updateById(
+        id: id, name: name, description: description, sku: sku,
+        categoryId: categoryId, price: price, buyPrice: buyPrice,
+        transportCost: transportCost, photoUrl: photoUrl,
+      );
+      await _syncService.queueOperation(
+        operation: 'UPDATE_PRODUCT',
+        payload: {'productId': id, ...payload},
+        entityId: id,
+      );
+      return localResult;
     }
-    return localResult;
   }
 
   @override
   Future<String> promoteToActive(String id) async {
     final product = await _local.getById(id);
     if (product == null) return id;
-    try {
-      // Backend auto-promotes DRAFT→ACTIVE on any PATCH update.
-      final dto = await _remote.update(id, {'name': product.name});
-      final model = _dtoToModel(dto);
-      await _local.upsert(model);
-      return model.id;
-    } catch (_) {
-      // PATCH failed — product may only exist locally (offline draft).
-      // Try creating it as a full (ACTIVE) product on the backend.
+
+    if (await _connectivity.isOnline()) {
       try {
-        final dto = await _remote.create({
-          'name': product.name,
-          if (product.description != null) 'description': product.description,
-          if (product.categoryId != null) 'categoryId': product.categoryId,
-          'price': product.price,
-          'buyPrice': product.buyPrice,
-          'transportCost': product.transportCost,
-        });
-        final newModel = _dtoToModel(dto);
-        // Remap sale_items references before deleting the old draft.
-        await _local.updateProductIdInSaleItems(id, newModel.id);
-        // Replace the local draft with the backend-assigned product.
-        await _local.deleteById(id);
-        await _local.upsert(newModel);
-        return newModel.id;
+        // Backend auto-promotes DRAFT→ACTIVE on any PATCH update.
+        final dto = await _remote.update(id, {'name': product.name});
+        final model = _dtoToModel(dto);
+        await _local.upsert(model);
+        return model.id;
       } catch (_) {
-        // CREATE failed (likely name already exists on backend).
-        // Try to find the existing backend product by name and remap.
+        // PATCH failed — product may only exist locally (offline draft).
+        // Try creating it as a full (ACTIVE) product on the backend.
         try {
-          final remoteDtos = await _remote.getAll();
-          final match = remoteDtos.cast<ProductResponseDto?>().firstWhere(
-            (dto) =>
-                dto!.name.toLowerCase() == product.name.toLowerCase(),
-            orElse: () => null,
-          );
-          if (match != null) {
-            final existingModel = _dtoToModel(match);
-            await _local.updateProductIdInSaleItems(id, existingModel.id);
-            await _local.deleteById(id);
-            await _local.upsert(existingModel);
-            return existingModel.id;
-          }
+          final dto = await _remote.create({
+            'name': product.name,
+            if (product.description != null) 'description': product.description,
+            if (product.categoryId != null) 'categoryId': product.categoryId,
+            'price': product.price,
+            'buyPrice': product.buyPrice,
+            'transportCost': product.transportCost,
+          });
+          final newModel = _dtoToModel(dto);
+          // Remap sale_items references before deleting the old draft.
+          await _local.updateProductIdInSaleItems(id, newModel.id);
+          // Replace the local draft with the backend-assigned product.
+          await _local.deleteById(id);
+          await _local.upsert(newModel);
+          return newModel.id;
         } catch (_) {
-          // Sync also failed — fully offline.
+          // CREATE failed — try to find existing backend product by name.
+          try {
+            final remoteDtos = await _remote.getAll();
+            final match = remoteDtos.cast<ProductResponseDto?>().firstWhere(
+              (dto) =>
+                  dto!.name.toLowerCase() == product.name.toLowerCase(),
+              orElse: () => null,
+            );
+            if (match != null) {
+              final existingModel = _dtoToModel(match);
+              await _local.updateProductIdInSaleItems(id, existingModel.id);
+              await _local.deleteById(id);
+              await _local.upsert(existingModel);
+              return existingModel.id;
+            }
+          } catch (_) {
+            // Sync also failed.
+          }
+          // All remote attempts failed — local + queue.
+          await _local.promoteToActive(id);
+          await _syncService.queueOperation(
+            operation: 'PROMOTE_PRODUCT',
+            payload: _promotePayload(id, product),
+            entityId: id,
+          );
+          return id;
         }
-        // Fully offline — promote locally, sync later.
-        await _local.promoteToActive(id);
-        return id;
       }
+    } else {
+      // Fully offline — promote locally, sync later.
+      await _local.promoteToActive(id);
+      await _syncService.queueOperation(
+        operation: 'PROMOTE_PRODUCT',
+        payload: _promotePayload(id, product),
+        entityId: id,
+      );
+      return id;
     }
   }
 
+  Map<String, dynamic> _promotePayload(String id, ProductModel p) => {
+        'productId': id,
+        'name': p.name,
+        if (p.description != null) 'description': p.description,
+        if (p.categoryId != null) 'categoryId': p.categoryId,
+        'price': p.price,
+        'buyPrice': p.buyPrice,
+        'transportCost': p.transportCost,
+      };
+
   @override
   Future<void> archive(String id) async {
-    await _local.archiveById(id);
-    try {
-      await _remote.archive(id);
-    } catch (_) {
-      // Offline fallback — sync engine will push later.
+    if (await _connectivity.isOnline()) {
+      try {
+        await _remote.archive(id);
+        await _local.archiveById(id);
+      } catch (_) {
+        await _local.archiveById(id);
+        await _syncService.queueOperation(
+          operation: 'ARCHIVE_PRODUCT',
+          payload: {'productId': id},
+          entityId: id,
+        );
+      }
+    } else {
+      await _local.archiveById(id);
+      await _syncService.queueOperation(
+        operation: 'ARCHIVE_PRODUCT',
+        payload: {'productId': id},
+        entityId: id,
+      );
     }
   }
 
   @override
   Future<void> unarchive(String id) async {
-    await _local.unarchiveById(id);
-    try {
-      await _remote.unarchive(id);
-    } catch (_) {
-      // Offline fallback — sync engine will push later.
+    if (await _connectivity.isOnline()) {
+      try {
+        await _remote.unarchive(id);
+        await _local.unarchiveById(id);
+      } catch (_) {
+        await _local.unarchiveById(id);
+        await _syncService.queueOperation(
+          operation: 'UNARCHIVE_PRODUCT',
+          payload: {'productId': id},
+          entityId: id,
+        );
+      }
+    } else {
+      await _local.unarchiveById(id);
+      await _syncService.queueOperation(
+        operation: 'UNARCHIVE_PRODUCT',
+        payload: {'productId': id},
+        entityId: id,
+      );
     }
   }
 
   @override
   Future<void> syncFromRemote() async {
+    // Skip remote pull if sync_queue has pending operations — avoids
+    // overwriting local offline changes with stale backend data.
+    if (await _syncService.hasPendingOperations()) return;
     final dtos = await _remote.getAll();
     for (final dto in dtos) {
       await _local.upsert(_dtoToModel(dto));

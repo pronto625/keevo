@@ -86,7 +86,7 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 
 ### Cross-Cutting Concerns Identified
 
-1. **Offline-First Synchronization** — Affects every data-writing component (POS, inventory, transfers, user management). Delta-based sync pattern required for stock quantities.
+1. **Backend-First-When-Online / Local-First-When-Offline Synchronization** — Affects every data-writing component (POS, inventory, transfers, user management, contacts, employees). When online, all writes go to backend FIRST (source of truth), then cache locally. When offline, writes go to local Drift + sync_queue, then batch-push on reconnection. Delta-based sync pattern required for stock quantities. UX must refresh immediately after every local write (online or offline).
 2. **Multi-Tenant Isolation** — Every API endpoint, database query, and sync operation must enforce tenant boundaries. JWT-based tenant resolution across all layers.
 3. **RBAC (Role-Based Access Control)** — Owner vs Employee permissions affect POS, reports, admin, and stock management. Super Admin operates at platform level.
 4. **Audit Trail** — Immutable logging of all modifications (stock, prices, sales, transfers) with identity, timestamp, before/after values. Spans all transactional components.
@@ -147,6 +147,7 @@ Full-stack cross-platform: Flutter (mobile + desktop) + Spring Boot (backend API
 5. **100% Schema-per-Tenant Isolation** — No shared data tables. Every tenant completely isolated in `kv_xxxxxx` schema. Non-negotiable.
 6. **Interface-Driven Design** — All service contracts defined as interfaces. Implementations injected via DI. Enables swapping (e.g., sync engine, WhatsApp provider) without modifying consuming code.
 7. **GoF Design Patterns (Gang of Four)** — Before implementing ANY feature, analyze which design pattern is most appropriate (Strategy, Observer, Factory, Adapter, Decorator, etc.). Code MUST be closed for modification, open for extension. This analysis is mandatory and non-negotiable.
+8. **Backend-First-When-Online / Local-First-When-Offline** — ALL data mutations across ALL modules follow this strategy: when online → backend FIRST (source of truth, prevents data loss) → then cache locally. When offline → local save + sync_queue → batch push on reconnection. After every write (online or offline), UX refreshes instantly from local Drift. No exceptions. See the complete module audit in _Sync Patterns_ section.
 
 ### Backend Architecture (Spring Boot)
 
@@ -261,7 +262,9 @@ lib/
 │   ├── di/                          # Riverpod providers setup
 │   ├── network/                     # HTTP client, interceptors
 │   ├── storage/                     # Secure storage, Drift DB
-│   ├── sync/                        # SyncService interface + impl
+│   ├── sync/                        # SyncService interface + impl,
+│   │                                # ConnectivityService (online/offline),
+│   │                                # SyncTriggerNotifier (push on reconnect)
 │   ├── auth/                        # Auth state, JWT handling
 │   ├── theme/                       # Material 3 Keevo tokens
 │   └── router/                      # go_router config
@@ -295,6 +298,8 @@ lib/
 - Repository interfaces in `domain/`, implementations in `data/`
 - Riverpod providers in `presentation/provider/` — bridge between domain and UI
 - All external services accessed via interfaces (sync, storage, WhatsApp)
+- All repositories performing data mutations MUST use `ConnectivityService` (in `core/sync/`) to determine online/offline branching
+- After every data mutation, Riverpod notifiers MUST call `refresh()` or `ref.invalidate()` to trigger instant UX update from local Drift
 
 ### Decision Priority Analysis
 
@@ -552,6 +557,8 @@ echo "\n✅✅✅ All cURL integration checks passed — story backend validated
 | Building complex queries | **Builder** | `SyncPullQueryBuilder` |
 | Unique code generation | **Strategy** | `TenantCodeGenerator` |
 | Registration orchestration | **Façade** | `RegistrationService` |
+| Online/offline write-path branching | **Strategy** | `ConnectivityService` (interface) → `NetworkConnectivityService` (impl) — injected into all repositories |
+| Sync queue replay | **Command** | `SyncOperation` encapsulates deferred mutation as replayable command |
 
 ---
 
@@ -728,40 +735,177 @@ Events are placed in the domain that **owns the concept**, even if other domains
 - Flutter UI: SnackBar via `ref.listen` sur les erreurs
 
 **Sync Patterns:**
-- Queue locale: Drift table `sync_queue`
-- Push: `POST /api/v1/sync/push` (batch)
+- **Write strategy**: Backend-First-When-Online / Local-First-When-Offline (see detailed section below)
+- **Online writes**: Repository → Remote first → on success → Local cache (synced:true, NO sync_queue)
+- **Offline writes**: Repository → Local save (synced:false) + sync_queue entry → SyncTriggerNotifier pushes on reconnect
+- **sync_queue**: Drift table — ONLY populated when backend is unreachable. NOT the primary write path.
+- **UX refresh**: After every mutation (online or offline), Riverpod notifier must refresh() or invalidate() to re-read local Drift → instant UI update
+- Push: `POST /api/v1/sync/push` (batch) — for offline queue replay ONLY
 - Pull: `GET /api/v1/sync/pull?since={timestamp}`
 - Conflicts stock: delta-based (somme des deltas)
 - Conflicts autres: last-write-wins par timestamp
 - Retry: backoff exponentiel (2s, 4s, 8s, 16s, max 5 min)
 
-**Write-Through Pattern (Flutter → Backend) — CRITICAL for all transactional features:**
+**🔴 BACKEND-FIRST-WHEN-ONLINE / LOCAL-FIRST-WHEN-OFFLINE — CRITICAL ARCHITECTURAL PRINCIPLE**
 
-Every transactional write (sales, stock movements, transfers) follows this exact pipeline:
+> **This is the foundational data write strategy for ALL modules, ALL actions, NO exceptions.**
+>
+> When the device is **online** → save to **backend FIRST** (source of truth, prevents data loss), then save locally (cache for instant UX).
+> When the device is **offline** → save **locally** (Drift) + enqueue in `sync_queue`, then batch-push when connectivity returns.
+> After **every** local update (online OR offline), the UX MUST refresh **immediately** — local Drift reads are instantaneous.
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│ 1. LocalDataSource.insertAll() — single Drift transaction:        │
-│    ├─ Insert main record (e.g. sales)                             │
-│    ├─ Insert child records (e.g. sale_items)                      │
-│    ├─ Update stock_levels                                         │
-│    ├─ Insert stock_movements                                      │
-│    └─ Enqueue sync_queue entry with _buildPayload() JSON          │
-│                                                                   │
-│ 2. RemoteDataSource.push() — unawaited background call:           │
-│    ├─ POST to backend REST API                                    │
-│    ├─ On success (201): mark synced + remove sync_queue entry     │
-│    └─ On failure: log + leave in sync_queue for later retry       │
-│                                                                   │
-│ 3. Epic 5 SyncService — handles offline retry:                    │
-│    └─ Reads pending sync_queue entries + replays _buildPayload()  │
-└─────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    ONLINE PATH (backend reachable)                         │
+│                                                                           │
+│  1. Repository detects connectivity (ConnectivityService / isOnline())    │
+│  2. Call RemoteDataSource → POST/PATCH/DELETE to backend REST API         │
+│  3. On success (2xx): save backend response locally via LocalDataSource   │
+│     └─ synced: true, NO sync_queue entry                                  │
+│  4. Return result → Riverpod notifier invalidates/refreshes UI instantly  │
+│                                                                           │
+│  On backend error (non-network, e.g. 409 CONFLICT):                       │
+│     → rethrow to UI (SnackBar) — do NOT save locally                      │
+│  On network error (timeout, connection refused):                          │
+│     → fall through to OFFLINE PATH                                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                    OFFLINE PATH (backend unreachable)                      │
+│                                                                           │
+│  1. Save locally via LocalDataSource (Drift transaction)                  │
+│     └─ synced: false                                                      │
+│  2. Enqueue sync_queue entry with operation + payload JSON                │
+│     └─ sync_queue insert is in the REPOSITORY layer, NOT in DataSource    │
+│  3. Return result → Riverpod notifier invalidates/refreshes UI instantly  │
+│  4. SyncTriggerNotifier detects reconnection → calls push()              │
+│     └─ push() replays ALL pending sync_queue entries in batch             │
+│     └─ On success: mark synced + remove sync_queue entry                  │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**⚠️ INVARIANT**: `_buildPayload()` (in each `LocalDataSource`) and `RemoteDataSource.push()` MUST produce **identical JSON structures** matching the backend DTO contract. When adding fields to a backend DTO (e.g. `discountAmount` on `RecordSaleRequestDto`), you MUST update THREE places in Flutter:
+**Repository implementation pattern (canonical — ALL repos MUST follow):**
+```dart
+class ExampleRepositoryImpl implements ExampleRepository {
+  final LocalExampleDataSource _local;
+  final RemoteExampleDataSource _remote;
+  final AppDatabase _db;
+  final bool Function() _isOnline; // ConnectivityService.isOnline
+
+  Future<ExampleModel> create(CreateParams params) async {
+    if (_isOnline()) {
+      try {
+        final remote = await _remote.create(params.toPayload());
+        await _local.upsert(remote);  // cache backend response locally
+        return remote;
+      } on DomainException { rethrow; } // business error → UI
+      catch (_) { /* network error → fall through to offline */ }
+    }
+    // OFFLINE: save locally + queue for sync
+    final local = await _local.insert(params);
+    await _db.into(_db.syncQueue).insert(SyncQueueCompanion.insert(
+      id: const Uuid().v4(),
+      operation: 'CREATE_EXAMPLE',
+      payload: jsonEncode(params.toPayload()),
+      createdAt: DateTime.now(),
+    ));
+    return local;
+  }
+}
+```
+
+**UX Refresh Rule — MANDATORY for all mutations:**
+
+After every data mutation (create/update/delete/archive), the Riverpod notifier MUST either:
+1. Call `await refresh()` to re-read from local Drift (triggers UI rebuild), OR
+2. Call `ref.invalidate(listProvider)` to force provider re-evaluation
+
+Since all data is available locally after both online and offline writes, the UX refresh is **instantaneous** — no loading spinner needed for the list update.
+
+```dart
+// In StoreListNotifier (example pattern for ALL notifiers):
+Future<StoreModel> createStore({...}) async {
+  final result = await ref.read(storeRepositoryProvider).createStore(...);
+  await refresh();  // ← re-reads from local Drift → instant UI update
+  return result;
+}
+```
+
+---
+
+**🔴 COMPLETE MODULE AUDIT — Current State vs Target State**
+
+> This audit covers EVERY data mutation operation across ALL modules. Each operation MUST conform to the Backend-First-When-Online pattern.
+
+#### ✅ CONFORMANT (no changes needed)
+
+| Module | Repository | Method | Pattern | Notes |
+|---|---|---|---|---|
+| Products | `ProductRepositoryImpl` | `create()` | ✅ Backend-first | Remote first, offline fallback to local insert + sync_queue |
+| Products | `ProductRepositoryImpl` | `createDraft()` | ✅ Backend-first | Via `remoteCsv.createDraft()`, offline fallback |
+| StockTransfer | `StockTransferRepositoryImpl` | `executeTransfer()` | ✅ Backend-first | Has `_isOnline()` check, full online/offline paths |
+| StockTransfer | `StockTransferRepositoryImpl` | `completeTransfer()` | ✅ Online-only | By design — requires source+dest confirmation |
+| Clients | `ClientRepositoryImpl` | `create()` | ✅ Backend-first | Try remote, catch → local fallback |
+| Suppliers | `SupplierRepositoryImpl` | `create()` | ✅ Backend-first | Try remote, catch → local fallback |
+| Stores | `StoreRepositoryImpl` | `createStore()` | ✅ Backend-first | Remote first, business errors rethrown |
+| Stores | `StoreRepositoryImpl` | `updateStore()` | ✅ Backend-first | Remote first, offline local fallback |
+| Stores | `StoreRepositoryImpl` | `deactivateStore()` | ✅ Backend-first | Remote first, offline local fallback |
+| Auth | `AuthRepositoryImpl` | `register/login/refresh/changePassword` | ✅ Online-only | By nature — requires backend |
+| Onboarding | `OnboardingRepositoryImpl` | `completeOnboarding()` | ✅ Online-only | By nature — creates tenant schema |
+| Employees | `EmployeeRepositoryImpl` | `regeneratePassword()` | ✅ Online-only | By nature — generates server-side password |
+| Categories | `CategoryRepositoryImpl` | `syncFromApi()` | ✅ Pull-only | Reference data sync — no user mutations |
+
+#### ❌ NON-CONFORMANT (must be refactored to Backend-First-When-Online)
+
+| Module | Repository | Method | Current Pattern | Problem | Required Fix |
+|---|---|---|---|---|---|
+| **Products** | `ProductRepositoryImpl` | `update()` | Local-first → try remote | Local update before backend. If backend rejects (e.g. name conflict), local is stale | Backend-first: try remote → on success upsert locally. On network error → local + sync_queue |
+| **Products** | `ProductRepositoryImpl` | `archive()` | Local-first → try remote | Archives locally even if backend rejects | Backend-first: try remote → on success archive locally. On network error → local + sync_queue |
+| **Products** | `ProductRepositoryImpl` | `unarchive()` | Local-first → try remote | Unarchives locally even if backend rejects | Backend-first: try remote → on success unarchive locally. On network error → local + sync_queue |
+| **Products** | `ProductRepositoryImpl` | `promoteToActive()` | Mixed (complex fallback chain) | Multiple try/catch levels with inconsistent data paths | Simplify: backend-first promote → on success upsert locally. On network error → local promote + sync_queue |
+| **Sales** | `SaleRepositoryImpl` | `recordSale()` | Local-first + `unawaited` remote | Sale always saved locally first, remote is fire-and-forget. sync_queue always created inside `LocalSaleDataSource.insertAll()` | Backend-first: if online → remote first → on success local save (synced:true, NO queue). If offline → local save + sync_queue (move queue insert from DS to repo) |
+| **DayClosure** | `DayClosureRepositoryImpl` | `saveClosureLocally()` | Local-only + queue in DataSource | Never attempts backend, sync_queue inside `LocalDayClosureDataSource.insertClosure()` | Backend-first: if online → remote.pushClosure() first → on success local save (synced:true). If offline → local save + sync_queue (move queue from DS to repo) |
+| **Clients** | `ClientRepositoryImpl` | `update()` | Prepares local model → tries remote | Builds updated model before trying remote. If remote succeeds, uses remote response. OK-ish but no sync_queue on failure | Backend-first: try remote → on success upsert locally. On network error → local upsert + sync_queue |
+| **Clients** | `ClientRepositoryImpl` | `archive()` | Local-first → try remote | Archives locally unconditionally, then tries remote | Backend-first: try remote → on success archive locally. On network error → local archive + sync_queue |
+| **Suppliers** | `SupplierRepositoryImpl` | `update()` | Same as Client.update() | Same issue — no sync_queue on offline | Backend-first + sync_queue on offline |
+| **Suppliers** | `SupplierRepositoryImpl` | `archive()` | Same as Client.archive() | Same issue | Backend-first + sync_queue on offline |
+| **Employees** | `EmployeeRepositoryImpl` | `createEmployee()` | Remote-only (no local DS) | Fails completely when offline — no local persistence | Add `LocalEmployeeDataSource`, backend-first + local fallback + sync_queue |
+| **Employees** | `EmployeeRepositoryImpl` | `reassignStore()` | Remote-only (no local DS) | Fails completely when offline | Backend-first + local fallback + sync_queue |
+| **Employees** | `EmployeeRepositoryImpl` | `deactivateEmployee()` | Remote-only (no local DS) | Fails completely when offline | Backend-first + local fallback + sync_queue |
+| **Employees** | `EmployeeRepositoryImpl` | `reactivateEmployee()` | Remote-only (no local DS) | Fails completely when offline | Backend-first + local fallback + sync_queue |
+
+#### ⚠️ CROSS-CUTTING ISSUES
+
+| Issue | Scope | Required Fix |
+|---|---|---|
+| **sync_queue inserts inside DataSources** | `LocalSaleDataSource.insertAll()`, `LocalDayClosureDataSource.insertClosure()`, `LocalProductDataSource.insert()` | Move sync_queue inserts to Repository layer — DataSources should only handle Drift persistence |
+| **No sync_queue for offline client/supplier/product mutations** | `archive()`, `update()` in client, supplier, product repos | Add sync_queue entries for ALL offline mutations so they are replayed on reconnection |
+| **Employee module has no local persistence** | `EmployeeRepositoryImpl` delegates everything to `RemoteEmployeeDataSource` | Create `LocalEmployeeDataSource` (Drift table for employees), add `employees` table to Drift schema |
+| **ConnectivityService not abstracted** | Only `StockTransferRepositoryImpl` has `_isOnline()` param | Create `ConnectivityService` interface in `core/sync/`, inject into ALL repositories that do online/offline branching |
+| **CloseDayNotifier calls syncService.push() directly** | `CloseDayNotifier.closeDay()` calls `syncService.push()` after saving | Remove direct push() call — SyncTriggerNotifier handles push on reconnection. If online, repo already saved to backend |
+
+#### UX REFRESH AUDIT — State Management After Mutations
+
+> All mutations MUST result in immediate UX refresh via local Drift re-read.
+
+| Module | Notifier | After Mutation | Current Behavior | Status |
+|---|---|---|---|---|
+| Products | `productListProvider` (FutureProvider) | Create/Update/Archive | `ref.invalidate(productListProvider)` in UI screens | ✅ OK |
+| Sales | `RecordSaleNotifier` | RecordSale | `ref.invalidate(frequentProductsProvider)` + `ref.invalidate(posSearchProvider)` + `ref.invalidate(stockNotifierProvider)` | ✅ OK |
+| DayClosure | `CloseDayNotifier` | CloseDay | `ref.invalidate(dayClosureStateProvider)` + `todaySalesCountProvider` + `todaySummaryProvider` | ✅ OK |
+| Stores | `StoreListNotifier` | Create/Update/Deactivate | `await refresh()` (re-reads local Drift) | ✅ OK |
+| Clients | `ClientListNotifier` | Create/Update/Archive | `await refresh()` (re-reads local Drift) | ✅ OK |
+| Suppliers | `SupplierListNotifier` | Create/Update/Archive | `await refresh()` (re-reads local Drift) | ✅ OK |
+| Employees | `EmployeeList` | Create/Reassign/Deactivate | `await refresh()` → BUT reads from remote only ❌ | ❌ Fix: read from local Drift after local DS is added |
+| StockTransfer | Inline in UI | ExecuteTransfer | Returns model directly to UI | ✅ OK |
+| Stock | `StockNotifier` | Entry/Adjust/Threshold | `loadLevels()` re-reads | ✅ OK |
+
+---
+
+**⚠️ PAYLOAD INVARIANT** (still applies for offline queue replay):
+
+`_buildPayload()` (in each `LocalDataSource`) and `RemoteDataSource.push()` MUST produce **identical JSON structures** matching the backend DTO contract. When adding fields to a backend DTO (e.g. `discountAmount` on `RecordSaleRequestDto`), you MUST update THREE places in Flutter:
 1. `LocalDataSource.insertAll()` → Drift companion fields
 2. `LocalDataSource._buildPayload()` → sync_queue JSON (for offline replay)
-3. `RemoteDataSource.push()` → Dio POST body (for immediate push)
+3. `RemoteDataSource.push()` → Dio POST body (for online direct call)
 
 Failing to update `_buildPayload()` causes offline-created records to sync without the new fields — silent data loss.
 
@@ -802,6 +946,10 @@ Two categories of local data with distinct retention rules:
 9. ✅ Keep `port/in/` interfaces free of ANY HTTP/framework type — pure Java Records only
 10. ✅ Create `adapter/in/mcp/` placeholder folder (empty `.gitkeep`) for every new module
 11. ✅ Purge transactional Drift tables (sales, sale_items, stock_movements) only when `synced_at IS NOT NULL` — PENDING rows are never deleted
+12. ✅ ALL data mutations MUST follow Backend-First-When-Online pattern: if online → remote first → on success cache locally (synced:true, NO sync_queue). If offline → local + sync_queue
+13. ✅ sync_queue inserts belong in the Repository layer, NOT in DataSources — DataSources handle only Drift persistence
+14. ✅ After every mutation (online or offline), the Riverpod notifier MUST refresh() or invalidate() so UX updates instantly from local Drift
+15. ✅ Every repository performing online/offline branching MUST use a `ConnectivityService` abstraction (not direct network checks)
 
 ### Anti-Patterns — FORBIDDEN:
 
@@ -818,6 +966,11 @@ Two categories of local data with distinct retention rules:
 - ❌ Creating a REST controller without creating the matching `adapter/in/mcp/` placeholder folder
 - ❌ Purging local Drift data without checking `synced_at IS NOT NULL` — risk of permanent data loss
 - ❌ Purging static/reference tables (products, stock_levels, categories) — these must always remain local
+- ❌ **Local-first writes when backend is reachable** — ALL mutations must attempt backend FIRST when online
+- ❌ **`unawaited()` remote calls after local writes** — this was the old pattern; backend must be awaited FIRST when online
+- ❌ **sync_queue inserts inside DataSources** — queue entries belong in Repository layer only (offline path)
+- ❌ **Remote-only repositories without local fallback** (e.g. EmployeeRepositoryImpl) — every module must work offline
+- ❌ **Calling `syncService.push()` directly from UI/notifiers** — SyncTriggerNotifier handles push on reconnection automatically
 
 ## Project Structure & Boundaries
 
@@ -1000,6 +1153,8 @@ app/
 | Notification routing | **Chain of Responsibility** | WhatsApp → Push → SMS fallback |
 | Building complex queries | **Builder** | `SyncPullQueryBuilder` |
 | Singleton services | **Singleton** (via Spring/Riverpod DI) | `TenantContext`, `ApiClient` |
+| Online/offline write-path branching | **Strategy** | `ConnectivityService` → `NetworkConnectivityService` |
+| Sync queue replay | **Command** | `SyncOperation` — deferred mutation replayed on reconnect |
 
 ## MCP Migration Path
 

@@ -47,6 +47,8 @@ final productRepositoryProvider = Provider<ProductRepository>((ref) {
     local: ref.watch(localProductDataSourceProvider),
     remote: ref.watch(remoteProductDataSourceProvider),
     remoteCsv: ref.watch(remoteCsvImportDataSourceProvider),
+    connectivity: ref.watch(connectivityServiceProvider),
+    syncService: ref.watch(syncServiceProvider),
   );
 });
 

@@ -73,6 +73,15 @@ public class ProductRepositoryAdapter implements ProductRepository {
         });
     }
 
+    @Override
+    public void unarchive(UUID id) {
+        springRepository.findById(id).ifPresent(product -> {
+            product.setArchived(false);
+            product.setUpdatedAt(Instant.now());
+            springRepository.save(product);
+        });
+    }
+
     // ── Conversion methods ─────────────────────────────────────────────────────
 
     private ProductJpaEntity toJpaEntity(Product product) {

@@ -1,20 +1,28 @@
 import 'dart:developer' as dev;
 
+import '../../../../core/sync/connectivity_service.dart';
+import '../../../../core/sync/sync_service.dart';
 import '../../domain/model/supplier_model.dart';
 import '../../domain/repository/supplier_repository.dart';
 import '../datasource/local_supplier_datasource.dart';
 import '../datasource/remote_supplier_datasource.dart';
 
-/// SupplierRepositoryImpl — write-through offline-first strategy (Story 2.5).
+/// SupplierRepositoryImpl — Backend-first write-through strategy (Story 2.5 + 5.1).
 class SupplierRepositoryImpl implements SupplierRepository {
   final LocalSupplierDataSource _local;
   final RemoteSupplierDataSource _remote;
+  final ConnectivityService _connectivity;
+  final SyncService _syncService;
 
   const SupplierRepositoryImpl({
     required LocalSupplierDataSource local,
     required RemoteSupplierDataSource remote,
+    required ConnectivityService connectivity,
+    required SyncService syncService,
   })  : _local = local,
-        _remote = remote;
+        _remote = remote,
+        _connectivity = connectivity,
+        _syncService = syncService;
 
   @override
   Future<List<SupplierModel>> getAll({bool includeArchived = false}) =>
@@ -85,35 +93,73 @@ class SupplierRepositoryImpl implements SupplierRepository {
       productIds: productIds ?? existing?.productIds ?? const [],
       updatedAt: now,
     );
-    try {
-      final remote = await _remote.update(id, {
-        if (name != null) 'name': name,
-        if (phone != null) 'phone': phone,
-        if (email != null) 'email': email,
-        if (productIds != null) 'productIds': productIds,
-      });
-      // Merge productIds: remote DTO may omit them (backend version mismatch).
-      // Priority: remote (if non-empty) > caller-supplied > existing local.
-      final resolvedIds = remote.productIds.isNotEmpty
-          ? remote.productIds
-          : (productIds ?? existing?.productIds ?? const []);
-      final merged = remote.copyWith(productIds: resolvedIds);
-      await _local.upsert(merged);
-      return merged;
-    } catch (e) {
-      dev.log('SupplierRepository.update: offline — local only: $e');
+
+    final payload = {
+      'supplierId': id,
+      if (name != null) 'name': name,
+      if (phone != null) 'phone': phone,
+      if (email != null) 'email': email,
+      if (productIds != null) 'productIds': productIds,
+    };
+
+    if (await _connectivity.isOnline()) {
+      try {
+        final remote = await _remote.update(id, {
+          if (name != null) 'name': name,
+          if (phone != null) 'phone': phone,
+          if (email != null) 'email': email,
+          if (productIds != null) 'productIds': productIds,
+        });
+        final resolvedIds = remote.productIds.isNotEmpty
+            ? remote.productIds
+            : (productIds ?? existing?.productIds ?? const []);
+        final merged = remote.copyWith(productIds: resolvedIds);
+        await _local.upsert(merged);
+        return merged;
+      } catch (e) {
+        dev.log('SupplierRepository.update: backend failed — local + queue: $e');
+        await _local.upsert(updated);
+        await _syncService.queueOperation(
+          operation: 'UPDATE_SUPPLIER',
+          payload: payload,
+          entityId: id,
+        );
+        return updated;
+      }
+    } else {
+      dev.log('SupplierRepository.update: offline — local + queue');
       await _local.upsert(updated);
+      await _syncService.queueOperation(
+        operation: 'UPDATE_SUPPLIER',
+        payload: payload,
+        entityId: id,
+      );
       return updated;
     }
   }
 
   @override
   Future<void> archive(String id) async {
-    await _local.archive(id);
-    try {
-      await _remote.archive(id);
-    } catch (e) {
-      dev.log('SupplierRepository.archive: backend unreachable — $e');
+    if (await _connectivity.isOnline()) {
+      try {
+        await _remote.archive(id);
+        await _local.archive(id);
+      } catch (e) {
+        dev.log('SupplierRepository.archive: backend failed — local + queue: $e');
+        await _local.archive(id);
+        await _syncService.queueOperation(
+          operation: 'ARCHIVE_SUPPLIER',
+          payload: {'supplierId': id},
+          entityId: id,
+        );
+      }
+    } else {
+      await _local.archive(id);
+      await _syncService.queueOperation(
+        operation: 'ARCHIVE_SUPPLIER',
+        payload: {'supplierId': id},
+        entityId: id,
+      );
     }
   }
 

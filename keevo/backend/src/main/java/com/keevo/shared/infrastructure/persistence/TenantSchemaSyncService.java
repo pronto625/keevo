@@ -74,7 +74,8 @@ public class TenantSchemaSyncService {
                     java.util.Map.entry("draft_notifications",   TenantSchemaProvisioner.DDL_DRAFT_NOTIFICATIONS),
                     java.util.Map.entry("employees",             TenantSchemaProvisioner.DDL_EMPLOYEES),
                     java.util.Map.entry("sale_items",            TenantSchemaProvisioner.DDL_SALE_ITEMS),
-                    java.util.Map.entry("day_closures",          TenantSchemaProvisioner.DDL_DAY_CLOSURES)
+                    java.util.Map.entry("day_closures",          TenantSchemaProvisioner.DDL_DAY_CLOSURES),
+                    java.util.Map.entry("sync_operations_log",   TenantSchemaProvisioner.DDL_SYNC_OPERATIONS_LOG)
             );
 
     /** Valid tenant schema pattern — prevents any SQL injection. */
@@ -213,6 +214,9 @@ public class TenantSchemaSyncService {
             stmt.execute(TenantSchemaProvisioner.DDL_DAY_CLOSURES_IDX_STORE_DATE);
             stmt.execute(TenantSchemaProvisioner.DDL_SALES_IDX_STORE_OCCURRED_AT);
             stmt.execute(TenantSchemaProvisioner.DDL_SALES_IDX_STORE_EMPLOYEE_OCCURRED_AT);
+            // Story 5.1 — sync operations log indexes
+            stmt.execute(TenantSchemaProvisioner.DDL_SYNC_OPERATIONS_LOG_IDX_ENTITY);
+            stmt.execute(TenantSchemaProvisioner.DDL_SYNC_OPERATIONS_LOG_IDX_PROCESSED);
             stmt.execute("SET search_path TO public");
         }
     }

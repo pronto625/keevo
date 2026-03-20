@@ -4,7 +4,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:sqlite3/open.dart';
-import 'package:keevo/core/storage/app_database.dart';
+import 'package:keevo/core/sync/connectivity_service.dart';
+import 'package:keevo/core/sync/sync_service.dart';
 import 'package:keevo/features/inventory/data/datasource/local_stock_transfer_datasource.dart';
 import 'package:keevo/features/inventory/data/datasource/remote_stock_transfer_datasource.dart';
 import 'package:keevo/features/inventory/data/repository/stock_transfer_repository_impl.dart';
@@ -12,6 +13,8 @@ import 'package:keevo/features/inventory/domain/model/stock_transfer_model.dart'
 
 class _MockLocal extends Mock implements LocalStockTransferDataSource {}
 class _MockRemote extends Mock implements RemoteStockTransferDataSource {}
+class _MockConnectivity extends Mock implements ConnectivityService {}
+class _MockSyncService extends Mock implements SyncService {}
 
 class _FakeStockTransferModel extends Fake implements StockTransferModel {}
 
@@ -29,7 +32,8 @@ void _overrideSqlite3ForLinuxTesting() {
 void main() {
   late _MockLocal mockLocal;
   late _MockRemote mockRemote;
-  late AppDatabase testDb;
+  late _MockConnectivity mockConnectivity;
+  late _MockSyncService mockSyncService;
   late StockTransferRepositoryImpl repository;
 
   setUpAll(() {
@@ -51,21 +55,19 @@ void main() {
   setUp(() {
     mockLocal = _MockLocal();
     mockRemote = _MockRemote();
-    testDb = AppDatabase.forTesting();
-  });
-
-  tearDown(() async {
-    await testDb.close();
+    mockConnectivity = _MockConnectivity();
+    mockSyncService = _MockSyncService();
   });
 
   group('StockTransferRepositoryImpl (Story 3.3 — Task 13)', () {
     test('executeTransfer online — calls remote, saves locally, returns model',
         () async {
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
       repository = StockTransferRepositoryImpl(
         local: mockLocal,
         remote: mockRemote,
-        db: testDb,
-        isOnline: () => true,
+        connectivity: mockConnectivity,
+        syncService: mockSyncService,
       );
       when(() => mockRemote.executeTransfer(
             sourceStoreId: any(named: 'sourceStoreId'),
@@ -106,11 +108,17 @@ void main() {
 
     test('executeTransfer offline — validates stock, updates locally, queues to sync, returns PENDING_SYNC',
         () async {
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => false);
+      when(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).thenAnswer((_) async {});
       repository = StockTransferRepositoryImpl(
         local: mockLocal,
         remote: mockRemote,
-        db: testDb,
-        isOnline: () => false,
+        connectivity: mockConnectivity,
+        syncService: mockSyncService,
       );
       when(() => mockLocal.getLocalStock(
             productId: any(named: 'productId'),
@@ -153,11 +161,12 @@ void main() {
 
     test('getHistory online — fetches remote, caches locally, returns list',
         () async {
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
       repository = StockTransferRepositoryImpl(
         local: mockLocal,
         remote: mockRemote,
-        db: testDb,
-        isOnline: () => true,
+        connectivity: mockConnectivity,
+        syncService: mockSyncService,
       );
       when(() => mockRemote.getHistory()).thenAnswer((_) async => [fakeTransfer]);
       when(() => mockLocal.saveTransfer(any())).thenAnswer((_) async {});
@@ -170,11 +179,12 @@ void main() {
     });
 
     test('getHistory offline — falls back to local cache', () async {
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => false);
       repository = StockTransferRepositoryImpl(
         local: mockLocal,
         remote: mockRemote,
-        db: testDb,
-        isOnline: () => false,
+        connectivity: mockConnectivity,
+        syncService: mockSyncService,
       );
       when(() => mockLocal.getHistory()).thenAnswer((_) async => [fakeTransfer]);
 

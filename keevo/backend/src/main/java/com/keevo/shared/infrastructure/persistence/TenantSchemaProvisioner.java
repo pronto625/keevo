@@ -447,6 +447,22 @@ public class TenantSchemaProvisioner {
     static final String DDL_SALES_IDX_STORE_EMPLOYEE_OCCURRED_AT =
             "CREATE INDEX IF NOT EXISTS idx_sales_store_employee_occurred ON sales(store_id, employee_id, occurred_at)";
 
+    // Story 5.1 — sync operations log (idempotency guard)
+    static final String DDL_SYNC_OPERATIONS_LOG = """
+            CREATE TABLE IF NOT EXISTS sync_operations_log (
+                id VARCHAR(36) PRIMARY KEY,
+                operation_type VARCHAR(50) NOT NULL,
+                entity_id VARCHAR(36),
+                status VARCHAR(20) NOT NULL,
+                error_reason TEXT,
+                processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                client_timestamp TIMESTAMPTZ
+            )""";
+    static final String DDL_SYNC_OPERATIONS_LOG_IDX_ENTITY =
+            "CREATE INDEX IF NOT EXISTS idx_sync_ops_log_entity ON sync_operations_log(entity_id)";
+    static final String DDL_SYNC_OPERATIONS_LOG_IDX_PROCESSED =
+            "CREATE INDEX IF NOT EXISTS idx_sync_ops_log_processed ON sync_operations_log(processed_at)";
+
     // SPEC CHANGE 2026-03-06: new tenants start on 6-month PREMIUM_TRIAL (unlimited limits)
     // WHERE NOT EXISTS ensures idempotency — provision() can be called multiple times safely.
     private static final String SEED_SUBSCRIPTION = """
@@ -594,6 +610,10 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_DAY_CLOSURES_IDX_STORE_DATE);
             stmt.execute(DDL_SALES_IDX_STORE_OCCURRED_AT);
             stmt.execute(DDL_SALES_IDX_STORE_EMPLOYEE_OCCURRED_AT);
+            // Story 5.1 — sync operations log
+            stmt.execute(DDL_SYNC_OPERATIONS_LOG);
+            stmt.execute(DDL_SYNC_OPERATIONS_LOG_IDX_ENTITY);
+            stmt.execute(DDL_SYNC_OPERATIONS_LOG_IDX_PROCESSED);
             stmt.execute("SET search_path TO public");
         }
     }

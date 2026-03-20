@@ -1,23 +1,31 @@
 import 'dart:developer' as dev;
 
+import '../../../../core/sync/connectivity_service.dart';
+import '../../../../core/sync/sync_service.dart';
 import '../../domain/model/client_model.dart';
 import '../../domain/repository/client_repository.dart';
 import '../datasource/local_client_datasource.dart';
 import '../datasource/remote_client_datasource.dart';
 
-/// ClientRepositoryImpl — write-through offline-first strategy (Story 2.5).
+/// ClientRepositoryImpl — Backend-first write-through strategy (Story 2.5 + 5.1).
 ///
 /// ALL reads come from local Drift — no network required.
-/// Writes push to backend first (source of truth), then update local cache.
+/// Writes go to backend first when online, fall back to local + sync_queue when offline.
 class ClientRepositoryImpl implements ClientRepository {
   final LocalClientDataSource _local;
   final RemoteClientDataSource _remote;
+  final ConnectivityService _connectivity;
+  final SyncService _syncService;
 
   const ClientRepositoryImpl({
     required LocalClientDataSource local,
     required RemoteClientDataSource remote,
+    required ConnectivityService connectivity,
+    required SyncService syncService,
   })  : _local = local,
-        _remote = remote;
+        _remote = remote,
+        _connectivity = connectivity,
+        _syncService = syncService;
 
   @override
   Future<List<ClientModel>> getAll({bool includeArchived = false}) =>
@@ -83,29 +91,73 @@ class ClientRepositoryImpl implements ClientRepository {
       notes: notes ?? existing?.notes,
       updatedAt: now,
     );
-    try {
-      final remote = await _remote.update(id, {
-        if (name != null) 'name': name,
-        if (phone != null) 'phone': phone,
-        if (email != null) 'email': email,
-        if (notes != null) 'notes': notes,
-      });
-      await _local.upsert(remote);
-      return remote;
-    } catch (e) {
-      dev.log('ClientRepository.update: offline — local only: $e');
+
+    if (await _connectivity.isOnline()) {
+      try {
+        final remote = await _remote.update(id, {
+          if (name != null) 'name': name,
+          if (phone != null) 'phone': phone,
+          if (email != null) 'email': email,
+          if (notes != null) 'notes': notes,
+        });
+        await _local.upsert(remote);
+        return remote;
+      } catch (e) {
+        dev.log('ClientRepository.update: backend failed — local + queue: $e');
+        await _local.upsert(updated);
+        await _syncService.queueOperation(
+          operation: 'UPDATE_CLIENT',
+          payload: {
+            'clientId': id,
+            if (name != null) 'name': name,
+            if (phone != null) 'phone': phone,
+            if (email != null) 'email': email,
+            if (notes != null) 'notes': notes,
+          },
+          entityId: id,
+        );
+        return updated;
+      }
+    } else {
+      dev.log('ClientRepository.update: offline — local + queue');
       await _local.upsert(updated);
+      await _syncService.queueOperation(
+        operation: 'UPDATE_CLIENT',
+        payload: {
+          'clientId': id,
+          if (name != null) 'name': name,
+          if (phone != null) 'phone': phone,
+          if (email != null) 'email': email,
+          if (notes != null) 'notes': notes,
+        },
+        entityId: id,
+      );
       return updated;
     }
   }
 
   @override
   Future<void> archive(String id) async {
-    await _local.archive(id);
-    try {
-      await _remote.archive(id);
-    } catch (e) {
-      dev.log('ClientRepository.archive: backend unreachable — $e');
+    if (await _connectivity.isOnline()) {
+      try {
+        await _remote.archive(id);
+        await _local.archive(id);
+      } catch (e) {
+        dev.log('ClientRepository.archive: backend failed — local + queue: $e');
+        await _local.archive(id);
+        await _syncService.queueOperation(
+          operation: 'ARCHIVE_CLIENT',
+          payload: {'clientId': id},
+          entityId: id,
+        );
+      }
+    } else {
+      await _local.archive(id);
+      await _syncService.queueOperation(
+        operation: 'ARCHIVE_CLIENT',
+        payload: {'clientId': id},
+        entityId: id,
+      );
     }
   }
 

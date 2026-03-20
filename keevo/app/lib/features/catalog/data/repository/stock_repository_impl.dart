@@ -4,6 +4,7 @@ import '../../domain/model/cross_store_availability_model.dart';
 import '../../domain/model/stock_level_model.dart';
 import '../../domain/model/stock_movement_model.dart';
 import '../../domain/repository/stock_repository.dart';
+import '../../../../core/sync/sync_service.dart';
 import '../datasource/local_stock_datasource.dart';
 import '../datasource/remote_stock_datasource.dart';
 
@@ -17,17 +18,25 @@ import '../datasource/remote_stock_datasource.dart';
 class StockRepositoryImpl implements StockRepository {
   final LocalStockDataSource _local;
   final RemoteStockDataSource _remote;
+  final SyncService _syncService;
 
   const StockRepositoryImpl({
     required LocalStockDataSource local,
     required RemoteStockDataSource remote,
+    required SyncService syncService,
   })  : _local = local,
-        _remote = remote;
+        _remote = remote,
+        _syncService = syncService;
 
   // ── Stock Levels ─────────────────────────────────────────────────────────
 
   @override
   Future<List<StockLevelModel>> getLevels(String productId) async {
+    // Guard: if sync_queue has pending operations, prefer local data
+    // to avoid overwriting offline stock decrements with stale backend values.
+    if (await _syncService.hasPendingOperations()) {
+      return _local.getLevels(productId);
+    }
     try {
       final levels = await _remote.getLevels(productId);
       for (final level in levels) {
@@ -46,6 +55,9 @@ class StockRepositoryImpl implements StockRepository {
     String productId,
     String storeId,
   ) async {
+    if (await _syncService.hasPendingOperations()) {
+      return _local.getLevelByStore(productId, storeId);
+    }
     try {
       final levels = await _remote.getLevels(productId);
       final matching = levels.where((l) => l.storeId == storeId).toList();
@@ -94,35 +106,37 @@ class StockRepositoryImpl implements StockRepository {
     int page = 0,
     int pageSize = 20,
   }) async {
-    try {
-      final movements = await _remote.getHistory(
-        productId: productId,
-        storeId: storeId,
-        movementType: movementType,
-        from: from,
-        to: to,
-        page: page,
-        pageSize: pageSize,
-      );
-      // Cache remote results locally so offline fallback stays up-to-date
-      // and history survives an app reinstall once connectivity is restored.
-      for (final m in movements) {
-        await _local.upsertMovement(m);
+    // Best-effort: sync remote movements into local cache when online.
+    // Always return from local so offline SALE movements (with local UUIDs)
+    // are never hidden by a purely-remote result set.
+    if (!await _syncService.hasPendingOperations()) {
+      try {
+        final movements = await _remote.getHistory(
+          productId: productId,
+          storeId: storeId,
+          movementType: movementType,
+          from: from,
+          to: to,
+          page: page,
+          pageSize: pageSize,
+        );
+        for (final m in movements) {
+          await _local.upsertMovement(m);
+        }
+      } catch (e) {
+        dev.log('[Stock] Remote history failed — using local: $e',
+            name: 'StockRepository');
       }
-      return movements;
-    } catch (e) {
-      dev.log('[Stock] Remote history failed — using local: $e',
-          name: 'StockRepository');
-      return _local.getMovements(
-        productId,
-        storeId: storeId,
-        movementType: movementType,
-        from: from,
-        to: to,
-        page: page,
-        pageSize: pageSize,
-      );
     }
+    return _local.getMovements(
+      productId,
+      storeId: storeId,
+      movementType: movementType,
+      from: from,
+      to: to,
+      page: page,
+      pageSize: pageSize,
+    );
   }
 
   // ── Mutations ─────────────────────────────────────────────────────────────

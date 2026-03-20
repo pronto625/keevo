@@ -1,9 +1,10 @@
-import 'dart:async';
 import 'dart:developer' as dev;
 
 import 'package:drift/drift.dart';
 
 import '../../../../core/storage/app_database.dart' hide Sale, SaleItem;
+import '../../../../core/sync/connectivity_service.dart';
+import '../../../../core/sync/sync_service.dart';
 import '../../domain/model/payment_mode_enum.dart';
 import '../../domain/model/sale_model.dart';
 import '../../domain/model/sales_history_filter.dart';
@@ -11,30 +12,48 @@ import '../../domain/repository/sale_repository.dart';
 import '../datasource/local_sale_datasource.dart';
 import '../datasource/remote_sale_datasource.dart';
 
-/// SaleRepositoryImpl — write-through: local-first, background push.
+/// SaleRepositoryImpl — Backend-first: online writes go to backend FIRST.
 class SaleRepositoryImpl implements SaleRepository {
   final LocalSaleDataSource _local;
   final RemoteSaleDataSource _remote;
   final AppDatabase _db;
+  final ConnectivityService _connectivity;
+  final SyncService _syncService;
 
-  const SaleRepositoryImpl(this._local, this._remote, this._db);
+  const SaleRepositoryImpl(
+    this._local,
+    this._remote,
+    this._db, {
+    required ConnectivityService connectivity,
+    required SyncService syncService,
+  })  : _connectivity = connectivity,
+        _syncService = syncService;
 
   @override
   Future<void> recordSale(Sale sale) async {
-    // Step 1 — ALWAYS save locally first (atomic Drift transaction)
-    await _local.insertAll(sale);
-
-    // Step 2 — Immediately attempt backend push in background (non-blocking)
-    unawaited(() async {
+    if (await _connectivity.isOnline()) {
+      // PATH A: Backend-first
       try {
         await _remote.pushSale(sale);
-        await _local.markSynced(sale.id);
-        await _local.removeSyncQueueEntry(sale.id);
+        await _local.insertAll(sale, synced: true);
       } catch (_) {
-        dev.log('[SaleRepo] Backend unreachable — sale ${sale.id} queued',
-            name: 'POS');
+        // Backend unreachable despite connectivity — fallback
+        await _local.insertAll(sale, synced: false);
+        await _syncService.queueOperation(
+          operation: 'CREATE_SALE',
+          payload: _buildPayload(sale),
+          entityId: sale.id,
+        );
       }
-    }());
+    } else {
+      // PATH B: Offline-first
+      await _local.insertAll(sale, synced: false);
+      await _syncService.queueOperation(
+        operation: 'CREATE_SALE',
+        payload: _buildPayload(sale),
+        entityId: sale.id,
+      );
+    }
   }
 
   @override
@@ -263,4 +282,24 @@ class SaleRepositoryImpl implements SaleRepository {
       createdAt: row.createdAt,
     );
   }
+
+  Map<String, dynamic> _buildPayload(Sale sale) => {
+        'saleId': sale.id,
+        'storeId': sale.storeId,
+        'paymentMode': sale.paymentMode.value,
+        'mobileMoneyRef': sale.mobileMoneyRef,
+        'clientId': sale.clientId,
+        'discountAmount': sale.discountAmount,
+        'status': sale.status,
+        'items': sale.items
+            .map((i) => {
+                  'productId': i.productId,
+                  'variantId': i.variantId,
+                  'productName': i.productName,
+                  'catalogueUnitPrice': i.catalogueUnitPrice,
+                  'appliedUnitPrice': i.appliedUnitPrice,
+                  'quantity': i.quantity,
+                })
+            .toList(),
+      };
 }

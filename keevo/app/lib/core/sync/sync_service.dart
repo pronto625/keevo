@@ -9,6 +9,12 @@ abstract interface class SyncService {
   /// Push queued local operations to the remote backend.
   Future<void> push();
 
+  /// Returns true if the sync_queue has pending (un-synced) operations.
+  ///
+  /// Used by repositories to avoid overwriting local data with stale
+  /// backend values while offline changes haven't been pushed yet.
+  Future<bool> hasPendingOperations();
+
   /// Pull remote delta changes and merge into local Drift DB.
   Future<void> pull();
 
@@ -16,8 +22,10 @@ abstract interface class SyncService {
   ///
   /// [operation] — e.g. "CREATE_SALE", "UPDATE_STOCK"
   /// [payload]   — JSON-serialisable map of the operation data
+  /// [entityId]  — optional identifier of the entity being synced (Story 5.1)
   Future<void> queueOperation({
     required String operation,
     required Map<String, dynamic> payload,
+    String? entityId,
   });
 }

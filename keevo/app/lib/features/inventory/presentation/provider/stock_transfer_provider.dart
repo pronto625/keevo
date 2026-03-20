@@ -34,12 +34,8 @@ final stockTransferRepositoryProvider =
   return StockTransferRepositoryImpl(
     local: ref.watch(localStockTransferDsProvider),
     remote: ref.watch(remoteStockTransferDsProvider),
-    db: ref.watch(appDatabaseProvider),
-    isOnline: () {
-      final status =
-          ref.read(syncStatusProvider).value ?? SyncStatus.offlineCritical;
-      return status == SyncStatus.online || status == SyncStatus.syncing;
-    },
+    connectivity: ref.watch(connectivityServiceProvider),
+    syncService: ref.watch(syncServiceProvider),
   );
 });
 

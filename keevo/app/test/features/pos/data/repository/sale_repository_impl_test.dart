@@ -5,6 +5,8 @@ import 'package:keevo/features/pos/data/repository/sale_repository_impl.dart';
 import 'package:keevo/features/pos/domain/model/payment_mode_enum.dart';
 import 'package:keevo/features/pos/domain/model/sale_model.dart';
 import 'package:keevo/core/storage/app_database.dart' hide Sale, SaleItem;
+import 'package:keevo/core/sync/connectivity_service.dart';
+import 'package:keevo/core/sync/sync_service.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockLocalSaleDataSource extends Mock implements LocalSaleDataSource {}
@@ -12,6 +14,10 @@ class MockLocalSaleDataSource extends Mock implements LocalSaleDataSource {}
 class MockRemoteSaleDataSource extends Mock implements RemoteSaleDataSource {}
 
 class MockAppDatabase extends Mock implements AppDatabase {}
+
+class MockConnectivityService extends Mock implements ConnectivityService {}
+
+class MockSyncService extends Mock implements SyncService {}
 
 class FakeSale extends Fake implements Sale {}
 
@@ -40,6 +46,8 @@ void main() {
   late MockLocalSaleDataSource mockLocal;
   late MockRemoteSaleDataSource mockRemote;
   late MockAppDatabase mockDb;
+  late MockConnectivityService mockConnectivity;
+  late MockSyncService mockSyncService;
   late SaleRepositoryImpl repo;
 
   setUpAll(() => registerFallbackValue(FakeSale()));
@@ -48,81 +56,71 @@ void main() {
     mockLocal = MockLocalSaleDataSource();
     mockRemote = MockRemoteSaleDataSource();
     mockDb = MockAppDatabase();
-    repo = SaleRepositoryImpl(mockLocal, mockRemote, mockDb);
+    mockConnectivity = MockConnectivityService();
+    mockSyncService = MockSyncService();
+    repo = SaleRepositoryImpl(
+      mockLocal,
+      mockRemote,
+      mockDb,
+      connectivity: mockConnectivity,
+      syncService: mockSyncService,
+    );
   });
 
   group('SaleRepositoryImpl', () {
-    test('recordSale saves locally and pushes remote', () async {
+    test('recordSale online — pushes to backend first, saves locally as synced', () async {
       final sale = _testSale();
-      when(() => mockLocal.insertAll(any())).thenAnswer((_) async {});
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
       when(() => mockRemote.pushSale(any())).thenAnswer((_) async {});
-      when(() => mockLocal.markSynced(any())).thenAnswer((_) async {});
-      when(() => mockLocal.removeSyncQueueEntry(any()))
-          .thenAnswer((_) async {});
+      when(() => mockLocal.insertAll(any(), synced: true)).thenAnswer((_) async {});
 
       await repo.recordSale(sale);
 
-      verify(() => mockLocal.insertAll(sale)).called(1);
-      // Background push is unawaited — give microtask a chance
-      await Future<void>.delayed(const Duration(milliseconds: 50));
       verify(() => mockRemote.pushSale(sale)).called(1);
+      verify(() => mockLocal.insertAll(sale, synced: true)).called(1);
     });
 
-    test('recordSale offline mode — only saves locally', () async {
+    test('recordSale online but backend fails — saves locally + queues sync', () async {
       final sale = _testSale();
-      when(() => mockLocal.insertAll(any())).thenAnswer((_) async {});
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
       when(() => mockRemote.pushSale(any()))
           .thenThrow(Exception('Network unreachable'));
+      when(() => mockLocal.insertAll(any(), synced: false)).thenAnswer((_) async {});
+      when(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).thenAnswer((_) async {});
 
       await repo.recordSale(sale);
 
-      verify(() => mockLocal.insertAll(sale)).called(1);
-      // Give background task time to run
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      // Remote was called but failed — sale still saved locally
-      verify(() => mockRemote.pushSale(sale)).called(1);
-      verifyNever(() => mockLocal.markSynced(any()));
+      verify(() => mockLocal.insertAll(sale, synced: false)).called(1);
+      verify(() => mockSyncService.queueOperation(
+            operation: 'CREATE_SALE',
+            payload: any(named: 'payload'),
+            entityId: sale.id,
+          )).called(1);
     });
 
-    test('recordSale online — marks synced after successful push', () async {
+    test('recordSale offline — saves locally + queues sync', () async {
       final sale = _testSale();
-      when(() => mockLocal.insertAll(any())).thenAnswer((_) async {});
-      when(() => mockRemote.pushSale(any())).thenAnswer((_) async {});
-      when(() => mockLocal.markSynced(any())).thenAnswer((_) async {});
-      when(() => mockLocal.removeSyncQueueEntry(any()))
-          .thenAnswer((_) async {});
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => false);
+      when(() => mockLocal.insertAll(any(), synced: false)).thenAnswer((_) async {});
+      when(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).thenAnswer((_) async {});
 
       await repo.recordSale(sale);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      verify(() => mockLocal.markSynced(sale.id)).called(1);
-      verify(() => mockLocal.removeSyncQueueEntry(sale.id)).called(1);
-    });
-
-    test('recordSale offline — leaves entry in sync queue', () async {
-      final sale = _testSale();
-      when(() => mockLocal.insertAll(any())).thenAnswer((_) async {});
-      when(() => mockRemote.pushSale(any()))
-          .thenThrow(Exception('Timeout'));
-
-      await repo.recordSale(sale);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-
-      verifyNever(() => mockLocal.markSynced(any()));
-      verifyNever(() => mockLocal.removeSyncQueueEntry(any()));
-    });
-
-    test('recordSale server error — leaves entry in sync queue', () async {
-      final sale = _testSale();
-      when(() => mockLocal.insertAll(any())).thenAnswer((_) async {});
-      when(() => mockRemote.pushSale(any()))
-          .thenThrow(Exception('503 Service Unavailable'));
-
-      await repo.recordSale(sale);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-
-      verify(() => mockLocal.insertAll(sale)).called(1);
-      verifyNever(() => mockLocal.markSynced(any()));
+      verifyNever(() => mockRemote.pushSale(any()));
+      verify(() => mockLocal.insertAll(sale, synced: false)).called(1);
+      verify(() => mockSyncService.queueOperation(
+            operation: 'CREATE_SALE',
+            payload: any(named: 'payload'),
+            entityId: sale.id,
+          )).called(1);
     });
 
     test('getFrequentProductIds returns top N by count', () async {

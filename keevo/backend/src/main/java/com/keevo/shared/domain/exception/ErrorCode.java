@@ -80,6 +80,9 @@ public enum ErrorCode {
     // ── Sync ──────────────────────────────────────────────────────
     SYNC_CONFLICT,
     OFFLINE_LIMIT_EXCEEDED,
+    SYNC_OPERATION_REJECTED,       // Story 5.1 — sync handler rejected the operation
+    SYNC_DUPLICATE_OPERATION,      // Story 5.1 — operationId already processed
+    SYNC_UNKNOWN_OPERATION_TYPE,   // Story 5.1 — no handler registered for operationType
 
     // ── Subscription / Plan Limits ────────────────────────────────
     SUBSCRIPTION_NOT_FOUND, // HTTP 404 — no active subscription for tenant (Story 2.4)

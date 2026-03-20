@@ -1,5 +1,11 @@
 package com.keevo.sync.sync.domain.port.in;
 
+import com.keevo.sync.sync.domain.model.SyncBatchResult;
+import com.keevo.sync.sync.domain.model.SyncOperation;
+
+import java.util.List;
+import java.util.UUID;
+
 /**
  * SyncUseCase — Port interface for the offline-first synchronisation use case.
  *
@@ -9,22 +15,17 @@ package com.keevo.sync.sync.domain.port.in;
  *   <li>ActorId injected explicitly in Command objects (Story 5+).
  *   <li>NO SecurityContextHolder inside this use case.
  * </ul>
- *
- * <p>Full implementation in Story 5.1 (push-sync) and 5.2 (pull-sync).
  */
 public interface SyncUseCase {
 
-    /**
-     * Push all queued local operations to the remote backend.
-     * Returns the number of operations successfully synced.
-     */
-    int push();
+    record PushBatchCommand(UUID actorId, String tenantId, String deviceId,
+                            List<SyncOperation> operations) {}
+
+    SyncBatchResult pushBatch(PushBatchCommand command);
 
     /**
      * Pull delta changes from the remote backend and merge into local store.
-     *
-     * @param since ISO-8601 timestamp of the last successful pull (nullable for full sync)
-     * @return number of changes applied locally
+     * Stub — full implementation in Story 5.2.
      */
     int pull(String since);
 }
