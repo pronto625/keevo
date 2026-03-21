@@ -121,7 +121,7 @@ development_status:
   # Epic 5: Moteur de Synchronisation Offline-First
   # ─────────────────────────────────────────────────────────
   epic-5: in-progress
-  5-1-push-sync-envoi-par-lot-des-operations-en-file: in-progress    # 2026-03-20 — dev started
+  5-1-push-sync-envoi-par-lot-des-operations-en-file: done             # 2026-03-20 — code review passed | H2: @Transactional per-batch→TransactionTemplate per-op | H4: SyncOperationsLogRepositoryAdapterTest (4 tests) | M5: OpenAPI annotations | H3: 10 Flutter backend-first test files (50 tests) | 77/77 backend + 50/50 Flutter GREEN
   5-2-pull-sync-telechargement-delta-fusion-locale: backlog
   5-3-resolution-de-conflits-delta-stock-last-write-wins: backlog
   5-4-limite-7-jours-hors-ligne-gate-de-deverrouillage: backlog

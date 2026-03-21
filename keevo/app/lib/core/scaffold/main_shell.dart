@@ -9,18 +9,16 @@ import '../../features/stores/presentation/provider/active_store_provider.dart';
 
 /// MainShell — persistent bottom navigation scaffold wrapping the main sections.
 ///
-/// UX spec: OWNER sees 5 onglets: Caisse / Catalogue / Clients / Fournisseurs / Plus
+/// UX spec: OWNER sees 4 onglets: Caisse / Catalogue / Rapports / Plus
 /// EMPLOYEE sees 2 onglets: Caisse / Plus (AC5 — restricted navigation)
 ///
-/// Routes inside the ShellRoute (/pos, /products, /clients, /suppliers) are
-/// displayed as the [child] body while the [NavigationBar] stays visible.
-/// Sub-routes (form pages) push on top of the shell and don't show the nav bar.
+/// Clients & Fournisseurs are accessible from the Plus (Settings) page.
 class MainShell extends ConsumerWidget {
   final Widget child;
   const MainShell({required this.child, super.key});
 
   /// OWNER tab routes — full navigation
-  static const _ownerRoutes = ['/pos', '/products', '/clients', '/suppliers', '/settings'];
+  static const _ownerRoutes = ['/pos', '/products', '/reports', '/settings'];
 
   /// EMPLOYEE tab routes — restricted to POS + settings only (AC5)
   static const _employeeRoutes = ['/pos', '/settings'];
@@ -84,14 +82,9 @@ class MainShell extends ConsumerWidget {
           label: 'Catalogue',
         ),
         const NavigationDestination(
-          icon: Icon(Icons.people_outline_rounded),
-          selectedIcon: Icon(Icons.people_rounded),
-          label: 'Clients',
-        ),
-        const NavigationDestination(
-          icon: Icon(Icons.local_shipping_outlined),
-          selectedIcon: Icon(Icons.local_shipping_rounded),
-          label: 'Fournisseurs',
+          icon: Icon(Icons.bar_chart_outlined),
+          selectedIcon: Icon(Icons.bar_chart_rounded),
+          label: 'Rapports',
         ),
       ],
       const NavigationDestination(

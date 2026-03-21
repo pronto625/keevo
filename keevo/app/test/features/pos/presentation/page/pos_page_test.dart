@@ -33,7 +33,7 @@ void main() {
         sharedPreferencesProvider.overrideWithValue(prefs),
         currentUserRoleProvider.overrideWithValue('OWNER'),
         frequentProductsProvider
-            .overrideWith((ref, storeId) => Future.value([])),
+            .overrideWith((ref, key) => Future.value([])),
         ...overrides,
       ],
       child: const MaterialApp(home: PosPage()),
@@ -67,7 +67,7 @@ void main() {
     testWidgets('cartPill visible after adding product', (tester) async {
       await tester.pumpWidget(buildApp(
         overrides: [
-          frequentProductsProvider.overrideWith((ref, storeId) => Future.value([
+          frequentProductsProvider.overrideWith((ref, key) => Future.value([
                 const PosProductResult(
                   id: 'p1',
                   name: 'Savon',
@@ -100,7 +100,7 @@ void main() {
 
       await tester.pumpWidget(buildApp(
         overrides: [
-          frequentProductsProvider.overrideWith((ref, storeId) => Future.value([
+          frequentProductsProvider.overrideWith((ref, key) => Future.value([
                 const PosProductResult(
                   id: 'p1',
                   name: 'Savon',

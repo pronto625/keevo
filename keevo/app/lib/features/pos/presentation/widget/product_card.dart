@@ -12,6 +12,7 @@ class ProductCard extends StatefulWidget {
   final int price;
   final int stockQuantity;
   final String? photoUrl;
+  final String? categoryName;
   final VoidCallback onTap;
   final VoidCallback? onVerifierStock;
 
@@ -21,6 +22,7 @@ class ProductCard extends StatefulWidget {
     required this.price,
     required this.stockQuantity,
     this.photoUrl,
+    this.categoryName,
     required this.onTap,
     this.onVerifierStock,
   });
@@ -145,6 +147,19 @@ class _ProductCardState extends State<ProductCard>
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Category label
+                        if (widget.categoryName != null)
+                          Text(
+                            widget.categoryName!.toUpperCase(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: Colors.grey.shade500,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
                         // Product name
                         Text(
                           widget.name,

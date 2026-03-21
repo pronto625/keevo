@@ -6,7 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/di/providers.dart';
 import '../../../../core/storage/app_constants.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../features/sync_indicator/presentation/widget/sync_indicator.dart';
+import '../../../catalog/presentation/provider/category_provider.dart';
 import '../../../catalog/presentation/widget/create_draft_product_bottom_sheet.dart';
 import '../../../onboarding/domain/model/sector_type.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
@@ -16,7 +18,6 @@ import '../provider/pos_providers.dart';
 import '../provider/pos_search_provider.dart';
 import '../widget/cart_bottom_sheet.dart';
 import '../widget/cart_pill.dart';
-import '../widget/pos_speed_dial.dart';
 import '../widget/product_card.dart';
 
 /// PosPage — main POS screen with product search, grid, and cart pill.
@@ -33,6 +34,7 @@ class _PosPageState extends ConsumerState<PosPage> {
   final _searchController = TextEditingController();
   SectorType? _sectorType;
   String _searchQuery = '';
+  String? _selectedCategoryId;
 
   @override
   void initState() {
@@ -107,103 +109,59 @@ class _PosPageState extends ConsumerState<PosPage> {
     final theme = Theme.of(context);
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FA),
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: 56),
-        child: PosSpeedDial(
-          storeId: storeId,
-          onCreateDraft: () => _createDraftAndAddToCart(context, ref, ''),
+        child: FloatingActionButton(
+          heroTag: 'pos_create_draft',
+          backgroundColor: AppTheme.primary,
+          onPressed: () => _createDraftAndAddToCart(context, ref, ''),
+          child: const Icon(Icons.add_rounded, color: Colors.white),
         ),
       ),
       body: Stack(
         children: [
           CustomScrollView(
             slivers: [
-              // Modern gradient AppBar with search
+              // ── Blue gradient header (consistent with other screens) ──
               SliverAppBar(
+                expandedHeight: 100,
                 floating: true,
                 snap: true,
-                expandedHeight: 120,
-                backgroundColor: const Color(0xFF3B5BDB),
+                pinned: false,
+                automaticallyImplyLeading: false,
+                elevation: 0,
+                backgroundColor: AppTheme.primary,
                 flexibleSpace: FlexibleSpaceBar(
                   background: Container(
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [Color(0xFF3B5BDB), Color(0xFF4DABF7)],
+                        colors: [AppTheme.primary, AppTheme.primary.withAlpha(180)],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
                     ),
                     child: SafeArea(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        padding: const EdgeInsets.fromLTRB(20, 8, 12, 12),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Row(
-                              children: [
-                                Text(
-                                  'Point de Vente',
-                                  style: theme.textTheme.titleLarge?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const Spacer(),
-                                // Mes Ventes — Story 4.4 AC7
-                                IconButton(
-                                  icon: const Icon(Icons.receipt_long, color: Colors.white),
-                                  tooltip: 'Mes Ventes',
-                                  onPressed: () => context.go('/pos/sales-history'),
-                                ),
-                                const SizedBox(width: 8),
-                                const SyncIndicator(),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            // Search bar
-                            Container(
-                              decoration: BoxDecoration(
+                            Text(
+                              'Caisse',
+                              style: theme.textTheme.titleLarge?.copyWith(
                                 color: Colors.white,
-                                borderRadius: BorderRadius.circular(14),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.08),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: TextField(
-                                controller: _searchController,
-                                decoration: InputDecoration(
-                                  hintText: 'Rechercher un produit…',
-                                  hintStyle: TextStyle(
-                                    color: Colors.grey.shade400,
-                                    fontWeight: FontWeight.w400,
-                                  ),
-                                  prefixIcon: Icon(Icons.search_rounded,
-                                      color: Colors.grey.shade400),
-                                  suffixIcon: _searchQuery.isNotEmpty
-                                      ? IconButton(
-                                          icon: Icon(Icons.close_rounded,
-                                              color: Colors.grey.shade500, size: 20),
-                                          onPressed: () {
-                                            _searchController.clear();
-                                            setState(() => _searchQuery = '');
-                                            ref.read(posSearchProvider.notifier).clear();
-                                          },
-                                        )
-                                      : null,
-                                  border: InputBorder.none,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 14),
-                                ),
-                                onChanged: (value) {
-                                  setState(() => _searchQuery = value);
-                                  ref.read(posSearchProvider.notifier).search(value, storeId);
-                                },
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
+                            const Spacer(),
+                            IconButton(
+                              icon: const Icon(Icons.receipt_long,
+                                  color: Colors.white70),
+                              tooltip: 'Mes Ventes',
+                              onPressed: () => context.go('/pos/sales-history'),
+                            ),
+                            const SyncIndicator(),
                           ],
                         ),
                       ),
@@ -211,6 +169,60 @@ class _PosPageState extends ConsumerState<PosPage> {
                   ),
                 ),
               ),
+              // ── Search bar on light background ──
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText: 'Chercher un produit',
+                        hintStyle: TextStyle(
+                          color: Colors.grey.shade400,
+                          fontWeight: FontWeight.w400,
+                        ),
+                        prefixIcon: Icon(Icons.search_rounded,
+                            color: Colors.grey.shade400),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: Icon(Icons.close_rounded,
+                                    color: Colors.grey.shade500, size: 20),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() => _searchQuery = '');
+                                  ref
+                                      .read(posSearchProvider.notifier)
+                                      .clear();
+                                },
+                              )
+                            : null,
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 14),
+                      ),
+                      onChanged: (value) {
+                        setState(() => _searchQuery = value);
+                        ref
+                            .read(posSearchProvider.notifier)
+                            .search(value, storeId);
+                      },
+                    ),
+                  ),
+                ),
+              ),
+              // Category filter chips
+              if (_searchQuery.isEmpty)
+                _CategoryChipsSliver(
+                  selectedCategoryId: _selectedCategoryId,
+                  onCategorySelected: (id) =>
+                      setState(() => _selectedCategoryId = id),
+                ),
               // Pending sales banner (OWNER only)
               if (!isEmployee) _PendingSalesBanner(storeId: storeId),
               // Product grid or search results
@@ -223,6 +235,7 @@ class _PosPageState extends ConsumerState<PosPage> {
                       storeId: storeId,
                       sectorType: _sectorType,
                       isEmployee: isEmployee,
+                      categoryId: _selectedCategoryId,
                       onAddToCart: (p) => _addProductToCart(p, cartNotifier),
                     ),
               // Bottom padding for cart pill
@@ -299,18 +312,21 @@ class _FrequentProductsSliver extends ConsumerWidget {
   final String? storeId;
   final SectorType? sectorType;
   final bool isEmployee;
+  final String? categoryId;
   final void Function(PosProductResult) onAddToCart;
 
   const _FrequentProductsSliver({
     required this.storeId,
     required this.sectorType,
     required this.isEmployee,
+    this.categoryId,
     required this.onAddToCart,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final asyncProducts = ref.watch(frequentProductsProvider(storeId));
+    final key = (storeId: storeId, categoryId: categoryId);
+    final asyncProducts = ref.watch(frequentProductsProvider(key));
     return asyncProducts.when(
       loading: () => const SliverFillRemaining(
         child: Center(child: CircularProgressIndicator()),
@@ -345,6 +361,7 @@ class _FrequentProductsSliver extends ConsumerWidget {
                       price: p.price,
                       stockQuantity: p.stock,
                       photoUrl: p.photoUrl,
+                      categoryName: p.categoryName,
                       onTap: () => onAddToCart(p),
                     );
                   },
@@ -430,6 +447,7 @@ class _SearchResultsSliver extends ConsumerWidget {
                       price: p.price,
                       stockQuantity: p.stock,
                       photoUrl: p.photoUrl,
+                      categoryName: p.categoryName,
                       onTap: () => onAddToCart(p),
                     );
                   },
@@ -494,6 +512,80 @@ class _EmptyState extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Horizontal scrollable category filter chips (Tous / Boissons / Épicerie…).
+class _CategoryChipsSliver extends ConsumerWidget {
+  final String? selectedCategoryId;
+  final ValueChanged<String?> onCategorySelected;
+
+  const _CategoryChipsSliver({
+    required this.selectedCategoryId,
+    required this.onCategorySelected,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asyncCategories = ref.watch(categoriesProvider);
+    return asyncCategories.when(
+      loading: () => const SliverToBoxAdapter(child: SizedBox.shrink()),
+      error: (_, __) => const SliverToBoxAdapter(child: SizedBox.shrink()),
+      data: (categories) {
+        if (categories.isEmpty) {
+          return const SliverToBoxAdapter(child: SizedBox.shrink());
+        }
+        // Only show root categories (no parentId)
+        final roots = categories
+            .where((c) => c.parentId == null && c.isActive)
+            .toList();
+        if (roots.isEmpty) {
+          return const SliverToBoxAdapter(child: SizedBox.shrink());
+        }
+        return SliverToBoxAdapter(
+          child: SizedBox(
+            height: 52,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+              itemCount: roots.length + 1,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final isAll = index == 0;
+                final cat = isAll ? null : roots[index - 1];
+                final isSelected = isAll
+                    ? selectedCategoryId == null
+                    : selectedCategoryId == cat!.id;
+                return GestureDetector(
+                  onTap: () => onCategorySelected(isAll ? null : cat!.id),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppTheme.primary
+                          : AppTheme.primary.withAlpha(20),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      isAll ? 'Tous' : cat!.name,
+                      style: TextStyle(
+                        color: isSelected
+                            ? Colors.white
+                            : AppTheme.primary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 }

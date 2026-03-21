@@ -5,6 +5,7 @@ import '../../domain/model/cart_item.dart';
 import '../../domain/model/payment_mode_enum.dart';
 import '../../domain/model/sale_model.dart';
 import 'cart_provider.dart';
+import 'day_closure_providers.dart';
 import 'pos_providers.dart';
 import 'pos_search_provider.dart';
 
@@ -81,6 +82,10 @@ class RecordSaleNotifier extends Notifier<RecordSaleState> {
       ref.invalidate(posSearchProvider);
       // Also invalidate the catalog stock providers for price/stock consistency
       ref.invalidate(stockNotifierProvider);
+      // Invalidate report providers so Reports tab shows updated totals
+      ref.invalidate(todaySummaryProvider);
+      ref.invalidate(todaySalesCountProvider);
+      ref.invalidate(dayClosureStateProvider);
       state = RecordSaleSuccess(sale);
     } catch (e) {
       state = RecordSaleError(e.toString());

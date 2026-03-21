@@ -6,7 +6,8 @@ import com.keevo.sync.sync.domain.port.in.SyncUseCase;
 import com.keevo.sync.sync.domain.port.out.SyncOperationsLogRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -19,17 +20,19 @@ public class SyncPushService implements SyncUseCase {
     private final SyncOperationHandlerRegistry handlerRegistry;
     private final SyncOperationsLogRepository logRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final TransactionTemplate transactionTemplate;
 
     public SyncPushService(SyncOperationHandlerRegistry handlerRegistry,
                            SyncOperationsLogRepository logRepository,
-                           ApplicationEventPublisher eventPublisher) {
+                           ApplicationEventPublisher eventPublisher,
+                           PlatformTransactionManager transactionManager) {
         this.handlerRegistry = handlerRegistry;
         this.logRepository = logRepository;
         this.eventPublisher = eventPublisher;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
     @Override
-    @Transactional
     public SyncBatchResult pushBatch(PushBatchCommand command) {
         List<SyncOperation> sorted = command.operations().stream()
                 .sorted(Comparator.comparing(
@@ -40,18 +43,25 @@ public class SyncPushService implements SyncUseCase {
         List<SyncOperationResult> results = new ArrayList<>();
 
         for (SyncOperation operation : sorted) {
-            SyncOperationResult result = processOperation(operation, command);
+            // Each operation runs in its own transaction — one failure does NOT roll back others (AC3)
+            SyncOperationResult result = transactionTemplate.execute(status -> {
+                SyncOperationResult opResult = processOperation(operation, command);
+
+                logRepository.save(new SyncOperationsLogEntry(
+                        operation.operationId(),
+                        operation.operationType(),
+                        operation.entityId(),
+                        opResult.status(),
+                        opResult.reason(),
+                        Instant.now(),
+                        operation.clientTimestamp()));
+
+                return opResult;
+            });
+
             results.add(result);
 
-            logRepository.save(new SyncOperationsLogEntry(
-                    operation.operationId(),
-                    operation.operationType(),
-                    operation.entityId(),
-                    result.status(),
-                    result.reason(),
-                    Instant.now(),
-                    operation.clientTimestamp()));
-
+            // Event published outside the transaction — non-transactional side effect
             eventPublisher.publishEvent(new SyncOperationProcessedEvent(
                     operation.operationId(),
                     operation.operationType(),

@@ -32,4 +32,9 @@ abstract interface class DayClosureRepository {
   ///
   /// [storeId] — Store to count sales for.
   Future<int> getTodaySalesCount(String storeId);
+
+  /// Count completed sales that occurred strictly after [after].
+  ///
+  /// Used to detect new sales after a day closure.
+  Future<int> getSalesCountAfter(String storeId, DateTime after);
 }

@@ -10,6 +10,7 @@ class PosProductResult {
   final int price;
   final int stock;
   final String? photoUrl;
+  final String? categoryName;
 
   const PosProductResult({
     required this.id,
@@ -17,6 +18,7 @@ class PosProductResult {
     required this.price,
     required this.stock,
     this.photoUrl,
+    this.categoryName,
   });
 }
 

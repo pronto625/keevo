@@ -70,4 +70,9 @@ class DayClosureRepositoryImpl implements DayClosureRepository {
   Future<int> getTodaySalesCount(String storeId) {
     return _localDataSource.getTodaySalesCount(storeId);
   }
+
+  @override
+  Future<int> getSalesCountAfter(String storeId, DateTime after) {
+    return _localDataSource.getSalesCountAfter(storeId, after);
+  }
 }

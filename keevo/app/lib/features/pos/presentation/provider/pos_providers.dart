@@ -68,11 +68,14 @@ final activeEmployeeIdProvider = FutureProvider<String?>((ref) async {
 
 /// Frequently sold products for POS grid (AC1 — ordered by sale_items.quantity DESC).
 /// Always shows ALL active products; frequent ones appear first.
+/// Optionally filters by categoryId when a category chip is selected.
 ///
 /// AutoDispose: POS page is destroyed on tab switch (GoRouter ShellRoute),
 /// so the provider re-queries fresh stock on each navigation.
 final frequentProductsProvider =
-    FutureProvider.autoDispose.family<List<PosProductResult>, String?>((ref, storeId) async {
+    FutureProvider.autoDispose.family<List<PosProductResult>, ({String? storeId, String? categoryId})>((ref, key) async {
+  final storeId = key.storeId;
+  final categoryId = key.categoryId;
   if (storeId == null) return [];
 
   // Sync stock for active store from remote so POS has fresh data.
@@ -103,9 +106,19 @@ final frequentProductsProvider =
     ];
   }
 
+  // Category filter clause
+  final String categoryClause;
+  if (categoryId != null) {
+    categoryClause = 'AND p.category_id = ? ';
+    variables.add(Variable.withString(categoryId));
+  } else {
+    categoryClause = '';
+  }
+
   final rows = await db.customSelect(
     'SELECT p.id, p.name, p.price, p.photo_url, '
-    'COALESCE(d.quantity, 0) as stock '
+    'COALESCE(d.quantity, 0) as stock, '
+    'c.name as category_name '
     'FROM products p '
     'LEFT JOIN ('
     '  SELECT sl.product_id, sl.quantity '
@@ -113,7 +126,9 @@ final frequentProductsProvider =
     '  WHERE sl.store_id = ? '
     '  GROUP BY sl.product_id'
     ') d ON d.product_id = p.id '
+    'LEFT JOIN categories c ON c.id = p.category_id '
     'WHERE p.archived = 0 AND p.status = \'ACTIVE\' '
+    '$categoryClause'
     'ORDER BY $frequentOrder ASC, '
     '(CASE WHEN COALESCE(d.quantity, 0) > 0 THEN 0 ELSE 1 END) ASC, '
     'p.name ASC '
@@ -128,6 +143,7 @@ final frequentProductsProvider =
             price: r.read<int>('price'),
             stock: r.read<int>('stock'),
             photoUrl: r.readNullable<String>('photo_url'),
+            categoryName: r.readNullable<String>('category_name'),
           ))
       .toList();
 

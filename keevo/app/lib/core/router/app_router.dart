@@ -35,6 +35,7 @@ import '../../features/pos/presentation/page/sale_success_page.dart';
 import '../../features/pos/presentation/page/sales_history_page.dart';
 import '../../features/pos/presentation/page/sale_detail_page.dart';
 import '../../features/pos/domain/model/sale_model.dart';
+import '../../features/reports/presentation/page/reports_page.dart';
 import '../../features/settings/presentation/page/settings_page.dart';
 import '../../features/settings/presentation/page/subscription_page.dart';
 import '../../features/stores/presentation/page/stores_list_page.dart';
@@ -288,43 +289,42 @@ final GoRouter appRouter = GoRouter(
     ),
 
     // ── Main shell — persistent BottomNavigationBar ─────────────────────────
-    // Wraps Caisse / Catalogue / Clients / Fournisseurs with a shared nav bar.
-    // Sub-routes (form pages) are declared outside this shell so they push
-    // as full-screen pages without the nav bar.
+    // Wraps Caisse / Catalogue / Rapports / Plus with a shared nav bar.
+    // Clients & Fournisseurs accessible from Plus page.
     ShellRoute(
       builder: (context, state, child) => MainShell(child: child),
       routes: [
-        // ── Caisse (POS) ───────────────────────────────────────────────────
         GoRoute(
           path: '/pos',
           builder: (_, __) => const PosPage(),
         ),
-
-        // ── Catalogue ──────────────────────────────────────────────────────
         GoRoute(
           path: '/products',
           builder: (_, __) => const CatalogPage(),
         ),
-
-        // ── Clients ────────────────────────────────────────────────────────
         GoRoute(
-          path: '/clients',
-          builder: (_, __) => const ClientListPage(),
+          path: '/reports',
+          builder: (_, __) => const ReportsPage(),
         ),
-
-        // ── Fournisseurs ───────────────────────────────────────────────────
-        GoRoute(
-          path: '/suppliers',
-          builder: (_, __) => const SupplierListPage(),
-        ),
-
-        // ── Plus > Paramètres (UX spec: 4ème onglet ‘Plus’) ──────────────────────
         GoRoute(
           path: '/settings',
           builder: (_, __) => const SettingsPage(),
         ),
       ],
     ),
+
+    // ── Clients (full-screen, accessed from Plus) ─────────────────────────
+    GoRoute(
+      path: '/clients',
+      builder: (_, __) => const ClientListPage(),
+    ),
+
+    // ── Fournisseurs (full-screen, accessed from Plus) ────────────────────
+    GoRoute(
+      path: '/suppliers',
+      builder: (_, __) => const SupplierListPage(),
+    ),
+
 
     // ── POS sub-routes (full-screen, no nav bar) ──────────────────────────
     GoRoute(

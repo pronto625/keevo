@@ -10,6 +10,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 
 import java.time.Instant;
 import java.util.List;
@@ -29,6 +31,7 @@ class SyncPushServiceTest {
     @Mock private SyncOperationsLogRepository logRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private SyncOperationHandler saleHandler;
+    @Mock private PlatformTransactionManager transactionManager;
 
     private SyncPushService service;
 
@@ -37,7 +40,10 @@ class SyncPushServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new SyncPushService(handlerRegistry, logRepository, eventPublisher);
+        // Simulate a pass-through transaction manager for unit tests
+        lenient().when(transactionManager.getTransaction(any()))
+                .thenReturn(new SimpleTransactionStatus());
+        service = new SyncPushService(handlerRegistry, logRepository, eventPublisher, transactionManager);
     }
 
     @Test

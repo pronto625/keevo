@@ -40,6 +40,7 @@ class SyncTriggerCriticalFailure extends SyncTriggerState {
 @Riverpod(keepAlive: true)
 class SyncTriggerNotifier extends _$SyncTriggerNotifier {
   Timer? _retryTimer;
+  Timer? _periodicTimer;
   int _consecutiveFailures = 0;
   DateTime? _firstFailureAt;
 
@@ -55,8 +56,16 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
       });
     });
 
+    // Periodic sync check every 30s — catches the case where the backend
+    // was down but the network (WiFi/mobile) stayed connected, so the
+    // connectivity stream never fires.
+    _periodicTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _tryPeriodicPush();
+    });
+
     ref.onDispose(() {
       _retryTimer?.cancel();
+      _periodicTimer?.cancel();
     });
 
     return const SyncTriggerState.idle();
@@ -68,6 +77,15 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
     _retryTimer = Timer(const Duration(seconds: 3), () {
       triggerPush();
     });
+  }
+
+  Future<void> _tryPeriodicPush() async {
+    if (state is! SyncTriggerIdle) return;
+    final syncService = ref.read(syncServiceProvider);
+    final hasPending = await syncService.hasPendingOperations();
+    if (hasPending) {
+      triggerPush();
+    }
   }
 
   Future<void> triggerPush() async {

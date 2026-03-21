@@ -10,6 +10,10 @@ import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.port.in.SyncUseCase;
 import com.keevo.sync.sync.domain.port.in.SyncUseCase.PushBatchCommand;
 import io.jsonwebtoken.Claims;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -25,6 +29,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/sync")
+@Tag(name = "Sync", description = "Offline-first synchronisation — push/pull operations")
 public class SyncController {
 
     private final SyncUseCase syncUseCase;
@@ -37,6 +42,12 @@ public class SyncController {
 
     @PostMapping("/push")
     @PreAuthorize("hasAnyRole('OWNER','EMPLOYEE')")
+    @Operation(summary = "Push batch of offline operations", description = "Processes a batch of queued offline operations. Each operation is handled independently — partial success is possible.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Batch processed (check per-operation status in results)"),
+            @ApiResponse(responseCode = "400", description = "Invalid request body"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid authentication")
+    })
     public ResponseEntity<ApiResponseWrapper<SyncPushResponseDto>> push(
             @Valid @RequestBody SyncPushRequestDto request,
             HttpServletRequest httpRequest) {
@@ -61,6 +72,8 @@ public class SyncController {
      * GET /api/v1/sync/pull — STUB until Story 5.2.
      */
     @GetMapping("/pull")
+    @Operation(summary = "Pull delta changes (STUB)", description = "Not implemented — Story 5.2")
+    @ApiResponse(responseCode = "501", description = "Not implemented")
     public ResponseEntity<Void> pull(@RequestParam(required = false) String since) {
         return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
     }

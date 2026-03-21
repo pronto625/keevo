@@ -87,17 +87,26 @@ class LocalDayClosureDataSource {
   ///
   /// Aggregates COMPLETED sales for totalRevenue,
   /// and PENDING_VALIDATION sales for pending count/total.
+  /// Only includes sales AFTER the last closure (if any) to avoid double-counting.
   Future<domain.DayClosureSummary> computeTodaySummary(
       String storeId, String? employeeId) async {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day);
     final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59, 999);
 
-    // Query for COMPLETED sales
+    // Determine the effective start: after last closure if one exists today
+    final lastClosure = await getLastClosure(storeId);
+    final DateTime effectiveStart =
+        (lastClosure != null && lastClosure.closedAt.isAfter(startOfDay))
+            ? lastClosure.closedAt
+            : startOfDay;
+
+    // Query for COMPLETED sales after effective start
     var completedQuery = _db.select(_db.sales)
       ..where((s) =>
           s.storeId.equals(storeId) &
-          s.occurredAt.isBetweenValues(startOfDay, endOfDay) &
+          s.occurredAt.isBiggerThanValue(effectiveStart) &
+          s.occurredAt.isSmallerOrEqualValue(endOfDay) &
           s.status.equals('COMPLETED'));
 
     if (employeeId != null) {
@@ -106,11 +115,12 @@ class LocalDayClosureDataSource {
 
     final completedSales = await completedQuery.get();
 
-    // Query for PENDING_VALIDATION sales
+    // Query for PENDING_VALIDATION sales after effective start
     var pendingQuery = _db.select(_db.sales)
       ..where((s) =>
           s.storeId.equals(storeId) &
-          s.occurredAt.isBetweenValues(startOfDay, endOfDay) &
+          s.occurredAt.isBiggerThanValue(effectiveStart) &
+          s.occurredAt.isSmallerOrEqualValue(endOfDay) &
           s.status.equals('PENDING_VALIDATION'));
 
     if (employeeId != null) {
@@ -147,18 +157,21 @@ class LocalDayClosureDataSource {
           () => _ProductAggregate(item.productId, item.productName),
         );
         agg.qty += item.quantity;
+        agg.revenue += item.subtotal;
       }
     }
 
     String? topProductId;
     String? topProductName;
     int topProductQty = 0;
+    int topProductRevenue = 0;
 
     if (productQty.isNotEmpty) {
       final top = productQty.values.reduce((a, b) => a.qty > b.qty ? a : b);
       topProductId = top.productId;
       topProductName = top.productName;
       topProductQty = top.qty;
+      topProductRevenue = top.revenue;
     }
 
     // Pending totals
@@ -173,6 +186,7 @@ class LocalDayClosureDataSource {
       topProductId: topProductId,
       topProductName: topProductName,
       topProductQty: topProductQty,
+      topProductRevenue: topProductRevenue,
       pendingSalesCount: pendingSalesCount,
       pendingSalesTotal: pendingSalesTotal,
     );
@@ -194,6 +208,23 @@ class LocalDayClosureDataSource {
 
     return count ?? 0;
   }
+
+  /// Count completed sales that occurred strictly after [after] and before end of today.
+  Future<int> getSalesCountAfter(String storeId, DateTime after) async {
+    final now = DateTime.now();
+    final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59, 999);
+
+    final count = await (_db.selectOnly(_db.sales)
+          ..where(_db.sales.storeId.equals(storeId) &
+              _db.sales.occurredAt.isBiggerThanValue(after) &
+              _db.sales.occurredAt.isSmallerOrEqualValue(endOfDay) &
+              _db.sales.status.equals('COMPLETED'))
+          ..addColumns([_db.sales.id.count()]))
+        .map((row) => row.read(_db.sales.id.count()))
+        .getSingle();
+
+    return count ?? 0;
+  }
 }
 
 /// Helper class for product aggregation.
@@ -201,6 +232,7 @@ class _ProductAggregate {
   final String productId;
   final String productName;
   int qty;
+  int revenue;
 
-  _ProductAggregate(this.productId, this.productName) : qty = 0;
+  _ProductAggregate(this.productId, this.productName) : qty = 0, revenue = 0;
 }

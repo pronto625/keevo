@@ -68,23 +68,46 @@ final getSalesHistoryUseCaseProvider = Provider<GetSalesHistoryUseCase>((ref) {
 // ─────────────────────────────────────────────────────────────────────────────
 // State providers
 
-/// Today's completed sales count for badge display.
+/// Unclosed completed sales count for badge display.
+///
+/// If a closure was already done today, shows only sales made after it.
 final todaySalesCountProvider = FutureProvider.family<int, String>((ref, storeId) async {
   final repository = ref.watch(dayClosureRepositoryProvider);
+  final now = DateTime.now();
+  final startOfDay = DateTime(now.year, now.month, now.day);
+
+  final lastClosure = await repository.getLastClosure(storeId);
+  if (lastClosure != null && lastClosure.closedAt.isAfter(startOfDay)) {
+    return repository.getSalesCountAfter(storeId, lastClosure.closedAt);
+  }
   return repository.getTodaySalesCount(storeId);
 });
 
 /// Day close button state: available, closed, or noSales.
+///
+/// If a closure exists today but new sales were made after it,
+/// the button becomes available again so the user can close again.
 final dayClosureStateProvider = FutureProvider.family<DayCloseButtonState, String>((ref, storeId) async {
   final repository = ref.watch(dayClosureRepositoryProvider);
+  final now = DateTime.now();
+  final startOfDay = DateTime(now.year, now.month, now.day);
 
-  // Check if already closed today
-  final hasClosureToday = await repository.hasClosureToday(storeId);
+  // Get last closure
+  final lastClosure = await repository.getLastClosure(storeId);
+  final hasClosureToday =
+      lastClosure != null && lastClosure.closedAt.isAfter(startOfDay);
+
   if (hasClosureToday) {
+    // Check for new completed sales AFTER the closure
+    final newSalesCount =
+        await repository.getSalesCountAfter(storeId, lastClosure!.closedAt);
+    if (newSalesCount > 0) {
+      return DayCloseButtonState.available;
+    }
     return DayCloseButtonState.closed;
   }
 
-  // Count today's sales
+  // No closure today — check if there are any sales
   final salesCount = await repository.getTodaySalesCount(storeId);
   if (salesCount == 0) {
     return DayCloseButtonState.noSales;

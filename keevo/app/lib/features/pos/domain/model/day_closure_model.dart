@@ -23,6 +23,9 @@ class DayClosureSummary {
   /// Quantity sold of top product
   final int topProductQty;
 
+  /// Revenue of top product in XAF
+  final int topProductRevenue;
+
   /// Number of pending sales (not included in totalRevenue)
   final int pendingSalesCount;
 
@@ -37,6 +40,7 @@ class DayClosureSummary {
     this.topProductId,
     this.topProductName,
     required this.topProductQty,
+    this.topProductRevenue = 0,
     required this.pendingSalesCount,
     required this.pendingSalesTotal,
   });
@@ -54,6 +58,7 @@ class DayClosureSummary {
         cashAmount: 0,
         momoAmount: 0,
         topProductQty: 0,
+        topProductRevenue: 0,
         pendingSalesCount: 0,
         pendingSalesTotal: 0,
       );

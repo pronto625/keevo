@@ -75,7 +75,10 @@ class _SupplierListPageState extends ConsumerState<SupplierListPage> {
             pinned: true,
             elevation: 0,
             backgroundColor: Colors.transparent,
-            automaticallyImplyLeading: false,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
                 decoration: BoxDecoration(
