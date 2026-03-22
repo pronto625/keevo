@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart' as sql;
 
+import 'audit_entries_table.dart';
 import 'categories_table.dart';
 import 'clients_table.dart';
 import 'day_closures_table.dart';
@@ -41,6 +42,7 @@ part 'app_database.g.dart';
 /// Schema version 10: stock_levels UNIQUE index on (product_id, store_id) + deduplicate (Story 4.1 POS fix).
 /// Schema version 14: day_closures table added (Story 4.4).
 /// Schema version 16: employees table added (Story 5.1).
+/// Schema version 17: audit_entries table added (Story 5.2 — Pull Sync).
 @DriftDatabase(tables: [
   SyncQueue,
   Products,
@@ -57,6 +59,7 @@ part 'app_database.g.dart';
   StockTransfers,
   DayClosures,
   Employees,
+  AuditEntries,
 ])
 class AppDatabase extends _$AppDatabase {
   /// Production constructor — uses SQLCipher encrypted file database.
@@ -69,7 +72,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -187,6 +190,10 @@ class AppDatabase extends _$AppDatabase {
       if (from < 16) {
         // Story 5.1 — employees table for offline support.
         await migrator.createTable(employees);
+      }
+      if (from < 17) {
+        // Story 5.2 — audit_entries table for offline audit history (pull sync).
+        await migrator.createTable(auditEntries);
       }
     },
   );

@@ -3,10 +3,12 @@ package com.keevo.sync.sync.adapter.in.rest;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.sync.sync.adapter.in.rest.dto.SyncOperationDto;
+import com.keevo.sync.sync.adapter.in.rest.dto.SyncPullResponseDto;
 import com.keevo.sync.sync.adapter.in.rest.dto.SyncPushRequestDto;
 import com.keevo.sync.sync.adapter.in.rest.dto.SyncPushResponseDto;
 import com.keevo.sync.sync.domain.model.SyncBatchResult;
 import com.keevo.sync.sync.domain.model.SyncOperation;
+import com.keevo.sync.sync.domain.model.SyncPullResult;
 import com.keevo.sync.sync.domain.port.in.SyncUseCase;
 import com.keevo.sync.sync.domain.port.in.SyncUseCase.PushBatchCommand;
 import io.jsonwebtoken.Claims;
@@ -16,12 +18,12 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -68,14 +70,32 @@ public class SyncController {
         return ResponseEntity.ok(ApiResponseWrapper.ok(SyncPushResponseDto.from(result)));
     }
 
-    /**
-     * GET /api/v1/sync/pull — STUB until Story 5.2.
-     */
     @GetMapping("/pull")
-    @Operation(summary = "Pull delta changes (STUB)", description = "Not implemented — Story 5.2")
-    @ApiResponse(responseCode = "501", description = "Not implemented")
-    public ResponseEntity<Void> pull(@RequestParam(required = false) String since) {
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    @PreAuthorize("hasAnyRole('OWNER','EMPLOYEE')")
+    @Operation(summary = "Pull delta changes since timestamp",
+            description = "Returns all entities modified after the given timestamp. " +
+                    "Omit 'since' for full sync (first-time). " +
+                    "Response includes serverTimestamp as the cursor for next pull.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Delta entities returned"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid authentication")
+    })
+    public ResponseEntity<ApiResponseWrapper<SyncPullResponseDto>> pull(
+            @RequestParam(required = false) String since,
+            HttpServletRequest httpRequest) {
+
+        UUID actorId = extractActorId();
+        Claims claims = extractClaims(httpRequest);
+        String tenantId = claims.get("tenantId", String.class);
+
+        Instant sinceInstant = (since != null && !since.isBlank())
+                ? Instant.parse(since)
+                : null;
+
+        SyncPullResult result = syncUseCase.pull(
+                new SyncUseCase.PullCommand(actorId, tenantId, sinceInstant));
+
+        return ResponseEntity.ok(ApiResponseWrapper.ok(SyncPullResponseDto.from(result)));
     }
 
     private UUID extractActorId() {

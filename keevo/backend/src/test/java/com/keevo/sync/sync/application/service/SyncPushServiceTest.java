@@ -43,7 +43,7 @@ class SyncPushServiceTest {
         // Simulate a pass-through transaction manager for unit tests
         lenient().when(transactionManager.getTransaction(any()))
                 .thenReturn(new SimpleTransactionStatus());
-        service = new SyncPushService(handlerRegistry, logRepository, eventPublisher, transactionManager);
+        service = new SyncPushService(handlerRegistry, logRepository, eventPublisher, transactionManager, List.of());
     }
 
     @Test

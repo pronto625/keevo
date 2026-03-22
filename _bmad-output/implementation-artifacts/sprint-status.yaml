@@ -122,7 +122,7 @@ development_status:
   # ─────────────────────────────────────────────────────────
   epic-5: in-progress
   5-1-push-sync-envoi-par-lot-des-operations-en-file: done             # 2026-03-20 — code review passed | H2: @Transactional per-batch→TransactionTemplate per-op | H4: SyncOperationsLogRepositoryAdapterTest (4 tests) | M5: OpenAPI annotations | H3: 10 Flutter backend-first test files (50 tests) | 77/77 backend + 50/50 Flutter GREEN
-  5-2-pull-sync-telechargement-delta-fusion-locale: backlog
+  5-2-pull-sync-telechargement-delta-fusion-locale: done             # 2026-03-22 — code review passed | H1: AC7 pendingIds protection in 6 upsert methods | H2: @Transactional(readOnly=true) on pull() | H3: stock_transfers.updated_at migration in SyncService | H4: 3 Flutter test files (17 tests) | H5: SaleDeltaProvider batch query (N+1 fix) | M2: full provider invalidation | M3: 5-min periodic sync | M4: onAppStartup() | M5: sales/sale_items updated_at DDL | 133/133 backend + 56/56 Flutter GREEN
   5-3-resolution-de-conflits-delta-stock-last-write-wins: backlog
   5-4-limite-7-jours-hors-ligne-gate-de-deverrouillage: backlog
   5-5-monitoring-sync-recuperation-derreurs-coherence-multi-device: backlog

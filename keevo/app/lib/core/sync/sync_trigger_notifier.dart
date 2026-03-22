@@ -1,12 +1,16 @@
 import 'dart:async';
+import 'dart:developer' as dev;
 import 'dart:math';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../features/catalog/presentation/provider/category_provider.dart';
 import '../../features/catalog/presentation/provider/product_provider.dart';
 import '../../features/catalog/presentation/provider/stock_provider.dart';
+import '../../features/contact/presentation/provider/contact_provider.dart';
 import '../../features/inventory/presentation/provider/global_stock_provider.dart';
+import '../../features/stores/presentation/provider/store_provider.dart';
 import '../di/providers.dart';
 import 'sync_status_provider.dart';
 
@@ -40,7 +44,8 @@ class SyncTriggerCriticalFailure extends SyncTriggerState {
 @Riverpod(keepAlive: true)
 class SyncTriggerNotifier extends _$SyncTriggerNotifier {
   Timer? _retryTimer;
-  Timer? _periodicTimer;
+  Timer? _periodicPushTimer;
+  Timer? _periodicSyncTimer;
   int _consecutiveFailures = 0;
   DateTime? _firstFailureAt;
 
@@ -56,16 +61,21 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
       });
     });
 
-    // Periodic sync check every 30s — catches the case where the backend
-    // was down but the network (WiFi/mobile) stayed connected, so the
-    // connectivity stream never fires.
-    _periodicTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    // Periodic push check every 30s — catches pending queue when backend
+    // was down but network stayed connected.
+    _periodicPushTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       _tryPeriodicPush();
+    });
+
+    // AC6: Periodic full push→pull cycle every 5 minutes for multi-device freshness
+    _periodicSyncTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      if (state is SyncTriggerIdle) triggerSync();
     });
 
     ref.onDispose(() {
       _retryTimer?.cancel();
-      _periodicTimer?.cancel();
+      _periodicPushTimer?.cancel();
+      _periodicSyncTimer?.cancel();
     });
 
     return const SyncTriggerState.idle();
@@ -75,7 +85,7 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
     // Debounce 3 seconds
     _retryTimer?.cancel();
     _retryTimer = Timer(const Duration(seconds: 3), () {
-      triggerPush();
+      triggerSync();
     });
   }
 
@@ -84,10 +94,45 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
     final syncService = ref.read(syncServiceProvider);
     final hasPending = await syncService.hasPendingOperations();
     if (hasPending) {
-      triggerPush();
+      triggerSync();
     }
   }
 
+  Future<void> triggerSync() async {
+    state = const SyncTriggerState.syncing();
+    try {
+      final syncService = ref.read(syncServiceProvider);
+
+      // Step 1: Push pending offline ops
+      try {
+        await syncService.push();
+      } catch (e) {
+        dev.log('Push failed during sync cycle: $e', name: 'SyncTrigger');
+        // Push failure does NOT prevent pull
+      }
+
+      // Step 2: Pull server delta
+      await syncService.pull();
+
+      _consecutiveFailures = 0;
+      _firstFailureAt = null;
+      // Invalidate ALL entity providers so UI refreshes with pulled data
+      _invalidateAllProviders();
+      state = const SyncTriggerState.idle();
+    } catch (_) {
+      _consecutiveFailures++;
+      _firstFailureAt ??= DateTime.now();
+      _scheduleRetry();
+    }
+  }
+
+  /// AC6: Called after JWT validation at app startup to pull latest server state.
+  Future<void> onAppStartup() async {
+    if (state is! SyncTriggerIdle) return;
+    triggerSync();
+  }
+
+  /// Push-only trigger — backward compatibility for connectivity restore.
   Future<void> triggerPush() async {
     state = const SyncTriggerState.syncing();
     try {
@@ -95,19 +140,26 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
       await syncService.push();
       _consecutiveFailures = 0;
       _firstFailureAt = null;
-      // After successful push, sync_queue is empty — invalidate data providers
-      // so they re-fetch now-correct backend data (guards will pass through).
-      ref.invalidate(stockNotifierProvider);
-      ref.invalidate(productListForPickerProvider);
-      ref.invalidate(productListProvider);
-      ref.invalidate(globalStockOverviewProvider);
-      ref.invalidate(storeStockDetailProvider);
+      _invalidateAllProviders();
       state = const SyncTriggerState.idle();
     } catch (_) {
       _consecutiveFailures++;
       _firstFailureAt ??= DateTime.now();
       _scheduleRetry();
     }
+  }
+
+  /// Invalidate all Riverpod providers for entity types refreshed by pull.
+  void _invalidateAllProviders() {
+    ref.invalidate(stockNotifierProvider);
+    ref.invalidate(productListForPickerProvider);
+    ref.invalidate(productListProvider);
+    ref.invalidate(globalStockOverviewProvider);
+    ref.invalidate(storeStockDetailProvider);
+    ref.invalidate(categoriesProvider);
+    ref.invalidate(clientListNotifierProvider);
+    ref.invalidate(supplierListNotifierProvider);
+    ref.invalidate(storeListNotifierProvider);
   }
 
   void _scheduleRetry() {

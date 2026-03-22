@@ -2,7 +2,9 @@ package com.keevo.sync.sync.domain.port.in;
 
 import com.keevo.sync.sync.domain.model.SyncBatchResult;
 import com.keevo.sync.sync.domain.model.SyncOperation;
+import com.keevo.sync.sync.domain.model.SyncPullResult;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -23,9 +25,12 @@ public interface SyncUseCase {
 
     SyncBatchResult pushBatch(PushBatchCommand command);
 
+    record PullCommand(UUID actorId, String tenantId, Instant since) {}
+
     /**
-     * Pull delta changes from the remote backend and merge into local store.
-     * Stub — full implementation in Story 5.2.
+     * Pull delta changes since the given timestamp.
+     * Returns all entities modified after {@code since} across all entity types.
+     * If since is null → full sync (first-time pull).
      */
-    int pull(String since);
+    SyncPullResult pull(PullCommand command);
 }

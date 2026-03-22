@@ -261,6 +261,10 @@ public class TenantSchemaProvisioner {
     static final String DDL_STOCK_TRANSFERS_IDX_PRODUCT =
             "CREATE INDEX IF NOT EXISTS idx_stock_transfers_product ON stock_transfers(product_id, occurred_at DESC)";
 
+    /** Story 5.2 — add updated_at for delta-pull sync on status changes */
+    static final String DDL_STOCK_TRANSFERS_MIGRATE_UPDATED_AT =
+            "ALTER TABLE stock_transfers ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ";
+
     // ── Clients (Story 2.5) ────────────────────────────────────────────────────
 
     static final String DDL_CLIENTS = """
@@ -365,6 +369,13 @@ public class TenantSchemaProvisioner {
 
     static final String DDL_SALE_ITEMS_MIGRATE_CATALOGUE_PRICE =
             "ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS catalogue_unit_price INTEGER NOT NULL DEFAULT 0";
+
+    /** Story 5.2 — add updated_at for delta-pull sync (future mutation tracking) */
+    static final String DDL_SALES_MIGRATE_UPDATED_AT =
+            "ALTER TABLE sales ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()";
+
+    static final String DDL_SALE_ITEMS_MIGRATE_UPDATED_AT =
+            "ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()";
 
     // ── Employees (Story 3.5) ─────────────────────────────────────────────────
 
@@ -575,6 +586,7 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_STOCK_TRANSFERS_IDX_SOURCE);
             stmt.execute(DDL_STOCK_TRANSFERS_IDX_DEST);
             stmt.execute(DDL_STOCK_TRANSFERS_IDX_PRODUCT);
+            stmt.execute(DDL_STOCK_TRANSFERS_MIGRATE_UPDATED_AT); // Story 5.2: add updated_at for delta pull
             // Story 2.5 — contact tables (clients before sales for FK constraint)
             stmt.execute(DDL_CLIENTS);
             stmt.execute(DDL_CLIENTS_IDX_NAME);
@@ -597,6 +609,9 @@ public class TenantSchemaProvisioner {
             // Story 4.2 — sale discount + catalogue price migrations
             stmt.execute(DDL_SALES_MIGRATE_DISCOUNT_AMOUNT);
             stmt.execute(DDL_SALE_ITEMS_MIGRATE_CATALOGUE_PRICE);
+            // Story 5.2 — updated_at for sales/sale_items delta pull
+            stmt.execute(DDL_SALES_MIGRATE_UPDATED_AT);
+            stmt.execute(DDL_SALE_ITEMS_MIGRATE_UPDATED_AT);
             // Story 3.5 — employees
             stmt.execute(DDL_EMPLOYEES);
             stmt.execute(DDL_EMPLOYEES_IDX_USER);

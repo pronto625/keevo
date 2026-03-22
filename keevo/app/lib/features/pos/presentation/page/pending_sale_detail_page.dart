@@ -198,7 +198,7 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
           ),
         ],
       ),
-    ).whenComplete(() => controller.dispose());
+    );
   }
 
   void _showCancelDialog(String saleId) {
@@ -230,7 +230,7 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
           ),
         ],
       ),
-    ).whenComplete(() => controller.dispose());
+    );
   }
 
   Future<void> _doValidate(String saleId, String justification) async {

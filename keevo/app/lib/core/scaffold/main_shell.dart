@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../di/providers.dart';
+import '../sync/sync_trigger_notifier.dart';
 import '../../features/catalog/presentation/provider/product_provider.dart';
 import '../../features/pos/presentation/provider/pos_providers.dart';
 import '../../features/stores/presentation/provider/active_store_provider.dart';
+import '../../features/sync_indicator/presentation/widget/sync_warning_banner.dart';
 
 /// MainShell — persistent bottom navigation scaffold wrapping the main sections.
 ///
@@ -39,6 +41,10 @@ class MainShell extends ConsumerWidget {
     final index = _tabIndex(location, routes);
     final draftCountAsync = ref.watch(pendingDraftsCountProvider);
     final draftCount = draftCountAsync.valueOrNull ?? 0;
+
+    // Eagerly initialize SyncTriggerNotifier so connectivity listeners
+    // and periodic sync timer are active from the moment the shell loads.
+    ref.watch(syncTriggerNotifierProvider);
 
     final storeId = ref.watch(activeStoreIdProvider);
     final pendingSalesCount = isEmployee
@@ -95,7 +101,12 @@ class MainShell extends ConsumerWidget {
     ];
 
     return Scaffold(
-      body: child,
+      body: Column(
+        children: [
+          const SyncWarningBanner(),
+          Expanded(child: child),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
         onDestinationSelected: (i) => context.go(routes[i]),

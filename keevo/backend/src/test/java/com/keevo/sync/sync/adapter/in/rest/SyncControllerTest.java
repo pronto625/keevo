@@ -7,6 +7,7 @@ import com.keevo.sync.sync.adapter.in.rest.dto.SyncPushRequestDto;
 import com.keevo.sync.sync.domain.model.SyncBatchResult;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
+import com.keevo.sync.sync.domain.model.SyncPullResult;
 import com.keevo.sync.sync.domain.port.in.SyncUseCase;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
@@ -190,11 +191,44 @@ class SyncControllerTest {
     }
 
     @Test
-    void pull_returnsNotImplemented() throws Exception {
-        authenticateAs("OWNER");
+    void pull_withSince_returns200WithEntities() throws Exception {
+        mockJwt("OWNER");
+        var pullResult = new SyncPullResult(
+                Instant.parse("2026-03-21T12:00:00Z"),
+                Map.of("products", List.of(Map.<String, Object>of("id", "abc", "name", "Prod1"))),
+                Map.of("products", 1));
+        when(syncUseCase.pull(any())).thenReturn(pullResult);
+
+        mockMvc.perform(get("/api/v1/sync/pull")
+                        .param("since", "2026-03-20T10:00:00Z")
+                        .header("Authorization", "Bearer fake-jwt"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.serverTimestamp").exists())
+                .andExpect(jsonPath("$.data.entities.products").isArray())
+                .andExpect(jsonPath("$.data.entities.products.length()").value(1))
+                .andExpect(jsonPath("$.data.counts.products").value(1));
+    }
+
+    @Test
+    void pull_withoutSince_returns200FullSync() throws Exception {
+        mockJwt("OWNER");
+        var pullResult = new SyncPullResult(Instant.now(), Map.of(), Map.of());
+        when(syncUseCase.pull(any())).thenReturn(pullResult);
 
         mockMvc.perform(get("/api/v1/sync/pull")
                         .header("Authorization", "Bearer fake-jwt"))
-                .andExpect(status().isNotImplemented());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.serverTimestamp").exists());
+    }
+
+    @Test
+    void pull_employee_returns200() throws Exception {
+        mockJwt("EMPLOYEE");
+        var pullResult = new SyncPullResult(Instant.now(), Map.of(), Map.of());
+        when(syncUseCase.pull(any())).thenReturn(pullResult);
+
+        mockMvc.perform(get("/api/v1/sync/pull")
+                        .header("Authorization", "Bearer fake-jwt"))
+                .andExpect(status().isOk());
     }
 }
