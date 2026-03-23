@@ -6,11 +6,13 @@ import com.keevo.sync.sync.adapter.in.rest.dto.SyncOperationDto;
 import com.keevo.sync.sync.adapter.in.rest.dto.SyncPullResponseDto;
 import com.keevo.sync.sync.adapter.in.rest.dto.SyncPushRequestDto;
 import com.keevo.sync.sync.adapter.in.rest.dto.SyncPushResponseDto;
+import com.keevo.sync.sync.adapter.in.rest.dto.SyncConflictDto;
 import com.keevo.sync.sync.domain.model.SyncBatchResult;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncPullResult;
 import com.keevo.sync.sync.domain.port.in.SyncUseCase;
 import com.keevo.sync.sync.domain.port.in.SyncUseCase.PushBatchCommand;
+import com.keevo.sync.sync.domain.port.out.SyncConflictsLogRepository;
 import io.jsonwebtoken.Claims;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -24,6 +26,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -36,10 +39,13 @@ public class SyncController {
 
     private final SyncUseCase syncUseCase;
     private final JwtTokenProvider jwtTokenProvider;
+    private final SyncConflictsLogRepository conflictsLogRepository;
 
-    public SyncController(SyncUseCase syncUseCase, JwtTokenProvider jwtTokenProvider) {
+    public SyncController(SyncUseCase syncUseCase, JwtTokenProvider jwtTokenProvider,
+                           SyncConflictsLogRepository conflictsLogRepository) {
         this.syncUseCase = syncUseCase;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.conflictsLogRepository = conflictsLogRepository;
     }
 
     @PostMapping("/push")
@@ -96,6 +102,25 @@ public class SyncController {
                 new SyncUseCase.PullCommand(actorId, tenantId, sinceInstant));
 
         return ResponseEntity.ok(ApiResponseWrapper.ok(SyncPullResponseDto.from(result)));
+    }
+
+    @GetMapping("/conflicts")
+    @PreAuthorize("hasRole('OWNER')")
+    @Operation(summary = "List sync conflict log",
+            description = "Returns paginated list of sync conflicts for OWNER review.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Conflict log returned"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid authentication"),
+            @ApiResponse(responseCode = "403", description = "Insufficient permissions — OWNER only")
+    })
+    public ResponseEntity<ApiResponseWrapper<List<SyncConflictDto>>> getConflicts(
+            @RequestParam(defaultValue = "50") int limit,
+            @RequestParam(defaultValue = "0") int offset) {
+        List<SyncConflictDto> conflicts = conflictsLogRepository.findAll(limit, offset)
+                .stream()
+                .map(SyncConflictDto::from)
+                .toList();
+        return ResponseEntity.ok(ApiResponseWrapper.ok(conflicts));
     }
 
     private UUID extractActorId() {

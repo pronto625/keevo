@@ -82,6 +82,8 @@ class SupplierControllerTest {
     @DisplayName("GET /api/v1/suppliers returns list of suppliers")
     void should_list_suppliers() throws Exception {
         when(getSuppliersUseCase.execute(any())).thenReturn(List.of(sampleSupplier));
+        when(getSupplierProfileUseCase.execute(sampleSupplier.id()))
+                .thenReturn(new GetSupplierProfileUseCase.SupplierProfileResult(sampleSupplier, List.of()));
 
         mockMvc.perform(get("/api/v1/suppliers"))
                 .andExpect(status().isOk())
@@ -122,6 +124,8 @@ class SupplierControllerTest {
     void should_update_supplier() throws Exception {
         UUID id = sampleSupplier.id();
         when(updateSupplierUseCase.execute(any())).thenReturn(sampleSupplier);
+        when(getSupplierProfileUseCase.execute(id))
+                .thenReturn(new GetSupplierProfileUseCase.SupplierProfileResult(sampleSupplier, List.of()));
 
         mockMvc.perform(patch("/api/v1/suppliers/" + id)
                         .contentType(MediaType.APPLICATION_JSON)

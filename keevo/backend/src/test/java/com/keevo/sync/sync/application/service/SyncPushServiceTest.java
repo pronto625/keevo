@@ -2,7 +2,9 @@ package com.keevo.sync.sync.application.service;
 
 import com.keevo.sync.sync.domain.model.*;
 import com.keevo.sync.sync.domain.port.in.SyncOperationHandler;
+import com.keevo.sync.sync.domain.port.out.SyncConflictsLogRepository;
 import com.keevo.sync.sync.domain.port.out.SyncOperationsLogRepository;
+import com.keevo.sync.sync.application.strategy.ConflictStrategyRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +34,8 @@ class SyncPushServiceTest {
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private SyncOperationHandler saleHandler;
     @Mock private PlatformTransactionManager transactionManager;
+    @Mock private ConflictStrategyRegistry conflictStrategyRegistry;
+    @Mock private SyncConflictsLogRepository conflictsLogRepository;
 
     private SyncPushService service;
 
@@ -43,7 +47,8 @@ class SyncPushServiceTest {
         // Simulate a pass-through transaction manager for unit tests
         lenient().when(transactionManager.getTransaction(any()))
                 .thenReturn(new SimpleTransactionStatus());
-        service = new SyncPushService(handlerRegistry, logRepository, eventPublisher, transactionManager, List.of());
+        service = new SyncPushService(handlerRegistry, logRepository, eventPublisher, transactionManager, List.of(),
+                conflictStrategyRegistry, conflictsLogRepository);
     }
 
     @Test

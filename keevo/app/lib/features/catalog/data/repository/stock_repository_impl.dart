@@ -1,9 +1,12 @@
 import 'dart:developer' as dev;
 
+import 'package:uuid/uuid.dart';
+
 import '../../domain/model/cross_store_availability_model.dart';
 import '../../domain/model/stock_level_model.dart';
 import '../../domain/model/stock_movement_model.dart';
 import '../../domain/repository/stock_repository.dart';
+import '../../../../core/sync/connectivity_service.dart';
 import '../../../../core/sync/sync_service.dart';
 import '../datasource/local_stock_datasource.dart';
 import '../datasource/remote_stock_datasource.dart';
@@ -19,14 +22,17 @@ class StockRepositoryImpl implements StockRepository {
   final LocalStockDataSource _local;
   final RemoteStockDataSource _remote;
   final SyncService _syncService;
+  final ConnectivityService _connectivity;
 
   const StockRepositoryImpl({
     required LocalStockDataSource local,
     required RemoteStockDataSource remote,
     required SyncService syncService,
+    required ConnectivityService connectivity,
   })  : _local = local,
         _remote = remote,
-        _syncService = syncService;
+        _syncService = syncService,
+        _connectivity = connectivity;
 
   // ── Stock Levels ─────────────────────────────────────────────────────────
 
@@ -149,16 +155,86 @@ class StockRepositoryImpl implements StockRepository {
     required int quantity,
     String? notes,
   }) async {
-    final movement = await _remote.recordEntry(
+    if (await _connectivity.isOnline()) {
+      try {
+        final movement = await _remote.recordEntry(
+          productId: productId,
+          variantId: variantId,
+          storeId: storeId,
+          quantity: quantity,
+          notes: notes,
+        );
+        await _local.insertMovement(movement);
+        await _refreshLocalLevels(productId);
+        return movement;
+      } catch (e) {
+        dev.log('[Stock] Remote recordEntry failed — offline fallback: $e',
+            name: 'StockRepository');
+        return _recordEntryLocally(
+          productId: productId,
+          variantId: variantId,
+          storeId: storeId,
+          quantity: quantity,
+          notes: notes,
+        );
+      }
+    } else {
+      return _recordEntryLocally(
+        productId: productId,
+        variantId: variantId,
+        storeId: storeId,
+        quantity: quantity,
+        notes: notes,
+      );
+    }
+  }
+
+  Future<StockMovementModel> _recordEntryLocally({
+    required String productId,
+    String? variantId,
+    required String storeId,
+    required int quantity,
+    String? notes,
+  }) async {
+    final currentLevel = await _local.getLevelByStore(productId, storeId);
+    final before = currentLevel?.quantity ?? 0;
+    final after = before + quantity;
+
+    final movement = StockMovementModel(
+      id: const Uuid().v4(),
       productId: productId,
       variantId: variantId,
       storeId: storeId,
-      quantity: quantity,
+      movementType: 'STOCK_ENTRY',
+      quantityBefore: before,
+      quantityDelta: quantity,
+      quantityAfter: after,
+      actorId: 'local',
       notes: notes,
+      occurredAt: DateTime.now(),
+      synced: false,
     );
     await _local.insertMovement(movement);
-    // Refresh local level cache
-    await _refreshLocalLevels(productId);
+    await _local.upsertLevel(StockLevelModel(
+      id: currentLevel?.id ?? const Uuid().v4(),
+      productId: productId,
+      variantId: variantId,
+      storeId: storeId,
+      quantity: after,
+      minimumThreshold: currentLevel?.minimumThreshold ?? 0,
+      updatedAt: DateTime.now(),
+    ));
+    await _syncService.queueOperation(
+      operation: 'RECORD_STOCK_ENTRY',
+      payload: {
+        'productId': productId,
+        if (variantId != null) 'variantId': variantId,
+        'storeId': storeId,
+        'quantity': quantity,
+        if (notes != null) 'notes': notes,
+      },
+      entityId: movement.id,
+    );
     return movement;
   }
 
@@ -170,15 +246,86 @@ class StockRepositoryImpl implements StockRepository {
     required int newQuantity,
     required String notes,
   }) async {
-    final movement = await _remote.adjustStock(
+    if (await _connectivity.isOnline()) {
+      try {
+        final movement = await _remote.adjustStock(
+          productId: productId,
+          variantId: variantId,
+          storeId: storeId,
+          newQuantity: newQuantity,
+          notes: notes,
+        );
+        await _local.insertMovement(movement);
+        await _refreshLocalLevels(productId);
+        return movement;
+      } catch (e) {
+        dev.log('[Stock] Remote adjustStock failed — offline fallback: $e',
+            name: 'StockRepository');
+        return _adjustStockLocally(
+          productId: productId,
+          variantId: variantId,
+          storeId: storeId,
+          newQuantity: newQuantity,
+          notes: notes,
+        );
+      }
+    } else {
+      return _adjustStockLocally(
+        productId: productId,
+        variantId: variantId,
+        storeId: storeId,
+        newQuantity: newQuantity,
+        notes: notes,
+      );
+    }
+  }
+
+  Future<StockMovementModel> _adjustStockLocally({
+    required String productId,
+    String? variantId,
+    required String storeId,
+    required int newQuantity,
+    required String notes,
+  }) async {
+    final currentLevel = await _local.getLevelByStore(productId, storeId);
+    final before = currentLevel?.quantity ?? 0;
+    final delta = newQuantity - before;
+
+    final movement = StockMovementModel(
+      id: const Uuid().v4(),
       productId: productId,
       variantId: variantId,
       storeId: storeId,
-      newQuantity: newQuantity,
+      movementType: 'STOCK_ADJUST',
+      quantityBefore: before,
+      quantityDelta: delta,
+      quantityAfter: newQuantity,
+      actorId: 'local',
       notes: notes,
+      occurredAt: DateTime.now(),
+      synced: false,
     );
     await _local.insertMovement(movement);
-    await _refreshLocalLevels(productId);
+    await _local.upsertLevel(StockLevelModel(
+      id: currentLevel?.id ?? const Uuid().v4(),
+      productId: productId,
+      variantId: variantId,
+      storeId: storeId,
+      quantity: newQuantity,
+      minimumThreshold: currentLevel?.minimumThreshold ?? 0,
+      updatedAt: DateTime.now(),
+    ));
+    await _syncService.queueOperation(
+      operation: 'STOCK_ADJUST',
+      payload: {
+        'productId': productId,
+        if (variantId != null) 'variantId': variantId,
+        'storeId': storeId,
+        'quantity': newQuantity,
+        if (notes.isNotEmpty) 'notes': notes,
+      },
+      entityId: movement.id,
+    );
     return movement;
   }
 

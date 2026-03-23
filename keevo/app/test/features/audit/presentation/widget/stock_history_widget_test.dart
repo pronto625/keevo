@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/audit/domain/model/audit_entry_dto.dart';
 import 'package:keevo/features/audit/domain/repository/audit_repository.dart';
 import 'package:keevo/features/audit/presentation/provider/audit_provider.dart';
@@ -16,13 +18,38 @@ class _FakeAuditRepository implements AuditRepository {
   _FakeAuditRepository(this.entries);
 
   @override
-  Future<List<AuditEntryDto>> getAuditHistory({
+  Future<AuditPageResult> getAuditHistoryPage({
+    required int page,
+    required int size,
     String? entityType,
     String? entityId,
-  }) async => entries;
+  }) async => AuditPageResult(entries: entries, hasMore: false);
+}
+
+class _NeverCompleteAuditRepository implements AuditRepository {
+  final Future<AuditPageResult> _future;
+  _NeverCompleteAuditRepository(this._future);
+
+  @override
+  Future<AuditPageResult> getAuditHistoryPage({
+    required int page,
+    required int size,
+    String? entityType,
+    String? entityId,
+  }) => _future;
 }
 
 // ── Helper ─────────────────────────────────────────────────────────────────
+
+late SharedPreferences _prefs;
+
+List<Override> _baseOverrides(List<AuditEntryDto> entries) => [
+      sharedPreferencesProvider.overrideWithValue(_prefs),
+      currentUserIdProvider.overrideWith((_) => Future.value('user-uuid-ABCDEF01')),
+      auditRepositoryProvider.overrideWith(
+        (_) => _FakeAuditRepository(entries),
+      ),
+    ];
 
 Widget _buildWidget(
   List<AuditEntryDto> entries, {
@@ -30,11 +57,7 @@ Widget _buildWidget(
   String? entityId,
 }) {
   return ProviderScope(
-    overrides: [
-      auditRepositoryProvider.overrideWith(
-        (_) => _FakeAuditRepository(entries),
-      ),
-    ],
+    overrides: _baseOverrides(entries),
     child: MaterialApp(
       home: Scaffold(
         body: StockHistoryWidget(
@@ -54,7 +77,7 @@ final _stockEntry = AuditEntryDto(
   entityId: 'product-uuid-001',
   action: 'STOCK_ADJUSTED',
   valueBefore: '{"qty":5}',
-  valueAfter: '{"qty":10}',
+  valueAfter: '{"movementType":"ADJUSTMENT","quantityChange":5,"quantityAfter":10}',
   userId: 'user-uuid-ABCDEF01',
   occurredAt: DateTime.utc(2026, 3, 1, 10, 0, 0),
 );
@@ -72,6 +95,11 @@ final _loginEntry = AuditEntryDto(
 
 void main() {
   group('StockHistoryWidget', () {
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      _prefs = await SharedPreferences.getInstance();
+    });
+
     testWidgets('renders list of AuditEntryDto items — shows action and actor',
         (tester) async {
       await tester.pumpWidget(
@@ -80,11 +108,11 @@ void main() {
       await tester.pumpAndSettle();
 
       // French action labels should be shown
-      expect(find.text('Ajustement stock'), findsOneWidget);
+      expect(find.text('Mouvement de stock'), findsOneWidget);
       expect(find.text('Connexion'), findsOneWidget);
 
-      // Actor: last 8 chars of userId
-      expect(find.textContaining('ABCDEF01'), findsWidgets);
+      // Actor: current user → "Vous"
+      expect(find.textContaining('Vous'), findsWidgets);
     });
 
     testWidgets('empty list → shows "Aucun historique disponible"', (tester) async {
@@ -96,15 +124,17 @@ void main() {
     });
 
     testWidgets('loading state → shows CircularProgressIndicator', (tester) async {
-      // Use a Completer to create a Future that never completes,
-      // forcing the provider to stay in loading state.
-      final completer = Completer<List<AuditEntryDto>>();
+      // Override repository with one that never completes,
+      // keeping the notifier in AsyncLoading.
+      final completer = Completer<AuditPageResult>();
 
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            auditHistoryProvider(entityType: null, entityId: null).overrideWith(
-              (_) => completer.future,
+            sharedPreferencesProvider.overrideWithValue(_prefs),
+            currentUserIdProvider.overrideWith((_) => Future.value('test-user')),
+            auditRepositoryProvider.overrideWith(
+              (_) => _NeverCompleteAuditRepository(completer.future),
             ),
           ],
           child: const MaterialApp(
@@ -124,8 +154,10 @@ void main() {
       await tester.pumpWidget(_buildWidget([_stockEntry]));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('{"qty":5}'), findsOneWidget);
-      expect(find.textContaining('{"qty":10}'), findsOneWidget);
+      // Widget decodes JSON → French description
+      expect(find.textContaining('ajusté'), findsOneWidget);
+      expect(find.textContaining('+5'), findsOneWidget);
+      expect(find.textContaining('10'), findsOneWidget);
     });
   });
 }

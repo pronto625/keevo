@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/sync/sync_status.dart';
 import '../../../../core/sync/sync_status_provider.dart';
+import '../../../../core/sync/sync_trigger_notifier.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/storage/app_constants.dart';
 
@@ -20,6 +22,33 @@ class SyncIndicator extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // AC8: Listen for stock conflict notifications and show amber SnackBar
+    ref.listen<List<Map<String, dynamic>>>(pendingConflictNotificationsProvider, (prev, conflicts) {
+      if (conflicts.isEmpty) return;
+      for (final c in conflicts) {
+        final data = c['conflictData'] as Map<String, dynamic>?;
+        if (data == null) continue;
+        final productName = data['productName'] ?? 'Produit';
+        final resultingStock = data['resultingStock'] ?? '?';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFFFCC419),
+            duration: const Duration(seconds: 5),
+            content: Text(
+              '\u26a0 Conflit de stock : $productName \u2014 stock n\u00e9gatif ($resultingStock). V\u00e9rifiez l\u2019inventaire.',
+              style: const TextStyle(color: Colors.black87),
+            ),
+            action: SnackBarAction(
+              label: 'Voir',
+              textColor: Colors.black87,
+              onPressed: () => context.push('/settings/sync/conflicts'),
+            ),
+          ),
+        );
+      }
+      ref.read(pendingConflictNotificationsProvider.notifier).state = [];
+    });
+
     final asyncStatus = ref.watch(syncStatusProvider);
     final days = ref.watch(daysOfflineProvider);
 
@@ -136,6 +165,17 @@ class SyncIndicator extends ConsumerWidget {
                       }
                     : null,
                 child: const Text('Synchroniser maintenant'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  context.push('/settings/sync/conflicts');
+                },
+                child: const Text('Voir les conflits'),
               ),
             ),
           ],

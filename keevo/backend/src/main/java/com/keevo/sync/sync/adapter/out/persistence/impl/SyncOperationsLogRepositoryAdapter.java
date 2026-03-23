@@ -2,9 +2,12 @@ package com.keevo.sync.sync.adapter.out.persistence.impl;
 
 import com.keevo.sync.sync.adapter.out.persistence.entity.SyncOperationsLogJpaEntity;
 import com.keevo.sync.sync.adapter.out.persistence.jpa.SyncOperationsLogSpringRepository;
+import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import com.keevo.sync.sync.domain.model.SyncOperationsLogEntry;
 import com.keevo.sync.sync.domain.port.out.SyncOperationsLogRepository;
 import org.springframework.stereotype.Component;
+
+import java.util.Optional;
 
 @Component
 public class SyncOperationsLogRepositoryAdapter implements SyncOperationsLogRepository {
@@ -30,5 +33,18 @@ public class SyncOperationsLogRepositoryAdapter implements SyncOperationsLogRepo
                 entry.errorReason(),
                 entry.processedAt(),
                 entry.clientTimestamp()));
+    }
+
+    @Override
+    public Optional<SyncOperationsLogEntry> findPreviousAppliedByEntityId(String entityId, String excludeOperationId) {
+        return jpa.findPreviousAppliedByEntityId(entityId, excludeOperationId)
+                .map(e -> new SyncOperationsLogEntry(
+                        e.getId(),
+                        e.getOperationType(),
+                        e.getEntityId(),
+                        SyncOperationStatus.valueOf(e.getStatus()),
+                        e.getErrorReason(),
+                        e.getProcessedAt(),
+                        e.getClientTimestamp()));
     }
 }

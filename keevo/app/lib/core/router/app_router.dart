@@ -38,6 +38,7 @@ import '../../features/pos/domain/model/sale_model.dart';
 import '../../features/reports/presentation/page/reports_page.dart';
 import '../../features/settings/presentation/page/settings_page.dart';
 import '../../features/settings/presentation/page/subscription_page.dart';
+import '../../features/sync_indicator/presentation/page/sync_conflict_log_page.dart';
 import '../../features/stores/presentation/page/stores_list_page.dart';
 import '../../features/inventory/presentation/page/global_stock_overview_page.dart';
 import '../../features/inventory/presentation/page/transfer_history_page.dart';
@@ -194,6 +195,7 @@ const _ownerOnlyPrefixes = [
   '/settings/team',
   '/reports',
   '/audit',
+  '/settings/sync/conflicts',
 ];
 
 /// Application router — all feature routes registered here.
@@ -443,6 +445,11 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/settings/team/new',
       builder: (_, __) => const CreateEmployeePage(),
+    ),
+    // ── Settings > Sync Conflicts (Story 5.3 — OWNER only) ────────────────
+    GoRoute(
+      path: '/settings/sync/conflicts',
+      builder: (_, __) => const SyncConflictLogPage(),
     ),
     // ── Audit trail (OWNER only — full-screen, no nav bar) ────────────────
     GoRoute(

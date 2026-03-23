@@ -2,6 +2,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/di/providers.dart';
 import '../../../../features/auth/presentation/provider/auth_provider.dart';
+import '../../data/datasource/local_audit_datasource.dart';
 import '../../data/datasource/remote_audit_datasource.dart';
 import '../../data/repository/audit_repository_impl.dart';
 import '../../domain/model/audit_entry_dto.dart';
@@ -20,9 +21,19 @@ final remoteAuditDataSourceProvider = Provider<RemoteAuditDataSource>((ref) {
   return RemoteAuditDataSource(dio: ref.watch(dioProvider));
 });
 
+/// LocalAuditDataSource provider — reads from Drift audit_entries table.
+final localAuditDataSourceProvider = Provider<LocalAuditDataSource>((ref) {
+  return LocalAuditDataSource(ref.watch(appDatabaseProvider));
+});
+
 /// AuditRepository provider — Strategy pattern (swappable for tests).
+/// Online: remote API. Offline: local Drift DB.
 final auditRepositoryProvider = Provider<AuditRepository>((ref) {
-  return AuditRepositoryImpl(ref.watch(remoteAuditDataSourceProvider));
+  return AuditRepositoryImpl(
+    ref.watch(remoteAuditDataSourceProvider),
+    ref.watch(localAuditDataSourceProvider),
+    ref.watch(connectivityServiceProvider),
+  );
 });
 
 // ── Feature provider ──────────────────────────────────────────────────────────

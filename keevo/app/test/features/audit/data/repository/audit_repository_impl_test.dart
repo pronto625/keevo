@@ -1,14 +1,17 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:keevo/core/sync/connectivity_service.dart';
+import 'package:keevo/features/audit/data/datasource/local_audit_datasource.dart';
 import 'package:keevo/features/audit/data/datasource/remote_audit_datasource.dart';
 import 'package:keevo/features/audit/data/repository/audit_repository_impl.dart';
-import 'package:keevo/features/audit/domain/exception/audit_exception.dart';
 import 'package:keevo/features/audit/domain/model/audit_entry_dto.dart';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
 class MockRemoteAuditDataSource extends Mock implements RemoteAuditDataSource {}
+class MockLocalAuditDataSource extends Mock implements LocalAuditDataSource {}
+class MockConnectivityService extends Mock implements ConnectivityService {}
 
 // ── Test data ──────────────────────────────────────────────────────────────
 
@@ -34,109 +37,122 @@ final _productEntry = AuditEntryDto(
   occurredAt: DateTime.utc(2026, 3, 1, 11, 0, 0),
 );
 
+final _pageResult = AuditPageResult(
+  entries: [_userEntry, _productEntry],
+  hasMore: false,
+);
+
 void main() {
-  late MockRemoteAuditDataSource mockDataSource;
+  late MockRemoteAuditDataSource mockRemote;
+  late MockLocalAuditDataSource mockLocal;
+  late MockConnectivityService mockConnectivity;
   late AuditRepositoryImpl repository;
 
   setUp(() {
-    mockDataSource = MockRemoteAuditDataSource();
-    repository = AuditRepositoryImpl(mockDataSource);
+    mockRemote = MockRemoteAuditDataSource();
+    mockLocal = MockLocalAuditDataSource();
+    mockConnectivity = MockConnectivityService();
+    repository = AuditRepositoryImpl(mockRemote, mockLocal, mockConnectivity);
   });
 
-  group('AuditRepositoryImpl.getAuditHistory()', () {
-    test('both entityType + entityId → calls datasource with both parameters', () async {
-      when(() => mockDataSource.getAuditHistory(
+  group('AuditRepositoryImpl.getAuditHistoryPage()', () {
+    test('online → fetches from remote datasource', () async {
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
+      when(() => mockRemote.getAuditHistoryPage(
+            page: 0,
+            size: 20,
             entityType: 'Product',
             entityId: 'product-uuid-001',
-          )).thenAnswer((_) async => [_productEntry]);
+          )).thenAnswer((_) async => AuditPageResult(
+            entries: [_productEntry],
+            hasMore: false,
+          ));
 
-      final result = await repository.getAuditHistory(
+      final result = await repository.getAuditHistoryPage(
+        page: 0,
+        size: 20,
         entityType: 'Product',
         entityId: 'product-uuid-001',
       );
 
-      expect(result, hasLength(1));
-      expect(result.first.entityType, equals('Product'));
-      expect(result.first.entityId, equals('product-uuid-001'));
-      verify(() => mockDataSource.getAuditHistory(
+      expect(result.entries, hasLength(1));
+      expect(result.entries.first.entityType, equals('Product'));
+      verify(() => mockRemote.getAuditHistoryPage(
+            page: 0,
+            size: 20,
             entityType: 'Product',
             entityId: 'product-uuid-001',
           )).called(1);
+      verifyNever(() => mockLocal.getAuditHistoryPage(
+            page: any(named: 'page'),
+            size: any(named: 'size'),
+            entityType: any(named: 'entityType'),
+            entityId: any(named: 'entityId'),
+          ));
     });
 
-    test('only entityType (no entityId) → calls datasource with entityType only', () async {
-      when(() => mockDataSource.getAuditHistory(
-            entityType: 'User',
+    test('offline → reads from local datasource', () async {
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => false);
+      when(() => mockLocal.getAuditHistoryPage(
+            page: 0,
+            size: 20,
+            entityType: null,
             entityId: null,
-          )).thenAnswer((_) async => [_userEntry]);
+          )).thenAnswer((_) async => _pageResult);
 
-      final result = await repository.getAuditHistory(entityType: 'User');
+      final result = await repository.getAuditHistoryPage(
+        page: 0,
+        size: 20,
+      );
 
-      expect(result, hasLength(1));
-      expect(result.first.entityType, equals('User'));
-      verify(() => mockDataSource.getAuditHistory(
-            entityType: 'User',
+      expect(result.entries, hasLength(2));
+      verifyNever(() => mockRemote.getAuditHistoryPage(
+            page: any(named: 'page'),
+            size: any(named: 'size'),
+            entityType: any(named: 'entityType'),
+            entityId: any(named: 'entityId'),
+          ));
+      verify(() => mockLocal.getAuditHistoryPage(
+            page: 0,
+            size: 20,
+            entityType: null,
             entityId: null,
           )).called(1);
     });
 
-    test('no params → calls datasource with no filters (full tenant log)', () async {
-      when(() => mockDataSource.getAuditHistory(
+    test('online but remote throws → falls back to local', () async {
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
+      when(() => mockRemote.getAuditHistoryPage(
+            page: any(named: 'page'),
+            size: any(named: 'size'),
+            entityType: any(named: 'entityType'),
+            entityId: any(named: 'entityId'),
+          )).thenThrow(Exception('Network error'));
+      when(() => mockLocal.getAuditHistoryPage(
+            page: 0,
+            size: 20,
             entityType: null,
             entityId: null,
-          )).thenAnswer((_) async => [_userEntry, _productEntry]);
+          )).thenAnswer((_) async => _pageResult);
 
-      final result = await repository.getAuditHistory();
+      final result = await repository.getAuditHistoryPage(
+        page: 0,
+        size: 20,
+      );
 
-      expect(result, hasLength(2));
-      verify(() => mockDataSource.getAuditHistory(
+      expect(result.entries, hasLength(2));
+      verify(() => mockRemote.getAuditHistoryPage(
+            page: 0,
+            size: 20,
             entityType: null,
             entityId: null,
           )).called(1);
-    });
-
-    test('datasource throws AuditException(UNAUTHORIZED) → propagates', () async {
-      when(() => mockDataSource.getAuditHistory(
-            entityType: any(named: 'entityType'),
-            entityId: any(named: 'entityId'),
-          )).thenThrow(const AuditException(
-        domainCode: 'UNAUTHORIZED',
-        message: 'Non authentifié',
-        statusCode: 401,
-      ));
-
-      expect(
-        () => repository.getAuditHistory(),
-        throwsA(
-          isA<AuditException>().having(
-            (e) => e.domainCode,
-            'domainCode',
-            equals('UNAUTHORIZED'),
-          ),
-        ),
-      );
-    });
-
-    test('datasource throws AuditException(AUDIT_IMMUTABLE) on 403 → propagates', () async {
-      when(() => mockDataSource.getAuditHistory(
-            entityType: any(named: 'entityType'),
-            entityId: any(named: 'entityId'),
-          )).thenThrow(const AuditException(
-        domainCode: 'AUDIT_IMMUTABLE',
-        message: 'Les entrées du journal d\'audit ne peuvent pas être modifiées',
-        statusCode: 403,
-      ));
-
-      expect(
-        () => repository.getAuditHistory(),
-        throwsA(
-          isA<AuditException>().having(
-            (e) => e.statusCode,
-            'statusCode',
-            equals(403),
-          ),
-        ),
-      );
+      verify(() => mockLocal.getAuditHistoryPage(
+            page: 0,
+            size: 20,
+            entityType: null,
+            entityId: null,
+          )).called(1);
     });
   });
 }

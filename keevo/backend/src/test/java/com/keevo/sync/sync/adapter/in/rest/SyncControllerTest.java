@@ -11,6 +11,7 @@ import com.keevo.sync.sync.domain.model.SyncPullResult;
 import com.keevo.sync.sync.domain.port.in.SyncUseCase;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
+import com.keevo.sync.sync.domain.port.out.SyncConflictsLogRepository;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,6 +44,7 @@ class SyncControllerTest {
 
     @Mock private SyncUseCase syncUseCase;
     @Mock private JwtTokenProvider jwtTokenProvider;
+    @Mock private SyncConflictsLogRepository conflictsLogRepository;
 
     private MockMvc mockMvc;
     private ObjectMapper mapper;
@@ -54,7 +56,7 @@ class SyncControllerTest {
         mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
 
-        var controller = new SyncController(syncUseCase, jwtTokenProvider);
+        var controller = new SyncController(syncUseCase, jwtTokenProvider, conflictsLogRepository);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(mapper))

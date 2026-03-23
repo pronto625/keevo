@@ -3,6 +3,7 @@ import 'dart:developer' as dev;
 import 'dart:math';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../features/catalog/presentation/provider/category_provider.dart';
@@ -15,6 +16,11 @@ import '../di/providers.dart';
 import 'sync_status_provider.dart';
 
 part 'sync_trigger_notifier.g.dart';
+
+/// Provider for pending stock conflict notifications (AC8).
+/// SyncTriggerNotifier populates this; SyncIndicator listens and shows SnackBars.
+final pendingConflictNotificationsProvider =
+    StateProvider<List<Map<String, dynamic>>>((ref) => []);
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -104,11 +110,27 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
       final syncService = ref.read(syncServiceProvider);
 
       // Step 1: Push pending offline ops
+      List<Map<String, dynamic>> conflicts = [];
       try {
-        await syncService.push();
+        conflicts = await syncService.push();
       } catch (e) {
         dev.log('Push failed during sync cycle: $e', name: 'SyncTrigger');
         // Push failure does NOT prevent pull
+      }
+
+      // Notify UI about STOCK_NEGATIVE conflicts via provider (AC8)
+      final stockConflicts = conflicts
+          .where((c) => c['status'] == 'CONFLICT')
+          .toList();
+      if (stockConflicts.isNotEmpty) {
+        ref.read(pendingConflictNotificationsProvider.notifier).state =
+            stockConflicts;
+      }
+      // Log LWW conflicts silently (LAST_WRITE_WINS — no user notification)
+      for (final c in conflicts) {
+        if (c['status'] == 'APPLIED' && c['conflictData'] != null) {
+          dev.log('LWW overwrite detected', name: 'SyncTrigger');
+        }
       }
 
       // Step 2: Pull server delta

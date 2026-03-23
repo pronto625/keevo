@@ -159,18 +159,18 @@ class TenantSchemaSyncServiceTest {
         when(tablesRs1.next()).thenReturn(false); // public schema has no tables
 
         when(tablesStmt2.executeQuery()).thenReturn(tablesRs2);
-        when(tablesRs2.next()).thenReturn(true, true, true, true, true, true, true, true, true, true, true, true, true, false); // 13 tables
+        when(tablesRs2.next()).thenReturn(true, true, true, true, true, true, true, true, true, true, true, true, true, true, false); // 14 tables
         when(tablesRs2.getString("table_name")).thenReturn(
                 "audit_log", "products", "stock_levels", "stock_movements",
                 "clients", "suppliers", "product_suppliers", "draft_notifications", "employees", "sale_items",
-                "day_closures", "stock_transfers", "sync_operations_log");
+                "day_closures", "stock_transfers", "sync_operations_log", "sync_conflicts_log");
 
         when(tablesStmt3.executeQuery()).thenReturn(tablesRs3);
-        when(tablesRs3.next()).thenReturn(true, true, true, true, true, true, true, true, true, true, true, true, true, false); // 13 tables
+        when(tablesRs3.next()).thenReturn(true, true, true, true, true, true, true, true, true, true, true, true, true, true, false); // 14 tables
         when(tablesRs3.getString("table_name")).thenReturn(
                 "audit_log", "products", "stock_levels", "stock_movements",
                 "clients", "suppliers", "product_suppliers", "draft_notifications", "employees", "sale_items",
-                "day_closures", "stock_transfers", "sync_operations_log");
+                "day_closures", "stock_transfers", "sync_operations_log", "sync_conflicts_log");
 
         // ensureRequiredIndexes() always runs (idempotent index DDL) and uses createStatement()
         when(connection.createStatement()).thenReturn(execStmt);

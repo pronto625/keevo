@@ -21,13 +21,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+import com.keevo.sync.sync.domain.port.out.SyncConflictsLogRepository;
 import com.keevo.sync.sync.domain.port.out.SyncOperationsLogRepository;
+import com.keevo.sync.sync.application.strategy.ConflictStrategyRegistry;
 
 @ExtendWith(MockitoExtension.class)
 class SyncPullServiceTest {
 
     @Mock private SyncOperationHandlerRegistry handlerRegistry;
     @Mock private SyncOperationsLogRepository logRepository;
+    @Mock private ConflictStrategyRegistry conflictStrategyRegistry;
+    @Mock private SyncConflictsLogRepository conflictsLogRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private PlatformTransactionManager transactionManager;
     @Mock private DeltaEntityProvider productProvider;
@@ -45,7 +49,8 @@ class SyncPullServiceTest {
         lenient().when(productProvider.entityKey()).thenReturn("products");
         lenient().when(clientProvider.entityKey()).thenReturn("clients");
         service = new SyncPushService(handlerRegistry, logRepository, eventPublisher,
-                transactionManager, List.of(productProvider, clientProvider));
+                transactionManager, List.of(productProvider, clientProvider),
+                conflictStrategyRegistry, conflictsLogRepository);
     }
 
     @Test

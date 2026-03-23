@@ -7,7 +7,9 @@
 /// registered via Riverpod providers in lib/core/di/providers.dart.
 abstract interface class SyncService {
   /// Push queued local operations to the remote backend.
-  Future<void> push();
+  /// Returns a list of conflict result maps (operationId, conflictType, conflictData).
+  /// Empty list if no conflicts.
+  Future<List<Map<String, dynamic>>> push();
 
   /// Returns true if the sync_queue has pending (un-synced) operations.
   ///

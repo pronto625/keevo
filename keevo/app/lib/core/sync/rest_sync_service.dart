@@ -35,24 +35,26 @@ class RestSyncService implements SyncService {
         _secureStorage = secureStorage;
 
   @override
-  Future<void> push() async {
+  Future<List<Map<String, dynamic>>> push() async {
     final pendingOps = await (_database.select(_database.syncQueue)
           ..where((t) => t.synced.equals(false))
           ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
         .get();
 
-    if (pendingOps.isEmpty) return;
+    if (pendingOps.isEmpty) return [];
 
     dev.log('📦 Found ${pendingOps.length} pending operations', name: 'RestSync');
 
+    final allConflicts = <Map<String, dynamic>>[];
     // Batch in groups of 50
     for (var i = 0; i < pendingOps.length; i += 50) {
       final batch = pendingOps.sublist(i, min(i + 50, pendingOps.length));
-      await _pushBatch(batch);
+      allConflicts.addAll(await _pushBatch(batch));
     }
+    return allConflicts;
   }
 
-  Future<void> _pushBatch(List<SyncQueueData> ops) async {
+  Future<List<Map<String, dynamic>>> _pushBatch(List<SyncQueueData> ops) async {
     final payload = {
       'deviceId': await _getDeviceId(),
       'operations': ops.map((op) {
@@ -67,6 +69,8 @@ class RestSyncService implements SyncService {
       }).toList(),
     };
 
+    final conflicts = <Map<String, dynamic>>[];
+
     try {
       final response = await _dio.post('/api/v1/sync/push', data: payload);
       final results = (response.data['data']['results'] as List)
@@ -77,6 +81,10 @@ class RestSyncService implements SyncService {
         final status = result['status'] as String;
 
         if (status == 'APPLIED' || status == 'DUPLICATE') {
+          // Collect conflicts from APPLIED results with conflictData (LWW)
+          if (result['conflictData'] != null) {
+            conflicts.add(result);
+          }
           await (_database.delete(_database.syncQueue)
                 ..where((t) => t.id.equals(opId)))
               .go();
@@ -89,7 +97,7 @@ class RestSyncService implements SyncService {
             lastAttemptAt: Value(DateTime.now()),
           ));
         } else if (status == 'CONFLICT') {
-          // Server processed it — remove from queue (conflict resolution in Story 5.3)
+          conflicts.add(result);
           await (_database.delete(_database.syncQueue)
                 ..where((t) => t.id.equals(opId)))
               .go();
@@ -107,6 +115,7 @@ class RestSyncService implements SyncService {
       }
       rethrow;
     }
+    return conflicts;
   }
 
   @override
