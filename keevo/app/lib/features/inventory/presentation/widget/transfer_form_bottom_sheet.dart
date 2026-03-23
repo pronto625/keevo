@@ -7,6 +7,8 @@ import '../../../catalog/presentation/provider/product_provider.dart';
 import '../../../catalog/presentation/provider/stock_provider.dart';
 import '../../../stores/domain/model/store_model.dart';
 import '../../../stores/presentation/provider/store_provider.dart';
+import '../../../sync_indicator/presentation/widget/sync_required_modal.dart';
+import '../../../../core/sync/sync_gate_provider.dart';
 import '../provider/global_stock_provider.dart';
 import '../provider/stock_transfer_provider.dart';
 
@@ -124,6 +126,12 @@ class _TransferFormBottomSheetState
 
     setState(() => _isSubmitting = true);
     try {
+      // Gate check — inline since WidgetRef != Ref
+      if (ref.read(syncGateStateProvider).isWriteBlocked) {
+        setState(() => _isSubmitting = false);
+        if (mounted) SyncRequiredModal.show(context);
+        return;
+      }
       // Call repository directly — avoids "Bad state: Future already completed"
       // that occurs when executeTransferNotifierProvider (AutoDispose) gets
       // disposed mid-await after ref.invalidate() triggers a rebuild.

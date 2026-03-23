@@ -5,11 +5,13 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../features/catalog/data/datasource/remote_product_datasource.dart';
 import '../storage/app_constants.dart';
 import '../storage/app_database.dart';
+import 'sync_required_exception.dart';
 import 'sync_service.dart';
 
 /// RestSyncService — REST implementation for offline queue batch push sync.
@@ -23,16 +25,19 @@ class RestSyncService implements SyncService {
   final RemoteProductDataSource _remoteProducts;
   final Dio _dio;
   final FlutterSecureStorage _secureStorage;
+  final SharedPreferences _prefs;
 
   RestSyncService({
     required AppDatabase database,
     required RemoteProductDataSource remoteProducts,
     required Dio dio,
     required FlutterSecureStorage secureStorage,
+    required SharedPreferences prefs,
   })  : _database = database,
         _remoteProducts = remoteProducts,
         _dio = dio,
-        _secureStorage = secureStorage;
+        _secureStorage = secureStorage,
+        _prefs = prefs;
 
   @override
   Future<List<Map<String, dynamic>>> push() async {
@@ -103,7 +108,16 @@ class RestSyncService implements SyncService {
               .go();
         }
       }
-    } on DioException {
+    } on DioException catch (e) {
+      // HTTP 423: server-side 7-day gate — throw SyncRequiredException to abort pull cycle
+      if (e.response?.statusCode == 423) {
+        final details =
+            (e.response?.data?['details'] as Map<String, dynamic>?);
+        final days = (details?['daysSinceLastSync'] as num?)?.toInt() ?? 7;
+        final lastPushAt = details?['lastPushAt'] as String?;
+        throw SyncRequiredException(
+            daysSinceLastSync: days, lastPushAt: lastPushAt);
+      }
       // Network error — increment retry on all ops in this batch
       for (final op in ops) {
         await (_database.update(_database.syncQueue)
@@ -196,6 +210,9 @@ class RestSyncService implements SyncService {
         key: kLastSyncTimestampKey,
         value: serverInstant.millisecondsSinceEpoch.toString(),
       );
+      // 5. Update SharedPreferences gate key (synchronous access for gate check)
+      await _prefs.setInt(
+          kLastSyncAtKey, serverInstant.millisecondsSinceEpoch);
     } catch (e) {
       dev.log('Pull sync failed: $e', name: 'RestSync');
       rethrow;

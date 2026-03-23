@@ -11,6 +11,7 @@ import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../provider/cart_provider.dart';
 import '../provider/pos_providers.dart';
 import '../provider/record_sale_notifier.dart';
+import '../../../sync_indicator/presentation/widget/sync_required_modal.dart';
 
 /// CheckoutPage — payment mode selection + sale confirmation.
 class CheckoutPage extends ConsumerStatefulWidget {
@@ -48,6 +49,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     ref.listen<RecordSaleState>(recordSaleNotifierProvider, (_, state) {
       if (state is RecordSaleSuccess) {
         context.go('/pos/success?total=${state.sale.totalAmount}&status=${state.sale.status}');
+      } else if (state is RecordSaleBlockedByGate) {
+        SyncRequiredModal.show(context);
       } else if (state is RecordSaleError) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

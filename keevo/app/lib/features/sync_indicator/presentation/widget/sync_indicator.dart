@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/sync/sync_gate_provider.dart';
+import '../../../../core/sync/sync_gate_state.dart';
+import 'sync_required_modal.dart';
 import '../../../../core/sync/sync_status.dart';
 import '../../../../core/sync/sync_status_provider.dart';
 import '../../../../core/sync/sync_trigger_notifier.dart';
@@ -51,6 +54,36 @@ class SyncIndicator extends ConsumerWidget {
 
     final asyncStatus = ref.watch(syncStatusProvider);
     final days = ref.watch(daysOfflineProvider);
+    final gateState = ref.watch(syncGateStateProvider);
+
+    // Story 5.4: blocked state — tapping opens SyncRequiredModal directly
+    if (gateState == SyncGateState.blocked) {
+      return GestureDetector(
+        onTap: () => SyncRequiredModal.show(context),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                key: const Key('sync_dot'),
+                width: 10,
+                height: 10,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFA5252),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Text(
+                '🔴 Accès limité — Sync requise',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return GestureDetector(
       onTap: () => _showSyncBottomSheet(context, ref, asyncStatus.valueOrNull),
@@ -202,7 +235,7 @@ class _LastSyncLabelState extends State<_LastSyncLabel> {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    final ms = prefs.getInt(kLastSyncTimestampKey);
+    final ms = prefs.getInt(kLastSyncAtKey);
     if (ms == null || !mounted) return;
     final ts = DateTime.fromMillisecondsSinceEpoch(ms);
     final diff = DateTime.now().difference(ts);

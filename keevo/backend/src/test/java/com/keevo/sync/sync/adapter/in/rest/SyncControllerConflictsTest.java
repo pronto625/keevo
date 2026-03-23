@@ -4,9 +4,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
+import com.keevo.sync.sync.application.service.SyncGateCheckService;
 import com.keevo.sync.sync.domain.model.SyncConflictsLogEntry;
 import com.keevo.sync.sync.domain.port.in.SyncUseCase;
 import com.keevo.sync.sync.domain.port.out.SyncConflictsLogRepository;
+import com.keevo.sync.sync.domain.port.out.UserSyncStateRepository;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,6 +41,8 @@ class SyncControllerConflictsTest {
     @Mock private SyncUseCase syncUseCase;
     @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private SyncConflictsLogRepository conflictsLogRepository;
+    @Mock private SyncGateCheckService syncGateCheckService;
+    @Mock private UserSyncStateRepository userSyncStateRepository;
 
     private MockMvc mockMvc;
     private UUID actorId;
@@ -48,7 +52,8 @@ class SyncControllerConflictsTest {
         var mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
 
-        var controller = new SyncController(syncUseCase, jwtTokenProvider, conflictsLogRepository);
+        var controller = new SyncController(syncUseCase, jwtTokenProvider, conflictsLogRepository,
+                syncGateCheckService, userSyncStateRepository);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(mapper))

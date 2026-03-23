@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/sync/sync_gate_guard.dart';
 import '../../../catalog/presentation/provider/stock_provider.dart';
 import '../../domain/model/cart_item.dart';
 import '../../domain/model/payment_mode_enum.dart';
@@ -32,6 +33,10 @@ class RecordSaleError extends RecordSaleState {
   const RecordSaleError(this.message);
 }
 
+class RecordSaleBlockedByGate extends RecordSaleState {
+  const RecordSaleBlockedByGate();
+}
+
 /// RecordSaleNotifier — orchestrates sale submission.
 class RecordSaleNotifier extends Notifier<RecordSaleState> {
   @override
@@ -45,6 +50,12 @@ class RecordSaleNotifier extends Notifier<RecordSaleState> {
     String? clientId,
     String? mobileRef,
   }) async {
+    try {
+      SyncGateGuard.assertWriteAllowed(ref);
+    } on WriteBlockedException {
+      state = const RecordSaleBlockedByGate();
+      return;
+    }
     state = const RecordSaleLoading();
     try {
       final cartNotifier = ref.read(cartProvider.notifier);

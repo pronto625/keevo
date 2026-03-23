@@ -44,11 +44,21 @@ class SyncPushRequestDtoTest {
     }
 
     @Test
-    void emptyOperationsList_failsValidation() {
-        var dto = new SyncPushRequestDto("device-1", List.of());
+    void nullOperationsList_failsValidation() {
+        // With @NotNull: null operations must fail; empty list [] is now allowed (Story 5.4)
+        var dto = new SyncPushRequestDto("device-1", null);
 
         var violations = validator.validate(dto);
         assertThat(violations).isNotEmpty();
+    }
+
+    @Test
+    void emptyOperationsList_passesValidation() {
+        // Story 5.4: empty batch is a valid gate-check push — @NotNull allows []
+        var dto = new SyncPushRequestDto("device-1", List.of());
+
+        var violations = validator.validate(dto);
+        assertThat(violations).isEmpty();
     }
 
     @Test

@@ -9,6 +9,7 @@ import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/core/sync/rest_sync_service.dart';
 import 'package:keevo/features/catalog/data/datasource/remote_product_datasource.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3/open.dart';
 
 class MockDio extends Mock implements Dio {}
@@ -41,17 +42,20 @@ void main() {
   late FlutterSecureStorage secureStorage;
   late RestSyncService syncService;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.forTesting();
     mockDio = MockDio();
     secureStorage = const FlutterSecureStorage();
     FlutterSecureStorage.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
 
     syncService = RestSyncService(
       database: db,
       remoteProducts: MockRemoteProductDataSource(),
       dio: mockDio,
       secureStorage: secureStorage,
+      prefs: prefs,
     );
   });
 

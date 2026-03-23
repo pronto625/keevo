@@ -13,6 +13,9 @@ import '../../features/contact/presentation/provider/contact_provider.dart';
 import '../../features/inventory/presentation/provider/global_stock_provider.dart';
 import '../../features/stores/presentation/provider/store_provider.dart';
 import '../di/providers.dart';
+import '../storage/app_constants.dart';
+import 'sync_gate_provider.dart';
+import 'sync_required_exception.dart';
 import 'sync_status_provider.dart';
 
 part 'sync_trigger_notifier.g.dart';
@@ -52,6 +55,7 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
   Timer? _retryTimer;
   Timer? _periodicPushTimer;
   Timer? _periodicSyncTimer;
+  Timer? _gateCheckTimer;
   int _consecutiveFailures = 0;
   DateTime? _firstFailureAt;
 
@@ -78,10 +82,16 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
       if (state is SyncTriggerIdle) triggerSync();
     });
 
+    // Story 5.4: 30-min gate state refresh
+    _gateCheckTimer = Timer.periodic(const Duration(minutes: 30), (_) {
+      ref.invalidate(daysSinceLastSyncProvider);
+    });
+
     ref.onDispose(() {
       _retryTimer?.cancel();
       _periodicPushTimer?.cancel();
       _periodicSyncTimer?.cancel();
+      _gateCheckTimer?.cancel();
     });
 
     return const SyncTriggerState.idle();
@@ -113,9 +123,24 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
       List<Map<String, dynamic>> conflicts = [];
       try {
         conflicts = await syncService.push();
+      } on SyncRequiredException catch (e) {
+        // Server 423: device is stale server-side.
+        // ABORT pull — pull would write kLastSyncAtKey=now and falsely reopen the gate.
+        dev.log(
+          'Push blocked by server 423 gate: ${e.daysSinceLastSync} days stale',
+          name: 'SyncTrigger',
+        );
+        // Force client gate to stay blocked (align with server reality)
+        final prefs = ref.read(sharedPreferencesProvider);
+        final staleMs = DateTime.now()
+            .subtract(const Duration(days: 7))
+            .millisecondsSinceEpoch;
+        await prefs.setInt(kLastSyncAtKey, staleMs);
+        ref.invalidate(daysSinceLastSyncProvider);
+        rethrow; // outer catch handles _scheduleRetry
       } catch (e) {
         dev.log('Push failed during sync cycle: $e', name: 'SyncTrigger');
-        // Push failure does NOT prevent pull
+        // Non-423 push failure: proceed with pull (pull is NOT gated)
       }
 
       // Notify UI about STOCK_NEGATIVE conflicts via provider (AC8)

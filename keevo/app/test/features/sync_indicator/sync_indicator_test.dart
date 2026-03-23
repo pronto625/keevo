@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:keevo/core/sync/sync_gate_provider.dart';
 import 'package:keevo/core/sync/sync_status.dart';
 import 'package:keevo/core/sync/sync_status_provider.dart';
 import 'package:keevo/features/sync_indicator/presentation/widget/sync_indicator.dart';
@@ -11,6 +12,8 @@ Widget buildWithStatus(SyncStatus status, {int days = 0}) {
     overrides: [
       syncStatusProvider.overrideWith((ref) => Stream.value(status)),
       daysOfflineProvider.overrideWithValue(days),
+      // Gate is open in these tests (0 days since last sync)
+      daysSinceLastSyncProvider.overrideWithValue(0),
     ],
     child: MaterialApp(
       home: Scaffold(

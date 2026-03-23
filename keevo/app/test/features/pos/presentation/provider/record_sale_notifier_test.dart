@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo/core/sync/sync_gate_provider.dart';
 import 'package:keevo/features/pos/data/datasource/local_sale_datasource.dart';
 import 'package:keevo/features/pos/domain/model/cart_item.dart';
 import 'package:keevo/features/pos/domain/model/payment_mode_enum.dart';
@@ -42,6 +43,8 @@ void main() {
   ProviderContainer createContainer({List<CartItem> cart = const []}) {
     final container = ProviderContainer(
       overrides: [
+        // Gate is open (0 days — no sync required)
+        daysSinceLastSyncProvider.overrideWithValue(0),
         saleRepositoryProvider.overrideWithValue(mockRepo),
         localSaleDataSourceProvider.overrideWithValue(mockLocalDs),
         recordSaleUseCaseProvider
@@ -120,6 +123,37 @@ void main() {
       final state = container.read(recordSaleNotifierProvider);
       expect(state, isA<RecordSaleSuccess>());
       verify(() => mockRepo.recordSale(any())).called(1);
+    });
+
+    test('submit_blockedByGate_returnsBlockedByGateState', () async {
+      // Gate is BLOCKED — 7+ days without sync. SyncGateGuard.assertWriteAllowed()
+      // throws WriteBlockedException before any repo or stock check is called.
+      final container = ProviderContainer(
+        overrides: [
+          daysSinceLastSyncProvider.overrideWithValue(7),
+          saleRepositoryProvider.overrideWithValue(mockRepo),
+          localSaleDataSourceProvider.overrideWithValue(mockLocalDs),
+          recordSaleUseCaseProvider
+              .overrideWithValue(RecordSaleUseCase(mockRepo)),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.read(cartProvider.notifier).addItem(_item());
+
+      await container.read(recordSaleNotifierProvider.notifier).submit(
+            cart: [_item()],
+            mode: PaymentModeEnum.cash,
+            storeId: 'store-1',
+            employeeId: 'emp-1',
+          );
+
+      expect(
+        container.read(recordSaleNotifierProvider),
+        isA<RecordSaleBlockedByGate>(),
+        reason: 'Gate blocked must set RecordSaleBlockedByGate state',
+      );
+      verifyNever(() => mockLocalDs.getAvailableStock(any(), any()));
+      verifyNever(() => mockRepo.recordSale(any()));
     });
   });
 }

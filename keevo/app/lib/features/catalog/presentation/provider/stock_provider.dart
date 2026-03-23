@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/sync/sync_gate_guard.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
 import '../../data/datasource/local_stock_datasource.dart';
 import '../../data/datasource/remote_stock_datasource.dart';
@@ -82,6 +83,8 @@ class StockState {
   final bool isLoadingHistory;
   final String? error;
   final bool hasMoreHistory;
+  /// True when the last write attempt was blocked by the offline gate.
+  final bool blockedByGate;
 
   const StockState({
     this.levels = const [],
@@ -90,6 +93,7 @@ class StockState {
     this.isLoadingHistory = false,
     this.error,
     this.hasMoreHistory = true,
+    this.blockedByGate = false,
   });
 
   StockState copyWith({
@@ -99,6 +103,7 @@ class StockState {
     bool? isLoadingHistory,
     String? error,
     bool? hasMoreHistory,
+    bool? blockedByGate,
   }) =>
       StockState(
         levels: levels ?? this.levels,
@@ -107,6 +112,7 @@ class StockState {
         isLoadingHistory: isLoadingHistory ?? this.isLoadingHistory,
         error: error,
         hasMoreHistory: hasMoreHistory ?? this.hasMoreHistory,
+        blockedByGate: blockedByGate ?? this.blockedByGate,
       );
 }
 
@@ -175,7 +181,13 @@ class StockNotifier extends _$StockNotifier {
     required int quantity,
     String? notes,
   }) async {
-    state = state.copyWith(isLoading: true, error: null);
+    try {
+      SyncGateGuard.assertWriteAllowed(ref);
+    } on WriteBlockedException {
+      state = state.copyWith(blockedByGate: true);
+      return false;
+    }
+    state = state.copyWith(isLoading: true, error: null, blockedByGate: false);
     try {
       await ref.read(stockRepositoryProvider).recordEntry(
             productId: productId,
@@ -200,7 +212,13 @@ class StockNotifier extends _$StockNotifier {
     required int newQuantity,
     required String notes,
   }) async {
-    state = state.copyWith(isLoading: true, error: null);
+    try {
+      SyncGateGuard.assertWriteAllowed(ref);
+    } on WriteBlockedException {
+      state = state.copyWith(blockedByGate: true);
+      return false;
+    }
+    state = state.copyWith(isLoading: true, error: null, blockedByGate: false);
     try {
       await ref.read(stockRepositoryProvider).adjustStock(
             productId: productId,

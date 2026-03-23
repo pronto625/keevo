@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../features/sync_indicator/presentation/widget/sync_required_modal.dart';
 import '../provider/stock_provider.dart';
 
 /// StockEntryBottomSheet — modal for recording a stock delivery (+quantity).
@@ -110,12 +111,17 @@ class _StockEntryBottomSheetState extends ConsumerState<StockEntryBottomSheet> {
           ),
         );
       } else {
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text('Erreur lors de l\'enregistrement'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        final blocked = ref.read(stockNotifierProvider(widget.productId)).blockedByGate;
+        if (blocked) {
+          SyncRequiredModal.show(context);
+        } else {
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text('Erreur lors de l\'enregistrement'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }

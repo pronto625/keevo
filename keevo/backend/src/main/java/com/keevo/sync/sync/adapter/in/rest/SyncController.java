@@ -7,12 +7,15 @@ import com.keevo.sync.sync.adapter.in.rest.dto.SyncPullResponseDto;
 import com.keevo.sync.sync.adapter.in.rest.dto.SyncPushRequestDto;
 import com.keevo.sync.sync.adapter.in.rest.dto.SyncPushResponseDto;
 import com.keevo.sync.sync.adapter.in.rest.dto.SyncConflictDto;
+import com.keevo.sync.sync.application.service.SyncGateCheckService;
 import com.keevo.sync.sync.domain.model.SyncBatchResult;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncPullResult;
+import com.keevo.sync.sync.domain.model.UserSyncState;
 import com.keevo.sync.sync.domain.port.in.SyncUseCase;
 import com.keevo.sync.sync.domain.port.in.SyncUseCase.PushBatchCommand;
 import com.keevo.sync.sync.domain.port.out.SyncConflictsLogRepository;
+import com.keevo.sync.sync.domain.port.out.UserSyncStateRepository;
 import io.jsonwebtoken.Claims;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -20,13 +23,17 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -40,12 +47,18 @@ public class SyncController {
     private final SyncUseCase syncUseCase;
     private final JwtTokenProvider jwtTokenProvider;
     private final SyncConflictsLogRepository conflictsLogRepository;
+    private final SyncGateCheckService syncGateCheckService;
+    private final UserSyncStateRepository userSyncStateRepository;
 
     public SyncController(SyncUseCase syncUseCase, JwtTokenProvider jwtTokenProvider,
-                           SyncConflictsLogRepository conflictsLogRepository) {
+                          SyncConflictsLogRepository conflictsLogRepository,
+                          SyncGateCheckService syncGateCheckService,
+                          UserSyncStateRepository userSyncStateRepository) {
         this.syncUseCase = syncUseCase;
         this.jwtTokenProvider = jwtTokenProvider;
         this.conflictsLogRepository = conflictsLogRepository;
+        this.syncGateCheckService = syncGateCheckService;
+        this.userSyncStateRepository = userSyncStateRepository;
     }
 
     @PostMapping("/push")
@@ -63,6 +76,23 @@ public class SyncController {
         UUID actorId = extractActorId();
         Claims claims = extractClaims(httpRequest);
         String tenantId = claims.get("tenantId", String.class);
+        String deviceId = request.deviceId();
+
+        // ── 7-day offline gate check ──────────────────────────────────────────
+        if (syncGateCheckService.isStalePush(deviceId)) {
+            Optional<UserSyncState> syncState = userSyncStateRepository.findByDeviceId(deviceId);
+            Instant lastPushAt = syncState.map(UserSyncState::lastPushAt).orElse(null);
+            long daysSince = lastPushAt != null
+                    ? ChronoUnit.DAYS.between(lastPushAt, Instant.now())
+                    : 0L;
+            return ResponseEntity.status(HttpStatus.LOCKED).body(
+                    ApiResponseWrapper.error(
+                            "Synchronisation requise — données trop anciennes",
+                            "SYNC_REQUIRED",
+                            "SYNC_REQUIRED",
+                            Map.of("daysSinceLastSync", daysSince,
+                                    "lastPushAt", lastPushAt != null ? lastPushAt.toString() : "")));
+        }
 
         var operations = request.operations().stream()
                 .map(dto -> new SyncOperation(
@@ -71,7 +101,11 @@ public class SyncController {
                 .toList();
 
         SyncBatchResult result = syncUseCase.pushBatch(
-                new PushBatchCommand(actorId, tenantId, request.deviceId(), operations));
+                new PushBatchCommand(actorId, tenantId, deviceId, operations));
+
+        // ── Record successful push timestamp ──────────────────────────────────
+        userSyncStateRepository.upsert(
+                new UserSyncState(deviceId, actorId, tenantId, Instant.now(), null, Instant.now()));
 
         return ResponseEntity.ok(ApiResponseWrapper.ok(SyncPushResponseDto.from(result)));
     }

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/sync/sync_gate_guard.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
 import '../../data/datasource/local_product_datasource.dart';
 import '../../data/datasource/remote_csv_import_datasource.dart';
@@ -167,6 +168,7 @@ class ProductActions {
     int transportCost = 0,
     String? photoUrl,
   }) async {
+    SyncGateGuard.assertWriteAllowed(_ref);
     final useCase = _ref.read(createProductUseCaseProvider);
     final result = await useCase.execute(
       name: name,
@@ -195,6 +197,7 @@ class ProductActions {
     int? transportCost,
     String? photoUrl,
   }) async {
+    SyncGateGuard.assertWriteAllowed(_ref);
     final useCase = _ref.read(updateProductUseCaseProvider);
     final result = await useCase.execute(
       id: id,
@@ -223,6 +226,7 @@ class ProductActions {
   }
 
   Future<void> archive(String id) async {
+    SyncGateGuard.assertWriteAllowed(_ref);
     final useCase = _ref.read(archiveProductUseCaseProvider);
     await useCase.execute(id);
     _ref.invalidate(productListProvider);
@@ -230,6 +234,7 @@ class ProductActions {
   }
 
   Future<void> unarchive(String id) async {
+    SyncGateGuard.assertWriteAllowed(_ref);
     final useCase = _ref.read(unarchiveProductUseCaseProvider);
     await useCase.execute(id);
     _ref.invalidate(productListProvider);

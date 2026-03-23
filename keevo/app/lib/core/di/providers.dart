@@ -81,12 +81,14 @@ final syncServiceProvider = Provider<SyncService>((ref) {
   final database = ref.watch(appDatabaseProvider);
   final dio = ref.watch(dioProvider);
   final remoteProducts = RemoteProductDataSource(dio: dio);
-  
+  final prefs = ref.watch(sharedPreferencesProvider);
+
   return RestSyncService(
     database: database,
     remoteProducts: remoteProducts,
     dio: dio,
     secureStorage: const FlutterSecureStorage(),
+    prefs: prefs,
   );
 });
 

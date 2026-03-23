@@ -83,7 +83,8 @@ public enum ErrorCode {
     SYNC_OPERATION_REJECTED,       // Story 5.1 — sync handler rejected the operation
     SYNC_DUPLICATE_OPERATION,      // Story 5.1 — operationId already processed
     SYNC_UNKNOWN_OPERATION_TYPE,   // Story 5.1 — no handler registered for operationType
-
+    // ── Sync Gate (Story 5.4) ─────────────────────────────────────────────
+    SYNC_REQUIRED,                 // HTTP 423 — device has not synced for >7 days
     // ── Subscription / Plan Limits ────────────────────────────────
     SUBSCRIPTION_NOT_FOUND, // HTTP 404 — no active subscription for tenant (Story 2.4)
     PLAN_LIMIT_EXCEEDED,    // HTTP 403 — store/product/employee limit reached on Free plan

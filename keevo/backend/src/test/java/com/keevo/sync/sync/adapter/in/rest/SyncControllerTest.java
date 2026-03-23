@@ -8,10 +8,12 @@ import com.keevo.sync.sync.domain.model.SyncBatchResult;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import com.keevo.sync.sync.domain.model.SyncPullResult;
+import com.keevo.sync.sync.application.service.SyncGateCheckService;
 import com.keevo.sync.sync.domain.port.in.SyncUseCase;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
 import com.keevo.sync.sync.domain.port.out.SyncConflictsLogRepository;
+import com.keevo.sync.sync.domain.port.out.UserSyncStateRepository;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +47,8 @@ class SyncControllerTest {
     @Mock private SyncUseCase syncUseCase;
     @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private SyncConflictsLogRepository conflictsLogRepository;
+    @Mock private SyncGateCheckService syncGateCheckService;
+    @Mock private UserSyncStateRepository userSyncStateRepository;
 
     private MockMvc mockMvc;
     private ObjectMapper mapper;
@@ -56,7 +60,8 @@ class SyncControllerTest {
         mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
 
-        var controller = new SyncController(syncUseCase, jwtTokenProvider, conflictsLogRepository);
+        var controller = new SyncController(syncUseCase, jwtTokenProvider, conflictsLogRepository,
+                syncGateCheckService, userSyncStateRepository);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(mapper))
@@ -131,12 +136,12 @@ class SyncControllerTest {
     }
 
     @Test
-    void push_emptyOperations_returns400() throws Exception {
+    void push_nullOperations_returns422() throws Exception {
+        // With @NotNull: null (missing field) → 422; empty list [] is now allowed (Story 5.4)
         authenticateAs("OWNER");
 
-        var body = Map.of(
-                "deviceId", "device-1",
-                "operations", List.of());
+        // No "operations" key → Jackson deserialises as null → @NotNull fires
+        var body = Map.of("deviceId", "device-1");
 
         mockMvc.perform(post("/api/v1/sync/push")
                         .header("Authorization", "Bearer fake-jwt")

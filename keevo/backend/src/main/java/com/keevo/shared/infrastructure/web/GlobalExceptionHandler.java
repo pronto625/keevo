@@ -79,7 +79,8 @@ public class GlobalExceptionHandler {
             Map.entry("JUSTIFICATION_TOO_SHORT",   "La justification doit contenir au moins 10 caractères"),
             Map.entry("INTERNAL_ERROR",            "Une erreur inattendue s'est produite"),
             Map.entry("DAY_ALREADY_CLOSED",        "La journée a déjà été clôturée pour cette boutique"),
-            Map.entry("MISSING_PARAMETER",         "Paramètre requis manquant")
+            Map.entry("MISSING_PARAMETER",         "Paramètre requis manquant"),
+            Map.entry("SYNC_REQUIRED",              "Synchronisation requise — données trop anciennes")
     );
 
     @ExceptionHandler(DomainException.class)

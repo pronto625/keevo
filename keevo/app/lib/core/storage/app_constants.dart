@@ -35,6 +35,13 @@ const String kFirstOfflineDateKey = 'first_offline_date_ms';
 // Displayed in the SyncIndicator bottom sheet (AC4).
 const String kLastSyncTimestampKey = 'last_sync_timestamp_ms';
 
+/// Timestamp (milliseconds since epoch) of the last completed sync cycle (push+pull).
+/// Written by RestSyncService.pull() on success.
+/// Used by syncGateStateProvider to compute daysSinceLastSync.
+/// Stored in SharedPreferences (synchronous access for gate computation).
+/// Distinct from kLastSyncTimestampKey (pull cursor, in SecureStorage).
+const String kLastSyncAtKey = 'last_sync_at_ms';
+
 // Date (YYYY-MM-DD) of the last day closure.
 // Used to detect automatic closures for snackbar notification.
 const String kLastClosureDate = 'last_closure_date';

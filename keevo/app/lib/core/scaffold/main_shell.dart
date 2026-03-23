@@ -8,6 +8,7 @@ import '../../features/catalog/presentation/provider/product_provider.dart';
 import '../../features/pos/presentation/provider/pos_providers.dart';
 import '../../features/stores/presentation/provider/active_store_provider.dart';
 import '../../features/sync_indicator/presentation/widget/sync_warning_banner.dart';
+import 'offline_gate_banner.dart';
 
 /// MainShell — persistent bottom navigation scaffold wrapping the main sections.
 ///
@@ -104,6 +105,7 @@ class MainShell extends ConsumerWidget {
       body: Column(
         children: [
           const SyncWarningBanner(),
+          const OfflineGateBanner(),
           Expanded(child: child),
         ],
       ),
