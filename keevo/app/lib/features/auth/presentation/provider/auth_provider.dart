@@ -19,6 +19,7 @@ import '../../domain/usecase/change_password_usecase.dart';
 import '../../domain/usecase/login_usecase.dart';
 import '../../domain/usecase/register_user_usecase.dart';
 import '../../domain/usecase/select_tenant_usecase.dart';
+import '../../../stores/presentation/provider/active_store_provider.dart';
 
 part 'auth_provider.g.dart';
 
@@ -190,6 +191,11 @@ class Login extends _$Login {
         prefs.setString(kUserRoleKey, loginResult.tokens.role);
         prefs.setString(kUserPhoneKey, phoneNumber);
         prefs.setBool(kPasswordChangeRequiredKey, loginResult.tokens.passwordChangeRequired);
+        // EMPLOYEE: set active store from JWT so POS/Reports use the assigned store.
+        // OWNER: clear active store so "all stores" is the default.
+        ref.read(activeStoreIdProvider.notifier).setActiveStore(
+          loginResult.tokens.role == 'EMPLOYEE' ? loginResult.tokens.storeId : null,
+        );
         ref.invalidate(currentUserRoleProvider);
         ref.invalidate(currentUserPhoneProvider);
       }
@@ -232,6 +238,11 @@ class SelectTenant extends _$SelectTenant {
         final prefs = ref.read(sharedPreferencesProvider);
         prefs.setString(kUserRoleKey, tokens.role);
         prefs.setBool(kPasswordChangeRequiredKey, tokens.passwordChangeRequired);
+        // EMPLOYEE: set active store from JWT so POS/Reports use the assigned store.
+        // OWNER: clear active store so "all stores" is the default.
+        ref.read(activeStoreIdProvider.notifier).setActiveStore(
+          tokens.role == 'EMPLOYEE' ? tokens.storeId : null,
+        );
         ref.invalidate(currentUserRoleProvider);
         ref.invalidate(currentUserPhoneProvider);
       }

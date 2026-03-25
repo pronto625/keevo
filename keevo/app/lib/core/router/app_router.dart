@@ -48,6 +48,7 @@ import '../../features/audit/presentation/page/audit_page.dart';
 import '../../features/team/presentation/page/create_employee_page.dart';
 import '../di/providers.dart';
 import '../scaffold/main_shell.dart';
+import '../../features/stores/presentation/provider/active_store_provider.dart';
 import '../storage/app_constants.dart';
 
 /// Returns true only if [token] is a structurally valid JWT **and** its `exp`
@@ -133,6 +134,22 @@ class _SplashRedirectPageState extends ConsumerState<_SplashRedirectPage> {
 
     if (token != null && _isValidJwt(token)) {
       if (!mounted) return;
+
+      // Ensure EMPLOYEE activeStoreId is set from JWT on cold start.
+      // OWNER gets null (all stores).
+      try {
+        final parts = token.split('.');
+        final payload = utf8.decode(
+          base64Url.decode(base64Url.normalize(parts[1])),
+        );
+        final claims = jsonDecode(payload) as Map<String, dynamic>;
+        final role = claims['role'] as String?;
+        final jwtStoreId = claims['storeId'] as String?;
+        ref.read(activeStoreIdProvider.notifier).setActiveStore(
+          role == 'EMPLOYEE' ? jwtStoreId : null,
+        );
+      } catch (_) {}
+
       final prefs = await SharedPreferences.getInstance();
       var wizardSeen = prefs.getBool(kOnboardingWizardSeenKey) ?? false;
 
@@ -195,7 +212,7 @@ const _ownerOnlyPrefixes = [
   '/settings/subscription',
   '/settings/team',
   '/settings/sync',
-  '/reports',
+  '/stock/transfers',
   '/audit',
 ];
 

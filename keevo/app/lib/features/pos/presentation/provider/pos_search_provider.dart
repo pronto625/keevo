@@ -51,7 +51,7 @@ class PosSearchNotifier extends Notifier<AsyncValue<List<PosProductResult>>> {
           'SELECT p.id, p.name, p.price, p.photo_url, '
           'COALESCE(d.quantity, 0) as stock '
           'FROM products p '
-          'LEFT JOIN ('
+          'INNER JOIN ('
           '  SELECT sl.product_id, sl.quantity '
           '  FROM stock_levels sl '
           '  WHERE sl.store_id = ? '

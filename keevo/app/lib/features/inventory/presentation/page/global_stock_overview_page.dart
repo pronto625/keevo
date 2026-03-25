@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/di/providers.dart';
 import '../../../../core/sync/sync_status.dart';
 import '../../../../core/sync/sync_status_provider.dart';
 import '../../../stores/presentation/provider/store_provider.dart';
@@ -84,12 +85,13 @@ class _GlobalStockOverviewPageState
             elevation: 0,
             backgroundColor: Colors.transparent,
             actions: [
-              // Story 3.3 — navigate to transfer history
-              IconButton(
-                icon: const Icon(Icons.swap_horiz_rounded, color: Colors.white),
-                onPressed: () => context.push('/stock/transfers'),
-                tooltip: 'Historique des transferts',
-              ),
+              // Story 3.3 — navigate to transfer history (OWNER only)
+              if (ref.watch(currentUserRoleProvider) != 'EMPLOYEE')
+                IconButton(
+                  icon: const Icon(Icons.swap_horiz_rounded, color: Colors.white),
+                  onPressed: () => context.push('/stock/transfers'),
+                  tooltip: 'Historique des transferts',
+                ),
               IconButton(
                 icon: _isRefreshing
                     ? const SizedBox(
@@ -316,8 +318,11 @@ class _OverviewSliver extends ConsumerWidget {
           );
         }
 
+        // EMPLOYEE sees ALL stores (read-only multi-store view, Story 3.2).
+        // OWNER sees filtered view if a specific store is selected.
+        final role = ref.watch(currentUserRoleProvider);
         final selectedStoreId = ref.watch(activeStoreIdProvider);
-        final visibleStores = selectedStoreId == null
+        final visibleStores = (role == 'EMPLOYEE' || selectedStoreId == null)
             ? stores
             : stores.where((s) => s.storeId == selectedStoreId).toList();
         final totalValue =

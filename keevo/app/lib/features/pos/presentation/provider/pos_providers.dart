@@ -120,7 +120,7 @@ final frequentProductsProvider =
     'COALESCE(d.quantity, 0) as stock, '
     'c.name as category_name '
     'FROM products p '
-    'LEFT JOIN ('
+    'INNER JOIN ('
     '  SELECT sl.product_id, sl.quantity '
     '  FROM stock_levels sl '
     '  WHERE sl.store_id = ? '

@@ -201,6 +201,25 @@ class SettingsPage extends ConsumerWidget {
                 const SizedBox(height: 20),
                 ],
 
+                // ── Section : Consultation stock (EMPLOYEE — read-only) ──
+                if (!isOwner) ...[
+                  const _SectionLabel('Consultation'),
+                  const SizedBox(height: 8),
+                  _SettingsCard(
+                    children: [
+                      _SettingsTile(
+                        icon: Icons.inventory_2_rounded,
+                        iconColor: const Color(0xFF20C997),
+                        iconBg: const Color(0xFFD3F9D8),
+                        title: 'Stock multi-boutiques',
+                        subtitle: 'Vue centralisée des stocks par boutique',
+                        onTap: () => context.push('/stock/overview'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                ],
+
                 // ── Section : Préférences ────────────────────────────────
                 const _SectionLabel('Préférences'),
                 const SizedBox(height: 8),

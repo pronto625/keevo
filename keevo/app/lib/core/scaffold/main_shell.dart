@@ -23,8 +23,8 @@ class MainShell extends ConsumerWidget {
   /// OWNER tab routes — full navigation
   static const _ownerRoutes = ['/pos', '/products', '/reports', '/settings'];
 
-  /// EMPLOYEE tab routes — restricted to POS + settings only (AC5)
-  static const _employeeRoutes = ['/pos', '/settings'];
+  /// EMPLOYEE tab routes — POS + Rapports (day closure) + settings (AC5)
+  static const _employeeRoutes = ['/pos', '/reports', '/settings'];
 
   static int _tabIndex(String location, List<String> routes) {
     for (int i = routes.length - 1; i >= 0; i--) {
@@ -70,7 +70,7 @@ class MainShell extends ConsumerWidget {
         ),
         label: 'Caisse',
       ),
-      if (!isEmployee) ...[
+      if (!isEmployee)
         NavigationDestination(
           icon: Badge(
             label: Text(draftCount > 9 ? '9+' : '$draftCount'),
@@ -88,12 +88,11 @@ class MainShell extends ConsumerWidget {
           ),
           label: 'Catalogue',
         ),
-        const NavigationDestination(
-          icon: Icon(Icons.bar_chart_outlined),
-          selectedIcon: Icon(Icons.bar_chart_rounded),
-          label: 'Rapports',
-        ),
-      ],
+      const NavigationDestination(
+        icon: Icon(Icons.bar_chart_outlined),
+        selectedIcon: Icon(Icons.bar_chart_rounded),
+        label: 'Rapports',
+      ),
       const NavigationDestination(
         icon: Icon(Icons.more_horiz_outlined),
         selectedIcon: Icon(Icons.more_horiz_rounded),
