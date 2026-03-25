@@ -25,4 +25,10 @@ public interface UserSyncStateRepository {
      * On conflict (device_id PK), updates last_push_at and updated_at.
      */
     void upsert(UserSyncState state);
+
+    /**
+     * Returns all device sync states for the given tenant.
+     * Story 5.5 — AC4.
+     */
+    java.util.List<UserSyncState> findAllByTenantId(String tenantId);
 }

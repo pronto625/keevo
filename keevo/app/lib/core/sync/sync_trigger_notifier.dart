@@ -3,6 +3,7 @@ import 'dart:developer' as dev;
 import 'dart:math';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -110,6 +111,17 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
     final syncService = ref.read(syncServiceProvider);
     final hasPending = await syncService.hasPendingOperations();
     if (hasPending) {
+      // Check if queue is stale (ops pending > 1 hour) — trigger diagnostic
+      final db = ref.read(appDatabaseProvider);
+      final oldestPending = await (db.select(db.syncQueue)
+            ..where((t) => t.synced.equals(false))
+            ..orderBy([(t) => OrderingTerm.asc(t.createdAt)])
+            ..limit(1))
+          .getSingleOrNull();
+      if (oldestPending != null &&
+          DateTime.now().difference(oldestPending.createdAt).inHours >= 1) {
+        await ref.read(syncDiagnosticRunnerProvider).runIfNeeded();
+      }
       triggerSync();
     }
   }
@@ -118,11 +130,14 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
     state = const SyncTriggerState.syncing();
     try {
       final syncService = ref.read(syncServiceProvider);
+      final eventLogger = ref.read(syncEventLoggerProvider);
 
       // Step 1: Push pending offline ops
       List<Map<String, dynamic>> conflicts = [];
+      bool pushFailed = false;
       try {
         conflicts = await syncService.push();
+        await eventLogger.logPushSuccess(conflicts.length);
       } on SyncRequiredException catch (e) {
         // Server 423: device is stale server-side.
         // ABORT pull — pull would write kLastSyncAtKey=now and falsely reopen the gate.
@@ -130,6 +145,7 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
           'Push blocked by server 423 gate: ${e.daysSinceLastSync} days stale',
           name: 'SyncTrigger',
         );
+        await eventLogger.logPushFailed('423 gate: ${e.daysSinceLastSync} days stale');
         // Force client gate to stay blocked (align with server reality)
         final prefs = ref.read(sharedPreferencesProvider);
         final staleMs = DateTime.now()
@@ -139,7 +155,9 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
         ref.invalidate(daysSinceLastSyncProvider);
         rethrow; // outer catch handles _scheduleRetry
       } catch (e) {
+        pushFailed = true;
         dev.log('Push failed during sync cycle: $e', name: 'SyncTrigger');
+        await eventLogger.logPushFailed(e.toString());
         // Non-423 push failure: proceed with pull (pull is NOT gated)
       }
 
@@ -159,7 +177,13 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
       }
 
       // Step 2: Pull server delta
-      await syncService.pull();
+      try {
+        await syncService.pull();
+        await eventLogger.logPullSuccess(0);
+      } catch (e) {
+        await eventLogger.logPullFailed(e.toString());
+        rethrow;
+      }
 
       _consecutiveFailures = 0;
       _firstFailureAt = null;

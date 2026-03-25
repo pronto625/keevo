@@ -9,7 +9,9 @@ import '../services/api_service.dart';
 import '../storage/app_database.dart';
 import '../sync/connectivity_service.dart';
 import '../sync/connectivity_service_impl.dart';
+import '../sync/diagnostics/sync_diagnostic_runner.dart';
 import '../sync/rest_sync_service.dart';
+import '../sync/sync_event_logger.dart';
 import '../sync/sync_service.dart';
 import '../../features/catalog/data/datasource/remote_product_datasource.dart';
 import '../../features/auth/presentation/provider/auth_provider.dart';
@@ -96,6 +98,21 @@ final syncServiceProvider = Provider<SyncService>((ref) {
 /// Used by repositories to check if device is online before write operations.
 final connectivityServiceProvider = Provider<ConnectivityService>((ref) {
   return ConnectivityServiceImpl();
+});
+
+/// SyncEventLogger provider — logs push/pull/diagnostic events to local Drift sync_events table.
+final syncEventLoggerProvider = Provider<SyncEventLogger>((ref) {
+  return SyncEventLogger(ref.watch(appDatabaseProvider));
+});
+
+/// SyncDiagnosticRunner provider — health + JWT checks with 6h cooldown.
+final syncDiagnosticRunnerProvider = Provider<SyncDiagnosticRunner>((ref) {
+  return SyncDiagnosticRunner(
+    dio: ref.watch(dioProvider),
+    secureStorage: ref.watch(flutterSecureStorageProvider),
+    prefs: ref.watch(sharedPreferencesProvider),
+    eventLogger: ref.watch(syncEventLoggerProvider),
+  );
 });
 
 /// ApiService provider — default stub implementation.

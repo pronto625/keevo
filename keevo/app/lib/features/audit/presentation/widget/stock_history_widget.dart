@@ -194,7 +194,10 @@ class _AuditEntryTile extends StatelessWidget {
     final isSelf = currentUserId != null &&
         entry.userId == currentUserId;
     if (isSelf) {
-      return currentUserPhone != null ? 'Vous ($currentUserPhone)' : 'Vous';
+      // Prefer backend actorPhone (authoritative) over locally stored phone
+      // to avoid stale values after two-step login user switch.
+      final phone = entry.actorPhone ?? currentUserPhone;
+      return phone != null ? 'Vous ($phone)' : 'Vous';
     }
     // actorPhone is resolved by the backend via LEFT JOIN public.users
     return entry.actorPhone ??

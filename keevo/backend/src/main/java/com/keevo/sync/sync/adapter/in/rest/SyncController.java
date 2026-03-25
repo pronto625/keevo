@@ -157,6 +157,28 @@ public class SyncController {
         return ResponseEntity.ok(ApiResponseWrapper.ok(conflicts));
     }
 
+    @GetMapping("/devices")
+    @PreAuthorize("hasAnyRole('OWNER','EMPLOYEE')")
+    @Operation(summary = "List active devices for current tenant",
+            description = "Returns all devices that have pushed sync data for this tenant.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Device list returned"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid authentication")
+    })
+    public ResponseEntity<ApiResponseWrapper<List<Map<String, Object>>>> getDevices(
+            HttpServletRequest httpRequest) {
+        Claims claims = extractClaims(httpRequest);
+        String tenantId = claims.get("tenantId", String.class);
+        List<UserSyncState> devices = userSyncStateRepository.findAllByTenantId(tenantId);
+        List<Map<String, Object>> dtos = devices.stream().map(d -> Map.<String, Object>of(
+                "deviceId", d.deviceId(),
+                "userId", d.userId().toString(),
+                "lastPushAt", d.lastPushAt() != null ? d.lastPushAt().toString() : "",
+                "updatedAt", d.updatedAt().toString()
+        )).toList();
+        return ResponseEntity.ok(ApiResponseWrapper.ok(dtos));
+    }
+
     private UUID extractActorId() {
         return (UUID) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
     }

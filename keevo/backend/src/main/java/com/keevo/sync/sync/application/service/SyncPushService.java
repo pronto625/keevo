@@ -7,6 +7,7 @@ import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider;
 import com.keevo.sync.sync.domain.port.in.SyncOperationHandler;
 import com.keevo.sync.sync.domain.port.in.SyncUseCase;
 import com.keevo.sync.sync.domain.port.out.SyncConflictsLogRepository;
+import com.keevo.sync.sync.domain.port.out.SyncErrorLogRepository;
 import com.keevo.sync.sync.domain.port.out.SyncOperationsLogRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,6 +32,7 @@ public class SyncPushService implements SyncUseCase {
     private final List<DeltaEntityProvider> deltaProviders;
     private final ConflictStrategyRegistry conflictStrategyRegistry;
     private final SyncConflictsLogRepository conflictsLogRepository;
+    private final SyncErrorLogRepository syncErrorLogRepository;
 
     public SyncPushService(SyncOperationHandlerRegistry handlerRegistry,
                            SyncOperationsLogRepository logRepository,
@@ -38,7 +40,8 @@ public class SyncPushService implements SyncUseCase {
                            PlatformTransactionManager transactionManager,
                            List<DeltaEntityProvider> deltaProviders,
                            ConflictStrategyRegistry conflictStrategyRegistry,
-                           SyncConflictsLogRepository conflictsLogRepository) {
+                           SyncConflictsLogRepository conflictsLogRepository,
+                           SyncErrorLogRepository syncErrorLogRepository) {
         this.handlerRegistry = handlerRegistry;
         this.logRepository = logRepository;
         this.eventPublisher = eventPublisher;
@@ -46,6 +49,7 @@ public class SyncPushService implements SyncUseCase {
         this.deltaProviders = deltaProviders;
         this.conflictStrategyRegistry = conflictStrategyRegistry;
         this.conflictsLogRepository = conflictsLogRepository;
+        this.syncErrorLogRepository = syncErrorLogRepository;
     }
 
     @Override
@@ -76,6 +80,25 @@ public class SyncPushService implements SyncUseCase {
             });
 
             results.add(result);
+
+            // Story 5.5 — AC5: persist REJECTED payloads to sync_error_log for zero data loss (FR73).
+            // CRITICAL: outside the per-operation transaction — error log save failure must NOT affect push processing.
+            if (result != null && result.status() == SyncOperationStatus.REJECTED) {
+                try {
+                    syncErrorLogRepository.save(new SyncErrorLogEntry(
+                            UUID.randomUUID(),
+                            operation.operationId(),
+                            operation.operationType(),
+                            operation.entityId(),
+                            operation.payload(),
+                            result.reason(),
+                            operation.clientTimestamp(),
+                            Instant.now()));
+                } catch (Exception e) {
+                    log.error("Failed to save sync error log for operation {}: {}",
+                            operation.operationId(), e.getMessage());
+                }
+            }
 
             // Event published outside the transaction — non-transactional side effect
             eventPublisher.publishEvent(new SyncOperationProcessedEvent(

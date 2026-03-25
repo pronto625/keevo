@@ -87,4 +87,33 @@ class UserSyncStateRepositoryAdapterTest {
 
         verify(jdbcTemplate).update(contains("ON CONFLICT"), any(), any(), any());
     }
+
+    // ── findAllByTenantId ────────────────────────────────────────────────────
+
+    @Test
+    void findAllByTenantId_returnsMatchingDevices() {
+        UserSyncState device1 = new UserSyncState(
+                "device-1", USER_ID, TENANT_ID, Instant.now(), null, Instant.now());
+        UserSyncState device2 = new UserSyncState(
+                "device-2", UUID.randomUUID(), TENANT_ID, Instant.now(), null, Instant.now());
+
+        when(jdbcTemplate.query(contains("WHERE tenant_id"), any(RowMapper.class), eq(TENANT_ID)))
+                .thenReturn(List.of(device1, device2));
+
+        List<UserSyncState> result = adapter.findAllByTenantId(TENANT_ID);
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).deviceId()).isEqualTo("device-1");
+        assertThat(result.get(1).deviceId()).isEqualTo("device-2");
+    }
+
+    @Test
+    void findAllByTenantId_emptyWhenNoDevices() {
+        when(jdbcTemplate.query(contains("WHERE tenant_id"), any(RowMapper.class), eq("kv_empty")))
+                .thenReturn(List.of());
+
+        List<UserSyncState> result = adapter.findAllByTenantId("kv_empty");
+
+        assertThat(result).isEmpty();
+    }
 }

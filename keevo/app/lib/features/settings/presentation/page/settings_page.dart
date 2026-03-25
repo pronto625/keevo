@@ -171,6 +171,15 @@ class SettingsPage extends ConsumerWidget {
                     ),
                     const _Divider(),
                     _SettingsTile(
+                      icon: Icons.sync_rounded,
+                      iconColor: const Color(0xFF339AF0),
+                      iconBg: const Color(0xFFD0EBFF),
+                      title: 'Synchronisation',
+                      subtitle: 'Historique, appareils et file d\'attente',
+                      onTap: () => context.push('/settings/sync'),
+                    ),
+                    const _Divider(),
+                    _SettingsTile(
                       icon: Icons.people_rounded,
                       iconColor: const Color(0xFF0EA5E9),
                       iconBg: const Color(0xFFE0F2FE),

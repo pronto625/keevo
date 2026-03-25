@@ -21,6 +21,7 @@ import 'stock_movements_table.dart';
 import 'stores_table.dart';
 import 'suppliers_table.dart';
 import 'stock_transfers_table.dart';
+import 'sync_events_table.dart';
 import 'sync_queue_table.dart';
 import 'users_table.dart';
 
@@ -43,6 +44,7 @@ part 'app_database.g.dart';
 /// Schema version 14: day_closures table added (Story 4.4).
 /// Schema version 16: employees table added (Story 5.1).
 /// Schema version 17: audit_entries table added (Story 5.2 — Pull Sync).
+/// Schema version 18: sync_events table added (Story 5.5 — Sync Monitoring).
 @DriftDatabase(tables: [
   SyncQueue,
   Products,
@@ -60,6 +62,7 @@ part 'app_database.g.dart';
   DayClosures,
   Employees,
   AuditEntries,
+  SyncEvents,
 ])
 class AppDatabase extends _$AppDatabase {
   /// Production constructor — uses SQLCipher encrypted file database.
@@ -72,7 +75,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -194,6 +197,10 @@ class AppDatabase extends _$AppDatabase {
       if (from < 17) {
         // Story 5.2 — audit_entries table for offline audit history (pull sync).
         await migrator.createTable(auditEntries);
+      }
+      if (from < 18) {
+        // Story 5.5 — sync_events table for local sync history.
+        await migrator.createTable(syncEvents);
       }
     },
   );

@@ -125,7 +125,7 @@ development_status:
   5-2-pull-sync-telechargement-delta-fusion-locale: done             # 2026-03-22 — code review passed | H1: AC7 pendingIds protection in 6 upsert methods | H2: @Transactional(readOnly=true) on pull() | H3: stock_transfers.updated_at migration in SyncService | H4: 3 Flutter test files (17 tests) | H5: SaleDeltaProvider batch query (N+1 fix) | M2: full provider invalidation | M3: 5-min periodic sync | M4: onAppStartup() | M5: sales/sale_items updated_at DDL | 133/133 backend + 56/56 Flutter GREEN
   5-3-resolution-de-conflits-delta-stock-last-write-wins: done             # code review — 5H 6M 4L issues found, fixes applied (H2-H5, M1-M3, L3-L4)
   5-4-limite-7-jours-hors-ligne-gate-de-deverrouillage: done
-  5-5-monitoring-sync-recuperation-derreurs-coherence-multi-device: backlog
+  5-5-monitoring-sync-recuperation-derreurs-coherence-multi-device: done             # Code review: 2C 3H 2M 4L findings — all fixed | H1: SyncErrorLogCleanupJob rewritten (multi-tenant iteration via JdbcTemplate) | H2: SyncControllerDevicesTest renamed (standaloneSetup limitation) | M2: FAB offline check | L1-L3: conflict count + relative time + entityId | Backend: 37/37 GREEN | Flutter: 28/28 GREEN
   epic-5-retrospective: optional
 
   # ─────────────────────────────────────────────────────────

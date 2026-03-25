@@ -38,6 +38,7 @@ class SyncPushServiceConflictTest {
     @Mock private SyncOperationHandler saleHandler;
     @Mock private ConflictResolutionStrategy conflictStrategy;
     @Mock private PlatformTransactionManager transactionManager;
+    @Mock private com.keevo.sync.sync.domain.port.out.SyncErrorLogRepository syncErrorLogRepository;
 
     private SyncPushService service;
 
@@ -49,7 +50,7 @@ class SyncPushServiceConflictTest {
         lenient().when(transactionManager.getTransaction(any()))
                 .thenReturn(new SimpleTransactionStatus());
         service = new SyncPushService(handlerRegistry, logRepository, eventPublisher,
-                transactionManager, List.of(), conflictStrategyRegistry, conflictsLogRepository);
+                transactionManager, List.of(), conflictStrategyRegistry, conflictsLogRepository, syncErrorLogRepository);
     }
 
     @Test

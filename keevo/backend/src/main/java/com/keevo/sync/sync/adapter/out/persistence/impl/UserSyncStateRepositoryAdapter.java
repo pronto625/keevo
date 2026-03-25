@@ -34,6 +34,10 @@ public class UserSyncStateRepositoryAdapter implements UserSyncStateRepository {
                     + "  last_push_at = NOW(), "
                     + "  updated_at   = NOW()";
 
+    private static final String FIND_ALL_BY_TENANT =
+            "SELECT device_id, user_id, tenant_id, last_push_at, last_pull_at, updated_at "
+                    + "FROM public.user_sync_state WHERE tenant_id = ? ORDER BY updated_at DESC";
+
     private final JdbcTemplate jdbcTemplate;
 
     public UserSyncStateRepositoryAdapter(JdbcTemplate jdbcTemplate) {
@@ -49,6 +53,11 @@ public class UserSyncStateRepositoryAdapter implements UserSyncStateRepository {
     @Override
     public void upsert(UserSyncState state) {
         jdbcTemplate.update(UPSERT, state.deviceId(), state.userId(), state.tenantId());
+    }
+
+    @Override
+    public List<UserSyncState> findAllByTenantId(String tenantId) {
+        return jdbcTemplate.query(FIND_ALL_BY_TENANT, rowMapper(), tenantId);
     }
 
     private RowMapper<UserSyncState> rowMapper() {

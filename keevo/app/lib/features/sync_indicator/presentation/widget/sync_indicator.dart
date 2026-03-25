@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/sync/sync_gate_provider.dart';
 import '../../../../core/sync/sync_gate_state.dart';
+import 'sync_detail_bottom_sheet.dart';
 import 'sync_required_modal.dart';
 import '../../../../core/sync/sync_status.dart';
 import '../../../../core/sync/sync_status_provider.dart';
 import '../../../../core/sync/sync_trigger_notifier.dart';
-import '../../../../core/di/providers.dart';
-import '../../../../core/storage/app_constants.dart';
 
 /// SyncIndicator — AppBar widget showing real-time connectivity + sync state.
 ///
@@ -149,7 +147,7 @@ class SyncIndicator extends ConsumerWidget {
     };
   }
 
-  /// Builds and shows the sync details bottom sheet (AC4).
+  /// Builds and shows the enhanced sync details bottom sheet (AC1, AC4).
   void _showSyncBottomSheet(
     BuildContext context,
     WidgetRef ref,
@@ -157,101 +155,8 @@ class SyncIndicator extends ConsumerWidget {
   ) {
     showModalBottomSheet<void>(
       context: context,
-      builder: (ctx) => _buildSyncBottomSheet(ctx, ref, status),
+      isScrollControlled: true,
+      builder: (ctx) => const SyncDetailBottomSheet(),
     );
-  }
-
-  Widget _buildSyncBottomSheet(
-    BuildContext context,
-    WidgetRef ref,
-    SyncStatus? status,
-  ) {
-    final isOnline = status == SyncStatus.online || status == SyncStatus.syncing;
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Synchronisation',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 12),
-            _LastSyncLabel(),
-            const SizedBox(height: 8),
-            Text(
-              'Statut : ${_label(status ?? SyncStatus.offlineCritical, 0)}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: isOnline
-                    ? () async {
-                        Navigator.of(context).pop();
-                        final svc = ref.read(syncServiceProvider);
-                        await svc.push();
-                        await svc.pull();
-                      }
-                    : null,
-                child: const Text('Synchroniser maintenant'),
-              ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  context.push('/settings/sync/conflicts');
-                },
-                child: const Text('Voir les conflits'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Displays "Dernière sync : il y a X heures / minutes" from SharedPreferences.
-class _LastSyncLabel extends StatefulWidget {
-  @override
-  State<_LastSyncLabel> createState() => _LastSyncLabelState();
-}
-
-class _LastSyncLabelState extends State<_LastSyncLabel> {
-  String _label = 'Dernière sync : inconnue';
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final ms = prefs.getInt(kLastSyncAtKey);
-    if (ms == null || !mounted) return;
-    final ts = DateTime.fromMillisecondsSinceEpoch(ms);
-    final diff = DateTime.now().difference(ts);
-    final label = _humanize(diff);
-    if (mounted) setState(() => _label = 'Dernière sync : $label');
-  }
-
-  String _humanize(Duration d) {
-    if (d.inMinutes < 1) return 'à l\'instant';
-    if (d.inMinutes < 60) return 'il y a ${d.inMinutes} min';
-    if (d.inHours < 24) return 'il y a ${d.inHours} h';
-    return 'il y a ${d.inDays} j';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(_label, style: Theme.of(context).textTheme.bodyMedium);
   }
 }
