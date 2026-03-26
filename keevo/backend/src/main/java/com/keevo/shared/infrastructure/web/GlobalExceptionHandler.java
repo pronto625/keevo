@@ -195,7 +195,8 @@ public class GlobalExceptionHandler {
                  "JUSTIFICATION_TOO_SHORT" -> HttpStatus.BAD_REQUEST;
             case "SECTOR_TEMPLATE_NOT_FOUND",
                  "ONBOARDING_ALREADY_COMPLETED",
-                 "INVENTORY_INVALID_CATEGORIES" -> HttpStatus.BAD_REQUEST;
+                 "INVENTORY_INVALID_CATEGORIES",
+                 "INVENTORY_COUNT_PRODUCT_NOT_IN_SCOPE" -> HttpStatus.BAD_REQUEST;
             case "TENANT_PROVISION_FAILED" -> HttpStatus.INTERNAL_SERVER_ERROR;
             case "CSV_PARSE_ERROR" -> HttpStatus.UNPROCESSABLE_ENTITY;  // Story 2.4 malformed CSV
             case "PLAN_LIMIT_EXCEEDED",

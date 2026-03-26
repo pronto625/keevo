@@ -220,6 +220,8 @@ class RestSyncService implements SyncService {
             entities['auditEntries'] as List<dynamic>? ?? []);
         await _upsertInventorySessions(
             entities['inventorySessions'] as List<dynamic>? ?? []);
+        await _upsertInventoryCounts(
+            entities['inventoryCounts'] as List<dynamic>? ?? []);
       });
 
       // 4. Store serverTimestamp as new lastPullTimestamp
@@ -681,6 +683,46 @@ class RestSyncService implements SyncService {
           map['cancelledBy'],
           _toLocalIso(map['cancelledAt']),
           _toLocalIso(map['completedAt']),
+          _toLocalIso(map['updatedAt']),
+        ],
+      );
+    }
+  }
+
+  Future<void> _upsertInventoryCounts(List<dynamic> counts) async {
+    if (counts.isEmpty) return;
+    for (final c in counts) {
+      final map = c as Map<String, dynamic>;
+      final id = map['id'] as String;
+      // Protect pending IDs (synced=false → local offline count not yet pushed)
+      final pendingRows = await _database.customSelect(
+        'SELECT 1 FROM inventory_counts WHERE id = ? AND synced = 0',
+        variables: [Variable<String>(id)],
+      ).get();
+      if (pendingRows.isNotEmpty) continue;
+
+      await _database.customStatement(
+        'INSERT INTO inventory_counts '
+        '(id, session_id, product_id, variant_id, product_name, variant_label, '
+        'theoretical, physical, counted_by, counted_at, updated_at, synced) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1) '
+        'ON CONFLICT(id) DO UPDATE SET '
+        'physical = excluded.physical, '
+        'counted_by = excluded.counted_by, '
+        'counted_at = excluded.counted_at, '
+        'updated_at = excluded.updated_at, '
+        'synced = 1',
+        [
+          id,
+          map['sessionId'],
+          map['productId'],
+          map['variantId'],
+          map['productName'],
+          map['variantLabel'],
+          map['theoretical'],
+          map['physical'],
+          map['countedBy'],
+          _toLocalIso(map['countedAt']),
           _toLocalIso(map['updatedAt']),
         ],
       );

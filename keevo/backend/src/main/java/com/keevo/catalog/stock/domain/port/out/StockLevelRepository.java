@@ -25,4 +25,7 @@ public interface StockLevelRepository {
 
     /** Retrieve all stock levels for a product across all stores. */
     List<StockLevel> findAllByProduct(UUID productId);
+
+    /** Find all stock levels for a store (used by inventory counting). */
+    List<StockLevel> findAllByStoreId(UUID storeId);
 }

@@ -4,6 +4,7 @@ import com.keevo.catalog.product.domain.entity.Product;
 
 import java.util.UUID;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -82,4 +83,22 @@ public interface ProductRepository {
      * @param id the product ID to unarchive
      */
     void unarchive(UUID id);
+
+    /**
+     * Find products by a list of IDs (used by FullScopeResolver to enrich StockLevel data).
+     * Story 6.2.
+     */
+    List<Product> findAllByIds(List<UUID> ids);
+
+    /**
+     * Find active products belonging to any of the given category IDs (PartialScopeResolver).
+     * Story 6.2.
+     */
+    List<Product> findByCategoryIds(List<UUID> categoryIds);
+
+    /**
+     * Find photo URLs for products by IDs (inventory counting enrichment).
+     * Story 6.2.
+     */
+    Map<UUID, String> findPhotoUrlsByIds(List<UUID> ids);
 }

@@ -79,7 +79,8 @@ public class TenantSchemaSyncService {
                     java.util.Map.entry("sync_operations_log",   TenantSchemaProvisioner.DDL_SYNC_OPERATIONS_LOG),
                     java.util.Map.entry("sync_conflicts_log",     TenantSchemaProvisioner.DDL_SYNC_CONFLICTS_LOG),
                     java.util.Map.entry("sync_error_log",        TenantSchemaProvisioner.DDL_SYNC_ERROR_LOG),
-                    java.util.Map.entry("inventory_sessions",    TenantSchemaProvisioner.DDL_INVENTORY_SESSIONS)
+                    java.util.Map.entry("inventory_sessions",    TenantSchemaProvisioner.DDL_INVENTORY_SESSIONS),
+                    java.util.Map.entry("inventory_counts",      TenantSchemaProvisioner.DDL_INVENTORY_COUNTS)
             );
 
     /** Valid tenant schema pattern — prevents any SQL injection. */
@@ -233,6 +234,10 @@ public class TenantSchemaSyncService {
             // Story 6.1 — inventory sessions indexes
             stmt.execute(TenantSchemaProvisioner.DDL_INVENTORY_SESSIONS_IDX_STORE_STATUS);
             stmt.execute(TenantSchemaProvisioner.DDL_INVENTORY_SESSIONS_IDX_STATUS);
+            // Story 6.2 — inventory counts table + indexes
+            stmt.execute(TenantSchemaProvisioner.DDL_INVENTORY_COUNTS_IDX_SESSION);
+            stmt.execute(TenantSchemaProvisioner.DDL_INVENTORY_COUNTS_IDX_UNIQUE_NO_VARIANT);
+            stmt.execute(TenantSchemaProvisioner.DDL_INVENTORY_COUNTS_IDX_UNIQUE_VARIANT);
             stmt.execute("SET search_path TO public");
         }
     }

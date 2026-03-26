@@ -42,6 +42,7 @@ import '../../features/sync_indicator/presentation/page/sync_conflict_log_page.d
 import '../../features/sync_indicator/presentation/page/sync_settings_page.dart';
 import '../../features/stores/presentation/page/stores_list_page.dart';
 import '../../features/inventory/presentation/page/global_stock_overview_page.dart';
+import '../../features/inventory/presentation/page/inventory_counting_page.dart';
 import '../../features/inventory/presentation/page/inventory_launch_page.dart';
 import '../../features/inventory/presentation/page/transfer_history_page.dart';
 import '../../features/team/presentation/page/team_page.dart';
@@ -442,7 +443,10 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: '/inventory/counting/:sessionId',
-      builder: (_, __) => const _PlaceholderPage(title: 'Comptage'),
+      builder: (_, state) {
+        final sessionId = state.pathParameters['sessionId']!;
+        return InventoryCountingPage(sessionId: sessionId);
+      },
     ),
 
     GoRoute(

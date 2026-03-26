@@ -7,8 +7,10 @@ import com.keevo.shared.infrastructure.persistence.entity.ProductJpaEntity;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.time.Instant;
 
 /**
@@ -80,6 +82,33 @@ public class ProductRepositoryAdapter implements ProductRepository {
             product.setUpdatedAt(Instant.now());
             springRepository.save(product);
         });
+    }
+
+    @Override
+    public List<Product> findAllByIds(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) return List.of();
+        return springRepository.findAllByIds(ids).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Product> findByCategoryIds(List<UUID> categoryIds) {
+        if (categoryIds == null || categoryIds.isEmpty()) return List.of();
+        return springRepository.findByCategoryIds(categoryIds).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
+    public Map<UUID, String> findPhotoUrlsByIds(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) return Map.of();
+        return springRepository.findPhotoUrlsByIds(ids).stream()
+                .filter(row -> row[1] != null)
+                .collect(Collectors.toMap(
+                        row -> (UUID) row[0],
+                        row -> (String) row[1],
+                        (a, b) -> a));
     }
 
     // ── Conversion methods ─────────────────────────────────────────────────────

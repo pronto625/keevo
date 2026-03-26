@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../provider/inventory_session_provider.dart';
@@ -41,7 +42,8 @@ class InventoryLaunchPage extends ConsumerWidget {
               child: ActiveSessionBanner(
                 session: activeSessionAsync.value!,
                 onResume: () {
-                  // Placeholder: navigate to counting page (Story 6.2)
+                  GoRouter.of(context).push(
+                      '/inventory/counting/${activeSessionAsync.value!.id}');
                 },
                 onCancel: () => _confirmCancel(context, ref,
                     activeSessionAsync.value!.id),
@@ -113,7 +115,18 @@ class InventoryLaunchPage extends ConsumerWidget {
       floatingActionButton:
           (activeSessionAsync is AsyncData && activeSessionAsync.value == null)
               ? FloatingActionButton.extended(
-                  onPressed: () => showInventoryConfigBottomSheet(context),
+                  onPressed: () async {
+                    final created =
+                        await showInventoryConfigBottomSheet(context);
+                    if (created == true && context.mounted) {
+                      // Navigate to counting page for the newly created session
+                      final session = ref.read(createSessionNotifierProvider).value;
+                      if (session != null) {
+                        GoRouter.of(context)
+                            .push('/inventory/counting/${session.id}');
+                      }
+                    }
+                  },
                   icon: const Icon(Icons.add),
                   label: const Text('Nouvel inventaire'),
                 )

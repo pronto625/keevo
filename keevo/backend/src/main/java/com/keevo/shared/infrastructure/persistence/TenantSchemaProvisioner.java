@@ -532,6 +532,34 @@ public class TenantSchemaProvisioner {
     static final String DDL_INVENTORY_SESSIONS_IDX_STATUS =
             "CREATE INDEX IF NOT EXISTS idx_inventory_sessions_status ON inventory_sessions(status)";
 
+    // ── Inventory counts (Story 6.2) ────────────────────────────────────────────
+
+    static final String DDL_INVENTORY_COUNTS = """
+            CREATE TABLE IF NOT EXISTS inventory_counts (
+                id             UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+                session_id     UUID         NOT NULL REFERENCES inventory_sessions(id),
+                product_id     UUID         NOT NULL,
+                variant_id     UUID,
+                product_name   VARCHAR(200) NOT NULL,
+                variant_label  VARCHAR(100),
+                theoretical    INT          NOT NULL DEFAULT 0,
+                physical       INT,
+                counted_at     TIMESTAMPTZ,
+                counted_by     UUID,
+                updated_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+            )""";
+
+    static final String DDL_INVENTORY_COUNTS_IDX_SESSION =
+            "CREATE INDEX IF NOT EXISTS idx_inventory_counts_session ON inventory_counts(session_id)";
+
+    static final String DDL_INVENTORY_COUNTS_IDX_UNIQUE_NO_VARIANT =
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_counts_session_product_no_variant "
+            + "ON inventory_counts(session_id, product_id) WHERE variant_id IS NULL";
+
+    static final String DDL_INVENTORY_COUNTS_IDX_UNIQUE_VARIANT =
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_counts_session_product_variant "
+            + "ON inventory_counts(session_id, product_id, variant_id) WHERE variant_id IS NOT NULL";
+
     // SPEC CHANGE 2026-03-06: new tenants start on 6-month PREMIUM_TRIAL (unlimited limits)
     // WHERE NOT EXISTS ensures idempotency — provision() can be called multiple times safely.
     private static final String SEED_SUBSCRIPTION = """
@@ -698,6 +726,11 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_INVENTORY_SESSIONS);
             stmt.execute(DDL_INVENTORY_SESSIONS_IDX_STORE_STATUS);
             stmt.execute(DDL_INVENTORY_SESSIONS_IDX_STATUS);
+            // Story 6.2 — inventory counts
+            stmt.execute(DDL_INVENTORY_COUNTS);
+            stmt.execute(DDL_INVENTORY_COUNTS_IDX_SESSION);
+            stmt.execute(DDL_INVENTORY_COUNTS_IDX_UNIQUE_NO_VARIANT);
+            stmt.execute(DDL_INVENTORY_COUNTS_IDX_UNIQUE_VARIANT);
             stmt.execute("SET search_path TO public");
         }
     }

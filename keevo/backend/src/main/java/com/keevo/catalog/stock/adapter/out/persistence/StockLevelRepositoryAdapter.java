@@ -56,6 +56,14 @@ public class StockLevelRepositoryAdapter implements StockLevelRepository {
                 .toList();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<StockLevel> findAllByStoreId(UUID storeId) {
+        return springRepository.findAllByStoreId(storeId).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
     // ── Conversion ────────────────────────────────────────────────────────────
 
     private StockLevel toDomain(StockLevelJpaEntity e) {

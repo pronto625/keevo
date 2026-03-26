@@ -25,6 +25,7 @@ import 'sync_events_table.dart';
 import 'sync_queue_table.dart';
 import 'users_table.dart';
 import 'inventory_sessions_table.dart';
+import 'inventory_counts_table.dart';
 
 part 'app_database.g.dart';
 
@@ -65,6 +66,7 @@ part 'app_database.g.dart';
   AuditEntries,
   SyncEvents,
   InventorySessions,
+  InventoryCounts,
 ])
 class AppDatabase extends _$AppDatabase {
   /// Production constructor — uses SQLCipher encrypted file database.
@@ -77,7 +79,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 20;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -207,6 +209,10 @@ class AppDatabase extends _$AppDatabase {
       if (from < 19) {
         // Story 6.1 — inventory_sessions table.
         await migrator.createTable(inventorySessions);
+      }
+      if (from < 20) {
+        // Story 6.2 — inventory_counts table.
+        await migrator.createTable(inventoryCounts);
       }
     },
   );

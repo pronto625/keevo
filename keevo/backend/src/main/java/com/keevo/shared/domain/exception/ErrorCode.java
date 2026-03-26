@@ -53,6 +53,9 @@ public enum ErrorCode {
     INVENTORY_STORE_NOT_FOUND,           // HTTP 404 — target store does not exist
     INVENTORY_INVALID_CATEGORIES,        // HTTP 400 — one or more category IDs are invalid
 
+    // ── Inventory Count (Story 6.2) ───────────────────────────────
+    INVENTORY_COUNT_PRODUCT_NOT_IN_SCOPE, // HTTP 400 — product not in session scope
+
     // ── Employee (Story 3.5) ──────────────────────────────────────
     EMPLOYEE_NOT_FOUND,
     PASSWORD_CHANGE_REQUIRED,

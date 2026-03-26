@@ -35,4 +35,13 @@ public interface ProductSpringRepository extends JpaRepository<ProductJpaEntity,
      */
     @Query("SELECT COUNT(p) > 0 FROM ProductJpaEntity p WHERE LOWER(p.name) = LOWER(:name)")
     boolean existsByNameIgnoreCase(@Param("name") String name);
+
+    @Query("SELECT p FROM ProductJpaEntity p WHERE p.id IN :ids")
+    List<ProductJpaEntity> findAllByIds(@Param("ids") List<UUID> ids);
+
+    @Query("SELECT p FROM ProductJpaEntity p WHERE p.categoryId IN :categoryIds AND p.archived = false")
+    List<ProductJpaEntity> findByCategoryIds(@Param("categoryIds") List<UUID> categoryIds);
+
+    @Query("SELECT p.id, p.photoUrl FROM ProductJpaEntity p WHERE p.id IN :ids")
+    List<Object[]> findPhotoUrlsByIds(@Param("ids") List<UUID> ids);
 }

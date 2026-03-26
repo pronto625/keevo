@@ -27,4 +27,7 @@ public interface StockLevelSpringRepository extends JpaRepository<StockLevelJpaE
 
     @Query("SELECT s FROM StockLevelJpaEntity s WHERE s.productId = :productId")
     List<StockLevelJpaEntity> findAllByProduct(@Param("productId") UUID productId);
+
+    @Query("SELECT s FROM StockLevelJpaEntity s WHERE s.storeId = :storeId")
+    List<StockLevelJpaEntity> findAllByStoreId(@Param("storeId") UUID storeId);
 }
