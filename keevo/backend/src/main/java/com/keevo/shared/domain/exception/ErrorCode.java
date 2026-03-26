@@ -46,6 +46,13 @@ public enum ErrorCode {
     INSUFFICIENT_STOCK,
     STOCK_NOT_FOUND,
 
+    // ── Inventory Session (Story 6.1) ─────────────────────────────
+    INVENTORY_SESSION_ALREADY_ACTIVE,    // HTTP 409 — store already has an in-progress session
+    INVENTORY_SESSION_NOT_FOUND,         // HTTP 404
+    INVENTORY_SESSION_NOT_IN_PROGRESS,   // HTTP 409 — cannot cancel/validate a non-active session
+    INVENTORY_STORE_NOT_FOUND,           // HTTP 404 — target store does not exist
+    INVENTORY_INVALID_CATEGORIES,        // HTTP 400 — one or more category IDs are invalid
+
     // ── Employee (Story 3.5) ──────────────────────────────────────
     EMPLOYEE_NOT_FOUND,
     PASSWORD_CHANGE_REQUIRED,

@@ -293,6 +293,7 @@ class SaleRepositoryImpl implements SaleRepository {
         'status': sale.status,
         'items': sale.items
             .map((i) => {
+                  'itemId': i.id,
                   'productId': i.productId,
                   'variantId': i.variantId,
                   'productName': i.productName,

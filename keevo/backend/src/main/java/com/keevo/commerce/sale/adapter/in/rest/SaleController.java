@@ -75,6 +75,7 @@ public class SaleController {
                 requestedStatus,
                 request.items().stream()
                         .map(i -> new SaleItemCommand(
+                                i.itemId(),
                                 i.productId(), i.variantId(), i.productName(),
                                 i.catalogueUnitPrice(), i.appliedUnitPrice(), i.quantity()))
                         .toList()

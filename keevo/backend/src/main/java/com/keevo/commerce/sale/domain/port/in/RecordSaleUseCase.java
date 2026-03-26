@@ -33,6 +33,7 @@ public interface RecordSaleUseCase {
     }
 
     record SaleItemCommand(
+            UUID itemId,      // client-generated — nullable (server generates if absent)
             UUID productId,
             UUID variantId,   // nullable
             String productName,

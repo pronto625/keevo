@@ -7,6 +7,7 @@ import '../sync/sync_trigger_notifier.dart';
 import '../../features/catalog/presentation/provider/product_provider.dart';
 import '../../features/pos/presentation/provider/pos_providers.dart';
 import '../../features/stores/presentation/provider/active_store_provider.dart';
+import '../../features/stores/presentation/provider/store_provider.dart';
 import '../../features/sync_indicator/presentation/widget/sync_warning_banner.dart';
 import 'offline_gate_banner.dart';
 
@@ -48,6 +49,21 @@ class MainShell extends ConsumerWidget {
     ref.watch(syncTriggerNotifierProvider);
 
     final storeId = ref.watch(activeStoreIdProvider);
+
+    // OWNER auto-select: when no store is chosen, pick the first available.
+    if (storeId == null && !isEmployee) {
+      final storesAsync = ref.watch(storeListNotifierProvider);
+      final stores = storesAsync.valueOrNull;
+      if (stores != null && stores.isNotEmpty) {
+        // Schedule after build to avoid modifying state during build.
+        Future.microtask(() {
+          ref
+              .read(activeStoreIdProvider.notifier)
+              .setActiveStore(stores.first.id);
+        });
+      }
+    }
+
     final pendingSalesCount = isEmployee
         ? 0
         : (ref.watch(pendingSalesCountProvider(storeId)).valueOrNull ?? 0);

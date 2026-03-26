@@ -27,6 +27,12 @@ public interface UserSyncStateRepository {
     void upsert(UserSyncState state);
 
     /**
+     * Inserts or updates the device row on pull.
+     * On conflict (device_id PK), updates last_pull_at and updated_at (does not touch last_push_at).
+     */
+    void upsertOnPull(UserSyncState state);
+
+    /**
      * Returns all device sync states for the given tenant.
      * Story 5.5 — AC4.
      */

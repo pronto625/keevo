@@ -67,7 +67,7 @@ class RecordSaleServiceTest {
         return new RecordSaleCommand(
                 SALE_ID, ACTOR_ID, STORE_ID, null,
                 PaymentMode.CASH, null, 0,
-                List.of(new SaleItemCommand(PRODUCT_ID, null, "Produit A", 1500, 1500, 2))
+                List.of(new SaleItemCommand(null, PRODUCT_ID, null, "Produit A", 1500, 1500, 2))
         );
     }
 
@@ -153,7 +153,7 @@ class RecordSaleServiceTest {
         var command = new RecordSaleCommand(
                 SALE_ID, ACTOR_ID, STORE_ID, null,
                 PaymentMode.CASH, null, 500,
-                List.of(new SaleItemCommand(PRODUCT_ID, null, "Produit A", 1500, 1500, 2))
+                List.of(new SaleItemCommand(null, PRODUCT_ID, null, "Produit A", 1500, 1500, 2))
         );
 
         service.recordSale(command);
@@ -174,7 +174,7 @@ class RecordSaleServiceTest {
         var command = new RecordSaleCommand(
                 SALE_ID, ACTOR_ID, STORE_ID, null,
                 PaymentMode.CASH, null, 0,
-                List.of(new SaleItemCommand(PRODUCT_ID, null, "Produit Test", 5000, 4000, 1))
+                List.of(new SaleItemCommand(null, PRODUCT_ID, null, "Produit Test", 5000, 4000, 1))
         );
 
         service.recordSale(command);
@@ -202,7 +202,7 @@ class RecordSaleServiceTest {
         var command = new RecordSaleCommand(
                 SALE_ID, ACTOR_ID, STORE_ID, null,
                 PaymentMode.CASH, null, 0,
-                List.of(new SaleItemCommand(PRODUCT_ID, null, "Produit A", 1500, 1500, 2))
+                List.of(new SaleItemCommand(null, PRODUCT_ID, null, "Produit A", 1500, 1500, 2))
         );
 
         service.recordSale(command);
@@ -221,7 +221,7 @@ class RecordSaleServiceTest {
         var command = new RecordSaleCommand(
                 SALE_ID, ACTOR_ID, STORE_ID, null,
                 PaymentMode.CASH, null, 1000,
-                List.of(new SaleItemCommand(PRODUCT_ID, null, "Produit A", 5000, 5000, 2))
+                List.of(new SaleItemCommand(null, PRODUCT_ID, null, "Produit A", 5000, 5000, 2))
         );
 
         service.recordSale(command);
@@ -241,7 +241,7 @@ class RecordSaleServiceTest {
         var command = new RecordSaleCommand(
                 SALE_ID, ACTOR_ID, STORE_ID, null,
                 PaymentMode.CASH, null, 500,
-                List.of(new SaleItemCommand(PRODUCT_ID, null, "Produit A", 1500, 1500, 2))
+                List.of(new SaleItemCommand(null, PRODUCT_ID, null, "Produit A", 1500, 1500, 2))
         );
 
         service.recordSale(command);
@@ -265,7 +265,7 @@ class RecordSaleServiceTest {
                 SALE_ID, ACTOR_ID, STORE_ID, null,
                 PaymentMode.CASH, null, 0,
                 SaleStatus.PENDING_VALIDATION,
-                List.of(new SaleItemCommand(PRODUCT_ID, null, "Produit Draft", 3000, 3000, 2))
+                List.of(new SaleItemCommand(null, PRODUCT_ID, null, "Produit Draft", 3000, 3000, 2))
         );
     }
 

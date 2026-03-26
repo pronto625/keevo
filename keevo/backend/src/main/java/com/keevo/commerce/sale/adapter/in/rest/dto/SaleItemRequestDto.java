@@ -8,6 +8,7 @@ import jakarta.validation.constraints.PositiveOrZero;
 import java.util.UUID;
 
 public record SaleItemRequestDto(
+        UUID itemId,                                // client-generated — preserved for sync consistency
         @NotNull UUID productId,
         UUID variantId,
         @NotBlank String productName,

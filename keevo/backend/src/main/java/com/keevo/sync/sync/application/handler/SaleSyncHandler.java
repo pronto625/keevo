@@ -52,6 +52,7 @@ public class SaleSyncHandler extends AbstractSyncOperationHandler {
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> items = (List<Map<String, Object>>) p.get("items");
         List<SaleItemCommand> saleItems = items.stream().map(item -> new SaleItemCommand(
+                item.get("itemId") != null ? UUID.fromString((String) item.get("itemId")) : null,
                 UUID.fromString((String) item.get("productId")),
                 item.get("variantId") != null ? UUID.fromString((String) item.get("variantId")) : null,
                 (String) item.get("productName"),

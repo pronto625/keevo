@@ -156,7 +156,21 @@ class RestSyncService implements SyncService {
   Future<void> pull() async {
     try {
       // 1. Read last pull timestamp
-      final lastSyncMs = await _secureStorage.read(key: kLastSyncTimestampKey);
+      var lastSyncMs = await _secureStorage.read(key: kLastSyncTimestampKey);
+
+      // Guard against stale SecureStorage after Android "Clear Data".
+      // SharedPreferences is reliably cleared, but FlutterSecureStorage
+      // (Android Keystore) may survive — causing delta pulls against an
+      // empty local DB.  When SharedPrefs has no gate key but SecureStorage
+      // still has a cursor, reset to force a full sync.
+      final prefsLastSync = _prefs.getInt(kLastSyncAtKey);
+      if (prefsLastSync == null && lastSyncMs != null) {
+        dev.log('Stale sync cursor detected — forcing full sync',
+            name: 'RestSync');
+        await _secureStorage.delete(key: kLastSyncTimestampKey);
+        lastSyncMs = null;
+      }
+
       String? since;
       if (lastSyncMs != null) {
         final lastSync =
@@ -164,10 +178,12 @@ class RestSyncService implements SyncService {
         since = lastSync.toUtc().toIso8601String();
       }
 
-      // 2. Call pull endpoint
+      // 2. Call pull endpoint (include deviceId header for device registration)
+      final deviceId = await _getDeviceId();
       final response = await _dio.get<Map<String, dynamic>>(
         '/api/v1/sync/pull',
         queryParameters: since != null ? {'since': since} : null,
+        options: Options(headers: {'X-Device-Id': deviceId}),
       );
 
       final data = response.data!['data'] as Map<String, dynamic>;
@@ -202,6 +218,8 @@ class RestSyncService implements SyncService {
             entities['stockTransfers'] as List<dynamic>? ?? []);
         await _upsertAuditEntries(
             entities['auditEntries'] as List<dynamic>? ?? []);
+        await _upsertInventorySessions(
+            entities['inventorySessions'] as List<dynamic>? ?? []);
       });
 
       // 4. Store serverTimestamp as new lastPullTimestamp
@@ -220,6 +238,16 @@ class RestSyncService implements SyncService {
   }
 
   // ── Upsert helpers ────────────────────────────────────────────────────────
+
+  /// Converts a server UTC ISO-8601 timestamp to local-time ISO-8601 string.
+  /// Drift with storeDateTimeAsText compares dates as plain strings in SQL.
+  /// Locally-created records use DateTime.now() (local, no Z suffix), so
+  /// server-synced records must also be stored in local time for consistent
+  /// string comparison in time-range queries.
+  static String? _toLocalIso(dynamic utcIso) {
+    if (utcIso == null) return null;
+    return DateTime.parse(utcIso as String).toLocal().toIso8601String();
+  }
 
   /// AC7 — Get entity IDs that have pending (unsynced) operations in sync_queue.
   /// These records must NOT be overwritten by pull data.
@@ -280,8 +308,8 @@ class RestSyncService implements SyncService {
           map['photoUrl'] ?? photoUrlMap[id],
           (map['archived'] == true) ? 1 : 0,
           map['status'] ?? 'ACTIVE',
-          map['createdAt'],
-          map['updatedAt'],
+          _toLocalIso(map['createdAt']),
+          _toLocalIso(map['updatedAt']),
         ],
       );
     }
@@ -308,7 +336,7 @@ class RestSyncService implements SyncService {
           map['storeId'],
           map['quantity'],
           (map['minimumThreshold'] as int?) ?? 0,
-          map['updatedAt'] ?? DateTime.now().toIso8601String(),
+          _toLocalIso(map['updatedAt']) ?? DateTime.now().toIso8601String(),
         ],
       );
     }
@@ -335,8 +363,8 @@ class RestSyncService implements SyncService {
           map['parentId'],
           (map['isActive'] == true) ? 1 : 0,
           (map['isCustom'] == true) ? 1 : 0,
-          map['createdAt'],
-          map['updatedAt'],
+          _toLocalIso(map['createdAt']),
+          _toLocalIso(map['updatedAt']),
         ],
       );
     }
@@ -364,8 +392,8 @@ class RestSyncService implements SyncService {
           map['email'],
           map['notes'],
           (map['archived'] == true) ? 1 : 0,
-          map['createdAt'],
-          map['updatedAt'],
+          _toLocalIso(map['createdAt']),
+          _toLocalIso(map['updatedAt']),
         ],
       );
     }
@@ -392,8 +420,8 @@ class RestSyncService implements SyncService {
           map['phone'],
           map['email'],
           (map['archived'] == true) ? 1 : 0,
-          map['createdAt'],
-          map['updatedAt'],
+          _toLocalIso(map['createdAt']),
+          _toLocalIso(map['updatedAt']),
         ],
       );
     }
@@ -421,8 +449,8 @@ class RestSyncService implements SyncService {
           map['address'],
           map['phone'],
           (map['isActive'] == true) ? 1 : 0,
-          map['createdAt'],
-          map['updatedAt'],
+          _toLocalIso(map['createdAt']),
+          _toLocalIso(map['updatedAt']),
         ],
       );
     }
@@ -451,7 +479,7 @@ class RestSyncService implements SyncService {
           map['storeId'],
           map['status'] ?? 'ACTIVE',
           (map['passwordChangeRequired'] == true) ? 1 : 0,
-          map['createdAt'],
+          _toLocalIso(map['createdAt']),
         ],
       );
     }
@@ -467,7 +495,8 @@ class RestSyncService implements SyncService {
         'synced, created_at) '
         'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?) '
         'ON CONFLICT(id) DO UPDATE SET '
-        'status = excluded.status, synced = 1',
+        'status = excluded.status, synced = 1, '
+        'occurred_at = excluded.occurred_at, created_at = excluded.created_at',
         [
           map['id'],
           map['storeId'],
@@ -477,20 +506,25 @@ class RestSyncService implements SyncService {
           map['paymentMode'],
           map['clientId'],
           map['status'] ?? 'COMPLETED',
-          map['occurredAt'],
-          map['createdAt'],
+          _toLocalIso(map['occurredAt']),
+          _toLocalIso(map['createdAt']),
         ],
       );
-      // Upsert nested sale items
+      // Delete existing sale_items then re-insert from server (authoritative)
       final items = map['items'] as List<dynamic>? ?? [];
+      if (items.isNotEmpty) {
+        await _database.customStatement(
+          'DELETE FROM sale_items WHERE sale_id = ?',
+          [map['id']],
+        );
+      }
       for (final item in items) {
         final iMap = item as Map<String, dynamic>;
         await _database.customStatement(
-          'INSERT INTO sale_items (id, sale_id, product_id, variant_id, '
+          'INSERT OR IGNORE INTO sale_items (id, sale_id, product_id, variant_id, '
           'product_name, unit_price, catalogue_unit_price, quantity, subtotal, '
           'created_at) '
-          'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) '
-          'ON CONFLICT(id) DO NOTHING',
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
           [
             iMap['id'],
             map['id'],
@@ -512,6 +546,7 @@ class RestSyncService implements SyncService {
     if (closures.isEmpty) return;
     for (final c in closures) {
       final map = c as Map<String, dynamic>;
+      final closedAtLocal = _toLocalIso(map['closedAt']);
       await _database.customStatement(
         'INSERT INTO day_closures (id, store_id, actor_id, closed_at, '
         'total_sales, total_revenue, cash_amount, momo_amount, '
@@ -523,12 +558,12 @@ class RestSyncService implements SyncService {
           map['id'],
           map['storeId'],
           map['employeeId'],
-          map['closedAt'],
+          closedAtLocal,
           map['totalSales'],
           map['totalTransactions'],
           map['cashTotal'],
           map['mobileMoneyTotal'],
-          map['closedAt'],
+          closedAtLocal,
         ],
       );
     }
@@ -555,7 +590,7 @@ class RestSyncService implements SyncService {
           map['quantityAfter'],
           map['actorId'],
           map['notes'],
-          map['occurredAt'],
+          _toLocalIso(map['occurredAt']),
         ],
       );
     }
@@ -580,7 +615,7 @@ class RestSyncService implements SyncService {
           map['variantId'],
           map['quantity'],
           map['actorId'],
-          map['occurredAt'],
+          _toLocalIso(map['occurredAt']),
           map['status'],
           map['notes'],
         ],
@@ -605,7 +640,48 @@ class RestSyncService implements SyncService {
           map['action'],
           map['valueBefore'],
           map['valueAfter'],
-          map['occurredAt'],
+          _toLocalIso(map['occurredAt']),
+        ],
+      );
+    }
+  }
+
+  Future<void> _upsertInventorySessions(List<dynamic> sessions) async {
+    if (sessions.isEmpty) return;
+    for (final s in sessions) {
+      final map = s as Map<String, dynamic>;
+      final id = map['id'] as String;
+      // Protect pending IDs (synced=false → local offline create not yet pushed)
+      final pendingRows = await _database.customSelect(
+        'SELECT 1 FROM inventory_sessions WHERE id = ? AND synced = 0',
+        variables: [Variable<String>(id)],
+      ).get();
+      if (pendingRows.isNotEmpty) continue;
+
+      await _database.customStatement(
+        'INSERT INTO inventory_sessions '
+        '(id, store_id, scope, category_ids, status, started_by, '
+        'started_at, cancelled_by, cancelled_at, completed_at, updated_at, synced) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1) '
+        'ON CONFLICT(id) DO UPDATE SET '
+        'status = excluded.status, '
+        'cancelled_by = excluded.cancelled_by, '
+        'cancelled_at = excluded.cancelled_at, '
+        'completed_at = excluded.completed_at, '
+        'updated_at = excluded.updated_at, '
+        'synced = 1',
+        [
+          id,
+          map['storeId'],
+          map['scope'],
+          map['categoryIds'],
+          map['status'],
+          map['startedBy'],
+          _toLocalIso(map['startedAt']),
+          map['cancelledBy'],
+          _toLocalIso(map['cancelledAt']),
+          _toLocalIso(map['completedAt']),
+          _toLocalIso(map['updatedAt']),
         ],
       );
     }

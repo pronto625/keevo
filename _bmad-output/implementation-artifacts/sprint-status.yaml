@@ -131,8 +131,8 @@ development_status:
   # ─────────────────────────────────────────────────────────
   # Epic 6: Inventaire Assisté
   # ─────────────────────────────────────────────────────────
-  epic-6: backlog
-  6-1-lancement-configuration-session-inventaire: backlog
+  epic-6: in-progress
+  6-1-lancement-configuration-session-inventaire: done    # 2026-03-08 — 20 tasks complete | Backend: 45 inventory tests, 1007 total tests GREEN | Flutter: build_runner 421 outputs, 0 new warnings | All 6 ACs satisfied
   6-2-formulaire-guide-saisie-des-quantites-physiques: backlog
   6-3-calcul-des-ecarts-rapport-inventaire: backlog
   6-4-validation-application-des-ajustements-au-stock: backlog

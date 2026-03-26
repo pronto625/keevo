@@ -508,6 +508,30 @@ public class TenantSchemaProvisioner {
     static final String DDL_SYNC_ERROR_LOG_IDX_CREATED =
             "CREATE INDEX IF NOT EXISTS idx_sync_error_log_created ON sync_error_log(created_at)";
 
+    // ── Inventory sessions (Story 6.1) ──────────────────────────────────────────
+
+    static final String DDL_INVENTORY_SESSIONS = """
+            CREATE TABLE IF NOT EXISTS inventory_sessions (
+                id             UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+                store_id       UUID         NOT NULL REFERENCES stores(id),
+                scope          VARCHAR(10)  NOT NULL CHECK (scope IN ('FULL', 'PARTIAL')),
+                category_ids   JSONB,
+                status         VARCHAR(15)  NOT NULL DEFAULT 'IN_PROGRESS'
+                                 CHECK (status IN ('IN_PROGRESS', 'VALIDATED', 'CANCELLED')),
+                started_by     UUID         NOT NULL,
+                started_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                cancelled_by   UUID,
+                cancelled_at   TIMESTAMPTZ,
+                completed_at   TIMESTAMPTZ,
+                updated_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+            )""";
+
+    static final String DDL_INVENTORY_SESSIONS_IDX_STORE_STATUS =
+            "CREATE INDEX IF NOT EXISTS idx_inventory_sessions_store_status ON inventory_sessions(store_id, status)";
+
+    static final String DDL_INVENTORY_SESSIONS_IDX_STATUS =
+            "CREATE INDEX IF NOT EXISTS idx_inventory_sessions_status ON inventory_sessions(status)";
+
     // SPEC CHANGE 2026-03-06: new tenants start on 6-month PREMIUM_TRIAL (unlimited limits)
     // WHERE NOT EXISTS ensures idempotency — provision() can be called multiple times safely.
     private static final String SEED_SUBSCRIPTION = """
@@ -670,6 +694,10 @@ public class TenantSchemaProvisioner {
             // Story 5.5 — sync error log (REJECTED payload retention)
             stmt.execute(DDL_SYNC_ERROR_LOG);
             stmt.execute(DDL_SYNC_ERROR_LOG_IDX_CREATED);
+            // Story 6.1 — inventory sessions
+            stmt.execute(DDL_INVENTORY_SESSIONS);
+            stmt.execute(DDL_INVENTORY_SESSIONS_IDX_STORE_STATUS);
+            stmt.execute(DDL_INVENTORY_SESSIONS_IDX_STATUS);
             stmt.execute("SET search_path TO public");
         }
     }

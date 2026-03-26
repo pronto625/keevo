@@ -94,12 +94,11 @@ class LocalDayClosureDataSource {
     final startOfDay = DateTime(now.year, now.month, now.day);
     final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59, 999);
 
-    // Determine the effective start: after last closure if one exists today
+    // Determine the effective start: always resume from last closure so that
+    // unclosed sales between the previous closure and midnight are not lost.
     final lastClosure = await getLastClosure(storeId);
     final DateTime effectiveStart =
-        (lastClosure != null && lastClosure.closedAt.isAfter(startOfDay))
-            ? lastClosure.closedAt
-            : startOfDay;
+        (lastClosure != null) ? lastClosure.closedAt : startOfDay;
 
     // Query for COMPLETED sales after effective start
     var completedQuery = _db.select(_db.sales)

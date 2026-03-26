@@ -42,6 +42,7 @@ import '../../features/sync_indicator/presentation/page/sync_conflict_log_page.d
 import '../../features/sync_indicator/presentation/page/sync_settings_page.dart';
 import '../../features/stores/presentation/page/stores_list_page.dart';
 import '../../features/inventory/presentation/page/global_stock_overview_page.dart';
+import '../../features/inventory/presentation/page/inventory_launch_page.dart';
 import '../../features/inventory/presentation/page/transfer_history_page.dart';
 import '../../features/team/presentation/page/team_page.dart';
 import '../../features/audit/presentation/page/audit_page.dart';
@@ -437,7 +438,11 @@ final GoRouter appRouter = GoRouter(
     // ── Inventory ───────────────────────────────────────────
     GoRoute(
       path: '/inventory',
-      builder: (_, __) => const _PlaceholderPage(title: 'Inventory'),
+      builder: (_, __) => const InventoryLaunchPage(),
+    ),
+    GoRoute(
+      path: '/inventory/counting/:sessionId',
+      builder: (_, __) => const _PlaceholderPage(title: 'Comptage'),
     ),
 
     GoRoute(

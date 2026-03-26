@@ -80,7 +80,12 @@ public class GlobalExceptionHandler {
             Map.entry("INTERNAL_ERROR",            "Une erreur inattendue s'est produite"),
             Map.entry("DAY_ALREADY_CLOSED",        "La journée a déjà été clôturée pour cette boutique"),
             Map.entry("MISSING_PARAMETER",         "Paramètre requis manquant"),
-            Map.entry("SYNC_REQUIRED",              "Synchronisation requise — données trop anciennes")
+            Map.entry("SYNC_REQUIRED",              "Synchronisation requise — données trop anciennes"),
+            Map.entry("INVENTORY_SESSION_ALREADY_ACTIVE", "Un inventaire est déjà en cours pour cette boutique"),
+            Map.entry("INVENTORY_SESSION_NOT_FOUND",     "Session d'inventaire introuvable"),
+            Map.entry("INVENTORY_SESSION_NOT_IN_PROGRESS", "Cette session d'inventaire n'est pas en cours"),
+            Map.entry("INVENTORY_STORE_NOT_FOUND",       "Boutique cible introuvable"),
+            Map.entry("INVENTORY_INVALID_CATEGORIES",    "Une ou plusieurs catégories sont invalides")
     );
 
     @ExceptionHandler(DomainException.class)
@@ -160,6 +165,8 @@ public class GlobalExceptionHandler {
                  "MEMBERSHIP_NOT_FOUND",
                  "SUBSCRIPTION_NOT_FOUND",
                  "SALE_NOT_FOUND",
+                 "INVENTORY_SESSION_NOT_FOUND",
+                 "INVENTORY_STORE_NOT_FOUND",
                  "NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "UNAUTHORIZED", "TOKEN_EXPIRED",
                  "TOKEN_INVALID",
@@ -173,7 +180,9 @@ public class GlobalExceptionHandler {
                  "PRODUCT_NAME_ALREADY_EXISTS",
                  "WAREHOUSE_ALREADY_EXISTS",
                  "SALE_ALREADY_EXISTS",
-                 "DAY_ALREADY_CLOSED" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4
+                 "DAY_ALREADY_CLOSED",
+                 "INVENTORY_SESSION_ALREADY_ACTIVE",
+                 "INVENTORY_SESSION_NOT_IN_PROGRESS" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4 / 6.1
             case "VALIDATION_ERROR", "INVALID_AMOUNT",
                  "INVALID_PHONE_NUMBER", "INVALID_PASSWORD",
                  "INSUFFICIENT_STOCK",
@@ -185,7 +194,8 @@ public class GlobalExceptionHandler {
             case "JUSTIFICATION_REQUIRED",
                  "JUSTIFICATION_TOO_SHORT" -> HttpStatus.BAD_REQUEST;
             case "SECTOR_TEMPLATE_NOT_FOUND",
-                 "ONBOARDING_ALREADY_COMPLETED" -> HttpStatus.BAD_REQUEST;
+                 "ONBOARDING_ALREADY_COMPLETED",
+                 "INVENTORY_INVALID_CATEGORIES" -> HttpStatus.BAD_REQUEST;
             case "TENANT_PROVISION_FAILED" -> HttpStatus.INTERNAL_SERVER_ERROR;
             case "CSV_PARSE_ERROR" -> HttpStatus.UNPROCESSABLE_ENTITY;  // Story 2.4 malformed CSV
             case "PLAN_LIMIT_EXCEEDED",

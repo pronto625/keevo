@@ -48,7 +48,7 @@ public final class SaleFactory {
 
     private static SaleItem toSaleItem(UUID saleId, SaleItemCommand cmd) {
         return new SaleItem(
-                UUID.randomUUID(),
+                cmd.itemId() != null ? cmd.itemId() : UUID.randomUUID(),
                 saleId,
                 cmd.productId(),
                 cmd.variantId(),

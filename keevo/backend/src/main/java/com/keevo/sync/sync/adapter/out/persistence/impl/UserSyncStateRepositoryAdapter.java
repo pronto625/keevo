@@ -34,6 +34,13 @@ public class UserSyncStateRepositoryAdapter implements UserSyncStateRepository {
                     + "  last_push_at = NOW(), "
                     + "  updated_at   = NOW()";
 
+    private static final String UPSERT_ON_PULL =
+            "INSERT INTO public.user_sync_state (device_id, user_id, tenant_id, last_pull_at, updated_at) "
+                    + "VALUES (?, ?, ?, NOW(), NOW()) "
+                    + "ON CONFLICT (device_id) DO UPDATE SET "
+                    + "  last_pull_at = NOW(), "
+                    + "  updated_at   = NOW()";
+
     private static final String FIND_ALL_BY_TENANT =
             "SELECT device_id, user_id, tenant_id, last_push_at, last_pull_at, updated_at "
                     + "FROM public.user_sync_state WHERE tenant_id = ? ORDER BY updated_at DESC";
@@ -53,6 +60,11 @@ public class UserSyncStateRepositoryAdapter implements UserSyncStateRepository {
     @Override
     public void upsert(UserSyncState state) {
         jdbcTemplate.update(UPSERT, state.deviceId(), state.userId(), state.tenantId());
+    }
+
+    @Override
+    public void upsertOnPull(UserSyncState state) {
+        jdbcTemplate.update(UPSERT_ON_PULL, state.deviceId(), state.userId(), state.tenantId());
     }
 
     @Override

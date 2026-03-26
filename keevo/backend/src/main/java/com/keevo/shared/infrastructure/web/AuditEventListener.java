@@ -17,6 +17,8 @@ import com.keevo.catalog.product.domain.event.SalePriceOverriddenEvent;
 import com.keevo.catalog.stock.domain.event.StockAdjustedEvent;
 import com.keevo.catalog.stock.domain.event.StockThresholdBreachedEvent;
 import com.keevo.commerce.sale.domain.model.*;
+import com.keevo.inventory.counting.domain.event.InventorySessionCancelledEvent;
+import com.keevo.inventory.counting.domain.event.InventorySessionCreatedEvent;
 import com.keevo.store.store.domain.event.StoreCreatedEvent;
 import com.keevo.store.store.domain.event.StoreDeactivatedEvent;
 import com.keevo.store.store.domain.event.StoreUpdatedEvent;
@@ -618,6 +620,56 @@ public class AuditEventListener {
                 event.closureId(), event.storeId(), event.isAutomatic(),
                 event.summary().totalSales(), event.summary().totalRevenue(),
                 event.tenantId(), event.actorId());
+    }
+
+    // ── Inventory (Story 6.1) ─────────────────────────────────────────────────
+
+    /**
+     * Handle inventory session created event.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
+     */
+    @EventListener
+    public void on(InventorySessionCreatedEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "INVENTORY_SESSION_CREATED",
+                "InventorySession",
+                event.sessionId(),
+                null,
+                toJson(Map.of(
+                        "storeId", event.storeId().toString(),
+                        "scope", event.scope().name(),
+                        "occurredAt", event.occurredAt().toString()
+                ))
+        );
+        log.info("AUDIT: inventory_session_created sessionId={} storeId={} scope={} tenantId={} actorId={}",
+                event.sessionId(), event.storeId(), event.scope(),
+                event.tenantId(), event.actorId());
+    }
+
+    /**
+     * Handle inventory session cancelled event.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
+     */
+    @EventListener
+    public void on(InventorySessionCancelledEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "INVENTORY_SESSION_CANCELLED",
+                "InventorySession",
+                event.sessionId(),
+                null,
+                toJson(Map.of(
+                        "cancelledBy", event.actorId().toString(),
+                        "occurredAt", event.occurredAt().toString()
+                ))
+        );
+        log.info("AUDIT: inventory_session_cancelled sessionId={} tenantId={} actorId={}",
+                event.sessionId(), event.tenantId(), event.actorId());
     }
 
     // ── Template Method helper ────────────────────────────────────────────────

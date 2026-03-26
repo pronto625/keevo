@@ -122,11 +122,18 @@ public class SyncController {
     })
     public ResponseEntity<ApiResponseWrapper<SyncPullResponseDto>> pull(
             @RequestParam(required = false) String since,
+            @RequestHeader(value = "X-Device-Id", required = false) String deviceId,
             HttpServletRequest httpRequest) {
 
         UUID actorId = extractActorId();
         Claims claims = extractClaims(httpRequest);
         String tenantId = claims.get("tenantId", String.class);
+
+        // Register device on pull so it appears in active devices list
+        if (deviceId != null && !deviceId.isBlank()) {
+            userSyncStateRepository.upsertOnPull(
+                    new UserSyncState(deviceId, actorId, tenantId, null, Instant.now(), Instant.now()));
+        }
 
         Instant sinceInstant = (since != null && !since.isBlank())
                 ? Instant.parse(since)
