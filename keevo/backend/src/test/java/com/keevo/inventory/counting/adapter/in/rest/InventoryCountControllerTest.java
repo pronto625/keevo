@@ -37,6 +37,7 @@ class InventoryCountControllerTest {
     @Mock private GetCountingProductsUseCase getCountingProductsUseCase;
     @Mock private SaveInventoryCountUseCase saveInventoryCountUseCase;
     @Mock private GetSessionCountsUseCase getSessionCountsUseCase;
+    @Mock private QuickAddProductUseCase quickAddProductUseCase;
 
     private MockMvc mockMvc;
     private final ObjectMapper mapper = new ObjectMapper();
@@ -48,7 +49,8 @@ class InventoryCountControllerTest {
     @BeforeEach
     void setUp() {
         var controller = new InventoryCountController(
-                getCountingProductsUseCase, saveInventoryCountUseCase, getSessionCountsUseCase);
+                getCountingProductsUseCase, saveInventoryCountUseCase, getSessionCountsUseCase,
+                quickAddProductUseCase);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

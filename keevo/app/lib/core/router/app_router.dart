@@ -43,6 +43,7 @@ import '../../features/sync_indicator/presentation/page/sync_settings_page.dart'
 import '../../features/stores/presentation/page/stores_list_page.dart';
 import '../../features/inventory/presentation/page/global_stock_overview_page.dart';
 import '../../features/inventory/presentation/page/inventory_counting_page.dart';
+import '../../features/inventory/presentation/page/inventory_gap_report_page.dart';
 import '../../features/inventory/presentation/page/inventory_launch_page.dart';
 import '../../features/inventory/presentation/page/transfer_history_page.dart';
 import '../../features/team/presentation/page/team_page.dart';
@@ -446,6 +447,13 @@ final GoRouter appRouter = GoRouter(
       builder: (_, state) {
         final sessionId = state.pathParameters['sessionId']!;
         return InventoryCountingPage(sessionId: sessionId);
+      },
+    ),
+    GoRoute(
+      path: '/inventory/gap-report/:sessionId',
+      builder: (_, state) {
+        final sessionId = state.pathParameters['sessionId']!;
+        return InventoryGapReportPage(sessionId: sessionId);
       },
     ),
 

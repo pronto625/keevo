@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../data/datasource/remote_quick_add_datasource.dart';
 import '../../domain/model/inventory_product_row_model.dart';
 import '../provider/inventory_counting_provider.dart';
 import '../widget/inventory_row.dart';
+import '../widget/quick_add_product_sheet.dart';
 
 /// InventoryCountingPage — guided counting form for a session.
 ///
@@ -25,10 +28,13 @@ class _InventoryCountingPageState
     extends ConsumerState<InventoryCountingPage> {
   bool _isSearching = false;
   final _searchController = TextEditingController();
+  final _scrollController = ScrollController();
+  String? _scrollToProductId;
 
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -108,17 +114,29 @@ class _InventoryCountingPageState
                 progress: progress,
                 filter: filter,
                 onFilter: () => _showFilterSheet(context, ref, products),
+                onQuickAdd: () => _showQuickAddSheet(context, products),
                 onValidate: progress >= 1.0
-                    ? () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content:
-                                Text('6.3 — Rapport d\'inventaire à venir'),
-                          ),
-                        );
-                      }
+                    ? () => context.push(
+                        '/inventory/gap-report/${widget.sessionId}')
                     : null,
               );
+
+              // Scroll to newly added product after list rebuilds
+              if (_scrollToProductId != null) {
+                final targetId = _scrollToProductId;
+                _scrollToProductId = null;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  final targetIndex = filtered.indexWhere(
+                      (p) => p.productId == targetId);
+                  if (targetIndex >= 0 && _scrollController.hasClients) {
+                    _scrollController.animateTo(
+                      targetIndex * 72.0, // approximate row height
+                      duration: const Duration(milliseconds: 400),
+                      curve: Curves.easeOutCubic,
+                    );
+                  }
+                });
+              }
 
               final productList = filtered.isEmpty
                   ? Center(
@@ -130,6 +148,7 @@ class _InventoryCountingPageState
                       ),
                     )
                   : ListView.builder(
+                      controller: _scrollController,
                       itemCount: filtered.length,
                       itemBuilder: (context, index) {
                         return InventoryRow(
@@ -177,6 +196,41 @@ class _InventoryCountingPageState
         },
       ),
     );
+  }
+
+  void _showQuickAddSheet(
+      BuildContext context, List<InventoryProductRowModel> products) async {
+    final messenger = ScaffoldMessenger.of(context);
+
+    final result = await showQuickAddProductSheet(
+      context: context,
+      sessionId: widget.sessionId,
+    );
+
+    if (result == null || !mounted) return;
+
+    if (result == 'COUNT_EXISTING') {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Recherchez le produit dans la liste pour le compter.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    if (result is QuickAddResult) {
+      // Schedule scroll-to after the list rebuilds with the new product
+      _scrollToProductId = result.productId;
+      // Invalidate the family provider WITH the session ID
+      ref.invalidate(countingProductsProvider(widget.sessionId));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Produit « ${result.productName} » ajouté et compté'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   void _showFilterSheet(
@@ -359,12 +413,14 @@ class _BottomActionBar extends StatelessWidget {
   final double progress;
   final InventoryCountFilter filter;
   final VoidCallback onFilter;
+  final VoidCallback onQuickAdd;
   final VoidCallback? onValidate;
 
   const _BottomActionBar({
     required this.progress,
     required this.filter,
     required this.onFilter,
+    required this.onQuickAdd,
     required this.onValidate,
   });
 
@@ -415,7 +471,18 @@ class _BottomActionBar extends StatelessWidget {
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
+              // Quick-add button
+              IconButton.filled(
+                onPressed: onQuickAdd,
+                icon: const Icon(Icons.add),
+                tooltip: 'Ajouter un produit',
+                style: IconButton.styleFrom(
+                  backgroundColor: theme.colorScheme.secondaryContainer,
+                  foregroundColor: theme.colorScheme.onSecondaryContainer,
+                ),
+              ),
+              const SizedBox(width: 8),
               // Validate button (expanded)
               Expanded(
                 child: FilledButton.icon(

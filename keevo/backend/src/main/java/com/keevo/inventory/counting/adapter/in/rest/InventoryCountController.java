@@ -3,6 +3,7 @@ package com.keevo.inventory.counting.adapter.in.rest;
 import com.keevo.inventory.counting.adapter.in.rest.dto.*;
 import com.keevo.inventory.counting.domain.model.InventoryCount;
 import com.keevo.inventory.counting.domain.model.InventoryProductRow;
+import com.keevo.inventory.counting.domain.model.QuickAddProductResult;
 import com.keevo.inventory.counting.domain.port.in.*;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import io.swagger.v3.oas.annotations.Operation;
@@ -27,13 +28,16 @@ public class InventoryCountController {
     private final GetCountingProductsUseCase getCountingProductsUseCase;
     private final SaveInventoryCountUseCase saveInventoryCountUseCase;
     private final GetSessionCountsUseCase getSessionCountsUseCase;
+    private final QuickAddProductUseCase quickAddProductUseCase;
 
     public InventoryCountController(GetCountingProductsUseCase getCountingProductsUseCase,
                                     SaveInventoryCountUseCase saveInventoryCountUseCase,
-                                    GetSessionCountsUseCase getSessionCountsUseCase) {
+                                    GetSessionCountsUseCase getSessionCountsUseCase,
+                                    QuickAddProductUseCase quickAddProductUseCase) {
         this.getCountingProductsUseCase = getCountingProductsUseCase;
         this.saveInventoryCountUseCase = saveInventoryCountUseCase;
         this.getSessionCountsUseCase = getSessionCountsUseCase;
+        this.quickAddProductUseCase = quickAddProductUseCase;
     }
 
     @Operation(summary = "List products in scope with counting status")
@@ -117,6 +121,29 @@ public class InventoryCountController {
                 .map(InventoryCountResponseDto::fromDomain)
                 .toList();
         return ResponseEntity.ok(ApiResponseWrapper.ok(dtos));
+    }
+
+    @Operation(summary = "Quick-add a product during inventory counting")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Product created with count"),
+            @ApiResponse(responseCode = "404", description = "Session not found"),
+            @ApiResponse(responseCode = "409", description = "Product name already exists or session not in progress")
+    })
+    @PostMapping("/quick-add")
+    public ResponseEntity<ApiResponseWrapper<QuickAddProductResponseDto>> quickAddProduct(
+            @PathVariable UUID sessionId,
+            @Valid @RequestBody QuickAddProductRequestDto request) {
+
+        UUID actorId = extractActorId();
+        var command = new QuickAddProductCommand(
+                sessionId, request.name(), request.categoryId(),
+                request.physicalQty(), request.sellingPrice(), actorId
+        );
+
+        QuickAddProductResult result = quickAddProductUseCase.execute(command);
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponseWrapper.ok(QuickAddProductResponseDto.fromDomain(result)));
     }
 
     private UUID extractActorId() {

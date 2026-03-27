@@ -100,6 +100,10 @@ class InventoryLaunchPage extends ConsumerWidget {
                     itemCount: sessions.length,
                     itemBuilder: (context, index) => SessionHistoryCard(
                       session: sessions[index],
+                      onViewReport: sessions[index].status == 'VALIDATED'
+                          ? () => context.push(
+                              '/inventory/gap-report/${sessions[index].id}')
+                          : null,
                     ),
                   ),
             loading: () => const SliverFillRemaining(

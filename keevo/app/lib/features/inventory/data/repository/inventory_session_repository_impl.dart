@@ -88,6 +88,18 @@ class InventorySessionRepositoryImpl implements InventorySessionRepository {
 
   @override
   Future<InventorySessionModel?> getActiveByStoreId(String storeId) async {
+    if (await _connectivity.isOnline()) {
+      try {
+        final session = await _remote.getActive(storeId);
+        if (session != null) {
+          await _local.upsert(session);
+        }
+        return session;
+      } catch (e) {
+        dev.log('Remote getActive failed, falling back to local: $e',
+            name: 'InventorySessionRepo');
+      }
+    }
     return _local.findActiveByStoreId(storeId);
   }
 
@@ -117,6 +129,20 @@ class InventorySessionRepositoryImpl implements InventorySessionRepository {
     int page = 0,
     int size = 20,
   }) async {
+    if (await _connectivity.isOnline()) {
+      try {
+        final sessions =
+            await _remote.getHistory(page: page, size: size);
+        // Cache locally for offline access
+        for (final s in sessions) {
+          await _local.upsert(s);
+        }
+        return sessions;
+      } catch (e) {
+        dev.log('Remote getHistory failed, falling back to local: $e',
+            name: 'InventorySessionRepo');
+      }
+    }
     return _local.findAll(page: page, size: size);
   }
 }

@@ -18,6 +18,7 @@ import com.keevo.catalog.stock.domain.event.StockAdjustedEvent;
 import com.keevo.catalog.stock.domain.event.StockThresholdBreachedEvent;
 import com.keevo.commerce.sale.domain.model.*;
 import com.keevo.inventory.counting.domain.event.InventoryCountSavedEvent;
+import com.keevo.inventory.counting.domain.event.InventoryReportGeneratedEvent;
 import com.keevo.inventory.counting.domain.event.InventorySessionCancelledEvent;
 import com.keevo.inventory.counting.domain.event.InventorySessionCreatedEvent;
 import com.keevo.store.store.domain.event.StoreCreatedEvent;
@@ -695,6 +696,26 @@ public class AuditEventListener {
         );
         log.info("AUDIT: inventory_count_saved countId={} sessionId={} productId={} ecart={} tenantId={}",
                 event.countId(), event.sessionId(), event.productId(), event.ecart(), event.tenantId());
+    }
+
+    // ── Inventory Report (Story 6.3) ────────────────────────────────────────
+
+    @EventListener
+    public void on(InventoryReportGeneratedEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "INVENTORY_REPORT_GENERATED",
+                "InventorySession",
+                event.sessionId(),
+                null,
+                toJson(Map.of(
+                        "sessionId", event.sessionId().toString(),
+                        "occurredAt", event.occurredAt().toString()
+                ))
+        );
+        log.info("AUDIT: inventory_report_generated sessionId={} tenantId={} actorId={}",
+                event.sessionId(), event.tenantId(), event.actorId());
     }
 
     // ── Template Method helper ────────────────────────────────────────────────

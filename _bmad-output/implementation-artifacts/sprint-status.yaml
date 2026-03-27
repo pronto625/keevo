@@ -134,9 +134,9 @@ development_status:
   # ─────────────────────────────────────────────────────────
   epic-6: in-progress
   6-1-lancement-configuration-session-inventaire: done    # 2026-03-08 — 20 tasks complete | Backend: 45 inventory tests, 1007 total tests GREEN | Flutter: build_runner 421 outputs, 0 new warnings | All 6 ACs satisfied
-  6-2-formulaire-guide-saisie-des-quantites-physiques: review    # 26 tasks complete | Backend: 100 tests GREEN (49 story-6.2 specific) | Flutter: Drift v20, Freezed models, Backend-First repo, Riverpod providers, InventoryCountingPage, sync pull | cURL script ready
-  6-2a-ajout-rapide-produit-pendant-inventaire: ready-for-dev    # Quick-add product during inventory (3 fields: name, categoryId, physicalQty) | Facade pattern: atomic Product+StockLevel+InventoryCount | POST /sessions/{id}/quick-add | Blocking dedup | Offline support
-  6-3-calcul-des-ecarts-rapport-inventaire: backlog
+  6-2-formulaire-guide-saisie-des-quantites-physiques: done    # 26 tasks complete | Backend: 100 tests GREEN (49 story-6.2 specific) | Flutter: Drift v20, Freezed models, Backend-First repo, Riverpod providers, InventoryCountingPage, sync pull | cURL script ready
+  6-2a-ajout-rapide-produit-pendant-inventaire: done    # 21 tasks complete | Backend: 104 tests GREEN (14 new: 6 service + 5 controller + 3 integration) | Flutter: 14 new tests GREEN (6 widget + 5 unit + 3 page) | Facade pattern, blocking dedup, offline support
+  6-3-calcul-des-ecarts-rapport-inventaire: done    # 20 tasks complete | Backend: 126 inventory tests GREEN (22 new) | Flutter: 17 new tests GREEN | GoF: Builder, Strategy, Observer, Template Method
   6-4-validation-application-des-ajustements-au-stock: backlog
   epic-6-retrospective: optional
 
