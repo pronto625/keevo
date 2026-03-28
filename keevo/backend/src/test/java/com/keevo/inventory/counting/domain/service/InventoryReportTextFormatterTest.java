@@ -107,7 +107,8 @@ class InventoryReportTextFormatterTest {
                 new InventoryGapSummary(total, concordant.size(), surplus.size(), shortage.size(),
                         surplusValue, shortageValue),
                 concordant, surplus, shortage,
-                UUID.randomUUID(), Instant.now()
+                UUID.randomUUID(), Instant.now(),
+                "IN_PROGRESS"
         );
     }
 }

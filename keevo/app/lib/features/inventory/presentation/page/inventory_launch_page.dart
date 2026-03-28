@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../stores/presentation/provider/active_store_provider.dart';
+import '../../../stores/presentation/provider/store_provider.dart';
 import '../provider/inventory_session_provider.dart';
 import '../widget/active_session_banner.dart';
 import '../widget/inventory_config_bottom_sheet.dart';
@@ -25,6 +26,13 @@ class InventoryLaunchPage extends ConsumerWidget {
         ? ref.watch(activeSessionProvider(activeStoreId))
         : const AsyncValue<dynamic>.data(null);
     final historyAsync = ref.watch(sessionHistoryProvider());
+    final storesAsync = ref.watch(storeListNotifierProvider);
+    final storeMap = <String, String>{};
+    if (storesAsync is AsyncData) {
+      for (final s in storesAsync.value ?? <dynamic>[]) {
+        storeMap[s.id] = s.name;
+      }
+    }
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
@@ -100,6 +108,7 @@ class InventoryLaunchPage extends ConsumerWidget {
                     itemCount: sessions.length,
                     itemBuilder: (context, index) => SessionHistoryCard(
                       session: sessions[index],
+                      storeName: storeMap[sessions[index].storeId],
                       onViewReport: sessions[index].status == 'VALIDATED'
                           ? () => context.push(
                               '/inventory/gap-report/${sessions[index].id}')

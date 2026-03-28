@@ -21,6 +21,7 @@ class InventoryGapReportModel with _$InventoryGapReportModel {
     required List<InventoryGapRowModel> surplusRows,
     required List<InventoryGapRowModel> shortageRows,
     required DateTime generatedAt,
+    String? sessionStatus,
   }) = _InventoryGapReportModel;
 
   factory InventoryGapReportModel.fromJson(Map<String, dynamic> json) =>

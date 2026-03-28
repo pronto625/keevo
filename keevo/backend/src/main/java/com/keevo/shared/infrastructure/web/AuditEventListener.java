@@ -21,6 +21,7 @@ import com.keevo.inventory.counting.domain.event.InventoryCountSavedEvent;
 import com.keevo.inventory.counting.domain.event.InventoryReportGeneratedEvent;
 import com.keevo.inventory.counting.domain.event.InventorySessionCancelledEvent;
 import com.keevo.inventory.counting.domain.event.InventorySessionCreatedEvent;
+import com.keevo.inventory.counting.domain.event.InventoryValidatedEvent;
 import com.keevo.store.store.domain.event.StoreCreatedEvent;
 import com.keevo.store.store.domain.event.StoreDeactivatedEvent;
 import com.keevo.store.store.domain.event.StoreUpdatedEvent;
@@ -716,6 +717,26 @@ public class AuditEventListener {
         );
         log.info("AUDIT: inventory_report_generated sessionId={} tenantId={} actorId={}",
                 event.sessionId(), event.tenantId(), event.actorId());
+    }
+
+    // ── Inventory Validation (Story 6.4) ────────────────────────────────────────
+
+    @EventListener
+    public void on(InventoryValidatedEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "INVENTORY_VALIDATED",
+                "InventorySession",
+                event.sessionId(),
+                null,
+                toJson(Map.of(
+                        "adjustmentCount", event.adjustmentCount(),
+                        "occurredAt", event.occurredAt().toString()
+                ))
+        );
+        log.info("AUDIT: inventory_validated sessionId={} adjustments={} tenantId={} actorId={}",
+                event.sessionId(), event.adjustmentCount(), event.tenantId(), event.actorId());
     }
 
     // ── Template Method helper ────────────────────────────────────────────────

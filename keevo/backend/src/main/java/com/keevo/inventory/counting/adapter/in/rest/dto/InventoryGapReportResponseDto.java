@@ -20,7 +20,8 @@ public record InventoryGapReportResponseDto(
         List<InventoryGapRowDto> concordantRows,
         List<InventoryGapRowDto> surplusRows,
         List<InventoryGapRowDto> shortageRows,
-        Instant generatedAt
+        Instant generatedAt,
+        String sessionStatus
 ) {
     public static InventoryGapReportResponseDto fromDomain(InventoryGapReport report) {
         return new InventoryGapReportResponseDto(
@@ -32,7 +33,8 @@ public record InventoryGapReportResponseDto(
                 report.getConcordantRows().stream().map(InventoryGapRowDto::fromDomain).toList(),
                 report.getSurplusRows().stream().map(InventoryGapRowDto::fromDomain).toList(),
                 report.getShortageRows().stream().map(InventoryGapRowDto::fromDomain).toList(),
-                report.getGeneratedAt()
+                report.getGeneratedAt(),
+                report.getSessionStatus()
         );
     }
 

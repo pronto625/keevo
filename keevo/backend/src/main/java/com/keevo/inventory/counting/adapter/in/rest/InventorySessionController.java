@@ -2,6 +2,7 @@ package com.keevo.inventory.counting.adapter.in.rest;
 
 import com.keevo.inventory.counting.adapter.in.rest.dto.CreateInventorySessionRequestDto;
 import com.keevo.inventory.counting.adapter.in.rest.dto.InventorySessionResponseDto;
+import com.keevo.inventory.counting.adapter.in.rest.dto.ValidateInventoryResponseDto;
 import com.keevo.inventory.counting.domain.model.InventorySession;
 import com.keevo.inventory.counting.domain.port.in.*;
 import com.keevo.shared.domain.exception.DomainException;
@@ -33,17 +34,20 @@ public class InventorySessionController {
     private final GetActiveSessionUseCase getActiveSessionUseCase;
     private final CancelInventorySessionUseCase cancelSessionUseCase;
     private final ListInventorySessionsUseCase listSessionsUseCase;
+    private final ValidateInventoryUseCase validateInventoryUseCase;
     private final JwtTokenProvider jwtTokenProvider;
 
     public InventorySessionController(CreateInventorySessionUseCase createSessionUseCase,
                                        GetActiveSessionUseCase getActiveSessionUseCase,
                                        CancelInventorySessionUseCase cancelSessionUseCase,
                                        ListInventorySessionsUseCase listSessionsUseCase,
+                                       ValidateInventoryUseCase validateInventoryUseCase,
                                        JwtTokenProvider jwtTokenProvider) {
         this.createSessionUseCase = createSessionUseCase;
         this.getActiveSessionUseCase = getActiveSessionUseCase;
         this.cancelSessionUseCase = cancelSessionUseCase;
         this.listSessionsUseCase = listSessionsUseCase;
+        this.validateInventoryUseCase = validateInventoryUseCase;
         this.jwtTokenProvider = jwtTokenProvider;
     }
 
@@ -123,6 +127,33 @@ public class InventorySessionController {
     }
 
     // ── Private helpers ───────────────────────────────────────────
+
+    @Operation(summary = "Validate inventory session and apply stock adjustments")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Inventory validated, adjustments applied"),
+            @ApiResponse(responseCode = "404", description = "Session not found"),
+            @ApiResponse(responseCode = "409", description = "Session not in IN_PROGRESS status"),
+            @ApiResponse(responseCode = "403", description = "Forbidden")
+    })
+    @PostMapping("/{id}/validate")
+    @PreAuthorize("hasRole('OWNER')")
+    public ResponseEntity<ApiResponseWrapper<ValidateInventoryResponseDto>> validateInventory(
+            @PathVariable UUID id) {
+        // Defense-in-depth: explicit role check (testable with standaloneSetup)
+        boolean isOwner = SecurityContextHolder.getContext().getAuthentication()
+                .getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_OWNER"));
+        if (!isOwner) {
+            throw new DomainException(ErrorCode.FORBIDDEN, "Only OWNER can validate inventory");
+        }
+        UUID actorId = extractActorId();
+        var result = validateInventoryUseCase.execute(
+                new ValidateInventoryCommand(id, actorId));
+        return ResponseEntity.ok(ApiResponseWrapper.ok(
+                ValidateInventoryResponseDto.fromDomain(result)));
+    }
+
+    // ── Private helper methods ───────────────────────────────────────────
 
     private UUID extractActorId() {
         return (UUID) SecurityContextHolder.getContext().getAuthentication().getPrincipal();

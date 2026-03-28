@@ -42,6 +42,7 @@ class InventorySessionControllerTest {
     @Mock private GetActiveSessionUseCase getActiveSessionUseCase;
     @Mock private CancelInventorySessionUseCase cancelSessionUseCase;
     @Mock private ListInventorySessionsUseCase listSessionsUseCase;
+    @Mock private ValidateInventoryUseCase validateInventoryUseCase;
     @Mock private JwtTokenProvider jwtTokenProvider;
 
     private MockMvc mockMvc;
@@ -54,7 +55,8 @@ class InventorySessionControllerTest {
     void setUp() {
         var controller = new InventorySessionController(
                 createSessionUseCase, getActiveSessionUseCase,
-                cancelSessionUseCase, listSessionsUseCase, jwtTokenProvider);
+                cancelSessionUseCase, listSessionsUseCase,
+                validateInventoryUseCase, jwtTokenProvider);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

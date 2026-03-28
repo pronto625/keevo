@@ -19,6 +19,7 @@ public class InventoryGapReportBuilder {
     private String storeName;
     private InventoryScope scope;
     private UUID generatedBy;
+    private String sessionStatus;
     private final List<InventoryGapRow> allRows = new ArrayList<>();
 
     public InventoryGapReportBuilder sessionId(UUID id) { this.sessionId = id; return this; }
@@ -26,6 +27,7 @@ public class InventoryGapReportBuilder {
     public InventoryGapReportBuilder storeName(String name) { this.storeName = name; return this; }
     public InventoryGapReportBuilder scope(InventoryScope s) { this.scope = s; return this; }
     public InventoryGapReportBuilder generatedBy(UUID actor) { this.generatedBy = actor; return this; }
+    public InventoryGapReportBuilder sessionStatus(String status) { this.sessionStatus = status; return this; }
 
     public InventoryGapReportBuilder addRow(InventoryCount count, int unitPriceXaf) {
         int ecart = count.getEcart();
@@ -82,7 +84,8 @@ public class InventoryGapReportBuilder {
         );
 
         return new InventoryGapReport(sessionId, storeId, storeName, scope,
-                summary, concordant, surplus, shortage, generatedBy, Instant.now());
+                summary, concordant, surplus, shortage, generatedBy, Instant.now(),
+                sessionStatus);
     }
 
     public record ProductDetails(String sku, String photoUrl, String categoryName) {}

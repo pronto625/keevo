@@ -22,13 +22,15 @@ public class InventoryGapReport {
     private final List<InventoryGapRow> shortageRows;
     private final UUID generatedBy;
     private final Instant generatedAt;
+    private final String sessionStatus;
 
     public InventoryGapReport(UUID sessionId, UUID storeId, String storeName,
                               InventoryScope scope, InventoryGapSummary summary,
                               List<InventoryGapRow> concordantRows,
                               List<InventoryGapRow> surplusRows,
                               List<InventoryGapRow> shortageRows,
-                              UUID generatedBy, Instant generatedAt) {
+                              UUID generatedBy, Instant generatedAt,
+                              String sessionStatus) {
         this.sessionId = sessionId;
         this.storeId = storeId;
         this.storeName = storeName;
@@ -39,6 +41,7 @@ public class InventoryGapReport {
         this.shortageRows = List.copyOf(shortageRows);
         this.generatedBy = generatedBy;
         this.generatedAt = generatedAt;
+        this.sessionStatus = sessionStatus;
     }
 
     public UUID getSessionId() { return sessionId; }
@@ -51,4 +54,5 @@ public class InventoryGapReport {
     public List<InventoryGapRow> getShortageRows() { return shortageRows; }
     public UUID getGeneratedBy() { return generatedBy; }
     public Instant getGeneratedAt() { return generatedAt; }
+    public String getSessionStatus() { return sessionStatus; }
 }

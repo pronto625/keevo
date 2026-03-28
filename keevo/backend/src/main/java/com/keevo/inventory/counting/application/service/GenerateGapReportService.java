@@ -73,7 +73,8 @@ public class GenerateGapReportService implements GenerateGapReportUseCase {
                 .storeId(session.getStoreId())
                 .storeName(storeName)
                 .scope(session.getScope())
-                .generatedBy(query.actorId());
+                .generatedBy(query.actorId())
+                .sessionStatus(session.getStatus().name());
 
         for (InventoryCount count : counts) {
             if (!count.isCounted()) continue; // skip uncounted

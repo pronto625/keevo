@@ -125,7 +125,8 @@ class InventoryReportControllerTest {
                 InventoryScope.FULL,
                 new InventoryGapSummary(2, 1, 0, 1, 0, 25000),
                 List.of(concordant), List.of(), List.of(shortage),
-                actorId, Instant.now()
+                actorId, Instant.now(),
+                "IN_PROGRESS"
         );
     }
 }

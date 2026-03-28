@@ -40,7 +40,7 @@ class LocalGapReportDataSource {
     final counts = await countsQuery.get();
 
     if (counts.isEmpty) {
-      return _emptyReport(sessionId, session.storeId, store.name, session.scope);
+      return _emptyReport(sessionId, session.storeId, store.name, session.scope, session.status);
     }
 
     // 4. Load products for price + photo + sku
@@ -117,6 +117,7 @@ class LocalGapReportDataSource {
       surplusRows: surplus,
       shortageRows: shortage,
       generatedAt: DateTime.now(),
+      sessionStatus: session.status,
     );
   }
 
@@ -125,6 +126,7 @@ class LocalGapReportDataSource {
     String storeId,
     String storeName,
     String scope,
+    String sessionStatus,
   ) {
     return InventoryGapReportModel(
       sessionId: sessionId,
@@ -143,6 +145,7 @@ class LocalGapReportDataSource {
       surplusRows: const [],
       shortageRows: const [],
       generatedAt: DateTime.now(),
+      sessionStatus: sessionStatus,
     );
   }
 }

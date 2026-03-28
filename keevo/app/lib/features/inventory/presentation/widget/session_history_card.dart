@@ -6,12 +6,14 @@ import '../../domain/model/inventory_session_model.dart';
 /// Story 6.1. Modified in Story 6.3 — "Voir rapport" for VALIDATED sessions.
 class SessionHistoryCard extends StatelessWidget {
   final InventorySessionModel session;
+  final String? storeName;
   final VoidCallback? onTap;
   final VoidCallback? onViewReport;
 
   const SessionHistoryCard({
     super.key,
     required this.session,
+    this.storeName,
     this.onTap,
     this.onViewReport,
   });
@@ -43,9 +45,22 @@ class SessionHistoryCard extends StatelessWidget {
                 fontWeight: FontWeight.w600,
               ),
             ),
-            subtitle: Text(
-              _formatDate(session.startedAt),
-              style: theme.textTheme.bodySmall,
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _formatDate(session.startedAt),
+                  style: theme.textTheme.bodySmall,
+                ),
+                if (storeName != null)
+                  Text(
+                    storeName!,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+              ],
             ),
             trailing: Chip(
               label: Text(
