@@ -23,8 +23,7 @@ class LocalMultiStoreStockDataSource {
       s.type         AS store_type,
       COUNT(DISTINCT sl.product_id)                                         AS product_count,
       COALESCE(SUM(sl.quantity * p.price), 0)                              AS total_value_xaf,
-      COUNT(CASE WHEN sl.minimum_threshold > 0
-                  AND sl.quantity <= sl.minimum_threshold THEN 1 END)      AS low_stock_count
+      COUNT(CASE WHEN sl.quantity <= COALESCE(NULLIF(sl.minimum_threshold, 0), 5) THEN 1 END) AS low_stock_count
     FROM stores s
     LEFT JOIN stock_levels sl ON sl.store_id = s.id
     LEFT JOIN products p      ON p.id = sl.product_id AND p.archived = 0
@@ -57,7 +56,7 @@ class LocalMultiStoreStockDataSource {
   }) async {
     final offset = page * size;
     final orderClause = sortLowFirst
-        ? 'CASE WHEN minimum_threshold > 0 AND quantity > 0 AND quantity <= minimum_threshold THEN 0 '
+        ? 'CASE WHEN quantity <= COALESCE(NULLIF(minimum_threshold, 0), 5) AND quantity > 0 THEN 0 '
             'WHEN quantity = 0 THEN 1 ELSE 2 END ASC, p.name ASC'
         : 'p.name ASC';
 

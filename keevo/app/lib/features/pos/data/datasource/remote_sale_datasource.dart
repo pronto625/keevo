@@ -1,6 +1,9 @@
 import 'package:dio/dio.dart';
+import 'package:intl/intl.dart';
 
+import '../../domain/model/payment_mode_enum.dart';
 import '../../domain/model/sale_model.dart';
+import '../../domain/model/sales_history_filter.dart';
 
 /// RemoteSaleDataSource — pushes sales to the backend via REST.
 ///
@@ -60,5 +63,66 @@ class RemoteSaleDataSource {
       '/api/v1/sales/$saleId/cancel',
       data: {'justification': justification},
     );
+  }
+
+  static final _dateFormat = DateFormat('yyyy-MM-dd');
+
+  /// GET /api/v1/sales/history — fetch sales history from backend.
+  Future<List<Sale>> getSalesHistory(SalesHistoryFilter filter) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/v1/sales/history',
+      queryParameters: {
+        'storeId': filter.storeId,
+        'from': _dateFormat.format(filter.from),
+        'to': _dateFormat.format(filter.to),
+        if (filter.employeeId != null) 'employeeId': filter.employeeId,
+        'page': 0,
+        'size': 100,
+      },
+    );
+
+    final data = response.data!['data'] as Map<String, dynamic>;
+    final content = data['content'] as List<dynamic>;
+
+    return content.map((item) {
+      final json = item as Map<String, dynamic>;
+      final items = (json['items'] as List<dynamic>?)
+              ?.map((i) {
+                final ij = i as Map<String, dynamic>;
+                return SaleItemModel(
+                  id: ij['id'] as String? ?? '',
+                  productId: ij['productId'] as String? ?? '',
+                  variantId: ij['variantId'] as String?,
+                  productName: ij['productName'] as String? ?? '',
+                  catalogueUnitPrice:
+                      (ij['catalogueUnitPrice'] as num?)?.toInt() ?? 0,
+                  appliedUnitPrice:
+                      (ij['appliedUnitPrice'] as num?)?.toInt() ?? 0,
+                  quantity: (ij['quantity'] as num?)?.toInt() ?? 0,
+                  subtotal: (ij['subtotal'] as num?)?.toInt() ?? 0,
+                );
+              })
+              .toList() ??
+          [];
+
+      return Sale(
+        id: json['id'] as String? ?? '',
+        storeId: json['storeId'] as String? ?? '',
+        employeeId: json['employeeId'] as String? ?? '',
+        clientId: json['clientId'] as String?,
+        paymentMode: PaymentModeEnum.values.firstWhere(
+          (m) => m.value == (json['paymentMode'] as String? ?? 'CASH'),
+          orElse: () => PaymentModeEnum.cash,
+        ),
+        totalAmount: (json['totalAmount'] as num?)?.toInt() ?? 0,
+        discountAmount: (json['discountAmount'] as num?)?.toInt() ?? 0,
+        status: json['status'] as String? ?? 'COMPLETED',
+        items: items,
+        occurredAt: DateTime.tryParse(json['occurredAt'] as String? ?? '') ??
+            DateTime.now(),
+        createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+            DateTime.now(),
+      );
+    }).toList();
   }
 }

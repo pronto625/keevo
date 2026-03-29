@@ -83,6 +83,9 @@ final productSearchQueryProvider = StateProvider<String>((ref) => '');
 /// When true, the active products tab shows only DRAFT products.
 final showDraftsOnlyProvider = StateProvider<bool>((ref) => false);
 
+/// When true, the active products tab shows only products with low stock.
+final showLowStockOnlyProvider = StateProvider<bool>((ref) => false);
+
 /// Product list state — reactive to the search query.
 ///
 /// AC7: re-executes on every [productSearchQueryProvider] change.
@@ -109,6 +112,12 @@ Future<List<ProductModel>> productList(ProductListRef ref) async {
   final draftsOnly = ref.watch(showDraftsOnlyProvider);
   if (draftsOnly) {
     products = products.where((p) => p.status == ProductStatus.draft).toList();
+  }
+  final lowStockOnly = ref.watch(showLowStockOnlyProvider);
+  if (lowStockOnly) {
+    final local = ref.watch(localProductDataSourceProvider);
+    final lowStockIds = await local.getLowStockProductIds();
+    products = products.where((p) => lowStockIds.contains(p.id)).toList();
   }
   return products;
 }

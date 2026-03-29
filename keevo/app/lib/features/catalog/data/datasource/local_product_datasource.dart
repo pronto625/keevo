@@ -76,6 +76,14 @@ class LocalProductDataSource {
     return rows.map((r) => r.read<String>('product_id')).toSet();
   }
 
+  /// Returns product IDs where stock is at or below the minimum threshold.
+  Future<Set<String>> getLowStockProductIds() async {
+    const sql = 'SELECT DISTINCT product_id FROM stock_levels '
+        'WHERE quantity <= COALESCE(NULLIF(minimum_threshold, 0), 5)';
+    final rows = await _db.customSelect(sql).get();
+    return rows.map((r) => r.read<String>('product_id')).toSet();
+  }
+
   // ── Write operations ─────────────────────────────────────────────────────
 
   Future<ProductModel> insert({

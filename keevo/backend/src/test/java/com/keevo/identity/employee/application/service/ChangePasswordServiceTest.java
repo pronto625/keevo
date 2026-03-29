@@ -75,7 +75,7 @@ class ChangePasswordServiceTest {
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(employeeRepository.findByUserId(userId)).thenReturn(Optional.of(employee));
         when(employeeRepository.updatePasswordChangeRequired(employeeId, false)).thenReturn(employee.withPasswordChangeRequired(false));
-        when(jwtTokenProvider.generateAccessToken(any(), any(), any(), any(), any(), anyBoolean()))
+        when(jwtTokenProvider.generateAccessToken(any(), any(), any(), any(), any(), anyBoolean(), any()))
                 .thenReturn("newAccessToken");
         when(jwtTokenProvider.generateRefreshToken()).thenReturn("newRefreshToken");
         when(jwtProperties.getAccessTokenExpiryHours()).thenReturn(24);
@@ -101,7 +101,7 @@ class ChangePasswordServiceTest {
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(employeeRepository.findByUserId(userId)).thenReturn(Optional.of(employee));
         when(employeeRepository.updatePasswordChangeRequired(employeeId, false)).thenReturn(employee.withPasswordChangeRequired(false));
-        when(jwtTokenProvider.generateAccessToken(any(), any(), any(), any(), any(), anyBoolean()))
+        when(jwtTokenProvider.generateAccessToken(any(), any(), any(), any(), any(), anyBoolean(), any()))
                 .thenReturn("token");
         when(jwtTokenProvider.generateRefreshToken()).thenReturn("refresh");
         when(jwtProperties.getAccessTokenExpiryHours()).thenReturn(24);
@@ -134,7 +134,7 @@ class ChangePasswordServiceTest {
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(employeeRepository.findByUserId(userId)).thenReturn(Optional.of(employee));
         when(employeeRepository.updatePasswordChangeRequired(employeeId, false)).thenReturn(employee.withPasswordChangeRequired(false));
-        when(jwtTokenProvider.generateAccessToken(any(), any(), any(), any(), any(), anyBoolean()))
+        when(jwtTokenProvider.generateAccessToken(any(), any(), any(), any(), any(), anyBoolean(), any()))
                 .thenReturn("token");
         when(jwtTokenProvider.generateRefreshToken()).thenReturn("refresh");
         when(jwtProperties.getAccessTokenExpiryHours()).thenReturn(24);
@@ -155,7 +155,7 @@ class ChangePasswordServiceTest {
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(employeeRepository.findByUserId(userId)).thenReturn(Optional.of(employee));
         when(employeeRepository.updatePasswordChangeRequired(employeeId, false)).thenReturn(employee.withPasswordChangeRequired(false));
-        when(jwtTokenProvider.generateAccessToken(any(), any(), any(), any(), any(), anyBoolean()))
+        when(jwtTokenProvider.generateAccessToken(any(), any(), any(), any(), any(), anyBoolean(), any()))
                 .thenReturn("freshAccessToken");
         when(jwtTokenProvider.generateRefreshToken()).thenReturn("freshRefreshToken");
         when(jwtProperties.getAccessTokenExpiryHours()).thenReturn(24);

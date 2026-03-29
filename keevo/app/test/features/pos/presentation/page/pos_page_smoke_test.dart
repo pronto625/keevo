@@ -28,7 +28,7 @@ void main() {
     ));
     await tester.pump();
     // Should render the AppBar title without crash
-    expect(find.text('Point de Vente'), findsOneWidget);
+    expect(find.text('Caisse'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

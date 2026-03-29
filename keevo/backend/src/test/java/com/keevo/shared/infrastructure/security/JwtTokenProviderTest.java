@@ -169,6 +169,55 @@ class JwtTokenProviderTest {
         assertThat(provider.extractScope(claims)).isNull();
     }
 
+    // ── firstName claim (Story 7.1) ──────────────────────────────────────────
+
+    @Test
+    @DisplayName("generateAccessToken includes firstName claim when provided")
+    void should_include_firstName_claim_when_provided() {
+        UUID userId = UUID.randomUUID();
+        String token = provider.generateAccessToken(userId, "kv_abc123", "EMPLOYEE",
+                "ACTIVE", "Simon");
+
+        Claims claims = provider.parseToken(token);
+        assertThat(provider.extractFirstName(claims)).isEqualTo("Simon");
+    }
+
+    @Test
+    @DisplayName("generateAccessToken omits firstName claim when null")
+    void should_omit_firstName_claim_when_null() {
+        String token = provider.generateAccessToken(UUID.randomUUID(), "kv_abc123", "OWNER");
+
+        Claims claims = provider.parseToken(token);
+        assertThat(provider.extractFirstName(claims)).isNull();
+    }
+
+    @Test
+    @DisplayName("7-arg generateAccessToken includes firstName claim for EMPLOYEE")
+    void should_include_firstName_in_7arg_overload() {
+        UUID userId = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+        String token = provider.generateAccessToken(userId, "kv_abc123", "EMPLOYEE",
+                "ACTIVE", storeId, true, "Loïc");
+
+        Claims claims = provider.parseToken(token);
+        assertThat(provider.extractFirstName(claims)).isEqualTo("Loïc");
+        assertThat(claims.get("storeId", String.class)).isEqualTo(storeId.toString());
+        assertThat(claims.get("passwordChangeRequired", Boolean.class)).isTrue();
+    }
+
+    @Test
+    @DisplayName("existing endpoints still work — 3-arg overload backward compatible")
+    void should_remain_backward_compatible_3arg() {
+        UUID userId = UUID.randomUUID();
+        String token = provider.generateAccessToken(userId, "kv_test", "OWNER");
+
+        Claims claims = provider.parseToken(token);
+        assertThat(claims.getSubject()).isEqualTo(userId.toString());
+        assertThat(claims.get("tenantId", String.class)).isEqualTo("kv_test");
+        assertThat(claims.get("role", String.class)).isEqualTo("OWNER");
+        assertThat(provider.extractFirstName(claims)).isNull();
+    }
+
     // ── Refresh token ──────────────────────────────────────────────────────
 
     @Test

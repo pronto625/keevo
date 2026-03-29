@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -22,6 +24,22 @@ import '../../domain/usecase/select_tenant_usecase.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 
 part 'auth_provider.g.dart';
+
+/// Extract firstName from a JWT access token payload.
+/// Returns null if not present or on any decode error.
+String? _extractFirstNameFromJwt(String accessToken) {
+  try {
+    final parts = accessToken.split('.');
+    if (parts.length != 3) return null;
+    final payload = utf8.decode(
+      base64Url.decode(base64Url.normalize(parts[1])),
+    );
+    final claims = jsonDecode(payload) as Map<String, dynamic>;
+    return claims['firstName'] as String?;
+  } catch (_) {
+    return null;
+  }
+}
 
 // ── Infrastructure providers ─────────────────────────────────────────────────
 
@@ -191,6 +209,11 @@ class Login extends _$Login {
         prefs.setString(kUserRoleKey, loginResult.tokens.role);
         prefs.setString(kUserPhoneKey, phoneNumber);
         prefs.setBool(kPasswordChangeRequiredKey, loginResult.tokens.passwordChangeRequired);
+        // Story 7.1 AC2: persist firstName from JWT for dashboard greeting.
+        final firstName = _extractFirstNameFromJwt(loginResult.tokens.accessToken);
+        if (firstName != null && firstName.isNotEmpty) {
+          prefs.setString('user_first_name', firstName);
+        }
         // EMPLOYEE: set active store from JWT so POS/Reports use the assigned store.
         // OWNER: clear active store so "all stores" is the default.
         ref.read(activeStoreIdProvider.notifier).setActiveStore(
@@ -238,6 +261,11 @@ class SelectTenant extends _$SelectTenant {
         final prefs = ref.read(sharedPreferencesProvider);
         prefs.setString(kUserRoleKey, tokens.role);
         prefs.setBool(kPasswordChangeRequiredKey, tokens.passwordChangeRequired);
+        // Story 7.1 AC2: persist firstName from JWT for dashboard greeting.
+        final firstName = _extractFirstNameFromJwt(tokens.accessToken);
+        if (firstName != null && firstName.isNotEmpty) {
+          prefs.setString('user_first_name', firstName);
+        }
         // EMPLOYEE: set active store from JWT so POS/Reports use the assigned store.
         // OWNER: clear active store so "all stores" is the default.
         ref.read(activeStoreIdProvider.notifier).setActiveStore(

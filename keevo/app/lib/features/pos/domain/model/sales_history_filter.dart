@@ -23,8 +23,9 @@ class SalesHistoryFilter {
   /// Store to filter sales for
   final String storeId;
 
-  /// Employee to filter sales for (own sales for EMPLOYEE role)
-  final String employeeId;
+  /// Employee to filter sales for (own sales for EMPLOYEE role).
+  /// Null means all employees (OWNER sees all store sales).
+  final String? employeeId;
 
   /// Start of date range (inclusive)
   final DateTime from;
@@ -37,7 +38,7 @@ class SalesHistoryFilter {
 
   const SalesHistoryFilter({
     required this.storeId,
-    required this.employeeId,
+    this.employeeId,
     required this.from,
     required this.to,
     required this.filterType,
@@ -46,7 +47,7 @@ class SalesHistoryFilter {
   /// Factory for "today" filter
   factory SalesHistoryFilter.today({
     required String storeId,
-    required String employeeId,
+    String? employeeId,
   }) {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day);
@@ -63,7 +64,7 @@ class SalesHistoryFilter {
   /// Factory for "this week" filter (last 7 days)
   factory SalesHistoryFilter.thisWeek({
     required String storeId,
-    required String employeeId,
+    String? employeeId,
   }) {
     final now = DateTime.now();
     final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59);
@@ -80,7 +81,7 @@ class SalesHistoryFilter {
   /// Factory for "this month" filter (last 30 days)
   factory SalesHistoryFilter.thisMonth({
     required String storeId,
-    required String employeeId,
+    String? employeeId,
   }) {
     final now = DateTime.now();
     final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59);
@@ -97,7 +98,7 @@ class SalesHistoryFilter {
   /// Factory for custom date range
   factory SalesHistoryFilter.custom({
     required String storeId,
-    required String employeeId,
+    String? employeeId,
     required DateTime from,
     required DateTime to,
   }) {

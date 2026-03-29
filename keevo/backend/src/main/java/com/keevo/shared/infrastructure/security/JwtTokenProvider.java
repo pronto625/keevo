@@ -44,30 +44,39 @@ public class JwtTokenProvider {
     }
 
     /**
-     * Generate a signed RS256 JWT access token with tenant status claim.
+     * Generate a signed RS256 JWT access token with tenant status and firstName claims.
      *
      * @param userId       subject (user UUID)
      * @param tenantId     tenant schema name (e.g., "kv_abc123")
      * @param role         user role
-     * @param tenantStatus tenant status ("ACTIVE" | "SUSPENDED") — embedded for
-     *                     JwtAuthFilter suspension check without extra DB round-trip
+     * @param tenantStatus tenant status ("ACTIVE" | "SUSPENDED")
+     * @param firstName    user's first name (nullable — omitted from JWT if null)
      * @return compact JWT string
      */
-    public String generateAccessToken(UUID userId, String tenantId, String role, String tenantStatus) {
+    public String generateAccessToken(UUID userId, String tenantId, String role,
+                                       String tenantStatus, String firstName) {
         Instant now = Instant.now();
-        return Jwts.builder()
+        var builder = Jwts.builder()
                 .subject(userId.toString())
                 .claim("tenantId", tenantId)
                 .claim("role", role)
                 .claim("tenantStatus", tenantStatus)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(jwtProperties.getAccessTokenExpiryHours(), ChronoUnit.HOURS)))
-                .signWith(privateKey, Jwts.SIG.RS256)
-                .compact();
+                .signWith(privateKey, Jwts.SIG.RS256);
+        if (firstName != null) {
+            builder.claim("firstName", firstName);
+        }
+        return builder.compact();
+    }
+
+    /** Backward-compatible overload — firstName defaults to null. */
+    public String generateAccessToken(UUID userId, String tenantId, String role, String tenantStatus) {
+        return generateAccessToken(userId, tenantId, role, tenantStatus, (String) null);
     }
 
     /**
-     * Generate a signed RS256 JWT access token (defaults tenantStatus to "ACTIVE").
+     * Generate a signed RS256 JWT access token (defaults tenantStatus to "ACTIVE", no firstName).
      *
      * @param userId   subject (user UUID)
      * @param tenantId tenant schema name (e.g., "kv_abc123")
@@ -75,12 +84,13 @@ public class JwtTokenProvider {
      * @return compact JWT string
      */
     public String generateAccessToken(UUID userId, String tenantId, String role) {
-        return generateAccessToken(userId, tenantId, role, "ACTIVE");
+        return generateAccessToken(userId, tenantId, role, "ACTIVE", (String) null);
     }
 
     /**
-     * Generate a signed RS256 JWT with storeId and passwordChangeRequired claims.
+     * Generate a signed RS256 JWT with storeId, passwordChangeRequired, and firstName claims.
      * Story 3.5 — EMPLOYEE tokens include store assignment and forced-change flag.
+     * Story 7.1 — firstName claim for dashboard greeting.
      *
      * @param userId                  subject (user UUID)
      * @param tenantId                tenant schema name
@@ -88,11 +98,12 @@ public class JwtTokenProvider {
      * @param tenantStatus            tenant status
      * @param storeId                 assigned store UUID (null for OWNER)
      * @param passwordChangeRequired  true if employee must change password
+     * @param firstName               user's first name (nullable — omitted if null)
      * @return compact JWT string
      */
     public String generateAccessToken(UUID userId, String tenantId, String role,
                                        String tenantStatus, UUID storeId,
-                                       boolean passwordChangeRequired) {
+                                       boolean passwordChangeRequired, String firstName) {
         Instant now = Instant.now();
         var builder = Jwts.builder()
                 .subject(userId.toString())
@@ -108,7 +119,17 @@ public class JwtTokenProvider {
         if (passwordChangeRequired) {
             builder.claim("passwordChangeRequired", true);
         }
+        if (firstName != null) {
+            builder.claim("firstName", firstName);
+        }
         return builder.compact();
+    }
+
+    /** Backward-compatible overload — firstName defaults to null. */
+    public String generateAccessToken(UUID userId, String tenantId, String role,
+                                       String tenantStatus, UUID storeId,
+                                       boolean passwordChangeRequired) {
+        return generateAccessToken(userId, tenantId, role, tenantStatus, storeId, passwordChangeRequired, null);
     }
 
     /**
@@ -206,6 +227,11 @@ public class JwtTokenProvider {
     public boolean extractPasswordChangeRequired(Claims claims) {
         Boolean val = claims.get("passwordChangeRequired", Boolean.class);
         return val != null && val;
+    }
+
+    /** Extract firstName from parsed claims. Returns null if absent (backward-compatible). */
+    public String extractFirstName(Claims claims) {
+        return claims.get("firstName", String.class);
     }
 
     /**

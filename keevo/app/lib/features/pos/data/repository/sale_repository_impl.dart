@@ -196,14 +196,27 @@ class SaleRepositoryImpl implements SaleRepository {
 
   @override
   Future<List<Sale>> getSalesHistory(SalesHistoryFilter filter) async {
-    // Query sales within date range for the store and employee
-    final rows = await (_db.select(_db.sales)
-          ..where((s) =>
-              s.storeId.equals(filter.storeId) &
-              s.employeeId.equals(filter.employeeId) &
-              s.occurredAt.isBetweenValues(filter.from, filter.to))
-          ..orderBy([(s) => OrderingTerm.desc(s.occurredAt)]))
-        .get();
+    // Online-first: try backend, fall back to local Drift
+    if (await _connectivity.isOnline()) {
+      try {
+        return await _remote.getSalesHistory(filter);
+      } catch (e) {
+        dev.log('Remote getSalesHistory failed, falling back to local: $e');
+      }
+    }
+
+    // Fallback: local Drift query
+    final query = _db.select(_db.sales)
+      ..where((s) {
+        var expr = s.storeId.equals(filter.storeId) &
+            s.occurredAt.isBetweenValues(filter.from, filter.to);
+        if (filter.employeeId != null) {
+          expr = expr & s.employeeId.equals(filter.employeeId!);
+        }
+        return expr;
+      })
+      ..orderBy([(s) => OrderingTerm.desc(s.occurredAt)]);
+    final rows = await query.get();
 
     final sales = <Sale>[];
     for (final row in rows) {

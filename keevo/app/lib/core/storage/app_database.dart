@@ -79,7 +79,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => 21;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -213,6 +213,14 @@ class AppDatabase extends _$AppDatabase {
       if (from < 20) {
         // Story 6.2 — inventory_counts table.
         await migrator.createTable(inventoryCounts);
+      }
+      if (from < 21) {
+        // Story 7.1 — add firstName column to users table for dashboard greeting.
+        await customStatement('ALTER TABLE users ADD COLUMN first_name TEXT');
+        // Story 7.1 — performance index for dashboard aggregation queries.
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_sales_occurred_at ON sales (occurred_at)',
+        );
       }
     },
   );

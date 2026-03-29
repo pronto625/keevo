@@ -44,8 +44,7 @@ public class MultiStoreStockRepositoryAdapter implements MultiStoreStockReposito
             s.type         AS store_type,
             COUNT(DISTINCT sl.product_id)                                        AS product_count,
             COALESCE(SUM(sl.quantity * p.price), 0)                             AS total_value_xaf,
-            COUNT(CASE WHEN p.minimum_threshold > 0
-                        AND sl.quantity <= p.minimum_threshold THEN 1 END)       AS low_stock_count
+            COUNT(CASE WHEN sl.quantity <= COALESCE(NULLIF(p.minimum_threshold, 0), 5) THEN 1 END) AS low_stock_count
         FROM %1$s.stores s
         LEFT JOIN %1$s.stock_levels sl ON sl.store_id = s.id
         LEFT JOIN %1$s.products p     ON p.id = sl.product_id
@@ -75,7 +74,7 @@ public class MultiStoreStockRepositoryAdapter implements MultiStoreStockReposito
     private static final String SQL_STORE_DETAIL_SORT_LOW_TPL =
         SQL_STORE_DETAIL_BASE_TPL +
         "ORDER BY " +
-        "  CASE WHEN p.minimum_threshold > 0 AND sl.quantity <= p.minimum_threshold AND sl.quantity > 0 THEN 0 " +
+        "  CASE WHEN sl.quantity <= COALESCE(NULLIF(p.minimum_threshold, 0), 5) AND sl.quantity > 0 THEN 0 " +
         "       WHEN sl.quantity = 0 THEN 1 " +
         "       ELSE 2 END ASC, " +
         "  p.name ASC ";

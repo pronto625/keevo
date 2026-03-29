@@ -287,6 +287,31 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
                 ),
               ),
             ),
+          // Low stock filter indicator
+          if (ref.watch(showLowStockOnlyProvider))
+            SliverToBoxAdapter(
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Row(
+                  children: [
+                    Chip(
+                      avatar: const Icon(Icons.warning_rounded,
+                          size: 18, color: Colors.red),
+                      label: const Text('Stock bas uniquement'),
+                      deleteIcon: const Icon(Icons.close, size: 18),
+                      onDeleted: () {
+                        ref.read(showLowStockOnlyProvider.notifier).state = false;
+                      },
+                      backgroundColor: Colors.red.withOpacity(0.12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        side: BorderSide(color: Colors.red.withOpacity(0.3)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           // TabBar moderne
           SliverPersistentHeader(
             pinned: true,

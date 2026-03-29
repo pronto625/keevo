@@ -159,7 +159,7 @@ class _PosPageState extends ConsumerState<PosPage> {
                               icon: const Icon(Icons.receipt_long,
                                   color: Colors.white70),
                               tooltip: 'Mes Ventes',
-                              onPressed: () => context.go('/pos/sales-history'),
+                              onPressed: () => context.push('/pos/sales-history'),
                             ),
                             const SyncIndicator(),
                           ],

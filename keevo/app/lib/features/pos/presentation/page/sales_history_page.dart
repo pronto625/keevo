@@ -58,7 +58,10 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
   }
 
   Widget _buildContent(String storeId, String employeeId) {
-    final filter = _buildFilter(storeId, employeeId);
+    final role = ref.watch(currentUserRoleProvider);
+    // OWNER sees all store sales; EMPLOYEE sees only their own
+    final effectiveEmployeeId = role == 'OWNER' ? null : employeeId;
+    final filter = _buildFilter(storeId, effectiveEmployeeId);
     final salesAsync = ref.watch(salesHistoryProvider(filter));
 
     return Column(
@@ -190,7 +193,7 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
     }
   }
 
-  SalesHistoryFilter _buildFilter(String storeId, String employeeId) {
+  SalesHistoryFilter _buildFilter(String storeId, String? employeeId) {
     switch (_selectedFilter) {
       case DateFilterType.today:
         return SalesHistoryFilter.today(
@@ -268,7 +271,7 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
             sale: sale,
             currencyFormat: _currencyFormat,
             timeFormat: _timeFormat,
-            onTap: () => context.go('/pos/sales-history/${sale.id}'),
+            onTap: () => context.push('/pos/sales-history/${sale.id}', extra: sale),
           );
         },
       ),

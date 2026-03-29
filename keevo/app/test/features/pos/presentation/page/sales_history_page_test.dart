@@ -1,14 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:keevo/features/pos/domain/model/payment_mode_enum.dart';
 import 'package:keevo/features/pos/domain/model/sale_model.dart';
 import 'package:keevo/features/pos/domain/model/sales_history_filter.dart';
 import 'package:keevo/features/pos/presentation/page/sales_history_page.dart';
 import 'package:keevo/features/pos/presentation/provider/day_closure_providers.dart';
 import 'package:keevo/core/di/providers.dart';
-import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUpAll(() async {
+    GoogleFonts.config.allowRuntimeFetching = false;
+    await initializeDateFormatting('fr_FR');
+  });
+
+  late SharedPreferences prefs;
+
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    prefs = await SharedPreferences.getInstance();
+  });
+
   group('SalesHistoryPage', () {
     final mockSales = [
       Sale(
@@ -18,11 +33,9 @@ void main() {
         occurredAt: DateTime.now(),
         totalAmount: 50000,
         discountAmount: 0,
-        paymentMode: 'CASH',
+        paymentMode: PaymentModeEnum.cash,
         status: 'COMPLETED',
         items: [],
-        tenantId: 'tenant-1',
-        synced: false,
         createdAt: DateTime.now(),
       ),
       Sale(
@@ -32,11 +45,9 @@ void main() {
         occurredAt: DateTime.now().subtract(const Duration(hours: 2)),
         totalAmount: 30000,
         discountAmount: 5000,
-        paymentMode: 'MOMO',
+        paymentMode: PaymentModeEnum.mobileMoney,
         status: 'COMPLETED',
         items: [],
-        tenantId: 'tenant-1',
-        synced: false,
         createdAt: DateTime.now(),
       ),
     ];
@@ -45,8 +56,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            sharedPreferencesProvider.overrideWithValue(prefs),
             currentUserIdProvider.overrideWith((ref) => Future.value('emp-1')),
-            salesHistoryProvider(any).overrideWith((ref) => Future.value(mockSales)),
+            salesHistoryProvider.overrideWith((ref, filter) => Future.value(mockSales)),
           ],
           child: const MaterialApp(
             home: SalesHistoryPage(),
@@ -57,15 +69,16 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Mes Ventes'), findsOneWidget);
-      expect(find.byType(ListTile), findsNWidgets(2));
+      expect(find.byType(Card), findsNWidgets(2));
     });
 
     testWidgets('shows empty state when no sales', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            sharedPreferencesProvider.overrideWithValue(prefs),
             currentUserIdProvider.overrideWith((ref) => Future.value('emp-1')),
-            salesHistoryProvider(any).overrideWith((ref) => Future.value([])),
+            salesHistoryProvider.overrideWith((ref, filter) => Future.value([])),
           ],
           child: const MaterialApp(
             home: SalesHistoryPage(),
@@ -82,8 +95,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            sharedPreferencesProvider.overrideWithValue(prefs),
             currentUserIdProvider.overrideWith((ref) => Future.value('emp-1')),
-            salesHistoryProvider(any).overrideWith((ref) => Future.value(mockSales)),
+            salesHistoryProvider.overrideWith((ref, filter) => Future.value(mockSales)),
           ],
           child: const MaterialApp(
             home: SalesHistoryPage(),
@@ -102,8 +116,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            sharedPreferencesProvider.overrideWithValue(prefs),
             currentUserIdProvider.overrideWith((ref) => Future.value('emp-1')),
-            salesHistoryProvider(any).overrideWith((ref) => Future.value(mockSales)),
+            salesHistoryProvider.overrideWith((ref, filter) => Future.value(mockSales)),
           ],
           child: const MaterialApp(
             home: SalesHistoryPage(),
@@ -128,19 +143,18 @@ void main() {
         occurredAt: DateTime.now(),
         totalAmount: 20000,
         discountAmount: 0,
-        paymentMode: 'CASH',
+        paymentMode: PaymentModeEnum.cash,
         status: 'PENDING_VALIDATION',
         items: [],
-        tenantId: 'tenant-1',
-        synced: false,
         createdAt: DateTime.now(),
       );
 
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            sharedPreferencesProvider.overrideWithValue(prefs),
             currentUserIdProvider.overrideWith((ref) => Future.value('emp-1')),
-            salesHistoryProvider(any).overrideWith((ref) => Future.value([pendingSale])),
+            salesHistoryProvider.overrideWith((ref, filter) => Future.value([pendingSale])),
           ],
           child: const MaterialApp(
             home: SalesHistoryPage(),
@@ -151,7 +165,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Should show pending badge/indicator
-      expect(find.byType(ListTile), findsOneWidget);
+      expect(find.byType(Card), findsOneWidget);
     });
 
     testWidgets('displays cancelled badge for cancelled sales', (tester) async {
@@ -162,19 +176,18 @@ void main() {
         occurredAt: DateTime.now(),
         totalAmount: 15000,
         discountAmount: 0,
-        paymentMode: 'CASH',
+        paymentMode: PaymentModeEnum.cash,
         status: 'CANCELLED',
         items: [],
-        tenantId: 'tenant-1',
-        synced: false,
         createdAt: DateTime.now(),
       );
 
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            sharedPreferencesProvider.overrideWithValue(prefs),
             currentUserIdProvider.overrideWith((ref) => Future.value('emp-1')),
-            salesHistoryProvider(any).overrideWith((ref) => Future.value([cancelledSale])),
+            salesHistoryProvider.overrideWith((ref, filter) => Future.value([cancelledSale])),
           ],
           child: const MaterialApp(
             home: SalesHistoryPage(),
@@ -184,7 +197,7 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(find.byType(ListTile), findsOneWidget);
+      expect(find.byType(Card), findsOneWidget);
     });
   });
 }

@@ -88,23 +88,28 @@ public class SelectTenantService implements SelectTenantUseCase {
 
         // Step 5 — Generate full RS256 access token (24h, scope=access / no scope claim)
         // Story 3.5: EMPLOYEE tokens include storeId and passwordChangeRequired claims.
+        // Story 7.1: firstName claim for dashboard greeting.
         UUID storeId = null;
         boolean passwordChangeRequired = false;
+        String firstName = null;
         if ("EMPLOYEE".equals(role)) {
             try {
                 Map<String, Object> empRow = jdbcTemplate.queryForMap(
-                        "SELECT store_id, password_change_required FROM \""
+                        "SELECT store_id, password_change_required, first_name FROM \""
                         + schemaName + "\".employees WHERE user_id = ? LIMIT 1", userId);
                 storeId = (UUID) empRow.get("store_id");
                 passwordChangeRequired = Boolean.TRUE.equals(empRow.get("password_change_required"));
+                firstName = (String) empRow.get("first_name");
             } catch (org.springframework.dao.EmptyResultDataAccessException ignored) {
                 // Employee row does not exist yet — should not happen in normal flow
             }
         }
+        // TODO(Story-7.1/H4): OWNER firstName requires first_name column in public.users
+        // and registration flow update. Currently null → Flutter falls back to "Patron".
 
         String accessToken = jwtTokenProvider.generateAccessToken(
                 userId, schemaName, role, tenant.getStatus().name(),
-                storeId, passwordChangeRequired);
+                storeId, passwordChangeRequired, firstName);
 
         // Step 6 — Generate opaque refresh token and persist its SHA-256 hash
         String rawRefreshToken = jwtTokenProvider.generateRefreshToken();

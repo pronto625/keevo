@@ -88,7 +88,7 @@ public class ChangePasswordService implements ChangePasswordUseCase {
         String tenantId = TenantContext.getCurrentTenant();
         String accessToken = jwtTokenProvider.generateAccessToken(
                 command.actorId(), tenantId, "EMPLOYEE", "ACTIVE",
-                employee.getStoreId(), false);
+                employee.getStoreId(), false, employee.getFirstName());
         String rawRefreshToken = jwtTokenProvider.generateRefreshToken();
         String tokenHash = hashToken(rawRefreshToken);
         Instant expiresAt = Instant.now().plus(jwtProperties.getRefreshTokenExpiryDays(), ChronoUnit.DAYS);

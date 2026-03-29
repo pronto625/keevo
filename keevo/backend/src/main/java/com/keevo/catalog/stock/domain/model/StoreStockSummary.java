@@ -14,5 +14,5 @@ public record StoreStockSummary(
     StoreType storeType,
     int productCount,       // distinct SKUs with any stock_level row in this store
     long totalValueXaf,     // SUM(quantity × price) across all products in this store
-    int lowStockCount       // count of products where qty <= minimumThreshold AND threshold > 0
+    int lowStockCount       // count of products where qty <= minimumThreshold (default 5 when not set)
 ) {}

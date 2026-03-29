@@ -21,8 +21,8 @@ class MainShell extends ConsumerWidget {
   final Widget child;
   const MainShell({required this.child, super.key});
 
-  /// OWNER tab routes — full navigation
-  static const _ownerRoutes = ['/pos', '/products', '/reports', '/settings'];
+  /// OWNER tab routes — full navigation (5 tabs: Dashboard / Caisse / Catalogue / Rapports / Plus)
+  static const _ownerRoutes = ['/dashboard', '/pos', '/products', '/reports', '/settings'];
 
   /// EMPLOYEE tab routes — POS + Rapports (day closure) + settings (AC5)
   static const _employeeRoutes = ['/pos', '/reports', '/settings'];
@@ -69,6 +69,12 @@ class MainShell extends ConsumerWidget {
         : (ref.watch(pendingSalesCountProvider(storeId)).valueOrNull ?? 0);
 
     final destinations = <NavigationDestination>[
+      if (!isEmployee)
+        const NavigationDestination(
+          icon: Icon(Icons.dashboard_outlined),
+          selectedIcon: Icon(Icons.dashboard_rounded),
+          label: 'Dashboard',
+        ),
       NavigationDestination(
         icon: Badge(
           label: Text(pendingSalesCount > 9 ? '9+' : '$pendingSalesCount'),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/di/providers.dart';
@@ -275,6 +276,32 @@ class ReportsPage extends ConsumerWidget {
                 ],
               ),
             ),
+
+          // ── Sales history link ──
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 16),
+            child: OutlinedButton.icon(
+              onPressed: () => context.push('/pos/sales-history'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                side: BorderSide(color: AppTheme.primary.withValues(alpha: 0.4)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              icon: Icon(Icons.history_rounded,
+                  color: AppTheme.primary, size: 20),
+              label: Text(
+                'Voir l\'historique des ventes',
+                style: TextStyle(
+                  color: AppTheme.primary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
 
           // ── Closure button ──
           userIdAsync.when(

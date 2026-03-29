@@ -12,6 +12,9 @@ class Users extends Table {
   /// Role string: 'OWNER' | 'EMPLOYEE'
   TextColumn get role => text()();
 
+  /// User first name — nullable, populated from JWT firstName claim (Story 7.1).
+  TextColumn get firstName => text().nullable()();
+
   DateTimeColumn get createdAt => dateTime()();
 
   @override

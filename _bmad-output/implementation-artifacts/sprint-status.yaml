@@ -143,8 +143,8 @@ development_status:
   # ─────────────────────────────────────────────────────────
   # Epic 7: Rapports, Dashboard & Communication WhatsApp
   # ─────────────────────────────────────────────────────────
-  epic-7: backlog
-  7-1-dashboard-matinal-message-motivationnel: backlog
+  epic-7: in-progress
+  7-1-dashboard-matinal-message-motivationnel: done   # 2026-03-23 — code review PASSED (adversarial) | 9 fixes applied: H1 saveStoreId mock (42/42 auth GREEN), H3 tenantName subtitle, H4 OWNER firstName store-name removed, L1 greeting emoji, M3 idx_sales_occurred_at, M4 Stock Bas→/stock/overview, M5 Vos boutiques+VOIR TOUT, M6 getLowStockCount JOIN+DISTINCT, M7 trendPercent today-vs-yesterday | Deferred: H2 (spec contradiction), H5 (User firstName schema gap), L2 (N+1 perf) | 1134/1134 backend + 71/71 dashboard + 42/42 auth tests GREEN
   7-2-rapport-end-of-day-generation-envoi-whatsapp: backlog
   7-3-rapport-hebdomadaire-automatique: backlog
   7-4-dashboard-rentabilite-analyse-par-produit-boutique: backlog

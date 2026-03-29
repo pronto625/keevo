@@ -86,6 +86,8 @@ void main() {
         when(() => mockTokenStorage.saveUserId(any())).thenAnswer((_) async {});
         when(() => mockTokenStorage.saveTenantId(any()))
             .thenAnswer((_) async {});
+        when(() => mockTokenStorage.saveStoreId(any()))
+            .thenAnswer((_) async {});
       });
 
       test('AC8: single membership → returns AuthenticatedResult', () async {

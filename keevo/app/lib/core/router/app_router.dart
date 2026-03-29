@@ -48,6 +48,8 @@ import '../../features/inventory/presentation/page/inventory_launch_page.dart';
 import '../../features/inventory/presentation/page/transfer_history_page.dart';
 import '../../features/team/presentation/page/team_page.dart';
 import '../../features/audit/presentation/page/audit_page.dart';
+import '../../features/dashboard/presentation/page/dashboard_page.dart';
+import '../../features/dashboard/presentation/page/store_dashboard_page.dart';
 import '../../features/team/presentation/page/create_employee_page.dart';
 import '../di/providers.dart';
 import '../scaffold/main_shell.dart';
@@ -140,17 +142,25 @@ class _SplashRedirectPageState extends ConsumerState<_SplashRedirectPage> {
 
       // Ensure EMPLOYEE activeStoreId is set from JWT on cold start.
       // OWNER gets null (all stores).
+      String? role;
       try {
         final parts = token.split('.');
         final payload = utf8.decode(
           base64Url.decode(base64Url.normalize(parts[1])),
         );
         final claims = jsonDecode(payload) as Map<String, dynamic>;
-        final role = claims['role'] as String?;
+        role = claims['role'] as String?;
         final jwtStoreId = claims['storeId'] as String?;
         ref.read(activeStoreIdProvider.notifier).setActiveStore(
           role == 'EMPLOYEE' ? jwtStoreId : null,
         );
+
+        // Story 7.1 AC2: persist firstName from JWT for dashboard greeting.
+        final firstName = claims['firstName'] as String?;
+        final prefs0 = await SharedPreferences.getInstance();
+        if (firstName != null && firstName.isNotEmpty) {
+          await prefs0.setString('user_first_name', firstName);
+        }
       } catch (_) {}
 
       final prefs = await SharedPreferences.getInstance();
@@ -180,7 +190,9 @@ class _SplashRedirectPageState extends ConsumerState<_SplashRedirectPage> {
         }
       }
 
-      context.go(wizardSeen ? '/pos' : '/onboarding/sector');
+      // Story 7.1: OWNER lands on /dashboard, EMPLOYEE on /pos.
+      final landingRoute = (role == 'OWNER') ? '/dashboard' : '/pos';
+      context.go(wizardSeen ? landingRoute : '/onboarding/sector');
       return;
     }
 
@@ -208,6 +220,7 @@ class _SplashRedirectPageState extends ConsumerState<_SplashRedirectPage> {
 
 /// OWNER-only route prefixes — EMPLOYEE users are redirected to /pos (AC5).
 const _ownerOnlyPrefixes = [
+  '/dashboard',
   '/products',
   '/clients',
   '/suppliers',
@@ -253,7 +266,12 @@ final GoRouter appRouter = GoRouter(
         // AC3: skip login only when a valid, non-expired JWT is present
         const storage = FlutterSecureStorage();
         final token = await storage.read(key: 'jwt_token');
-        if (token != null && _isValidJwt(token)) return '/pos';
+        if (token != null && _isValidJwt(token)) {
+          // Story 7.1: OWNER → /dashboard, EMPLOYEE → /pos
+          final prefs = await SharedPreferences.getInstance();
+          final role = prefs.getString(kUserRoleKey);
+          return (role == 'OWNER') ? '/dashboard' : '/pos';
+        }
         return null; // proceed to LoginPage
       },
       builder: (_, __) => const LoginPage(),
@@ -318,6 +336,10 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state, child) => MainShell(child: child),
       routes: [
         GoRoute(
+          path: '/dashboard',
+          builder: (_, __) => const DashboardPage(),
+        ),
+        GoRoute(
           path: '/pos',
           builder: (_, __) => const PosPage(),
         ),
@@ -334,6 +356,15 @@ final GoRouter appRouter = GoRouter(
           builder: (_, __) => const SettingsPage(),
         ),
       ],
+    ),
+
+    // ── Dashboard > Store sub-dashboard (full-screen, no nav bar) ────────
+    GoRoute(
+      path: '/dashboard/store/:storeId',
+      builder: (_, state) {
+        final storeId = state.pathParameters['storeId'] ?? '';
+        return StoreDashboardPage(storeId: storeId);
+      },
     ),
 
     // ── Clients (full-screen, accessed from Plus) ─────────────────────────
@@ -387,7 +418,8 @@ final GoRouter appRouter = GoRouter(
       path: '/pos/sales-history/:id',
       builder: (_, state) {
         final saleId = state.pathParameters['id'] ?? '';
-        return SaleDetailPage(saleId: saleId);
+        final sale = state.extra as Sale?;
+        return SaleDetailPage(saleId: saleId, sale: sale);
       },
     ),
 

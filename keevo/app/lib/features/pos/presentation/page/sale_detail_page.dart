@@ -11,11 +11,26 @@ import '../provider/pos_providers.dart';
 /// Story 4.4 AC7 — View sale items, quantities, applied prices, discount, client.
 class SaleDetailPage extends ConsumerWidget {
   final String saleId;
+  final Sale? sale;
 
-  const SaleDetailPage({super.key, required this.saleId});
+  const SaleDetailPage({super.key, required this.saleId, this.sale});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // If sale was passed directly (from sales history), use it
+    if (sale != null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Détails de la vente'),
+          backgroundColor: const Color(0xFF3B5BDB),
+          foregroundColor: Colors.white,
+          elevation: 0,
+        ),
+        body: _SaleDetailContent(sale: sale!),
+      );
+    }
+
+    // Fallback: fetch by ID (deep link or local)
     final saleAsync = ref.watch(saleByIdProvider(saleId));
 
     return Scaffold(
