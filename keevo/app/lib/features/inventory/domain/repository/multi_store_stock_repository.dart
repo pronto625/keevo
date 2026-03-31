@@ -10,8 +10,9 @@ abstract class MultiStoreStockRepository {
 
   /// Returns paginated product stock list for a specific store.
   /// [sortLowFirst]: if true, BAS/CRITIQUE entries come first.
+  /// [lowOnly]: if true, return only products at or below their stock threshold.
   Future<List<StoreProductStockModel>> getStoreStockDetail(
-      String storeId, {int page = 0, int size = 25, bool sortLowFirst = true});
+      String storeId, {int page = 0, int size = 25, bool sortLowFirst = true, bool lowOnly = false});
 
   /// Cross-store search against local Drift data only (offline-capable).
   /// Returns all (product, store) pairs where product name matches [query].

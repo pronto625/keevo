@@ -6,6 +6,7 @@ import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
@@ -20,7 +21,11 @@ import java.util.Locale;
  * <p>Builds and sends WhatsApp report to owner using ClosureReportStrategy.
  *
  * <p>MVP: Uses NoOpWhatsAppAdapter (logs only, no real sending).
+ *
+ * <p>DEPRECATED by story 7.2 — replaced by EndOfDayReportListener.
+ * Disabled by default; re-enable with keevo.reporting.legacy-listener=true.
  */
+@ConditionalOnProperty(name = "keevo.reporting.legacy-listener", havingValue = "true", matchIfMissing = false)
 @Component
 public class DayClosureWhatsAppListener {
 

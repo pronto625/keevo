@@ -45,6 +45,7 @@ class MultiStoreStockRepositoryImpl implements MultiStoreStockRepository {
     int page = 0,
     int size = 25,
     bool sortLowFirst = true,
+    bool lowOnly = false,
   }) async {
     // Guard: if offline ops are pending, return local data to prevent
     // stale remote values from overwriting correct offline decrements.
@@ -62,6 +63,7 @@ class MultiStoreStockRepositoryImpl implements MultiStoreStockRepository {
         page: page,
         size: size,
         sortLowFirst: sortLowFirst,
+        lowOnly: lowOnly,
       );
       await _local.upsertStockLevels(storeId, result.content);
       return result.content;

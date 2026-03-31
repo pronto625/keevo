@@ -118,11 +118,16 @@ public class MultiStoreStockRepositoryAdapter implements MultiStoreStockReposito
     @Override
     @Transactional(readOnly = true)
     public Page<StoreProductStockEntry> getStoreStockDetail(
-            UUID storeId, boolean sortLowFirst, Pageable pageable) {
+            UUID storeId, boolean sortLowFirst, boolean lowOnly, Pageable pageable) {
 
         String s = schema();
         String baseSql  = String.format(
                 sortLowFirst ? SQL_STORE_DETAIL_SORT_LOW_TPL : SQL_STORE_DETAIL_SORT_NAME_TPL, s);
+        if (lowOnly) {
+            // Insert low-stock filter before ORDER BY clause
+            baseSql = baseSql.replace("ORDER BY",
+                    "  AND sl.quantity <= COALESCE(NULLIF(p.minimum_threshold, 0), 5)\n        ORDER BY");
+        }
         String pagedSql = baseSql + " LIMIT " + pageable.getPageSize()
                                   + " OFFSET " + pageable.getOffset();
 
@@ -141,7 +146,11 @@ public class MultiStoreStockRepositoryAdapter implements MultiStoreStockReposito
             },
             storeId.toString());
 
-        Long total = jdbc.queryForObject(String.format(SQL_STORE_DETAIL_COUNT_TPL, s), Long.class, storeId.toString());
+        String countSql = String.format(SQL_STORE_DETAIL_COUNT_TPL, s);
+        if (lowOnly) {
+            countSql += " AND sl.quantity <= COALESCE(NULLIF(p.minimum_threshold, 0), 5)";
+        }
+        Long total = jdbc.queryForObject(countSql, Long.class, storeId.toString());
         return new PageImpl<>(content, pageable, total != null ? total : 0L);
     }
 

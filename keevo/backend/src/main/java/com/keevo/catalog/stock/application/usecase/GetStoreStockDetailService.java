@@ -26,6 +26,6 @@ public class GetStoreStockDetailService implements GetStoreStockDetailUseCase {
     @Transactional(readOnly = true)
     public Page<StoreProductStockEntry> execute(GetStoreStockDetailQuery query) {
         var pageable = PageRequest.of(query.page(), query.size());
-        return repo.getStoreStockDetail(query.storeId(), query.sortLowFirst(), pageable);
+        return repo.getStoreStockDetail(query.storeId(), query.sortLowFirst(), query.lowOnly(), pageable);
     }
 }

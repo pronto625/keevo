@@ -39,6 +39,16 @@ public class UserRepositoryAdapter implements UserRepository {
             WHERE m.user_id = ? AND m.is_active = true
             """;
 
+    private static final String OWNER_BY_SCHEMA_SQL = """
+            SELECT u.id, u.phone_number, u.password_hash, u.role, u.is_active,
+                   u.created_at, u.failed_attempts, u.locked_until
+            FROM public.users u
+            JOIN public.user_tenant_memberships m ON u.id = m.user_id
+            JOIN public.tenants t ON t.id = m.tenant_id
+            WHERE t.schema_name = ? AND m.role = 'OWNER' AND m.is_active = true
+            LIMIT 1
+            """;
+
     private final UserSpringRepository springRepository;
     private final JdbcTemplate jdbcTemplate;
 
@@ -86,6 +96,30 @@ public class UserRepositoryAdapter implements UserRepository {
                         rs.getString("role"),
                         rs.getString("schema_name")),
                 userId);
+    }
+
+    /**
+     * Story 7.2 — Find the OWNER user for WhatsApp delivery phone resolution.
+     */
+    @Override
+    public Optional<User> findOwnerByTenantSchemaName(String schemaName) {
+        List<User> results = jdbcTemplate.query(
+                OWNER_BY_SCHEMA_SQL,
+                (rs, rowNum) -> {
+                    var e = new com.keevo.identity.auth.adapter.out.persistence.entity.UserJpaEntity(
+                            (UUID) rs.getObject("id"),
+                            rs.getString("phone_number"),
+                            rs.getString("password_hash"),
+                            rs.getString("role"),
+                            rs.getBoolean("is_active"),
+                            rs.getInt("failed_attempts"),
+                            rs.getTimestamp("locked_until") != null
+                                    ? rs.getTimestamp("locked_until").toInstant() : null
+                    );
+                    return toDomain(e);
+                },
+                schemaName);
+        return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
     // ── Mapping ──────────────────────────────────────────────────────────────

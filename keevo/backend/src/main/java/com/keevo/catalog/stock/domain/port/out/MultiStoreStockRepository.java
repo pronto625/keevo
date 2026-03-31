@@ -28,7 +28,7 @@ public interface MultiStoreStockRepository {
      * Returns paginated product stock entries for a specific store.
      * Sort: low/critical first (when sortLowFirst), then alphabetical by product name.
      */
-    Page<StoreProductStockEntry> getStoreStockDetail(UUID storeId, boolean sortLowFirst, Pageable pageable);
+    Page<StoreProductStockEntry> getStoreStockDetail(UUID storeId, boolean sortLowFirst, boolean lowOnly, Pageable pageable);
 
     /**
      * Returns stock availability for {@code productId} across ALL active stores.

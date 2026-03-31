@@ -36,6 +36,9 @@ import '../../features/pos/presentation/page/sales_history_page.dart';
 import '../../features/pos/presentation/page/sale_detail_page.dart';
 import '../../features/pos/domain/model/sale_model.dart';
 import '../../features/reports/presentation/page/reports_page.dart';
+import '../../features/reports/presentation/page/report_history_page.dart';
+import '../../features/reports/presentation/page/report_detail_page.dart';
+import '../../features/reports/domain/model/report_history_model.dart';
 import '../../features/settings/presentation/page/settings_page.dart';
 import '../../features/settings/presentation/page/subscription_page.dart';
 import '../../features/sync_indicator/presentation/page/sync_conflict_log_page.dart';
@@ -380,6 +383,20 @@ final GoRouter appRouter = GoRouter(
     ),
 
 
+    // ── Report history (full-screen, no nav bar) — Story 7.2 ─────────────
+    GoRoute(
+      path: '/reports/history',
+      builder: (_, __) => const ReportHistoryPage(),
+    ),
+    GoRoute(
+      path: '/reports/history/:reportId',
+      builder: (_, state) {
+        final reportId = state.pathParameters['reportId']!;
+        final report = state.extra as ReportHistoryModel?;
+        return ReportDetailPage(reportId: reportId, report: report);
+      },
+    ),
+
     // ── POS sub-routes (full-screen, no nav bar) ──────────────────────────
     GoRoute(
       path: '/pos/checkout',
@@ -531,7 +548,11 @@ final GoRouter appRouter = GoRouter(
     // ── Stock overview (full-screen, no nav bar) ─────────────────────────
     GoRoute(
       path: '/stock/overview',
-      builder: (_, __) => const GlobalStockOverviewPage(),
+      builder: (context, state) {
+        final showLowOnly =
+            state.uri.queryParameters['showLowOnly'] == 'true';
+        return GlobalStockOverviewPage(showLowOnly: showLowOnly);
+      },
     ),    // ── Transfer history (Story 3.3) ─────────────────────────────────
     GoRoute(
       path: '/stock/transfers',

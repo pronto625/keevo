@@ -249,7 +249,7 @@ class _MetricGrid extends ConsumerWidget {
               MetricBadgeCard.yesterdayCA(amount: snapshot.yesterdayCA),
               MetricBadgeCard.lowStock(
                 count: snapshot.lowStockCount,
-                onTap: () => context.push('/stock/overview'),
+                onTap: () => context.push('/stock/overview?showLowOnly=true'),
               ),
               MetricBadgeCard.monthlyTransactions(
                 count: snapshot.totalTransactionsMonth,

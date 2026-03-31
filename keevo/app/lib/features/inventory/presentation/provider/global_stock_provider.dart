@@ -74,4 +74,9 @@ Future<List<StoreProductStockModel>> stockSearchResults(
 /// this is cleared back to null.
 final highlightedStoreIdProvider = StateProvider<String?>((ref) => null);
 
+/// Set to true when navigating from the dashboard low-stock badge.
+/// [GlobalStockOverviewPage] writes this in initState; [_ProductList] reads it
+/// when loading stock data; reset to false on page dispose.
+final showLowStockOnlyProvider = StateProvider<bool>((ref) => false);
+
 

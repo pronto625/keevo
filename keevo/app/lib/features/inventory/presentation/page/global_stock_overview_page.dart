@@ -17,7 +17,8 @@ import '../widget/store_stock_card.dart';
 /// GlobalStockOverviewPage — centralized multi-store stock view.
 /// Route: /stock/overview. Story 3.2.
 class GlobalStockOverviewPage extends ConsumerStatefulWidget {
-  const GlobalStockOverviewPage({super.key});
+  final bool showLowOnly;
+  const GlobalStockOverviewPage({super.key, this.showLowOnly = false});
 
   @override
   ConsumerState<GlobalStockOverviewPage> createState() =>
@@ -34,6 +35,12 @@ class _GlobalStockOverviewPageState
   void initState() {
     super.initState();
     _searchCtrl.addListener(_onSearchChanged);
+    // Set low-stock filter when navigating from the dashboard badge.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(showLowStockOnlyProvider.notifier).state = widget.showLowOnly;
+      }
+    });
   }
 
   void _onSearchChanged() {
@@ -55,6 +62,7 @@ class _GlobalStockOverviewPageState
     _debounce?.cancel();
     _searchCtrl.removeListener(_onSearchChanged);
     _searchCtrl.dispose();
+    ref.read(showLowStockOnlyProvider.notifier).state = false;
     super.dispose();
   }
 
@@ -318,13 +326,10 @@ class _OverviewSliver extends ConsumerWidget {
           );
         }
 
-        // EMPLOYEE sees ALL stores (read-only multi-store view, Story 3.2).
-        // OWNER sees filtered view if a specific store is selected.
+        // Global overview — all stores are visible regardless of role.
+        // activeStoreIdProvider is POS context only; must not filter this view.
         final role = ref.watch(currentUserRoleProvider);
-        final selectedStoreId = ref.watch(activeStoreIdProvider);
-        final visibleStores = (role == 'EMPLOYEE' || selectedStoreId == null)
-            ? stores
-            : stores.where((s) => s.storeId == selectedStoreId).toList();
+        final visibleStores = stores;
         final totalValue =
             visibleStores.fold<int>(0, (sum, s) => sum + s.totalValueXaf);
 

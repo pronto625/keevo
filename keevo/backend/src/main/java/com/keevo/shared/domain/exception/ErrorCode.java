@@ -84,6 +84,10 @@ public enum ErrorCode {
     JUSTIFICATION_REQUIRED,        // HTTP 400 — missing justification
     JUSTIFICATION_TOO_SHORT,       // HTTP 400 — justification < 10 chars
 
+    // ── Reports (Story 7.2) ───────────────────────────────────────
+    REPORT_NOT_FOUND,              // HTTP 404 — report not found
+    REPORT_ALREADY_SENT,           // HTTP 409 — report already delivered via WhatsApp
+
     // ── Sale (Story 4.4) ──────────────────────────────────────────
     DAY_ALREADY_CLOSED,            // HTTP 409 — day closure already exists for storeId + date
 

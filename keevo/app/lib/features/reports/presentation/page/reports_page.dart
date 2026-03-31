@@ -277,6 +277,32 @@ class ReportsPage extends ConsumerWidget {
               ),
             ),
 
+          // ── Report history link — Story 7.2 ──
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 12),
+            child: OutlinedButton.icon(
+              onPressed: () => context.push('/reports/history'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                side: BorderSide(color: AppTheme.primary.withValues(alpha: 0.4)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              icon: Icon(Icons.assessment_outlined,
+                  color: AppTheme.primary, size: 20),
+              label: Text(
+                'Historique des rapports',
+                style: TextStyle(
+                  color: AppTheme.primary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
+
           // ── Sales history link ──
           Container(
             width: double.infinity,

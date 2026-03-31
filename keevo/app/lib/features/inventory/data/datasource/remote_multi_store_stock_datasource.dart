@@ -24,6 +24,7 @@ class RemoteMultiStoreStockDataSource {
     int page = 0,
     int size = 25,
     bool sortLowFirst = true,
+    bool lowOnly = false,
   }) async {
     final resp = await _dio.get<Map<String, dynamic>>(
       '/api/v1/stock/stores/$storeId/products',
@@ -31,6 +32,7 @@ class RemoteMultiStoreStockDataSource {
         'page': page,
         'size': size,
         'sortLowFirst': sortLowFirst,
+        'lowOnly': lowOnly,
       },
     );
     final pageData = resp.data!['data'] as Map<String, dynamic>;

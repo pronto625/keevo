@@ -26,6 +26,7 @@ import 'sync_queue_table.dart';
 import 'users_table.dart';
 import 'inventory_sessions_table.dart';
 import 'inventory_counts_table.dart';
+import 'reports_table.dart';
 
 part 'app_database.g.dart';
 
@@ -47,6 +48,10 @@ part 'app_database.g.dart';
 /// Schema version 16: employees table added (Story 5.1).
 /// Schema version 17: audit_entries table added (Story 5.2 — Pull Sync).
 /// Schema version 18: sync_events table added (Story 5.5 — Sync Monitoring).
+/// Schema version 19: inventory_sessions table added (Story 6.1).
+/// Schema version 20: inventory_counts table added (Story 6.2).
+/// Schema version 21: users.firstName column added; sales index added (Story 7.1).
+/// Schema version 22: reports table added for end-of-day report history (Story 7.2).
 @DriftDatabase(tables: [
   SyncQueue,
   Products,
@@ -67,6 +72,7 @@ part 'app_database.g.dart';
   SyncEvents,
   InventorySessions,
   InventoryCounts,
+  Reports,
 ])
 class AppDatabase extends _$AppDatabase {
   /// Production constructor — uses SQLCipher encrypted file database.
@@ -79,7 +85,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 21;
+  int get schemaVersion => 22;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -221,6 +227,10 @@ class AppDatabase extends _$AppDatabase {
         await customStatement(
           'CREATE INDEX IF NOT EXISTS idx_sales_occurred_at ON sales (occurred_at)',
         );
+      }
+      if (from < 22) {
+        // Story 7.2 — reports table for end-of-day report history.
+        await migrator.createTable(reports);
       }
     },
   );

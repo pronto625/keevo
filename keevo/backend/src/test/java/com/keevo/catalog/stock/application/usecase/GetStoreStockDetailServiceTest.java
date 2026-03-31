@@ -44,10 +44,10 @@ class GetStoreStockDetailServiceTest {
     @Test
     void execute_shouldReturnPagedEntries_forValidStore() {
         var page = new PageImpl<>(List.of(entry(5, 10)));
-        when(repo.getStoreStockDetail(eq(storeId), anyBoolean(), any(Pageable.class)))
-            .thenReturn(page);
+when(repo.getStoreStockDetail(eq(storeId), anyBoolean(), anyBoolean(), any(Pageable.class)))
+                    .thenReturn(page);
 
-        var result = service.execute(new GetStoreStockDetailQuery(storeId, 0, 25, true));
+        var result = service.execute(new GetStoreStockDetailQuery(storeId, 0, 25, true, false));
 
         assertThat(result.getContent()).hasSize(1);
     }
@@ -55,10 +55,10 @@ class GetStoreStockDetailServiceTest {
     @Test
     void execute_shouldSortLowStockFirst_whenFlagSet() {
         ArgumentCaptor<Boolean> sortCaptor = ArgumentCaptor.forClass(Boolean.class);
-        when(repo.getStoreStockDetail(any(), sortCaptor.capture(), any(Pageable.class)))
-            .thenReturn(new PageImpl<>(List.of()));
+when(repo.getStoreStockDetail(any(), sortCaptor.capture(), anyBoolean(), any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of()));
 
-        service.execute(new GetStoreStockDetailQuery(storeId, 0, 25, true));
+        service.execute(new GetStoreStockDetailQuery(storeId, 0, 25, true, false));
 
         assertThat(sortCaptor.getValue()).isTrue();
     }
@@ -66,10 +66,10 @@ class GetStoreStockDetailServiceTest {
     @Test
     void execute_shouldDelegateToRepository_withCorrectPageable() {
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        when(repo.getStoreStockDetail(any(), anyBoolean(), pageableCaptor.capture()))
-            .thenReturn(new PageImpl<>(List.of()));
+when(repo.getStoreStockDetail(any(), anyBoolean(), anyBoolean(), pageableCaptor.capture()))
+                       .thenReturn(new PageImpl<>(List.of()));
 
-        service.execute(new GetStoreStockDetailQuery(storeId, 2, 10, false));
+        service.execute(new GetStoreStockDetailQuery(storeId, 2, 10, false, false));
 
         Pageable captured = pageableCaptor.getValue();
         assertThat(captured.getPageNumber()).isEqualTo(2);

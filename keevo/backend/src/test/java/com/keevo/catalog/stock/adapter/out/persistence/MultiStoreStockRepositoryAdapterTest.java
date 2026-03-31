@@ -87,7 +87,7 @@ class MultiStoreStockRepositoryAdapterTest {
         when(jdbc.queryForObject(anyString(), eq(Long.class), any()))
             .thenReturn(1L);
 
-        var result = adapter.getStoreStockDetail(storeId, false, PageRequest.of(0, 25));
+        var result = adapter.getStoreStockDetail(storeId, false, false, PageRequest.of(0, 25));
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getTotalElements()).isEqualTo(1L);
@@ -101,7 +101,7 @@ class MultiStoreStockRepositoryAdapterTest {
             .thenReturn(0L);
 
         // sortLowFirst = true — should use the low-first SQL variant
-        adapter.getStoreStockDetail(storeId, true, PageRequest.of(0, 25));
+        adapter.getStoreStockDetail(storeId, true, false, PageRequest.of(0, 25));
 
         // Verify JdbcTemplate was called (SQL choice is internal — validated by cURL E2E)
         verify(jdbc).query(anyString(), any(RowMapper.class), any());

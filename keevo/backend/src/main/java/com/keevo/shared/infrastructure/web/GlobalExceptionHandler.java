@@ -167,6 +167,7 @@ public class GlobalExceptionHandler {
                  "SALE_NOT_FOUND",
                  "INVENTORY_SESSION_NOT_FOUND",
                  "INVENTORY_STORE_NOT_FOUND",
+                 "REPORT_NOT_FOUND",
                  "NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "UNAUTHORIZED", "TOKEN_EXPIRED",
                  "TOKEN_INVALID",
@@ -182,7 +183,8 @@ public class GlobalExceptionHandler {
                  "SALE_ALREADY_EXISTS",
                  "DAY_ALREADY_CLOSED",
                  "INVENTORY_SESSION_ALREADY_ACTIVE",
-                 "INVENTORY_SESSION_NOT_IN_PROGRESS" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4 / 6.1
+                 "INVENTORY_SESSION_NOT_IN_PROGRESS",
+                 "REPORT_ALREADY_SENT" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4 / 6.1 / 7.2
             case "VALIDATION_ERROR", "INVALID_AMOUNT",
                  "INVALID_PHONE_NUMBER", "INVALID_PASSWORD",
                  "INSUFFICIENT_STOCK",

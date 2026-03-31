@@ -80,7 +80,8 @@ public class TenantSchemaSyncService {
                     java.util.Map.entry("sync_conflicts_log",     TenantSchemaProvisioner.DDL_SYNC_CONFLICTS_LOG),
                     java.util.Map.entry("sync_error_log",        TenantSchemaProvisioner.DDL_SYNC_ERROR_LOG),
                     java.util.Map.entry("inventory_sessions",    TenantSchemaProvisioner.DDL_INVENTORY_SESSIONS),
-                    java.util.Map.entry("inventory_counts",      TenantSchemaProvisioner.DDL_INVENTORY_COUNTS)
+                    java.util.Map.entry("inventory_counts",      TenantSchemaProvisioner.DDL_INVENTORY_COUNTS),
+                    java.util.Map.entry("reports",                TenantSchemaProvisioner.DDL_REPORTS)
             );
 
     /** Valid tenant schema pattern — prevents any SQL injection. */

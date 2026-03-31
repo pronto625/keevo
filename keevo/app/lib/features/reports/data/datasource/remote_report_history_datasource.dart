@@ -1,0 +1,44 @@
+import 'package:dio/dio.dart';
+
+import '../../domain/model/report_history_model.dart';
+
+/// RemoteReportHistoryDataSource — fetches reports from the backend REST API.
+/// Story 7.2 — Task 17.
+class RemoteReportHistoryDataSource {
+  final Dio _dio;
+
+  RemoteReportHistoryDataSource(this._dio);
+
+  Future<List<ReportHistoryModel>> fetchHistory({
+    required int page,
+    required int size,
+    String? type,
+  }) async {
+    final queryParams = <String, dynamic>{
+      'page': page,
+      'size': size,
+      if (type != null) 'type': type,
+    };
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/v1/reports',
+      queryParameters: queryParams,
+    );
+    final data = response.data!['data'] as Map<String, dynamic>;
+    final items = (data['items'] as List<dynamic>)
+        .map((e) => ReportHistoryModel.fromJson(e as Map<String, dynamic>))
+        .toList();
+    return items;
+  }
+
+  Future<ReportHistoryModel> fetchById(String reportId) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/v1/reports/$reportId',
+    );
+    return ReportHistoryModel.fromJson(
+        response.data!['data'] as Map<String, dynamic>);
+  }
+
+  Future<void> resend(String reportId) async {
+    await _dio.post<void>('/api/v1/reports/$reportId/resend');
+  }
+}

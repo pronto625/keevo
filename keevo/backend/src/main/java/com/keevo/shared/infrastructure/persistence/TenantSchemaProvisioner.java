@@ -560,6 +560,31 @@ public class TenantSchemaProvisioner {
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_counts_session_product_variant "
             + "ON inventory_counts(session_id, product_id, variant_id) WHERE variant_id IS NOT NULL";
 
+    // Story 7.2 — end-of-day reports
+    static final String DDL_REPORTS = """
+            CREATE TABLE IF NOT EXISTS reports (
+                id UUID PRIMARY KEY,
+                tenant_id VARCHAR(64) NOT NULL,
+                store_id UUID NOT NULL,
+                store_name VARCHAR(255),
+                report_type VARCHAR(30) NOT NULL,
+                report_date DATE NOT NULL,
+                content TEXT NOT NULL,
+                delivery_status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+                delivery_attempts INT NOT NULL DEFAULT 0,
+                last_attempt_at TIMESTAMPTZ,
+                total_revenue INT NOT NULL DEFAULT 0,
+                total_sales INT NOT NULL DEFAULT 0,
+                is_automatic BOOLEAN NOT NULL DEFAULT false,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )""";
+    static final String DDL_REPORTS_IDX_TENANT_TYPE =
+            "CREATE INDEX IF NOT EXISTS idx_reports_tenant_type ON reports (tenant_id, report_type)";
+    static final String DDL_REPORTS_IDX_DATE =
+            "CREATE INDEX IF NOT EXISTS idx_reports_date ON reports (report_date)";
+    static final String DDL_REPORTS_IDX_DELIVERY_STATUS =
+            "CREATE INDEX IF NOT EXISTS idx_reports_delivery_status ON reports (delivery_status, delivery_attempts)";
+
     // SPEC CHANGE 2026-03-06: new tenants start on 6-month PREMIUM_TRIAL (unlimited limits)
     // WHERE NOT EXISTS ensures idempotency — provision() can be called multiple times safely.
     private static final String SEED_SUBSCRIPTION = """
@@ -731,6 +756,11 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_INVENTORY_COUNTS_IDX_SESSION);
             stmt.execute(DDL_INVENTORY_COUNTS_IDX_UNIQUE_NO_VARIANT);
             stmt.execute(DDL_INVENTORY_COUNTS_IDX_UNIQUE_VARIANT);
+            // Story 7.2 — reports
+            stmt.execute(DDL_REPORTS);
+            stmt.execute(DDL_REPORTS_IDX_TENANT_TYPE);
+            stmt.execute(DDL_REPORTS_IDX_DATE);
+            stmt.execute(DDL_REPORTS_IDX_DELIVERY_STATUS);
             stmt.execute("SET search_path TO public");
         }
     }

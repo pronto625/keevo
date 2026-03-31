@@ -9,7 +9,8 @@ import java.util.UUID;
  * @param page         0-based page index
  * @param size         page size (default 25)
  * @param sortLowFirst true → low/critical stock entries first, then alphabetical
+ * @param lowOnly      true → return only products at or below their stock threshold
  *
  * Story 3.2.
  */
-public record GetStoreStockDetailQuery(UUID storeId, int page, int size, boolean sortLowFirst) {}
+public record GetStoreStockDetailQuery(UUID storeId, int page, int size, boolean sortLowFirst, boolean lowOnly) {}

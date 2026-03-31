@@ -28,6 +28,17 @@ public interface UserRepository {
     boolean existsByPhoneNumber(String phoneNumber);
 
     /**
+     * Story 7.2 — Find the OWNER user for a given tenant schema name.
+     * Used for resolving WhatsApp delivery phone number.
+     *
+     * <p>Queries public schema: user_tenant_memberships JOIN users WHERE role='OWNER'.
+     *
+     * @param schemaName tenant schema name (e.g., "kv_abc123")
+     * @return the OWNER User, or empty if not found
+     */
+    Optional<User> findOwnerByTenantSchemaName(String schemaName);
+
+    /**
      * Story 1.7 — Two-step login: load all active memberships for a user together with
      * tenant metadata (code, name, schemaName) for the login session response.
      *

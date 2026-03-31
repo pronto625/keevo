@@ -64,14 +64,15 @@ public class MultiStoreStockController {
     @GetMapping("/stores/{storeId}/products")
     public ResponseEntity<ApiResponseWrapper<Page<StoreProductStockEntryDto>>> getStoreDetail(
             @PathVariable UUID storeId,
-            @RequestParam(defaultValue = "0")    int page,
-            @RequestParam(defaultValue = "25")   int size,
-            @RequestParam(defaultValue = "true") boolean sortLowFirst) {
+            @RequestParam(defaultValue = "0")     int page,
+            @RequestParam(defaultValue = "25")    int size,
+            @RequestParam(defaultValue = "true")  boolean sortLowFirst,
+            @RequestParam(defaultValue = "false") boolean lowOnly) {
 
         if (size < 1 || size > 100) size = 25; // safety clamp
 
         Page<StoreProductStockEntryDto> result = detailUseCase
-                .execute(new GetStoreStockDetailQuery(storeId, page, size, sortLowFirst))
+                .execute(new GetStoreStockDetailQuery(storeId, page, size, sortLowFirst, lowOnly))
                 .map(StoreProductStockEntryDto::from);
 
         return ResponseEntity.ok(ApiResponseWrapper.ok(result));

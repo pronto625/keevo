@@ -267,10 +267,11 @@ class _ProductListState extends ConsumerState<_ProductList> {
       _loadError = null;
     });
     try {
+      final lowOnly = ref.read(showLowStockOnlyProvider);
       final newItems = await ref
           .read(multiStoreStockRepositoryProvider)
           .getStoreStockDetail(widget.storeId,
-              page: _page, size: _kPageSize, sortLowFirst: true);
+              page: _page, size: _kPageSize, sortLowFirst: true, lowOnly: lowOnly);
       if (!mounted) return;
       setState(() {
         _items.addAll(newItems);
