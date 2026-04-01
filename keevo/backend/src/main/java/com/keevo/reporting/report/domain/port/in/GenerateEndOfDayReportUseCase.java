@@ -3,6 +3,7 @@ package com.keevo.reporting.report.domain.port.in;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -16,7 +17,8 @@ public interface GenerateEndOfDayReportUseCase {
             UUID actorId,
             String tenantId,
             boolean isAutomatic,
-            Instant closedAt
+            Instant closedAt,
+            Instant windowStart
     ) {}
 
     EndOfDayReport generateReport(GenerateReportCommand command);

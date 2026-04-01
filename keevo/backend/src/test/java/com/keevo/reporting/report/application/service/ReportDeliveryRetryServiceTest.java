@@ -46,12 +46,16 @@ class ReportDeliveryRetryServiceTest {
         lenient().when(activeTenant.getStatus()).thenReturn(TenantStatus.ACTIVE);
         lenient().when(activeTenant.getSchemaName()).thenReturn("kv_test01");
         lenient().when(tenantRepository.findAll()).thenReturn(List.of(activeTenant));
-        lenient().when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.empty());
+        // Default: owner phone is resolved
+        com.keevo.identity.auth.domain.model.User owner = mock(com.keevo.identity.auth.domain.model.User.class);
+        lenient().when(owner.getPhoneNumber()).thenReturn("+237600000001");
+        lenient().when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.of(owner));
     }
 
     private EndOfDayReport failedReport(int attempts) {
         EndOfDayReport r = EndOfDayReport.createNew(
                 "kv_test01", UUID.randomUUID(), "Boutique Test",
+                null,
                 ReportType.DAILY, LocalDate.now(), "Contenu", 100000, 5, false);
         // Simulate previous failures
         for (int i = 0; i < attempts; i++) {

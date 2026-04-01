@@ -10,13 +10,14 @@ import java.util.UUID;
 
 /**
  * ReportResponseDto — REST DTO for a single EndOfDayReport.
- * Story 7.2 — Task 8.2.
+ * Story 7.2 — Task 8.2 | Updated: actorId for multi-vendor support.
  */
 public record ReportResponseDto(
         UUID id,
         String tenantId,
         UUID storeId,
         String storeName,
+        UUID actorId,
         ReportType reportType,
         LocalDate reportDate,
         String content,
@@ -31,6 +32,7 @@ public record ReportResponseDto(
     public static ReportResponseDto from(EndOfDayReport r) {
         return new ReportResponseDto(
                 r.getId(), r.getTenantId(), r.getStoreId(), r.getStoreName(),
+                r.getActorId(),
                 r.getReportType(), r.getReportDate(), r.getContent(),
                 r.getDeliveryStatus(), r.getDeliveryAttempts(), r.getLastAttemptAt(),
                 r.getTotalRevenue(), r.getTotalSales(), r.isAutomatic(), r.getCreatedAt()

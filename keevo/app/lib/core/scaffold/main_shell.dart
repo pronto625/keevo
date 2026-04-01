@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../di/providers.dart';
+import '../sync/auto_closure_notification_checker.dart';
 import '../sync/sync_trigger_notifier.dart';
 import '../../features/catalog/presentation/provider/product_provider.dart';
 import '../../features/pos/presentation/provider/pos_providers.dart';
@@ -17,10 +19,15 @@ import 'offline_gate_banner.dart';
 /// EMPLOYEE sees 2 onglets: Caisse / Plus (AC5 — restricted navigation)
 ///
 /// Clients & Fournisseurs are accessible from the Plus (Settings) page.
-class MainShell extends ConsumerWidget {
+class MainShell extends ConsumerStatefulWidget {
   final Widget child;
   const MainShell({required this.child, super.key});
 
+  @override
+  ConsumerState<MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends ConsumerState<MainShell> {
   /// OWNER tab routes — full navigation (5 tabs: Dashboard / Caisse / Catalogue / Rapports / Plus)
   static const _ownerRoutes = ['/dashboard', '/pos', '/products', '/reports', '/settings'];
 
@@ -35,7 +42,41 @@ class MainShell extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  void initState() {
+    super.initState();
+    // Check for unnotified auto-closures after the first frame so the
+    // ScaffoldMessenger is ready to show SnackBars.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAutoClosureNotifications();
+    });
+  }
+
+  Future<void> _checkAutoClosureNotifications() async {
+    if (!mounted) return;
+    final db = ref.read(appDatabaseProvider);
+    final prefs = ref.read(sharedPreferencesProvider);
+    final checker = AutoClosureNotificationChecker(db: db, prefs: prefs);
+    final unnotified = await checker.getUnnotified();
+    if (!mounted || unnotified.isEmpty) return;
+
+    final dateFormat = DateFormat('d MMMM yyyy', 'fr_FR');
+    final messenger = ScaffoldMessenger.of(context);
+    for (final closure in unnotified) {
+      messenger.showSnackBar(SnackBar(
+        content: Text(
+          'Clôture automatique\u202f: ${closure.storeName} — ${dateFormat.format(closure.closedAt)}',
+        ),
+        duration: const Duration(seconds: 5),
+        behavior: SnackBarBehavior.floating,
+      ));
+      // Slight delay between multiple SnackBars to avoid overlap.
+      await Future.delayed(const Duration(milliseconds: 300));
+    }
+    await checker.markNotified(unnotified.map((c) => c.id).toList());
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final location = GoRouterState.of(context).uri.toString();
     final role = ref.watch(currentUserRoleProvider);
     final isEmployee = role == 'EMPLOYEE';
@@ -127,7 +168,7 @@ class MainShell extends ConsumerWidget {
         children: [
           const SyncWarningBanner(),
           const OfflineGateBanner(),
-          Expanded(child: child),
+          Expanded(child: widget.child),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -138,3 +179,4 @@ class MainShell extends ConsumerWidget {
     );
   }
 }
+

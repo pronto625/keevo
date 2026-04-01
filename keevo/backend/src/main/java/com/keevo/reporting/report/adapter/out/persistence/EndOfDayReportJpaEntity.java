@@ -28,6 +28,9 @@ public class EndOfDayReportJpaEntity {
     @Column(name = "store_name", length = 255)
     private String storeName;
 
+    @Column(name = "actor_id", columnDefinition = "UUID")
+    private UUID actorId;  // nullable — null for auto-scheduled closures
+
     @Column(name = "report_type", nullable = false, length = 30)
     private String reportType;
 
@@ -61,6 +64,7 @@ public class EndOfDayReportJpaEntity {
     protected EndOfDayReportJpaEntity() {}
 
     public EndOfDayReportJpaEntity(UUID id, String tenantId, UUID storeId, String storeName,
+                                    UUID actorId,
                                     String reportType, LocalDate reportDate, String content,
                                     String deliveryStatus, int deliveryAttempts, Instant lastAttemptAt,
                                     int totalRevenue, int totalSales, boolean isAutomatic, Instant createdAt) {
@@ -68,6 +72,7 @@ public class EndOfDayReportJpaEntity {
         this.tenantId = tenantId;
         this.storeId = storeId;
         this.storeName = storeName;
+        this.actorId = actorId;
         this.reportType = reportType;
         this.reportDate = reportDate;
         this.content = content;
@@ -84,6 +89,7 @@ public class EndOfDayReportJpaEntity {
     public String getTenantId() { return tenantId; }
     public UUID getStoreId() { return storeId; }
     public String getStoreName() { return storeName; }
+    public UUID getActorId() { return actorId; }
     public String getReportType() { return reportType; }
     public LocalDate getReportDate() { return reportDate; }
     public String getContent() { return content; }

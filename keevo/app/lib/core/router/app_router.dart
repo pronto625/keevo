@@ -159,10 +159,13 @@ class _SplashRedirectPageState extends ConsumerState<_SplashRedirectPage> {
         );
 
         // Story 7.1 AC2: persist firstName from JWT for dashboard greeting.
+        // Always overwrite (even with null) so a previous user's name is never shown.
         final firstName = claims['firstName'] as String?;
         final prefs0 = await SharedPreferences.getInstance();
         if (firstName != null && firstName.isNotEmpty) {
           await prefs0.setString('user_first_name', firstName);
+        } else {
+          await prefs0.remove('user_first_name');
         }
       } catch (_) {}
 
@@ -386,7 +389,11 @@ final GoRouter appRouter = GoRouter(
     // ── Report history (full-screen, no nav bar) — Story 7.2 ─────────────
     GoRoute(
       path: '/reports/history',
-      builder: (_, __) => const ReportHistoryPage(),
+      builder: (_, state) {
+        final storeId = state.uri.queryParameters['storeId'];
+        final adminMode = state.uri.queryParameters['adminMode'] == 'true';
+        return ReportHistoryPage(storeId: storeId, adminMode: adminMode);
+      },
     ),
     GoRoute(
       path: '/reports/history/:reportId',
@@ -429,7 +436,11 @@ final GoRouter appRouter = GoRouter(
     // ── Sales History (Story 4.4 AC7) ────────────────────────────────────
     GoRoute(
       path: '/pos/sales-history',
-      builder: (_, __) => const SalesHistoryPage(),
+      builder: (_, state) {
+        final storeId = state.uri.queryParameters['storeId'];
+        final adminMode = state.uri.queryParameters['adminMode'] == 'true';
+        return SalesHistoryPage(storeId: storeId, adminMode: adminMode);
+      },
     ),
     GoRoute(
       path: '/pos/sales-history/:id',

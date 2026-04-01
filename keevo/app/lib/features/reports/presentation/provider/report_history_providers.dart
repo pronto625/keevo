@@ -35,17 +35,23 @@ final reportHistoryRepositoryProvider =
 
 // ── Reactive providers ───────────────────────────────────────────────────────
 
-/// Paginated report history for the current tenant.
+/// Paginated report history.
 /// [type]: optional filter — 'DAILY', 'DAILY_COMBINED', or null for all.
+/// [storeId]: optional — filter to a specific store (admin view).
+/// [actorId]: optional — filter to a specific employee's reports.
 @riverpod
 Future<List<ReportHistoryModel>> reportHistory(
   ReportHistoryRef ref, {
   int page = 0,
   int size = 20,
   String? type,
+  String? storeId,
+  String? actorId,
 }) async {
   final repo = ref.watch(reportHistoryRepositoryProvider);
-  return repo.getReportHistory(page: page, size: size, type: type);
+  return repo.getReportHistory(
+      page: page, size: size, type: type,
+      storeId: storeId, actorId: actorId);
 }
 
 /// Single report detail by ID.

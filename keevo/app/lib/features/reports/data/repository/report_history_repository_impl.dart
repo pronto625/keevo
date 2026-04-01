@@ -25,11 +25,13 @@ class ReportHistoryRepositoryImpl implements ReportHistoryRepository {
     required int page,
     required int size,
     String? type,
+    String? storeId,
+    String? actorId,
   }) async {
     try {
       final remoteList = await _remote.fetchHistory(
-          page: page, size: size, type: type);
-      // Cache fetched reports locally
+          page: page, size: size, type: type,
+          storeId: storeId, actorId: actorId);
       for (final report in remoteList) {
         await _local.upsertReport(report);
       }

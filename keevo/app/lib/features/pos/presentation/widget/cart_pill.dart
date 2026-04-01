@@ -21,7 +21,7 @@ class CartPill extends StatelessWidget {
   });
 
   static final _currencyFormat =
-      NumberFormat.currency(locale: 'fr_CM', symbol: 'FCFA', decimalDigits: 0);
+      NumberFormat.currency(locale: 'fr_FR', symbol: 'XAF', decimalDigits: 0);
 
   @override
   Widget build(BuildContext context) {

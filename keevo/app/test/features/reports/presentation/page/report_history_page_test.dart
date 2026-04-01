@@ -67,12 +67,15 @@ void main() {
     );
   }
 
-  testWidgets('shows loading indicator while fetching', (tester) async {
+  testWidgets('shows skeleton loading while fetching', (tester) async {
     final completer = Completer<List<ReportHistoryModel>>();
     await tester.pumpWidget(_buildPage(completer.future));
     await tester.pump(); // one frame before the future completes
 
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    // Skeleton replaces spinner — CircularProgressIndicator should not appear
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    // Skeleton renders a ListView with skeleton cards
+    expect(find.byType(ListView), findsWidgets);
 
     completer.complete([]);
     await tester.pumpAndSettle();
@@ -82,7 +85,8 @@ void main() {
     await tester.pumpWidget(_buildPage(Future.value([])));
     await tester.pumpAndSettle();
 
-    expect(find.text('Aucun rapport disponible'), findsOneWidget);
+    expect(find.text('Aucun rapport disponible.'), findsOneWidget);
+    expect(find.text('Les rapports apparaîtront après la première clôture journalière.'), findsOneWidget);
   });
 
   testWidgets('shows report cards when data is available', (tester) async {

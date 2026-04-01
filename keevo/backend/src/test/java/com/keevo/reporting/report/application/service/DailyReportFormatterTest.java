@@ -33,6 +33,7 @@ class DailyReportFormatterTest {
                 LocalDate.of(2026, 5, 15),
                 LocalTime.of(20, 30),
                 false,
+                false,
                 sales,
                 revenue,
                 100000,
@@ -93,6 +94,7 @@ class DailyReportFormatterTest {
     void format_whenNoSales_shouldReturnAucuneVenteMessage() {
         EndOfDayReportData empty = new EndOfDayReportData(
                 "Boutique Test", LocalDate.now(), LocalTime.NOON, true,
+                false,
                 0, 0, 0, 0, 0,
                 List.of(), List.of(), 0, 0, 0
         );
@@ -116,6 +118,7 @@ class DailyReportFormatterTest {
     void format_automaticClosure_shouldContainAutoLabel() {
         EndOfDayReportData autoData = new EndOfDayReportData(
                 "Boutique Auto", LocalDate.now(), LocalTime.MIDNIGHT, true,
+                false,
                 2, 30000, 20000, 10000, 15000,
                 List.of(), List.of(), 0, 0, 0
         );

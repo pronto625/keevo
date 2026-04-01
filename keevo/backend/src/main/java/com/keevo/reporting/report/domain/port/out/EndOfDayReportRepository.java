@@ -22,6 +22,12 @@ public interface EndOfDayReportRepository {
 
     Page<EndOfDayReport> findByTypeAndTenant(ReportType type, String tenantId, Pageable pageable);
 
+    /**
+     * Flexible filter: any combination of storeId, actorId, type. Null = no filter.
+     */
+    Page<EndOfDayReport> findFiltered(String tenantId, UUID storeId, UUID actorId,
+                                      ReportType type, Pageable pageable);
+
     List<EndOfDayReport> findPendingRetries(int maxAttempts);
 
     boolean allStoresClosedForDate(String tenantId, LocalDate date, int activeStoreCount);

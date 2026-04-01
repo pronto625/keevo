@@ -1,3 +1,5 @@
+import 'package:intl/intl.dart';
+
 /// MotivationalMessageService — Template Method pattern for daily motivational messages.
 ///
 /// Story 7.1 — AC5: personalized, daily rotation, dismissible.
@@ -49,14 +51,8 @@ class MotivationalMessageService {
         .replaceAll('{amount}', amountFormatted);
   }
 
-  /// Format amount with space thousands separator (e.g., 125 000).
+  /// Format amount with thousands separator (e.g., 125 000).
   static String _formatAmount(int amount) {
-    final str = amount.toString();
-    final buffer = StringBuffer();
-    for (int i = 0; i < str.length; i++) {
-      if (i > 0 && (str.length - i) % 3 == 0) buffer.write(' ');
-      buffer.write(str[i]);
-    }
-    return buffer.toString();
+    return NumberFormat.decimalPattern('fr_FR').format(amount);
   }
 }

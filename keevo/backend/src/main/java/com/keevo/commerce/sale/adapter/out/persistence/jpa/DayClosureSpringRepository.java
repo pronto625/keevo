@@ -6,6 +6,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -27,4 +28,10 @@ public interface DayClosureSpringRepository extends JpaRepository<DayClosureJpaE
      * Find all closures for a store on a given date.
      */
     List<DayClosureJpaEntity> findByStoreIdAndClosureDate(UUID storeId, LocalDate closureDate);
+
+    /**
+     * Find the most recent closure for a store across all dates.
+     * Spring Data derives: SELECT * FROM day_closures WHERE store_id = ? ORDER BY closed_at DESC LIMIT 1
+     */
+    Optional<DayClosureJpaEntity> findFirstByStoreIdOrderByClosedAtDesc(UUID storeId);
 }

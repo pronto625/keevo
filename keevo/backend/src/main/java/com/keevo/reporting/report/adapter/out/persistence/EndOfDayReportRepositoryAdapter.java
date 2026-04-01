@@ -12,6 +12,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * EndOfDayReportRepositoryAdapter — Adapter bridging EndOfDayReportRepository port
@@ -45,6 +46,16 @@ public class EndOfDayReportRepositoryAdapter implements EndOfDayReportRepository
     }
 
     @Override
+    public Page<EndOfDayReport> findFiltered(String tenantId, UUID storeId, UUID actorId,
+                                              ReportType type, Pageable pageable) {
+        String typeStr = type != null ? type.name() : null;
+        String storeStr = storeId != null ? storeId.toString() : null;
+        String actorStr = actorId != null ? actorId.toString() : null;
+        return springRepository.findFiltered(tenantId, storeStr, actorStr, typeStr, pageable)
+                .map(this::toDomain);
+    }
+
+    @Override
     public List<EndOfDayReport> findPendingRetries(int maxAttempts) {
         return springRepository.findPendingRetries(maxAttempts)
                 .stream()
@@ -71,6 +82,7 @@ public class EndOfDayReportRepositoryAdapter implements EndOfDayReportRepository
     private EndOfDayReportJpaEntity toEntity(EndOfDayReport r) {
         return new EndOfDayReportJpaEntity(
                 r.getId(), r.getTenantId(), r.getStoreId(), r.getStoreName(),
+                r.getActorId(),
                 r.getReportType().name(), r.getReportDate(), r.getContent(),
                 r.getDeliveryStatus().name(), r.getDeliveryAttempts(), r.getLastAttemptAt(),
                 r.getTotalRevenue(), r.getTotalSales(), r.isAutomatic(), r.getCreatedAt()
@@ -80,6 +92,7 @@ public class EndOfDayReportRepositoryAdapter implements EndOfDayReportRepository
     private EndOfDayReport toDomain(EndOfDayReportJpaEntity e) {
         return new EndOfDayReport(
                 e.getId(), e.getTenantId(), e.getStoreId(), e.getStoreName(),
+                e.getActorId(),
                 ReportType.valueOf(e.getReportType()),
                 e.getReportDate(), e.getContent(),
                 DeliveryStatus.valueOf(e.getDeliveryStatus()),

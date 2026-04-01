@@ -14,7 +14,14 @@ import java.util.UUID;
  */
 public interface GetReportHistoryUseCase {
 
-    record ReportHistoryQuery(String tenantId, ReportType type, Pageable pageable) {}
+    /**
+     * @param tenantId  required
+     * @param storeId   optional — filter to a specific store
+     * @param actorId   optional — filter to reports triggered by a specific user
+     * @param type      optional — DAILY / DAILY_COMBINED
+     * @param pageable  pagination
+     */
+    record ReportHistoryQuery(String tenantId, UUID storeId, UUID actorId, ReportType type, Pageable pageable) {}
 
     Page<EndOfDayReport> getReportHistory(ReportHistoryQuery query);
 

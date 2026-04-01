@@ -57,12 +57,13 @@ class DailyReportGeneratorTest {
                 builder, formatter, storeRepository, userRepository);
         storeId = UUID.randomUUID();
         actorId = UUID.randomUUID();
-        command = new GenerateReportCommand(storeId, actorId, "kv_test01", false, Instant.now());
+        command = new GenerateReportCommand(storeId, null, "kv_test01", false, Instant.now(), null);
     }
 
     private EndOfDayReportData sampleData() {
         return new EndOfDayReportData(
                 "Boutique Test", LocalDate.now(), LocalTime.of(20, 0), false,
+                false,
                 5, 100000, 70000, 30000, 20000,
                 List.of(), List.of(), 1, 0, 0
         );
@@ -72,7 +73,7 @@ class DailyReportGeneratorTest {
     void generateReport_shouldReturnDailyType() {
         when(storeRepository.findById(storeId)).thenReturn(Optional.of(
                 new Store(storeId, "Boutique Test", StoreType.STORE, null, null, true, Instant.now(), Instant.now())));
-        when(builder.build(any(), any(), anyString(), any(), anyBoolean())).thenReturn(sampleData());
+        when(builder.build(any(), any(), any(), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
         when(formatter.format(any())).thenReturn("Rapport WhatsApp");
         when(userRepository.findOwnerByTenantSchemaName("kv_test01")).thenReturn(Optional.empty());
 
@@ -83,13 +84,13 @@ class DailyReportGeneratorTest {
     @Test
     void generateReport_whenStoreNotFound_shouldUseFallbackName() {
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
-        when(builder.build(any(), any(), anyString(), any(), anyBoolean())).thenReturn(sampleData());
+        when(builder.build(any(), any(), any(), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
         when(formatter.format(any())).thenReturn("Rapport");
         when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.empty());
 
         // Should not throw
         generator.generateReport(command);
-        verify(builder, times(1)).build(eq(storeId), any(), anyString(), any(), eq(false));
+        verify(builder, times(1)).build(eq(storeId), any(), any(), anyString(), any(), any(), eq(false));
     }
 
     @Test
@@ -97,7 +98,7 @@ class DailyReportGeneratorTest {
         User owner = mock(User.class);
         when(owner.getPhoneNumber()).thenReturn("+243812345678");
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
-        when(builder.build(any(), any(), anyString(), any(), anyBoolean())).thenReturn(sampleData());
+        when(builder.build(any(), any(), any(), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
         when(formatter.format(any())).thenReturn("Rapport");
         when(userRepository.findOwnerByTenantSchemaName("kv_test01")).thenReturn(Optional.of(owner));
 
@@ -106,20 +107,21 @@ class DailyReportGeneratorTest {
     }
 
     @Test
-    void generateReport_whenOwnerPhoneAbsent_shouldUseFallback() {
+    void generateReport_whenOwnerPhoneAbsent_shouldMarkInAppOnly() {
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
-        when(builder.build(any(), any(), anyString(), any(), anyBoolean())).thenReturn(sampleData());
+        when(builder.build(any(), any(), any(), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
         when(formatter.format(any())).thenReturn("Rapport");
         when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.empty());
 
-        generator.generateReport(command);
-        verify(whatsAppPort, times(1)).sendReport(eq("+243000000000"), anyString());
+        EndOfDayReport report = generator.generateReport(command);
+        assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.IN_APP_ONLY);
+        verifyNoInteractions(whatsAppPort);
     }
 
     @Test
     void generateReport_shouldPersistWithTenantId() {
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
-        when(builder.build(any(), any(), anyString(), any(), anyBoolean())).thenReturn(sampleData());
+        when(builder.build(any(), any(), any(), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
         when(formatter.format(any())).thenReturn("Rapport");
         when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.empty());
 
@@ -129,10 +131,12 @@ class DailyReportGeneratorTest {
 
     @Test
     void generateReport_deliverySuccess_shouldMarkSent() {
+        User owner = mock(User.class);
+        when(owner.getPhoneNumber()).thenReturn("+243812345678");
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
-        when(builder.build(any(), any(), anyString(), any(), anyBoolean())).thenReturn(sampleData());
+        when(builder.build(any(), any(), any(), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
         when(formatter.format(any())).thenReturn("Rapport");
-        when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.empty());
+        when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.of(owner));
 
         EndOfDayReport report = generator.generateReport(command);
         assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.SENT);
@@ -140,10 +144,12 @@ class DailyReportGeneratorTest {
 
     @Test
     void generateReport_deliveryFailure_shouldMarkFailed() {
+        User owner = mock(User.class);
+        when(owner.getPhoneNumber()).thenReturn("+243812345678");
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
-        when(builder.build(any(), any(), anyString(), any(), anyBoolean())).thenReturn(sampleData());
+        when(builder.build(any(), any(), any(), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
         when(formatter.format(any())).thenReturn("Rapport");
-        when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.empty());
+        when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.of(owner));
         doThrow(new RuntimeException("net error")).when(whatsAppPort).sendReport(anyString(), anyString());
 
         EndOfDayReport report = generator.generateReport(command);

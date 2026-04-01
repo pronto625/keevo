@@ -67,6 +67,7 @@ class ReportControllerTest {
     private EndOfDayReport sampleReport() {
         return EndOfDayReport.createNew(
                 "kv_test01", UUID.randomUUID(), "Boutique Test",
+                null,
                 ReportType.DAILY, LocalDate.now(), "Contenu rapport",
                 100000, 5, false);
     }
@@ -88,18 +89,21 @@ class ReportControllerTest {
     }
 
     @Test
-    void GET_reports_returns403_forEmployee() throws Exception {
+    void GET_reports_returns200_forEmployee() throws Exception {
         authenticateAs("EMPLOYEE");
+        Page<EndOfDayReport> emptyPage = new PageImpl<>(List.of(),
+                PageRequest.of(0, 20), 0);
+        when(getReportHistoryUseCase.getReportHistory(any())).thenReturn(emptyPage);
+
         mockMvc.perform(get("/api/v1/reports"))
-                .andExpect(status().isForbidden());
-        verify(getReportHistoryUseCase, never()).getReportHistory(any());
+                .andExpect(status().isOk());
     }
 
     @Test
-    void GET_reports_returns403_whenNotAuthenticated() throws Exception {
+    void GET_reports_returns401_whenNotAuthenticated() throws Exception {
         SecurityContextHolder.clearContext();
         mockMvc.perform(get("/api/v1/reports"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     // ── GET /api/v1/reports/{id} ───────────────────────────────────────────────
@@ -126,8 +130,13 @@ class ReportControllerTest {
     }
 
     @Test
-    void GET_reportById_returns403_forEmployee() throws Exception {
+    void GET_reportById_returns403_forEmployee_whenNotOwner() throws Exception {
         authenticateAs("EMPLOYEE");
+        // Employee (ownerId principal) tries to access a report owned by someone else
+        EndOfDayReport reportForOtherEmployee = sampleReport(); // actorId = null ≠ ownerId
+        when(getReportHistoryUseCase.getReportById(any(UUID.class), any()))
+                .thenReturn(Optional.of(reportForOtherEmployee));
+
         mockMvc.perform(get("/api/v1/reports/" + UUID.randomUUID()))
                 .andExpect(status().isForbidden());
     }

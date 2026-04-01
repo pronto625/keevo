@@ -3,12 +3,16 @@ import '../model/report_history_model.dart';
 /// Domain interface for retrieving report history.
 /// Story 7.2 — Rapport End-of-Day.
 abstract class ReportHistoryRepository {
-  /// Fetch paginated list of reports for the current tenant.
-  /// [type]: optional filter ('DAILY' | 'DAILY_COMBINED'). Null = all types.
+  /// Fetch paginated list of reports.
+  /// [type]: optional filter ('DAILY' | 'DAILY_COMBINED'). Null = all.
+  /// [storeId]: optional — filter to a specific store (used in admin boutique detail).
+  /// [actorId]: optional — filter to reports triggered by a specific user.
   Future<List<ReportHistoryModel>> getReportHistory({
     required int page,
     required int size,
     String? type,
+    String? storeId,
+    String? actorId,
   });
 
   /// Fetch a single report by ID.

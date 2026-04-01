@@ -77,6 +77,7 @@ class AbstractReportGeneratorTest {
     void setUp() {
         var data = new EndOfDayReportData(
                 "Boutique Test", LocalDate.now(), LocalTime.of(20, 0), false,
+                false,
                 10, 150000, 100000, 50000, 15000,
                 List.of(new EndOfDayReportData.TopProductEntry("Produit A", 5, 50000)),
                 List.of(new EndOfDayReportData.EmployeeEntry("Alice", 7, 100000)),
@@ -84,7 +85,7 @@ class AbstractReportGeneratorTest {
         );
         generator = new TestableReportGenerator(reportRepository, whatsAppPort, multiStoreSummaryService, data);
         command = new GenerateReportCommand(
-                UUID.randomUUID(), UUID.randomUUID(), "kv_test01", false, Instant.now()
+                UUID.randomUUID(), UUID.randomUUID(), "kv_test01", false, Instant.now(), null
         );
     }
 

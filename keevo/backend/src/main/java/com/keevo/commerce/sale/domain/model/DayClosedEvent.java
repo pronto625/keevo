@@ -29,5 +29,6 @@ public record DayClosedEvent(
         DayClosureSummary summary,
         boolean isAutomatic,
         String tenantId,
-        Instant occurredAt
+        Instant occurredAt,
+        Instant windowStart
 ) {}

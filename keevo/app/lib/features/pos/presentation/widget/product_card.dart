@@ -142,7 +142,7 @@ class _ProductCardState extends State<ProductCard>
                   flex: 2,
                   child: Padding(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -155,9 +155,9 @@ class _ProductCardState extends State<ProductCard>
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.labelSmall?.copyWith(
                               color: Colors.grey.shade500,
-                              fontSize: 9,
+                              fontSize: 7,
                               fontWeight: FontWeight.w600,
-                              letterSpacing: 0.5,
+                              letterSpacing: 0.3,
                             ),
                           ),
                         // Product name
@@ -167,22 +167,23 @@ class _ProductCardState extends State<ProductCard>
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodySmall?.copyWith(
                             fontWeight: FontWeight.w600,
+                            fontSize: 10,
                             height: 1.2,
                             letterSpacing: -0.1,
                           ),
                         ),
-                        const SizedBox(height: 3),
+                        const SizedBox(height: 1),
                         // Price
                         Text(
                           _currencyFormat.format(widget.price),
                           style: theme.textTheme.bodySmall?.copyWith(
                             fontWeight: FontWeight.w800,
                             color: const Color(0xFF3B5BDB),
-                            fontSize: 13,
+                            fontSize: 11,
                             height: 1.1,
                           ),
                         ),
-                        const SizedBox(height: 5),
+                        const SizedBox(height: 2),
                         // Stock badge
                         _buildStockBadge(),
                       ],
@@ -223,7 +224,7 @@ class _ProductCardState extends State<ProductCard>
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
-            fontSize: 28,
+            fontSize: 20,
             letterSpacing: 1,
           ),
         ),
@@ -235,16 +236,16 @@ class _ProductCardState extends State<ProductCard>
     final isOutOfStock = widget.stockQuantity <= 0;
     if (isOutOfStock) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
         decoration: BoxDecoration(
           color: const Color(0xFFFA5252).withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(6),
         ),
         child: const Text(
           'Rupture',
           style: TextStyle(
             color: Color(0xFFFA5252),
-            fontSize: 10,
+            fontSize: 9,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -252,18 +253,18 @@ class _ProductCardState extends State<ProductCard>
     }
     final isLow = widget.stockQuantity <= 5;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: BoxDecoration(
         color: isLow
             ? const Color(0xFFFCC419).withValues(alpha: 0.15)
             : const Color(0xFF51CF66).withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
         '${widget.stockQuantity} en stock',
         style: TextStyle(
           color: isLow ? const Color(0xFFE67700) : const Color(0xFF2B8A3E),
-          fontSize: 10,
+          fontSize: 9,
           fontWeight: FontWeight.w600,
         ),
       ),

@@ -348,10 +348,10 @@ class _FrequentProductsSliver extends ConsumerWidget {
           sliver: SliverLayoutBuilder(
             builder: (context, constraints) {
               final crossAxisCount = constraints.crossAxisExtent < 600
-                  ? 2
+                  ? 3
                   : constraints.crossAxisExtent < 1200
-                      ? 3
-                      : 4;
+                      ? 4
+                      : 5;
               return SliverGrid(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
@@ -369,9 +369,9 @@ class _FrequentProductsSliver extends ConsumerWidget {
                 ),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: crossAxisCount,
-                  childAspectRatio: 0.75,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
+                  childAspectRatio: 0.78,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
                 ),
               );
             },
@@ -434,10 +434,10 @@ class _SearchResultsSliver extends ConsumerWidget {
           sliver: SliverLayoutBuilder(
             builder: (context, constraints) {
               final crossAxisCount = constraints.crossAxisExtent < 600
-                  ? 2
+                  ? 3
                   : constraints.crossAxisExtent < 1200
-                      ? 3
-                      : 4;
+                      ? 4
+                      : 5;
               return SliverGrid(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
@@ -455,9 +455,9 @@ class _SearchResultsSliver extends ConsumerWidget {
                 ),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: crossAxisCount,
-                  childAspectRatio: 0.75,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
+                  childAspectRatio: 0.78,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
                 ),
               );
             },

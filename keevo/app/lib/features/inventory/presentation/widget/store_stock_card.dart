@@ -141,7 +141,7 @@ class _StoreStockCardState extends ConsumerState<StoreStockCard> {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            '${NumberFormat.compact(locale: 'fr_FR').format(s.totalValueXaf)} XAF',
+                            NumberFormat.currency(locale: 'fr_FR', symbol: 'XAF', decimalDigits: 0).format(s.totalValueXaf),
                             style: theme.textTheme.titleSmall?.copyWith(
                               fontWeight: FontWeight.bold,
                               color: theme.colorScheme.primary,

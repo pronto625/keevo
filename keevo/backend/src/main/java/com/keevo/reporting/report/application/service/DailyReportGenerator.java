@@ -2,6 +2,7 @@ package com.keevo.reporting.report.application.service;
 
 import com.keevo.commerce.sale.domain.port.out.WhatsAppPort;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
+import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData;
 import com.keevo.reporting.report.domain.model.ReportType;
 import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase;
@@ -13,20 +14,20 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.UUID;
 
 /**
  * DailyReportGenerator — Concrete implementation of AbstractReportGenerator.
  * Story 7.2 — Task 6.3 (GREEN).
  *
  * <p>Overrides: collectData (via EndOfDayReportBuilder) + formatContent (via DailyReportFormatter).
- * Future WeeklyReportGenerator (story 7.3) extends the same AbstractReportGenerator.
+ * Routes to employee-scoped build + format when command.actorId() is non-null.
  */
 @Service
 public class DailyReportGenerator extends AbstractReportGenerator
         implements GenerateEndOfDayReportUseCase {
 
     private static final ZoneId WAT = ZoneId.of("Africa/Lagos");
-    private static final String DEFAULT_OWNER_PHONE = "+243000000000";
 
     private final EndOfDayReportBuilder builder;
     private final DailyReportFormatter formatter;
@@ -61,12 +62,22 @@ public class DailyReportGenerator extends AbstractReportGenerator
                 ? command.closedAt().atZone(WAT).toLocalTime()
                 : LocalTime.now(WAT);
 
-        return builder.build(command.storeId(), reportDate, storeName, closeTime, command.isAutomatic());
+        Instant windowStart = command.windowStart() != null
+                ? command.windowStart()
+                : reportDate.atStartOfDay(WAT).toInstant();
+        Instant windowEnd = command.closedAt() != null ? command.closedAt() : Instant.now();
+
+        if (command.actorId() != null) {
+            return builder.buildForEmployee(command.storeId(), command.actorId(),
+                    windowStart, windowEnd, storeName, reportDate, closeTime, command.isAutomatic());
+        }
+        return builder.build(command.storeId(), windowStart, windowEnd,
+                storeName, reportDate, closeTime, command.isAutomatic());
     }
 
     @Override
     protected String formatContent(EndOfDayReportData data) {
-        return formatter.format(data);
+        return data.isForEmployee() ? formatter.formatEmployee(data) : formatter.format(data);
     }
 
     @Override
@@ -78,6 +89,25 @@ public class DailyReportGenerator extends AbstractReportGenerator
     protected String resolveOwnerPhone(GenerateReportCommand command) {
         return userRepository.findOwnerByTenantSchemaName(command.tenantId())
                 .map(u -> u.getPhoneNumber())
-                .orElse(DEFAULT_OWNER_PHONE);
+                .orElse(null); // null → AbstractReportGenerator.deliverReport marks IN_APP_ONLY
     }
+
+    /** Employee reports are stored in DB only — not delivered via WhatsApp. */
+    @Override
+    protected void deliverReport(EndOfDayReport report, GenerateReportCommand command) {
+        if (command.actorId() != null) {
+            return;
+        }
+        super.deliverReport(report, command);
+    }
+
+    /** Multi-store summary is only triggered once (for the store report, actorId=null). */
+    @Override
+    protected void checkMultiStoreCondition(GenerateReportCommand command) {
+        if (command.actorId() == null) {
+            super.checkMultiStoreCondition(command);
+        }
+    }
+
 }
+

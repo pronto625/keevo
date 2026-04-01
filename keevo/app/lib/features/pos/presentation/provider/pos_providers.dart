@@ -129,8 +129,8 @@ final frequentProductsProvider =
     'LEFT JOIN categories c ON c.id = p.category_id '
     'WHERE p.archived = 0 AND p.status = \'ACTIVE\' '
     '$categoryClause'
-    'ORDER BY $frequentOrder ASC, '
-    '(CASE WHEN COALESCE(d.quantity, 0) > 0 THEN 0 ELSE 1 END) ASC, '
+    'ORDER BY (CASE WHEN COALESCE(d.quantity, 0) > 0 THEN 0 ELSE 1 END) ASC, '
+    '$frequentOrder ASC, '
     'p.name ASC '
     'LIMIT 12',
     variables: variables,
@@ -147,12 +147,15 @@ final frequentProductsProvider =
           ))
       .toList();
 
-  // Re-sort frequent products to respect their original frequency order.
-  if (ids.isNotEmpty) {
-    final freqFirst = results.where((p) => ids.contains(p.id)).toList()
-      ..sort((a, b) => ids.indexOf(a.id).compareTo(ids.indexOf(b.id)));
-    final rest = results.where((p) => !ids.contains(p.id)).toList();
-    return [...freqFirst, ...rest];
-  }
+  // Sort: availability first, then frequency (preference), then alphabetical.
+  results.sort((a, b) {
+    final aStock = a.stock > 0 ? 0 : 1;
+    final bStock = b.stock > 0 ? 0 : 1;
+    if (aStock != bStock) return aStock.compareTo(bStock);
+    final aFreq = ids.contains(a.id) ? ids.indexOf(a.id) : ids.length;
+    final bFreq = ids.contains(b.id) ? ids.indexOf(b.id) : ids.length;
+    if (aFreq != bFreq) return aFreq.compareTo(bFreq);
+    return a.name.compareTo(b.name);
+  });
   return results;
 });

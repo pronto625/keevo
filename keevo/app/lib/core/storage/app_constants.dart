@@ -49,3 +49,8 @@ const String kLastClosureDate = 'last_closure_date';
 // Date (YYYY-MM-DD) when auto-closure notification was last shown.
 // Ensures the snackbar is shown only once per day.
 const String kAutoClosureNotifiedDate = 'auto_closure_notified_date';
+
+// Set of closure IDs for which an auto-closure SnackBar has been shown.
+// Stored via prefs.getStringList / setStringList.
+// Capped at 200 entries to avoid unbounded growth.
+const String kAutoClosureNotifiedIds = 'auto_closure_notified_ids';

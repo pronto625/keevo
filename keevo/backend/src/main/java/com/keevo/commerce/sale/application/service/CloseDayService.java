@@ -14,7 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.UUID;
 
 /**
@@ -59,12 +58,14 @@ public class CloseDayService implements CloseDayUseCase {
                     "La journée a déjà été clôturée pour cette boutique");
         }
 
-        // Step 2: Load all sales for today
-        Instant startOfDay = today.atStartOfDay(WAT_ZONE).toInstant();
-        Instant endOfDay = today.plusDays(1).atStartOfDay(WAT_ZONE).toInstant();
+        // Step 2: Load all sales for the sliding window (prev closure → now)
+        Instant now = Instant.now();
+        Instant windowStart = dayClosureRepository.findLastClosureForStore(command.storeId())
+                .map(DayClosure::getClosedAt)
+                .orElse(today.atStartOfDay(WAT_ZONE).toInstant());
 
         var salesPage = saleRepository.findByStoreIdAndDateRange(
-                command.storeId(), startOfDay, endOfDay, PageRequest.of(0, 10000));
+                command.storeId(), windowStart, now, PageRequest.of(0, 10000));
 
         // Step 3: Build summary
         DayClosureSummary summary = new DayClosureSummaryBuilder()
@@ -72,7 +73,6 @@ public class CloseDayService implements CloseDayUseCase {
                 .build();
 
         // Step 4: Persist closure
-        Instant now = Instant.now();
         DayClosure closure = new DayClosure(
                 UUID.randomUUID(),
                 command.storeId(),
@@ -84,7 +84,7 @@ public class CloseDayService implements CloseDayUseCase {
         );
         dayClosureRepository.save(closure);
 
-        // Step 5: Publish event
+        // Step 5: Publish event with sliding window info
         DayClosedEvent event = new DayClosedEvent(
                 closure.getId(),
                 closure.getStoreId(),
@@ -92,7 +92,8 @@ public class CloseDayService implements CloseDayUseCase {
                 summary,
                 command.isAutomatic(),
                 command.tenantId(),
-                now
+                now,
+                windowStart
         );
         eventPublisher.publishEvent(event);
 

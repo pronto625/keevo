@@ -210,9 +210,12 @@ class Login extends _$Login {
         prefs.setString(kUserPhoneKey, phoneNumber);
         prefs.setBool(kPasswordChangeRequiredKey, loginResult.tokens.passwordChangeRequired);
         // Story 7.1 AC2: persist firstName from JWT for dashboard greeting.
+        // Always overwrite (even with null) so a previous user's name is never shown.
         final firstName = _extractFirstNameFromJwt(loginResult.tokens.accessToken);
         if (firstName != null && firstName.isNotEmpty) {
           prefs.setString('user_first_name', firstName);
+        } else {
+          prefs.remove('user_first_name');
         }
         // EMPLOYEE: set active store from JWT so POS/Reports use the assigned store.
         // OWNER: clear active store so "all stores" is the default.
@@ -262,9 +265,12 @@ class SelectTenant extends _$SelectTenant {
         prefs.setString(kUserRoleKey, tokens.role);
         prefs.setBool(kPasswordChangeRequiredKey, tokens.passwordChangeRequired);
         // Story 7.1 AC2: persist firstName from JWT for dashboard greeting.
+        // Always overwrite (even with null) so a previous user's name is never shown.
         final firstName = _extractFirstNameFromJwt(tokens.accessToken);
         if (firstName != null && firstName.isNotEmpty) {
           prefs.setString('user_first_name', firstName);
+        } else {
+          prefs.remove('user_first_name');
         }
         // EMPLOYEE: set active store from JWT so POS/Reports use the assigned store.
         // OWNER: clear active store so "all stores" is the default.

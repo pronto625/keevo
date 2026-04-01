@@ -44,9 +44,13 @@ final dashboardSnapshotProvider = FutureProvider<DashboardSnapshot>((ref) {
   return ref.watch(dashboardRepositoryProvider).getDashboardSnapshot();
 });
 
-/// Store overviews — can be watched independently.
-final storeOverviewsProvider = FutureProvider<List<StoreOverview>>((ref) {
-  return ref.watch(dashboardRepositoryProvider).getStoreOverviews();
+/// Store overviews — derived from the dashboard snapshot (online-first).
+/// The backend computes todayCA/yesterdayCA in WAT timezone; using the remote
+/// snapshot avoids the device timezone mismatch that the local SQLite queries
+/// would produce when the emulator/phone is on a different timezone.
+final storeOverviewsProvider = FutureProvider<List<StoreOverview>>((ref) async {
+  final snapshot = await ref.watch(dashboardSnapshotProvider.future);
+  return snapshot.storeOverviews;
 });
 
 // ── Chart period providers ──────────────────────────────────

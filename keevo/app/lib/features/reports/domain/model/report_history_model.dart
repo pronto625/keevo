@@ -14,6 +14,7 @@ class ReportHistoryModel with _$ReportHistoryModel {
     required String tenantId,
     required String storeId,
     String? storeName,
+    String? actorId,
     required String reportType,
     required DateTime reportDate,
     required String content,

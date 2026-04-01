@@ -41,8 +41,13 @@ public class ReportHistoryService implements GetReportHistoryUseCase, ResendRepo
 
     @Override
     public Page<EndOfDayReport> getReportHistory(ReportHistoryQuery query) {
-        ReportType type = query.type() != null ? query.type() : ReportType.DAILY;
-        return reportRepository.findByTypeAndTenant(type, query.tenantId(), query.pageable());
+        return reportRepository.findFiltered(
+                query.tenantId(),
+                query.storeId(),
+                query.actorId(),
+                query.type(),
+                query.pageable()
+        );
     }
 
     @Override

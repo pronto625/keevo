@@ -12,6 +12,7 @@ import '../../features/catalog/presentation/provider/product_provider.dart';
 import '../../features/catalog/presentation/provider/stock_provider.dart';
 import '../../features/contact/presentation/provider/contact_provider.dart';
 import '../../features/inventory/presentation/provider/global_stock_provider.dart';
+import '../../features/reports/presentation/provider/report_history_providers.dart';
 import '../../features/stores/presentation/provider/store_provider.dart';
 import '../di/providers.dart';
 import '../storage/app_constants.dart';
@@ -231,6 +232,7 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
     ref.invalidate(clientListNotifierProvider);
     ref.invalidate(supplierListNotifierProvider);
     ref.invalidate(storeListNotifierProvider);
+    ref.invalidate(reportHistoryProvider());
   }
 
   void _scheduleRetry() {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -763,7 +764,7 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
                                 )
                               : product.price > 0
                                   ? Text(
-                                      '${product.price.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]} ')} XAF',
+                                      NumberFormat.currency(locale: 'fr_FR', symbol: 'XAF', decimalDigits: 0).format(product.price),
                                       style: TextStyle(
                                         color: primary,
                                         fontSize: 12,

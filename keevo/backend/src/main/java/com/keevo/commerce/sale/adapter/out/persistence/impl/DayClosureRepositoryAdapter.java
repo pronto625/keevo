@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -45,6 +46,12 @@ public class DayClosureRepositoryAdapter implements DayClosureRepository {
                 .stream()
                 .map(this::toDomain)
                 .toList();
+    }
+
+    @Override
+    public Optional<DayClosure> findLastClosureForStore(UUID storeId) {
+        return springRepository.findFirstByStoreIdOrderByClosedAtDesc(storeId)
+                .map(this::toDomain);
     }
 
     // ── Mapping ───────────────────────────────────────────────────────────────

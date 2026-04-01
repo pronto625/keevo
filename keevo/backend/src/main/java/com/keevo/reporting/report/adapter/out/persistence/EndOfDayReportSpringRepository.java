@@ -6,8 +6,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import org.springframework.data.repository.query.Param;
-
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -21,6 +19,22 @@ public interface EndOfDayReportSpringRepository
 
     Page<EndOfDayReportJpaEntity> findByReportTypeAndTenantIdOrderByReportDateDesc(
             String reportType, String tenantId, Pageable pageable);
+
+    /**
+     * Flexible filtered query — null params = no filter applied.
+     */
+    @Query("SELECT r FROM EndOfDayReportJpaEntity r WHERE " +
+           "r.tenantId = :tenantId " +
+           "AND (:storeId IS NULL OR CAST(r.storeId AS string) = :storeId) " +
+           "AND (:actorId IS NULL OR CAST(r.actorId AS string) = :actorId) " +
+           "AND (:type IS NULL OR r.reportType = :type) " +
+           "ORDER BY r.reportDate DESC")
+    Page<EndOfDayReportJpaEntity> findFiltered(
+            @Param("tenantId") String tenantId,
+            @Param("storeId") String storeId,
+            @Param("actorId") String actorId,
+            @Param("type") String type,
+            Pageable pageable);
 
     @Query("SELECT r FROM EndOfDayReportJpaEntity r WHERE r.deliveryStatus = 'FAILED' AND r.deliveryAttempts < :maxAttempts")
     List<EndOfDayReportJpaEntity> findPendingRetries(@Param("maxAttempts") int maxAttempts);

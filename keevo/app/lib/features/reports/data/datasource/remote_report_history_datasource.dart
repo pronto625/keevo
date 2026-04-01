@@ -13,11 +13,15 @@ class RemoteReportHistoryDataSource {
     required int page,
     required int size,
     String? type,
+    String? storeId,
+    String? actorId,
   }) async {
     final queryParams = <String, dynamic>{
       'page': page,
       'size': size,
       if (type != null) 'type': type,
+      if (storeId != null) 'storeId': storeId,
+      if (actorId != null) 'actorId': actorId,
     };
     final response = await _dio.get<Map<String, dynamic>>(
       '/api/v1/reports',

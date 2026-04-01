@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/di/providers.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
+import '../../../team/presentation/provider/employee_provider.dart';
 import '../../domain/model/payment_mode_enum.dart';
 import '../../domain/model/sale_model.dart';
 import '../../domain/model/sales_history_filter.dart';
@@ -13,8 +14,20 @@ import '../provider/day_closure_providers.dart';
 /// SalesHistoryPage — Displays sales history filtered by date.
 ///
 /// Story 4.4 AC7 — Historique des ventes (Mes Ventes).
+/// adminMode=true: OWNER view of all store sales (from Détails Boutique).
+/// adminMode=false: EMPLOYEE sees own sales (or OWNER sees active store).
 class SalesHistoryPage extends ConsumerStatefulWidget {
-  const SalesHistoryPage({super.key});
+  /// Override active store (used when launched from store detail admin view).
+  final String? storeId;
+
+  /// When true: OWNER context, show all employees' sales + employee filter.
+  final bool adminMode;
+
+  const SalesHistoryPage({
+    super.key,
+    this.storeId,
+    this.adminMode = false,
+  });
 
   @override
   ConsumerState<SalesHistoryPage> createState() => _SalesHistoryPageState();
@@ -23,10 +36,11 @@ class SalesHistoryPage extends ConsumerStatefulWidget {
 class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
   DateFilterType _selectedFilter = DateFilterType.today;
   DateTimeRange? _customRange;
+  String? _selectedEmployeeId; // only used in adminMode
 
   final _currencyFormat = NumberFormat.currency(
     locale: 'fr_FR',
-    symbol: 'FCFA',
+    symbol: 'XAF',
     decimalDigits: 0,
   );
   final _timeFormat = DateFormat('HH:mm', 'fr_FR');
@@ -34,12 +48,13 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final storeId = ref.watch(activeStoreIdProvider) ?? 'default';
+    final activeStoreId = ref.watch(activeStoreIdProvider) ?? 'default';
+    final effectiveStoreId = widget.storeId ?? activeStoreId;
     final userIdAsync = ref.watch(currentUserIdProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Mes Ventes'),
+        title: Text(widget.adminMode ? 'Ventes de la boutique' : 'Mes Ventes'),
         backgroundColor: const Color(0xFF3B5BDB),
         foregroundColor: Colors.white,
         elevation: 0,
@@ -49,7 +64,7 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
           if (userId == null) {
             return const Center(child: Text('Utilisateur non connecté'));
           }
-          return _buildContent(storeId, userId);
+          return _buildContent(effectiveStoreId, userId);
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erreur: $e')),
@@ -59,14 +74,22 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
 
   Widget _buildContent(String storeId, String employeeId) {
     final role = ref.watch(currentUserRoleProvider);
-    // OWNER sees all store sales; EMPLOYEE sees only their own
-    final effectiveEmployeeId = role == 'OWNER' ? null : employeeId;
+    // adminMode: OWNER view of all store sales; employee filter is optional.
+    // Normal: EMPLOYEE sees own sales, OWNER sees all store sales.
+    final String? effectiveEmployeeId;
+    if (widget.adminMode) {
+      effectiveEmployeeId = _selectedEmployeeId; // can be null (all) or specific
+    } else {
+      effectiveEmployeeId = role == 'OWNER' ? null : employeeId;
+    }
     final filter = _buildFilter(storeId, effectiveEmployeeId);
     final salesAsync = ref.watch(salesHistoryProvider(filter));
 
     return Column(
       children: [
-        // Filter chips
+        // Employee filter (adminMode only)
+        if (widget.adminMode) _buildEmployeeFilter(storeId),
+        // Date filter chips
         _buildFilterBar(),
         // Sales list
         Expanded(
@@ -79,6 +102,51 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildEmployeeFilter(String storeId) {
+    final employeesAsync = ref.watch(employeeListProvider);
+    return employeesAsync.when(
+      data: (employees) {
+        final storeEmployees =
+            employees.where((e) => e.storeId == storeId).toList();
+        if (storeEmployees.isEmpty) return const SizedBox.shrink();
+        return Container(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          color: Colors.white,
+          child: Row(
+            children: [
+              const Icon(Icons.person_outline, size: 18, color: Colors.grey),
+              const SizedBox(width: 8),
+              Expanded(
+                child: DropdownButton<String?>(
+                  value: _selectedEmployeeId,
+                  isExpanded: true,
+                  underline: const SizedBox.shrink(),
+                  hint: const Text('Tous les employés',
+                      style: TextStyle(fontSize: 14)),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('Tous les employés',
+                          style: TextStyle(fontSize: 14)),
+                    ),
+                    ...storeEmployees.map((e) => DropdownMenuItem<String?>(
+                          value: e.userId,
+                          child: Text('${e.firstName} ${e.lastName}',
+                              style: const TextStyle(fontSize: 14)),
+                        )),
+                  ],
+                  onChanged: (v) => setState(() => _selectedEmployeeId = v),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
     );
   }
 

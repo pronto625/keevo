@@ -4,6 +4,7 @@ import com.keevo.commerce.sale.domain.model.DayClosure;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -34,4 +35,13 @@ public interface DayClosureRepository {
      * @return list of closures (usually 0 or 1)
      */
     List<DayClosure> findByStoreIdAndDate(UUID storeId, LocalDate date);
+
+    /**
+     * Find the most recent closure for a store (across all dates).
+     * Used to compute the sliding window start for the next closure.
+     *
+     * @param storeId store UUID
+     * @return the most recent DayClosure, or empty if none exists
+     */
+    Optional<DayClosure> findLastClosureForStore(UUID storeId);
 }

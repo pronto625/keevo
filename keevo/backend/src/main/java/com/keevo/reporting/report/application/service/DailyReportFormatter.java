@@ -88,6 +88,51 @@ public class DailyReportFormatter {
     }
 
     /**
+     * Format a personal employee report (no team section, personalized header).
+     */
+    public String formatEmployee(EndOfDayReportData data) {
+        String closureType = data.isAutomatic() ? "Auto" : "Manuel";
+        String formattedDate = data.reportDate().format(FR_DATE);
+        String formattedTime = data.closeTime().format(FR_TIME);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("📊 Votre rapport du jour — ").append(data.storeName()).append("\n");
+        sb.append("📅 ").append(formattedDate)
+          .append(" | ⏰ ").append(formattedTime)
+          .append(" (").append(closureType).append(")").append("\n\n");
+
+        if (data.totalSales() == 0) {
+            sb.append("Aucune vente enregistrée.");
+            return sb.toString();
+        }
+
+        sb.append("💰 Votre CA : ").append(formatXAF(data.totalRevenue())).append(" FCFA\n");
+        sb.append("🛍 Ventes : ").append(data.totalSales())
+          .append(" | 🧺 Panier moyen : ").append(formatXAF(data.avgBasket())).append(" FCFA\n");
+        sb.append("💵 Cash : ").append(formatXAF(data.cashAmount())).append(" FCFA")
+          .append(" | 📱 MoMo : ").append(formatXAF(data.momoAmount())).append(" FCFA\n");
+
+        List<TopProductEntry> top = data.topProducts();
+        if (!top.isEmpty()) {
+            sb.append("\n🏆 Vos top produits :\n");
+            for (int i = 0; i < top.size(); i++) {
+                TopProductEntry p = top.get(i);
+                sb.append(i + 1).append(". ")
+                  .append(p.name()).append(" — ")
+                  .append(p.qty()).append(" vendu(s) — ")
+                  .append(formatXAF(p.revenue())).append(" FCFA\n");
+            }
+        }
+
+        if (data.pendingSalesCount() > 0) {
+            sb.append("\n⏳ Ventes en attente : ").append(data.pendingSalesCount())
+              .append(" (").append(formatXAF(data.pendingSalesTotal())).append(" FCFA)");
+        }
+
+        return sb.toString();
+    }
+
+    /**
      * Format a multi-store combined summary section to append to a report or send separately.
      */
     public String formatCombinedSummary(String date, List<StoreRevenuePair> stores, int totalRevenue, int totalSales) {

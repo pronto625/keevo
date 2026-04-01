@@ -88,6 +88,7 @@ public class MultiStoreSummaryService {
 
         EndOfDayReport combined = EndOfDayReport.createNew(
                 command.tenantId(), command.storeId(), "Toutes boutiques",
+                null,  // combined report has no specific actor
                 ReportType.DAILY_COMBINED, today,
                 combinedContent, totalRevenue, totalSales, command.isAutomatic()
         );

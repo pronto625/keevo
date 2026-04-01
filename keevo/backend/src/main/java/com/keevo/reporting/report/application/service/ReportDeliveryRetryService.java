@@ -14,6 +14,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * ReportDeliveryRetryService — Polls FAILED reports and retries WhatsApp delivery.
@@ -32,8 +33,6 @@ public class ReportDeliveryRetryService {
     private final WhatsAppPort whatsAppPort;
     private final TenantRepository tenantRepository;
     private final UserRepository userRepository;
-    private static final String DEFAULT_OWNER_PHONE = "+243000000000";
-
     public ReportDeliveryRetryService(EndOfDayReportRepository reportRepository,
                                        WhatsAppPort whatsAppPort,
                                        TenantRepository tenantRepository,
@@ -66,9 +65,14 @@ public class ReportDeliveryRetryService {
         List<EndOfDayReport> pendingRetries = reportRepository.findPendingRetries(MAX_ATTEMPTS);
         if (pendingRetries.isEmpty()) return;
 
-        String ownerPhone = userRepository.findOwnerByTenantSchemaName(tenant.getSchemaName())
-                .map(u -> u.getPhoneNumber())
-                .orElse(DEFAULT_OWNER_PHONE);
+        Optional<String> ownerPhoneOpt = userRepository.findOwnerByTenantSchemaName(tenant.getSchemaName())
+                .map(u -> u.getPhoneNumber());
+        if (ownerPhoneOpt.isEmpty()) {
+            log.warn("No owner found for tenant {} — skipping retry for {} report(s)",
+                    tenant.getSchemaName(), pendingRetries.size());
+            return;
+        }
+        String ownerPhone = ownerPhoneOpt.get();
 
         for (EndOfDayReport report : pendingRetries) {
             try {

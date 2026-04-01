@@ -11,6 +11,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
@@ -63,36 +65,35 @@ class EndOfDayReportBuilderTest {
     @Test
     void build_shouldReturnCorrectStoreName() {
         stubAllQueries(5, 100000, 70000, 30000, 0, 0, 2);
-        EndOfDayReportData data = builder.build(storeId, date, "Ma Boutique",
-                LocalTime.of(20, 0), false);
+        EndOfDayReportData data = builder.build(storeId, Instant.EPOCH, Instant.now(), "Ma Boutique", date, LocalTime.of(20, 0), false);
         assertThat(data.storeName()).isEqualTo("Ma Boutique");
     }
 
     @Test
     void build_shouldReturnCorrectReportDate() {
         stubAllQueries(5, 100000, 70000, 30000, 0, 0, 2);
-        EndOfDayReportData data = builder.build(storeId, date, "Test", LocalTime.NOON, false);
+        EndOfDayReportData data = builder.build(storeId, Instant.EPOCH, Instant.now(), "Test", date, LocalTime.NOON, false);
         assertThat(data.reportDate()).isEqualTo(date);
     }
 
     @Test
     void build_shouldReturnIsAutomatic() {
         stubAllQueries(0, 0, 0, 0, 0, 0, 0);
-        EndOfDayReportData data = builder.build(storeId, date, "T", LocalTime.NOON, true);
+        EndOfDayReportData data = builder.build(storeId, Instant.EPOCH, Instant.now(), "T", date, LocalTime.NOON, true);
         assertThat(data.isAutomatic()).isTrue();
     }
 
     @Test
     void build_whenNoSales_avgBasketShouldBeZero() {
         stubAllQueries(0, 0, 0, 0, 0, 0, 0);
-        EndOfDayReportData data = builder.build(storeId, date, "T", LocalTime.NOON, false);
+        EndOfDayReportData data = builder.build(storeId, Instant.EPOCH, Instant.now(), "T", date, LocalTime.NOON, false);
         assertThat(data.avgBasket()).isZero();
     }
 
     @Test
     void build_shouldReturnLowStockCount() {
         stubAllQueries(3, 60000, 40000, 20000, 0, 0, 4);
-        EndOfDayReportData data = builder.build(storeId, date, "T", LocalTime.NOON, false);
+        EndOfDayReportData data = builder.build(storeId, Instant.EPOCH, Instant.now(), "T", date, LocalTime.NOON, false);
         assertThat(data.lowStockCount()).isEqualTo(4);
     }
 }

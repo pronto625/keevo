@@ -222,6 +222,8 @@ class RestSyncService implements SyncService {
             entities['inventorySessions'] as List<dynamic>? ?? []);
         await _upsertInventoryCounts(
             entities['inventoryCounts'] as List<dynamic>? ?? []);
+        await _upsertReports(
+            entities['reports'] as List<dynamic>? ?? []);
       });
 
       // 4. Store serverTimestamp as new lastPullTimestamp
@@ -684,6 +686,47 @@ class RestSyncService implements SyncService {
           _toLocalIso(map['cancelledAt']),
           _toLocalIso(map['completedAt']),
           _toLocalIso(map['updatedAt']),
+        ],
+      );
+    }
+  }
+
+  Future<void> _upsertReports(List<dynamic> reports) async {
+    if (reports.isEmpty) return;
+    for (final r in reports) {
+      final map = r as Map<String, dynamic>;
+      // reportDate comes as 'YYYY-MM-DD' LocalDate — parse as noon UTC to avoid
+      // timezone-shift artefacts when Drift stores as local ISO-8601.
+      final reportDateStr = map['reportDate'] as String?;
+      final reportDate = reportDateStr != null
+          ? DateTime.parse('${reportDateStr}T12:00:00').toLocal().toIso8601String()
+          : null;
+      await _database.customStatement(
+        'INSERT INTO reports '
+        '(id, tenant_id, store_id, store_name, report_type, report_date, '
+        'content, delivery_status, delivery_attempts, last_attempt_at, '
+        'total_revenue, total_sales, is_automatic, created_at) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) '
+        'ON CONFLICT(id) DO UPDATE SET '
+        'delivery_status = excluded.delivery_status, '
+        'delivery_attempts = excluded.delivery_attempts, '
+        'last_attempt_at = excluded.last_attempt_at, '
+        'store_name = excluded.store_name',
+        [
+          map['id'],
+          map['tenantId'],
+          map['storeId'],
+          map['storeName'],
+          map['reportType'],
+          reportDate,
+          map['content'],
+          map['deliveryStatus'],
+          map['deliveryAttempts'] ?? 0,
+          _toLocalIso(map['lastAttemptAt']),
+          map['totalRevenue'] ?? 0,
+          map['totalSales'] ?? 0,
+          ((map['isAutomatic'] ?? map['automatic']) == true ? 1 : 0),
+          _toLocalIso(map['createdAt']),
         ],
       );
     }

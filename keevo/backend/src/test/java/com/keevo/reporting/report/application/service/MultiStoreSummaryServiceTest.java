@@ -45,11 +45,12 @@ class MultiStoreSummaryServiceTest {
         service = new MultiStoreSummaryService(reportRepository, storeRepository,
                 whatsAppPort, formatter, userRepository);
         command = new GenerateReportCommand(UUID.randomUUID(), UUID.randomUUID(),
-                "kv_test01", false, Instant.now());
+                "kv_test01", false, Instant.now(), null);
     }
 
     private EndOfDayReport stubReport(UUID storeId, String name, int revenue, int sales) {
         return EndOfDayReport.createNew("kv_test01", storeId, name,
+                null,
                 ReportType.DAILY, LocalDate.now(), "Contenu", revenue, sales, false);
     }
 

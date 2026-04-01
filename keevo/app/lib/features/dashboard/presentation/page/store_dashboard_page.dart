@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../domain/model/dashboard_snapshot.dart';
@@ -172,6 +173,25 @@ class _StoreDetail extends ConsumerWidget {
         ),
 
         const SizedBox(height: 24),
+
+        // ── Admin sections: Rapports & Ventes de la boutique ─────────────
+        _AdminSectionButton(
+          icon: Icons.assessment_outlined,
+          label: 'Rapports de la boutique',
+          subtitle: 'Voir tous les rapports journaliers',
+          onTap: () => context.push(
+              '/reports/history?storeId=$storeId&adminMode=true'),
+        ),
+        const SizedBox(height: 12),
+        _AdminSectionButton(
+          icon: Icons.receipt_long_outlined,
+          label: 'Ventes de la boutique',
+          subtitle: 'Voir toutes les ventes et filtrer par employé',
+          onTap: () => context.push(
+              '/pos/sales-history?storeId=$storeId&adminMode=true'),
+        ),
+
+        const SizedBox(height: 24),
       ],
     );
   }
@@ -238,6 +258,70 @@ class _LowStockSection extends StatelessWidget {
               ),
             )),
       ],
+    );
+  }
+}
+
+/// Admin section action button in store detail.
+class _AdminSectionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _AdminSectionButton({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3B5BDB).withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon,
+                    color: const Color(0xFF3B5BDB), size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text(subtitle,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: Colors.grey.shade500)),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: Colors.grey.shade400),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

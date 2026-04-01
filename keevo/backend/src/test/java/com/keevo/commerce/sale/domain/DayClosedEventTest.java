@@ -47,7 +47,8 @@ class DayClosedEventTest {
                 summary,
                 false,      // isAutomatic
                 tenantId,
-                occurredAt
+                occurredAt,
+                Instant.EPOCH
         );
 
         // Then
@@ -71,7 +72,8 @@ class DayClosedEventTest {
                 summary,
                 false,      // manual closure
                 "kv_test",
-                Instant.now()
+                Instant.now(),
+                Instant.EPOCH
         );
 
         // Then
@@ -89,7 +91,8 @@ class DayClosedEventTest {
                 summary,
                 true,       // automatic closure
                 "kv_test",
-                Instant.now()
+                Instant.now(),
+                Instant.EPOCH
         );
 
         // Then
@@ -118,7 +121,8 @@ class DayClosedEventTest {
                 summary,
                 false,
                 "kv_test",
-                Instant.now()
+                Instant.now(),
+                Instant.EPOCH
         );
 
         // Then - summary contains pending sales info for WhatsApp report
@@ -136,8 +140,9 @@ class DayClosedEventTest {
         Instant occurredAt = Instant.parse("2026-03-19T18:00:00Z");
         var summary = new DayClosureSummary(5, 50000, null, null, 0, 50000, 0, 0, 0);
 
-        var event1 = new DayClosedEvent(closureId, storeId, actorId, summary, false, tenantId, occurredAt);
-        var event2 = new DayClosedEvent(closureId, storeId, actorId, summary, false, tenantId, occurredAt);
+        Instant windowStart = Instant.EPOCH;
+        var event1 = new DayClosedEvent(closureId, storeId, actorId, summary, false, tenantId, occurredAt, windowStart);
+        var event2 = new DayClosedEvent(closureId, storeId, actorId, summary, false, tenantId, occurredAt, windowStart);
 
         // Then
         assertThat(event1).isEqualTo(event2);

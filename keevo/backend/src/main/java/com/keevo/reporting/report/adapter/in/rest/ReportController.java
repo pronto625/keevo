@@ -17,6 +17,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,11 +31,13 @@ import java.util.UUID;
 
 /**
  * ReportController — REST adapter for end-of-day report history.
- * Story 7.2 — Task 8.1.
+ * Story 7.2 — Task 8.1 | Updated: multi-vendor support (Option A).
  *
  * <pre>
- * GET  /api/v1/reports           → paginated history (OWNER only)
- * GET  /api/v1/reports/{id}      → single report detail (OWNER only)
+ * GET  /api/v1/reports           → paginated history
+ *   OWNER: all reports (or filter by storeId / actorId)
+ *   EMPLOYEE: only their actorId reports (actorId param ignored, forced to JWT actorId)
+ * GET  /api/v1/reports/{id}      → single report detail
  * POST /api/v1/reports/{id}/resend → re-trigger WhatsApp delivery (OWNER only)
  * </pre>
  */
@@ -51,17 +55,32 @@ public class ReportController {
         this.resendReportUseCase = resendReportUseCase;
     }
 
-    @Operation(summary = "Get paginated report history for the current tenant")
+    @Operation(summary = "Get paginated report history. OWNER: all or filtered. EMPLOYEE: own only.")
     @GetMapping
     public ResponseEntity<ApiResponseWrapper<ReportListResponseDto>> getHistory(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) String type) {
-        requireOwnerOrForbid();
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) UUID storeId,
+            @RequestParam(required = false) UUID actorId) {
+
+        Authentication auth = requireAuthentication();
+        String role = roleFromAuth(auth);
         String tenantId = TenantContext.getCurrentTenant();
+
         ReportType reportType = type != null ? ReportType.valueOf(type.toUpperCase()) : null;
+
+        UUID effectiveActorId;
+        if ("OWNER".equals(role)) {
+            // OWNER: can optionally filter by actorId or storeId
+            effectiveActorId = actorId;
+        } else {
+            // EMPLOYEE: always forced to their own actorId
+            effectiveActorId = principalId(auth);
+        }
+
         var pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "reportDate"));
-        var query = new ReportHistoryQuery(tenantId, reportType, pageable);
+        var query = new ReportHistoryQuery(tenantId, storeId, effectiveActorId, reportType, pageable);
         var result = getReportHistoryUseCase.getReportHistory(query);
         return ResponseEntity.ok(ApiResponseWrapper.ok(ReportListResponseDto.from(result)));
     }
@@ -70,10 +89,19 @@ public class ReportController {
     @GetMapping("/{reportId}")
     public ResponseEntity<ApiResponseWrapper<ReportResponseDto>> getById(
             @PathVariable UUID reportId) {
-        requireOwnerOrForbid();
+        Authentication auth = requireAuthentication();
+        String role = roleFromAuth(auth);
         String tenantId = TenantContext.getCurrentTenant();
         EndOfDayReport report = getReportHistoryUseCase.getReportById(reportId, tenantId)
                 .orElseThrow(() -> new DomainException(ErrorCode.NOT_FOUND, "Report not found"));
+
+        // EMPLOYEE can only see their own reports
+        if (!"OWNER".equals(role)) {
+            UUID userId = principalId(auth);
+            if (!userId.equals(report.getActorId())) {
+                throw new DomainException(ErrorCode.FORBIDDEN, "Access denied");
+            }
+        }
         return ResponseEntity.ok(ApiResponseWrapper.ok(ReportResponseDto.from(report)));
     }
 
@@ -84,6 +112,33 @@ public class ReportController {
         String tenantId = TenantContext.getCurrentTenant();
         resendReportUseCase.resendReport(new ResendReportCommand(reportId, tenantId));
         return ResponseEntity.ok(ApiResponseWrapper.ok(null));
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
+
+    private Authentication requireAuthentication() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            throw new DomainException(ErrorCode.UNAUTHORIZED, "Authentication required");
+        }
+        return auth;
+    }
+
+    private String roleFromAuth(Authentication auth) {
+        return auth.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .filter(a -> a.startsWith("ROLE_"))
+                .findFirst()
+                .map(a -> a.substring(5))
+                .orElse("EMPLOYEE");
+    }
+
+    private UUID principalId(Authentication auth) {
+        try {
+            return UUID.fromString(auth.getName());
+        } catch (Exception e) {
+            throw new DomainException(ErrorCode.UNAUTHORIZED, "Invalid principal identity");
+        }
     }
 
     private void requireOwnerOrForbid() {

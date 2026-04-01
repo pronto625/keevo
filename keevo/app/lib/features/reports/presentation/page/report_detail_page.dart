@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/di/providers.dart';
 import '../provider/report_history_providers.dart';
 import '../../domain/model/report_history_model.dart';
 
@@ -52,6 +53,8 @@ class _DetailScaffold extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final resendState = ref.watch(resendReportNotifierProvider);
+    final role = ref.watch(currentUserRoleProvider);
+    final isOwner = role == 'OWNER';
     final dateFormat = DateFormat("EEEE d MMMM yyyy", 'fr_FR');
     final timeFormat = DateFormat("HH:mm", 'fr_FR');
 
@@ -176,43 +179,45 @@ class _DetailScaffold extends ConsumerWidget {
             ),
             const SizedBox(height: 24),
 
-            // ── Resend button ────────────────────────────────────────────
-            if (resendState is AsyncError)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Text(
-                  'Erreur: ${resendState.error}',
-                  style: const TextStyle(color: Colors.red, fontSize: 13),
+            // ── Resend button (OWNER only) ────────────────────────────────
+            if (isOwner) ...[
+              if (resendState is AsyncError)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    'Erreur: ${resendState.error}',
+                    style: const TextStyle(color: Colors.red, fontSize: 13),
+                  ),
                 ),
-              ),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: (report.isDelivered ||
-                        resendState is AsyncLoading)
-                    ? null
-                    : () => ref
-                        .read(resendReportNotifierProvider.notifier)
-                        .resend(reportId),
-                icon: resendState is AsyncLoading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.send_outlined),
-                label: const Text('Renvoyer via WhatsApp'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: (report.isDelivered ||
+                          resendState is AsyncLoading)
+                      ? null
+                      : () => ref
+                          .read(resendReportNotifierProvider.notifier)
+                          .resend(reportId),
+                  icon: resendState is AsyncLoading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.send_outlined),
+                  label: const Text('Renvoyer via WhatsApp'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
             const SizedBox(height: 32),
           ],
         ),
@@ -221,7 +226,7 @@ class _DetailScaffold extends ConsumerWidget {
   }
 
   String _formatCurrency(int xaf) {
-    return NumberFormat.currency(locale: 'fr_FR', symbol: 'FCFA', decimalDigits: 0)
+    return NumberFormat.currency(locale: 'fr_FR', symbol: 'XAF', decimalDigits: 0)
         .format(xaf);
   }
 }

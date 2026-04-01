@@ -82,11 +82,14 @@ public class SaleHistoryController {
         UUID actorId = UUID.fromString(claims.getSubject());
         String role = jwtTokenProvider.extractRole(claims);
 
+        // Security: EMPLOYEE can only see their own sales
+        UUID effectiveEmployeeId = "EMPLOYEE".equals(role) ? actorId : employeeId;
+
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "occurredAt"));
 
         SalesHistoryQuery query = new SalesHistoryQuery(
                 storeId,
-                employeeId,
+                effectiveEmployeeId,
                 fromInstant,
                 toInstant,
                 role,

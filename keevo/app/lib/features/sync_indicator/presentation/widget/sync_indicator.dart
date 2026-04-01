@@ -87,11 +87,18 @@ class SyncIndicator extends ConsumerWidget {
       onTap: () => _showSyncBottomSheet(context, ref, asyncStatus.valueOrNull),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: asyncStatus.when(
-          data: (status) => _buildIndicator(status, days),
-          loading: () => _buildIndicator(SyncStatus.syncing, 0),
-          error: (_, __) => _buildIndicator(SyncStatus.offlineCritical, 0),
-        ),
+        child: Builder(builder: (context) {
+          final triggerState = ref.watch(syncTriggerNotifierProvider);
+          final isSyncing = triggerState is SyncTriggerSyncing;
+          if (isSyncing) {
+            return _buildIndicator(SyncStatus.syncing, 0);
+          }
+          return asyncStatus.when(
+            data: (status) => _buildIndicator(status, days),
+            loading: () => _buildIndicator(SyncStatus.online, 0),
+            error: (_, __) => _buildIndicator(SyncStatus.offlineCritical, 0),
+          );
+        }),
       ),
     );
   }

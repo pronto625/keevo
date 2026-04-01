@@ -8,6 +8,7 @@ import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase;
 import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * AbstractReportGenerator — GoF Template Method pattern.
@@ -35,7 +36,10 @@ public abstract class AbstractReportGenerator {
     /**
      * Template Method — defines the algorithm skeleton.
      * Final: subclasses cannot change the order of steps.
+     * @Transactional ensures PENDING report is persisted before delivery;
+     * on crash mid-delivery the PENDING status can be retried.
      */
+    @Transactional
     public final EndOfDayReport generateReport(GenerateEndOfDayReportUseCase.GenerateReportCommand command) {
         // Step 1: Collect data (subclass-specific)
         EndOfDayReportData data = collectData(command);
@@ -69,6 +73,7 @@ public abstract class AbstractReportGenerator {
                                            EndOfDayReportData data, String content) {
         EndOfDayReport report = EndOfDayReport.createNew(
                 command.tenantId(), command.storeId(), data.storeName(),
+                command.actorId(),
                 getReportType(), data.reportDate(), content,
                 data.totalRevenue(), data.totalSales(), command.isAutomatic()
         );
@@ -80,6 +85,13 @@ public abstract class AbstractReportGenerator {
     protected void deliverReport(EndOfDayReport report,
                                  GenerateEndOfDayReportUseCase.GenerateReportCommand command) {
         String ownerPhone = resolveOwnerPhone(command);
+        if (ownerPhone == null) {
+            log.warn("Owner phone not resolved for tenantId={} — report {} marked IN_APP_ONLY",
+                    command.tenantId(), report.getId());
+            report.markInAppOnly();
+            reportRepository.save(report);
+            return;
+        }
         try {
             whatsAppPort.sendReport(ownerPhone, report.getContent());
             report.markSent();

@@ -9,12 +9,15 @@ import java.util.List;
  * Story 7.2 — Rapport End-of-Day
  *
  * <p>Assembled by EndOfDayReportBuilder from multiple SQL queries.
+ * isForEmployee=true → personal report for one employee (no team section).
+ * isForEmployee=false → store-level report visible to owner.
  */
 public record EndOfDayReportData(
         String storeName,
         LocalDate reportDate,
         LocalTime closeTime,
         boolean isAutomatic,
+        boolean isForEmployee,
         int totalSales,
         int totalRevenue,
         int cashAmount,
