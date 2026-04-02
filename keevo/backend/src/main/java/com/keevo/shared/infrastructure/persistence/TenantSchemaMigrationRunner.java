@@ -91,6 +91,21 @@ public class TenantSchemaMigrationRunner implements ApplicationRunner {
             // Migration M1: add IN_TRANSIT to status CHECK constraint
             stmt.execute(TenantSchemaProvisioner.DDL_STOCK_TRANSFERS_MIGRATE_IN_TRANSIT);
 
+            // Migration M2 (Story 7.2): ensure reports table exists, then add actor_id
+            stmt.execute(TenantSchemaProvisioner.DDL_REPORTS);           // CREATE TABLE IF NOT EXISTS
+            stmt.execute(TenantSchemaProvisioner.DDL_REPORTS_MIGRATE_ACTOR_ID); // ADD COLUMN IF NOT EXISTS
+
+            // Migration M3 (Story 7.5): add report-preference columns to tenant_preferences
+            stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_EOD_ENABLED);
+            stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_EOD_CHANNEL);
+            stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_WEEKLY_ENABLED);
+            stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_WEEKLY_DAY);
+            stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_WEEKLY_TIME);
+            stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_WEEKLY_CHANNEL);
+            stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_INVENTORY_ENABLED);
+            stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_INVENTORY_CHANNEL);
+            stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_STOCK_CHANNEL);
+
             stmt.execute("SET search_path TO public");
         }
     }

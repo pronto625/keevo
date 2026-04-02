@@ -253,14 +253,14 @@ class SettingsPage extends ConsumerWidget {
                       badge: 'Bientôt',
                     ),
                     const _Divider(),
+                    if (isOwner)
                     _SettingsTile(
                       icon: Icons.bar_chart_rounded,
                       iconColor: AppTheme.success,
                       iconBg: const Color(0xFFE8F5E9),
-                      title: 'Rapports',
-                      subtitle: 'Types de rapports activés',
-                      onTap: () {},
-                      badge: 'Bientôt',
+                      title: 'Rapports & WhatsApp',
+                      subtitle: 'Configurer les rapports automatiques',
+                      onTap: () => context.push('/settings/reports'),
                     ),
                   ],
                 ),

@@ -15,8 +15,28 @@ class TenantPreferencesRepositoryImpl implements TenantPreferencesRepository {
       final data = response['data'] as Map<String, dynamic>;
       return TenantPreferencesModel.fromJson(data);
     } catch (e) {
-      // Si l'API échoue (pas d'onboarding terminé, etc.), retourner null
       return null;
+    }
+  }
+
+  @override
+  Future<TenantPreferencesModel> updateReportPreferences(
+      Map<String, dynamic> payload) async {
+    final response = await _apiService.put(
+        '/api/v1/tenant/report-preferences', payload);
+    final data = response['data'] as Map<String, dynamic>;
+    return TenantPreferencesModel.fromJson(data);
+  }
+
+  @override
+  Future<bool> sendTestReport() async {
+    try {
+      final response =
+          await _apiService.post('/api/v1/tenant/report-test', data: {});
+      final data = response['data'] as Map<String, dynamic>? ?? {};
+      return data['testSent'] as bool? ?? false;
+    } catch (_) {
+      return false;
     }
   }
 }

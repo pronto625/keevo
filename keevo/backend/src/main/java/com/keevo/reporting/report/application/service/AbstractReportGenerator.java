@@ -1,6 +1,7 @@
 package com.keevo.reporting.report.application.service;
 
 import com.keevo.commerce.sale.domain.port.out.WhatsAppPort;
+import com.keevo.identity.onboarding.domain.model.ReportChannel;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData;
 import com.keevo.reporting.report.domain.model.ReportType;
@@ -84,6 +85,15 @@ public abstract class AbstractReportGenerator {
 
     protected void deliverReport(EndOfDayReport report,
                                  GenerateEndOfDayReportUseCase.GenerateReportCommand command) {
+        // Story 7.5 — honour per-tenant delivery channel
+        ReportChannel channel = command.deliveryChannel();
+        if (channel == ReportChannel.IN_APP_ONLY) {
+            report.markInAppOnly();
+            reportRepository.save(report);
+            log.info("Report marked IN_APP_ONLY per tenant preference: reportId={}", report.getId());
+            return;
+        }
+
         String ownerPhone = resolveOwnerPhone(command);
         if (ownerPhone == null) {
             log.warn("Owner phone not resolved for tenantId={} — report {} marked IN_APP_ONLY",

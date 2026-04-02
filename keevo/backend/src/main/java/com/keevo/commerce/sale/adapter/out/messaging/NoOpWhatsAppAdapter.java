@@ -18,6 +18,9 @@ public class NoOpWhatsAppAdapter implements WhatsAppPort {
     private static final Logger log = LoggerFactory.getLogger(NoOpWhatsAppAdapter.class);
 
     @Override
+    public boolean isConfigured() { return false; }
+
+    @Override
     public void sendReport(String phoneNumber, String message) {
         log.info("[WhatsApp Stub] Would send to {}: \n{}", phoneNumber, message);
     }

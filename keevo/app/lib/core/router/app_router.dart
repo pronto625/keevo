@@ -43,6 +43,7 @@ import '../../features/reports/domain/model/report_history_model.dart';
 import '../../features/profitability/presentation/page/product_profitability_detail_page.dart';
 import '../../features/settings/presentation/page/settings_page.dart';
 import '../../features/settings/presentation/page/subscription_page.dart';
+import '../../features/settings/presentation/page/report_preferences_page.dart';
 import '../../features/sync_indicator/presentation/page/sync_conflict_log_page.dart';
 import '../../features/sync_indicator/presentation/page/sync_settings_page.dart';
 import '../../features/stores/presentation/page/stores_list_page.dart';
@@ -240,6 +241,7 @@ const _ownerOnlyPrefixes = [
   '/audit',
   '/reports/rentabilite',
   '/reports/boutiques',
+  '/settings/reports',
 ];
 
 /// Application router — all feature routes registered here.
@@ -569,6 +571,11 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/settings/sync',
       builder: (_, __) => const SyncSettingsPage(),
+    ),
+    // ── Settings > Report Preferences (Story 7.5 — OWNER only) ───────────
+    GoRoute(
+      path: '/settings/reports',
+      builder: (_, __) => const ReportPreferencesPage(),
     ),
     // ── Audit trail (OWNER only — full-screen, no nav bar) ────────────────
     GoRoute(

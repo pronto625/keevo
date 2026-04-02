@@ -10,6 +10,12 @@ package com.keevo.commerce.sale.domain.port.out;
 public interface WhatsAppPort {
 
     /**
+     * Returns true if a real WhatsApp integration is configured.
+     * The NoOp stub returns false.
+     */
+    default boolean isConfigured() { return true; }
+
+    /**
      * Send a report message to the given phone number.
      *
      * @param phoneNumber Recipient phone (E.164 format, e.g., +243...)

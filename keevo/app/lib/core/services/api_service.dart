@@ -9,6 +9,7 @@ import 'package:dio/dio.dart';
 abstract class ApiService {
   Future<Map<String, dynamic>> get(String path);
   Future<Map<String, dynamic>> post(String path, {Map<String, dynamic>? data});
+  Future<Map<String, dynamic>> put(String path, Map<String, dynamic> data);
   Future<Map<String, dynamic>> patch(String path, {Map<String, dynamic>? data});
   Future<Map<String, dynamic>> delete(String path);
 }
@@ -80,6 +81,16 @@ class DioApiService extends ApiService {
   }
 
   @override
+  Future<Map<String, dynamic>> put(String path, Map<String, dynamic> data) async {
+    try {
+      final response = await dio.put<Map<String, dynamic>>(path, data: data);
+      return response.data ?? {};
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  @override
   Future<Map<String, dynamic>> patch(String path, {Map<String, dynamic>? data}) async {
     try {
       final response = await dio.patch<Map<String, dynamic>>(path, data: data);
@@ -112,6 +123,11 @@ class StubApiService implements ApiService {
 
   @override
   Future<Map<String, dynamic>> post(String path, {Map<String, dynamic>? data}) async {
+    return {};
+  }
+
+  @override
+  Future<Map<String, dynamic>> put(String path, Map<String, dynamic> data) async {
     return {};
   }
 

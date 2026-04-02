@@ -2,6 +2,9 @@ package com.keevo.reporting.report.application.service;
 
 import com.keevo.commerce.sale.domain.model.DayClosedEvent;
 import com.keevo.commerce.sale.domain.model.DayClosureSummary;
+import com.keevo.identity.onboarding.domain.model.ReportChannel;
+import com.keevo.identity.onboarding.domain.model.TenantPreferences;
+import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
 import com.keevo.reporting.report.application.service.EndOfDayReportBuilder;
 import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase;
 import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase.GenerateReportCommand;
@@ -32,6 +35,7 @@ class EndOfDayReportListenerTest {
 
     @Mock private GenerateEndOfDayReportUseCase generateReportUseCase;
     @Mock private EndOfDayReportBuilder builder;
+    @Mock private TenantPreferencesRepository tenantPreferencesRepository;
 
     private EndOfDayReportListener listener;
     private UUID storeId;
@@ -40,7 +44,10 @@ class EndOfDayReportListenerTest {
 
     @BeforeEach
     void setUp() {
-        listener = new EndOfDayReportListener(generateReportUseCase, builder);
+        listener = new EndOfDayReportListener(generateReportUseCase, builder, tenantPreferencesRepository);
+        // Default: EOD report is enabled with WHATSAPP channel
+        when(tenantPreferencesRepository.findByCurrentTenant())
+                .thenReturn(java.util.Optional.of(enabledPrefs()));
         // Default: no employees have sales in the window
         when(builder.getDistinctEmployeeIds(any(), any(), any())).thenReturn(List.of());
         storeId = UUID.randomUUID();
@@ -89,5 +96,9 @@ class EndOfDayReportListenerTest {
         doThrow(new RuntimeException("DB error")).when(generateReportUseCase).generateReport(any());
         // Must not throw — listener handles errors internally
         listener.onDayClosed(buildEvent(false));
+    }
+
+    private TenantPreferences enabledPrefs() {
+        return TenantPreferences.withDefaults(UUID.randomUUID(), null, "20:00:00", true, Instant.now());
     }
 }

@@ -239,6 +239,16 @@ public class TenantSchemaSyncService {
             stmt.execute(TenantSchemaProvisioner.DDL_INVENTORY_COUNTS_IDX_SESSION);
             stmt.execute(TenantSchemaProvisioner.DDL_INVENTORY_COUNTS_IDX_UNIQUE_NO_VARIANT);
             stmt.execute(TenantSchemaProvisioner.DDL_INVENTORY_COUNTS_IDX_UNIQUE_VARIANT);
+            // Story 7.5 — tenant_preferences report config columns
+            stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_EOD_ENABLED);
+            stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_EOD_CHANNEL);
+            stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_WEEKLY_ENABLED);
+            stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_WEEKLY_DAY);
+            stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_WEEKLY_TIME);
+            stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_WEEKLY_CHANNEL);
+            stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_INVENTORY_ENABLED);
+            stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_INVENTORY_CHANNEL);
+            stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_STOCK_CHANNEL);
             stmt.execute("SET search_path TO public");
         }
     }

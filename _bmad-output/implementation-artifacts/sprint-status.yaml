@@ -148,7 +148,7 @@ development_status:
   7-2-rapport-end-of-day-generation-envoi-whatsapp: done   # 2025-06-21 — backend hex (1198 tests GREEN) + Flutter Drift v22/Riverpod (39 tests GREEN) | Code review 6 fixes (H2 PII, H3 ISP, M1 auth 401, M2 skeleton, M3 OWNER-only, M4 empty state) + 3 LOW fixes (L1 @Transactional, L2 window boundary <=, L3 null-safe) + Task 22 (pull sync + invalidation) + Task 23 (auto-closure notification) | Pre-existing unrelated failure: MultiStoreStockRepositoryContractTest (catalog/stock)
   7-3-rapport-hebdomadaire-automatique: backlog
   7-4-dashboard-rentabilite-analyse-par-produit-boutique: review
-  7-5-configuration-des-rapports-preferences-whatsapp: backlog
+  7-5-configuration-des-rapports-preferences-whatsapp: done
   epic-7-retrospective: optional
 
   # ─────────────────────────────────────────────────────────

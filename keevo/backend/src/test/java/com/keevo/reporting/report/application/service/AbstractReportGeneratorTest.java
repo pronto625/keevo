@@ -1,6 +1,7 @@
 package com.keevo.reporting.report.application.service;
 
 import com.keevo.commerce.sale.domain.port.out.WhatsAppPort;
+import com.keevo.identity.onboarding.domain.model.ReportChannel;
 import com.keevo.reporting.report.domain.model.DeliveryStatus;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData;
@@ -145,5 +146,52 @@ class AbstractReportGeneratorTest {
                 .when(multiStoreSummaryService).checkAndGenerateCombinedSummary(any());
         // Should not throw
         generator.generateReport(command);
+    }
+
+    // ── Story 7.5: Channel strategy tests ────────────────────────────────────
+
+    @Test
+    void deliverReport_withInAppOnlyChannel_doesNotCallWhatsApp() {
+        // Given — command with IN_APP_ONLY delivery channel
+        GenerateReportCommand inAppCommand = new GenerateReportCommand(
+                UUID.randomUUID(), UUID.randomUUID(), "kv_test01", false, Instant.now(), null,
+                ReportChannel.IN_APP_ONLY
+        );
+
+        // When
+        generator.generateReport(inAppCommand);
+
+        // Then — WhatsApp MUST NOT be called
+        verify(whatsAppPort, never()).sendReport(anyString(), anyString());
+        verify(reportRepository, atLeast(1)).save(any(EndOfDayReport.class));
+    }
+
+    @Test
+    void deliverReport_withWhatsAppChannel_callsPort() {
+        // Given — command with explicit WHATSAPP channel
+        GenerateReportCommand whatsAppCommand = new GenerateReportCommand(
+                UUID.randomUUID(), UUID.randomUUID(), "kv_test01", false, Instant.now(), null,
+                ReportChannel.WHATSAPP
+        );
+
+        // When
+        generator.generateReport(whatsAppCommand);
+
+        // Then — WhatsApp MUST be called exactly once
+        verify(whatsAppPort, times(1)).sendReport(eq("+243999000000"), anyString());
+    }
+
+    @Test
+    void deliverReport_withNullChannel_defaultsToWhatsApp() {
+        // Given — command with null channel (backward compat — 6-arg constructor)
+        GenerateReportCommand nullChannelCommand = new GenerateReportCommand(
+                UUID.randomUUID(), UUID.randomUUID(), "kv_test01", false, Instant.now(), null
+        );
+
+        // When
+        generator.generateReport(nullChannelCommand);
+
+        // Then — should default to WhatsApp delivery
+        verify(whatsAppPort, times(1)).sendReport(eq("+243999000000"), anyString());
     }
 }

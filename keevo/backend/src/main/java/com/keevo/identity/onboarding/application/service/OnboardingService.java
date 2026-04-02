@@ -93,8 +93,8 @@ public class OnboardingService implements CompleteOnboardingUseCase {
         // 4. Update store name from default "Ma Boutique" to merchant's choice
         storeRepository.updateStoreName(command.storeName());
 
-        // 5. Seed tenant preferences with defaults (AC8)
-        TenantPreferences prefs = new TenantPreferences(
+        // 5. Seed tenant preferences with defaults (AC8 + Story 7.5 fields)
+        TenantPreferences prefs = TenantPreferences.withDefaults(
             UUID.randomUUID(),
             command.sectorType(),
             "20:00:00",     // default end-of-day report time

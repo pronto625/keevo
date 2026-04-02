@@ -1,10 +1,12 @@
 package com.keevo.reporting.report.application.service;
 
 import com.keevo.commerce.sale.domain.model.DayClosedEvent;
+import com.keevo.identity.onboarding.domain.model.ReportChannel;
+import com.keevo.identity.onboarding.domain.model.TenantPreferences;
+import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
 import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase;
 import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase.GenerateReportCommand;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.reporting.report.application.service.EndOfDayReportBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
@@ -16,6 +18,7 @@ import java.util.UUID;
 /**
  * EndOfDayReportListener — Spring Observer: listens to DayClosedEvent and generates reports.
  * Story 7.2 — Task 6.4 (GREEN).
+ * Story 7.5 — Reads per-tenant eodReportEnabled + eodReportChannel before generating.
  *
  * <p>For each closure it generates:
  * <ol>
@@ -30,11 +33,14 @@ public class EndOfDayReportListener {
 
     private final GenerateEndOfDayReportUseCase generateReportUseCase;
     private final EndOfDayReportBuilder builder;
+    private final TenantPreferencesRepository tenantPreferencesRepository;
 
     public EndOfDayReportListener(GenerateEndOfDayReportUseCase generateReportUseCase,
-                                  EndOfDayReportBuilder builder) {
+                                  EndOfDayReportBuilder builder,
+                                  TenantPreferencesRepository tenantPreferencesRepository) {
         this.generateReportUseCase = generateReportUseCase;
         this.builder = builder;
+        this.tenantPreferencesRepository = tenantPreferencesRepository;
     }
 
     @EventListener
@@ -44,6 +50,14 @@ public class EndOfDayReportListener {
 
         TenantContext.setCurrentTenant(event.tenantId());
         try {
+            // Story 7.5 — check if EOD report is enabled for this tenant
+            ReportChannel channel = resolveEodChannel();
+            if (channel == null) {
+                // eodReportEnabled == false — skip report generation entirely
+                log.info("EOD report disabled for tenant={}, skipping.", event.tenantId());
+                return;
+            }
+
             // 1. Generate the store-level report (actorId = null → owner sees it)
             var storeCommand = new GenerateReportCommand(
                     event.storeId(),
@@ -51,7 +65,8 @@ public class EndOfDayReportListener {
                     event.tenantId(),
                     event.isAutomatic(),
                     event.occurredAt(),
-                    event.windowStart()
+                    event.windowStart(),
+                    channel
             );
             generateReportUseCase.generateReport(storeCommand);
 
@@ -67,7 +82,8 @@ public class EndOfDayReportListener {
                             event.tenantId(),
                             event.isAutomatic(),
                             event.occurredAt(),
-                            event.windowStart()
+                            event.windowStart(),
+                            channel
                     );
                     generateReportUseCase.generateReport(empCommand);
                 } catch (Exception e) {
@@ -80,5 +96,17 @@ public class EndOfDayReportListener {
         } finally {
             TenantContext.clear();
         }
+    }
+
+    /**
+     * Returns the configured EOD delivery channel, or null if EOD reports are disabled.
+     * Defaults to WHATSAPP when no preference record exists (safe fallback for legacy tenants).
+     */
+    private ReportChannel resolveEodChannel() {
+        return tenantPreferencesRepository.findByCurrentTenant()
+                .map(prefs -> prefs.eodReportEnabled()
+                        ? (prefs.eodReportChannel() != null ? prefs.eodReportChannel() : ReportChannel.WHATSAPP)
+                        : null)
+                .orElse(ReportChannel.WHATSAPP);
     }
 }

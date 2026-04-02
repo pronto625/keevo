@@ -35,8 +35,7 @@ public enum ErrorCode {
     MEMBERSHIP_NOT_FOUND,       // user is not a member of the requested tenant
     // ── Onboarding ────────────────────────────────────────────────────────
     ONBOARDING_ALREADY_COMPLETED,
-    SECTOR_TEMPLATE_NOT_FOUND,
-    // ── Catalog ───────────────────────────────────────────────────
+    SECTOR_TEMPLATE_NOT_FOUND,    PREFERENCES_NOT_FOUND,       // Story 7.5 — tenant_preferences row missing    // ── Catalog ───────────────────────────────────────────────────
     PRODUCT_NOT_FOUND,
     CATEGORY_NOT_FOUND,
     CLIENT_NOT_FOUND,

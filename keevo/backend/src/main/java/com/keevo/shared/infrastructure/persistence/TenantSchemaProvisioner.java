@@ -157,13 +157,42 @@ public class TenantSchemaProvisioner {
 
     private static final String DDL_TENANT_PREFERENCES = """
             CREATE TABLE IF NOT EXISTS tenant_preferences (
-                id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-                sector_type         VARCHAR(30),
-                eod_report_time     TIME        NOT NULL DEFAULT '20:00:00',
-                stock_alert_enabled BOOLEAN     NOT NULL DEFAULT TRUE,
-                created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                id                         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                sector_type                VARCHAR(30),
+                eod_report_time            TIME        NOT NULL DEFAULT '20:00:00',
+                stock_alert_enabled        BOOLEAN     NOT NULL DEFAULT TRUE,
+                created_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                eod_report_enabled         BOOLEAN     NOT NULL DEFAULT TRUE,
+                eod_report_channel         VARCHAR(20) NOT NULL DEFAULT 'WHATSAPP',
+                weekly_report_enabled      BOOLEAN     NOT NULL DEFAULT TRUE,
+                weekly_report_day          INTEGER     NOT NULL DEFAULT 0,
+                weekly_report_time         TIME        NOT NULL DEFAULT '20:00:00',
+                weekly_report_channel      VARCHAR(20) NOT NULL DEFAULT 'WHATSAPP',
+                inventory_report_enabled   BOOLEAN     NOT NULL DEFAULT TRUE,
+                inventory_report_channel   VARCHAR(20) NOT NULL DEFAULT 'WHATSAPP',
+                stock_alert_channel        VARCHAR(20) NOT NULL DEFAULT 'PUSH'
             )""";
+
+    // ── Tenant preferences migration (Story 7.5) ──────────────────────────────
+    static final String DDL_TENANT_PREFS_MIGRATE_EOD_ENABLED =
+            "ALTER TABLE tenant_preferences ADD COLUMN IF NOT EXISTS eod_report_enabled BOOLEAN NOT NULL DEFAULT TRUE";
+    static final String DDL_TENANT_PREFS_MIGRATE_EOD_CHANNEL =
+            "ALTER TABLE tenant_preferences ADD COLUMN IF NOT EXISTS eod_report_channel VARCHAR(20) NOT NULL DEFAULT 'WHATSAPP'";
+    static final String DDL_TENANT_PREFS_MIGRATE_WEEKLY_ENABLED =
+            "ALTER TABLE tenant_preferences ADD COLUMN IF NOT EXISTS weekly_report_enabled BOOLEAN NOT NULL DEFAULT TRUE";
+    static final String DDL_TENANT_PREFS_MIGRATE_WEEKLY_DAY =
+            "ALTER TABLE tenant_preferences ADD COLUMN IF NOT EXISTS weekly_report_day INTEGER NOT NULL DEFAULT 0";
+    static final String DDL_TENANT_PREFS_MIGRATE_WEEKLY_TIME =
+            "ALTER TABLE tenant_preferences ADD COLUMN IF NOT EXISTS weekly_report_time TIME NOT NULL DEFAULT '20:00:00'";
+    static final String DDL_TENANT_PREFS_MIGRATE_WEEKLY_CHANNEL =
+            "ALTER TABLE tenant_preferences ADD COLUMN IF NOT EXISTS weekly_report_channel VARCHAR(20) NOT NULL DEFAULT 'WHATSAPP'";
+    static final String DDL_TENANT_PREFS_MIGRATE_INVENTORY_ENABLED =
+            "ALTER TABLE tenant_preferences ADD COLUMN IF NOT EXISTS inventory_report_enabled BOOLEAN NOT NULL DEFAULT TRUE";
+    static final String DDL_TENANT_PREFS_MIGRATE_INVENTORY_CHANNEL =
+            "ALTER TABLE tenant_preferences ADD COLUMN IF NOT EXISTS inventory_report_channel VARCHAR(20) NOT NULL DEFAULT 'WHATSAPP'";
+    static final String DDL_TENANT_PREFS_MIGRATE_STOCK_CHANNEL =
+            "ALTER TABLE tenant_preferences ADD COLUMN IF NOT EXISTS stock_alert_channel VARCHAR(20) NOT NULL DEFAULT 'PUSH'";
 
     // ── Audit log (Story 1.8) ──────────────────────────────────────────────────
 
@@ -567,6 +596,7 @@ public class TenantSchemaProvisioner {
                 tenant_id VARCHAR(64) NOT NULL,
                 store_id UUID NOT NULL,
                 store_name VARCHAR(255),
+                actor_id UUID,
                 report_type VARCHAR(30) NOT NULL,
                 report_date DATE NOT NULL,
                 content TEXT NOT NULL,
@@ -578,6 +608,11 @@ public class TenantSchemaProvisioner {
                 is_automatic BOOLEAN NOT NULL DEFAULT false,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )""";
+
+    /** Migration DDL: adds actor_id to existing reports tables (idempotent — Story 7.2) */
+    static final String DDL_REPORTS_MIGRATE_ACTOR_ID =
+            "ALTER TABLE reports ADD COLUMN IF NOT EXISTS actor_id UUID";
+
     static final String DDL_REPORTS_IDX_TENANT_TYPE =
             "CREATE INDEX IF NOT EXISTS idx_reports_tenant_type ON reports (tenant_id, report_type)";
     static final String DDL_REPORTS_IDX_DATE =
@@ -682,6 +717,16 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_PRODUCTS_MIGRATE_MINIMUM_THRESHOLD); // idempotent: adds minimum_threshold if missing
             stmt.execute(DDL_PRODUCTS_UQ_NAME); // Story 2.4 — case-insensitive unique name index
             stmt.execute(DDL_TENANT_PREFERENCES);
+            // Story 7.5 — report preference columns (idempotent: adds columns if missing)
+            stmt.execute(DDL_TENANT_PREFS_MIGRATE_EOD_ENABLED);
+            stmt.execute(DDL_TENANT_PREFS_MIGRATE_EOD_CHANNEL);
+            stmt.execute(DDL_TENANT_PREFS_MIGRATE_WEEKLY_ENABLED);
+            stmt.execute(DDL_TENANT_PREFS_MIGRATE_WEEKLY_DAY);
+            stmt.execute(DDL_TENANT_PREFS_MIGRATE_WEEKLY_TIME);
+            stmt.execute(DDL_TENANT_PREFS_MIGRATE_WEEKLY_CHANNEL);
+            stmt.execute(DDL_TENANT_PREFS_MIGRATE_INVENTORY_ENABLED);
+            stmt.execute(DDL_TENANT_PREFS_MIGRATE_INVENTORY_CHANNEL);
+            stmt.execute(DDL_TENANT_PREFS_MIGRATE_STOCK_CHANNEL);
             stmt.execute(DDL_AUDIT_LOG);
             stmt.execute(DDL_AUDIT_LOG_IDX_ENTITY);
             stmt.execute(DDL_AUDIT_LOG_IDX_OCCURRED);
@@ -758,6 +803,7 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_INVENTORY_COUNTS_IDX_UNIQUE_VARIANT);
             // Story 7.2 — reports
             stmt.execute(DDL_REPORTS);
+            stmt.execute(DDL_REPORTS_MIGRATE_ACTOR_ID); // idempotent: adds actor_id if missing
             stmt.execute(DDL_REPORTS_IDX_TENANT_TYPE);
             stmt.execute(DDL_REPORTS_IDX_DATE);
             stmt.execute(DDL_REPORTS_IDX_DELIVERY_STATUS);

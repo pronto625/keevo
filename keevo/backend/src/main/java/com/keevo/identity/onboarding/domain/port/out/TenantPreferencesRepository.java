@@ -12,12 +12,21 @@ import java.util.Optional;
 public interface TenantPreferencesRepository {
 
     /**
-     * Persist tenant preferences.
+     * Persist tenant preferences (initial creation).
      *
      * @param prefs the preferences to save
      * @return the persisted preferences
      */
     TenantPreferences save(TenantPreferences prefs);
+
+    /**
+     * Fully replace preferences for the current tenant with new values.
+     * Story 7.5 — used by UpdateReportPreferencesService.
+     *
+     * @param prefs updated preferences
+     * @return the saved preferences
+     */
+    TenantPreferences update(TenantPreferences prefs);
 
     /**
      * Returns {@code true} if the tenant has already completed onboarding.
@@ -27,8 +36,9 @@ public interface TenantPreferencesRepository {
 
     /**
      * Find tenant preferences for the current tenant.
-     * 
+     *
      * @return tenant preferences if found
      */
     Optional<TenantPreferences> findByCurrentTenant();
 }
+
