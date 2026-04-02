@@ -38,7 +38,9 @@ import '../../features/pos/domain/model/sale_model.dart';
 import '../../features/reports/presentation/page/reports_page.dart';
 import '../../features/reports/presentation/page/report_history_page.dart';
 import '../../features/reports/presentation/page/report_detail_page.dart';
+import '../../features/reports/presentation/page/owner_reports_page.dart';
 import '../../features/reports/domain/model/report_history_model.dart';
+import '../../features/profitability/presentation/page/product_profitability_detail_page.dart';
 import '../../features/settings/presentation/page/settings_page.dart';
 import '../../features/settings/presentation/page/subscription_page.dart';
 import '../../features/sync_indicator/presentation/page/sync_conflict_log_page.dart';
@@ -236,6 +238,8 @@ const _ownerOnlyPrefixes = [
   '/settings/sync',
   '/stock/transfers',
   '/audit',
+  '/reports/rentabilite',
+  '/reports/boutiques',
 ];
 
 /// Application router — all feature routes registered here.
@@ -355,7 +359,13 @@ final GoRouter appRouter = GoRouter(
         ),
         GoRoute(
           path: '/reports',
-          builder: (_, __) => const ReportsPage(),
+          builder: (context, __) {
+            final role = ProviderScope.containerOf(context)
+                .read(currentUserRoleProvider);
+            return role == 'OWNER'
+                ? const OwnerReportsPage()
+                : const ReportsPage();
+          },
         ),
         GoRoute(
           path: '/settings',
@@ -401,6 +411,15 @@ final GoRouter appRouter = GoRouter(
         final reportId = state.pathParameters['reportId']!;
         final report = state.extra as ReportHistoryModel?;
         return ReportDetailPage(reportId: reportId, report: report);
+      },
+    ),
+
+    // ── Profitability detail (full-screen, no nav bar) — Story 7.4 ────────
+    GoRoute(
+      path: '/reports/rentabilite/:productId',
+      builder: (_, state) {
+        final productId = state.pathParameters['productId']!;
+        return ProductProfitabilityDetailPage(productId: productId);
       },
     ),
 

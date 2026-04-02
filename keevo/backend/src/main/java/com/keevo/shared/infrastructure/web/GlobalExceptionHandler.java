@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -137,6 +138,17 @@ public class GlobalExceptionHandler {
                         "Paramètre requis manquant : " + ex.getParameterName(),
                         HttpStatus.BAD_REQUEST.name(),
                         "MISSING_PARAMETER",
+                        null
+                ));
+    }
+
+    @ExceptionHandler(AuthorizationDeniedException.class)
+    public ResponseEntity<ApiResponseWrapper<Void>> handleAccessDenied(AuthorizationDeniedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponseWrapper.error(
+                        FR_MESSAGES.getOrDefault("FORBIDDEN", "Vous n'avez pas les droits nécessaires"),
+                        HttpStatus.FORBIDDEN.name(),
+                        "FORBIDDEN",
                         null
                 ));
     }

@@ -31,7 +31,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/products")
-@PreAuthorize("hasRole('USER')")
+@PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
 public class ProductController {
 
     private final CreateProductUseCase createProductUseCase;

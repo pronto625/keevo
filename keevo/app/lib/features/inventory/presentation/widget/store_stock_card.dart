@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/di/providers.dart';
 import '../../../catalog/presentation/widget/cross_store_availability_bottom_sheet.dart';
 import '../../domain/model/store_product_stock_model.dart';
 import '../../domain/model/store_stock_summary_model.dart';
@@ -140,14 +141,16 @@ class _StoreStockCardState extends ConsumerState<StoreStockCard> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text(
-                            NumberFormat.currency(locale: 'fr_FR', symbol: 'XAF', decimalDigits: 0).format(s.totalValueXaf),
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: theme.colorScheme.primary,
+                          if (ref.watch(currentUserRoleProvider) == 'OWNER') ...[  
+                            Text(
+                              NumberFormat.currency(locale: 'fr_FR', symbol: 'XAF', decimalDigits: 0).format(s.totalValueXaf),
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.primary,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 4),
+                            const SizedBox(height: 4),
+                          ],
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [

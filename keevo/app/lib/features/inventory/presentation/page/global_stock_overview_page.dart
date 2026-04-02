@@ -384,7 +384,8 @@ class _OverviewSliver extends ConsumerWidget {
             },
           ),
 
-          // Footer: valeur totale
+          // Footer: valeur totale (OWNER only)
+          if (role == 'OWNER')
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),

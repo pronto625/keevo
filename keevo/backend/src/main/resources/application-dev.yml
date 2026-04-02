@@ -10,6 +10,8 @@ spring:
     baseline-on-migrate: true
 
 logging:
+  file:
+    name: /tmp/keevo-dev.log
   level:
     root: DEBUG
     com.keevo: DEBUG
