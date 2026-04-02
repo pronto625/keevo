@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../identity/presentation/provider/report_preferences_provider.dart';
@@ -194,6 +195,44 @@ class _ReportPreferencesPageState
                       ),
                     ],
                   ]),
+
+                  if (state.preferences!.weeklyReportEnabled) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: OutlinedButton.icon(
+                        onPressed: state.weeklyPreviewing
+                            ? null
+                            : () async {
+                                final reportId =
+                                    await notifier.previewWeeklyReport();
+                                if (reportId != null && mounted) {
+                                  context.push('/reports/history/$reportId');
+                                }
+                              },
+                        icon: state.weeklyPreviewing
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2),
+                              )
+                            : const Icon(Icons.preview_rounded),
+                        label: Text(state.weeklyPreviewing
+                            ? 'Génération...'
+                            : 'Aperçu du rapport hebdomadaire'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF20C997),
+                          side: const BorderSide(color: Color(0xFF20C997)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14)),
+                          textStyle: const TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                  ],
 
                   const SizedBox(height: 20),
 

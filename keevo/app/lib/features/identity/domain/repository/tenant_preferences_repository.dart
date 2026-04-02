@@ -11,4 +11,8 @@ abstract class TenantPreferencesRepository {
 
   /// Envoie un rapport test immédiatement (OWNER uniquement).
   Future<bool> sendTestReport();
+
+  /// Déclenche immédiatement la génération du rapport hebdomadaire et retourne
+  /// l'ID du rapport créé, ou null si aucun rapport n'a pu être généré.
+  Future<String?> triggerWeeklyPreview();
 }

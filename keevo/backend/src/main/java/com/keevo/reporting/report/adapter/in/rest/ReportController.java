@@ -4,6 +4,8 @@ import com.keevo.reporting.report.adapter.in.rest.dto.ReportListResponseDto;
 import com.keevo.reporting.report.adapter.in.rest.dto.ReportResponseDto;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.ReportType;
+import com.keevo.reporting.report.domain.port.in.GenerateWeeklyReportUseCase;
+import com.keevo.reporting.report.domain.port.in.GenerateWeeklyReportUseCase.WeeklyReportCommand;
 import com.keevo.reporting.report.domain.port.in.GetReportHistoryUseCase;
 import com.keevo.reporting.report.domain.port.in.GetReportHistoryUseCase.ReportHistoryQuery;
 import com.keevo.reporting.report.domain.port.in.ResendReportUseCase;
@@ -12,6 +14,7 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.store.store.domain.port.out.StoreRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.PageRequest;
@@ -27,6 +30,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.UUID;
 
 /**
@@ -34,11 +40,12 @@ import java.util.UUID;
  * Story 7.2 — Task 8.1 | Updated: multi-vendor support (Option A).
  *
  * <pre>
- * GET  /api/v1/reports           → paginated history
+ * GET  /api/v1/reports                → paginated history
  *   OWNER: all reports (or filter by storeId / actorId)
  *   EMPLOYEE: only their actorId reports (actorId param ignored, forced to JWT actorId)
- * GET  /api/v1/reports/{id}      → single report detail
- * POST /api/v1/reports/{id}/resend → re-trigger WhatsApp delivery (OWNER only)
+ * GET  /api/v1/reports/{id}             → single report detail
+ * POST /api/v1/reports/{id}/resend      → re-trigger WhatsApp delivery (OWNER only)
+ * POST /api/v1/reports/trigger-weekly   → manual trigger for weekly report (OWNER only)
  * </pre>
  */
 @Tag(name = "Reports", description = "End-of-day report history and resend")
@@ -46,13 +53,21 @@ import java.util.UUID;
 @RequestMapping("/api/v1/reports")
 public class ReportController {
 
+    private static final ZoneId WAT = ZoneId.of("Africa/Lagos");
+
     private final GetReportHistoryUseCase getReportHistoryUseCase;
     private final ResendReportUseCase resendReportUseCase;
+    private final GenerateWeeklyReportUseCase weeklyReportGenerator;
+    private final StoreRepository storeRepository;
 
     public ReportController(GetReportHistoryUseCase getReportHistoryUseCase,
-                             ResendReportUseCase resendReportUseCase) {
+                             ResendReportUseCase resendReportUseCase,
+                             GenerateWeeklyReportUseCase weeklyReportGenerator,
+                             StoreRepository storeRepository) {
         this.getReportHistoryUseCase = getReportHistoryUseCase;
         this.resendReportUseCase = resendReportUseCase;
+        this.weeklyReportGenerator = weeklyReportGenerator;
+        this.storeRepository = storeRepository;
     }
 
     @Operation(summary = "Get paginated report history. OWNER: all or filtered. EMPLOYEE: own only.")
@@ -105,6 +120,23 @@ public class ReportController {
         return ResponseEntity.ok(ApiResponseWrapper.ok(ReportResponseDto.from(report)));
     }
 
+    @Operation(summary = "Manually trigger weekly report generation for all active stores (OWNER only)")
+    @PostMapping("/trigger-weekly")
+    public ResponseEntity<ApiResponseWrapper<Void>> triggerWeekly() {
+        requireOwnerOrForbid();
+        String tenantId = TenantContext.getCurrentTenant();
+        LocalDate todayWAT = LocalDate.now(WAT);
+        Instant weekStart  = todayWAT.minusDays(6).atStartOfDay(WAT).toInstant();
+        Instant weekEnd    = todayWAT.atTime(23, 59, 59).atZone(WAT).toInstant();
+
+        storeRepository.findAllActive().forEach(store -> {
+            var cmd = new WeeklyReportCommand(
+                    store.id(), tenantId, false, weekStart, weekEnd, null);
+            weeklyReportGenerator.generateWeeklyReport(cmd);
+        });
+        return ResponseEntity.ok(ApiResponseWrapper.ok(null));
+    }
+
     @Operation(summary = "Resend a report via WhatsApp")
     @PostMapping("/{reportId}/resend")
     public ResponseEntity<ApiResponseWrapper<Void>> resend(@PathVariable UUID reportId) {
@@ -143,7 +175,10 @@ public class ReportController {
 
     private void requireOwnerOrForbid() {
         var auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || auth.getAuthorities().stream()
+        if (auth == null || !auth.isAuthenticated()) {
+            throw new DomainException(ErrorCode.UNAUTHORIZED, "Authentication required");
+        }
+        if (auth.getAuthorities().stream()
                 .noneMatch(a -> "ROLE_OWNER".equals(a.getAuthority()))) {
             throw new DomainException(ErrorCode.FORBIDDEN, "OWNER role required");
         }

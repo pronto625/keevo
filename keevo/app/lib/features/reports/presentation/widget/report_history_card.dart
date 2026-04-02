@@ -16,6 +16,7 @@ class ReportHistoryCard extends StatelessWidget {
   });
 
   static final _dateFormat = DateFormat('d MMM yyyy', 'fr_FR');
+  static final _shortDateFormat = DateFormat('d MMM', 'fr_FR');
   static final _currencyFormat = NumberFormat.currency(
     locale: 'fr_FR',
     symbol: 'XAF',
@@ -27,10 +28,10 @@ class ReportHistoryCard extends StatelessWidget {
     final theme = Theme.of(context);
     final statusColor = _statusColor(report.deliveryStatus);
     final statusIcon = _statusIcon(report.deliveryStatus);
-    final formattedDate = _dateFormat.format(report.reportDate);
-    final typeLabelColor = report.reportType == 'DAILY_COMBINED'
-        ? Colors.purple.shade700
-        : Colors.blue.shade700;
+    final formattedDate = report.reportType == 'WEEKLY'
+        ? _weekLabel(report.reportDate)
+        : _dateFormat.format(report.reportDate);
+    final typeLabelColor = _typeLabelColor(report.reportType);
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -150,10 +151,29 @@ class ReportHistoryCard extends StatelessWidget {
 
   String _typeLabel(String type) {
     switch (type) {
+      case 'WEEKLY':
+        return '📅 HEBDO';
       case 'DAILY_COMBINED':
         return 'Multi-boutiques';
       default:
         return 'Quotidien';
     }
+  }
+
+  Color _typeLabelColor(String type) {
+    switch (type) {
+      case 'WEEKLY':
+        return Colors.orange.shade700;
+      case 'DAILY_COMBINED':
+        return Colors.purple.shade700;
+      default:
+        return Colors.blue.shade700;
+    }
+  }
+
+  /// Returns "Semaine du [Mon] au [Sun YYYY]" for weekly reports.
+  String _weekLabel(DateTime sunday) {
+    final monday = sunday.subtract(const Duration(days: 6));
+    return 'Semaine du ${_shortDateFormat.format(monday)} au ${_dateFormat.format(sunday)}';
   }
 }

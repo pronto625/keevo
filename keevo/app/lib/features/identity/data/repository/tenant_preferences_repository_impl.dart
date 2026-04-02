@@ -39,4 +39,19 @@ class TenantPreferencesRepositoryImpl implements TenantPreferencesRepository {
       return false;
     }
   }
+
+  @override
+  Future<String?> triggerWeeklyPreview() async {
+    try {
+      await _apiService.post('/api/v1/reports/trigger-weekly', data: {});
+      final listResp =
+          await _apiService.get('/api/v1/reports?type=WEEKLY&size=1&page=0');
+      final data = listResp['data'] as Map<String, dynamic>? ?? {};
+      final items = data['items'] as List<dynamic>? ?? [];
+      if (items.isEmpty) return null;
+      return (items.first as Map<String, dynamic>)['id'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
 }

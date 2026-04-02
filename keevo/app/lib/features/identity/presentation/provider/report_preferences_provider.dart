@@ -9,6 +9,7 @@ class ReportPreferencesState {
   final bool isLoading;
   final bool isSaving;
   final bool testSending;
+  final bool weeklyPreviewing;
   final String? error;
   final String? successMessage;
 
@@ -17,6 +18,7 @@ class ReportPreferencesState {
     this.isLoading = false,
     this.isSaving = false,
     this.testSending = false,
+    this.weeklyPreviewing = false,
     this.error,
     this.successMessage,
   });
@@ -26,6 +28,7 @@ class ReportPreferencesState {
     bool? isLoading,
     bool? isSaving,
     bool? testSending,
+    bool? weeklyPreviewing,
     String? error,
     String? successMessage,
   }) {
@@ -34,6 +37,7 @@ class ReportPreferencesState {
       isLoading: isLoading ?? this.isLoading,
       isSaving: isSaving ?? this.isSaving,
       testSending: testSending ?? this.testSending,
+      weeklyPreviewing: weeklyPreviewing ?? this.weeklyPreviewing,
       error: error,
       successMessage: successMessage,
     );
@@ -112,6 +116,23 @@ class ReportPreferencesNotifier extends StateNotifier<ReportPreferencesState> {
       );
     } catch (e) {
       state = state.copyWith(testSending: false, error: e.toString());
+    }
+  }
+
+  /// Génère immédiatement le rapport hebdomadaire et retourne son ID pour navigation.
+  Future<String?> previewWeeklyReport() async {
+    state = state.copyWith(weeklyPreviewing: true);
+    try {
+      final repo = _ref.read(tenantPreferencesRepositoryProvider);
+      final reportId = await repo.triggerWeeklyPreview();
+      state = state.copyWith(
+        weeklyPreviewing: false,
+        error: reportId == null ? 'Impossible de générer le rapport' : null,
+      );
+      return reportId;
+    } catch (e) {
+      state = state.copyWith(weeklyPreviewing: false, error: e.toString());
+      return null;
     }
   }
 

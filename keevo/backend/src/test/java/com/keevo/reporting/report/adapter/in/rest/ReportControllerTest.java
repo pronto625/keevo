@@ -3,11 +3,13 @@ package com.keevo.reporting.report.adapter.in.rest;
 import com.keevo.reporting.report.domain.model.DeliveryStatus;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.ReportType;
+import com.keevo.reporting.report.domain.port.in.GenerateWeeklyReportUseCase;
 import com.keevo.reporting.report.domain.port.in.GetReportHistoryUseCase;
 import com.keevo.reporting.report.domain.port.in.ResendReportUseCase;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
+import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,6 +46,8 @@ class ReportControllerTest {
 
     @Mock private GetReportHistoryUseCase getReportHistoryUseCase;
     @Mock private ResendReportUseCase resendReportUseCase;
+    @Mock private GenerateWeeklyReportUseCase weeklyReportGenerator;
+    @Mock private StoreRepository storeRepository;
     @InjectMocks private ReportController controller;
 
     private MockMvc mockMvc;

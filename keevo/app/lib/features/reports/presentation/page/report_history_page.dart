@@ -33,6 +33,7 @@ class ReportHistoryPage extends ConsumerStatefulWidget {
 
 class _ReportHistoryPageState extends ConsumerState<ReportHistoryPage> {
   String? _selectedEmployeeId;
+  String? _typeFilter; // null=Tous, 'DAILY'=Journalier, 'WEEKLY'=Hebdomadaire
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +41,7 @@ class _ReportHistoryPageState extends ConsumerState<ReportHistoryPage> {
     final reportsAsync = ref.watch(reportHistoryProvider(
       storeId: widget.storeId,
       actorId: widget.adminMode ? _selectedEmployeeId : null,
+      type: _typeFilter,
     ));
 
     return Scaffold(
@@ -54,6 +56,8 @@ class _ReportHistoryPageState extends ConsumerState<ReportHistoryPage> {
       ),
       body: Column(
         children: [
+          // Report type filter tabs (Tous | Journalier | Hebdomadaire)
+          _buildTypeFilterTabs(),
           // Employee filter (adminMode only)
           if (widget.adminMode && widget.storeId != null)
             _buildEmployeeFilter(widget.storeId!),
@@ -124,6 +128,31 @@ class _ReportHistoryPageState extends ConsumerState<ReportHistoryPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTypeFilterTabs() {
+    final tabs = [
+      (label: 'Tous', value: null),
+      (label: 'Journalier', value: 'DAILY'),
+      (label: '📅 Hebdo', value: 'WEEKLY'),
+    ];
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: tabs.map((tab) {
+          final isSelected = _typeFilter == tab.value;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              label: Text(tab.label),
+              selected: isSelected,
+              onSelected: (_) => setState(() => _typeFilter = tab.value),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
