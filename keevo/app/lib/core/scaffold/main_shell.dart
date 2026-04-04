@@ -1,16 +1,20 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-import '../di/providers.dart';
-import '../sync/auto_closure_notification_checker.dart';
-import '../sync/sync_trigger_notifier.dart';
 import '../../features/catalog/presentation/provider/product_provider.dart';
+import '../../features/notifications/presentation/provider/notification_provider.dart';
 import '../../features/pos/presentation/provider/pos_providers.dart';
 import '../../features/stores/presentation/provider/active_store_provider.dart';
 import '../../features/stores/presentation/provider/store_provider.dart';
 import '../../features/sync_indicator/presentation/widget/sync_warning_banner.dart';
+import '../di/providers.dart';
+import '../router/app_router.dart';
+import '../sync/auto_closure_notification_checker.dart';
+import '../sync/sync_trigger_notifier.dart';
 import 'offline_gate_banner.dart';
 
 /// MainShell — persistent bottom navigation scaffold wrapping the main sections.
@@ -44,11 +48,41 @@ class _MainShellState extends ConsumerState<MainShell> {
   @override
   void initState() {
     super.initState();
-    // Check for unnotified auto-closures after the first frame so the
-    // ScaffoldMessenger is ready to show SnackBars.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAutoClosureNotifications();
+      _initFcm();
     });
+  }
+
+  /// Initialise Firebase Messaging et enregistre le token FCM sur le backend.
+  /// Best-effort: aucune erreur ne remonte à l'UI.
+  Future<void> _initFcm() async {
+    try {
+      final fcmService = ref.read(fcmServiceProvider);
+      debugPrint('[FCM] Initializing Firebase Messaging...');
+      await fcmService.initialize(appRouter);
+      debugPrint('[FCM] Getting FCM token...');
+      final token = await fcmService.getToken();
+      if (token == null) {
+        debugPrint('[FCM] getToken() returned null — skipping registration (no GMS or permission denied)');
+        return;
+      }
+      debugPrint('[FCM] Token obtained: ${token.substring(0, 20)}...');
+      await ref.read(remoteDeviceTokenDataSourceProvider).registerToken(
+        token: token,
+        platform: _fcmPlatform(),
+      );
+      debugPrint('[FCM] Token registered with backend ✅');
+    } catch (e, st) {
+      debugPrint('[FCM] Token registration failed: $e\n$st');
+    }
+  }
+
+  String _fcmPlatform() {
+    if (Platform.isAndroid) return 'ANDROID';
+    if (Platform.isIOS) return 'IOS';
+    if (Platform.isWindows) return 'WINDOWS';
+    return 'LINUX';
   }
 
   Future<void> _checkAutoClosureNotifications() async {

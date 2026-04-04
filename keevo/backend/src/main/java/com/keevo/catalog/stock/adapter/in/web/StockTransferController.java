@@ -37,7 +37,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/stock/transfers")
-@PreAuthorize("hasRole('USER')")
+@PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
 public class StockTransferController {
 
     private final ExecuteTransferService executeTransferService;

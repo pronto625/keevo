@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1070414488326",
+    "project_id": "keevo-1d289",
+    "storage_bucket": "keevo-1d289.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1070414488326:android:659fe6b9beaf445da03487",
+        "android_client_info": {
+          "package_name": "com.example.keevo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAgix9C0XjXMDwxUmYyDkUYw6d-pKgvySo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

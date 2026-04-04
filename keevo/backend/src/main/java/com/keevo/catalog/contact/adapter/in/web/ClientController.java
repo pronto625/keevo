@@ -22,7 +22,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/clients")
-@PreAuthorize("hasRole('USER')")
+@PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
 public class ClientController {
 
     private final CreateClientUseCase createClientUseCase;
