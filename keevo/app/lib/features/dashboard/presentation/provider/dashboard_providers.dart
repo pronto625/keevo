@@ -83,6 +83,8 @@ final storeChartPeriodProvider = StateProvider.family<ChartPeriod, String>(
 );
 
 /// Chart data for a specific store.
+/// When the remote snapshot has no per-store chart data (offline fallback),
+/// queries the local datasource directly.
 final storeChartDataProvider = FutureProvider.family<List<DailyCA>, String>((ref, storeId) async {
   final period = ref.watch(storeChartPeriodProvider(storeId));
   final snapshot = await ref.watch(dashboardSnapshotProvider.future);
@@ -90,15 +92,32 @@ final storeChartDataProvider = FutureProvider.family<List<DailyCA>, String>((ref
       .where((s) => s.storeId == storeId)
       .firstOrNull;
   if (store == null) return [];
+
+  final List<DailyCA> remoteData;
   switch (period) {
     case ChartPeriod.daily:
-      return store.dailyCA;
+      remoteData = store.dailyCA;
     case ChartPeriod.weekly:
-      return store.weeklyCA;
+      remoteData = store.weeklyCA;
     case ChartPeriod.monthly:
-      return store.monthlyCA;
+      remoteData = store.monthlyCA;
     case ChartPeriod.yearly:
-      return store.yearlyCA;
+      remoteData = store.yearlyCA;
+  }
+
+  if (remoteData.isNotEmpty) return remoteData;
+
+  // Offline / local fallback: StoreOverview chart lists are empty.
+  final local = ref.watch(localDashboardDatasourceProvider);
+  switch (period) {
+    case ChartPeriod.daily:
+      return local.getStoreDailyCA(storeId);
+    case ChartPeriod.weekly:
+      return local.getStoreWeeklyCA(storeId);
+    case ChartPeriod.monthly:
+      return local.getStoreMonthlyCA(storeId);
+    case ChartPeriod.yearly:
+      return local.getStoreYearlyCA(storeId);
   }
 });
 

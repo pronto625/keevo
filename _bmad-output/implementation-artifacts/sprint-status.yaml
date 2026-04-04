@@ -146,7 +146,7 @@ development_status:
   epic-7: in-progress
   7-1-dashboard-matinal-message-motivationnel: done   # 2026-03-23 — code review PASSED (adversarial) | 9 fixes applied: H1 saveStoreId mock (42/42 auth GREEN), H3 tenantName subtitle, H4 OWNER firstName store-name removed, L1 greeting emoji, M3 idx_sales_occurred_at, M4 Stock Bas→/stock/overview, M5 Vos boutiques+VOIR TOUT, M6 getLowStockCount JOIN+DISTINCT, M7 trendPercent today-vs-yesterday | Deferred: H2 (spec contradiction), H5 (User firstName schema gap), L2 (N+1 perf) | 1134/1134 backend + 71/71 dashboard + 42/42 auth tests GREEN
   7-2-rapport-end-of-day-generation-envoi-whatsapp: done   # 2025-06-21 — backend hex (1198 tests GREEN) + Flutter Drift v22/Riverpod (39 tests GREEN) | Code review 6 fixes (H2 PII, H3 ISP, M1 auth 401, M2 skeleton, M3 OWNER-only, M4 empty state) + 3 LOW fixes (L1 @Transactional, L2 window boundary <=, L3 null-safe) + Task 22 (pull sync + invalidation) + Task 23 (auto-closure notification) | Pre-existing unrelated failure: MultiStoreStockRepositoryContractTest (catalog/stock)
-  7-3-rapport-hebdomadaire-automatique: backlog
+  7-3-rapport-hebdomadaire-automatique: done
   7-4-dashboard-rentabilite-analyse-par-produit-boutique: review
   7-5-configuration-des-rapports-preferences-whatsapp: done
   epic-7-retrospective: optional
@@ -154,7 +154,8 @@ development_status:
   # ─────────────────────────────────────────────────────────
   # Epic 8: Alertes, Notifications & Gestion Opérationnelle
   # ─────────────────────────────────────────────────────────
-  epic-8: backlog
+  epic-8: in-progress
+  8-0-fcm-push-notifications-whatsapp-wassender: done  # Code review PASSED (adversarial) | H1: TenantContext added to FcmNotificationAdapter (cross-tenant fix) | H2: wassenderRestTemplate @Bean with 10s/30s timeouts | H3: onTokenRefresh re-registers token with backend (AC2) | H4: Bell Align+SafeArea instead of Positioned overlay | M1: DevicePlatform.valueOf wrapped → DomainException(VALIDATION_ERROR) | M2: ERROR log added when WASSENDER_API_TOKEN blank at startup | M3: null FirebaseMessaging guard in notifyOwners() | L1: escapeJson handles U+0000–U+001F control chars | L2: ownership check deferred | 29/29 backend + 11/11 Flutter GREEN
   8-1-alertes-stock-critique-tendances-de-ventes: backlog
   8-2-suivi-activite-employes: backlog
   8-3-desactivation-employe-revocation-de-sessions: backlog

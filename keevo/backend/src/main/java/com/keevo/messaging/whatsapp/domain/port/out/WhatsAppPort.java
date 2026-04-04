@@ -1,11 +1,12 @@
-package com.keevo.commerce.sale.domain.port.out;
+package com.keevo.messaging.whatsapp.domain.port.out;
 
 /**
  * WhatsAppPort — Port out for sending WhatsApp messages.
  * Story 4.4 — Clôture Journalière & Historique des Ventes
+ * Story 8.0 — Moved from commerce.sale.domain.port.out to messaging.whatsapp.domain.port.out
  *
  * <p>MVP: NoOpWhatsAppAdapter logs the message (no real sending).
- * Production: implement with WhatsApp Business API.
+ * Production: WassenderWhatsAppAdapter sends via Wassender API.
  */
 public interface WhatsAppPort {
 

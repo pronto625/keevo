@@ -105,6 +105,8 @@ public enum ErrorCode {
     RATE_LIMIT_EXCEEDED,    // HTTP 429 — >100 req/min per tenant
     // ── Audit ─────────────────────────────────────────────────────────────
     AUDIT_IMMUTABLE,        // HTTP 403 — attempt to modify or delete an immutable audit entry
+    // ── WhatsApp (Story 8.0) ──────────────────────────────────────────────
+    WHATSAPP_DELIVERY_FAILED, // WhatsApp message delivery failed (Wassender API error or timeout)
     // ── Generic ───────────────────────────────────────────────────
     NOT_FOUND,
     VALIDATION_FAILED,

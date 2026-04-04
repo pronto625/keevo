@@ -27,6 +27,7 @@ import 'users_table.dart';
 import 'inventory_sessions_table.dart';
 import 'inventory_counts_table.dart';
 import 'reports_table.dart';
+import 'notifications_table.dart';
 
 part 'app_database.g.dart';
 
@@ -52,6 +53,7 @@ part 'app_database.g.dart';
 /// Schema version 20: inventory_counts table added (Story 6.2).
 /// Schema version 21: users.firstName column added; sales index added (Story 7.1).
 /// Schema version 22: reports table added for end-of-day report history (Story 7.2).
+/// Schema version 23: notifications table added for local notification storage (Story 8.0).
 @DriftDatabase(tables: [
   SyncQueue,
   Products,
@@ -73,6 +75,7 @@ part 'app_database.g.dart';
   InventorySessions,
   InventoryCounts,
   Reports,
+  Notifications,
 ])
 class AppDatabase extends _$AppDatabase {
   /// Production constructor — uses SQLCipher encrypted file database.
@@ -85,7 +88,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 22;
+  int get schemaVersion => 23;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -231,6 +234,10 @@ class AppDatabase extends _$AppDatabase {
       if (from < 22) {
         // Story 7.2 — reports table for end-of-day report history.
         await migrator.createTable(reports);
+      }
+      if (from < 23) {
+        // Story 8.0 — notifications table for local notification storage.
+        await migrator.createTable(notifications);
       }
     },
   );

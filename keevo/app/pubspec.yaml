@@ -74,6 +74,11 @@ dependencies:
   # URL launcher (WhatsApp deeplink, Story 3.4)
   url_launcher: ^6.3.1
 
+  # Firebase Cloud Messaging (Story 8.0 — push notifications)
+  firebase_core: ^3.8.1
+  firebase_messaging: ^15.2.1
+  flutter_local_notifications: ^18.0.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

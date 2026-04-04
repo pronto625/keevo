@@ -39,7 +39,7 @@ class ReportHistoryRepositoryImpl implements ReportHistoryRepository {
     } catch (e) {
       dev.log('Remote report history failed, using local cache: $e',
           name: 'ReportHistoryRepository');
-      return _local.getHistory(page: page, size: size, type: type);
+      return _local.getHistory(page: page, size: size, type: type, storeId: storeId);
     }
   }
 

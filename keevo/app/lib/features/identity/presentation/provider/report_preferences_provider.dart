@@ -88,6 +88,7 @@ class ReportPreferencesNotifier extends StateNotifier<ReportPreferencesState> {
         'weeklyReportChannel': prefs.weeklyReportChannel,
         'inventoryReportEnabled': prefs.inventoryReportEnabled,
         'inventoryReportChannel': prefs.inventoryReportChannel,
+        'stockAlertEnabled': prefs.stockAlertEnabled,
         'stockAlertChannel': prefs.stockAlertChannel,
       });
       state = state.copyWith(

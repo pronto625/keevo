@@ -620,6 +620,24 @@ public class TenantSchemaProvisioner {
     static final String DDL_REPORTS_IDX_DELIVERY_STATUS =
             "CREATE INDEX IF NOT EXISTS idx_reports_delivery_status ON reports (delivery_status, delivery_attempts)";
 
+    // Story 8.0 — device_tokens table for FCM push notifications
+    static final String DDL_DEVICE_TOKENS = """
+            CREATE TABLE IF NOT EXISTS device_tokens (
+                id UUID PRIMARY KEY,
+                user_id UUID NOT NULL,
+                token VARCHAR(512) NOT NULL,
+                platform VARCHAR(20) NOT NULL,
+                device_name VARCHAR(100),
+                role VARCHAR(20) NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                CONSTRAINT uq_device_tokens_token UNIQUE (token)
+            )""";
+    static final String DDL_DEVICE_TOKENS_IDX_USER =
+            "CREATE INDEX IF NOT EXISTS idx_device_tokens_user_id ON device_tokens(user_id)";
+    static final String DDL_DEVICE_TOKENS_IDX_ROLE =
+            "CREATE INDEX IF NOT EXISTS idx_device_tokens_role ON device_tokens(role)";
+
     // SPEC CHANGE 2026-03-06: new tenants start on 6-month PREMIUM_TRIAL (unlimited limits)
     // WHERE NOT EXISTS ensures idempotency — provision() can be called multiple times safely.
     private static final String SEED_SUBSCRIPTION = """
@@ -807,6 +825,10 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_REPORTS_IDX_TENANT_TYPE);
             stmt.execute(DDL_REPORTS_IDX_DATE);
             stmt.execute(DDL_REPORTS_IDX_DELIVERY_STATUS);
+            // Story 8.0 — device_tokens
+            stmt.execute(DDL_DEVICE_TOKENS);
+            stmt.execute(DDL_DEVICE_TOKENS_IDX_USER);
+            stmt.execute(DDL_DEVICE_TOKENS_IDX_ROLE);
             stmt.execute("SET search_path TO public");
         }
     }

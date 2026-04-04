@@ -14,12 +14,16 @@ class LocalReportHistoryDataSource {
     required int page,
     required int size,
     String? type,
+    String? storeId,
   }) async {
     final query = _db.select(_db.reports)
       ..orderBy([(t) => OrderingTerm.desc(t.reportDate)])
       ..limit(size, offset: page * size);
     if (type != null) {
       query.where((t) => t.reportType.equals(type));
+    }
+    if (storeId != null) {
+      query.where((t) => t.storeId.equals(storeId));
     }
     final rows = await query.get();
     return rows.map(_mapToModel).toList();

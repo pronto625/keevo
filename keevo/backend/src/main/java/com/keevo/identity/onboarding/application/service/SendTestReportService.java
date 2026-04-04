@@ -1,6 +1,6 @@
 package com.keevo.identity.onboarding.application.service;
 
-import com.keevo.commerce.sale.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.onboarding.domain.port.in.SendTestReportUseCase;
@@ -9,6 +9,8 @@ import com.keevo.reporting.report.application.service.EndOfDayReportBuilder;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.store.domain.port.out.StoreRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -25,6 +27,7 @@ import java.util.List;
 @Service
 public class SendTestReportService implements SendTestReportUseCase {
 
+    private static final Logger log = LoggerFactory.getLogger(SendTestReportService.class);
     private static final String TEST_PREFIX = "🧪 [TEST] ";
 
     private final EndOfDayReportBuilder reportBuilder;
@@ -48,6 +51,7 @@ public class SendTestReportService implements SendTestReportUseCase {
     @Override
     public TestReportResult sendTestReport(String tenantId) {
         if (!whatsAppPort.isConfigured()) {
+            // WhatsApp not configured (check KEEVO_WHATSAPP_PROVIDER, WASSENDER_API_URL, etc.)
             return new TestReportResult(false);
         }
 
@@ -78,6 +82,7 @@ public class SendTestReportService implements SendTestReportUseCase {
             whatsAppPort.sendReport(ownerPhone, reportText);
             return new TestReportResult(true);
         } catch (Exception e) {
+            log.warn("[report-test] WhatsApp delivery failed for owner {} — {}", ownerPhone, e.getMessage());
             return new TestReportResult(false);
         }
     }

@@ -81,7 +81,8 @@ public class TenantSchemaSyncService {
                     java.util.Map.entry("sync_error_log",        TenantSchemaProvisioner.DDL_SYNC_ERROR_LOG),
                     java.util.Map.entry("inventory_sessions",    TenantSchemaProvisioner.DDL_INVENTORY_SESSIONS),
                     java.util.Map.entry("inventory_counts",      TenantSchemaProvisioner.DDL_INVENTORY_COUNTS),
-                    java.util.Map.entry("reports",                TenantSchemaProvisioner.DDL_REPORTS)
+                    java.util.Map.entry("reports",                TenantSchemaProvisioner.DDL_REPORTS),
+                    java.util.Map.entry("device_tokens",          TenantSchemaProvisioner.DDL_DEVICE_TOKENS)  // Story 8.0
             );
 
     /** Valid tenant schema pattern — prevents any SQL injection. */
@@ -249,6 +250,9 @@ public class TenantSchemaSyncService {
             stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_INVENTORY_ENABLED);
             stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_INVENTORY_CHANNEL);
             stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_STOCK_CHANNEL);
+            // Story 8.0 — device_tokens indexes
+            stmt.execute(TenantSchemaProvisioner.DDL_DEVICE_TOKENS_IDX_USER);
+            stmt.execute(TenantSchemaProvisioner.DDL_DEVICE_TOKENS_IDX_ROLE);
             stmt.execute("SET search_path TO public");
         }
     }

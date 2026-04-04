@@ -54,6 +54,7 @@ import '../../features/inventory/presentation/page/inventory_launch_page.dart';
 import '../../features/inventory/presentation/page/transfer_history_page.dart';
 import '../../features/team/presentation/page/team_page.dart';
 import '../../features/audit/presentation/page/audit_page.dart';
+import '../../features/notifications/presentation/page/notifications_page.dart';
 import '../../features/dashboard/presentation/page/dashboard_page.dart';
 import '../../features/dashboard/presentation/page/store_dashboard_page.dart';
 import '../../features/team/presentation/page/create_employee_page.dart';
@@ -581,6 +582,11 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/audit',
       builder: (_, __) => const AuditPage(),
+    ),
+    // ── Notifications (Story 8.0 — full-screen, no nav bar) ──────────────
+    GoRoute(
+      path: '/notifications',
+      builder: (_, __) => const NotificationsPage(),
     ),
     // ── Stock overview (full-screen, no nav bar) ─────────────────────────
     GoRoute(

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/providers.dart';
 
+import '../../../../features/notifications/presentation/widget/notification_bell_widget.dart';
 import '../../domain/model/dashboard_snapshot.dart';
 import '../provider/dashboard_providers.dart';
 import '../widget/metric_badge_card.dart';
@@ -109,6 +110,7 @@ class _DashboardContent extends ConsumerWidget {
               ],
             ),
             actions: [
+              const NotificationBellWidget(),
               IconButton(
                 icon: const Icon(Icons.refresh_rounded),
                 onPressed: onRefresh,

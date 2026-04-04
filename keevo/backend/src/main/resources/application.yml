@@ -75,6 +75,15 @@ keevo:
   admin:
     phone: ${ADMIN_PHONE:+237600000000}
     password: ${ADMIN_PASSWORD:Admin@1234!}
+  fcm:
+    enabled: ${KEEVO_FCM_ENABLED:false}
+    credentials-path: ${GOOGLE_APPLICATION_CREDENTIALS:}
+  whatsapp:
+    provider: ${KEEVO_WHATSAPP_PROVIDER:noop}
+    wassender:
+      api-url: ${WASSENDER_API_URL:}
+      api-token: ${WASSENDER_API_TOKEN:}
+      default-device: ${WASSENDER_DEFAULT_DEVICE:}
 
 # Springdoc OpenAPI / Swagger UI
 springdoc:

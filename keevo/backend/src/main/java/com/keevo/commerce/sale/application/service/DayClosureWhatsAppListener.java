@@ -1,7 +1,7 @@
 package com.keevo.commerce.sale.application.service;
 
 import com.keevo.commerce.sale.domain.model.DayClosedEvent;
-import com.keevo.commerce.sale.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.slf4j.Logger;

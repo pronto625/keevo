@@ -7,7 +7,7 @@ import com.keevo.reporting.report.domain.port.in.ResendReportUseCase;
 import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.commerce.sale.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -279,6 +279,8 @@ class LocalDashboardDatasource {
   }
 
   /// Bottom [limit] least-selling products this week (Monday → now).
+  /// Includes non-archived catalog products that had 0 sales so that
+  /// the list isn't just a reverse of topProducts.
   Future<List<TopProduct>> getWeeklyWorstProducts({int limit = 5}) async {
     final now = DateTime.now();
     final monday = now.subtract(Duration(days: now.weekday - 1));
@@ -296,11 +298,18 @@ class LocalDashboardDatasource {
     final totalRevenue = totalResult.read<int>('total');
 
     final rows = await _db.customSelect(
-      'SELECT si.product_id, si.product_name, '
-      'SUM(si.quantity) AS units_sold, SUM(si.subtotal) AS revenue '
-      'FROM sale_items si INNER JOIN sales s ON si.sale_id = s.id '
-      'WHERE s.status = ? AND s.occurred_at >= ? '
-      'GROUP BY si.product_id, si.product_name '
+      'SELECT p.id AS product_id, p.name AS product_name, '
+      'COALESCE(weekly.units_sold, 0) AS units_sold, '
+      'COALESCE(weekly.revenue, 0) AS revenue '
+      'FROM products p '
+      'LEFT JOIN ( '
+      '  SELECT si.product_id, '
+      '  SUM(si.quantity) AS units_sold, SUM(si.subtotal) AS revenue '
+      '  FROM sale_items si INNER JOIN sales s ON si.sale_id = s.id '
+      '  WHERE s.status = ? AND s.occurred_at >= ? '
+      '  GROUP BY si.product_id '
+      ') weekly ON weekly.product_id = p.id '
+      'WHERE p.archived = 0 '
       'ORDER BY units_sold ASC LIMIT ?',
       variables: [
         Variable.withString('COMPLETED'),
@@ -541,6 +550,7 @@ class LocalDashboardDatasource {
   }
 
   /// Worst products for a specific store this week.
+  /// Includes non-archived catalog products that had 0 sales.
   Future<List<TopProduct>> getStoreWorstProducts(String storeId, {int limit = 5}) async {
     final now = DateTime.now();
     final monday = now.subtract(Duration(days: now.weekday - 1));
@@ -555,11 +565,18 @@ class LocalDashboardDatasource {
     final totalRevenue = totalResult.read<int>('total');
 
     final rows = await _db.customSelect(
-      'SELECT si.product_id, si.product_name, '
-      'SUM(si.quantity) AS units_sold, SUM(si.subtotal) AS revenue '
-      'FROM sale_items si INNER JOIN sales s ON si.sale_id = s.id '
-      "WHERE s.status = 'COMPLETED' AND s.store_id = ? AND s.occurred_at >= ? "
-      'GROUP BY si.product_id, si.product_name '
+      'SELECT p.id AS product_id, p.name AS product_name, '
+      'COALESCE(weekly.units_sold, 0) AS units_sold, '
+      'COALESCE(weekly.revenue, 0) AS revenue '
+      'FROM products p '
+      'LEFT JOIN ( '
+      '  SELECT si.product_id, '
+      '  SUM(si.quantity) AS units_sold, SUM(si.subtotal) AS revenue '
+      "  FROM sale_items si INNER JOIN sales s ON si.sale_id = s.id "
+      "  WHERE s.status = 'COMPLETED' AND s.store_id = ? AND s.occurred_at >= ? "
+      '  GROUP BY si.product_id '
+      ') weekly ON weekly.product_id = p.id '
+      'WHERE p.archived = 0 '
       'ORDER BY units_sold ASC LIMIT ?',
       variables: [
         Variable.withString(storeId),

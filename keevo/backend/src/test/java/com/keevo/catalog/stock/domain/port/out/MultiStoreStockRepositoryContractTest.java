@@ -27,7 +27,7 @@ class MultiStoreStockRepositoryContractTest {
     @Test
     void repository_shouldDefineGetStoreStockDetail() throws NoSuchMethodException {
         Method method = MultiStoreStockRepository.class.getMethod(
-            "getStoreStockDetail", UUID.class, boolean.class,
+            "getStoreStockDetail", UUID.class, boolean.class, boolean.class,
             org.springframework.data.domain.Pageable.class);
         assertThat(method.getReturnType()).isEqualTo(Page.class);
     }
