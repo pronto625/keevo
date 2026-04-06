@@ -135,7 +135,6 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
 
       // Step 1: Push pending offline ops
       List<Map<String, dynamic>> conflicts = [];
-      bool pushFailed = false;
       try {
         conflicts = await syncService.push();
         await eventLogger.logPushSuccess(conflicts.length);
@@ -156,7 +155,6 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
         ref.invalidate(daysSinceLastSyncProvider);
         rethrow; // outer catch handles _scheduleRetry
       } catch (e) {
-        pushFailed = true;
         dev.log('Push failed during sync cycle: $e', name: 'SyncTrigger');
         await eventLogger.logPushFailed(e.toString());
         // Non-423 push failure: proceed with pull (pull is NOT gated)

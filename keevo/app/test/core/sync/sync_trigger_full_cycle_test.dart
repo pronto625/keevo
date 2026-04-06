@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/sync/sync_trigger_notifier.dart';
 
 /// Story 5.2 — AC6 Sync Trigger Full Cycle Tests
 ///

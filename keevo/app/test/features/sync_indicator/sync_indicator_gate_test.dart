@@ -10,7 +10,6 @@ import 'package:keevo/core/sync/sync_status.dart';
 import 'package:keevo/core/sync/sync_status_provider.dart';
 import 'package:keevo/core/sync/sync_trigger_notifier.dart';
 import 'package:keevo/features/sync_indicator/presentation/widget/sync_indicator.dart';
-import 'package:keevo/features/sync_indicator/presentation/widget/sync_required_modal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // ── Fake SyncTriggerNotifier ──────────────────────────────────────────────────

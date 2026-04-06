@@ -508,7 +508,6 @@ class _SaleHistoryCard extends StatelessWidget {
       case PaymentModeEnum.mobileMoney:
         return Icons.phone_android;
       case PaymentModeEnum.cash:
-      default:
         return Icons.payments_outlined;
     }
   }
@@ -518,7 +517,6 @@ class _SaleHistoryCard extends StatelessWidget {
       case PaymentModeEnum.mobileMoney:
         return Colors.amber.shade700;
       case PaymentModeEnum.cash:
-      default:
         return Colors.green.shade600;
     }
   }

@@ -2,8 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/di/providers.dart';
-import '../../../../core/sync/sync_status_provider.dart';
-import '../../../../core/sync/sync_status.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
 import '../../../catalog/presentation/provider/product_provider.dart';
 import '../../../stores/presentation/provider/store_provider.dart';

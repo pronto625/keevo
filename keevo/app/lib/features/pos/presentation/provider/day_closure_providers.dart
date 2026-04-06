@@ -100,7 +100,7 @@ final dayClosureStateProvider = FutureProvider.family<DayCloseButtonState, Strin
   if (hasClosureToday) {
     // Check for new completed sales AFTER the closure
     final newSalesCount =
-        await repository.getSalesCountAfter(storeId, lastClosure!.closedAt);
+        await repository.getSalesCountAfter(storeId, lastClosure.closedAt);
     if (newSalesCount > 0) {
       return DayCloseButtonState.available;
     }

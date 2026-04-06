@@ -1,8 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:keevo/core/di/providers.dart';
-import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/features/catalog/domain/model/category_model.dart';
 import 'package:keevo/features/catalog/domain/repository/category_repository.dart';
 import 'package:keevo/features/catalog/presentation/provider/category_provider.dart';
@@ -70,6 +68,30 @@ class MockCategoryRepository implements CategoryRepository {
       parentId: category.parentId,
       isCustom: category.isCustom,
       createdAt: category.createdAt,
+      updatedAt: now,
+    );
+    _localCategories[index] = updated;
+    return updated;
+  }
+
+  @override
+  Future<void> deleteCategory(String categoryId) async {
+    _localCategories.removeWhere((c) => c.id == categoryId);
+  }
+
+  @override
+  Future<CategoryModel> renameCategory(String categoryId, String newName) async {
+    final index = _localCategories.indexWhere((c) => c.id == categoryId);
+    if (index == -1) throw Exception('Category not found');
+    final cat = _localCategories[index];
+    final now = DateTime.now();
+    final updated = CategoryModel(
+      id: cat.id,
+      name: newName,
+      isActive: cat.isActive,
+      parentId: cat.parentId,
+      isCustom: cat.isCustom,
+      createdAt: cat.createdAt,
       updatedAt: now,
     );
     _localCategories[index] = updated;

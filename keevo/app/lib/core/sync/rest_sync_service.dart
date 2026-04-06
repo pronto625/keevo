@@ -22,7 +22,6 @@ import 'sync_service.dart';
 /// the offline safety-net queue.
 class RestSyncService implements SyncService {
   final AppDatabase _database;
-  final RemoteProductDataSource _remoteProducts;
   final Dio _dio;
   final FlutterSecureStorage _secureStorage;
   final SharedPreferences _prefs;
@@ -34,7 +33,6 @@ class RestSyncService implements SyncService {
     required FlutterSecureStorage secureStorage,
     required SharedPreferences prefs,
   })  : _database = database,
-        _remoteProducts = remoteProducts,
         _dio = dio,
         _secureStorage = secureStorage,
         _prefs = prefs;

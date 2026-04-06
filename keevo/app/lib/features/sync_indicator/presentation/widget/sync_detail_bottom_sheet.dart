@@ -9,7 +9,6 @@ import '../../../../core/sync/sync_status.dart';
 import '../../../../core/sync/sync_status_provider.dart';
 import '../../../../core/sync/sync_trigger_notifier.dart';
 import '../../../../core/storage/app_constants.dart';
-import '../../../../core/di/providers.dart';
 
 /// Enhanced bottom sheet with sync monitoring details (AC1).
 ///

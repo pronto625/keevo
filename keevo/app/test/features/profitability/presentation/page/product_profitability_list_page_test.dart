@@ -16,9 +16,6 @@ void main() {
       ProfitabilityParams(from: DateTime(2025), to: DateTime(2025)),
     );
   });
-  final now = DateTime.now();
-  final from = DateTime(now.year, now.month, now.day - 30);
-  final to = DateTime(now.year, now.month, now.day);
 
   ProductProfitabilityEntry makeEntry({
     String productId = 'p1',
@@ -59,7 +56,6 @@ void main() {
   group('ProductProfitabilityListPage', () {
     testWidgets('rendersProductRows_withMarginColorBadge', (tester) async {
       final mockRepo = MockProfitabilityRepository();
-      final params = ProfitabilityParams(from: from, to: to);
       when(() => mockRepo.getProductProfitability(params: any(named: 'params')))
           .thenAnswer((_) async => [
                 makeEntry(),

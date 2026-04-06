@@ -8,7 +8,6 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/network/auth_interceptor.dart';
 import '../../../../core/router/app_router.dart';
-import '../../../../core/services/api_service.dart';
 import '../../data/datasource/remote_auth_datasource.dart';
 import '../../data/repository/auth_repository_impl.dart';
 import '../../data/repository/secure_token_storage.dart';
@@ -260,26 +259,24 @@ class SelectTenant extends _$SelectTenant {
     );
     // Persist role; invalidate provider so SettingsPage role-guard rebuilds.
     result.whenData((tokens) {
-      if (tokens != null) {
-        final prefs = ref.read(sharedPreferencesProvider);
-        prefs.setString(kUserRoleKey, tokens.role);
-        prefs.setBool(kPasswordChangeRequiredKey, tokens.passwordChangeRequired);
-        // Story 7.1 AC2: persist firstName from JWT for dashboard greeting.
-        // Always overwrite (even with null) so a previous user's name is never shown.
-        final firstName = _extractFirstNameFromJwt(tokens.accessToken);
-        if (firstName != null && firstName.isNotEmpty) {
-          prefs.setString('user_first_name', firstName);
-        } else {
-          prefs.remove('user_first_name');
-        }
-        // EMPLOYEE: set active store from JWT so POS/Reports use the assigned store.
-        // OWNER: clear active store so "all stores" is the default.
-        ref.read(activeStoreIdProvider.notifier).setActiveStore(
-          tokens.role == 'EMPLOYEE' ? tokens.storeId : null,
-        );
-        ref.invalidate(currentUserRoleProvider);
-        ref.invalidate(currentUserPhoneProvider);
+      final prefs = ref.read(sharedPreferencesProvider);
+      prefs.setString(kUserRoleKey, tokens.role);
+      prefs.setBool(kPasswordChangeRequiredKey, tokens.passwordChangeRequired);
+      // Story 7.1 AC2: persist firstName from JWT for dashboard greeting.
+      // Always overwrite (even with null) so a previous user's name is never shown.
+      final firstName = _extractFirstNameFromJwt(tokens.accessToken);
+      if (firstName != null && firstName.isNotEmpty) {
+        prefs.setString('user_first_name', firstName);
+      } else {
+        prefs.remove('user_first_name');
       }
+      // EMPLOYEE: set active store from JWT so POS/Reports use the assigned store.
+      // OWNER: clear active store so "all stores" is the default.
+      ref.read(activeStoreIdProvider.notifier).setActiveStore(
+        tokens.role == 'EMPLOYEE' ? tokens.storeId : null,
+      );
+      ref.invalidate(currentUserRoleProvider);
+      ref.invalidate(currentUserPhoneProvider);
     });
     state = result;
   }
@@ -315,9 +312,7 @@ class ChangePassword extends _$ChangePassword {
     );
     // Clear the password change required flag on success
     result.whenData((tokens) {
-      if (tokens != null) {
-        ref.read(sharedPreferencesProvider).setBool(kPasswordChangeRequiredKey, false);
-      }
+      ref.read(sharedPreferencesProvider).setBool(kPasswordChangeRequiredKey, false);
     });
     state = result;
   }

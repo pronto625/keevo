@@ -120,6 +120,12 @@ class _FakeTokenStorage implements TokenStorage {
   Future<void> saveUserId(String userId) async {}
 
   @override
+  Future<void> saveStoreId(String? storeId) async {}
+
+  @override
+  Future<String?> getStoreId() async => null;
+
+  @override
   Future<void> saveTenantId(String tenantId) async {}
 
   @override

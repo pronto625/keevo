@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/di/providers.dart';
 import '../../../../core/services/api_service.dart';
 import '../../data/repository/tenant_preferences_repository_impl.dart';
 import '../../domain/model/tenant_preferences_model.dart';

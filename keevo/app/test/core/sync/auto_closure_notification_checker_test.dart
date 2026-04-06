@@ -1,7 +1,6 @@
 import 'dart:ffi';
 import 'dart:io';
 
-import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/storage/app_constants.dart';
 import 'package:keevo/core/storage/app_database.dart';

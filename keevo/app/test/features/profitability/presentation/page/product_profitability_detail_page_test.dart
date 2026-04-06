@@ -16,9 +16,6 @@ void main() {
       ProfitabilityParams(from: DateTime(2025), to: DateTime(2025)),
     );
   });
-  final now = DateTime.now();
-  final from = DateTime(now.year, now.month, now.day - 30);
-  final to = DateTime(now.year, now.month, now.day);
 
   ProductProfitabilityDetail makeDetail() => const ProductProfitabilityDetail(
         productId: 'p1',

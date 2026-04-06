@@ -8,7 +8,6 @@ import '../../../stores/domain/model/store_model.dart';
 import '../../../stores/presentation/provider/store_provider.dart';
 import '../../domain/model/cross_store_availability_model.dart';
 import '../provider/cross_store_availability_provider.dart';
-import '../provider/stock_provider.dart';
 import '../../../inventory/presentation/widget/transfer_form_bottom_sheet.dart';
 
 /// Opens the cross-store availability bottom sheet for [productId].

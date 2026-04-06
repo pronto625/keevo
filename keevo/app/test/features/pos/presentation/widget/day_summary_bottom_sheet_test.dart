@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/pos/domain/model/day_closure_model.dart';
 import 'package:keevo/features/pos/presentation/provider/day_closure_providers.dart';
 import 'package:keevo/features/pos/presentation/widget/day_summary_bottom_sheet.dart';
-import 'package:mocktail/mocktail.dart';
 
 void main() {
   group('DaySummaryBottomSheet', () {

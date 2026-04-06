@@ -12,11 +12,6 @@ import '../provider/pos_providers.dart';
 class PendingSalesPage extends ConsumerWidget {
   const PendingSalesPage({super.key});
 
-  static final _currencyFormat =
-      NumberFormat.currency(locale: 'fr_CM', symbol: 'FCFA', decimalDigits: 0);
-
-  static final _dateFormat = DateFormat('dd/MM HH:mm');
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final storeId = ref.watch(activeStoreIdProvider);

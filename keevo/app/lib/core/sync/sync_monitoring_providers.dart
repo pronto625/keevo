@@ -4,7 +4,6 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../features/auth/presentation/provider/auth_provider.dart';
 import '../di/providers.dart';
 import '../storage/app_database.dart';
-import '../sync/sync_event_logger.dart';
 
 part 'sync_monitoring_providers.g.dart';
 

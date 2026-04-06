@@ -25,6 +25,7 @@ class _FakeQuickAddNotifier extends QuickAddProductNotifier {
     required String name,
     required String categoryId,
     required int physicalQty,
+    int? sellingPrice,
   }) async {
     state = const AsyncLoading();
     if (shouldReturnNull) {

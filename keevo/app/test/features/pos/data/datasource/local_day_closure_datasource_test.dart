@@ -1,7 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/features/pos/data/datasource/local_day_closure_datasource.dart';
-import 'package:keevo/features/pos/domain/model/day_closure_model.dart';
-import 'package:mocktail/mocktail.dart';
 
 void main() {
   group('LocalDayClosureDatasource', () {

@@ -8,8 +8,6 @@ import 'package:intl/intl.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/sync/sync_status.dart';
 import '../../../../core/sync/sync_status_provider.dart';
-import '../../../stores/presentation/provider/store_provider.dart';
-import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../provider/global_stock_provider.dart';
 import '../widget/store_product_stock_tile.dart';
 import '../widget/store_stock_card.dart';

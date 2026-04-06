@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/storage/app_constants.dart';
 import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/core/sync/rest_sync_service.dart';
 import 'package:keevo/features/catalog/data/datasource/remote_product_datasource.dart';

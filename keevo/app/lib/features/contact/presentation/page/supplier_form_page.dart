@@ -356,7 +356,6 @@ class _ModernField extends StatelessWidget {
   final TextInputType? keyboardType;
   final String? Function(String?)? validator;
   final List<TextInputFormatter>? inputFormatters;
-  final int? maxLines;
   final bool required;
 
   const _ModernField({
@@ -367,7 +366,6 @@ class _ModernField extends StatelessWidget {
     this.keyboardType,
     this.validator,
     this.inputFormatters,
-    this.maxLines,
     this.required = false,
   });
 
@@ -379,7 +377,7 @@ class _ModernField extends StatelessWidget {
       keyboardType: keyboardType,
       validator: validator,
       inputFormatters: inputFormatters,
-      maxLines: maxLines ?? 1,
+      maxLines: 1,
       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
       decoration: InputDecoration(
         labelText: required ? '$label *' : label,

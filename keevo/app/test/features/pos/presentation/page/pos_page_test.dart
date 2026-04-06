@@ -8,10 +8,7 @@ import 'package:keevo/core/sync/sync_status.dart';
 import 'package:keevo/core/sync/sync_status_provider.dart';
 import 'package:keevo/features/pos/presentation/page/pos_page.dart';
 import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
-import 'package:keevo/features/pos/presentation/provider/pos_search_provider.dart';
-import 'package:keevo/features/pos/presentation/widget/cart_pill.dart';
-import 'package:keevo/features/pos/presentation/provider/cart_provider.dart';
-import 'package:keevo/features/stores/presentation/provider/active_store_provider.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

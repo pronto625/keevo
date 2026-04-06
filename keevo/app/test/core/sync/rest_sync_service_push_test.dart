@@ -1,10 +1,6 @@
-import 'dart:convert';
-
 import 'package:dio/dio.dart';
-import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/storage/app_database.dart';
-import 'package:keevo/core/sync/rest_sync_service.dart';
 import 'package:mocktail/mocktail.dart';
 
 // ─── Mocks ─────────────────────────────────────────────────────────────────
@@ -17,14 +13,6 @@ class MockAppDatabase extends Mock implements AppDatabase {}
 /// Tests the unified batch push to POST /api/v1/sync/push, result processing
 /// (APPLIED, REJECTED, DUPLICATE, CONFLICT), retry logic, and batch limits.
 void main() {
-  late MockDio mockDio;
-  late MockAppDatabase mockDb;
-
-  setUp(() {
-    mockDio = MockDio();
-    mockDb = MockAppDatabase();
-  });
-
   group('RestSyncService.push()', () {
     test('push_emptyQueue_doesNothing', () async {
       // When there are no pending operations, push should not make any HTTP call

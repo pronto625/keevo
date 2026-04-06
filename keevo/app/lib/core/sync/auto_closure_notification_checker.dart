@@ -1,4 +1,3 @@
-import 'package:drift/drift.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../storage/app_constants.dart';
