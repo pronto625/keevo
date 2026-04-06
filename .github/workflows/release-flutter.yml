@@ -75,7 +75,9 @@ jobs:
 
       - name: Build release APK
         working-directory: keevo/app
-        run: flutter build apk --release
+        env:
+          APP_DOMAIN: ${{ secrets.APP_DOMAIN }}
+        run: flutter build apk --release --dart-define=API_BASE_URL=https://${APP_DOMAIN}
 
       - name: Rename APK
         run: |
@@ -143,7 +145,9 @@ jobs:
 
       - name: Build Flutter iOS (no codesign)
         working-directory: keevo/app
-        run: flutter build ios --release --no-codesign
+        env:
+          APP_DOMAIN: ${{ secrets.APP_DOMAIN }}
+        run: flutter build ios --release --no-codesign --dart-define=API_BASE_URL=https://${APP_DOMAIN}
 
       - name: Archive with Xcode
         working-directory: keevo/app/ios
