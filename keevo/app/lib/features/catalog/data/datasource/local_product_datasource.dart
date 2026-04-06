@@ -84,6 +84,27 @@ class LocalProductDataSource {
     return rows.map((r) => r.read<String>('product_id')).toSet();
   }
 
+  /// Returns productId → stock quantity for the given store.
+  /// Uses actual [stock_levels] rows, not the stale denormalized product field.
+  Future<Map<String, int>> getStockByStore(String storeId) async {
+    const sql =
+        'SELECT product_id, quantity FROM stock_levels WHERE store_id = ?';
+    final rows = await _db.customSelect(
+      sql,
+      variables: [Variable.withString(storeId)],
+    ).get();
+    return {for (final r in rows) r.read<String>('product_id'): r.read<int>('quantity')};
+  }
+
+  /// Returns productId → total stock quantity summed across all stores.
+  /// Uses actual [stock_levels] rows, not the stale denormalized product field.
+  Future<Map<String, int>> getTotalStock() async {
+    const sql =
+        'SELECT product_id, SUM(quantity) as total FROM stock_levels GROUP BY product_id';
+    final rows = await _db.customSelect(sql).get();
+    return {for (final r in rows) r.read<String>('product_id'): r.read<int>('total')};
+  }
+
   // ── Write operations ─────────────────────────────────────────────────────
 
   Future<ProductModel> insert({

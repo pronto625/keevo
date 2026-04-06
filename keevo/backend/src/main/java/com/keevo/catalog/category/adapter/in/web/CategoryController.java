@@ -2,10 +2,13 @@ package com.keevo.catalog.category.adapter.in.web;
 
 import com.keevo.catalog.category.adapter.in.web.dto.CreateCategoryRequestDto;
 import com.keevo.catalog.category.adapter.in.web.dto.CategoryResponseDto;
+import com.keevo.catalog.category.adapter.in.web.dto.RenameCategoryRequestDto;
 import com.keevo.catalog.category.application.usecase.CreateCategoryUseCase;
 import com.keevo.catalog.category.application.usecase.GetCategoriesUseCase;
+import com.keevo.catalog.category.application.usecase.RenameCategoryUseCase;
 import com.keevo.catalog.category.application.usecase.ToggleCategoryUseCase;
 import com.keevo.catalog.category.domain.model.Category;
+import com.keevo.catalog.category.domain.port.out.CategoryRepository;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 
 import org.springframework.http.HttpStatus;
@@ -34,13 +37,19 @@ public class CategoryController {
     private final CreateCategoryUseCase createCategoryUseCase;
     private final GetCategoriesUseCase getCategoriesUseCase;
     private final ToggleCategoryUseCase toggleCategoryUseCase;
+    private final RenameCategoryUseCase renameCategoryUseCase;
+    private final CategoryRepository categoryRepository;
 
     public CategoryController(CreateCategoryUseCase createCategoryUseCase,
                             GetCategoriesUseCase getCategoriesUseCase,
-                            ToggleCategoryUseCase toggleCategoryUseCase) {
+                            ToggleCategoryUseCase toggleCategoryUseCase,
+                            RenameCategoryUseCase renameCategoryUseCase,
+                            CategoryRepository categoryRepository) {
         this.createCategoryUseCase = createCategoryUseCase;
         this.getCategoriesUseCase = getCategoriesUseCase;
         this.toggleCategoryUseCase = toggleCategoryUseCase;
+        this.renameCategoryUseCase = renameCategoryUseCase;
+        this.categoryRepository = categoryRepository;
     }
 
     /**
@@ -115,5 +124,29 @@ public class CategoryController {
         CategoryResponseDto response = CategoryResponseDto.fromDomain(category);
 
         return ResponseEntity.ok(ApiResponseWrapper.ok(response));
+    }
+
+    /**
+     * Rename a category.
+     * PATCH /api/v1/categories/{id}
+     */
+    @PatchMapping("/{id}")
+    public ResponseEntity<ApiResponseWrapper<CategoryResponseDto>> renameCategory(
+            @PathVariable UUID id,
+            @Valid @RequestBody RenameCategoryRequestDto request) {
+        var dto = new RenameCategoryUseCase.RenameCategoryDto(request.name());
+        Category category = renameCategoryUseCase.execute(id, dto);
+        return ResponseEntity.ok(ApiResponseWrapper.ok(CategoryResponseDto.fromDomain(category)));
+    }
+
+    /**
+     * Soft-delete a category (always sets isActive = false).
+     * DELETE /api/v1/categories/{id}
+     */
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('OWNER')")
+    public ResponseEntity<Void> deleteCategory(@PathVariable UUID id) {
+        categoryRepository.deactivate(id);
+        return ResponseEntity.noContent().build();
     }
 }

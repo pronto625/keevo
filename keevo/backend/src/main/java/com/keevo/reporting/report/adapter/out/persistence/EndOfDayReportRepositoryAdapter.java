@@ -77,6 +77,12 @@ public class EndOfDayReportRepositoryAdapter implements EndOfDayReportRepository
                 .toList();
     }
 
+    @Override
+    public Optional<EndOfDayReport> findByKey(UUID storeId, LocalDate date, ReportType type, UUID actorId) {
+        return springRepository.findByKey(storeId, date, type.name(), actorId)
+                .map(this::toDomain);
+    }
+
     // ── Mapping ───────────────────────────────────────────────────────────────
 
     private EndOfDayReportJpaEntity toEntity(EndOfDayReport r) {

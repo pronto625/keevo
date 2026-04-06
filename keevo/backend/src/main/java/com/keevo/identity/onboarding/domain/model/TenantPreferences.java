@@ -28,11 +28,13 @@ public record TenantPreferences(
         ReportChannel weeklyReportChannel,  // default WHATSAPP
         boolean inventoryReportEnabled,     // default true
         ReportChannel inventoryReportChannel, // default WHATSAPP
-        StockAlertChannel stockAlertChannel   // default PUSH
+        StockAlertChannel stockAlertChannel,  // default PUSH
+        // ── Story 8.1 — Trend notification preference ─────────────────────────
+        boolean trendNotificationEnabled    // default true
 ) {
 
     /**
-     * Factory with Story 7.5 defaults — used by OnboardingService and tests.
+     * Factory with Story 8.1 defaults — used by OnboardingService and tests.
      * Avoids breaking callers when new fields are added to the record.
      */
     public static TenantPreferences withDefaults(UUID id, SectorType sectorType,
@@ -44,7 +46,8 @@ public record TenantPreferences(
             true, ReportChannel.WHATSAPP,
             true, 0, "20:00:00", ReportChannel.WHATSAPP,
             true, ReportChannel.WHATSAPP,
-            StockAlertChannel.PUSH
+            StockAlertChannel.PUSH,
+            true
         );
     }
 }

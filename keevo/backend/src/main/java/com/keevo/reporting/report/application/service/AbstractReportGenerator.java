@@ -45,6 +45,15 @@ public abstract class AbstractReportGenerator {
         // Step 1: Collect data (subclass-specific)
         EndOfDayReportData data = collectData(command);
 
+        // Idempotency guard: if a report already exists for this (store, date, type, actor), skip creation
+        var existing = reportRepository.findByKey(
+                command.storeId(), data.reportDate(), getReportType(), command.actorId());
+        if (existing.isPresent()) {
+            log.warn("Duplicate report skipped — storeId={}, date={}, type={}, actorId={}",
+                    command.storeId(), data.reportDate(), getReportType(), command.actorId());
+            return existing.get();
+        }
+
         // Step 2: Format content (subclass-specific)
         String content = formatContent(data);
 

@@ -23,7 +23,9 @@ class NotificationModel with _$NotificationModel {
   /// Returns an emoji icon based on notification type.
   String get typeIcon => switch (type) {
         'DRAFT_PRODUCT_PENDING_VALIDATION' => '🔶',
-        'STOCK_THRESHOLD_BREACHED' => '⚠️',
+        'STOCK_THRESHOLD_BREACHED' || 'STOCK_ALERT' || 'STOCK_ALERT_BATCH' => '⚠️',
+        'TREND_DOWN' => '📉',
+        'TREND_UP' => '📈',
         'DAILY_REPORT' || 'WEEKLY_REPORT' => '📊',
         _ => '🔔',
       };

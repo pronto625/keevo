@@ -33,4 +33,11 @@ public interface EndOfDayReportRepository {
     boolean allStoresClosedForDate(String tenantId, LocalDate date, int activeStoreCount);
 
     List<EndOfDayReport> findByDateAndTenant(LocalDate date, String tenantId, ReportType type);
+
+    /**
+     * Idempotency check: returns the existing report for the exact
+     * (storeId, reportDate, reportType, actorId) combination, if any.
+     * actorId == null matches store-level (owner) reports.
+     */
+    Optional<EndOfDayReport> findByKey(UUID storeId, LocalDate date, ReportType type, UUID actorId);
 }

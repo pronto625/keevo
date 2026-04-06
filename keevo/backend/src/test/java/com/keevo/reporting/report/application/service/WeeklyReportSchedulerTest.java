@@ -250,7 +250,8 @@ class WeeklyReportSchedulerTest {
                 UUID.randomUUID(), SectorType.OTHER, "20:00:00", true, Instant.now(),
                 true, ReportChannel.WHATSAPP,
                 enabled, weeklyDay, weeklyTime, ReportChannel.WHATSAPP,
-                true, ReportChannel.WHATSAPP, StockAlertChannel.PUSH
+                true, ReportChannel.WHATSAPP, StockAlertChannel.PUSH,
+                true
         );
     }
 
@@ -259,7 +260,8 @@ class WeeklyReportSchedulerTest {
                 UUID.randomUUID(), SectorType.OTHER, "20:00:00", true, Instant.now(),
                 true, ReportChannel.WHATSAPP,
                 true, weeklyDay, weeklyTime, channel,
-                true, ReportChannel.WHATSAPP, StockAlertChannel.PUSH
+                true, ReportChannel.WHATSAPP, StockAlertChannel.PUSH,
+                true
         );
     }
 

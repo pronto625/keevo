@@ -53,6 +53,27 @@ class _DetailScaffold extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final resendState = ref.watch(resendReportNotifierProvider);
+
+    ref.listen<AsyncValue<void>>(resendReportNotifierProvider, (prev, next) {
+      if (prev is AsyncLoading && next is AsyncData) {
+        ref.invalidate(reportDetailProvider(reportId));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Rapport renvoyé avec succès via WhatsApp'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else if (next is AsyncError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Échec du renvoi : ${next.error}'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    });
     final role = ref.watch(currentUserRoleProvider);
     final isOwner = role == 'OWNER';
     final dateFormat = DateFormat("EEEE d MMMM yyyy", 'fr_FR');
@@ -181,19 +202,10 @@ class _DetailScaffold extends ConsumerWidget {
 
             // ── Resend button (OWNER only) ────────────────────────────────
             if (isOwner) ...[
-              if (resendState is AsyncError)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Text(
-                    'Erreur: ${resendState.error}',
-                    style: const TextStyle(color: Colors.red, fontSize: 13),
-                  ),
-                ),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: (report.isDelivered ||
-                          resendState is AsyncLoading)
+                  onPressed: resendState is AsyncLoading
                       ? null
                       : () => ref
                           .read(resendReportNotifierProvider.notifier)

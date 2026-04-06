@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -46,4 +47,17 @@ public interface EndOfDayReportSpringRepository
                    "WHERE DATE(closed_at) = :date AND tenant_id = :tenantId",
            nativeQuery = true)
     int countDistinctStoresClosed(@Param("date") LocalDate date, @Param("tenantId") String tenantId);
+
+    /**
+     * Idempotency lookup: finds the existing report for an exact
+     * (storeId, reportDate, reportType, actorId) key. Handles actorId=null for store-level reports.
+     */
+    @Query("SELECT r FROM EndOfDayReportJpaEntity r WHERE " +
+           "r.storeId = :storeId AND r.reportDate = :reportDate AND r.reportType = :reportType " +
+           "AND ((:actorId IS NULL AND r.actorId IS NULL) OR r.actorId = :actorId)")
+    Optional<EndOfDayReportJpaEntity> findByKey(
+            @Param("storeId") UUID storeId,
+            @Param("reportDate") LocalDate reportDate,
+            @Param("reportType") String reportType,
+            @Param("actorId") UUID actorId);
 }

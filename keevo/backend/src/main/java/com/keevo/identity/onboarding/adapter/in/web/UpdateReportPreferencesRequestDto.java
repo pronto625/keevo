@@ -42,5 +42,7 @@ public record UpdateReportPreferencesRequestDto(
 
     @Pattern(regexp = "^([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d$",
              message = "eodReportTime must be HH:mm:ss")
-    String eodReportTime
+    String eodReportTime,
+
+    Boolean trendNotificationEnabled       // Story 8.1 — nullable: absent means no change
 ) {}

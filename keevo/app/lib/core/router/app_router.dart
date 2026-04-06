@@ -255,6 +255,16 @@ const _ownerOnlyPrefixes = [
 /// 4. Backend enforcement via JwtAuthFilter (403 for EMPLOYEE on OWNER-only endpoints)
 final GoRouter appRouter = GoRouter(
   initialLocation: '/splash',
+  errorBuilder: (context, state) {
+    // Unknown deepLink (e.g. stale notification) — fall back to splash
+    // which re-evaluates auth state and routes accordingly.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      GoRouter.of(context).go('/splash');
+    });
+    return const Scaffold(
+      body: Center(child: CircularProgressIndicator()),
+    );
+  },
   redirect: (context, state) async {
     final path = state.uri.path;
     if (!_ownerOnlyPrefixes.any((prefix) => path.startsWith(prefix))) {

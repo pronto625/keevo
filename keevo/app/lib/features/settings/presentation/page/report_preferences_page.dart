@@ -279,6 +279,25 @@ class _ReportPreferencesPageState
                     ),
                   ]),
 
+                  const SizedBox(height: 20),
+
+                  // ── Section 5 : Tendances de Ventes ─────────────────────
+                  _SectionHeader(
+                    icon: Icons.trending_up_rounded,
+                    iconColor: const Color(0xFF20C997),
+                    title: 'Tendances de Ventes',
+                  ),
+                  const SizedBox(height: 8),
+                  _PrefsCard(children: [
+                    _SwitchTile(
+                      title: 'Activer les alertes de tendance',
+                      subtitle: 'Notifié quand les ventes varient fortement',
+                      value: state.preferences!.trendNotificationEnabled,
+                      onChanged: (v) => notifier.updateField(
+                          (p) => p.copyWith(trendNotificationEnabled: v)),
+                    ),
+                  ]),
+
                   const SizedBox(height: 28),
 
                   // ── Save button ─────────────────────────────────────────

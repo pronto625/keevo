@@ -27,7 +27,7 @@ public class DayClosureDeltaProvider implements DeltaEntityProvider {
     public List<Map<String, Object>> queryDelta(Instant since) {
         String sql = "SELECT id, store_id, actor_id, closed_at, " +
                 "total_sales, total_revenue, " +
-                "cash_amount, momo_amount " +
+                "cash_amount, momo_amount, is_automatic " +
                 "FROM day_closures WHERE closed_at > :since ORDER BY closed_at ASC";
         Query query = em.createNativeQuery(sql);
         query.setParameter("since", java.sql.Timestamp.from(since));
@@ -46,9 +46,12 @@ public class DayClosureDeltaProvider implements DeltaEntityProvider {
         map.put("totalTransactions", num(row[5]));
         map.put("cashTotal", num(row[6]));
         map.put("mobileMoneyTotal", num(row[7]));
+        map.put("isAutomatic", bool(row[8]));
         map.put("createdAt", ts(row[3])); // closedAt serves as createdAt
         return map;
     }
+
+    private boolean bool(Object o) { return o != null && ((Number) o).intValue() != 0; }
 
     private String str(Object o) { return o != null ? o.toString() : null; }
     private Object num(Object o) { return o != null ? ((Number) o).intValue() : 0; }

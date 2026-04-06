@@ -48,7 +48,7 @@ public class DayClosureNotificationListener {
                     "DAY_CLOSED",
                     "📊 Clôture journalière",
                     body,
-                    "/day-closures",
+                    "/reports/history",
                     Map.of(
                             "closureId",    event.closureId().toString(),
                             "storeId",      event.storeId().toString(),

@@ -170,6 +170,47 @@ class CategoryRepositoryImpl implements CategoryRepository {
     }
   }
 
+  @override
+  Future<CategoryModel> renameCategory(String categoryId, String newName) async {
+    try {
+      final response = await _apiService.patch(
+        '/api/v1/categories/$categoryId',
+        data: {'name': newName},
+      );
+      final categoryData = response['data'] as Map<String, dynamic>;
+      final category = CategoryModel.fromJson(categoryData);
+      await (_database.update(_database.categories)
+            ..where((c) => c.id.equals(categoryId)))
+          .write(CategoriesCompanion(
+        name: Value(category.name),
+        updatedAt: Value(category.updatedAt),
+      ));
+      return category;
+    } catch (e) {
+      // Offline fallback: rename locally
+      final now = DateTime.now();
+      await (_database.update(_database.categories)
+            ..where((c) => c.id.equals(categoryId)))
+          .write(CategoriesCompanion(name: Value(newName), updatedAt: Value(now)));
+      final row = await (_database.select(_database.categories)
+            ..where((c) => c.id.equals(categoryId)))
+          .getSingle();
+      return _mapToModel(row);
+    }
+  }
+
+  @override
+  Future<void> deleteCategory(String categoryId) async {
+    try {
+      await _apiService.delete('/api/v1/categories/$categoryId');
+    } catch (_) {
+      // Proceed with local removal even if network fails.
+    }
+    await (_database.delete(_database.categories)
+          ..where((c) => c.id.equals(categoryId)))
+        .go();
+  }
+
   /// Map Drift Category to CategoryModel
   CategoryModel _mapToModel(Category row) {
     return CategoryModel(

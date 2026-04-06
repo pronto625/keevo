@@ -200,7 +200,8 @@ class ReportPreferencesControllerTest {
         return new TenantPreferences(
                 UUID.randomUUID(), SectorType.OTHER, "22:00:00", true, Instant.now(),
                 true, ReportChannel.WHATSAPP, true, 0, "20:00:00", ReportChannel.WHATSAPP,
-                true, ReportChannel.WHATSAPP, StockAlertChannel.PUSH
+                true, ReportChannel.WHATSAPP, StockAlertChannel.PUSH,
+                true
         );
     }
 }

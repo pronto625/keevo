@@ -62,11 +62,7 @@ public class ReportHistoryService implements GetReportHistoryUseCase, ResendRepo
                 .filter(r -> r.getTenantId().equals(command.tenantId()))
                 .orElseThrow(() -> new DomainException(ErrorCode.NOT_FOUND, "Report not found"));
 
-        if (report.getDeliveryStatus() == com.keevo.reporting.report.domain.model.DeliveryStatus.SENT) {
-            throw new DomainException(ErrorCode.REPORT_ALREADY_SENT, "Report already delivered via WhatsApp");
-        }
-
-        // Reset and attempt immediate delivery
+        // Reset and attempt immediate delivery (no guard: re-sending an already-SENT report is allowed)
         report.resetForResend();
         reportRepository.save(report);
 
@@ -76,6 +72,7 @@ public class ReportHistoryService implements GetReportHistoryUseCase, ResendRepo
 
         try {
             whatsAppPort.sendReport(ownerPhone, report.getContent());
+            report.incrementAttempt();
             report.markSent();
             log.info("Resend succeeded for reportId={}", report.getId());
         } catch (Exception e) {

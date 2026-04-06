@@ -31,6 +31,7 @@ class ReportsPage extends ConsumerWidget {
     final summaryAsync = ref.watch(todaySummaryProvider(storeId));
     final closureStateAsync = ref.watch(dayClosureStateProvider(storeId));
     final userIdAsync = ref.watch(currentUserIdProvider);
+    final lastClosureAsync = ref.watch(lastClosureProvider(storeId));
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
@@ -96,6 +97,7 @@ class ReportsPage extends ConsumerWidget {
                 storeId,
                 closureStateAsync,
                 userIdAsync,
+                lastClosureAsync.valueOrNull,
               ),
             ),
           ),
@@ -112,9 +114,25 @@ class ReportsPage extends ConsumerWidget {
     String storeId,
     AsyncValue<DayCloseButtonState> closureStateAsync,
     AsyncValue<String?> userIdAsync,
+    DayClosure? lastClosure,
   ) {
     final isClosed =
         closureStateAsync.valueOrNull == DayCloseButtonState.closed;
+
+    // Compute period label: "depuis HH:mm" for same-day closure,
+    // "depuis le dd/MM" for an older closure, or "depuis le début de la journée".
+    final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day);
+    final String periodLabel;
+    if (lastClosure == null) {
+      periodLabel = "depuis le début de la journée";
+    } else if (lastClosure.closedAt.isAfter(startOfToday)) {
+      final hm = DateFormat('HH:mm', 'fr_FR').format(lastClosure.closedAt);
+      periodLabel = "depuis la clôture de $hm";
+    } else {
+      final dateShort = DateFormat('d MMM', 'fr_FR').format(lastClosure.closedAt);
+      periodLabel = "depuis le $dateShort";
+    }
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -133,7 +151,7 @@ class ReportsPage extends ConsumerWidget {
           const SizedBox(height: 4),
           Text(
             summary.hasSales
-                ? 'Excellent travail aujourd\'hui !'
+                ? 'Excellent travail — $periodLabel'
                 : 'Aucune vente enregistrée pour le moment.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: Colors.grey.shade600,
@@ -190,7 +208,7 @@ class ReportsPage extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      '${summary.totalSales} vente${summary.totalSales > 1 ? 's' : ''} aujourd\'hui',
+                      '${summary.totalSales} vente${summary.totalSales > 1 ? 's' : ''} enregistrée${summary.totalSales > 1 ? 's' : ''}',
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.9),
                         fontSize: 12,

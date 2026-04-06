@@ -106,6 +106,11 @@ public class TenantSchemaMigrationRunner implements ApplicationRunner {
             stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_INVENTORY_CHANNEL);
             stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_STOCK_CHANNEL);
 
+            // Migration M4 (Story 8.1): notification_cooldowns table + trend preference
+            stmt.execute(TenantSchemaProvisioner.DDL_NOTIFICATION_COOLDOWNS);
+            stmt.execute(TenantSchemaProvisioner.DDL_NOTIFICATION_COOLDOWNS_IDX_TYPE_STORE);
+            stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_TREND_NOTIFICATION);
+
             stmt.execute("SET search_path TO public");
         }
     }

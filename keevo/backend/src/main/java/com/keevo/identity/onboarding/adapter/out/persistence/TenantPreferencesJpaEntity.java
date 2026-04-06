@@ -68,6 +68,11 @@ public class TenantPreferencesJpaEntity {
     @Column(name = "stock_alert_channel", nullable = false, length = 20)
     private String stockAlertChannel = "PUSH";
 
+    // ── Story 8.1 — Trend notification preference ─────────────────────────────
+
+    @Column(name = "trend_notification_enabled", nullable = false)
+    private boolean trendNotificationEnabled = true;
+
     // ── JPA requires no-arg constructor ───────────────────────────────────────
     protected TenantPreferencesJpaEntity() {}
 
@@ -119,6 +124,9 @@ public class TenantPreferencesJpaEntity {
 
     public String getStockAlertChannel() { return stockAlertChannel; }
     public void setStockAlertChannel(String v) { this.stockAlertChannel = v; }
+
+    public boolean isTrendNotificationEnabled() { return trendNotificationEnabled; }
+    public void setTrendNotificationEnabled(boolean v) { this.trendNotificationEnabled = v; }
 
     public void setUpdatedAt(Instant v) { this.updatedAt = v; }
     public void setStockAlertEnabled(boolean v) { this.stockAlertEnabled = v; }

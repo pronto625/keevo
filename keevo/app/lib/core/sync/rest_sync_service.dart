@@ -551,13 +551,14 @@ class RestSyncService implements SyncService {
     for (final c in closures) {
       final map = c as Map<String, dynamic>;
       final closedAtLocal = _toLocalIso(map['closedAt']);
+      final isAutomatic = (map['isAutomatic'] == true) ? 1 : 0;
       await _database.customStatement(
         'INSERT INTO day_closures (id, store_id, actor_id, closed_at, '
         'total_sales, total_revenue, cash_amount, momo_amount, '
         'pending_sales_count, pending_sales_total, is_automatic, '
         'synced, created_at) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 1, ?) '
-        'ON CONFLICT(id) DO NOTHING',
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 1, ?) '
+        'ON CONFLICT(id) DO UPDATE SET is_automatic = excluded.is_automatic',
         [
           map['id'],
           map['storeId'],
@@ -567,6 +568,7 @@ class RestSyncService implements SyncService {
           map['totalTransactions'],
           map['cashTotal'],
           map['mobileMoneyTotal'],
+          isAutomatic,
           closedAtLocal,
         ],
       );

@@ -156,7 +156,7 @@ development_status:
   # ─────────────────────────────────────────────────────────
   epic-8: in-progress
   8-0-fcm-push-notifications-whatsapp-wassender: done  # Code review PASSED (adversarial) | H1: TenantContext added to FcmNotificationAdapter (cross-tenant fix) | H2: wassenderRestTemplate @Bean with 10s/30s timeouts | H3: onTokenRefresh re-registers token with backend (AC2) | H4: Bell Align+SafeArea instead of Positioned overlay | M1: DevicePlatform.valueOf wrapped → DomainException(VALIDATION_ERROR) | M2: ERROR log added when WASSENDER_API_TOKEN blank at startup | M3: null FirebaseMessaging guard in notifyOwners() | L1: escapeJson handles U+0000–U+001F control chars | L2: ownership check deferred | 29/29 backend + 11/11 Flutter GREEN
-  8-1-alertes-stock-critique-tendances-de-ventes: backlog
+  8-1-alertes-stock-critique-tendances-de-ventes: done
   8-2-suivi-activite-employes: backlog
   8-3-desactivation-employe-revocation-de-sessions: backlog
   8-4-feedback-utilisateur-signalement-de-probleme: backlog

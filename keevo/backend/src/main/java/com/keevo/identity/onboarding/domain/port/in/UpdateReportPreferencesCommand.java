@@ -21,5 +21,6 @@ public record UpdateReportPreferencesCommand(
         boolean inventoryReportEnabled,
         ReportChannel inventoryReportChannel,
         boolean stockAlertEnabled,          // AC3 — must be updatable
-        StockAlertChannel stockAlertChannel
+        StockAlertChannel stockAlertChannel,
+        Boolean trendNotificationEnabled    // Story 8.1 — nullable means no change
 ) {}

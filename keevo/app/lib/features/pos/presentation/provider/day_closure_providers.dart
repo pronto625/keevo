@@ -122,6 +122,12 @@ final todaySummaryProvider = FutureProvider.family<DayClosureSummary, String>((r
   return repository.computeTodaySummary(storeId, null);
 });
 
+/// Last closure for the store — used to display the period label in Reports.
+final lastClosureProvider = FutureProvider.family<DayClosure?, String>((ref, storeId) async {
+  final repository = ref.watch(dayClosureRepositoryProvider);
+  return repository.getLastClosure(storeId);
+});
+
 /// Sales history with date filter.
 final salesHistoryProvider = FutureProvider.family<List<Sale>, SalesHistoryFilter>((ref, filter) async {
   final useCase = ref.watch(getSalesHistoryUseCaseProvider);

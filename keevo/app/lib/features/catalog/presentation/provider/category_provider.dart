@@ -34,6 +34,9 @@ final categoryRepositoryProvider = Provider<CategoryRepository>((ref) {
 /// asyncCats.when(data: (cats) => ..., loading: ..., error: ...);
 /// ```
 final categoriesProvider = FutureProvider.autoDispose<List<CategoryModel>>((ref) async {
+  // Re-run when category list is mutated.
+  ref.watch(categoryRefreshProvider);
+
   final repository = ref.watch(categoryRepositoryProvider);
   
   // Get tenant preferences to access sector type
@@ -80,8 +83,37 @@ final subcategoriesProvider = FutureProvider.autoDispose
   return await repository.getSubcategories(parentId);
 });
 
-/// StateProvider for manual category refresh
+/// Trigger for manual category refresh (increment to force providers to re-run).
 final categoryRefreshProvider = StateProvider<int>((ref) => 0);
+
+/// Category actions — create, rename, delete.
+class CategoryActions {
+  final Ref _ref;
+  const CategoryActions(this._ref);
+
+  CategoryRepository get _repo => _ref.read(categoryRepositoryProvider);
+
+  Future<CategoryModel> create(String name, {String? parentId}) async {
+    final result = await _repo.createCustomCategory(name, parentId: parentId);
+    _ref.read(categoryRefreshProvider.notifier).state++;
+    return result;
+  }
+
+  Future<CategoryModel> rename(String categoryId, String newName) async {
+    final result = await _repo.renameCategory(categoryId, newName);
+    _ref.read(categoryRefreshProvider.notifier).state++;
+    return result;
+  }
+
+  Future<void> delete(String categoryId) async {
+    await _repo.deleteCategory(categoryId);
+    _ref.read(categoryRefreshProvider.notifier).state++;
+  }
+}
+
+final categoryActionsProvider = Provider<CategoryActions>((ref) {
+  return CategoryActions(ref);
+});
 
 /// Trigger category sync from API
 Future<void> refreshCategories(WidgetRef ref) async {
@@ -90,3 +122,4 @@ Future<void> refreshCategories(WidgetRef ref) async {
   // Trigger provider refresh
   ref.read(categoryRefreshProvider.notifier).state++;
 }
+

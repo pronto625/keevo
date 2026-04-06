@@ -171,7 +171,8 @@ public class TenantSchemaProvisioner {
                 weekly_report_channel      VARCHAR(20) NOT NULL DEFAULT 'WHATSAPP',
                 inventory_report_enabled   BOOLEAN     NOT NULL DEFAULT TRUE,
                 inventory_report_channel   VARCHAR(20) NOT NULL DEFAULT 'WHATSAPP',
-                stock_alert_channel        VARCHAR(20) NOT NULL DEFAULT 'PUSH'
+                stock_alert_channel        VARCHAR(20) NOT NULL DEFAULT 'PUSH',
+                trend_notification_enabled BOOLEAN     NOT NULL DEFAULT TRUE
             )""";
 
     // ── Tenant preferences migration (Story 7.5) ──────────────────────────────
@@ -638,6 +639,23 @@ public class TenantSchemaProvisioner {
     static final String DDL_DEVICE_TOKENS_IDX_ROLE =
             "CREATE INDEX IF NOT EXISTS idx_device_tokens_role ON device_tokens(role)";
 
+    // Story 8.1 — notification_cooldowns table for stock alert + trend cooldowns
+    static final String DDL_NOTIFICATION_COOLDOWNS = """
+            CREATE TABLE IF NOT EXISTS notification_cooldowns (
+                id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                cooldown_type VARCHAR(30) NOT NULL,
+                product_id    UUID,
+                store_id      UUID,
+                last_sent_at  TIMESTAMPTZ NOT NULL,
+                CONSTRAINT uq_cooldown_product_store_type UNIQUE (cooldown_type, product_id, store_id)
+            )""";
+    static final String DDL_NOTIFICATION_COOLDOWNS_IDX_TYPE_STORE =
+            "CREATE INDEX IF NOT EXISTS idx_cooldown_type_store ON notification_cooldowns(cooldown_type, store_id)";
+
+    // Story 8.1 — trend notification preference migration
+    static final String DDL_TENANT_PREFS_MIGRATE_TREND_NOTIFICATION =
+            "ALTER TABLE tenant_preferences ADD COLUMN IF NOT EXISTS trend_notification_enabled BOOLEAN NOT NULL DEFAULT TRUE";
+
     // SPEC CHANGE 2026-03-06: new tenants start on 6-month PREMIUM_TRIAL (unlimited limits)
     // WHERE NOT EXISTS ensures idempotency — provision() can be called multiple times safely.
     private static final String SEED_SUBSCRIPTION = """
@@ -829,6 +847,11 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_DEVICE_TOKENS);
             stmt.execute(DDL_DEVICE_TOKENS_IDX_USER);
             stmt.execute(DDL_DEVICE_TOKENS_IDX_ROLE);
+            // Story 8.1 — notification_cooldowns
+            stmt.execute(DDL_NOTIFICATION_COOLDOWNS);
+            stmt.execute(DDL_NOTIFICATION_COOLDOWNS_IDX_TYPE_STORE);
+            // Story 8.1 — trend notification preference
+            stmt.execute(DDL_TENANT_PREFS_MIGRATE_TREND_NOTIFICATION);
             stmt.execute("SET search_path TO public");
         }
     }

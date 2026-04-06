@@ -67,6 +67,7 @@ public class CategoryJpaEntity {
     public Instant getUpdatedAt() { return updatedAt; }
 
     // ── Mutators for JPA operations ──────────────────────────────────────────
+    public void setName(String name) { this.name = name; }
     public void setActive(boolean active) { this.isActive = active; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
 }

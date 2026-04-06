@@ -84,6 +84,7 @@ public class JpaTenantPreferencesRepository implements TenantPreferencesReposito
                 ? prefs.inventoryReportChannel().name() : "WHATSAPP");
         entity.setStockAlertChannel(prefs.stockAlertChannel() != null
                 ? prefs.stockAlertChannel().name() : "PUSH");
+        entity.setTrendNotificationEnabled(prefs.trendNotificationEnabled());
     }
 
     private TenantPreferences toDomain(TenantPreferencesJpaEntity entity) {
@@ -104,7 +105,8 @@ public class JpaTenantPreferencesRepository implements TenantPreferencesReposito
             ReportChannel.fromString(entity.getWeeklyReportChannel()),
             entity.isInventoryReportEnabled(),
             ReportChannel.fromString(entity.getInventoryReportChannel()),
-            StockAlertChannel.fromString(entity.getStockAlertChannel())
+            StockAlertChannel.fromString(entity.getStockAlertChannel()),
+            entity.isTrendNotificationEnabled()
         );
     }
 }

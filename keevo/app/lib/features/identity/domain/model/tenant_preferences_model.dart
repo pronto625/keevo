@@ -27,6 +27,7 @@ class TenantPreferencesModel {
   final bool inventoryReportEnabled;
   final String inventoryReportChannel;
   final String stockAlertChannel;
+  final bool trendNotificationEnabled;
 
   const TenantPreferencesModel({
     required this.sectorType,
@@ -42,6 +43,7 @@ class TenantPreferencesModel {
     this.inventoryReportEnabled = true,
     this.inventoryReportChannel = 'WHATSAPP',
     this.stockAlertChannel = 'PUSH',
+    this.trendNotificationEnabled = true,
   });
 
   /// Factory from API response
@@ -71,6 +73,7 @@ class TenantPreferencesModel {
       inventoryReportEnabled: json['inventoryReportEnabled'] as bool? ?? false,
       inventoryReportChannel: json['inventoryReportChannel'] as String? ?? 'WHATSAPP',
       stockAlertChannel: json['stockAlertChannel'] as String? ?? 'PUSH',
+      trendNotificationEnabled: json['trendNotificationEnabled'] as bool? ?? true,
     );
   }
 
@@ -90,6 +93,7 @@ class TenantPreferencesModel {
       'inventoryReportEnabled': inventoryReportEnabled,
       'inventoryReportChannel': inventoryReportChannel,
       'stockAlertChannel': stockAlertChannel,
+      'trendNotificationEnabled': trendNotificationEnabled,
     };
   }
 
@@ -107,6 +111,7 @@ class TenantPreferencesModel {
     bool? inventoryReportEnabled,
     String? inventoryReportChannel,
     String? stockAlertChannel,
+    bool? trendNotificationEnabled,
   }) {
     return TenantPreferencesModel(
       sectorType: sectorType ?? this.sectorType,
@@ -122,6 +127,7 @@ class TenantPreferencesModel {
       inventoryReportEnabled: inventoryReportEnabled ?? this.inventoryReportEnabled,
       inventoryReportChannel: inventoryReportChannel ?? this.inventoryReportChannel,
       stockAlertChannel: stockAlertChannel ?? this.stockAlertChannel,
+      trendNotificationEnabled: trendNotificationEnabled ?? this.trendNotificationEnabled,
     );
   }
 }

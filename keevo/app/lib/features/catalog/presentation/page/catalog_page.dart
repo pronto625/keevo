@@ -3,13 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../provider/product_provider.dart';
+import '../provider/category_provider.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../../stores/presentation/provider/store_provider.dart';
+import '../../domain/model/category_model.dart';
+import '../../domain/model/product_model.dart';
 import '../widget/draft_validation_banner.dart';
 import '../widget/product_card.dart';
 
-/// CatalogPage — product catalogue with search and tabs (Active / Archivés).
+enum CatalogTab { active, archived, outOfStock, lowStock }
+/// CatalogPage — product catalogue with search and 4 tabs.
 ///
+/// Tabs: Actifs | Archivés | Rupture | Stock Faible
 /// AC1: FAB "Ajouter un produit" opens [ProductFormPage] for creation.
 /// AC6: "Archivés" tab shows archived products.
 /// AC7: search bar filters in real-time (debounce 300ms) against local Drift DB.
@@ -28,7 +33,7 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
 
     // Trigger a background sync when the page first opens.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -175,6 +180,8 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
                                 onSelected: (value) {
                                   if (value == 'import') {
                                     context.push('/products/import');
+                                  } else if (value == 'categories') {
+                                    _showCategoriesBottomSheet(context);
                                   }
                                 },
                                 itemBuilder: (_) => [
@@ -183,6 +190,14 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
                                     child: ListTile(
                                       leading: Icon(Icons.upload_file),
                                       title: Text('Importer CSV'),
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'categories',
+                                    child: ListTile(
+                                      leading: Icon(Icons.category_rounded),
+                                      title: Text('Gérer les catégories'),
                                       contentPadding: EdgeInsets.zero,
                                     ),
                                   ),
@@ -325,8 +340,10 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
             child: TabBarView(
               controller: _tabController,
               children: const [
-                _ProductListView(archived: false),
-                _ProductListView(archived: true),
+                _ProductListView(tab: CatalogTab.active),
+                _ProductListView(tab: CatalogTab.archived),
+                _ProductListView(tab: CatalogTab.outOfStock),
+                _ProductListView(tab: CatalogTab.lowStock),
               ],
             ),
           ),
@@ -366,6 +383,20 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
           ),
         ),
       ),
+    );
+  }
+
+  // ── Category management bottom sheet ───────────────────────────────────────
+
+  void _showCategoriesBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => _CategoryManagerSheet(parentRef: ref),
     );
   }
 }
@@ -408,6 +439,8 @@ class _ModernTabDelegate extends SliverPersistentHeaderDelegate {
         ),
         child: TabBar(
           controller: tabController,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
           indicator: BoxDecoration(
             gradient: LinearGradient(
               colors: [
@@ -423,19 +456,19 @@ class _ModernTabDelegate extends SliverPersistentHeaderDelegate {
           unselectedLabelColor: theme.colorScheme.onSurfaceVariant,
           labelStyle: const TextStyle(
             fontWeight: FontWeight.w600,
-            fontSize: 14,
+            fontSize: 13,
           ),
           unselectedLabelStyle: const TextStyle(
             fontWeight: FontWeight.w500,
-            fontSize: 14,
+            fontSize: 13,
           ),
           tabs: [
             Tab(
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.inventory_2_rounded, size: 18),
-                  const SizedBox(width: 8),
+                  Icon(Icons.inventory_2_rounded, size: 16),
+                  const SizedBox(width: 6),
                   const Text('Actifs'),
                 ],
               ),
@@ -444,9 +477,29 @@ class _ModernTabDelegate extends SliverPersistentHeaderDelegate {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.archive_rounded, size: 18),
-                  const SizedBox(width: 8),
+                  Icon(Icons.archive_rounded, size: 16),
+                  const SizedBox(width: 6),
                   const Text('Archivés'),
+                ],
+              ),
+            ),
+            Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.remove_shopping_cart_outlined, size: 16, color: Colors.red),
+                  const SizedBox(width: 6),
+                  const Text('Rupture'),
+                ],
+              ),
+            ),
+            Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.warning_amber_rounded, size: 16, color: Colors.orange),
+                  const SizedBox(width: 6),
+                  const Text('Stock Bas'),
                 ],
               ),
             ),
@@ -457,19 +510,22 @@ class _ModernTabDelegate extends SliverPersistentHeaderDelegate {
   }
 
   @override
-  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) => false;
+  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) => true;
 }
 
 class _ProductListView extends ConsumerWidget {
-  final bool archived;
+  final CatalogTab tab;
 
-  const _ProductListView({required this.archived});
+  const _ProductListView({required this.tab});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final listAsync = archived
-        ? ref.watch(archivedProductListProvider)
-        : ref.watch(productListProvider);
+    final AsyncValue<List<ProductModel>> listAsync = switch (tab) {
+      CatalogTab.active   => ref.watch(productListProvider),
+      CatalogTab.archived => ref.watch(archivedProductListProvider),
+      CatalogTab.outOfStock => ref.watch(outOfStockProductListProvider),
+      CatalogTab.lowStock   => ref.watch(lowStockProductListProvider),
+    };
 
     return listAsync.when(
       loading: () =>
@@ -494,21 +550,29 @@ class _ProductListView extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  archived ? Icons.archive_outlined : Icons.inventory_2_outlined,
+                  switch (tab) {
+                    CatalogTab.active     => Icons.inventory_2_outlined,
+                    CatalogTab.archived   => Icons.archive_outlined,
+                    CatalogTab.outOfStock => Icons.remove_shopping_cart_outlined,
+                    CatalogTab.lowStock   => Icons.warning_amber_rounded,
+                  },
                   size: 64,
                   color: Theme.of(context).colorScheme.outlineVariant,
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  archived
-                      ? 'Aucun produit archivé'
-                      : 'Aucun produit dans le catalogue',
+                  switch (tab) {
+                    CatalogTab.active     => 'Aucun produit dans le catalogue',
+                    CatalogTab.archived   => 'Aucun produit archivé',
+                    CatalogTab.outOfStock => 'Aucun produit en rupture de stock',
+                    CatalogTab.lowStock   => 'Aucun produit en stock bas',
+                  },
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
-                if (!archived) ...[
+                if (tab == CatalogTab.active) ...[
                   const SizedBox(height: 8),
                   const Text('Appuyez sur + pour ajouter votre premier produit'),
-                ] else ...[
+                ] else if (tab == CatalogTab.archived) ...[
                   const SizedBox(height: 8),
                   const Text('Les produits archivés apparaîtront ici'),
                 ],
@@ -524,7 +588,7 @@ class _ProductListView extends ConsumerWidget {
           child: Column(
             children: [
               // Message d'aide pour l'appui long (seulement dans l'onglet actifs et s'il y a des produits)
-              if (!archived && products.isNotEmpty)
+              if (tab == CatalogTab.active && products.isNotEmpty)
                 Container(
                   width: double.infinity,
                   margin: const EdgeInsets.all(16),
@@ -567,6 +631,286 @@ class _ProductListView extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+// ── Category manager bottom sheet ────────────────────────────────────────────
+
+class _CategoryManagerSheet extends ConsumerStatefulWidget {
+  final WidgetRef parentRef;
+  const _CategoryManagerSheet({required this.parentRef});
+
+  @override
+  ConsumerState<_CategoryManagerSheet> createState() =>
+      _CategoryManagerSheetState();
+}
+
+class _CategoryManagerSheetState
+    extends ConsumerState<_CategoryManagerSheet> {
+  final _nameController = TextEditingController();
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _createCategory() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) return;
+    setState(() => _loading = true);
+    try {
+      await ref.read(categoryActionsProvider).create(name);
+      _nameController.clear();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Catégorie « $name » créée'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _renameCategory(CategoryModel cat) async {
+    final controller = TextEditingController(text: cat.name);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Renommer la catégorie'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Nouveau nom'),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annuler')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Renommer')),
+        ],
+      ),
+    );
+    if (confirmed == true && controller.text.trim().isNotEmpty) {
+      try {
+        await ref
+            .read(categoryActionsProvider)
+            .rename(cat.id, controller.text.trim());
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('Erreur : $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+    // Defer dispose until the dialog's exit animation completes — disposing
+    // inline causes "controller used after dispose" when the TextField inside
+    // the dialog route is still alive during its pop animation.
+    WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
+  }
+
+  Future<void> _deleteCategory(CategoryModel cat) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Supprimer la catégorie'),
+        content: Text(
+          '« ${cat.name} » sera désactivée. Les produits associés ne seront pas supprimés.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annuler')),
+          FilledButton(
+            style:
+                FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      try {
+        await ref.read(categoryActionsProvider).delete(cat.id);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('Erreur : $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final categoriesAsync = ref.watch(categoriesProvider);
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (ctx, scrollCtrl) => Column(
+        children: [
+          // Handle
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 12),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.onSurfaceVariant.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                Icon(Icons.category_rounded,
+                    color: theme.colorScheme.primary, size: 24),
+                const SizedBox(width: 12),
+                Text('Gérer les catégories',
+                    style: theme.textTheme.titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Add category input
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _nameController,
+                    decoration: InputDecoration(
+                      hintText: 'Nom de la nouvelle catégorie',
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                    ),
+                    onSubmitted: (_) => _createCategory(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: _loading ? null : _createCategory,
+                  icon: _loading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.add, size: 18),
+                  label: const Text('Ajouter'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          // Category list
+          Expanded(
+            child: categoriesAsync.when(
+              loading: () =>
+                  const Center(child: CircularProgressIndicator()),
+              error: (e, _) =>
+                  Center(child: Text('Erreur : $e')),
+              data: (categories) {
+                if (categories.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'Aucune catégorie',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                  );
+                }
+                return ListView.separated(
+                  controller: scrollCtrl,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  itemCount: categories.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    final cat = categories[i];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor:
+                            theme.colorScheme.primaryContainer,
+                        child: Text(
+                          cat.name.isNotEmpty
+                              ? cat.name[0].toUpperCase()
+                              : '?',
+                          style: TextStyle(
+                              color:
+                                  theme.colorScheme.onPrimaryContainer),
+                        ),
+                      ),
+                      title: Text(cat.name),
+                      subtitle: cat.isCustom
+                          ? null
+                          : Text('Catégorie système',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme
+                                      .onSurfaceVariant)),
+                      trailing: cat.isCustom
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit_rounded,
+                                      size: 20),
+                                  color: theme.colorScheme.primary,
+                                  tooltip: 'Renommer',
+                                  onPressed: () => _renameCategory(cat),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline,
+                                      size: 20),
+                                  color: Colors.red,
+                                  tooltip: 'Supprimer',
+                                  onPressed: () => _deleteCategory(cat),
+                                ),
+                              ],
+                            )
+                          : IconButton(
+                              icon: const Icon(Icons.edit_rounded,
+                                  size: 20),
+                              color: theme.colorScheme.primary,
+                              tooltip: 'Renommer',
+                              onPressed: () => _renameCategory(cat),
+                            ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

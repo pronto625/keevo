@@ -49,7 +49,8 @@ class UpdateReportPreferencesServiceTest {
         existingPrefs = new TenantPreferences(
                 UUID.randomUUID(), SectorType.OTHER, "20:00:00", true, Instant.now(),
                 true, ReportChannel.WHATSAPP, true, 0, "20:00:00", ReportChannel.WHATSAPP,
-                true, ReportChannel.WHATSAPP, StockAlertChannel.PUSH
+                true, ReportChannel.WHATSAPP, StockAlertChannel.PUSH,
+                true
         );
     }
 
@@ -63,7 +64,8 @@ class UpdateReportPreferencesServiceTest {
                 false, ReportChannel.IN_APP_ONLY, "22:00:00",
                 true, 5, "19:00:00", ReportChannel.WHATSAPP,
                 false, ReportChannel.IN_APP_ONLY,
-                true, StockAlertChannel.BOTH
+                true, StockAlertChannel.BOTH,
+                null
         );
 
         try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
@@ -101,7 +103,8 @@ class UpdateReportPreferencesServiceTest {
                 true, ReportChannel.WHATSAPP, "22:00:00",
                 true, 0, "20:00:00", ReportChannel.WHATSAPP,
                 true, ReportChannel.WHATSAPP,
-                true, StockAlertChannel.PUSH
+                true, StockAlertChannel.PUSH,
+                null
         );
 
         try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
@@ -128,7 +131,8 @@ class UpdateReportPreferencesServiceTest {
                 true, ReportChannel.WHATSAPP, "20:00:00",
                 true, 0, "20:00:00", ReportChannel.WHATSAPP,
                 true, ReportChannel.WHATSAPP,
-                true, StockAlertChannel.PUSH
+                true, StockAlertChannel.PUSH,
+                null
         );
 
         // Then

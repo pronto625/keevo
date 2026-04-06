@@ -26,6 +26,7 @@ class CloseDayUseCase {
   Future<DayClosureSummary> execute({
     required String storeId,
     required String actorId,
+    bool isAutomatic = false,
   }) async {
     // Check if already closed today
     final alreadyClosed = await _repository.hasClosureToday(storeId);
@@ -43,7 +44,7 @@ class CloseDayUseCase {
       actorId: actorId,
       closedAt: DateTime.now(),
       summary: summary,
-      isAutomatic: false,
+      isAutomatic: isAutomatic,
       synced: false,
     );
 

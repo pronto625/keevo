@@ -70,4 +70,22 @@ public interface CategoryRepository {
      * <p>TODO Story 2.1: implement in JPA adapter.
      */
     Category createCustom(String name, UUID parentId);
+
+    /**
+     * Rename a category (name change only).
+     *
+     * @param id   the category UUID
+     * @param name new name (2–100 chars)
+     * @return updated category
+     */
+    Category rename(UUID id, String name);
+
+    /**
+     * Deactivate a category (soft-delete — preserves record for audit integrity).
+     *
+     * <p>Unlike {@link #toggleActive} this always sets {@code isActive = false}.
+     *
+     * @param id the category UUID
+     */
+    void deactivate(UUID id);
 }

@@ -80,7 +80,8 @@ public class TenantPreferencesController {
             request.inventoryReportEnabled(),
             ReportChannel.fromString(request.inventoryReportChannel()),
             request.stockAlertEnabled() != null && request.stockAlertEnabled(),
-            StockAlertChannel.fromString(request.stockAlertChannel())
+            StockAlertChannel.fromString(request.stockAlertChannel()),
+            request.trendNotificationEnabled()
         );
 
         var updated = updateReportPreferencesUseCase.update(command);

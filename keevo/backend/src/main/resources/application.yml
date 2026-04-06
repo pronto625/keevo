@@ -2,6 +2,10 @@ spring:
   application:
     name: keevo-backend
 
+  # Load .env file from the working directory (dev convenience — ignored if absent)
+  config:
+    import: optional:file:.env[.properties]
+
   # Active profile: dev or prod (override with env var SPRING_PROFILES_ACTIVE)
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}

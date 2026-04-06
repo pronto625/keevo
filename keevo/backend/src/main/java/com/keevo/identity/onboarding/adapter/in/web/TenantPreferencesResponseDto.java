@@ -21,7 +21,8 @@ public record TenantPreferencesResponseDto(
     String weeklyReportChannel,
     boolean inventoryReportEnabled,
     String inventoryReportChannel,
-    String stockAlertChannel
+    String stockAlertChannel,
+    boolean trendNotificationEnabled
 ) {
 
     public static TenantPreferencesResponseDto fromDomain(TenantPreferences prefs) {
@@ -38,7 +39,8 @@ public record TenantPreferencesResponseDto(
             prefs.weeklyReportChannel() != null ? prefs.weeklyReportChannel().name() : "WHATSAPP",
             prefs.inventoryReportEnabled(),
             prefs.inventoryReportChannel() != null ? prefs.inventoryReportChannel().name() : "WHATSAPP",
-            prefs.stockAlertChannel() != null ? prefs.stockAlertChannel().name() : "PUSH"
+            prefs.stockAlertChannel() != null ? prefs.stockAlertChannel().name() : "PUSH",
+            prefs.trendNotificationEnabled()
         );
     }
 }

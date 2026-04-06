@@ -41,6 +41,10 @@ public class UpdateReportPreferencesService implements UpdateReportPreferencesUs
                 ? command.eodReportTime()
                 : existing.eodReportTime();
 
+        boolean newTrendNotificationEnabled = command.trendNotificationEnabled() != null
+                ? command.trendNotificationEnabled()
+                : existing.trendNotificationEnabled();
+
         TenantPreferences updated = new TenantPreferences(
             existing.id(),
             existing.sectorType(),
@@ -55,7 +59,8 @@ public class UpdateReportPreferencesService implements UpdateReportPreferencesUs
             command.weeklyReportChannel(),
             command.inventoryReportEnabled(),
             command.inventoryReportChannel(),
-            command.stockAlertChannel()
+            command.stockAlertChannel(),
+            newTrendNotificationEnabled
         );
 
         TenantPreferences saved = preferencesRepository.update(updated);

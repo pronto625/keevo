@@ -6,7 +6,10 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../features/catalog/presentation/provider/product_provider.dart';
+import '../../features/inventory/presentation/provider/global_stock_provider.dart';
 import '../../features/notifications/presentation/provider/notification_provider.dart';
+import '../../features/pos/data/datasource/local_day_closure_datasource.dart';
+import '../../features/pos/presentation/provider/day_closure_providers.dart';
 import '../../features/pos/presentation/provider/pos_providers.dart';
 import '../../features/stores/presentation/provider/active_store_provider.dart';
 import '../../features/stores/presentation/provider/store_provider.dart';
@@ -50,6 +53,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAutoClosureNotifications();
+      _checkMissedDayClosure();
       _initFcm();
     });
   }
@@ -109,6 +113,60 @@ class _MainShellState extends ConsumerState<MainShell> {
     await checker.markNotified(unnotified.map((c) => c.id).toList());
   }
 
+  /// Checks on app startup whether a day closure was missed (e.g., backend
+  /// scheduler didn't fire, app was closed before EOD).
+  ///
+  /// Triggers a local automatic closure for each active store that:
+  ///   - has no closure recorded for today, AND
+  ///   - has unclosed sales from a previous day (last closure before today).
+  ///
+  /// Only fires after 20:00 local time (default EOD) to avoid premature closure.
+  Future<void> _checkMissedDayClosure() async {
+    if (!mounted) return;
+
+    // Only trigger after configured EOD (20:00 local).
+    final now = DateTime.now();
+    if (now.hour < 20) return;
+
+    final role = ref.read(currentUserRoleProvider);
+    if (role == 'EMPLOYEE') return; // Employees don't trigger auto-closure.
+
+    final userId = ref.read(currentUserIdProvider).valueOrNull;
+    if (userId == null) return;
+
+    final db = ref.read(appDatabaseProvider);
+    final localDS = LocalDayClosureDataSource(db);
+
+    final storesAsync = ref.read(storeListNotifierProvider);
+    final stores = storesAsync.valueOrNull ?? [];
+
+    final startOfToday = DateTime(now.year, now.month, now.day);
+
+    for (final store in stores) {
+      try {
+        final lastClosure = await localDS.getLastClosure(store.id);
+        // Skip if already closed today.
+        if (lastClosure != null && lastClosure.closedAt.isAfter(startOfToday)) {
+          continue;
+        }
+        // Only close if there are sales since the last closure.
+        final salesCount = await localDS.getTodaySalesCount(store.id);
+        if (salesCount == 0) continue;
+
+        debugPrint('[AutoClose] Missed closure for store ${store.id} — triggering locally');
+        await ref.read(closeDayUseCaseProvider).execute(
+          storeId: store.id,
+          actorId: userId,
+          isAutomatic: true,
+        );
+        debugPrint('[AutoClose] Closure done for store ${store.id}');
+      } catch (e) {
+        // DAY_ALREADY_CLOSED or other transient errors — not fatal.
+        debugPrint('[AutoClose] Skipped store ${store.id}: $e');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).uri.toString();
@@ -143,6 +201,15 @@ class _MainShellState extends ConsumerState<MainShell> {
         ? 0
         : (ref.watch(pendingSalesCountProvider(storeId)).valueOrNull ?? 0);
 
+    // Low stock badge — sum lowStockCount across all stores (AC8)
+    final lowStockCount = isEmployee
+        ? 0
+        : (ref
+                .watch(globalStockOverviewProvider)
+                .valueOrNull
+                ?.fold<int>(0, (sum, s) => sum + s.lowStockCount) ??
+            0);
+
     final destinations = <NavigationDestination>[
       if (!isEmployee)
         const NavigationDestination(
@@ -170,18 +237,30 @@ class _MainShellState extends ConsumerState<MainShell> {
       if (!isEmployee)
         NavigationDestination(
           icon: Badge(
-            label: Text(draftCount > 9 ? '9+' : '$draftCount'),
-            isLabelVisible: draftCount > 0,
+            label: Text(lowStockCount > 9 ? '9+' : '$lowStockCount'),
+            isLabelVisible: lowStockCount > 0,
             backgroundColor: const Color(0xFFFCC419),
             textColor: Colors.black87,
-            child: const Icon(Icons.inventory_2_outlined),
+            child: Badge(
+              label: Text(draftCount > 9 ? '9+' : '$draftCount'),
+              isLabelVisible: draftCount > 0 && lowStockCount == 0,
+              backgroundColor: const Color(0xFFFCC419),
+              textColor: Colors.black87,
+              child: const Icon(Icons.inventory_2_outlined),
+            ),
           ),
           selectedIcon: Badge(
-            label: Text(draftCount > 9 ? '9+' : '$draftCount'),
-            isLabelVisible: draftCount > 0,
+            label: Text(lowStockCount > 9 ? '9+' : '$lowStockCount'),
+            isLabelVisible: lowStockCount > 0,
             backgroundColor: const Color(0xFFFCC419),
             textColor: Colors.black87,
-            child: const Icon(Icons.inventory_2_rounded),
+            child: Badge(
+              label: Text(draftCount > 9 ? '9+' : '$draftCount'),
+              isLabelVisible: draftCount > 0 && lowStockCount == 0,
+              backgroundColor: const Color(0xFFFCC419),
+              textColor: Colors.black87,
+              child: const Icon(Icons.inventory_2_rounded),
+            ),
           ),
           label: 'Catalogue',
         ),

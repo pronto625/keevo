@@ -102,6 +102,24 @@ public class JpaCategoryRepository implements CategoryRepository {
         return toDomain(savedEntity);
     }
 
+    @Override
+    public Category rename(UUID id, String name) {
+        CategoryJpaEntity entity = jpaRepository.findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("Category not found: " + id));
+        entity.setName(name);
+        entity.setUpdatedAt(Instant.now());
+        return toDomain(jpaRepository.save(entity));
+    }
+
+    @Override
+    public void deactivate(UUID id) {
+        CategoryJpaEntity entity = jpaRepository.findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("Category not found: " + id));
+        entity.setActive(false);
+        entity.setUpdatedAt(Instant.now());
+        jpaRepository.save(entity);
+    }
+
     // ── Mapping helpers ───────────────────────────────────────────────────────
 
     private CategoryJpaEntity toEntity(Category domain) {

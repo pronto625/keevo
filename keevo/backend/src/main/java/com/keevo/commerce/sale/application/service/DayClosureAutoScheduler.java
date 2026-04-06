@@ -126,7 +126,7 @@ public class DayClosureAutoScheduler {
 
     private void processTenantsStores(Tenant tenant) {
         var stores = storeRepository.findAllActive();
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(WAT);
 
         for (var store : stores) {
             if (dayClosureRepository.existsByStoreIdAndDate(store.id(), today)) {
