@@ -195,7 +195,7 @@ jobs:
             docker image prune -f
 
             echo "✓ Deploy complete."
-            docker compose -f docker-compose.prod.yml ps
+            BACKEND_IMAGE="${IMAGE_REF}" docker compose -f docker-compose.prod.yml ps
 
 # ─── Required GitHub Secrets ──────────────────────────────────────────────────
 # GHCR_PAT                — GitHub PAT, scope: read:packages

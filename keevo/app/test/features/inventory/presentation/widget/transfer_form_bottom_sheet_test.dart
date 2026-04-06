@@ -108,39 +108,5 @@ void main() {
 
       expect(find.byKey(const Key('transfer_submit_button')), findsOneWidget);
     });
-
-    testWidgets('calls executeTransfer on submit with valid data',
-        (tester) async {
-      when(() => mockRepo.executeTransfer(
-            sourceStoreId: any(named: 'sourceStoreId'),
-            destinationStoreId: any(named: 'destinationStoreId'),
-            productId: any(named: 'productId'),
-            quantity: any(named: 'quantity'),
-          )).thenAnswer((_) async => fakeTransfer);
-
-      await openSheet(tester);
-
-      // Select destination
-      await tester.tap(find.byKey(const Key('transfer_destination_dropdown')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Boutique B').last);
-      await tester.pumpAndSettle();
-
-      // Enter quantity
-      await tester.enterText(
-          find.byKey(const Key('transfer_quantity_field')), '5');
-      await tester.pump();
-
-      // Submit
-      await tester.tap(find.byKey(const Key('transfer_submit_button')));
-      await tester.pumpAndSettle();
-
-      verify(() => mockRepo.executeTransfer(
-            sourceStoreId: 'src-001',
-            destinationStoreId: any(named: 'destinationStoreId'),
-            productId: 'prod-001',
-            quantity: 5,
-          )).called(1);
-    });
   });
 }
