@@ -1,12 +1,12 @@
 name: Release Flutter
 
-# ─── Trigger ──────────────────────────────────────────────────────────────────
+# ─── Trigger ──────────────────────────────────────────────────────────────────────────────
 on:
   push:
     branches:
       - deploy
 
-# ─── Concurrency ──────────────────────────────────────────────────────────────
+# ─── Concurrency ────────────────────────────────────────────────────────────────────────────
 concurrency:
   group: release-flutter-${{ github.ref }}
   cancel-in-progress: true
@@ -14,6 +14,11 @@ concurrency:
 env:
   FLUTTER_VERSION: '3.41.0'
   JAVA_VERSION: '17'
+
+# ─── Permissions ──────────────────────────────────────────────────────────────
+# `contents: write` is required to create GitHub Releases and upload assets.
+permissions:
+  contents: write
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
@@ -48,7 +53,6 @@ jobs:
         working-directory: keevo/app
         run: flutter pub run build_runner build --delete-conflicting-outputs
 
-      # ── Keystore setup ──────────────────────────────────────────────────────
       - name: Decode release keystore
         working-directory: keevo/app/android/app
         env:
@@ -73,147 +77,20 @@ jobs:
         working-directory: keevo/app
         run: flutter build apk --release
 
-      # ── Version metadata ────────────────────────────────────────────────────
-      - name: Extract version
-        id: version
-        working-directory: keevo/app
+      - name: Rename APK
         run: |
-          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d '[:space:]')
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "date=$(date +%Y%m%d)" >> "$GITHUB_OUTPUT"
-          echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          mv keevo/app/build/app/outputs/flutter-apk/app-release.apk \
+             keevo/app/build/app/outputs/flutter-apk/keevo.apk
 
-      # ── Upload to Google Cloud Storage ──────────────────────────────────────
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
         with:
-          credentials_json: ${{ secrets.GCS_CREDENTIALS_JSON }}
-
-      - name: Upload versioned APK to GCS
-        uses: google-github-actions/upload-cloud-storage@v2
-        with:
-          path: keevo/app/build/app/outputs/flutter-apk/app-release.apk
-          destination: >-
-            ${{ secrets.GCS_BUCKET_NAME }}/releases/android/${{ steps.version.outputs.version }}-${{ steps.version.outputs.date }}-${{ steps.version.outputs.sha }}/keevo.apk
-          headers: |-
-            content-type: application/vnd.android.package-archive
-          predefinedAcl: publicRead
-
-      - name: Upload latest APK to GCS
-        uses: google-github-actions/upload-cloud-storage@v2
-        with:
-          path: keevo/app/build/app/outputs/flutter-apk/app-release.apk
-          destination: ${{ secrets.GCS_BUCKET_NAME }}/releases/android/latest/keevo.apk
-          headers: |-
-            content-type: application/vnd.android.package-archive
-            cache-control: no-cache, no-store
-          predefinedAcl: publicRead
-
-      # ── Download page ────────────────────────────────────────────────────────
-      - name: Generate download page
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-          BUILD_DATE: ${{ steps.version.outputs.date }}
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET_NAME }}
-        run: |
-          APK_URL="https://storage.googleapis.com/${GCS_BUCKET}/releases/android/latest/keevo.apk"
-          cat > /tmp/download.html << 'HTMLEOF'
-          <!DOCTYPE html>
-          <html lang="fr">
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Keevo — Télécharger l'application</title>
-            <style>
-              *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-              body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                background: #f0f4f8;
-                min-height: 100vh;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                padding: 24px;
-              }
-              .card {
-                background: #fff;
-                border-radius: 16px;
-                padding: 40px 32px;
-                max-width: 440px;
-                width: 100%;
-                box-shadow: 0 4px 24px rgba(0,0,0,.08);
-                text-align: center;
-              }
-              h1 { font-size: 2rem; color: #1a73e8; margin-bottom: 8px; }
-              .subtitle { color: #5f6368; font-size: .95rem; margin-bottom: 32px; }
-              .btn {
-                display: inline-block;
-                background: #1a73e8;
-                color: #fff;
-                padding: 14px 32px;
-                border-radius: 10px;
-                text-decoration: none;
-                font-size: 1rem;
-                font-weight: 600;
-                letter-spacing: .02em;
-                transition: background .2s;
-              }
-              .btn:hover { background: #1558b0; }
-              .meta { color: #9aa0a6; font-size: .8rem; margin-top: 20px; }
-              .warning {
-                background: #fef7e0;
-                border: 1px solid #f9ab00;
-                border-radius: 8px;
-                padding: 12px 16px;
-                font-size: .82rem;
-                color: #7a5a00;
-                margin-top: 24px;
-                text-align: left;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="card">
-              <h1>Keevo</h1>
-              <p class="subtitle">Gestion d'inventaire et de ventes pour commerçants au Cameroun</p>
-              <a class="btn" href="APK_URL_PLACEHOLDER" download="keevo.apk">
-                ⬇ Télécharger l'APK Android
-              </a>
-              <p class="meta">Version VERSION_PLACEHOLDER &nbsp;·&nbsp; Build DATE_PLACEHOLDER</p>
-              <div class="warning">
-                <strong>Installation manuelle requise :</strong><br>
-                Avant d'installer, activez <em>Sources inconnues</em> (ou
-                <em>Installer des applications inconnues</em>) dans les
-                Paramètres → Sécurité de votre appareil Android.
-              </div>
-            </div>
-          </body>
-          </html>
-          HTMLEOF
-          # Replace placeholders with actual values (avoids heredoc variable expansion issues)
-          sed -i "s|APK_URL_PLACEHOLDER|${APK_URL}|g"            /tmp/download.html
-          sed -i "s|VERSION_PLACEHOLDER|${VERSION}|g"            /tmp/download.html
-          sed -i "s|DATE_PLACEHOLDER|${BUILD_DATE}|g"            /tmp/download.html
-
-      - name: Upload download page to GCS
-        uses: google-github-actions/upload-cloud-storage@v2
-        with:
-          path: /tmp/download.html
-          destination: ${{ secrets.GCS_BUCKET_NAME }}/download.html
-          headers: |-
-            content-type: text/html; charset=utf-8
-            cache-control: no-cache, no-store
-          predefinedAcl: publicRead
-
-      - name: Print download URL
-        run: |
-          echo "────────────────────────────────────────────────────────────────"
-          echo "  Download page : https://storage.googleapis.com/${{ secrets.GCS_BUCKET_NAME }}/download.html"
-          echo "  Direct APK    : https://storage.googleapis.com/${{ secrets.GCS_BUCKET_NAME }}/releases/android/latest/keevo.apk"
-          echo "────────────────────────────────────────────────────────────────"
+          name: android-apk
+          path: keevo/app/build/app/outputs/flutter-apk/keevo.apk
+          retention-days: 1
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Job 2 : iOS IPA  (macOS required — Xcode not available on Linux runners)
+  # Job 2 : iOS IPA  (macOS required)
   # ─────────────────────────────────────────────────────────────────────────────
   build-ios:
     name: Build iOS IPA
@@ -238,7 +115,6 @@ jobs:
         working-directory: keevo/app
         run: flutter pub run build_runner build --delete-conflicting-outputs
 
-      # ── iOS code-signing ─────────────────────────────────────────────────────
       - name: Import distribution certificate & provisioning profile
         env:
           CERTIFICATE_P12_BASE64: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
@@ -248,12 +124,10 @@ jobs:
         run: |
           set -euo pipefail
           KEYCHAIN_PATH="${RUNNER_TEMP}/keevo-signing.keychain-db"
-
           security create-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
           security default-keychain -s "${KEYCHAIN_PATH}"
           security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
           security set-keychain-settings -t 3600 -u "${KEYCHAIN_PATH}"
-
           echo "${CERTIFICATE_P12_BASE64}" | base64 --decode > "${RUNNER_TEMP}/dist.p12"
           security import "${RUNNER_TEMP}/dist.p12" \
             -k "${KEYCHAIN_PATH}" \
@@ -263,7 +137,6 @@ jobs:
           security set-key-partition-list \
             -S apple-tool:,apple:,codesign: \
             -s -k "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
-
           PP_DIR="${HOME}/Library/MobileDevice/Provisioning Profiles"
           mkdir -p "${PP_DIR}"
           echo "${PROVISIONING_PROFILE_BASE64}" | base64 --decode > "${PP_DIR}/keevo.mobileprovision"
@@ -305,63 +178,104 @@ jobs:
           </dict>
           </plist>
           PLIST
-
           xcodebuild -exportArchive \
             -archivePath        "${RUNNER_TEMP}/keevo.xcarchive" \
             -exportPath         "${RUNNER_TEMP}/ipa" \
             -exportOptionsPlist "${RUNNER_TEMP}/export-options.plist" \
             | xcpretty || true
+          mv "${RUNNER_TEMP}/ipa/"*.ipa "${RUNNER_TEMP}/ipa/keevo.ipa"
 
-      # ── Version metadata ────────────────────────────────────────────────────
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: ${{ runner.temp }}/ipa/keevo.ipa
+          retention-days: 1
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 3 : Create GitHub Release — attach APK + IPA as assets.
+  # Runs after both build jobs succeed.
+  # Permanent download URL (no auth, no bucket):
+  #   https://github.com/<owner>/<repo>/releases/latest/download/keevo.apk
+  # ─────────────────────────────────────────────────────────────────────────────
+  github-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs:
+      - build-apk
+      - build-ios
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Extract version
         id: version
         working-directory: keevo/app
         run: |
           VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d '[:space:]')
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "date=$(date +%Y%m%d)" >> "$GITHUB_OUTPUT"
-          echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}"     >> "$GITHUB_OUTPUT"
+          echo "tag=mobile/v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "date=$(date '+%d %B %Y')" >> "$GITHUB_OUTPUT"
+          echo "sha=${GITHUB_SHA::7}"   >> "$GITHUB_OUTPUT"
 
-      # ── Upload IPA to GCS ────────────────────────────────────────────────────
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
         with:
-          credentials_json: ${{ secrets.GCS_CREDENTIALS_JSON }}
+          name: android-apk
+          path: dist/
 
-      - name: Upload versioned IPA to GCS
-        uses: google-github-actions/upload-cloud-storage@v2
+      - name: Download IPA artifact
+        uses: actions/download-artifact@v4
         with:
-          path: ${{ runner.temp }}/ipa/keevo.ipa
-          destination: >-
-            ${{ secrets.GCS_BUCKET_NAME }}/releases/ios/${{ steps.version.outputs.version }}-${{ steps.version.outputs.date }}-${{ steps.version.outputs.sha }}/keevo.ipa
-          headers: |-
-            content-type: application/octet-stream
-          predefinedAcl: publicRead
+          name: ios-ipa
+          path: dist/
 
-      - name: Upload latest IPA to GCS
-        uses: google-github-actions/upload-cloud-storage@v2
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          path: ${{ runner.temp }}/ipa/keevo.ipa
-          destination: ${{ secrets.GCS_BUCKET_NAME }}/releases/ios/latest/keevo.ipa
-          headers: |-
-            content-type: application/octet-stream
-            cache-control: no-cache, no-store
-          predefinedAcl: publicRead
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "Keevo ${{ steps.version.outputs.version }} — ${{ steps.version.outputs.date }}"
+          prerelease: false
+          make_latest: true
+          body: |
+            ## Keevo ${{ steps.version.outputs.version }}
 
-      - name: Print IPA download URL
+            **Build :** `${{ steps.version.outputs.sha }}`  |  **Date :** ${{ steps.version.outputs.date }}
+
+            ---
+
+            ### Téléchargement
+
+            | Plateforme | Fichier | Lien direct |
+            |---|---|---|
+            | Android | `keevo.apk` | [⬇ Télécharger APK](https://github.com/${{ github.repository }}/releases/latest/download/keevo.apk) |
+            | iOS (Ad Hoc) | `keevo.ipa` | [⬇ Télécharger IPA](https://github.com/${{ github.repository }}/releases/latest/download/keevo.ipa) |
+
+            > **Android :** activez *Sources inconnues* (Paramètres → Sécurité) avant d'installer.
+            > **iOS :** profil Ad Hoc — l'appareil doit être enregistré dans le provisioning profile.
+          files: |
+            dist/keevo.apk
+            dist/keevo.ipa
+
+      - name: Print download URLs
         run: |
-          echo "────────────────────────────────────────────────────────────────"
-          echo "  IPA : https://storage.googleapis.com/${{ secrets.GCS_BUCKET_NAME }}/releases/ios/latest/keevo.ipa"
-          echo "────────────────────────────────────────────────────────────────"
+          echo "────────────────────────────────────────────────────────────────────────"
+          echo "  Release page : https://github.com/${{ github.repository }}/releases/latest"
+          echo "  APK (latest) : https://github.com/${{ github.repository }}/releases/latest/download/keevo.apk"
+          echo "  IPA (latest) : https://github.com/${{ github.repository }}/releases/latest/download/keevo.ipa"
+          echo "────────────────────────────────────────────────────────────────────────"
 
-# ─── Required GitHub Actions Secrets ──────────────────────────────────────────
-# ── Android ───────────────────────────────────────────────────────────────────
+# ─── Required GitHub Actions Secrets ─────────────────────────────────────────────────────────────────
+# Settings → Secrets and variables → Actions → Repository secrets
+#
+# ── Android ───────────────────────────────────────────────────────────────────────────────
 #  ANDROID_KEYSTORE_BASE64   — base64 -w0 keevo-release.keystore
 #  ANDROID_KEY_ALIAS         — key alias (e.g. "upload")
 #  ANDROID_STORE_PASSWORD    — keystore password
 #  ANDROID_KEY_PASSWORD      — key password
 #
-# ── iOS ───────────────────────────────────────────────────────────────────────
+# ── iOS ───────────────────────────────────────────────────────────────────────────────────
 #  IOS_CERTIFICATE_P12_BASE64         — base64 of .p12 distribution certificate
 #  IOS_CERTIFICATE_PASSWORD           — P12 export password
 #  IOS_PROVISIONING_PROFILE_BASE64    — base64 of Ad Hoc .mobileprovision
@@ -369,11 +283,9 @@ jobs:
 #  IOS_TEAM_ID                        — Apple Developer Team ID (10-char)
 #  IOS_PROVISIONING_PROFILE_SPECIFIER — profile name shown in Xcode
 #
-# ── GCS ───────────────────────────────────────────────────────────────────────
-#  GCS_CREDENTIALS_JSON  — service account JSON, role: Storage Object Admin
-#  GCS_BUCKET_NAME       — e.g. keevo-releases
-#
-# ── GCS one-time setup ────────────────────────────────────────────────────────
-#   gsutil mb -l africa-south1 gs://keevo-releases
-#   gsutil web set -m download.html gs://keevo-releases
-# ──────────────────────────────────────────────────────────────────────────────
+# ── Aucun service externe requis ───────────────────────────────────────────────────────────
+# APK + IPA sont publiés directement en tant qu'assets GitHub Release.
+# URLs permanentes (publiques, sans authentification) :
+#   https://github.com/<owner>/<repo>/releases/latest/download/keevo.apk
+#   https://github.com/<owner>/<repo>/releases/latest/download/keevo.ipa
+# ───────────────────────────────────────────────────────────────────────────────────

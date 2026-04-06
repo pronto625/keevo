@@ -136,7 +136,6 @@ jobs:
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
           GH_ACTOR: ${{ github.actor }}
           IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          COMPOSE_CONTENT: ${{ toJSON(steps.generate_compose.outputs) }}
         with:
           host: ${{ secrets.DEPLOY_SSH_HOST }}
           username: ${{ secrets.DEPLOY_SSH_USER }}
@@ -147,12 +146,12 @@ jobs:
           # ── Script that runs on the remote server ──────────────────────────────
           # Prerequisites on server:
           #   • Docker + Docker Compose plugin installed
-          #   • /srv/keevo/.env  (copy backend/.env.example, fill prod values;
+          #   • ~/keevo/.env  (copy backend/.env.example, fill prod values;
           #     POSTGRES_HOST will be overridden by compose to "postgres")
-          #   • /srv/keevo/firebase-credentials.json  (Firebase service-account key)
+          #   • ~/keevo/firebase-credentials.json  (Firebase service-account key)
           script: |
             set -euo pipefail
-            DEPLOY_DIR="/srv/keevo"
+            DEPLOY_DIR="${HOME}/keevo"
 
             mkdir -p "${DEPLOY_DIR}"
             cd "${DEPLOY_DIR}"
@@ -230,7 +229,7 @@ jobs:
 # DEPLOY_SSH_PRIVATE_KEY  — full SSH private key (ed25519 recommended)
 # DEPLOY_SSH_PORT         — optional, defaults to 22
 #
-# Files required on the server under /srv/keevo/ :
+# Files required on the server under ~/keevo/ :
 #   .env                          → backend/.env.example filled with prod values
 #                                    (POSTGRES_HOST is overridden by compose → "postgres")
 #   firebase-credentials.json     → Firebase service-account key
