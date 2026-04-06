@@ -1,0 +1,43 @@
+# ─── Dart / Flutter generated files ──────────────────────────────────────────
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+pubspec.lock
+
+# ─── Build outputs (already large, not needed as COPY context) ────────────────
+build/
+.gradle/
+
+# ─── IDE ──────────────────────────────────────────────────────────────────────
+.idea/
+*.iml
+.vscode/
+
+# ─── Signing — never bake keystores into the image ────────────────────────────
+android/app/*.keystore
+android/app/*.jks
+android/key.properties
+
+# ─── iOS (irrelevant for the Android builder image) ───────────────────────────
+ios/
+macos/
+web/
+linux/
+windows/
+
+# ─── OS artefacts ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── Tests (not needed for production build) ──────────────────────────────────
+test/
+integration_test/
+coverage/
+
+# ─── Git ──────────────────────────────────────────────────────────────────────
+.git/
+.gitignore
+
+# ─── Documentation ────────────────────────────────────────────────────────────
+README.md

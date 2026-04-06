@@ -1,0 +1,33 @@
+# ─── Git ──────────────────────────────────────────────────────────────────────
+.git/
+.gitignore
+
+# ─── IDE / editor ─────────────────────────────────────────────────────────────
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# ─── Build outputs ────────────────────────────────────────────────────────────
+target/
+
+# ─── Environment / secrets — NEVER bake these into the image ──────────────────
+.env
+.env.*
+!.env.example
+
+# ─── Firebase service-account key ─────────────────────────────────────────────
+*.json
+
+# ─── OS artefacts ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── Maven wrapper (already in PATH inside the builder image) ─────────────────
+.mvn/
+mvnw
+mvnw.cmd
+
+# ─── Documentation ────────────────────────────────────────────────────────────
+README.md
+docs/

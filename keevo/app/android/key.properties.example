@@ -1,0 +1,17 @@
+# ─── Android release keystore ─────────────────────────────────────────────────
+# Copy this file to android/key.properties (git-ignored) and fill in the values.
+# The file is consumed by android/app/build.gradle.kts at build time.
+#
+# Generate a keystore with:
+#   keytool -genkey -v \
+#     -keystore keevo-release.keystore \
+#     -alias upload \
+#     -keyalg RSA -keysize 2048 \
+#     -validity 10000
+#
+# Then place keevo-release.keystore next to this file (android/app/).
+# ──────────────────────────────────────────────────────────────────────────────
+storeFile=app/keevo-release.keystore
+storePassword=REPLACE_ME
+keyAlias=upload
+keyPassword=REPLACE_ME
