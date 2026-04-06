@@ -21,19 +21,11 @@ public class ClothingTemplateStrategy implements SectorTemplateStrategy {
     @Override
     public List<String> getDefaultCategories() {
         return List.of(
-            "Hauts & T-shirts",
-            "Pantalons & Jeans",
-            "Robes & Jupes",
-            "Chaussures Hommes",
-            "Chaussures Femmes",
-            "Chaussures Enfants",
-            "Sacs & Maroquinerie",
-            "Accessoires & Bijoux Fantaisie",
-            "Sous-vêtements",
+            "Vêtements Hommes",
+            "Vêtements Femmes",
             "Vêtements Enfants",
-            "Pagnes & Tissus",
-            "Vêtements de Sport",
-            "Ceintures & Cravates"
+            "Chaussures & Accessoires",
+            "Pagnes & Tissus"
         );
     }
 }

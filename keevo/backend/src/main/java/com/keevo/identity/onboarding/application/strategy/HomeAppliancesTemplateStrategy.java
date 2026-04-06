@@ -21,20 +21,11 @@ public class HomeAppliancesTemplateStrategy implements SectorTemplateStrategy {
     @Override
     public List<String> getDefaultCategories() {
         return List.of(
-            "Réfrigérateurs & Congélateurs",
-            "Climatiseurs & Ventilateurs",
-            "Cuisinières à Gaz",
-            "Plaques Électriques & Fours",
-            "Machines à Laver",
-            "Téléviseurs",
-            "Mixeurs & Blenders",
-            "Fers à Repasser",
-            "Bouilloires & Cafetières",
-            "Micro-ondes",
-            "Ustensiles de Cuisine",
-            "Vaisselle & Arts de la Table",
-            "Literie & Couvertures",
-            "Décoration Maison"
+            "Électroménager Froid",
+            "Électroménager Cuisine",
+            "Climatisation & Ventilation",
+            "TV & Audio",
+            "Literie & Décoration"
         );
     }
 }

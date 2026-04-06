@@ -21,21 +21,11 @@ public class FoodGroceryTemplateStrategy implements SectorTemplateStrategy {
     @Override
     public List<String> getDefaultCategories() {
         return List.of(
-            "Riz & Céréales",
-            "Huiles Alimentaires",
-            "Farine & Féculents",
-            "Sucre, Sel & Épices",
-            "Légumes Frais",
-            "Fruits Frais",
-            "Viandes & Volailles",
-            "Poissons & Fruits de Mer",
-            "Boissons Gazeuses",
-            "Eau Minérale & Jus",
-            "Produits Laitiers & Œufs",
-            "Conserves & Plats Préparés",
-            "Snacks & Biscuits",
-            "Produits de Base (Savon, Allumettes)",
-            "Pain & Viennoiseries"
+            "Céréales & Féculents",
+            "Fruits & Légumes",
+            "Viandes & Poissons",
+            "Boissons",
+            "Snacks & Produits Ménagers"
         );
     }
 }

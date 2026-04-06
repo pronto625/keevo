@@ -21,20 +21,11 @@ public class ElectronicsTemplateStrategy implements SectorTemplateStrategy {
     @Override
     public List<String> getDefaultCategories() {
         return List.of(
-            "Smartphones Neufs",
-            "Smartphones Reconditionnés",
-            "Tablettes",
-            "Ordinateurs & Laptops",
-            "Coques & Protections",
-            "Câbles & Chargeurs",
-            "Casques & Écouteurs",
-            "Batteries Externes",
-            "Montres Connectées",
-            "Accessoires Photo",
-            "Clés USB & Cartes Mémoire",
+            "Smartphones & Tablettes",
+            "Ordinateurs & Périphériques",
             "TV & Écrans",
-            "Accessoires PC & Périphériques",
-            "Kits Solaires & Onduleurs"
+            "Câbles & Accessoires",
+            "Kits Solaires & Batteries"
         );
     }
 }

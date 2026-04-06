@@ -21,17 +21,10 @@ public class BooksStationeryTemplateStrategy implements SectorTemplateStrategy {
     @Override
     public List<String> getDefaultCategories() {
         return List.of(
-            "Manuels Primaire",
-            "Manuels Collège & Lycée",
-            "Manuels Universitaires",
-            "Romans & Littérature",
-            "Dictionnaires & Atlas",
+            "Livres & Manuels",
             "Cahiers & Carnets",
             "Stylos & Crayons",
-            "Calculatrices & Instruments",
-            "Cartables & Sacs Scolaires",
-            "Uniformes Scolaires",
-            "Arts & Loisirs Créatifs",
+            "Accessoires Scolaires",
             "Fournitures Bureau"
         );
     }

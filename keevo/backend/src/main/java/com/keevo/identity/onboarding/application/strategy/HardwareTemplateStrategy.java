@@ -21,20 +21,11 @@ public class HardwareTemplateStrategy implements SectorTemplateStrategy {
     @Override
     public List<String> getDefaultCategories() {
         return List.of(
-            "Outils à Main",
-            "Outils Électriques & Perceuses",
-            "Visserie & Boulonnerie",
-            "Clous & Fixations",
-            "Câbles Électriques",
-            "Interrupteurs & Prises",
-            "Peintures & Vernis",
-            "Enduits & Colles",
-            "Tuyaux & Raccords Plomberie",
-            "Robinetterie",
-            "Ciment & Matériaux de Construction",
-            "Serrures & Sécurité",
-            "Grillages & Barbelés",
-            "Batteries & Génératrices"
+            "Outils",
+            "Matériaux Électriques",
+            "Plomberie",
+            "Peintures & Enduits",
+            "Matériaux de Construction"
         );
     }
 }

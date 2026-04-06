@@ -30,13 +30,13 @@ class SectorTemplateFactoryTest {
     @Test
     @DisplayName("should return correct category count for each sector")
     void should_return_correct_category_count_for_each_sector() {
-        assertThat(factory.create(SectorType.CLOTHING).getDefaultCategories()).hasSize(13);
-        assertThat(factory.create(SectorType.ELECTRONICS).getDefaultCategories()).hasSize(14);
-        assertThat(factory.create(SectorType.BOOKS_STATIONERY).getDefaultCategories()).hasSize(12);
-        assertThat(factory.create(SectorType.HOME_APPLIANCES).getDefaultCategories()).hasSize(14);
-        assertThat(factory.create(SectorType.FOOD_GROCERY).getDefaultCategories()).hasSize(15);
-        assertThat(factory.create(SectorType.PHARMACY).getDefaultCategories()).hasSize(13);
-        assertThat(factory.create(SectorType.HARDWARE).getDefaultCategories()).hasSize(14);
+        assertThat(factory.create(SectorType.CLOTHING).getDefaultCategories()).hasSize(5);
+        assertThat(factory.create(SectorType.ELECTRONICS).getDefaultCategories()).hasSize(5);
+        assertThat(factory.create(SectorType.BOOKS_STATIONERY).getDefaultCategories()).hasSize(5);
+        assertThat(factory.create(SectorType.HOME_APPLIANCES).getDefaultCategories()).hasSize(5);
+        assertThat(factory.create(SectorType.FOOD_GROCERY).getDefaultCategories()).hasSize(5);
+        assertThat(factory.create(SectorType.PHARMACY).getDefaultCategories()).hasSize(4);
+        assertThat(factory.create(SectorType.HARDWARE).getDefaultCategories()).hasSize(5);
         assertThat(factory.create(SectorType.OTHER).getDefaultCategories()).hasSize(3);
     }
 

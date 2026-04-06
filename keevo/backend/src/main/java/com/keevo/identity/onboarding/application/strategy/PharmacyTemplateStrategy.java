@@ -21,19 +21,10 @@ public class PharmacyTemplateStrategy implements SectorTemplateStrategy {
     @Override
     public List<String> getDefaultCategories() {
         return List.of(
-            "Médicaments Génériques",
-            "Médicaments de Marque",
-            "Vitamines & Suppléments",
-            "Contraceptifs",
-            "Soins Bébé & Maternité",
-            "Soins Visage & Peau",
-            "Soins Corps & Hygiène",
-            "Produits Capillaires",
-            "Parfums & Déodorants",
-            "Premiers Secours & Pansements",
-            "Matériel Médical",
-            "Produits Dentaires",
-            "Compléments Alimentaires"
+            "Médicaments",
+            "Soins & Hygiène",
+            "Compléments & Vitamines",
+            "Matériel Médical"
         );
     }
 }
