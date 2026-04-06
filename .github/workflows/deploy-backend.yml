@@ -25,11 +25,18 @@ jobs:
       packages: write
 
     outputs:
-      image_ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+      image_ref: ${{ steps.image.outputs.ref }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Compute lowercase image ref
+        id: image
+        run: |
+          IMAGE_LC=$(echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
+          echo "name=${IMAGE_LC}"        >> "$GITHUB_OUTPUT"
+          echo "ref=${IMAGE_LC}:latest"  >> "$GITHUB_OUTPUT"
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -42,7 +49,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ steps.image.outputs.name }}
           tags: |
             type=sha,prefix=sha-
             type=raw,value=latest
@@ -69,73 +76,12 @@ jobs:
     environment: production
 
     steps:
-      # Copy the production compose file to the runner workspace so we can SCP it.
-      # We generate it here rather than committing it, so no secrets leak to the repo.
-      - name: Generate docker-compose.prod.yml
-        env:
-          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          KEEVO_TAG: ${{ github.sha }}
-        run: |
-          cat > /tmp/docker-compose.prod.yml << 'COMPOSE'
-          version: "3.9"
-
-          services:
-            # ── PostgreSQL ─────────────────────────────────────────────────────
-            postgres:
-              image: postgres:16-alpine
-              container_name: keevo_postgres
-              restart: unless-stopped
-              environment:
-                POSTGRES_DB:       ${POSTGRES_DB}
-                POSTGRES_USER:     ${POSTGRES_USER}
-                POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-              volumes:
-                - postgres_data:/var/lib/postgresql/data
-              healthcheck:
-                test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-                interval: 10s
-                timeout: 5s
-                retries: 10
-              networks:
-                - keevo_net
-
-            # ── Spring Boot backend ────────────────────────────────────────────
-            backend:
-              image: ${BACKEND_IMAGE}
-              container_name: keevo_backend
-              restart: unless-stopped
-              depends_on:
-                postgres:
-                  condition: service_healthy
-              env_file: .env
-              environment:
-                # Override POSTGRES_HOST so the app talks to the compose service,
-                # not 'localhost' (which would be the container itself).
-                POSTGRES_HOST: postgres
-                POSTGRES_PORT: "5432"
-                SPRING_PROFILES_ACTIVE: prod
-                GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase
-              volumes:
-                - ./firebase-credentials.json:/run/secrets/firebase:ro
-              ports:
-                - "8080:8080"
-              networks:
-                - keevo_net
-
-          volumes:
-            postgres_data:
-
-          networks:
-            keevo_net:
-              driver: bridge
-          COMPOSE
-
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         env:
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
           GH_ACTOR: ${{ github.actor }}
-          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          IMAGE_REF: ${{ needs.build-and-push.outputs.image_ref }}
         with:
           host: ${{ secrets.DEPLOY_SSH_HOST }}
           username: ${{ secrets.DEPLOY_SSH_USER }}
@@ -161,8 +107,6 @@ jobs:
 
             echo "→ Writing docker-compose.prod.yml…"
             cat > docker-compose.prod.yml << 'COMPOSE'
-            version: "3.9"
-
             services:
               postgres:
                 image: postgres:16-alpine
