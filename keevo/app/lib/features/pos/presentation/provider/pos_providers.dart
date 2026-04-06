@@ -89,31 +89,36 @@ final frequentProductsProvider =
   final repo = ref.watch(saleRepositoryProvider);
   final ids = await repo.getFrequentProductIds(storeId, limit: 12);
 
+  // Category filter clause (variable must come BEFORE the ORDER BY CASE variables)
+  final String categoryClause;
+  Variable? categoryVar;
+  if (categoryId != null) {
+    categoryClause = 'AND p.category_id = ? ';
+    categoryVar = Variable.withString(categoryId);
+  } else {
+    categoryClause = '';
+  }
+
   // Build ORDER BY clause: frequent products first (by their position in ids),
   // then products with stock, then alphabetically.
   // Always show ALL active non-archived products so brand-new products are visible.
   final String frequentOrder;
-  final List<Variable> variables;
+  final List<Variable> frequentOrderVars;
   if (ids.isEmpty) {
     frequentOrder = '1'; // constant — no frequency to sort by
-    variables = [Variable.withString(storeId)];
+    frequentOrderVars = [];
   } else {
     final placeholders = ids.map((_) => '?').join(',');
     frequentOrder = 'CASE WHEN p.id IN ($placeholders) THEN 0 ELSE 1 END';
-    variables = [
-      Variable.withString(storeId),
-      ...ids.map(Variable.withString),
-    ];
+    frequentOrderVars = ids.map(Variable.withString).toList();
   }
 
-  // Category filter clause
-  final String categoryClause;
-  if (categoryId != null) {
-    categoryClause = 'AND p.category_id = ? ';
-    variables.add(Variable.withString(categoryId));
-  } else {
-    categoryClause = '';
-  }
+  // Variables order must match SQL placeholders: storeId, categoryId?, ...ids
+  final variables = [
+    Variable.withString(storeId),
+    if (categoryVar != null) categoryVar,
+    ...frequentOrderVars,
+  ];
 
   final rows = await db.customSelect(
     'SELECT p.id, p.name, p.price, p.photo_url, '

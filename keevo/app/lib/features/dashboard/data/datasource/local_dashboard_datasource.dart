@@ -168,12 +168,11 @@ class LocalDashboardDatasource {
     return result.read<int>('cnt');
   }
 
-  /// Top [limit] best-selling products this week (Monday → now).
+  /// Top [limit] best-selling products over the last 7 rolling days.
   Future<List<TopProduct>> getWeeklyTopProducts({int limit = 5}) async {
     final now = DateTime.now();
-    // Find Monday of current week
-    final monday = now.subtract(Duration(days: now.weekday - 1));
-    final startOfWeek = DateTime(monday.year, monday.month, monday.day);
+    // Rolling 7-day window (matches UI label "7j", avoids Monday-boundary issue)
+    final startOfWeek = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 6));
 
     // First get total weekly revenue for market share calculation
     final totalResult = await _db.customSelect(
@@ -278,13 +277,13 @@ class LocalDashboardDatasource {
     return overviews;
   }
 
-  /// Bottom [limit] least-selling products this week (Monday → now).
+  /// Bottom [limit] least-selling products over the last 7 rolling days.
   /// Includes non-archived catalog products that had 0 sales so that
   /// the list isn't just a reverse of topProducts.
   Future<List<TopProduct>> getWeeklyWorstProducts({int limit = 5}) async {
     final now = DateTime.now();
-    final monday = now.subtract(Duration(days: now.weekday - 1));
-    final startOfWeek = DateTime(monday.year, monday.month, monday.day);
+    // Rolling 7-day window (matches UI label "7j", avoids Monday-boundary issue)
+    final startOfWeek = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 6));
 
     final totalResult = await _db.customSelect(
       'SELECT COALESCE(SUM(si.subtotal), 0) AS total '

@@ -42,9 +42,8 @@ public class DashboardService implements GetDashboardSummaryUseCase {
         Instant startPrevMonth   = today.minusMonths(1).withDayOfMonth(1).atStartOfDay().toInstant(utc);
         Instant start30DaysAgo   = today.minusDays(29).atStartOfDay().toInstant(utc);
 
-        // Monday of current week
-        LocalDate monday = today.with(java.time.DayOfWeek.MONDAY);
-        Instant startOfWeek = monday.atStartOfDay().toInstant(utc);
+        // Rolling 7-day window for top/worst products (matches UI label "7j")
+        Instant start7DaysAgo = today.minusDays(6).atStartOfDay().toInstant(utc);
 
         long todayCA     = sumCA(startToday, null);
         long yesterdayCA  = sumCA(startYesterday, startToday);
@@ -68,8 +67,8 @@ public class DashboardService implements GetDashboardSummaryUseCase {
 
         int lowStockCount = countLowStock();
 
-        List<TopProductEntry> topProducts   = getWeeklyTopProducts(startOfWeek, 5);
-        List<TopProductEntry> worstProducts = getWeeklyWorstProducts(startOfWeek, 5);
+        List<TopProductEntry> topProducts   = getWeeklyTopProducts(start7DaysAgo, 5);
+        List<TopProductEntry> worstProducts = getWeeklyWorstProducts(start7DaysAgo, 5);
         List<DailyCAEntry> dailyCA          = getDailyCA(start30DaysAgo);
         List<DailyCAEntry> weeklyCA         = getWeeklyCA();
         List<DailyCAEntry> monthlyCA        = getMonthlyCA();

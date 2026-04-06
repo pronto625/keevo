@@ -130,11 +130,17 @@ class _StoreDetail extends ConsumerWidget {
               : SalesEvolutionChart(
                   data: chartData,
                   period: chartPeriod,
+                  daysRange: ref.watch(storeChartDaysProvider(storeId)),
                   onPeriodChanged: (p) =>
                       ref.read(storeChartPeriodProvider(storeId).notifier).state = p,
+                  onDaysRangeChanged: chartPeriod == ChartPeriod.daily
+                      ? (d) => ref
+                          .read(storeChartDaysProvider(storeId).notifier)
+                          .state = d
+                      : null,
                 ),
           loading: () => const SizedBox(
-            height: 120,
+            height: 150,
             child: Center(child: CircularProgressIndicator()),
           ),
           error: (_, __) => const SizedBox.shrink(),

@@ -13,7 +13,7 @@ class TopProductsSection extends StatelessWidget {
 
   const TopProductsSection({
     super.key,
-    this.title = 'Top Produits (7j)',
+    this.title = 'Top Produits — toutes boutiques (7j)',
     required this.products,
     this.onViewAll,
   });

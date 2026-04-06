@@ -17,7 +17,8 @@ import '../widget/sort_chips.dart';
 /// Route guard for EMPLOYEE is handled at router level (app_router.dart),
 /// not in this widget.
 class ProductProfitabilityListPage extends ConsumerWidget {
-  const ProductProfitabilityListPage({super.key});
+  final String? storeId;
+  const ProductProfitabilityListPage({super.key, this.storeId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -41,6 +42,7 @@ class ProductProfitabilityListPage extends ConsumerWidget {
       from: period.from,
       to: period.to,
       sort: sort,
+      storeId: storeId,
     );
 
     final dataAsync = ref.watch(productProfitabilityProvider(params));

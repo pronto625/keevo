@@ -77,6 +77,11 @@ class _DashboardContent extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final greeting = _buildGreeting(firstName);
     final tenantName = ref.watch(currentTenantNameProvider);
+    // Online-first via snapshot; fallback to local when offline/empty.
+    final topProducts = ref.watch(topProductsProvider).valueOrNull
+        ?? snapshot.weeklyTopProducts;
+    final worstProducts = ref.watch(worstProductsProvider).valueOrNull
+        ?? snapshot.weeklyWorstProducts;
 
     return RefreshIndicator(
       onRefresh: onRefresh,
@@ -198,17 +203,17 @@ class _DashboardContent extends ConsumerWidget {
 
                 // Top Products — AC7
                 TopProductsSection(
-                  products: snapshot.weeklyTopProducts,
+                  products: topProducts,
                   onViewAll: () => context.go('/reports'),
                 ),
 
                 const SizedBox(height: 16),
 
                 // Worst Products
-                if (snapshot.weeklyWorstProducts.isNotEmpty)
+                if (worstProducts.isNotEmpty)
                   TopProductsSection(
-                    title: 'Produits les moins vendus (7j)',
-                    products: snapshot.weeklyWorstProducts,
+                    title: 'Moins vendus — toutes boutiques (7j)',
+                    products: worstProducts,
                   ),
 
                 const SizedBox(height: 24),
@@ -278,12 +283,19 @@ class _ChartWithFilter extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final period = ref.watch(chartPeriodProvider);
+    final days = ref.watch(chartDaysProvider);
     final chartAsync = ref.watch(chartDataProvider);
 
     final data = chartAsync.when(
       data: (d) => d,
-      loading: () => dailyData,
-      error: (_, __) => dailyData,
+      loading: () {
+        final all = dailyData;
+        return all.length > days ? all.sublist(all.length - days) : all;
+      },
+      error: (_, __) {
+        final all = dailyData;
+        return all.length > days ? all.sublist(all.length - days) : all;
+      },
     );
 
     if (data.isEmpty) return const SizedBox.shrink();
@@ -293,7 +305,11 @@ class _ChartWithFilter extends ConsumerWidget {
         SalesEvolutionChart(
           data: data,
           period: period,
+          daysRange: days,
           onPeriodChanged: (p) => ref.read(chartPeriodProvider.notifier).state = p,
+          onDaysRangeChanged: period == ChartPeriod.daily
+              ? (d) => ref.read(chartDaysProvider.notifier).state = d
+              : null,
         ),
         const SizedBox(height: 16),
       ],

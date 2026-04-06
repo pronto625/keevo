@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../profitability/presentation/page/product_profitability_list_page.dart';
 import '../../../profitability/presentation/page/store_performance_page.dart';
+import '../../../stores/presentation/provider/active_store_provider.dart';
 import 'report_history_page.dart';
 import 'reports_page.dart';
 
@@ -14,11 +16,12 @@ import 'reports_page.dart';
 ///   🏪 Boutiques    — StorePerformancePage (Story 7.4)
 ///
 /// EMPLOYEE route `/reports` still points to [ReportsPage] (no tabs).
-class OwnerReportsPage extends StatelessWidget {
+class OwnerReportsPage extends ConsumerWidget {
   const OwnerReportsPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final activeStoreId = ref.watch(activeStoreIdProvider);
     return DefaultTabController(
       length: 4,
       child: Scaffold(
@@ -45,8 +48,8 @@ class OwnerReportsPage extends StatelessWidget {
           // Keep each tab alive so state (scroll position, filters) is preserved
           children: [
             _KeepAliveTab(child: ReportsPage()),
-            _KeepAliveTab(child: ReportHistoryPage()),
-            _KeepAliveTab(child: ProductProfitabilityListPage()),
+            _KeepAliveTab(child: ReportHistoryPage(storeId: activeStoreId)),
+            _KeepAliveTab(child: ProductProfitabilityListPage(storeId: activeStoreId)),
             _KeepAliveTab(child: StorePerformancePage()),
           ],
         ),

@@ -238,8 +238,12 @@ class _PosPageState extends ConsumerState<PosPage> {
                       categoryId: _selectedCategoryId,
                       onAddToCart: (p) => _addProductToCart(p, cartNotifier),
                     ),
-              // Bottom padding for cart pill
-              const SliverPadding(padding: EdgeInsets.only(bottom: 80)),
+              // Bottom padding: cart pill height + safe area + breathing room
+              SliverPadding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).padding.bottom + 110,
+                ),
+              ),
             ],
           ),
           // Cart pill
@@ -344,7 +348,7 @@ class _FrequentProductsSliver extends ConsumerWidget {
           );
         }
         return SliverPadding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           sliver: SliverLayoutBuilder(
             builder: (context, constraints) {
               final crossAxisCount = constraints.crossAxisExtent < 600
@@ -430,7 +434,7 @@ class _SearchResultsSliver extends ConsumerWidget {
           );
         }
         return SliverPadding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           sliver: SliverLayoutBuilder(
             builder: (context, constraints) {
               final crossAxisCount = constraints.crossAxisExtent < 600
@@ -544,11 +548,13 @@ class _CategoryChipsSliver extends ConsumerWidget {
           return const SliverToBoxAdapter(child: SizedBox.shrink());
         }
         return SliverToBoxAdapter(
-          child: SizedBox(
-            height: 52,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: SizedBox(
+              height: 44,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(vertical: 4),
               itemCount: roots.length + 1,
               separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (context, index) {
@@ -581,12 +587,13 @@ class _CategoryChipsSliver extends ConsumerWidget {
                     ),
                   ),
                 );
-              },
-            ),
-          ),
-        );
-      },
-    );
+              },            // itemBuilder
+            ),              // ListView.separated
+          ),                // SizedBox
+        ),                  // Padding
+        );                  // SliverToBoxAdapter (closes return statement)
+      },                    // data: callback
+    );                      // asyncCategories.when()
   }
 }
 
