@@ -157,7 +157,7 @@ void main() {
       // Widget decodes JSON → French description
       expect(find.textContaining('ajusté'), findsOneWidget);
       expect(find.textContaining('+5'), findsOneWidget);
-      expect(find.textContaining('10'), findsOneWidget);
+      expect(find.textContaining('total : 10'), findsOneWidget);
     });
   });
 }
