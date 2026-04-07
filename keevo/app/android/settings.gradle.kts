@@ -25,3 +25,13 @@ plugins {
 }
 
 include(":app")
+
+// Force all Android library plugins (e.g. sqlcipher_flutter_libs compileSdkVersion 28)
+// to compile against SDK 35 so that android:attr/lStar is available at resource link time.
+gradle.afterProject {
+    if (project.plugins.hasPlugin("com.android.library")) {
+        project.extensions.configure<com.android.build.gradle.LibraryExtension> {
+            compileSdk = 35
+        }
+    }
+}
