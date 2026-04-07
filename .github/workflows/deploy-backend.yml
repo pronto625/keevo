@@ -83,12 +83,14 @@ jobs:
           GH_ACTOR: ${{ github.actor }}
           IMAGE_REF: ${{ needs.build-and-push.outputs.image_ref }}
           APP_DOMAIN: ${{ secrets.APP_DOMAIN }}
+          JWT_PRIVATE_KEY_PEM: ${{ secrets.JWT_PRIVATE_KEY_PEM }}
+          JWT_PUBLIC_KEY_PEM: ${{ secrets.JWT_PUBLIC_KEY_PEM }}
         with:
           host: ${{ secrets.DEPLOY_SSH_HOST }}
           username: ${{ secrets.DEPLOY_SSH_USER }}
           key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
           port: ${{ secrets.DEPLOY_SSH_PORT || '22' }}
-          envs: GHCR_PAT,GH_ACTOR,IMAGE_REF,APP_DOMAIN
+          envs: GHCR_PAT,GH_ACTOR,IMAGE_REF,APP_DOMAIN,JWT_PRIVATE_KEY_PEM,JWT_PUBLIC_KEY_PEM
 
           # ── Script that runs on the remote server ──────────────────────────────
           # Prerequisites on server:
@@ -96,12 +98,18 @@ jobs:
           #   • ~/keevo/.env  (copy backend/.env.example, fill prod values;
           #     POSTGRES_HOST will be overridden by compose to "postgres")
           #   • ~/keevo/firebase-credentials.json  (Firebase service-account key)
+          #   • JWT_PRIVATE_KEY_PEM / JWT_PUBLIC_KEY_PEM secrets (RSA 2048 PEM content)
           script: |
             set -euo pipefail
             DEPLOY_DIR="${HOME}/keevo"
 
-            mkdir -p "${DEPLOY_DIR}"
+            mkdir -p "${DEPLOY_DIR}/keys"
             cd "${DEPLOY_DIR}"
+
+            echo "→ Writing RSA key pair for JWT…"
+            printf '%s\n' "${JWT_PRIVATE_KEY_PEM}" > keys/private_key.pem
+            printf '%s\n' "${JWT_PUBLIC_KEY_PEM}"  > keys/public_key.pem
+            chmod 600 keys/private_key.pem keys/public_key.pem
 
             echo "→ Authenticating with GHCR…"
             echo "${GHCR_PAT}" | docker login ghcr.io -u "${GH_ACTOR}" --password-stdin
@@ -165,8 +173,11 @@ jobs:
                   POSTGRES_PORT: "5432"
                   SPRING_PROFILES_ACTIVE: prod
                   GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase
+                  KEEVO_JWT_PRIVATE_KEY_PATH: file:/run/secrets/jwt/private_key.pem
+                  KEEVO_JWT_PUBLIC_KEY_PATH: file:/run/secrets/jwt/public_key.pem
                 volumes:
                   - ./firebase-credentials.json:/run/secrets/firebase:ro
+                  - ./keys:/run/secrets/jwt:ro
                 networks:
                   - keevo_net
                 labels:

@@ -72,8 +72,8 @@ management:
 # Keevo custom config
 keevo:
   jwt:
-    private-key-path: classpath:keys/private_key.pem
-    public-key-path: classpath:keys/public_key.pem
+    private-key-path: ${KEEVO_JWT_PRIVATE_KEY_PATH:classpath:keys/private_key.pem}
+    public-key-path: ${KEEVO_JWT_PUBLIC_KEY_PATH:classpath:keys/public_key.pem}
     access-token-expiry-hours: 24
     refresh-token-expiry-days: 30
   admin:
