@@ -82,6 +82,7 @@ void main() {
     when(() => mockDio.get<Map<String, dynamic>>(
           any(),
           queryParameters: any(named: 'queryParameters'),
+          options: any(named: 'options'),
         )).thenAnswer((_) async => pullResponse(entities: entities));
   }
 

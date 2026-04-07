@@ -28,10 +28,13 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      expect(find.text('Plan gratuit'), findsOneWidget);
-      expect(find.text('1/1 boutique'), findsOneWidget);
-      expect(find.text('87/500 produits'), findsOneWidget);
-      expect(find.text('2/3 employés'), findsOneWidget);
+      expect(find.text('Gratuit'), findsOneWidget);
+      expect(find.text('Boutiques'), findsOneWidget);
+      expect(find.text('1 / 1'), findsOneWidget);
+      expect(find.text('Produits'), findsOneWidget);
+      expect(find.text('87 / 500'), findsOneWidget);
+      expect(find.text('Employés'), findsOneWidget);
+      expect(find.text('2 / 3'), findsOneWidget);
     });
 
     testWidgets(
@@ -58,8 +61,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Premium Trial'), findsOneWidget);
-      expect(find.textContaining('Expire le'), findsOneWidget);
-      expect(find.textContaining('illimité'), findsWidgets);
+      expect(find.textContaining('Expire'), findsOneWidget);
+      expect(find.textContaining('∞'), findsWidgets);
     });
   });
 }

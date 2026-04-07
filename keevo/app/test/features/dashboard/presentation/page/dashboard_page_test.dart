@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/dashboard/domain/model/dashboard_snapshot.dart';
 import 'package:keevo/features/dashboard/presentation/page/dashboard_page.dart';
@@ -9,7 +10,10 @@ import 'package:keevo/features/dashboard/presentation/provider/dashboard_provide
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  setUpAll(() async {
+    GoogleFonts.config.allowRuntimeFetching = false;
+    await initializeDateFormatting('fr');
+  });
 
   final snapshot = DashboardSnapshot(
     todayCA: 50000,
@@ -95,7 +99,7 @@ void main() {
       expect(find.textContaining("CA D'AUJOURD'HUI"), findsOneWidget);
       // Metric badges
       expect(find.text("CA d'Hier"), findsOneWidget);
-      expect(find.text('Top Produits (7j)'), findsOneWidget);
+      expect(find.text('Top Produits — toutes boutiques (7j)'), findsOneWidget);
     });
   });
 }

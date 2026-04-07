@@ -21,14 +21,14 @@ void main() {
       expect(find.textContaining('1'), findsWidgets);
     });
 
-    testWidgets('shows initials avatar when no photo', (tester) async {
+    testWidgets('shows initials when no photo', (tester) async {
       await tester.pumpWidget(wrap(ProductCard(
         name: 'Savon Palmolive',
         price: 500,
         stockQuantity: 5,
         onTap: () {},
       )));
-      expect(find.byType(ProductInitialsAvatar), findsOneWidget);
+      expect(find.text('SP'), findsOneWidget);
     });
 
     testWidgets('shows rupture overlay when out of stock', (tester) async {

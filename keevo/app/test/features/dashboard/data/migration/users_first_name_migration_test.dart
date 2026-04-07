@@ -33,8 +33,8 @@ void main() {
 
     tearDown(() async => db.close());
 
-    test('schemaVersion is 21', () {
-      expect(db.schemaVersion, 21);
+    test('schemaVersion is 23', () {
+      expect(db.schemaVersion, 23);
     });
 
     test('users table accepts nullable firstName', () async {

@@ -21,7 +21,7 @@ void main() {
         yesterdayCA: 125000,
         now: DateTime(2025, 3, 15),
       );
-      expect(msg, contains('125 000'));
+      expect(msg, contains('125\u202f000'));
     });
 
     test('uses zero-CA template when yesterdayCA is 0', () {
@@ -69,7 +69,7 @@ void main() {
         yesterdayCA: 1500000,
         now: DateTime(2025, 1, 1),
       );
-      expect(msg, contains('1 500 000'));
+      expect(msg, contains('1\u202f500\u202f000'));
     });
   });
 }

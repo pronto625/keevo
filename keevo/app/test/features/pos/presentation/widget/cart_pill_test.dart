@@ -26,7 +26,7 @@ void main() {
         onEncaisser: () {},
       )));
       await tester.pumpAndSettle();
-      expect(find.text('Encaisser'), findsOneWidget);
+      expect(find.text('ENCAISSER'), findsOneWidget);
     });
 
     testWidgets('displays item count and total', (tester) async {
@@ -38,7 +38,7 @@ void main() {
       await tester.pumpAndSettle();
       // Count shown as badge number, no longer "2 articles"
       expect(find.text('2'), findsOneWidget);
-      expect(find.text('Encaisser'), findsOneWidget);
+      expect(find.text('ENCAISSER'), findsOneWidget);
     });
 
     testWidgets('singular article for 1 item', (tester) async {
@@ -60,7 +60,7 @@ void main() {
         onEncaisser: () => tapped = true,
       )));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Encaisser'));
+      await tester.tap(find.text('ENCAISSER'));
       expect(tapped, isTrue);
     });
   });

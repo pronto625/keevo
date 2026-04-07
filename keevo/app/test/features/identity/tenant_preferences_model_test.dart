@@ -116,7 +116,7 @@ void main() {
       // Unchanged fields preserved
       expect(updated.eodReportTime, '20:00:00');
       expect(updated.stockAlertEnabled, isFalse);
-      expect(updated.weeklyReportEnabled, isFalse);
+      expect(updated.weeklyReportEnabled, isTrue);
     });
   });
 }

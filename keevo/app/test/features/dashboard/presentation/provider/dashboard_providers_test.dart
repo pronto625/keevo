@@ -48,18 +48,35 @@ void main() {
   });
 
   group('storeOverviewsProvider', () {
-    test('returns store overviews from repository', () async {
+    test('returns store overviews from snapshot', () async {
       final mockRepo = _MockDashboardRepository();
-      when(() => mockRepo.getStoreOverviews()).thenAnswer((_) async => [
-            const StoreOverview(
-              storeId: 's1',
-              storeName: 'Boutique A',
-              todayCA: 10000,
-              yesterdayCA: 8000,
-              employeeCount: 2,
-              statusLevel: StoreStatusLevel.stable,
-            ),
-          ]);
+      const overviews = [
+        StoreOverview(
+          storeId: 's1',
+          storeName: 'Boutique A',
+          todayCA: 10000,
+          yesterdayCA: 8000,
+          employeeCount: 2,
+          statusLevel: StoreStatusLevel.stable,
+        ),
+      ];
+      when(() => mockRepo.getDashboardSnapshot()).thenAnswer((_) async =>
+          DashboardSnapshot(
+            todayCA: 0,
+            yesterdayCA: 0,
+            dayBeforeYesterdayCA: 0,
+            trendPercent: 0,
+            totalTransactionsMonth: 0,
+            averageBasketMonth: 0,
+            prevMonthTransactions: 0,
+            prevMonthAverageBasket: 0,
+            lowStockCount: 0,
+            weeklyTopProducts: const [],
+            weeklyWorstProducts: const [],
+            dailyCALast30: const [],
+            storeOverviews: overviews,
+            todaySalesCount: 0,
+          ));
 
       final container = ProviderContainer(overrides: [
         dashboardRepositoryProvider.overrideWithValue(mockRepo),

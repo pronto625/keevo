@@ -82,6 +82,7 @@ void main() {
     when(() => mockDio.get<Map<String, dynamic>>(
           any(),
           queryParameters: any(named: 'queryParameters'),
+          options: any(named: 'options'),
         )).thenAnswer((_) async => pullResponse(
           serverTimestamp: serverTimestamp,
           entities: entities,
@@ -106,6 +107,9 @@ void main() {
         key: kLastSyncTimestampKey,
         value: lastSync.millisecondsSinceEpoch.toString(),
       );
+      // Also set SharedPreferences so the stale-cursor guard doesn't reset
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(kLastSyncAtKey, lastSync.millisecondsSinceEpoch);
 
       stubPull();
       await syncService.pull();
@@ -113,6 +117,7 @@ void main() {
       final captured = verify(() => mockDio.get<Map<String, dynamic>>(
             captureAny(),
             queryParameters: captureAny(named: 'queryParameters'),
+            options: any(named: 'options'),
           )).captured;
       expect(captured[0], '/api/v1/sync/pull');
       final queryParams = captured[1] as Map<String, dynamic>?;

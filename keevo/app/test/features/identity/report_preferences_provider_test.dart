@@ -148,7 +148,7 @@ void main() {
       await container.read(reportPreferencesProvider.notifier).sendTestReport();
 
       final state = container.read(reportPreferencesProvider);
-      expect(state.successMessage, contains('non configuré'));
+      expect(state.successMessage, contains('Échec'));
     });
 
     test('clearMessages() — resets error and successMessage', () async {

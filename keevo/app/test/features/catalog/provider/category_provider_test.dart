@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keevo/features/catalog/domain/model/category_model.dart';
 import 'package:keevo/features/catalog/domain/repository/category_repository.dart';
 import 'package:keevo/features/catalog/presentation/provider/category_provider.dart';
+import 'package:keevo/features/identity/domain/model/tenant_preferences_model.dart';
+import 'package:keevo/features/identity/presentation/provider/tenant_preferences_provider.dart';
 
 /// Simple mock implementation of CategoryRepository for testing
 class MockCategoryRepository implements CategoryRepository {
@@ -110,6 +112,13 @@ void main() {
       container = ProviderContainer(
         overrides: [
           categoryRepositoryProvider.overrideWithValue(mockRepository),
+          tenantPreferencesProvider.overrideWith((_) async =>
+              TenantPreferencesModel(
+                sectorType: null,
+                eodReportTime: '20:00:00',
+                stockAlertEnabled: false,
+                createdAt: DateTime(2025),
+              )),
         ],
       );
     });

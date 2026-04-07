@@ -30,7 +30,7 @@ void main() {
         ],
       )));
 
-      expect(find.text('Top Produits (7j)'), findsOneWidget);
+      expect(find.text('Top Produits — toutes boutiques (7j)'), findsOneWidget);
       expect(find.text('Riz 5kg'), findsOneWidget);
       expect(find.text('Huile 1L'), findsOneWidget);
       expect(find.text('#1'), findsOneWidget);
@@ -56,7 +56,7 @@ void main() {
     testWidgets('hides when products list is empty', (tester) async {
       await tester.pumpWidget(_wrap(const TopProductsSection(products: [])));
 
-      expect(find.text('Top Produits (7j)'), findsNothing);
+      expect(find.text('Top Produits — toutes boutiques (7j)'), findsNothing);
     });
 
     testWidgets('shows Voir Tout button when onViewAll is set', (tester) async {

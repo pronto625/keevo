@@ -42,7 +42,7 @@ void main() {
       await tester.pumpWidget(buildApp());
       await tester.pump();
       expect(find.byType(TextField), findsOneWidget);
-      expect(find.text('Rechercher un produit…'), findsOneWidget);
+      expect(find.text('Chercher un produit'), findsOneWidget);
     });
 
     testWidgets('displays frequent products grid (empty state)',
@@ -81,7 +81,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // CartPill should now show the "Encaisser" button
-      expect(find.textContaining('Encaisser'), findsOneWidget);
+      expect(find.textContaining('ENCAISSER'), findsOneWidget);
     });
 
     testWidgets('haptic feedback on product tap', (tester) async {

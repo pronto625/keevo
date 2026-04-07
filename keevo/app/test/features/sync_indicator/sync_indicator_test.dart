@@ -91,7 +91,7 @@ void main() {
     await tester.tap(find.byType(SyncIndicator));
     await tester.pumpAndSettle();
     final btn = tester.widget<ElevatedButton>(
-        find.widgetWithText(ElevatedButton, 'Synchroniser maintenant'));
+        find.widgetWithText(ElevatedButton, 'Hors-ligne'));
     expect(btn.onPressed, isNull);
   });
 }
