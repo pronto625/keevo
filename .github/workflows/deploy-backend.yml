@@ -122,6 +122,8 @@ jobs:
                 image: traefik:v3.3
                 container_name: keevo_traefik
                 restart: unless-stopped
+                environment:
+                  DOCKER_API_VERSION: "1.44"
                 command:
                   - --providers.docker=true
                   - --providers.docker.exposedByDefault=false
