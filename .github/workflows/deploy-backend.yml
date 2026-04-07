@@ -114,6 +114,26 @@ jobs:
             echo "→ Authenticating with GHCR…"
             echo "${GHCR_PAT}" | docker login ghcr.io -u "${GH_ACTOR}" --password-stdin
 
+            echo "→ Writing traefik/dynamic.yml…"
+            mkdir -p traefik
+            cat > traefik/dynamic.yml << DYNAMIC
+            http:
+              routers:
+                backend:
+                  rule: "Host(\`${APP_DOMAIN}\`)"
+                  entryPoints:
+                    - websecure
+                  tls:
+                    certResolver: letsencrypt
+                  service: backend
+
+              services:
+                backend:
+                  loadBalancer:
+                    servers:
+                      - url: "http://backend:4500"
+            DYNAMIC
+
             echo "→ Writing docker-compose.prod.yml…"
             cat > docker-compose.prod.yml << COMPOSE
             services:
@@ -125,8 +145,8 @@ jobs:
                 mem_limit: 128m
                 mem_reservation: 64m
                 command:
-                  - --providers.docker=true
-                  - --providers.docker.exposedByDefault=false
+                  - --providers.file.filename=/etc/traefik/dynamic.yml
+                  - --providers.file.watch=true
                   - --entrypoints.web.address=:80
                   - --entrypoints.websecure.address=:443
                   - --entrypoints.web.http.redirections.entryPoint.to=websecure
@@ -139,7 +159,7 @@ jobs:
                   - "80:80"
                   - "443:443"
                 volumes:
-                  - /var/run/docker.sock:/var/run/docker.sock:ro
+                  - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
                   - traefik_letsencrypt:/letsencrypt
                 networks:
                   - keevo_net
@@ -198,12 +218,6 @@ jobs:
                   - ./keys:/run/secrets/jwt:ro
                 networks:
                   - keevo_net
-                labels:
-                  - traefik.enable=true
-                  - traefik.http.routers.backend.rule=Host(\`${APP_DOMAIN}\`)
-                  - traefik.http.routers.backend.entrypoints=websecure
-                  - traefik.http.routers.backend.tls.certresolver=letsencrypt
-                  - traefik.http.services.backend.loadbalancer.server.port=4500
 
             volumes:
               postgres_data:
