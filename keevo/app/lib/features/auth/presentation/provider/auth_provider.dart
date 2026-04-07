@@ -45,7 +45,7 @@ String? _extractFirstNameFromJwt(String accessToken) {
 /// Base API URL — replace with environment-based config in Story 1.3.
 const _apiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://10.0.3.2:8080', // local dev (Genymotion); prod: --dart-define=API_BASE_URL=https://<domain>
+  defaultValue: 'http://10.0.3.2:4500', // local dev (Genymotion); prod: --dart-define=API_BASE_URL=https://<domain>
 );
 
 /// Secure storage — singleton instance (AC5).

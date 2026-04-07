@@ -36,14 +36,14 @@ USER keevo
 #   SPRING_PROFILES_ACTIVE=prod
 #   POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD
 #   ADMIN_PHONE, ADMIN_PASSWORD
-#   APP_PORT (default 8080)
+#   APP_PORT (default 4500)
 #   GOOGLE_APPLICATION_CREDENTIALS (path to mounted Firebase JSON)
 #   KEEVO_FCM_ENABLED, KEEVO_WHATSAPP_PROVIDER, WASSENDER_API_TOKEN, ...
 # ──────────────────────────────────────────────────────────────────────────────
 ENV SPRING_PROFILES_ACTIVE=prod
-ENV APP_PORT=8080
+ENV APP_PORT=4500
 
-EXPOSE 8080
+EXPOSE 4500
 
 ENTRYPOINT ["java", \
             "-XX:+UseContainerSupport", \

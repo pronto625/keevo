@@ -47,17 +47,6 @@ void main() {
   group('TransferFormBottomSheet (Story 3.3 — Task 15)', () {
     late _MockRepo mockRepo;
 
-    final fakeTransfer = StockTransferModel(
-      id: 'tf-001',
-      sourceStoreId: 'src-001',
-      destinationStoreId: 'dst-001',
-      productId: 'prod-001',
-      quantity: 5,
-      actorId: 'actor-001',
-      occurredAt: DateTime(2026, 3, 14),
-      status: 'COMPLETED',
-    );
-
     setUp(() {
       mockRepo = _MockRepo();
     });

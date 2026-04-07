@@ -174,7 +174,7 @@ jobs:
                   - traefik.http.routers.backend.rule=Host(\`${APP_DOMAIN}\`)
                   - traefik.http.routers.backend.entrypoints=websecure
                   - traefik.http.routers.backend.tls.certresolver=letsencrypt
-                  - traefik.http.services.backend.loadbalancer.server.port=8080
+                  - traefik.http.services.backend.loadbalancer.server.port=4500
 
             volumes:
               postgres_data:
@@ -184,6 +184,10 @@ jobs:
               keevo_net:
                 driver: bridge
             COMPOSE
+
+            echo "→ Stopping old stack…"
+            BACKEND_IMAGE="${IMAGE_REF}" docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
+            docker rm -f keevo_backend keevo_traefik keevo_postgres 2>/dev/null || true
 
             echo "→ Pulling new backend image…"
             BACKEND_IMAGE="${IMAGE_REF}" docker compose -f docker-compose.prod.yml pull backend traefik
