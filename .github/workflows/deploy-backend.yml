@@ -132,6 +132,10 @@ jobs:
                   loadBalancer:
                     servers:
                       - url: "http://backend:4500"
+                    healthCheck:
+                      path: /actuator/health
+                      interval: 10s
+                      timeout: 5s
             DYNAMIC
 
             echo "→ Writing docker-compose.prod.yml…"
