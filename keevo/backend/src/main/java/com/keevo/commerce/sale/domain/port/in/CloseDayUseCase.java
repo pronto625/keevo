@@ -1,6 +1,6 @@
 package com.keevo.commerce.sale.domain.port.in;
 
-import com.keevo.commerce.sale.domain.model.DayClosureSummary;
+import com.keevo.commerce.sale.domain.model.DayClosure;
 
 import java.util.UUID;
 
@@ -26,8 +26,8 @@ public interface CloseDayUseCase {
      * Close the day for the given store.
      *
      * @param command closure command
-     * @return DayClosureSummary with aggregated sales data
+     * @return DayClosure aggregate containing id, summary and metadata
      * @throws com.keevo.shared.domain.exception.DomainException with DAY_ALREADY_CLOSED if already closed
      */
-    DayClosureSummary closeDay(CloseDayCommand command);
+    DayClosure closeDay(CloseDayCommand command);
 }

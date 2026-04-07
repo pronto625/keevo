@@ -1,9 +1,14 @@
 package com.keevo.reporting.report.adapter.in.rest;
 
+import com.keevo.commerce.sale.domain.model.DayClosure;
+import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
+import com.keevo.identity.onboarding.domain.model.ReportChannel;
 import com.keevo.reporting.report.adapter.in.rest.dto.ReportListResponseDto;
 import com.keevo.reporting.report.adapter.in.rest.dto.ReportResponseDto;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.ReportType;
+import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase;
+import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase.GenerateReportCommand;
 import com.keevo.reporting.report.domain.port.in.GenerateWeeklyReportUseCase;
 import com.keevo.reporting.report.domain.port.in.GenerateWeeklyReportUseCase.WeeklyReportCommand;
 import com.keevo.reporting.report.domain.port.in.GetReportHistoryUseCase;
@@ -46,6 +51,7 @@ import java.util.UUID;
  * GET  /api/v1/reports/{id}             → single report detail
  * POST /api/v1/reports/{id}/resend      → re-trigger WhatsApp delivery (OWNER only)
  * POST /api/v1/reports/trigger-weekly   → manual trigger for weekly report (OWNER only)
+ * POST /api/v1/reports/trigger-daily    → re-generate daily report for a store+date (OWNER only, recovery)
  * </pre>
  */
 @Tag(name = "Reports", description = "End-of-day report history and resend")
@@ -58,16 +64,22 @@ public class ReportController {
     private final GetReportHistoryUseCase getReportHistoryUseCase;
     private final ResendReportUseCase resendReportUseCase;
     private final GenerateWeeklyReportUseCase weeklyReportGenerator;
+    private final GenerateEndOfDayReportUseCase dailyReportGenerator;
     private final StoreRepository storeRepository;
+    private final DayClosureRepository dayClosureRepository;
 
     public ReportController(GetReportHistoryUseCase getReportHistoryUseCase,
                              ResendReportUseCase resendReportUseCase,
                              GenerateWeeklyReportUseCase weeklyReportGenerator,
-                             StoreRepository storeRepository) {
+                             GenerateEndOfDayReportUseCase dailyReportGenerator,
+                             StoreRepository storeRepository,
+                             DayClosureRepository dayClosureRepository) {
         this.getReportHistoryUseCase = getReportHistoryUseCase;
         this.resendReportUseCase = resendReportUseCase;
         this.weeklyReportGenerator = weeklyReportGenerator;
+        this.dailyReportGenerator = dailyReportGenerator;
         this.storeRepository = storeRepository;
+        this.dayClosureRepository = dayClosureRepository;
     }
 
     @Operation(summary = "Get paginated report history. OWNER: all or filtered. EMPLOYEE: own only.")
@@ -117,6 +129,35 @@ public class ReportController {
                 throw new DomainException(ErrorCode.FORBIDDEN, "Access denied");
             }
         }
+        return ResponseEntity.ok(ApiResponseWrapper.ok(ReportResponseDto.from(report)));
+    }
+
+    @Operation(summary = "Re-generate daily report for a store on a given date (OWNER only, recovery)")
+    @PostMapping("/trigger-daily")
+    public ResponseEntity<ApiResponseWrapper<ReportResponseDto>> triggerDaily(
+            @RequestParam UUID storeId,
+            @RequestParam(required = false) String date) {
+        requireOwnerOrForbid();
+        String tenantId = TenantContext.getCurrentTenant();
+        LocalDate targetDate = date != null ? LocalDate.parse(date) : LocalDate.now(WAT);
+
+        java.util.List<DayClosure> closures = dayClosureRepository.findByStoreIdAndDate(storeId, targetDate);
+        if (closures.isEmpty()) {
+            throw new DomainException(ErrorCode.NOT_FOUND,
+                    "Aucune clôture trouvée pour storeId=" + storeId + " date=" + targetDate);
+        }
+        DayClosure closure = closures.get(0);
+
+        var cmd = new GenerateReportCommand(
+                storeId,
+                null,                       // store-level report (owner only)
+                tenantId,
+                closure.isAutomatic(),
+                closure.getClosedAt(),
+                null,                       // windowStart=null → defaults to start-of-day WAT
+                ReportChannel.IN_APP_ONLY   // recovery: persist only, no WhatsApp re-send
+        );
+        EndOfDayReport report = dailyReportGenerator.generateReport(cmd);
         return ResponseEntity.ok(ApiResponseWrapper.ok(ReportResponseDto.from(report)));
     }
 

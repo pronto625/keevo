@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/di/providers.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
+import '../../../reports/presentation/provider/report_history_providers.dart';
 import '../../data/datasource/local_day_closure_datasource.dart';
 import '../../data/datasource/remote_day_closure_datasource.dart';
 import '../../data/repository/day_closure_repository_impl.dart';
@@ -153,6 +154,7 @@ class CloseDayNotifier extends StateNotifier<AsyncValue<DayClosureSummary?>> {
       _ref.invalidate(dayClosureStateProvider);
       _ref.invalidate(todaySalesCountProvider);
       _ref.invalidate(todaySummaryProvider);
+      _ref.invalidate(reportHistoryProvider);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
       rethrow;

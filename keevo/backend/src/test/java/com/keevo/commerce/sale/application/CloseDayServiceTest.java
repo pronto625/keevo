@@ -75,10 +75,10 @@ class CloseDayServiceTest {
         var result = service.closeDay(new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, false));
 
         // Then
-        assertThat(result.totalSales()).isEqualTo(3);
-        assertThat(result.totalRevenue()).isEqualTo(45000); // 15000 + 20000 + 10000
-        assertThat(result.cashAmount()).isEqualTo(25000);   // 15000 + 10000
-        assertThat(result.momoAmount()).isEqualTo(20000);
+        assertThat(result.getSummary().totalSales()).isEqualTo(3);
+        assertThat(result.getSummary().totalRevenue()).isEqualTo(45000); // 15000 + 20000 + 10000
+        assertThat(result.getSummary().cashAmount()).isEqualTo(25000);   // 15000 + 10000
+        assertThat(result.getSummary().momoAmount()).isEqualTo(20000);
     }
 
     @Test
@@ -99,10 +99,10 @@ class CloseDayServiceTest {
         var result = service.closeDay(new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, false));
 
         // Then - PENDING_VALIDATION excluded from totalRevenue but counted in pendingSales
-        assertThat(result.totalSales()).isEqualTo(2);           // only COMPLETED
-        assertThat(result.totalRevenue()).isEqualTo(35000);     // 15000 + 20000 (no 10000 pending)
-        assertThat(result.pendingSalesCount()).isEqualTo(1);
-        assertThat(result.pendingSalesTotal()).isEqualTo(10000);
+        assertThat(result.getSummary().totalSales()).isEqualTo(2);           // only COMPLETED
+        assertThat(result.getSummary().totalRevenue()).isEqualTo(35000);     // 15000 + 20000 (no 10000 pending)
+        assertThat(result.getSummary().pendingSalesCount()).isEqualTo(1);
+        assertThat(result.getSummary().pendingSalesTotal()).isEqualTo(10000);
     }
 
     @Test

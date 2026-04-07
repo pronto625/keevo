@@ -74,12 +74,15 @@ public class ReportHistoryService implements GetReportHistoryUseCase, ResendRepo
             whatsAppPort.sendReport(ownerPhone, report.getContent());
             report.incrementAttempt();
             report.markSent();
+            reportRepository.save(report);
             log.info("Resend succeeded for reportId={}", report.getId());
         } catch (Exception e) {
             report.incrementAttempt();
             report.markFailed();
+            reportRepository.save(report);
             log.warn("Resend failed for reportId={}: {}", report.getId(), e.getMessage());
+            throw new DomainException(ErrorCode.WHATSAPP_DELIVERY_FAILED,
+                    "WhatsApp delivery failed: " + e.getMessage());
         }
-        reportRepository.save(report);
     }
 }

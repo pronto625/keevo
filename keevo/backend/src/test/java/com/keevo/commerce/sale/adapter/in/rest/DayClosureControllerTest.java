@@ -96,7 +96,8 @@ class DayClosureControllerTest {
 
         var summary = new DayClosureSummary(5, 50000, UUID.randomUUID().toString(),
                 "iPhone 14", 3, 30000, 20000, 2, 10000);
-        when(closeDayUseCase.closeDay(any(CloseDayCommand.class))).thenReturn(summary);
+        var closure = new DayClosure(UUID.randomUUID(), storeId, actorId, Instant.now(), summary, false, "kv_abc123");
+        when(closeDayUseCase.closeDay(any(CloseDayCommand.class))).thenReturn(closure);
 
         mockMvc.perform(post("/api/v1/day-closures")
                         .header("Authorization", "Bearer fake-token")
@@ -115,7 +116,8 @@ class DayClosureControllerTest {
         mockJwt("EMPLOYEE");
 
         var summary = new DayClosureSummary(3, 25000, null, null, 0, 25000, 0, 0, 0);
-        when(closeDayUseCase.closeDay(any(CloseDayCommand.class))).thenReturn(summary);
+        var closure = new DayClosure(UUID.randomUUID(), storeId, actorId, Instant.now(), summary, false, "kv_abc123");
+        when(closeDayUseCase.closeDay(any(CloseDayCommand.class))).thenReturn(closure);
 
         mockMvc.perform(post("/api/v1/day-closures")
                         .header("Authorization", "Bearer fake-token")

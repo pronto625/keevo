@@ -1,8 +1,10 @@
 package com.keevo.reporting.report.adapter.in.rest;
 
+import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
 import com.keevo.reporting.report.domain.model.DeliveryStatus;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.ReportType;
+import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase;
 import com.keevo.reporting.report.domain.port.in.GenerateWeeklyReportUseCase;
 import com.keevo.reporting.report.domain.port.in.GetReportHistoryUseCase;
 import com.keevo.reporting.report.domain.port.in.ResendReportUseCase;
@@ -43,7 +45,9 @@ class WeeklyReportControllerTest {
     @Mock private GetReportHistoryUseCase getReportHistoryUseCase;
     @Mock private ResendReportUseCase resendReportUseCase;
     @Mock private GenerateWeeklyReportUseCase weeklyReportGenerator;
+    @Mock private GenerateEndOfDayReportUseCase dailyReportGenerator;
     @Mock private StoreRepository storeRepository;
+    @Mock private DayClosureRepository dayClosureRepository;
 
     private MockMvc mockMvc;
     private UUID ownerId;
@@ -51,7 +55,8 @@ class WeeklyReportControllerTest {
     @BeforeEach
     void setUp() {
         ReportController controller = new ReportController(
-                getReportHistoryUseCase, resendReportUseCase, weeklyReportGenerator, storeRepository);
+                getReportHistoryUseCase, resendReportUseCase, weeklyReportGenerator,
+                dailyReportGenerator, storeRepository, dayClosureRepository);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

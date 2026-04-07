@@ -89,7 +89,8 @@ class DayClosureAutoSchedulerTest {
         when(dayClosureRepository.existsByStoreIdAndDate(eq(STORE_ID), any(LocalDate.class)))
                 .thenReturn(false);
         when(closeDayUseCase.closeDay(any(CloseDayCommand.class)))
-                .thenReturn(new DayClosureSummary(0, 0, null, null, 0, 0, 0, 0, 0));
+                .thenReturn(new DayClosure(UUID.randomUUID(), STORE_ID, SYSTEM_UUID, Instant.now(),
+                        new DayClosureSummary(0, 0, null, null, 0, 0, 0, 0, 0), true, TENANT_SCHEMA));
         when(tenantPreferencesRepository.findByCurrentTenant())
                 .thenReturn(Optional.of(prefsWithEodTime("20:00:00")));
 
@@ -131,7 +132,8 @@ class DayClosureAutoSchedulerTest {
         when(dayClosureRepository.existsByStoreIdAndDate(eq(STORE_ID), any(LocalDate.class)))
                 .thenReturn(false);
         when(closeDayUseCase.closeDay(any()))
-                .thenReturn(new DayClosureSummary(0, 0, null, null, 0, 0, 0, 0, 0));
+                .thenReturn(new DayClosure(UUID.randomUUID(), STORE_ID, SYSTEM_UUID, Instant.now(),
+                        new DayClosureSummary(0, 0, null, null, 0, 0, 0, 0, 0), true, TENANT_SCHEMA));
         when(tenantPreferencesRepository.findByCurrentTenant())
                 .thenReturn(Optional.of(prefsWithEodTime("20:00:00")));
 
@@ -178,7 +180,8 @@ class DayClosureAutoSchedulerTest {
         when(dayClosureRepository.existsByStoreIdAndDate(eq(store2Id), any(LocalDate.class)))
                 .thenReturn(false); // needs closure
         when(closeDayUseCase.closeDay(any()))
-                .thenReturn(new DayClosureSummary(0, 0, null, null, 0, 0, 0, 0, 0));
+                .thenReturn(new DayClosure(UUID.randomUUID(), store2Id, SYSTEM_UUID, Instant.now(),
+                        new DayClosureSummary(0, 0, null, null, 0, 0, 0, 0, 0), true, TENANT_SCHEMA));
         when(tenantPreferencesRepository.findByCurrentTenant())
                 .thenReturn(Optional.of(prefsWithEodTime("20:00:00")));
 
@@ -225,7 +228,8 @@ class DayClosureAutoSchedulerTest {
         when(dayClosureRepository.existsByStoreIdAndDate(eq(STORE_ID), any(LocalDate.class)))
                 .thenReturn(false);
         when(closeDayUseCase.closeDay(any()))
-                .thenReturn(new DayClosureSummary(0, 0, null, null, 0, 0, 0, 0, 0));
+                .thenReturn(new DayClosure(UUID.randomUUID(), STORE_ID, SYSTEM_UUID, Instant.now(),
+                        new DayClosureSummary(0, 0, null, null, 0, 0, 0, 0, 0), true, TENANT_SCHEMA));
         when(tenantPreferencesRepository.findByCurrentTenant())
                 .thenReturn(Optional.of(prefsWithEodTime("20:00:00")));
 
@@ -247,7 +251,8 @@ class DayClosureAutoSchedulerTest {
         when(dayClosureRepository.existsByStoreIdAndDate(eq(STORE_ID), any(LocalDate.class)))
                 .thenReturn(false);
         when(closeDayUseCase.closeDay(any()))
-                .thenReturn(new DayClosureSummary(0, 0, null, null, 0, 0, 0, 0, 0));
+                .thenReturn(new DayClosure(UUID.randomUUID(), STORE_ID, SYSTEM_UUID, Instant.now(),
+                        new DayClosureSummary(0, 0, null, null, 0, 0, 0, 0, 0), true, TENANT_SCHEMA));
         when(tenantPreferencesRepository.findByCurrentTenant())
                 .thenReturn(Optional.empty()); // no preferences
 

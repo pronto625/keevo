@@ -39,9 +39,13 @@ public abstract class AbstractReportGenerator {
      * Final: subclasses cannot change the order of steps.
      * @Transactional ensures PENDING report is persisted before delivery;
      * on crash mid-delivery the PENDING status can be retried.
+     *
+     * <p>Note: NOT final — CGLIB proxying requires the method to be overridable so that the
+     * @Transactional advice can intercept the call and delegate to the fully-initialized target
+     * bean instance (avoiding NPE on injected fields in the CGLIB proxy subclass instance).
      */
     @Transactional
-    public final EndOfDayReport generateReport(GenerateEndOfDayReportUseCase.GenerateReportCommand command) {
+    public EndOfDayReport generateReport(GenerateEndOfDayReportUseCase.GenerateReportCommand command) {
         // Step 1: Collect data (subclass-specific)
         EndOfDayReportData data = collectData(command);
 

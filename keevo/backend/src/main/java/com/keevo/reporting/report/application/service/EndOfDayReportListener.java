@@ -9,8 +9,9 @@ import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase.G
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionalEventListener;
+import org.springframework.transaction.event.TransactionPhase;
 
 import java.util.List;
 import java.util.UUID;
@@ -43,7 +44,15 @@ public class EndOfDayReportListener {
         this.tenantPreferencesRepository = tenantPreferencesRepository;
     }
 
-    @EventListener
+    /**
+     * Fires AFTER the DayClosure transaction commits (AFTER_COMMIT), synchronously in the
+     * same request thread. Running synchronously ensures the report is always persisted before
+     * the HTTP response returns — no data loss on JVM restart.
+     *
+     * <p>WhatsApp delivery is best-effort (try/catch inside deliverReport): if it fails the
+     * report stays PENDING and can be resent later.
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onDayClosed(DayClosedEvent event) {
         log.info("EndOfDayReportListener: DayClosedEvent received storeId={}, tenantId={}, isAutomatic={}",
                 event.storeId(), event.tenantId(), event.isAutomatic());

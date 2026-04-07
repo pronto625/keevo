@@ -49,7 +49,7 @@ public class CloseDayService implements CloseDayUseCase {
     }
 
     @Override
-    public DayClosureSummary closeDay(CloseDayCommand command) {
+    public DayClosure closeDay(CloseDayCommand command) {
         LocalDate today = LocalDate.now(WAT_ZONE);
 
         // Step 1: Check no closure exists
@@ -97,6 +97,6 @@ public class CloseDayService implements CloseDayUseCase {
         );
         eventPublisher.publishEvent(event);
 
-        return summary;
+        return closure;
     }
 }

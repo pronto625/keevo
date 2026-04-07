@@ -2,7 +2,6 @@ package com.keevo.commerce.sale.adapter.in.rest;
 
 import com.keevo.commerce.sale.adapter.in.rest.dto.*;
 import com.keevo.commerce.sale.domain.model.DayClosure;
-import com.keevo.commerce.sale.domain.model.DayClosureSummary;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase.CloseDayCommand;
 import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
@@ -66,9 +65,10 @@ public class DayClosureController {
                 false // manual closure
         );
 
-        DayClosureSummary summary = closeDayUseCase.closeDay(command);
+        var closure = closeDayUseCase.closeDay(command);
+        var summary = closure.getSummary();
 
-        // Build a response DTO from the summary
+        // Build a response DTO from the closure
         DayClosureSummaryDto summaryDto = new DayClosureSummaryDto(
                 summary.totalSales(),
                 summary.totalRevenue(),
@@ -82,11 +82,11 @@ public class DayClosureController {
         );
 
         DayClosureResponseDto response = new DayClosureResponseDto(
-                null, // ID not returned from summary
-                request.storeId(),
-                actorId,
-                Instant.now(),
-                false,
+                closure.getId(),
+                closure.getStoreId(),
+                closure.getActorId(),
+                closure.getClosedAt(),
+                closure.isAutomatic(),
                 summaryDto
         );
 

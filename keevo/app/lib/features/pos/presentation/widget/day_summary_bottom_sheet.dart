@@ -213,18 +213,18 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppTheme.errorColor,
+                color: Theme.of(context).colorScheme.errorContainer_,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.errorColor),
+                border: Border.all(color: AppTheme.errorColor.withOpacity(0.4)),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.error_outline, color: AppTheme.errorColor),
+                  const Icon(Icons.error_outline, color: AppTheme.errorColor),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       _errorMessage!,
-                      style: TextStyle(color: AppTheme.errorColor, fontWeight: FontWeight.w500),
+                      style: const TextStyle(color: AppTheme.errorColor, fontWeight: FontWeight.w500),
                     ),
                   ),
                 ],
@@ -311,20 +311,20 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppTheme.warning,
+              color: Theme.of(context).colorScheme.warningContainer,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppTheme.warning),
+              border: Border.all(color: AppTheme.onWarning.withOpacity(0.2)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.warning_rounded, color: AppTheme.warning),
+                const Icon(Icons.warning_rounded, color: AppTheme.onWarning),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     '🔶 ${summary.pendingSalesCount} vente(s) en attente — '
                     '${_currencyFormat.format(summary.pendingSalesTotal)} (non comptabilisé)',
-                    style: TextStyle(
-                      color: AppTheme.warning,
+                    style: const TextStyle(
+                      color: AppTheme.onWarning,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -389,12 +389,12 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppTheme.success,
+              color: Theme.of(context).colorScheme.successContainer,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
               children: [
-                Icon(Icons.payments, color: AppTheme.success),
+                Icon(Icons.payments, color: Theme.of(context).colorScheme.success),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
@@ -405,7 +405,7 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
                         _currencyFormat.format(summary.cashAmount),
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: AppTheme.success,
+                          color: Theme.of(context).colorScheme.success,
                         ),
                       ),
                     ],
