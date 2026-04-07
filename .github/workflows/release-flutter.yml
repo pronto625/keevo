@@ -75,9 +75,7 @@ jobs:
 
       - name: Build release APK
         working-directory: keevo/app
-        env:
-          APP_DOMAIN: ${{ secrets.APP_DOMAIN }}
-        run: flutter build apk --release --dart-define=API_BASE_URL=https://${APP_DOMAIN}
+        run: flutter build apk --release --dart-define=API_BASE_URL=https://keevo.bookandgo.cloud
 
       - name: Rename APK
         run: |
