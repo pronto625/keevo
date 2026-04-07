@@ -16,5 +16,6 @@ logging:
 
 server:
   tomcat:
-    max-threads: 200
-    accept-count: 100
+    max-threads: 30
+    min-spare-threads: 5
+    accept-count: 50

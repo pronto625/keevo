@@ -122,6 +122,8 @@ jobs:
                 image: traefik:v3.3
                 container_name: keevo_traefik
                 restart: unless-stopped
+                mem_limit: 128m
+                mem_reservation: 64m
                 command:
                   - --providers.docker=true
                   - --providers.docker.exposedByDefault=false
@@ -146,6 +148,20 @@ jobs:
                 image: postgres:16-alpine
                 container_name: keevo_postgres
                 restart: unless-stopped
+                mem_limit: 384m
+                mem_reservation: 256m
+                command:
+                  - postgres
+                  - -c
+                  - shared_buffers=64MB
+                  - -c
+                  - work_mem=4MB
+                  - -c
+                  - maintenance_work_mem=32MB
+                  - -c
+                  - max_connections=30
+                  - -c
+                  - effective_cache_size=256MB
                 environment:
                   POSTGRES_DB:       \${POSTGRES_DB}
                   POSTGRES_USER:     \${POSTGRES_USER}
@@ -164,6 +180,8 @@ jobs:
                 image: \${BACKEND_IMAGE}
                 container_name: keevo_backend
                 restart: unless-stopped
+                mem_limit: 768m
+                mem_reservation: 512m
                 depends_on:
                   postgres:
                     condition: service_healthy
