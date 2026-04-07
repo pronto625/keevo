@@ -64,7 +64,7 @@ class _ReportPreferencesPageState
     });
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
       body: CustomScrollView(
         slivers: [
           // ── Header ───────────────────────────────────────────────────────
@@ -410,7 +410,7 @@ class _PrefsCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withAlpha(13),
+              color: Theme.of(context).colorScheme.shadow.withAlpha(13),
               blurRadius: 8,
               offset: const Offset(0, 2)),
         ],

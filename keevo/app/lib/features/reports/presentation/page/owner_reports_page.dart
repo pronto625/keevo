@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -27,7 +28,7 @@ class OwnerReportsPage extends ConsumerWidget {
       child: Scaffold(
         appBar: AppBar(
           automaticallyImplyLeading: false,
-          backgroundColor: const Color(0xFF3B5BDB),
+          backgroundColor: AppTheme.primary,
           title: const Text(
             'Rapports',
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),

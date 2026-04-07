@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -26,12 +27,12 @@ class ReportHistoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final statusColor = _statusColor(report.deliveryStatus);
+    final statusColor = _statusColor(report.deliveryStatus, theme.colorScheme);
     final statusIcon = _statusIcon(report.deliveryStatus);
     final formattedDate = report.reportType == 'WEEKLY'
         ? _weekLabel(report.reportDate)
         : _dateFormat.format(report.reportDate);
-    final typeLabelColor = _typeLabelColor(report.reportType);
+    final typeLabelColor = _typeLabelColor(report.reportType, theme.colorScheme);
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -90,7 +91,7 @@ class ReportHistoryCard extends StatelessWidget {
                     Text(
                       formattedDate,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.grey.shade600,
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -100,13 +101,13 @@ class ReportHistoryCard extends StatelessWidget {
                           _currencyFormat.format(report.totalRevenue),
                           style: theme.textTheme.bodyMedium?.copyWith(
                             fontWeight: FontWeight.w700,
-                            color: Colors.green.shade700,
+                            color: AppTheme.success,
                           ),
                         ),
                         Text(
                           '  •  ${report.totalSales} vente(s)',
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: Colors.grey.shade600,
+                            color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -123,16 +124,16 @@ class ReportHistoryCard extends StatelessWidget {
     );
   }
 
-  Color _statusColor(String status) {
+  Color _statusColor(String status, ColorScheme cs) {
     switch (status) {
       case 'SENT':
-        return Colors.green.shade600;
+        return AppTheme.success;
       case 'FAILED':
-        return Colors.orange.shade600;
+        return AppTheme.warning;
       case 'IN_APP_ONLY':
-        return Colors.grey.shade500;
+        return cs.onSurfaceVariant;
       default:
-        return Colors.blue.shade400;
+        return cs.primary;
     }
   }
 
@@ -160,14 +161,14 @@ class ReportHistoryCard extends StatelessWidget {
     }
   }
 
-  Color _typeLabelColor(String type) {
+  Color _typeLabelColor(String type, ColorScheme cs) {
     switch (type) {
       case 'WEEKLY':
-        return Colors.orange.shade700;
+        return AppTheme.warning;
       case 'DAILY_COMBINED':
-        return Colors.purple.shade700;
+        return const Color(0xFF7048E8);
       default:
-        return Colors.blue.shade700;
+        return cs.primary;
     }
   }
 

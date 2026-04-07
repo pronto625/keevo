@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -73,7 +74,7 @@ class _ApplyAdjustmentsButtonState
               const TextSpan(
                 text: 'irréversible',
                 style: TextStyle(
-                  color: Color(0xFFFA5252),
+                  color: AppTheme.errorColor,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -127,7 +128,7 @@ class _ApplyAdjustmentsButtonState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Erreur: $e'),
-          backgroundColor: const Color(0xFFFA5252),
+          backgroundColor: AppTheme.errorColor,
         ),
       );
     }

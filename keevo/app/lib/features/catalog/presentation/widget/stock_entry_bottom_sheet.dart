@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -106,7 +107,7 @@ class _StockEntryBottomSheetState extends ConsumerState<StockEntryBottomSheet> {
         messenger.showSnackBar(
           SnackBar(
             content: Text('Entrée enregistrée : +$quantity unités'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppTheme.success,
             duration: const Duration(seconds: 3),
           ),
         );
@@ -118,7 +119,7 @@ class _StockEntryBottomSheetState extends ConsumerState<StockEntryBottomSheet> {
           messenger.showSnackBar(
             const SnackBar(
               content: Text('Erreur lors de l\'enregistrement'),
-              backgroundColor: Colors.red,
+              backgroundColor: AppTheme.errorColor,
             ),
           );
         }
@@ -161,7 +162,7 @@ class _StockEntryBottomSheetState extends ConsumerState<StockEntryBottomSheet> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child:
-                      const Icon(Icons.add_circle_rounded, color: Colors.green, size: 22),
+                      const Icon(Icons.add_circle_rounded, color: AppTheme.success, size: 22),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -175,7 +176,7 @@ class _StockEntryBottomSheetState extends ConsumerState<StockEntryBottomSheet> {
                         Text(
                           widget.productName!,
                           style: theme.textTheme.bodySmall
-                              ?.copyWith(color: Colors.green[700]),
+                              ?.copyWith(color: AppTheme.success),
                           overflow: TextOverflow.ellipsis,
                         ),
                     ],
@@ -256,7 +257,7 @@ class _StockEntryBottomSheetState extends ConsumerState<StockEntryBottomSheet> {
                   // ── Submit ────────────────────────────────────────────
                   FilledButton.icon(
                     style: FilledButton.styleFrom(
-                      backgroundColor: Colors.green,
+                      backgroundColor: AppTheme.success,
                       foregroundColor: Colors.white,
                     ),
                     onPressed: _loading ? null : _submit,

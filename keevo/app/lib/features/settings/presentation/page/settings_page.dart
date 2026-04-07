@@ -28,7 +28,7 @@ class SettingsPage extends ConsumerWidget {
     final isOwner = role == 'OWNER';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: cs.scaffoldBg,
       body: CustomScrollView(
         slivers: [
           // ── Gradient header ─────────────────────────────────────────────
@@ -126,7 +126,7 @@ class SettingsPage extends ConsumerWidget {
                     _SettingsTile(
                       icon: Icons.storefront_rounded,
                       iconColor: AppTheme.primary,
-                      iconBg: const Color(0xFFD0EBFF),
+                      iconBg: AppTheme.iconBlueBg,
                       title: 'Mes boutiques',
                       subtitle: 'Boutiques, entrepôts et types',
                       onTap: () => context.push('/stores'),
@@ -136,8 +136,8 @@ class SettingsPage extends ConsumerWidget {
                     const _Divider(),
                     _SettingsTile(
                       icon: Icons.inventory_2_rounded,
-                      iconColor: const Color(0xFF20C997),
-                      iconBg: const Color(0xFFD3F9D8),
+                      iconColor: AppTheme.iconTeal,
+                      iconBg: AppTheme.iconTealBg,
                       title: 'Stock multi-boutiques',
                       subtitle: 'Vue centralisée des stocks par boutique',
                       onTap: () => context.push('/stock/overview'),
@@ -145,8 +145,8 @@ class SettingsPage extends ConsumerWidget {
                     const _Divider(),
                     _SettingsTile(
                       icon: Icons.assignment_outlined,
-                      iconColor: const Color(0xFFF59F00),
-                      iconBg: const Color(0xFFFFF9DB),
+                      iconColor: AppTheme.iconAmber,
+                      iconBg: AppTheme.iconAmberBg,
                       title: 'Inventaire',
                       subtitle: 'Lancer et suivre les sessions d\'inventaire',
                       onTap: () => context.push('/inventory'),
@@ -154,8 +154,8 @@ class SettingsPage extends ConsumerWidget {
                     const _Divider(),
                     _SettingsTile(
                       icon: Icons.card_membership_rounded,
-                      iconColor: const Color(0xFF9B59B6),
-                      iconBg: const Color(0xFFF3E5F5),
+                      iconColor: AppTheme.iconPurple,
+                      iconBg: AppTheme.iconPurpleBg,
                       title: 'Abonnement',
                       subtitle: 'Plan actif, limites et mise à niveau',
                       onTap: () => context.push('/settings/subscription'),
@@ -163,8 +163,8 @@ class SettingsPage extends ConsumerWidget {
                     const _Divider(),
                     _SettingsTile(
                       icon: Icons.group_rounded,
-                      iconColor: const Color(0xFF3B82F6),
-                      iconBg: const Color(0xFFDBEAFE),
+                      iconColor: AppTheme.iconBlue,
+                      iconBg: AppTheme.iconBlueBg,
                       title: 'Équipe',
                       subtitle: 'Employés, rôles et accès',
                       onTap: () => context.push('/settings/team'),
@@ -172,8 +172,8 @@ class SettingsPage extends ConsumerWidget {
                     const _Divider(),
                     _SettingsTile(
                       icon: Icons.history_rounded,
-                      iconColor: const Color(0xFF6F42C1),
-                      iconBg: const Color(0xFFF0E6FF),
+                      iconColor: AppTheme.iconIndigo,
+                      iconBg: AppTheme.iconIndigoBg,
                       title: 'Journal d\'audit',
                       subtitle: 'Historique complet des opérations',
                       onTap: () => context.push('/audit'),
@@ -181,8 +181,8 @@ class SettingsPage extends ConsumerWidget {
                     const _Divider(),
                     _SettingsTile(
                       icon: Icons.sync_rounded,
-                      iconColor: const Color(0xFF339AF0),
-                      iconBg: const Color(0xFFD0EBFF),
+                      iconColor: AppTheme.iconBlue,
+                      iconBg: AppTheme.iconBlueBg,
                       title: 'Synchronisation',
                       subtitle: 'Historique, appareils et file d\'attente',
                       onTap: () => context.push('/settings/sync'),
@@ -190,8 +190,8 @@ class SettingsPage extends ConsumerWidget {
                     const _Divider(),
                     _SettingsTile(
                       icon: Icons.people_rounded,
-                      iconColor: const Color(0xFF0EA5E9),
-                      iconBg: const Color(0xFFE0F2FE),
+                      iconColor: AppTheme.iconCyan,
+                      iconBg: AppTheme.iconCyanBg,
                       title: 'Clients',
                       subtitle: 'Gérez votre carnet de clients',
                       onTap: () => context.push('/clients'),
@@ -199,8 +199,8 @@ class SettingsPage extends ConsumerWidget {
                     const _Divider(),
                     _SettingsTile(
                       icon: Icons.local_shipping_rounded,
-                      iconColor: const Color(0xFFEA580C),
-                      iconBg: const Color(0xFFFFF7ED),
+                      iconColor: AppTheme.iconOrange,
+                      iconBg: AppTheme.iconOrangeBg,
                       title: 'Fournisseurs',
                       subtitle: 'Contacts et approvisionnement',
                       onTap: () => context.push('/suppliers'),
@@ -218,8 +218,8 @@ class SettingsPage extends ConsumerWidget {
                     children: [
                       _SettingsTile(
                         icon: Icons.inventory_2_rounded,
-                        iconColor: const Color(0xFF20C997),
-                        iconBg: const Color(0xFFD3F9D8),
+                        iconColor: AppTheme.iconTeal,
+                        iconBg: AppTheme.iconTealBg,
                         title: 'Stock multi-boutiques',
                         subtitle: 'Vue centralisée des stocks par boutique',
                         onTap: () => context.push('/stock/overview'),
@@ -227,8 +227,8 @@ class SettingsPage extends ConsumerWidget {
                       const _Divider(),
                       _SettingsTile(
                         icon: Icons.assignment_outlined,
-                        iconColor: const Color(0xFFF59F00),
-                        iconBg: const Color(0xFFFFF9DB),
+                        iconColor: AppTheme.iconAmber,
+                        iconBg: AppTheme.iconAmberBg,
                         title: 'Inventaire',
                         subtitle: 'Lancer et suivre les sessions d\'inventaire',
                         onTap: () => context.push('/inventory'),
@@ -245,8 +245,8 @@ class SettingsPage extends ConsumerWidget {
                   children: [
                     _SettingsTile(
                       icon: Icons.notifications_outlined,
-                      iconColor: const Color(0xFFE67E22),
-                      iconBg: const Color(0xFFFFF3E0),
+                      iconColor: AppTheme.iconOrange,
+                      iconBg: AppTheme.iconOrangeBg,
                       title: 'Notifications',
                       subtitle: 'Heure du rapport, alertes stock',
                       onTap: () {},
@@ -274,8 +274,8 @@ class SettingsPage extends ConsumerWidget {
                   children: [
                     _SettingsTile(
                       icon: Icons.help_outline_rounded,
-                      iconColor: const Color(0xFF868E96),
-                      iconBg: const Color(0xFFF1F3F5),
+                      iconColor: AppTheme.iconGrey,
+                      iconBg: AppTheme.iconGreyBg,
                       title: 'Aide & Tutoriels',
                       subtitle: 'Guides et questions fréquentes',
                       onTap: () {},
@@ -284,8 +284,8 @@ class SettingsPage extends ConsumerWidget {
                     const _Divider(),
                     _SettingsTile(
                       icon: Icons.bug_report_outlined,
-                      iconColor: const Color(0xFF868E96),
-                      iconBg: const Color(0xFFF1F3F5),
+                      iconColor: AppTheme.iconGrey,
+                      iconBg: AppTheme.iconGreyBg,
                       title: 'Signaler un problème',
                       subtitle: 'Envoyer un retour à l\'équipe Keevo',
                       onTap: () {},
@@ -336,7 +336,7 @@ class SettingsPage extends ConsumerWidget {
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(
-              foregroundColor: Colors.red,
+              foregroundColor: AppTheme.errorColor,
             ),
             child: const Text('Déconnecter'),
           ),
@@ -369,6 +369,7 @@ class _LogoutTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -381,23 +382,23 @@ class _LogoutTile extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFE3E3),
+                  color: cs.errorContainer_,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.logout_rounded,
-                  color: Colors.red,
+                  color: cs.error,
                   size: 20,
                 ),
               ),
               const SizedBox(width: 14),
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Se déconnecter',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: Colors.red,
+                    color: cs.error,
                   ),
                 ),
               ),
@@ -415,15 +416,16 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(left: 4, bottom: 2),
       child: Text(
         text.toUpperCase(),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.8,
-          color: Color(0xFF868E96),
+          color: cs.muted,
         ),
       ),
     );
@@ -436,13 +438,14 @@ class _SettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cs.cardBg,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(13),
+            color: cs.shadow.withAlpha(13),
             blurRadius: 12,
             offset: const Offset(0, 2),
           ),
@@ -475,6 +478,7 @@ class _SettingsTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -499,18 +503,18 @@ class _SettingsTile extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF212529),
+                        color: cs.onSurface,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: Color(0xFF868E96),
+                        color: cs.muted,
                       ),
                     ),
                   ],
@@ -521,21 +525,21 @@ class _SettingsTile extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF1F3F5),
+                    color: cs.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
                     badge!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF868E96),
+                      color: cs.muted,
                     ),
                   ),
                 )
               else
-                const Icon(Icons.chevron_right,
-                    color: Color(0xFFADB5BD), size: 20),
+                Icon(Icons.chevron_right,
+                    color: cs.muted, size: 20),
             ],
           ),
         ),
@@ -574,8 +578,8 @@ class _ActiveStoreTile extends ConsumerWidget {
 
     return _SettingsTile(
       icon: Icons.store_rounded,
-      iconColor: const Color(0xFF0CA678),
-      iconBg: const Color(0xFFD3F9D8),
+      iconColor: AppTheme.iconTeal,
+      iconBg: AppTheme.iconTealBg,
       title: 'Boutique active',
       subtitle: subtitle,
       onTap: () => _showStorePicker(
@@ -662,7 +666,7 @@ class _StorePickerSheet extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(Icons.all_inclusive,
-                  color: Color(0xFF228BE6), size: 20),
+                  color: AppTheme.iconBlue, size: 20),
             ),
             title: const Text('Toutes les boutiques'),
             subtitle: const Text('Afficher tous les produits'),
@@ -680,8 +684,8 @@ class _StorePickerSheet extends StatelessWidget {
                 height: 40,
                 decoration: BoxDecoration(
                   color: store.type == StoreType.warehouse
-                      ? const Color(0xFFFFF3CD)
-                      : const Color(0xFFD3F9D8),
+                      ? AppTheme.iconAmberBg
+                      : AppTheme.iconTealBg,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
@@ -689,8 +693,8 @@ class _StorePickerSheet extends StatelessWidget {
                       ? Icons.warehouse_rounded
                       : Icons.storefront_rounded,
                   color: store.type == StoreType.warehouse
-                      ? const Color(0xFFE67700)
-                      : const Color(0xFF0CA678),
+                      ? AppTheme.iconAmber
+                      : AppTheme.iconTeal,
                   size: 20,
                 ),
               ),

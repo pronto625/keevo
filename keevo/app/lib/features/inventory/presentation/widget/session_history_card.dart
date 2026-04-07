@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 import '../../domain/model/inventory_session_model.dart';
@@ -99,7 +100,7 @@ class SessionHistoryCard extends StatelessWidget {
       case 'IN_PROGRESS':
         return theme.colorScheme.primary;
       case 'VALIDATED':
-        return Colors.green;
+        return AppTheme.success;
       case 'CANCELLED':
         return theme.colorScheme.error;
       default:

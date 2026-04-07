@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -16,6 +17,7 @@ class PendingSalesPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final storeId = ref.watch(activeStoreIdProvider);
     final pendingSalesAsync = ref.watch(pendingSalesProvider(storeId));
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -32,12 +34,12 @@ class PendingSalesPage extends ConsumerWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.check_circle_outline,
-                      size: 64, color: Colors.grey.shade300),
+                      size: 64, color: cs.outlineVariant),
                   const SizedBox(height: 16),
                   Text(
                     'Aucune vente en attente',
                     style: TextStyle(
-                      color: Colors.grey.shade500,
+                      color: cs.onSurfaceVariant,
                       fontSize: 16,
                     ),
                   ),
@@ -77,13 +79,14 @@ class _PendingSaleTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: Colors.amber.shade200),
+        side: BorderSide(color: AppTheme.warning),
       ),
-      color: Colors.amber.shade50,
+      color: AppTheme.warning,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(14),
@@ -94,11 +97,11 @@ class _PendingSaleTile extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.amber.shade100,
+                  color: AppTheme.warning,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(Icons.pending_actions,
-                    color: Colors.amber.shade800, size: 24),
+                    color: AppTheme.warning, size: 24),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -116,14 +119,14 @@ class _PendingSaleTile extends StatelessWidget {
                     Text(
                       '${sale.items.length} article${sale.items.length > 1 ? 's' : ''} · ${_dateFormat.format(sale.createdAt)}',
                       style: TextStyle(
-                        color: Colors.grey.shade600,
+                        color: cs.onSurfaceVariant,
                         fontSize: 13,
                       ),
                     ),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, color: Colors.grey.shade400),
+              Icon(Icons.chevron_right, color: cs.outline),
             ],
           ),
         ),

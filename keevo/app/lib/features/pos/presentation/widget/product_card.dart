@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -79,7 +80,7 @@ class _ProductCardState extends State<ProductCard>
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
+              color: theme.colorScheme.shadow.withValues(alpha: 0.06),
               blurRadius: 10,
               offset: const Offset(0, 3),
             ),
@@ -114,7 +115,7 @@ class _ProductCardState extends State<ProductCard>
                         // Dim overlay when out of stock
                         if (isOutOfStock)
                           Container(
-                            color: Colors.black.withValues(alpha: 0.35),
+                            color: theme.colorScheme.shadow.withValues(alpha: 0.35),
                           ),
 
                         // Out-of-stock cross icon
@@ -125,7 +126,7 @@ class _ProductCardState extends State<ProductCard>
                             child: Container(
                               padding: const EdgeInsets.all(3),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFFA5252),
+                                color: AppTheme.errorColor,
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: const Icon(Icons.close_rounded,
@@ -154,7 +155,7 @@ class _ProductCardState extends State<ProductCard>
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.labelSmall?.copyWith(
-                              color: Colors.grey.shade500,
+                            color: theme.colorScheme.onSurfaceVariant,
                               fontSize: 7,
                               fontWeight: FontWeight.w600,
                               letterSpacing: 0.3,
@@ -178,7 +179,7 @@ class _ProductCardState extends State<ProductCard>
                           _currencyFormat.format(widget.price),
                           style: theme.textTheme.bodySmall?.copyWith(
                             fontWeight: FontWeight.w800,
-                            color: const Color(0xFF3B5BDB),
+                            color: AppTheme.primary,
                             fontSize: 11,
                             height: 1.1,
                           ),
@@ -238,13 +239,13 @@ class _ProductCardState extends State<ProductCard>
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
         decoration: BoxDecoration(
-          color: const Color(0xFFFA5252).withValues(alpha: 0.1),
+          color: AppTheme.errorColor.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(6),
         ),
         child: const Text(
           'Rupture',
           style: TextStyle(
-            color: Color(0xFFFA5252),
+            color: AppTheme.errorColor,
             fontSize: 9,
             fontWeight: FontWeight.w600,
           ),
@@ -256,8 +257,8 @@ class _ProductCardState extends State<ProductCard>
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: BoxDecoration(
         color: isLow
-            ? const Color(0xFFFCC419).withValues(alpha: 0.15)
-            : const Color(0xFF51CF66).withValues(alpha: 0.12),
+            ? AppTheme.warning.withValues(alpha: 0.15)
+            : AppTheme.success.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(

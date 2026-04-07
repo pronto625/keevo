@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -20,7 +21,7 @@ class StorePerformanceRow extends StatelessWidget {
     decimalDigits: 0,
   );
 
-  static Color _rankColor(int rank) {
+  static Color _rankColor(int rank, ColorScheme colorScheme) {
     switch (rank) {
       case 1:
         return const Color(0xFFFFD700); // gold
@@ -29,7 +30,7 @@ class StorePerformanceRow extends StatelessWidget {
       case 3:
         return const Color(0xFFCD7F32); // bronze
       default:
-        return Colors.blueGrey.shade200;
+        return colorScheme.outlineVariant;
     }
   }
 
@@ -38,7 +39,7 @@ class StorePerformanceRow extends StatelessWidget {
     final theme = Theme.of(context);
     final delta = entry.deltaPercent;
     final isPositive = delta >= 0;
-    final deltaColor = isPositive ? Colors.green : Colors.red;
+    final deltaColor = isPositive ? AppTheme.success : AppTheme.errorColor;
     final deltaText =
         '${isPositive ? '+' : ''}${delta.toStringAsFixed(1)}%';
 
@@ -53,16 +54,16 @@ class StorePerformanceRow extends StatelessWidget {
             height: 38,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: _rankColor(entry.rank).withAlpha(40),
+              color: _rankColor(entry.rank, theme.colorScheme).withAlpha(40),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: _rankColor(entry.rank), width: 1.5),
+              border: Border.all(color: _rankColor(entry.rank, theme.colorScheme), width: 1.5),
             ),
             child: Text(
               '#${entry.rank}',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: entry.rank <= 3
-                    ? _rankColor(entry.rank)
+                    ? _rankColor(entry.rank, theme.colorScheme)
                     : theme.colorScheme.onSurface,
                 fontSize: 13,
               ),

@@ -48,7 +48,7 @@ class ProductProfitabilityListPage extends ConsumerWidget {
     final dataAsync = ref.watch(productProfitabilityProvider(params));
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
       body: CustomScrollView(
         slivers: [
           // ── Header ────────────────────────────────────────────────────────
@@ -105,12 +105,12 @@ class ProductProfitabilityListPage extends ConsumerWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.cloud_off_outlined,
-                        size: 48, color: Colors.black26),
+                    Icon(Icons.cloud_off_outlined,
+                        size: 48, color: Theme.of(context).colorScheme.outlineVariant),
                     const SizedBox(height: 12),
-                    const Text(
+                    Text(
                       'Impossible de charger les données',
-                      style: TextStyle(color: Colors.black54),
+                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
                     ),
                     const SizedBox(height: 8),
                     FilledButton.tonal(
@@ -124,17 +124,17 @@ class ProductProfitabilityListPage extends ConsumerWidget {
             ),
             data: (entries) {
               if (entries.isEmpty) {
-                return const SliverFillRemaining(
+                return SliverFillRemaining(
                   child: Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.bar_chart_outlined,
-                            size: 48, color: Colors.black26),
-                        SizedBox(height: 12),
+                            size: 48, color: Theme.of(context).colorScheme.outlineVariant),
+                        const SizedBox(height: 12),
                         Text(
                           'Aucune vente sur cette période',
-                          style: TextStyle(color: Colors.black45),
+                          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
                         ),
                       ],
                     ),
@@ -171,19 +171,19 @@ class _OfflineBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: Colors.amber.shade50,
+      color: AppTheme.warning,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
             Icon(Icons.cloud_off_outlined,
-                size: 16, color: Colors.orange.shade700),
+                size: 16, color: AppTheme.warning),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 'Mode hors ligne — données du dernier sync affiché',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.orange.shade900,
+                      color: AppTheme.warning,
                     ),
               ),
             ),

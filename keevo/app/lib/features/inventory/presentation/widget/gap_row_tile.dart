@@ -1,12 +1,13 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 import '../../domain/model/inventory_gap_row_model.dart';
 import '../../domain/service/inventory_report_text_formatter.dart';
 
 /// UX2 color tokens.
-const _colorSuccess = Color(0xFF51CF66);
-const _colorWarning = Color(0xFFFCC419);
-const _colorError = Color(0xFFFA5252);
+const _colorSuccess = AppTheme.success;
+const _colorWarning = AppTheme.warning;
+const _colorError = AppTheme.errorColor;
 
 /// GapRowTile — read-only product row in the gap report.
 ///

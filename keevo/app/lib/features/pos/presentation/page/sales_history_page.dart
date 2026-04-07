@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -55,7 +56,7 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.adminMode ? 'Ventes de la boutique' : 'Mes Ventes'),
-        backgroundColor: const Color(0xFF3B5BDB),
+        backgroundColor: AppTheme.primary,
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -117,7 +118,7 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
           color: Colors.white,
           child: Row(
             children: [
-              const Icon(Icons.person_outline, size: 18, color: Colors.grey),
+              const Icon(Icons.person_outline, size: 18),
               const SizedBox(width: 8),
               Expanded(
                 child: DropdownButton<String?>(
@@ -151,13 +152,14 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
   }
 
   Widget _buildFilterBar() {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: cs.shadow.withValues(alpha: 0.05),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -182,6 +184,7 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
 
   Widget _buildFilterChip(DateFilterType type, String label) {
     final isSelected = _selectedFilter == type;
+    final cs = Theme.of(context).colorScheme;
     return FilterChip(
       label: Text(label),
       selected: isSelected,
@@ -191,11 +194,11 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
           _customRange = null;
         });
       },
-      backgroundColor: Colors.grey.shade100,
-      selectedColor: const Color(0xFF3B5BDB).withValues(alpha: 0.2),
-      checkmarkColor: const Color(0xFF3B5BDB),
+      backgroundColor: cs.surfaceContainerHighest,
+      selectedColor: AppTheme.primary.withValues(alpha: 0.2),
+      checkmarkColor: AppTheme.primary,
       labelStyle: TextStyle(
-        color: isSelected ? const Color(0xFF3B5BDB) : Colors.black87,
+        color: isSelected ? AppTheme.primary : cs.onSurface,
         fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
       ),
     );
@@ -203,6 +206,7 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
 
   Widget _buildCustomFilterChip() {
     final isSelected = _selectedFilter == DateFilterType.custom;
+    final cs = Theme.of(context).colorScheme;
     final label = isSelected && _customRange != null
         ? '${_dateFormat.format(_customRange!.start)} - ${_dateFormat.format(_customRange!.end)}'
         : 'Personnalisé';
@@ -218,11 +222,11 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
       ),
       selected: isSelected,
       onSelected: (_) => _selectCustomRange(),
-      backgroundColor: Colors.grey.shade100,
-      selectedColor: const Color(0xFF3B5BDB).withValues(alpha: 0.2),
-      checkmarkColor: const Color(0xFF3B5BDB),
+      backgroundColor: cs.surfaceContainerHighest,
+      selectedColor: AppTheme.primary.withValues(alpha: 0.2),
+      checkmarkColor: AppTheme.primary,
       labelStyle: TextStyle(
-        color: isSelected ? const Color(0xFF3B5BDB) : Colors.black87,
+        color: isSelected ? AppTheme.primary : cs.onSurface,
         fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
       ),
     );
@@ -244,7 +248,7 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: Color(0xFF3B5BDB),
+              primary: AppTheme.primary,
               onPrimary: Colors.white,
             ),
           ),
@@ -302,6 +306,7 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
   }
 
   Widget _buildEmptyState() {
+    final cs = Theme.of(context).colorScheme;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -309,14 +314,14 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
           Icon(
             Icons.receipt_long_outlined,
             size: 64,
-            color: Colors.grey.shade400,
+            color: cs.outline,
           ),
           const SizedBox(height: 16),
           Text(
             'Aucune vente pour cette période',
             style: TextStyle(
               fontSize: 16,
-              color: Colors.grey.shade600,
+              color: cs.onSurfaceVariant,
             ),
           ),
         ],
@@ -365,6 +370,7 @@ class _SaleHistoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 1,
@@ -413,7 +419,7 @@ class _SaleHistoryCard extends StatelessWidget {
                     Text(
                       '${sale.items.length} article${sale.items.length > 1 ? 's' : ''}',
                       style: TextStyle(
-                        color: Colors.grey.shade600,
+                        color: cs.onSurfaceVariant,
                         fontSize: 13,
                       ),
                     ),
@@ -422,7 +428,7 @@ class _SaleHistoryCard extends StatelessWidget {
                       Text(
                         'Client: ${sale.clientId}', // TODO: resolve client name
                         style: TextStyle(
-                          color: Colors.grey.shade500,
+                          color: cs.onSurfaceVariant,
                           fontSize: 12,
                         ),
                         maxLines: 1,
@@ -441,7 +447,7 @@ class _SaleHistoryCard extends StatelessWidget {
                     style: const TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 16,
-                      color: Color(0xFF3B5BDB),
+                      color: AppTheme.primary,
                     ),
                   ),
                   if (sale.discountAmount > 0) ...[
@@ -449,7 +455,7 @@ class _SaleHistoryCard extends StatelessWidget {
                     Text(
                       '-${currencyFormat.format(sale.discountAmount)}',
                       style: TextStyle(
-                        color: Colors.orange.shade700,
+                        color: AppTheme.warning,
                         fontSize: 12,
                       ),
                     ),
@@ -459,7 +465,7 @@ class _SaleHistoryCard extends StatelessWidget {
               const SizedBox(width: 8),
               Icon(
                 Icons.chevron_right,
-                color: Colors.grey.shade400,
+                color: cs.outline,
               ),
             ],
           ),
@@ -469,16 +475,16 @@ class _SaleHistoryCard extends StatelessWidget {
   }
 
   Widget _buildStatusBadge() {
-    MaterialColor color;
+    Color color;
     String label;
 
     switch (sale.status) {
       case 'PENDING_VALIDATION':
-        color = Colors.amber;
+        color = AppTheme.warning;
         label = 'En attente';
         break;
       case 'CANCELLED':
-        color = Colors.red;
+        color = AppTheme.errorColor;
         label = 'Annulée';
         break;
       default:
@@ -495,7 +501,7 @@ class _SaleHistoryCard extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-          color: color.shade700,
+          color: color,
           fontSize: 11,
           fontWeight: FontWeight.w600,
         ),
@@ -515,9 +521,9 @@ class _SaleHistoryCard extends StatelessWidget {
   Color get _paymentModeColor {
     switch (sale.paymentMode) {
       case PaymentModeEnum.mobileMoney:
-        return Colors.amber.shade700;
+        return AppTheme.warning;
       case PaymentModeEnum.cash:
-        return Colors.green.shade600;
+        return AppTheme.success;
     }
   }
 }

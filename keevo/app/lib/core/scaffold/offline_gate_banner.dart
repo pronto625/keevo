@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/sync/sync_gate_provider.dart';
 import '../../../../core/sync/sync_gate_state.dart';
+import '../../../../core/theme/app_theme.dart';
 
 /// OfflineGateBanner — persistent banner shown in MainShell when gate is warning or critical.
 ///
@@ -60,9 +61,10 @@ class _OfflineGateBannerState extends ConsumerState<OfflineGateBanner> {
 
     if (!isCritical && _dismissedToday) return const SizedBox.shrink();
 
+    final cs = Theme.of(context).colorScheme;
     final backgroundColor =
-        isCritical ? const Color(0xFFFFE3E3) : const Color(0xFFFFF3BF);
-    final textColor = isCritical ? const Color(0xFFFA5252) : Colors.black87;
+        isCritical ? cs.errorContainer_ : cs.warningContainer;
+    final textColor = isCritical ? AppTheme.errorColor : cs.onSurface;
     final message = isCritical
         ? '🔴 Dernière chance : synchronisez demain ou l\'accès sera limité (Jour $days/7)'
         : '⚠ Synchronisation requise dans ${7 - days} jour${(7 - days) > 1 ? 's' : ''} (Jour $days/7)';

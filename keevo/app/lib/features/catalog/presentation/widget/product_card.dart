@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -155,9 +156,9 @@ class ProductCard extends ConsumerWidget {
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                 decoration: BoxDecoration(
                                   color: totalStock == 0
-                                      ? Colors.red.withOpacity(0.1)
+                                      ? AppTheme.errorColor.withOpacity(0.1)
                                       : isLowStock
-                                          ? Colors.orange.withOpacity(0.1)
+                                          ? AppTheme.warning.withOpacity(0.1)
                                           : Colors.teal.withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(16),
                                 ),
@@ -168,9 +169,9 @@ class ProductCard extends ConsumerWidget {
                                       Icons.inventory_2_outlined,
                                       size: 12,
                                       color: totalStock == 0
-                                          ? Colors.red
+                                          ? AppTheme.errorColor
                                           : isLowStock
-                                              ? Colors.orange
+                                              ? AppTheme.warning
                                               : Colors.teal,
                                     ),
                                     const SizedBox(width: 4),
@@ -178,9 +179,9 @@ class ProductCard extends ConsumerWidget {
                                       '$totalStock',
                                       style: theme.textTheme.labelSmall?.copyWith(
                                         color: totalStock == 0
-                                            ? Colors.red
+                                            ? AppTheme.errorColor
                                             : isLowStock
-                                                ? Colors.orange
+                                                ? AppTheme.warning
                                                 : Colors.teal,
                                         fontWeight: FontWeight.bold,
                                       ),
@@ -195,7 +196,7 @@ class ProductCard extends ConsumerWidget {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: Colors.orange.withOpacity(0.1),
+                                  color: AppTheme.warning.withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Row(
@@ -204,13 +205,13 @@ class ProductCard extends ConsumerWidget {
                                     Icon(
                                       Icons.archive_outlined,
                                       size: 12,
-                                      color: Colors.orange,
+                                      color: AppTheme.warning,
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
                                       'Archivé',
                                       style: theme.textTheme.labelSmall?.copyWith(
-                                        color: Colors.orange,
+                                        color: AppTheme.warning,
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
@@ -224,7 +225,7 @@ class ProductCard extends ConsumerWidget {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFFCC419)
+                                  color: AppTheme.warning
                                       .withOpacity(0.18),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -251,7 +252,7 @@ class ProductCard extends ConsumerWidget {
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   decoration: BoxDecoration(
-                                    color: Colors.red.withOpacity(0.1),
+                                    color: AppTheme.errorColor.withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Row(
@@ -260,13 +261,13 @@ class ProductCard extends ConsumerWidget {
                                       const Icon(
                                         Icons.warning_amber_rounded,
                                         size: 12,
-                                        color: Colors.red,
+                                        color: AppTheme.errorColor,
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
                                         'Stock bas',
                                         style: theme.textTheme.labelSmall?.copyWith(
-                                          color: Colors.red,
+                                          color: AppTheme.errorColor,
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
@@ -434,7 +435,7 @@ class ProductCard extends ConsumerWidget {
                   icon: Icons.check_circle_rounded,
                   title: 'Valider ce produit',
                   subtitle: 'Promouvoir de Brouillon → Actif',
-                  color: Colors.green,
+                  color: AppTheme.success,
                   onTap: () {
                     Navigator.pop(context);
                     _confirmPromote(context, ref);
@@ -446,7 +447,7 @@ class ProductCard extends ConsumerWidget {
                 icon: Icons.edit_rounded,
                 title: 'Modifier',
                 subtitle: 'Éditer les informations',
-                color: Colors.blue,
+                color: Theme.of(context).colorScheme.primary,
                 onTap: () {
                   Navigator.pop(context);
                   context.push('/products/${product.id}/edit', extra: product);
@@ -473,7 +474,7 @@ class ProductCard extends ConsumerWidget {
                   icon: Icons.archive_rounded,
                   title: 'Archiver',
                   subtitle: 'Masquer du catalogue',
-                  color: Colors.orange,
+                  color: AppTheme.warning,
                   onTap: () {
                     Navigator.pop(context);
                     _confirmArchive(context, actions);
@@ -485,7 +486,7 @@ class ProductCard extends ConsumerWidget {
                   icon: Icons.unarchive_rounded,
                   title: 'Désarchiver',
                   subtitle: 'Remettre dans le catalogue',
-                  color: Colors.green,
+                  color: AppTheme.success,
                   onTap: () {
                     Navigator.pop(context);
                     _confirmUnarchive(context, actions);
@@ -564,7 +565,7 @@ class ProductCard extends ConsumerWidget {
           ),
           title: const Row(
             children: [
-              Icon(Icons.check_circle_rounded, color: Colors.green, size: 28),
+              Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 28),
               SizedBox(width: 12),
               Expanded(child: Text('Valider ce produit ?')),
             ],
@@ -650,7 +651,7 @@ class ProductCard extends ConsumerWidget {
                             Text('Produit validé avec succès'),
                           ],
                         ),
-                        backgroundColor: Colors.green,
+                        backgroundColor: AppTheme.success,
                         behavior: SnackBarBehavior.floating,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -669,7 +670,7 @@ class ProductCard extends ConsumerWidget {
                             Expanded(child: Text(e.message)),
                           ],
                         ),
-                        backgroundColor: Colors.red,
+                        backgroundColor: AppTheme.errorColor,
                         behavior: SnackBarBehavior.floating,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -680,7 +681,7 @@ class ProductCard extends ConsumerWidget {
                 }
               },
               style: FilledButton.styleFrom(
-                backgroundColor: Colors.green,
+                backgroundColor: AppTheme.success,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -704,7 +705,7 @@ class ProductCard extends ConsumerWidget {
           children: [
             Icon(
               Icons.archive_rounded,
-              color: Colors.orange,
+              color: AppTheme.warning,
               size: 28,
             ),
             const SizedBox(width: 12),
@@ -740,7 +741,7 @@ class ProductCard extends ConsumerWidget {
                           const Text('Produit archivé avec succès'),
                         ],
                       ),
-                      backgroundColor: Colors.green,
+                      backgroundColor: AppTheme.success,
                       behavior: SnackBarBehavior.floating,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -759,7 +760,7 @@ class ProductCard extends ConsumerWidget {
                           Expanded(child: Text(e.message)),
                         ],
                       ),
-                      backgroundColor: Colors.red,
+                      backgroundColor: AppTheme.errorColor,
                       behavior: SnackBarBehavior.floating,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -770,7 +771,7 @@ class ProductCard extends ConsumerWidget {
               }
             },
             style: FilledButton.styleFrom(
-              backgroundColor: Colors.orange,
+              backgroundColor: AppTheme.warning,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -793,7 +794,7 @@ class ProductCard extends ConsumerWidget {
           children: [
             Icon(
               Icons.unarchive_rounded,
-              color: Colors.green,
+              color: AppTheme.success,
               size: 28,
             ),
             const SizedBox(width: 12),
@@ -829,7 +830,7 @@ class ProductCard extends ConsumerWidget {
                           const Text('Produit désarchivé avec succès'),
                         ],
                       ),
-                      backgroundColor: Colors.green,
+                      backgroundColor: AppTheme.success,
                       behavior: SnackBarBehavior.floating,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -848,7 +849,7 @@ class ProductCard extends ConsumerWidget {
                           Expanded(child: Text(e.message)),
                         ],
                       ),
-                      backgroundColor: Colors.red,
+                      backgroundColor: AppTheme.errorColor,
                       behavior: SnackBarBehavior.floating,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -859,7 +860,7 @@ class ProductCard extends ConsumerWidget {
               }
             },
             style: FilledButton.styleFrom(
-              backgroundColor: Colors.green,
+              backgroundColor: AppTheme.success,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),

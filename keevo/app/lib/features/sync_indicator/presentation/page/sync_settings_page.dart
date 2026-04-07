@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -91,16 +92,16 @@ class _ActiveDevicesSection extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             if (devices.isEmpty)
-              const Text('Aucun appareil synchronisé',
-                  style: TextStyle(color: Colors.grey))
+              Text('Aucun appareil synchronisé',
+                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))
             else
               ...devices.map((d) => _DeviceTile(device: d)),
           ],
         ),
         loading: () =>
             const Center(child: CircularProgressIndicator.adaptive()),
-        error: (_, __) => const Text('Impossible de charger les appareils',
-            style: TextStyle(color: Colors.grey)),
+        error: (_, __) => Text('Impossible de charger les appareils',
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
       ),
     );
   }
@@ -118,7 +119,7 @@ class _DeviceTile extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         children: [
-          const Icon(Icons.phone_android, size: 16, color: Colors.grey),
+          Icon(Icons.phone_android, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
           const SizedBox(width: 8),
           Expanded(
             child: Text(deviceId,
@@ -127,7 +128,7 @@ class _DeviceTile extends StatelessWidget {
           ),
           Text(
             lastPush.isNotEmpty ? _formatDate(lastPush) : '-',
-            style: const TextStyle(fontSize: 12, color: Colors.grey),
+            style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
         ],
       ),
@@ -162,7 +163,7 @@ class _HistoryTab extends ConsumerWidget {
             ),
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) =>
-          Center(child: Text('Erreur: $e', style: const TextStyle(color: Colors.red))),
+          Center(child: Text('Erreur: $e', style: const TextStyle(color: AppTheme.errorColor))),
     );
   }
 }
@@ -180,10 +181,10 @@ class _EventTile extends StatelessWidget {
       _ => Icons.sync,
     };
     final color = switch (event.status) {
-      'SUCCESS' || 'OK' => Colors.green,
-      'FAILED' => Colors.red,
-      'WARN' => Colors.orange,
-      _ => Colors.grey,
+      'SUCCESS' || 'OK' => AppTheme.success,
+      'FAILED' => AppTheme.errorColor,
+      'WARN' => AppTheme.warning,
+      _ => Theme.of(context).colorScheme.onSurfaceVariant,
     };
     final dateStr = DateFormat('dd/MM HH:mm').format(event.createdAt);
 
@@ -204,7 +205,7 @@ class _EventTile extends StatelessWidget {
                   style: const TextStyle(fontSize: 11))
               : null),
       trailing: Text(dateStr,
-          style: const TextStyle(fontSize: 11, color: Colors.grey)),
+          style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
     );
   }
 }
@@ -224,7 +225,7 @@ class _ConflitsTab extends ConsumerWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.check_circle_outline, size: 48, color: Colors.green),
+                  Icon(Icons.check_circle_outline, size: 48, color: AppTheme.success),
                   SizedBox(height: 12),
                   Text('Aucun conflit'),
                 ],
@@ -237,7 +238,7 @@ class _ConflitsTab extends ConsumerWidget {
             ),
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) =>
-          Center(child: Text('Erreur: $e', style: const TextStyle(color: Colors.red))),
+          Center(child: Text('Erreur: $e', style: const TextStyle(color: AppTheme.errorColor))),
     );
   }
 }
@@ -256,8 +257,8 @@ class _ConflictTile extends StatelessWidget {
             ? Icons.warning_amber_rounded
             : Icons.info_outline,
         color: conflict.conflictType == 'STOCK_NEGATIVE'
-            ? Colors.amber
-            : Colors.blue,
+            ? AppTheme.warning
+            : Theme.of(context).colorScheme.primary,
         size: 20,
       ),
       title: Text(conflict.displayTitle,
@@ -323,7 +324,7 @@ class _DetailRow extends StatelessWidget {
                 style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: Colors.grey[600])),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ),
           Expanded(
             child: Text(value, style: const TextStyle(fontSize: 12)),
@@ -353,7 +354,7 @@ class _QueueTab extends ConsumerWidget {
             ),
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) =>
-          Center(child: Text('Erreur: $e', style: const TextStyle(color: Colors.red))),
+          Center(child: Text('Erreur: $e', style: const TextStyle(color: AppTheme.errorColor))),
     );
   }
 }
@@ -373,7 +374,7 @@ class _QueueTile extends StatelessWidget {
         : '-';
     return ListTile(
       dense: true,
-      leading: const Icon(Icons.pending_actions, size: 20, color: Colors.orange),
+      leading: const Icon(Icons.pending_actions, size: 20, color: AppTheme.warning),
       title: Text(op.operation, style: const TextStyle(fontSize: 13)),
       subtitle: Text(
         '$entityLabel — $timeInQueue — ${op.retryCount} tentative${op.retryCount != 1 ? 's' : ''}',

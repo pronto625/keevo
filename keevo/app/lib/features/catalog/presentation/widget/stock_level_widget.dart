@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -124,13 +125,13 @@ class StockLevelWidget extends ConsumerWidget {
             padding: const EdgeInsets.all(8),
             child: Text(
               'Erreur: ${stockState.error}',
-              style: const TextStyle(color: Colors.red),
+              style: const TextStyle(color: AppTheme.errorColor),
             ),
           )
         else if (stockState.levels.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(8),
-            child: Text('Aucun stock enregistré', style: TextStyle(color: Colors.grey)),
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Text('Aucun stock enregistré', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           )
         else
           ...stockState.levels
@@ -166,12 +167,12 @@ class _StockLevelTile extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       leading: CircleAvatar(
         radius: 20,
-        backgroundColor: isLow ? Colors.red.shade100 : Colors.green.shade100,
+        backgroundColor: isLow ? AppTheme.errorColor : AppTheme.success,
         child: Text(
           '${level.quantity}',
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            color: isLow ? Colors.red.shade700 : Colors.green.shade700,
+            color: isLow ? AppTheme.errorColor : AppTheme.success,
             fontSize: 13,
           ),
         ),
@@ -183,14 +184,14 @@ class _StockLevelTile extends StatelessWidget {
       subtitle: level.minimumThreshold > 0
           ? Text(
               'Seuil: ${level.minimumThreshold} unités',
-              style: const TextStyle(fontSize: 11, color: Colors.grey),
+              style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
             )
           : null,
       trailing: isLow
           ? Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: Colors.red,
+                color: AppTheme.errorColor,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Text(

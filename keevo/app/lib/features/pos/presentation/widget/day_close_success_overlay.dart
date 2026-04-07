@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -81,7 +82,7 @@ class _DayCloseSuccessOverlayState extends State<DayCloseSuccessOverlay>
             end: Alignment.bottomCenter,
             colors: [
               Color(0xFF4C6EF5),
-              Color(0xFF3B5BDB),
+              AppTheme.primary,
             ],
           ),
         ),

@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -92,7 +93,7 @@ class _StockAdjustBottomSheetState
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Erreur lors de l\'ajustement'),
-              backgroundColor: Colors.red,
+              backgroundColor: AppTheme.errorColor,
             ),
           );
         }

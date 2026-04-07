@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -36,6 +37,7 @@ class CartBottomSheet extends ConsumerWidget {
     final finalTotal = notifier.finalTotal;
     final hasDrafts = notifier.hasDraftProducts;
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
 
     return DraggableScrollableSheet(
       expand: false,
@@ -51,7 +53,7 @@ class CartBottomSheet extends ConsumerWidget {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey.shade300,
+                color: cs.outlineVariant,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -71,13 +73,13 @@ class CartBottomSheet extends ConsumerWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF3B5BDB).withValues(alpha: 0.1),
+                            color: AppTheme.primary.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
                             '${cart.length}',
                             style: const TextStyle(
-                              color: Color(0xFF3B5BDB),
+                              color: AppTheme.primary,
                               fontWeight: FontWeight.w700,
                               fontSize: 13,
                             ),
@@ -98,7 +100,7 @@ class CartBottomSheet extends ConsumerWidget {
                         TextButton(
                           onPressed: () => notifier.clearCart(),
                           style: TextButton.styleFrom(
-                            foregroundColor: const Color(0xFFFA5252),
+                            foregroundColor: AppTheme.errorColor,
                           ),
                           child: const Text('Vider'),
                         ),
@@ -107,25 +109,25 @@ class CartBottomSheet extends ConsumerWidget {
                 ],
               ),
             ),
-            Divider(color: Colors.grey.shade200),
+            Divider(color: cs.outlineVariant),
             if (hasDrafts)
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.amber.shade50,
+                  color: AppTheme.warning,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.amber.shade200),
+                  border: Border.all(color: AppTheme.warning),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline, color: Colors.amber.shade700, size: 20),
+                    Icon(Icons.info_outline, color: AppTheme.warning, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'Cette vente contient des produits en brouillon. Elle sera validée quand l\'admin les confirmera.',
                         style: TextStyle(
-                          color: Colors.amber.shade900,
+                          color: AppTheme.warning,
                           fontSize: 12,
                         ),
                       ),
@@ -141,7 +143,7 @@ class CartBottomSheet extends ConsumerWidget {
                   height: 1,
                   indent: 16,
                   endIndent: 16,
-                  color: Colors.grey.shade100,
+                  color: cs.surfaceContainerHighest,
                 ),
                 itemBuilder: (context, index) {
                   final item = cart[index];
@@ -158,7 +160,7 @@ class CartBottomSheet extends ConsumerWidget {
                 },
               ),
             ),
-            Divider(color: Colors.grey.shade200),
+            Divider(color: cs.outlineVariant),
             // Total breakdown
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -179,9 +181,9 @@ class CartBottomSheet extends ConsumerWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text('Réduction',
-                            style: TextStyle(color: Colors.red.shade700)),
+                            style: TextStyle(color: AppTheme.errorColor)),
                         Text('−${_currencyFormat.format(discountAmount)}',
-                            style: TextStyle(color: Colors.red.shade700)),
+                            style: TextStyle(color: AppTheme.errorColor)),
                       ],
                     ),
                     const Divider(height: 12),
@@ -197,7 +199,7 @@ class CartBottomSheet extends ConsumerWidget {
                         _currencyFormat.format(finalTotal),
                         style: theme.textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.w800,
-                          color: const Color(0xFF3B5BDB),
+                          color: AppTheme.primary,
                         ),
                       ),
                     ],
@@ -215,20 +217,20 @@ class CartBottomSheet extends ConsumerWidget {
                     gradient: cart.isNotEmpty
                         ? (hasDrafts
                             ? LinearGradient(
-                                colors: [Colors.amber.shade700, Colors.amber.shade500],
+                                colors: [AppTheme.warning, AppTheme.warning],
                               )
                             : const LinearGradient(
-                                colors: [Color(0xFF3B5BDB), Color(0xFF4DABF7)],
+                                colors: [AppTheme.primary, AppTheme.primaryGradientEnd],
                               ))
                         : null,
-                    color: cart.isEmpty ? Colors.grey.shade300 : null,
+                    color: cart.isEmpty ? cs.outlineVariant : null,
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: cart.isNotEmpty
                         ? [
                             BoxShadow(
                               color: hasDrafts
-                                  ? Colors.amber.shade700.withValues(alpha: 0.3)
-                                  : const Color(0xFF3B5BDB).withValues(alpha: 0.3),
+                                  ? AppTheme.warning.withValues(alpha: 0.3)
+                                  : AppTheme.primary.withValues(alpha: 0.3),
                               blurRadius: 12,
                               offset: const Offset(0, 4),
                             ),
@@ -324,6 +326,7 @@ class _CartItemTileState extends State<_CartItemTile> {
   Widget build(BuildContext context) {
     final item = widget.item;
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
 
     return Dismissible(
       key: ValueKey(item.id),
@@ -333,10 +336,10 @@ class _CartItemTileState extends State<_CartItemTile> {
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
         decoration: BoxDecoration(
-          color: const Color(0xFFFA5252).withValues(alpha: 0.1),
+          color: AppTheme.errorColor.withValues(alpha: 0.1),
         ),
         child: const Icon(Icons.delete_outline_rounded,
-            color: Color(0xFFFA5252), size: 24),
+            color: AppTheme.errorColor, size: 24),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -384,7 +387,7 @@ class _CartItemTileState extends State<_CartItemTile> {
                             const SizedBox(width: 4),
                             IconButton(
                               icon: const Icon(Icons.check_rounded, size: 18,
-                                  color: Color(0xFF51CF66)),
+                                  color: AppTheme.success),
                               onPressed: _confirmPrice,
                               visualDensity: VisualDensity.compact,
                             ),
@@ -400,7 +403,7 @@ class _CartItemTileState extends State<_CartItemTile> {
                               Text(
                                 _currencyFormat.format(item.appliedUnitPrice),
                                 style: theme.textTheme.bodySmall?.copyWith(
-                                  color: Colors.grey.shade600,
+                                  color: cs.onSurfaceVariant,
                                 ),
                               ),
                               if (item.isPriceOverridden)
@@ -410,14 +413,14 @@ class _CartItemTileState extends State<_CartItemTile> {
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 6, vertical: 1),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFFF6B6B)
+                                      color: AppTheme.secondary
                                           .withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: const Text(
                                       'modifié',
                                       style: TextStyle(
-                                        color: Color(0xFFFF6B6B),
+                                        color: AppTheme.secondary,
                                         fontSize: 10,
                                         fontWeight: FontWeight.w600,
                                       ),
@@ -433,9 +436,9 @@ class _CartItemTileState extends State<_CartItemTile> {
             // Quantity controls
             Container(
               decoration: BoxDecoration(
-                color: Colors.grey.shade50,
+                color: cs.surfaceContainerLowest,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade200),
+                border: Border.all(color: cs.outlineVariant),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -447,7 +450,7 @@ class _CartItemTileState extends State<_CartItemTile> {
                     child: Padding(
                       padding: const EdgeInsets.all(8),
                       child: Icon(Icons.remove_rounded,
-                          size: 18, color: Colors.grey.shade600),
+                          size: 18, color: cs.onSurfaceVariant),
                     ),
                   ),
                   Padding(
@@ -466,7 +469,7 @@ class _CartItemTileState extends State<_CartItemTile> {
                     child: const Padding(
                       padding: EdgeInsets.all(8),
                       child: Icon(Icons.add_rounded,
-                          size: 18, color: Color(0xFF3B5BDB)),
+                          size: 18, color: AppTheme.primary),
                     ),
                   ),
                 ],

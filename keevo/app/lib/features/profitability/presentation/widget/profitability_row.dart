@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -85,20 +86,20 @@ class ProductProfitabilityRow extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: Colors.red.shade50,
+                      color: AppTheme.errorColor,
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.warning_amber_rounded,
-                            size: 10, color: Colors.red.shade700),
+                            size: 10, color: AppTheme.errorColor),
                         const SizedBox(width: 2),
                         Text(
                           'PERTE',
                           style: TextStyle(
                               fontSize: 10,
-                              color: Colors.red.shade700,
+                              color: AppTheme.errorColor,
                               fontWeight: FontWeight.bold),
                         ),
                       ],
@@ -113,7 +114,7 @@ class ProductProfitabilityRow extends StatelessWidget {
               ],
             ),
             const SizedBox(width: 4),
-            const Icon(Icons.chevron_right, size: 16, color: Colors.black38),
+            Icon(Icons.chevron_right, size: 16, color: Theme.of(context).colorScheme.outline),
           ],
         ),
       ),

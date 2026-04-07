@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -113,7 +114,7 @@ class _PosSpeedDialState extends State<PosSpeedDial>
                                     ? 'Clôturée ✅'
                                     : 'Clôturer',
                                 backgroundColor: isClosed
-                                    ? Colors.grey
+                                    ? Theme.of(context).colorScheme.onSurfaceVariant
                                     : const Color(0xFF5F3DC4),
                                 onTap: isClosed
                                     ? () {
@@ -140,7 +141,7 @@ class _PosSpeedDialState extends State<PosSpeedDial>
                       _SpeedDialOption(
                         icon: Icons.add_rounded,
                         label: 'Produit',
-                        backgroundColor: Colors.amber.shade700,
+                        backgroundColor: AppTheme.warning,
                         onTap: () {
                           _close();
                           widget.onCreateDraft();
@@ -156,7 +157,7 @@ class _PosSpeedDialState extends State<PosSpeedDial>
         FloatingActionButton(
           heroTag: 'pos_speed_dial_main',
           backgroundColor:
-              _isOpen ? Colors.grey.shade700 : const Color(0xFF3B5BDB),
+              _isOpen ? Theme.of(context).colorScheme.onSurface : AppTheme.primary,
           onPressed: _toggle,
           child: AnimatedBuilder(
             animation: _rotationAnimation,
@@ -230,7 +231,7 @@ class _SpeedDialOption extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.15),
+                    color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.15),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -238,10 +239,10 @@ class _SpeedDialOption extends StatelessWidget {
               ),
               child: Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: Colors.black87,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
             ),

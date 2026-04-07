@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/theme/app_theme.dart';
+
 /// MetricBadgeCard — compact metric tile with icon, value, label, and trend.
 ///
 /// Story 7.1 — AC3.
@@ -29,7 +31,7 @@ class MetricBadgeCard extends StatelessWidget {
   }) {
     return MetricBadgeCard(
       icon: Icons.trending_up,
-      color: const Color(0xFF4DABF7),
+      color: AppTheme.primaryGradientEnd,
       label: "CA d'Hier",
       value: _currencyFormat.format(amount),
       onTap: onTap,
@@ -43,7 +45,7 @@ class MetricBadgeCard extends StatelessWidget {
   }) {
     return MetricBadgeCard(
       icon: Icons.warning_amber_rounded,
-      color: count > 0 ? const Color(0xFFFA5252) : const Color(0xFF868E96),
+      color: count > 0 ? AppTheme.errorColor : AppTheme.grey600,
       label: 'Stock Bas',
       value: count.toString(),
       onTap: onTap,
@@ -58,7 +60,7 @@ class MetricBadgeCard extends StatelessWidget {
   }) {
     return MetricBadgeCard(
       icon: Icons.receipt_long,
-      color: const Color(0xFF3B5BDB),
+      color: AppTheme.primary,
       label: 'Transactions Ce Mois',
       value: count.toString(),
       trendPercent: trendPercent,
@@ -74,7 +76,7 @@ class MetricBadgeCard extends StatelessWidget {
   }) {
     return MetricBadgeCard(
       icon: Icons.shopping_basket,
-      color: const Color(0xFF51CF66),
+      color: AppTheme.success,
       label: 'Panier Moyen',
       value: _currencyFormat.format(amount),
       trendPercent: trendPercent,
@@ -153,7 +155,7 @@ class _MiniTrend extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUp = trendPercent > 0;
-    final color = isUp ? const Color(0xFF51CF66) : const Color(0xFFFA5252);
+    final color = isUp ? AppTheme.success : AppTheme.errorColor;
     return Text(
       '${isUp ? "↑" : "↓"}${trendPercent.abs().toStringAsFixed(0)}%',
       style: TextStyle(

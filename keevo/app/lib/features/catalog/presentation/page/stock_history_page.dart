@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -220,12 +221,12 @@ class _MovementTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final isIn = movement.quantityDelta >= 0;
     final sign = isIn ? '+' : '';
-    final color = isIn ? Colors.green.shade700 : Colors.red.shade700;
+    final color = isIn ? AppTheme.success : AppTheme.errorColor;
     final dateStr = DateFormat('dd/MM/yyyy HH:mm').format(movement.occurredAt);
 
     return ListTile(
       leading: CircleAvatar(
-        backgroundColor: isIn ? Colors.green.shade50 : Colors.red.shade50,
+        backgroundColor: isIn ? AppTheme.success : AppTheme.errorColor,
         child: Icon(
           isIn ? Icons.add_circle : Icons.remove_circle,
           color: color,
@@ -251,7 +252,7 @@ class _MovementTile extends StatelessWidget {
           if (movement.notes != null && movement.notes!.isNotEmpty)
             Text(
               movement.notes!,
-              style: const TextStyle(fontSize: 11, color: Colors.grey),
+              style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -262,7 +263,7 @@ class _MovementTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Text('${movement.quantityBefore} → ${movement.quantityAfter}',
-              style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ],
       ),
     );

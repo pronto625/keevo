@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -25,7 +26,7 @@ class SyncWarningBanner extends ConsumerWidget {
         : '$hours heure(s)';
 
     return MaterialBanner(
-      backgroundColor: Colors.amber.shade100,
+      backgroundColor: AppTheme.warning,
       content: Text(
         '⚠ Synchronisation en échec depuis $durationLabel. '
         'Vérifiez votre connexion.',

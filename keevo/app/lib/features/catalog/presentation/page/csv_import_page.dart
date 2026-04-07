@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -323,9 +324,9 @@ class _StepMapColumns extends StatelessWidget {
     final theme = Theme.of(context);
     final previewRows = _previewRows();
     final dropdownItems = [
-      const DropdownMenuItem<String>(
+      DropdownMenuItem<String>(
         value: null,
-        child: Text('— Ignorer —', style: TextStyle(color: Colors.grey)),
+        child: Text('— Ignorer —', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
       ),
       ...headers.map(
         (h) => DropdownMenuItem<String>(value: h, child: Text(h)),
@@ -465,7 +466,7 @@ class _StepResult extends StatelessWidget {
                       : Icons.info_rounded,
                   size: 64,
                   color: result.imported > 0
-                      ? Colors.green
+                      ? AppTheme.success
                       : theme.colorScheme.tertiary,
                 ),
                 const SizedBox(height: 12),
@@ -475,7 +476,7 @@ class _StepResult extends StatelessWidget {
                       : 'Aucun produit importé',
                   style: theme.textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: result.imported > 0 ? Colors.green : null,
+                    color: result.imported > 0 ? AppTheme.success : null,
                   ),
                   textAlign: TextAlign.center,
                 ),

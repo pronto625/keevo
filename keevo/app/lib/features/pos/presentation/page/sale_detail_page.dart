@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -22,7 +23,7 @@ class SaleDetailPage extends ConsumerWidget {
       return Scaffold(
         appBar: AppBar(
           title: const Text('Détails de la vente'),
-          backgroundColor: const Color(0xFF3B5BDB),
+          backgroundColor: AppTheme.primary,
           foregroundColor: Colors.white,
           elevation: 0,
         ),
@@ -36,7 +37,7 @@ class SaleDetailPage extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Détails de la vente'),
-        backgroundColor: const Color(0xFF3B5BDB),
+        backgroundColor: AppTheme.primary,
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -88,7 +89,7 @@ class _SaleDetailContent extends StatelessWidget {
                 Text(
                   dateFormat.format(sale.occurredAt),
                   style: TextStyle(
-                    color: Colors.grey.shade700,
+                    color: theme.colorScheme.onSurface,
                     fontSize: 14,
                   ),
                 ),
@@ -100,8 +101,8 @@ class _SaleDetailContent extends StatelessWidget {
             _buildSectionHeader('Client'),
             ListTile(
               leading: CircleAvatar(
-                backgroundColor: Colors.grey.shade200,
-                child: const Icon(Icons.person_outline, color: Colors.grey),
+                backgroundColor: theme.colorScheme.outlineVariant,
+                child: Icon(Icons.person_outline, color: theme.colorScheme.onSurfaceVariant),
               ),
               title: Text(sale.clientId!), // TODO: resolve client name
               subtitle: const Text('Client enregistré'),
@@ -115,17 +116,20 @@ class _SaleDetailContent extends StatelessWidget {
           // Totals section
           _buildSectionHeader('Résumé'),
           _buildTotalRow(
+            context,
             'Sous-total',
             sale.items.fold<int>(0, (sum, item) => sum + item.subtotal),
           ),
           if (sale.discountAmount > 0)
             _buildTotalRow(
+              context,
               'Remise',
               -sale.discountAmount,
               isDiscount: true,
             ),
           const Divider(height: 24),
           _buildTotalRow(
+            context,
             'Total',
             sale.totalAmount,
             isTotal: true,
@@ -144,30 +148,30 @@ class _SaleDetailContent extends StatelessWidget {
         style: const TextStyle(
           fontWeight: FontWeight.w600,
           fontSize: 14,
-          color: Color(0xFF3B5BDB),
+          color: AppTheme.primary,
         ),
       ),
     );
   }
 
   Widget _buildStatusChip() {
-    MaterialColor color;
+    Color color;
     String label;
     IconData icon;
 
     switch (sale.status) {
       case 'PENDING_VALIDATION':
-        color = Colors.amber;
+        color = AppTheme.warning;
         label = 'En attente';
         icon = Icons.pending_outlined;
         break;
       case 'CANCELLED':
-        color = Colors.red;
+        color = AppTheme.errorColor;
         label = 'Annulée';
         icon = Icons.cancel_outlined;
         break;
       default:
-        color = Colors.green;
+        color = AppTheme.success;
         label = 'Complétée';
         icon = Icons.check_circle_outline;
     }
@@ -181,12 +185,12 @@ class _SaleDetailContent extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: color.shade700),
+          Icon(icon, size: 16, color: color),
           const SizedBox(width: 6),
           Text(
             label,
             style: TextStyle(
-              color: color.shade700,
+              color: color,
               fontWeight: FontWeight.w600,
               fontSize: 13,
             ),
@@ -198,7 +202,7 @@ class _SaleDetailContent extends StatelessWidget {
 
   Widget _buildPaymentChip() {
     final isMomo = sale.paymentMode == PaymentModeEnum.mobileMoney;
-    final color = isMomo ? Colors.amber.shade700 : Colors.green.shade600;
+    final color = isMomo ? AppTheme.warning : AppTheme.success;
     final icon = isMomo ? Icons.phone_android : Icons.payments_outlined;
     final label = isMomo ? 'Mobile Money' : 'Espèces';
 
@@ -231,11 +235,11 @@ class _SaleDetailContent extends StatelessWidget {
 
     return ListTile(
       leading: CircleAvatar(
-        backgroundColor: const Color(0xFF3B5BDB).withValues(alpha: 0.1),
+        backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
         child: Text(
           '${item.quantity}',
           style: const TextStyle(
-            color: Color(0xFF3B5BDB),
+            color: AppTheme.primary,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -251,7 +255,7 @@ class _SaleDetailContent extends StatelessWidget {
                   _currencyFormat.format(item.catalogueUnitPrice),
                   style: TextStyle(
                     decoration: TextDecoration.lineThrough,
-                    color: Colors.grey.shade500,
+                    color: theme.colorScheme.onSurfaceVariant,
                     fontSize: 12,
                   ),
                 ),
@@ -259,7 +263,7 @@ class _SaleDetailContent extends StatelessWidget {
                 Text(
                   _currencyFormat.format(item.appliedUnitPrice),
                   style: TextStyle(
-                    color: Colors.orange.shade700,
+                    color: AppTheme.warning,
                     fontSize: 12,
                   ),
                 ),
@@ -268,7 +272,7 @@ class _SaleDetailContent extends StatelessWidget {
           : Text(
               '${_currencyFormat.format(item.appliedUnitPrice)} / unité',
               style: TextStyle(
-                color: Colors.grey.shade600,
+                color: theme.colorScheme.onSurfaceVariant,
                 fontSize: 12,
               ),
             ),
@@ -282,8 +286,9 @@ class _SaleDetailContent extends StatelessWidget {
     );
   }
 
-  Widget _buildTotalRow(String label, int amount,
+  Widget _buildTotalRow(BuildContext context, String label, int amount,
       {bool isTotal = false, bool isDiscount = false}) {
+    final cs = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
@@ -294,7 +299,7 @@ class _SaleDetailContent extends StatelessWidget {
             style: TextStyle(
               fontSize: isTotal ? 16 : 14,
               fontWeight: isTotal ? FontWeight.w700 : FontWeight.w400,
-              color: isTotal ? Colors.black : Colors.grey.shade700,
+              color: isTotal ? cs.onSurface : cs.onSurface,
             ),
           ),
           Text(
@@ -303,10 +308,10 @@ class _SaleDetailContent extends StatelessWidget {
               fontSize: isTotal ? 18 : 14,
               fontWeight: isTotal ? FontWeight.w700 : FontWeight.w500,
               color: isDiscount
-                  ? Colors.orange.shade700
+                  ? AppTheme.warning
                   : isTotal
-                      ? const Color(0xFF3B5BDB)
-                      : Colors.black,
+                      ? AppTheme.primary
+                      : cs.onSurface,
             ),
           ),
         ],
@@ -317,11 +322,11 @@ class _SaleDetailContent extends StatelessWidget {
   Color get _statusColor {
     switch (sale.status) {
       case 'PENDING_VALIDATION':
-        return Colors.amber;
+        return AppTheme.warning;
       case 'CANCELLED':
-        return Colors.red;
+        return AppTheme.errorColor;
       default:
-        return Colors.green;
+        return AppTheme.success;
     }
   }
 }

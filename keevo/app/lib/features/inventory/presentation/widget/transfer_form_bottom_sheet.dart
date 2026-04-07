@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -166,7 +167,7 @@ class _TransferFormBottomSheetState
                 ),
               ),
             ]),
-            backgroundColor: Colors.green.shade700,
+            backgroundColor: AppTheme.success,
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 4),
           ),
@@ -232,7 +233,7 @@ class _TransferFormBottomSheetState
                 end: Alignment.bottomRight,
                 colors: [
                   cs.primary,              // #3B5BDB indigo royal — UX spec
-                  const Color(0xFF4DABF7), // bleu ciel électrique — UX spec gradient
+                  AppTheme.primaryGradientEnd, // bleu ciel électrique — UX spec gradient
                 ],
               ),
               borderRadius:

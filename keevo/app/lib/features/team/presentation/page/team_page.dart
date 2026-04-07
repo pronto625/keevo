@@ -24,7 +24,7 @@ class _TeamPageState extends ConsumerState<TeamPage> {
     final employeesAsync = ref.watch(employeeListProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
       body: CustomScrollView(
         slivers: [
           // ── Gradient header ─────────────────────────────────────────

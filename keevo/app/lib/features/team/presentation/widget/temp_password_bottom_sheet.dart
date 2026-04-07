@@ -94,7 +94,7 @@ class _TempPasswordSheetState extends State<_TempPasswordSheet> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF8F9FA),
+                  color: Theme.of(context).colorScheme.surfaceContainerLowest,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: const Color(0xFFDEE2E6)),
                 ),

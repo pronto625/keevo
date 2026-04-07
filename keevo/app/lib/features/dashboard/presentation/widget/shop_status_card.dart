@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/theme/app_theme.dart';
 import '../../domain/model/dashboard_snapshot.dart';
 
 /// ShopStatusCard — store overview card with CA, status badge, staff count,
@@ -109,11 +110,11 @@ class ShopStatusCard extends StatelessWidget {
   Color _accentColorFor(StoreStatusLevel status) {
     switch (status) {
       case StoreStatusLevel.stable:
-        return const Color(0xFF51CF66);
+        return AppTheme.success;
       case StoreStatusLevel.attention:
-        return const Color(0xFFFCC419);
+        return AppTheme.warning;
       case StoreStatusLevel.enBaisse:
-        return const Color(0xFFFA5252);
+        return AppTheme.errorColor;
     }
   }
 }
@@ -125,9 +126,9 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, color) = switch (status) {
-      StoreStatusLevel.stable => ('STABLE', const Color(0xFF51CF66)),
-      StoreStatusLevel.attention => ('ATTENTION', const Color(0xFFFCC419)),
-      StoreStatusLevel.enBaisse => ('EN BAISSE', const Color(0xFFFA5252)),
+      StoreStatusLevel.stable => ('STABLE', AppTheme.success),
+      StoreStatusLevel.attention => ('ATTENTION', AppTheme.warning),
+      StoreStatusLevel.enBaisse => ('EN BAISSE', AppTheme.errorColor),
     };
 
     return Container(

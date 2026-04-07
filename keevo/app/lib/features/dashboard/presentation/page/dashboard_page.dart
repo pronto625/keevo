@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/theme/app_theme.dart';
 
 import '../../../../features/notifications/presentation/widget/notification_bell_widget.dart';
 import '../../domain/model/dashboard_snapshot.dart';
@@ -399,7 +400,7 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.storefront_outlined, size: 64, color: Color(0xFF4DABF7)),
+            const Icon(Icons.storefront_outlined, size: 64, color: AppTheme.primaryGradientEnd),
             const SizedBox(height: 16),
             Text(greeting, style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 8),

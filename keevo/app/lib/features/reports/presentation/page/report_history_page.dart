@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -70,10 +71,10 @@ class _ReportHistoryPageState extends ConsumerState<ReportHistoryPage> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Icon(Icons.error_outline,
-                        size: 48, color: Colors.red),
+                        size: 48, color: AppTheme.errorColor),
                     const SizedBox(height: 12),
                     Text('Erreur: $e',
-                        style: const TextStyle(color: Colors.red)),
+                        style: const TextStyle(color: AppTheme.errorColor)),
                     const SizedBox(height: 16),
                     ElevatedButton(
                       onPressed: () => ref.invalidate(reportHistoryProvider),
@@ -89,12 +90,12 @@ class _ReportHistoryPageState extends ConsumerState<ReportHistoryPage> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.bar_chart_outlined,
-                            size: 64, color: Colors.grey.shade300),
+                            size: 64, color: theme.colorScheme.outlineVariant),
                         const SizedBox(height: 16),
                         Text(
                           'Aucun rapport disponible.',
                           style: theme.textTheme.titleMedium?.copyWith(
-                            color: Colors.grey.shade600,
+                            color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -102,7 +103,7 @@ class _ReportHistoryPageState extends ConsumerState<ReportHistoryPage> {
                           'Les rapports apparaîtront après la première clôture journalière.',
                           textAlign: TextAlign.center,
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: Colors.grey.shade500,
+                            color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -170,7 +171,7 @@ class _ReportHistoryPageState extends ConsumerState<ReportHistoryPage> {
             color: Colors.white,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
+                color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.04),
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),
@@ -178,7 +179,7 @@ class _ReportHistoryPageState extends ConsumerState<ReportHistoryPage> {
           ),
           child: Row(
             children: [
-              const Icon(Icons.person_outline, size: 18, color: Colors.grey),
+              Icon(Icons.person_outline, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
               const SizedBox(width: 8),
               Expanded(
                 child: DropdownButton<String?>(

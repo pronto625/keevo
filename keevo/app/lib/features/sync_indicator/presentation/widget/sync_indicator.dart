@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -33,15 +34,15 @@ class SyncIndicator extends ConsumerWidget {
         final resultingStock = data['resultingStock'] ?? '?';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: const Color(0xFFFCC419),
+            backgroundColor: AppTheme.warning,
             duration: const Duration(seconds: 5),
             content: Text(
               '\u26a0 Conflit de stock : $productName \u2014 stock n\u00e9gatif ($resultingStock). V\u00e9rifiez l\u2019inventaire.',
-              style: const TextStyle(color: Colors.black87),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
             ),
             action: SnackBarAction(
               label: 'Voir',
-              textColor: Colors.black87,
+              textColor: Theme.of(context).colorScheme.onSurface,
               onPressed: () => context.push('/settings/sync/conflicts'),
             ),
           ),
@@ -68,7 +69,7 @@ class SyncIndicator extends ConsumerWidget {
                 width: 10,
                 height: 10,
                 decoration: const BoxDecoration(
-                  color: Color(0xFFFA5252),
+                  color: AppTheme.errorColor,
                   shape: BoxShape.circle,
                 ),
               ),
@@ -138,10 +139,10 @@ class SyncIndicator extends ConsumerWidget {
 
   Color _dotColor(SyncStatus status) {
     return switch (status) {
-      SyncStatus.online => const Color(0xFF51CF66),
+      SyncStatus.online => AppTheme.success,
       SyncStatus.syncing => const Color(0xFF339AF0),
-      SyncStatus.offlineOk => const Color(0xFFFCC419),
-      SyncStatus.offlineCritical => const Color(0xFFFA5252),
+      SyncStatus.offlineOk => AppTheme.warning,
+      SyncStatus.offlineCritical => AppTheme.errorColor,
     };
   }
 

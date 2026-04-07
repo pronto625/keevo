@@ -34,7 +34,7 @@ class ReportsPage extends ConsumerWidget {
     final lastClosureAsync = ref.watch(lastClosureProvider(storeId));
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
       body: CustomScrollView(
         slivers: [
           // ── Blue gradient header ──
@@ -87,7 +87,7 @@ class ReportsPage extends ConsumerWidget {
                 padding: const EdgeInsets.all(32),
                 child: Center(
                     child: Text('Erreur: $e',
-                        style: const TextStyle(color: Colors.red))),
+                        style: const TextStyle(color: AppTheme.errorColor))),
               ),
               data: (summary) => _buildContent(
                 context,
@@ -154,7 +154,7 @@ class ReportsPage extends ConsumerWidget {
                 ? 'Excellent travail — $periodLabel'
                 : 'Aucune vente enregistrée pour le moment.',
             style: theme.textTheme.bodyMedium?.copyWith(
-              color: Colors.grey.shade600,
+              color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 20),
@@ -230,7 +230,7 @@ class ReportsPage extends ConsumerWidget {
                   icon: Icons.payments_rounded,
                   label: 'ESPÈCES',
                   amount: summary.cashAmount,
-                  color: Colors.green,
+                  color: AppTheme.success,
                 ),
               ),
               const SizedBox(width: 12),
@@ -239,7 +239,7 @@ class ReportsPage extends ConsumerWidget {
                   icon: Icons.phone_android_rounded,
                   label: 'MOBILE MONEY',
                   amount: summary.momoAmount,
-                  color: Colors.blue,
+                  color: theme.colorScheme.primary,
                 ),
               ),
             ],
@@ -252,7 +252,7 @@ class ReportsPage extends ConsumerWidget {
               'Top Produits Vendus',
               style: theme.textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.w600,
-                color: Colors.grey.shade700,
+                color: theme.colorScheme.onSurface,
               ),
             ),
             const SizedBox(height: 12),
@@ -271,21 +271,21 @@ class ReportsPage extends ConsumerWidget {
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.amber.shade50,
+                color: AppTheme.warning,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.amber.shade200),
+                border: Border.all(color: AppTheme.warning),
               ),
               child: Row(
                 children: [
                   Icon(Icons.warning_rounded,
-                      color: Colors.amber.shade700, size: 20),
+                      color: AppTheme.warning, size: 20),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       '${summary.pendingSalesCount} vente(s) en attente — '
                       '${_currencyFormat.format(summary.pendingSalesTotal)}',
                       style: TextStyle(
-                        color: Colors.amber.shade800,
+                        color: AppTheme.warning,
                         fontWeight: FontWeight.w500,
                         fontSize: 13,
                       ),
@@ -375,7 +375,7 @@ class _PaymentCard extends StatelessWidget {
   final IconData icon;
   final String label;
   final int amount;
-  final MaterialColor color;
+  final Color color;
 
   const _PaymentCard({
     required this.icon,
@@ -399,7 +399,7 @@ class _PaymentCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -410,10 +410,10 @@ class _PaymentCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: color.shade50,
+              color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, color: color.shade700, size: 20),
+            child: Icon(icon, color: color, size: 20),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -425,7 +425,7 @@ class _PaymentCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 9,
                     fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade500,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                     letterSpacing: 0.5,
                   ),
                 ),
@@ -435,7 +435,7 @@ class _PaymentCard extends StatelessWidget {
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 14,
-                    color: color.shade700,
+                    color: color,
                   ),
                 ),
               ],
@@ -473,7 +473,7 @@ class _TopProductTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -485,11 +485,11 @@ class _TopProductTile extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: Colors.grey.shade100,
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(Icons.inventory_2_rounded,
-                color: Colors.grey.shade400, size: 22),
+                color: Theme.of(context).colorScheme.outline, size: 22),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -506,7 +506,7 @@ class _TopProductTile extends StatelessWidget {
                 Text(
                   '$quantity unités vendues',
                   style: TextStyle(
-                    color: Colors.grey.shade500,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                     fontSize: 12,
                   ),
                 ),
@@ -548,9 +548,9 @@ class _ClosureButton extends ConsumerWidget {
             : () => _showDayCloseSummary(context, ref),
         style: ElevatedButton.styleFrom(
           backgroundColor: AppTheme.primary,
-          disabledBackgroundColor: Colors.grey.shade300,
+          disabledBackgroundColor: Theme.of(context).colorScheme.outlineVariant,
           foregroundColor: Colors.white,
-          disabledForegroundColor: Colors.grey.shade500,
+          disabledForegroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
           padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),

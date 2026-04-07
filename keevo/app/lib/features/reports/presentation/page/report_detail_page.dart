@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -60,7 +61,7 @@ class _DetailScaffold extends ConsumerWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Rapport renvoyé avec succès via WhatsApp'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppTheme.success,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -68,7 +69,7 @@ class _DetailScaffold extends ConsumerWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Échec du renvoi : ${next.error}'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppTheme.errorColor,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -104,7 +105,7 @@ class _DetailScaffold extends ConsumerWidget {
                     label: 'Chiffre du jour',
                     value: _formatCurrency(report.totalRevenue),
                     icon: Icons.attach_money,
-                    color: Colors.green.shade700,
+                    color: AppTheme.success,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -113,7 +114,7 @@ class _DetailScaffold extends ConsumerWidget {
                     label: 'Ventes',
                     value: '${report.totalSales}',
                     icon: Icons.shopping_cart_outlined,
-                    color: Colors.blue.shade700,
+                    color: theme.colorScheme.primary,
                   ),
                 ),
               ],
@@ -275,8 +276,8 @@ class _TypeBadge extends StatelessWidget {
     };
     return Chip(
       label: Text(label, style: const TextStyle(fontSize: 12)),
-      backgroundColor: Colors.indigo.shade50,
-      side: BorderSide(color: Colors.indigo.shade200),
+      backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+      side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
     );
   }
 }
@@ -288,10 +289,10 @@ class _DeliveryBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, color) = switch (status) {
-      'SENT' => ('Envoyé', Colors.green),
-      'FAILED' => ('Échec', Colors.red),
-      'IN_APP_ONLY' => ('App uniquement', Colors.grey),
-      _ => ('En attente', Colors.blue),
+      'SENT' => ('Envoyé', AppTheme.success),
+      'FAILED' => ('Échec', AppTheme.errorColor),
+      'IN_APP_ONLY' => ('App uniquement', Theme.of(context).colorScheme.onSurfaceVariant),
+      _ => ('En attente', Theme.of(context).colorScheme.primary),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -303,7 +304,7 @@ class _DeliveryBadge extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-          color: color.shade700,
+          color: color,
           fontSize: 12,
           fontWeight: FontWeight.w600,
         ),
@@ -347,7 +348,7 @@ class _MetricCard extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               label,
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12),
             ),
           ],
         ),
@@ -373,7 +374,7 @@ class _InfoRow extends StatelessWidget {
             width: 150,
             child: Text(
               label,
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13),
             ),
           ),
           Expanded(

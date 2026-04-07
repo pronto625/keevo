@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -61,7 +62,7 @@ class DayCloseButton extends ConsumerWidget {
           icon: const Icon(Icons.nightlight_round),
           label: const Text('Clôturer la journée'),
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF3B5BDB),
+            backgroundColor: AppTheme.primary,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             shape: RoundedRectangleBorder(
@@ -77,7 +78,7 @@ class DayCloseButton extends ConsumerWidget {
             child: Container(
               padding: const EdgeInsets.all(6),
               decoration: const BoxDecoration(
-                color: Colors.red,
+                color: AppTheme.errorColor,
                 shape: BoxShape.circle,
               ),
               child: Text(
@@ -96,13 +97,14 @@ class DayCloseButton extends ConsumerWidget {
 
   /// Build button when day is already closed.
   Widget _buildClosedButton(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return ElevatedButton.icon(
       onPressed: null,
       icon: const Icon(Icons.check_circle),
       label: const Text('Journée clôturée ✅'),
       style: ElevatedButton.styleFrom(
-        disabledBackgroundColor: Colors.grey.shade300,
-        disabledForegroundColor: Colors.grey.shade600,
+        disabledBackgroundColor: cs.outlineVariant,
+        disabledForegroundColor: cs.onSurfaceVariant,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
@@ -116,7 +118,7 @@ class DayCloseButton extends ConsumerWidget {
     return ElevatedButton(
       onPressed: null,
       style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF3B5BDB),
+        backgroundColor: AppTheme.primary,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
@@ -143,7 +145,7 @@ class DayCloseButton extends ConsumerWidget {
       icon: const Icon(Icons.refresh),
       label: const Text('Réessayer'),
       style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.orange,
+        backgroundColor: AppTheme.warning,
         foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         shape: RoundedRectangleBorder(

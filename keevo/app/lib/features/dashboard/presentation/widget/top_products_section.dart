@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/theme/app_theme.dart';
 import '../../domain/model/dashboard_snapshot.dart';
 
 /// TopProductsSection — top 5 weekly products with rank, name, units, revenue.
@@ -79,7 +80,7 @@ class _TopProductRow extends StatelessWidget {
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w700,
                     color: rank <= 3
-                        ? const Color(0xFF3B5BDB)
+                        ? AppTheme.primary
                         : Theme.of(context)
                             .colorScheme
                             .onSurface

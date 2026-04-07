@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -349,7 +350,7 @@ class _ProgressSection extends StatelessWidget {
                 style: theme.textTheme.bodyMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: progress >= 1.0
-                      ? const Color(0xFF51CF66)
+                      ? AppTheme.success
                       : theme.colorScheme.primary,
                 ),
               ),
@@ -364,7 +365,7 @@ class _ProgressSection extends StatelessWidget {
               backgroundColor:
                   theme.colorScheme.surfaceContainerHighest,
               color: progress >= 1.0
-                  ? const Color(0xFF51CF66)
+                  ? AppTheme.success
                   : theme.colorScheme.primary,
             ),
           ),
@@ -388,12 +389,12 @@ class _SummaryBanner extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF51CF66).withValues(alpha: 0.15),
+        color: AppTheme.success.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         children: [
-          const Icon(Icons.check_circle, color: Color(0xFF51CF66)),
+          const Icon(Icons.check_circle, color: AppTheme.success),
           const SizedBox(width: 8),
           Text(
             'Inventaire terminé — $matches concordants, $discrepancies écarts',
@@ -434,7 +435,7 @@ class _BottomActionBar extends StatelessWidget {
         color: theme.colorScheme.surface,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
+            color: theme.colorScheme.shadow.withValues(alpha: 0.08),
             blurRadius: 8,
             offset: const Offset(0, -2),
           ),

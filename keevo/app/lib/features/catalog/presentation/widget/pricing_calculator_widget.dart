@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 /// Widget de calcul de marge en temps réel.
@@ -88,7 +89,7 @@ class PricingCalculatorWidget extends StatelessWidget {
               label: 'Marge brute',
               value: _formatXaf(_grossMarginXaf),
               context: context,
-              valueColor: isLoss ? Colors.red : null,
+              valueColor: isLoss ? AppTheme.errorColor : null,
             ),
             _Row(
               label: 'Taux de marge',
@@ -104,20 +105,20 @@ class PricingCalculatorWidget extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.red.shade50,
+                    color: AppTheme.errorColor,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.shade300),
+                    border: Border.all(color: AppTheme.errorColor),
                   ),
                   child: const Row(
                     children: [
                       Icon(Icons.warning_amber_rounded,
-                          color: Colors.red, size: 16),
+                          color: AppTheme.errorColor, size: 16),
                       SizedBox(width: 6),
                       Expanded(
                         child: Text(
                           '\u26a0 Prix de vente inférieur au coût — vous vendez à perte',
                           style: TextStyle(
-                            color: Colors.red,
+                            color: AppTheme.errorColor,
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
                           ),
@@ -133,20 +134,20 @@ class PricingCalculatorWidget extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.red.shade50,
+                  color: AppTheme.errorColor,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.shade200),
+                  border: Border.all(color: AppTheme.errorColor),
                 ),
                 child: Row(
                   children: [
                     Icon(Icons.warning_amber_rounded,
-                        color: Colors.red.shade700, size: 16),
+                        color: AppTheme.errorColor, size: 16),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         '⚠ Prix de vente inférieur au coût — vous vendez à perte',
                         style: TextStyle(
-                          color: Colors.red.shade700,
+                          color: AppTheme.errorColor,
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
                         ),
@@ -222,7 +223,7 @@ class _Row extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: baseStyle?.copyWith(color: Colors.black54)),
+          Text(label, style: baseStyle?.copyWith(color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
           Text(
             value,
             style: baseStyle?.copyWith(
@@ -248,11 +249,11 @@ enum _MarginLevel {
     switch (this) {
       case _MarginLevel.loss:
       case _MarginLevel.low:
-        return Colors.red;
+        return AppTheme.errorColor;
       case _MarginLevel.moderate:
-        return Colors.orange;
+        return AppTheme.warning;
       case _MarginLevel.profitable:
-        return Colors.green;
+        return AppTheme.success;
     }
   }
 

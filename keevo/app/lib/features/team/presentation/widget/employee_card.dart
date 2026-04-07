@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -175,7 +176,7 @@ class EmployeeCard extends ConsumerWidget {
               // ── Deactivate ──────────────────────────────────────────
               ListTile(
                 leading:
-                    Icon(Icons.person_off_rounded, color: Colors.red.shade400),
+                    Icon(Icons.person_off_rounded, color: AppTheme.errorColor),
                 title: const Text('Désactiver l\'accès'),
                 subtitle: const Text('L\'employé ne pourra plus se connecter'),
                 onTap: () {
@@ -284,7 +285,7 @@ class EmployeeCard extends ConsumerWidget {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: Colors.red.shade400,
+              backgroundColor: AppTheme.errorColor,
             ),
             onPressed: () async {
               Navigator.pop(ctx);

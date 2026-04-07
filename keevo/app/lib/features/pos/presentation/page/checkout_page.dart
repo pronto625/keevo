@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -57,7 +58,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             content: Text(state.message == 'INSUFFICIENT_STOCK'
                 ? 'Stock insuffisant pour un ou plusieurs articles'
                 : 'Erreur: ${state.message}'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppTheme.errorColor,
           ),
         );
       }
@@ -81,14 +82,14 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF3B5BDB), Color(0xFF4DABF7)],
+                    colors: [AppTheme.primary, AppTheme.primaryGradientEnd],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF3B5BDB).withValues(alpha: 0.25),
+                      color: AppTheme.primary.withValues(alpha: 0.25),
                       blurRadius: 16,
                       offset: const Offset(0, 6),
                     ),
@@ -203,7 +204,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF51CF66).withValues(alpha: 0.1),
+                      color: AppTheme.success.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
@@ -253,19 +254,19 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                               !_isSubmitting &&
                               saleState is! RecordSaleLoading
                           ? const LinearGradient(
-                              colors: [Color(0xFF3B5BDB), Color(0xFF4DABF7)],
+                              colors: [AppTheme.primary, AppTheme.primaryGradientEnd],
                             )
                           : null,
                       color: _selectedMode == null ||
                               _isSubmitting ||
                               saleState is RecordSaleLoading
-                          ? Colors.grey.shade300
+                          ? Theme.of(context).colorScheme.outlineVariant
                           : null,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: _selectedMode != null
                           ? [
                               BoxShadow(
-                                color: const Color(0xFF3B5BDB).withValues(alpha: 0.3),
+                                color: AppTheme.primary.withValues(alpha: 0.3),
                                 blurRadius: 12,
                                 offset: const Offset(0, 4),
                               ),
@@ -365,19 +366,19 @@ class _PaymentModeCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
         decoration: BoxDecoration(
           color: selected
-              ? const Color(0xFF3B5BDB).withValues(alpha: 0.08)
+              ? AppTheme.primary.withValues(alpha: 0.08)
               : Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: selected
-                ? const Color(0xFF3B5BDB)
+                ? AppTheme.primary
                 : Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5),
             width: selected ? 2 : 1,
           ),
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: const Color(0xFF3B5BDB).withValues(alpha: 0.1),
+                    color: AppTheme.primary.withValues(alpha: 0.1),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -390,8 +391,8 @@ class _PaymentModeCard extends StatelessWidget {
               icon,
               size: 28,
               color: selected
-                  ? const Color(0xFF3B5BDB)
-                  : Colors.grey.shade500,
+                  ? AppTheme.primary
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             const SizedBox(height: 8),
             Text(
@@ -400,7 +401,7 @@ class _PaymentModeCard extends StatelessWidget {
                 fontSize: 14,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                 color: selected
-                    ? const Color(0xFF3B5BDB)
+                    ? AppTheme.primary
                     : Theme.of(context).textTheme.bodyLarge?.color,
               ),
             ),
@@ -425,6 +426,7 @@ class _ClientAutocomplete extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
     final clientsAsync = ref.watch(clientListNotifierProvider);
 
     return clientsAsync.when(
@@ -439,10 +441,10 @@ class _ClientAutocomplete extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF3B5BDB).withValues(alpha: 0.06),
+                  color: AppTheme.primary.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: const Color(0xFF3B5BDB).withValues(alpha: 0.2),
+                    color: AppTheme.primary.withValues(alpha: 0.2),
                   ),
                 ),
                 child: Row(
@@ -451,11 +453,11 @@ class _ClientAutocomplete extends ConsumerWidget {
                       width: 36,
                       height: 36,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF3B5BDB).withValues(alpha: 0.1),
+                        color: AppTheme.primary.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.person_rounded,
-                          size: 18, color: Color(0xFF3B5BDB)),
+                          size: 18, color: AppTheme.primary),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -472,7 +474,7 @@ class _ClientAutocomplete extends ConsumerWidget {
                           Text(
                             selectedClient!.phone,
                             style: TextStyle(
-                              color: Colors.grey.shade600,
+                              color: cs.onSurfaceVariant,
                               fontSize: 12,
                             ),
                           ),
@@ -481,7 +483,7 @@ class _ClientAutocomplete extends ConsumerWidget {
                     ),
                     IconButton(
                       icon: Icon(Icons.close_rounded,
-                          size: 18, color: Colors.grey.shade500),
+                          size: 18, color: cs.onSurfaceVariant),
                       onPressed: onCleared,
                     ),
                   ],

@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 import '../../domain/model/inventory_gap_row_model.dart';
@@ -27,7 +28,7 @@ class ConcordantCollapseSection extends StatelessWidget {
         child: ExpansionTile(
           key: const PageStorageKey('concordant-section'),
           initiallyExpanded: false,
-          leading: const Icon(Icons.check_circle, color: Color(0xFF51CF66)),
+          leading: const Icon(Icons.check_circle, color: AppTheme.success),
           title: Text(
             'Concordants : $count produits',
             style: theme.textTheme.titleSmall?.copyWith(
@@ -47,13 +48,13 @@ class ConcordantCollapseSection extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF51CF66).withValues(alpha: 0.15),
+                        color: AppTheme.success.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Text(
                         '= 0',
                         style: TextStyle(
-                          color: Color(0xFF51CF66),
+                          color: AppTheme.success,
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),

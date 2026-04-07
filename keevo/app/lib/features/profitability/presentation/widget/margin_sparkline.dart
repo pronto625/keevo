@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 import '../../domain/model/product_profitability_model.dart';
@@ -16,12 +17,12 @@ class MarginSparkline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (entries.isEmpty) {
-      return const SizedBox(
+      return SizedBox(
         height: 60,
         child: Center(
           child: Text(
             'Pas de données',
-            style: TextStyle(color: Colors.black38, fontSize: 12),
+            style: TextStyle(color: Theme.of(context).colorScheme.outline, fontSize: 12),
           ),
         ),
       );
@@ -30,7 +31,10 @@ class MarginSparkline extends StatelessWidget {
     return SizedBox(
       height: 60,
       child: CustomPaint(
-        painter: _SparklinePainter(entries: entries),
+        painter: _SparklinePainter(
+          entries: entries,
+          zeroLineColor: Theme.of(context).colorScheme.outlineVariant,
+        ),
         child: const SizedBox.expand(),
       ),
     );
@@ -39,8 +43,9 @@ class MarginSparkline extends StatelessWidget {
 
 class _SparklinePainter extends CustomPainter {
   final List<DailyMarginEntry> entries;
+  final Color zeroLineColor;
 
-  _SparklinePainter({required this.entries});
+  _SparklinePainter({required this.entries, required this.zeroLineColor});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -56,7 +61,7 @@ class _SparklinePainter extends CustomPainter {
 
     for (int i = 0; i < barCount; i++) {
       final margin = entries[i].marginXaf;
-      final barColor = margin >= 0 ? Colors.green : Colors.red;
+      final barColor = margin >= 0 ? AppTheme.success : AppTheme.errorColor;
       final paint = Paint()..color = barColor..style = PaintingStyle.fill;
 
       final barHeight = (margin.abs() / maxVal) * (size.height * 0.8);
@@ -74,7 +79,7 @@ class _SparklinePainter extends CustomPainter {
 
     // Zero line
     final linePaint = Paint()
-      ..color = Colors.black12
+      ..color = zeroLineColor
       ..strokeWidth = 0.5;
     canvas.drawLine(Offset(0, midY), Offset(size.width, midY), linePaint);
   }

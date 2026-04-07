@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_theme.dart';
+
 /// MotivationalCard — dismissible daily motivational message card.
 ///
 /// Story 7.1 — AC5, UX27.
@@ -19,7 +21,7 @@ class MotivationalCard extends StatelessWidget {
       elevation: 0,
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: const Color(0xFF3B5BDB).withValues(alpha: 0.08),
+      color: AppTheme.primary.withValues(alpha: 0.08),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
         child: Row(

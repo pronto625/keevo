@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
@@ -99,7 +100,7 @@ class InventoryGapReportPage extends ConsumerWidget {
           GapSectionList(
             title: '🔴 Manquants',
             rows: report.shortageRows,
-            titleColor: const Color(0xFFFA5252),
+            titleColor: AppTheme.errorColor,
             onRowTap: (row) => ProductDetailBottomSheet.show(context, row),
           ),
         if (report.shortageRows.isNotEmpty) const SizedBox(height: 16),
@@ -109,7 +110,7 @@ class InventoryGapReportPage extends ConsumerWidget {
           GapSectionList(
             title: '⚠️ Surplus',
             rows: report.surplusRows,
-            titleColor: const Color(0xFFFCC419),
+            titleColor: AppTheme.warning,
             onRowTap: (row) => ProductDetailBottomSheet.show(context, row),
           ),
       ],

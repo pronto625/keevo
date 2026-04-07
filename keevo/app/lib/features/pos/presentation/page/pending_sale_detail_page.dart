@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -57,7 +58,7 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [Colors.amber.shade50, Colors.amber.shade100],
+                colors: [AppTheme.warning, AppTheme.warning],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -65,7 +66,7 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
             child: Column(
               children: [
                 Icon(Icons.pending_actions,
-                    size: 40, color: Colors.amber.shade800),
+                    size: 40, color: AppTheme.warning),
                 const SizedBox(height: 8),
                 Text(
                   _currencyFormat.format(sale.totalAmount),
@@ -75,20 +76,20 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
                 const SizedBox(height: 4),
                 Text(
                   _dateFormat.format(sale.createdAt),
-                  style: TextStyle(color: Colors.grey.shade600),
+                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 4),
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.amber.shade200,
+                    color: AppTheme.warning,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     'EN ATTENTE DE VALIDATION',
                     style: TextStyle(
-                      color: Colors.amber.shade900,
+                      color: AppTheme.warning,
                       fontWeight: FontWeight.w600,
                       fontSize: 12,
                     ),
@@ -112,7 +113,7 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
                       style: const TextStyle(fontWeight: FontWeight.w600)),
                   subtitle: Text(
                     '${item.quantity} × ${_currencyFormat.format(item.appliedUnitPrice)}',
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13),
                   ),
                   trailing: Text(
                     _currencyFormat.format(item.subtotal),
@@ -135,8 +136,8 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
                           child: OutlinedButton.icon(
                             onPressed: () => _showCancelDialog(sale.id),
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.red,
-                              side: const BorderSide(color: Colors.red),
+                              foregroundColor: AppTheme.errorColor,
+                              side: const BorderSide(color: AppTheme.errorColor),
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12)),
@@ -151,7 +152,7 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
                           child: FilledButton.icon(
                             onPressed: () => _showValidateDialog(sale.id),
                             style: FilledButton.styleFrom(
-                              backgroundColor: Colors.amber.shade700,
+                              backgroundColor: AppTheme.warning,
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12)),
@@ -220,7 +221,7 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Retour')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.errorColor),
             onPressed: () {
               final text = controller.text.trim();
               Navigator.pop(ctx);
@@ -324,7 +325,7 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
           title: Row(
             children: [
               Icon(Icons.check_circle_rounded,
-                  color: Colors.green, size: 28),
+                  color: AppTheme.success, size: 28),
               const SizedBox(width: 12),
               const Expanded(child: Text('Valider ce produit ?')),
             ],
@@ -380,14 +381,14 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
                     ScaffoldMessenger.of(ctx).showSnackBar(
                       SnackBar(
                         content: Text('Erreur promotion: $e'),
-                        backgroundColor: Colors.red,
+                        backgroundColor: AppTheme.errorColor,
                       ),
                     );
                   }
                 }
               },
               style: FilledButton.styleFrom(
-                backgroundColor: Colors.green,
+                backgroundColor: AppTheme.success,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),

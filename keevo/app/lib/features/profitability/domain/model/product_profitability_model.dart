@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 /// SortOption — mirrors SortOption enum in backend.
@@ -116,9 +117,9 @@ class StorePerformanceParams {
 /// _MarginLevel in pricing_calculator_widget.dart.
 ///
 /// Color thresholds MUST match PricingCalculatorWidget:
-///   LOSS / LOW  → Colors.red
-///   MODERATE    → Colors.orange
-///   PROFITABLE  → Colors.green
+///   LOSS / LOW  → AppTheme.errorColor
+///   MODERATE    → AppTheme.warning
+///   PROFITABLE  → AppTheme.success
 enum MarginLevel {
   loss,
   low,
@@ -143,11 +144,11 @@ enum MarginLevel {
     switch (this) {
       case MarginLevel.loss:
       case MarginLevel.low:
-        return Colors.red;
+        return AppTheme.errorColor;
       case MarginLevel.moderate:
-        return Colors.orange;
+        return AppTheme.warning;
       case MarginLevel.profitable:
-        return Colors.green;
+        return AppTheme.success;
     }
   }
 }

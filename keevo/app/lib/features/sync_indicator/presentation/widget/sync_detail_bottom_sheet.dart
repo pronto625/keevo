@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -45,7 +46,7 @@ class SyncDetailBottomSheet extends ConsumerWidget {
                 label: count == 0
                     ? 'Aucune opération en attente'
                     : '$count opération${count > 1 ? 's' : ''} en attente d\'envoi',
-                color: count > 0 ? const Color(0xFFFCC419) : null,
+                color: count > 0 ? AppTheme.warning : null,
               ),
               loading: () => const _InfoRow(
                   icon: Icons.hourglass_empty, label: '...'),
@@ -66,7 +67,7 @@ class SyncDetailBottomSheet extends ConsumerWidget {
                         icon: Icons.warning_amber_rounded,
                         label:
                             '${conflicts.length} conflit${conflicts.length > 1 ? 's' : ''} non résolu${conflicts.length > 1 ? 's' : ''}',
-                        color: const Color(0xFFFCC419),
+                        color: AppTheme.warning,
                       ),
                     ),
               loading: () => const SizedBox.shrink(),
@@ -174,14 +175,14 @@ class _InfoRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 18, color: color ?? Colors.grey[600]),
+        Icon(icon, size: 18, color: color ?? Theme.of(context).colorScheme.onSurfaceVariant),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             label,
             style: TextStyle(
               fontSize: 13,
-              color: color ?? Colors.grey[800],
+              color: color ?? Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ),

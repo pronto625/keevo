@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -79,7 +80,7 @@ class _StockThresholdBottomSheetState
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Erreur lors de la mise à jour du seuil'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppTheme.errorColor,
           ),
         );
       }
@@ -99,7 +100,7 @@ class _StockThresholdBottomSheetState
           children: [
             Row(
               children: [
-                const Icon(Icons.notifications_outlined, color: Colors.orange),
+                const Icon(Icons.notifications_outlined, color: AppTheme.warning),
                 const SizedBox(width: 8),
                 Text('Seuil d\'alerte stock',
                     style: Theme.of(context).textTheme.titleLarge),

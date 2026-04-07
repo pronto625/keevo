@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -7,9 +8,9 @@ import '../../domain/model/inventory_product_row_model.dart';
 import '../provider/inventory_counting_provider.dart';
 
 /// UX2 color tokens — exact hex from design spec.
-const _colorSuccess = Color(0xFF51CF66);
-const _colorWarning = Color(0xFFFCC419);
-const _colorError = Color(0xFFFA5252);
+const _colorSuccess = AppTheme.success;
+const _colorWarning = AppTheme.warning;
+const _colorError = AppTheme.errorColor;
 
 /// InventoryRow — a single product row in the counting form (UX32).
 ///

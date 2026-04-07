@@ -1,8 +1,9 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 /// kAvatarColors — 8 Material colors safe for white text overlay.
 const kAvatarColors = [
-  Color(0xFF3B5BDB), // Indigo
+  AppTheme.primary, // Indigo
   Color(0xFF1098AD), // Cyan
   Color(0xFF37B24D), // Green
   Color(0xFFE8590C), // Orange

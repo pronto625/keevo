@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -71,7 +72,7 @@ class _TransferHistoryPageState extends ConsumerState<TransferHistoryPage> {
                     end: Alignment.bottomRight,
                     colors: [
                       theme.colorScheme.primary,        // #3B5BDB indigo royal
-                      const Color(0xFF4DABF7),          // bleu ciel — gradient UX spec
+                      AppTheme.primaryGradientEnd,          // bleu ciel — gradient UX spec
                     ],
                   ),
                 ),
@@ -300,19 +301,19 @@ class _FilterBar extends StatelessWidget {
             _Chip(
                 label: '✅ Effectués',
                 active: selected == 'COMPLETED',
-                color: Colors.green,
+                color: AppTheme.success,
                 onTap: () => onSelect('COMPLETED')),
             const SizedBox(width: 8),
             _Chip(
                 label: '⏳ En attente',
                 active: selected == 'PENDING_SYNC',
-                color: Colors.orange,
+                color: AppTheme.warning,
                 onTap: () => onSelect('PENDING_SYNC')),
             const SizedBox(width: 8),
             _Chip(
                 label: '❌ Conflits',
                 active: selected == 'CONFLICT',
-                color: Colors.red,
+                color: AppTheme.errorColor,
                 onTap: () => onSelect('CONFLICT')),
           ],
         ),
@@ -407,7 +408,7 @@ class _TransferTileState extends ConsumerState<_TransferTile> {
               overflow: TextOverflow.ellipsis,
             )),
           ]),
-          backgroundColor: Colors.green.shade700,
+          backgroundColor: AppTheme.success,
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 4),
         ));
@@ -427,7 +428,7 @@ class _TransferTileState extends ConsumerState<_TransferTile> {
       if (mounted) {
         messenger.showSnackBar(SnackBar(
           content: Text(msg.toString()),
-          backgroundColor: Colors.red.shade700,
+          backgroundColor: AppTheme.errorColor,
           behavior: SnackBarBehavior.floating,
         ));
       }
@@ -435,7 +436,7 @@ class _TransferTileState extends ConsumerState<_TransferTile> {
       if (mounted) {
         messenger.showSnackBar(SnackBar(
           content: Text(e.toString()),
-          backgroundColor: Colors.red.shade700,
+          backgroundColor: AppTheme.errorColor,
           behavior: SnackBarBehavior.floating,
         ));
       }
@@ -606,10 +607,10 @@ class _StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final (icon, label, color) = switch (status) {
       'IN_TRANSIT'   => ('🚚', 'En transit',         Colors.teal),
-      'COMPLETED'    => ('✅', 'Effectué',           Colors.green),
-      'PENDING_SYNC' => ('⏳', 'En attente de sync', Colors.orange),
-      'CONFLICT'     => ('❌', 'Conflit',             Colors.red),
-      _              => ('·', status,               Colors.grey),
+      'COMPLETED'    => ('✅', 'Effectué',           AppTheme.success),
+      'PENDING_SYNC' => ('⏳', 'En attente de sync', AppTheme.warning),
+      'CONFLICT'     => ('❌', 'Conflit',             AppTheme.errorColor),
+      _              => ('·', status,               Theme.of(context).colorScheme.onSurfaceVariant),
     };
 
     return Container(

@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -118,7 +119,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: theme.colorScheme.shadow.withOpacity(0.1),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
@@ -164,8 +165,8 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
                 subtitle: 'Utiliser l\'appareil photo',
                 gradient: LinearGradient(
                   colors: [
-                    Colors.purple.shade400,
-                    Colors.purple.shade700,
+                    const Color(0xFF7048E8).withOpacity(0.7),
+                    const Color(0xFF7048E8),
                   ],
                 ),
                 onTap: () => _pickImage(ImageSource.camera),
@@ -180,8 +181,8 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
                 subtitle: 'Sélectionner une image existante',
                 gradient: LinearGradient(
                   colors: [
-                    Colors.blue.shade400,
-                    Colors.blue.shade700,
+                    theme.colorScheme.primary.withOpacity(0.7),
+                    theme.colorScheme.primary,
                   ],
                 ),
                 onTap: () => _pickImage(ImageSource.gallery),
@@ -299,7 +300,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
                 ),
               ],
             ),
-            backgroundColor: Colors.green.shade600,
+            backgroundColor: AppTheme.success,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             margin: const EdgeInsets.all(16),
@@ -322,7 +323,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
                 Expanded(child: Text(e.message)),
               ],
             ),
-            backgroundColor: Colors.red.shade600,
+            backgroundColor: AppTheme.errorColor,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             margin: const EdgeInsets.all(16),
@@ -340,7 +341,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
                 Expanded(child: Text('Erreur inattendue : $e')),
               ],
             ),
-            backgroundColor: Colors.red.shade900,
+            backgroundColor: AppTheme.errorColor,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             margin: const EdgeInsets.all(16),
@@ -643,21 +644,21 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
                                 Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.orange.withOpacity(0.1),
+                                    color: AppTheme.warning.withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
-                                        color: Colors.orange.withOpacity(0.3)),
+                                        color: AppTheme.warning.withOpacity(0.3)),
                                   ),
                                   child: const Row(
                                     children: [
                                       Icon(Icons.info_outline,
-                                          color: Colors.orange, size: 20),
+                                          color: AppTheme.warning, size: 20),
                                       SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
                                           'Validez ce brouillon pour gérer son stock.',
                                           style: TextStyle(
-                                              color: Colors.orange,
+                                              color: AppTheme.warning,
                                               fontWeight: FontWeight.w500),
                                         ),
                                       ),
@@ -685,7 +686,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
                             _SectionHeader(
                               icon: Icons.local_shipping_rounded,
                               title: 'Fournisseur',
-                              color: Colors.orange,
+                              color: AppTheme.warning,
                             ),
                             const SizedBox(height: 12),
                             _SupplierTile(productId: widget.product!.id),
@@ -1073,8 +1074,8 @@ class _PhotoSection extends StatelessWidget {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    Colors.amber.shade400,
-                    Colors.orange.shade600,
+                    AppTheme.warning,
+                    AppTheme.warning,
                   ],
                 ),
                 borderRadius: BorderRadius.circular(12),
@@ -1096,7 +1097,7 @@ class _PhotoSection extends StatelessWidget {
                 ? Text(
                     'Taille: ${(selectedImage!.lengthSync() / 1024).toStringAsFixed(1)} KB',
                     style: TextStyle(
-                      color: Colors.green.shade600,
+                      color: AppTheme.success,
                       fontWeight: FontWeight.w500,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -1139,8 +1140,8 @@ class _PhotoSection extends StatelessWidget {
       if (file.existsSync()) return Image.file(file, fit: BoxFit.cover);
     }
     return Image.network(url, fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => const Center(
-          child: Icon(Icons.broken_image_rounded, size: 40, color: Colors.grey),
+        errorBuilder: (ctx, __, ___) => Center(
+          child: Icon(Icons.broken_image_rounded, size: 40, color: Theme.of(ctx).colorScheme.onSurfaceVariant),
         ));
   }
 }
@@ -1254,7 +1255,7 @@ class _SaveButton extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: isSaving 
-              ? [Colors.grey.shade400, Colors.grey.shade600]
+              ? [theme.colorScheme.outline, theme.colorScheme.onSurfaceVariant]
               : [
                   theme.colorScheme.primary,
                   theme.colorScheme.primary.withOpacity(0.8),
@@ -1416,12 +1417,12 @@ class _NoSupplierCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.orange.withOpacity(0.1),
+              color: AppTheme.warning.withOpacity(0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(
               Icons.local_shipping_outlined,
-              color: Colors.orange,
+              color: AppTheme.warning,
               size: 20,
             ),
           ),
@@ -1452,9 +1453,9 @@ class _SupplierCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.orange.withOpacity(0.05),
+          color: AppTheme.warning.withOpacity(0.05),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.orange.withOpacity(0.3)),
+          border: Border.all(color: AppTheme.warning.withOpacity(0.3)),
         ),
         child: Row(
           children: [
@@ -1462,7 +1463,7 @@ class _SupplierCard extends StatelessWidget {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Colors.orange.shade400, Colors.orange.shade700],
+                  colors: [AppTheme.warning, AppTheme.warning],
                 ),
                 borderRadius: BorderRadius.circular(10),
               ),

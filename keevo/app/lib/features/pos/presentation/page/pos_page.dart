@@ -81,7 +81,7 @@ class _PosPageState extends ConsumerState<PosPage> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('Votre journée du $lastClosureDate a été clôturée automatiquement.'),
-                backgroundColor: Colors.orange,
+                backgroundColor: AppTheme.warning,
                 duration: const Duration(seconds: 5),
               ),
             );
@@ -109,7 +109,7 @@ class _PosPageState extends ConsumerState<PosPage> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: 56),
         child: FloatingActionButton(
@@ -177,22 +177,22 @@ class _PosPageState extends ConsumerState<PosPage> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.grey.shade200),
+                      border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
                     ),
                     child: TextField(
                       controller: _searchController,
                       decoration: InputDecoration(
                         hintText: 'Chercher un produit',
                         hintStyle: TextStyle(
-                          color: Colors.grey.shade400,
+                          color: Theme.of(context).colorScheme.outline,
                           fontWeight: FontWeight.w400,
                         ),
                         prefixIcon: Icon(Icons.search_rounded,
-                            color: Colors.grey.shade400),
+                            color: Theme.of(context).colorScheme.outline),
                         suffixIcon: _searchQuery.isNotEmpty
                             ? IconButton(
                                 icon: Icon(Icons.close_rounded,
-                                    color: Colors.grey.shade500, size: 20),
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant, size: 20),
                                 onPressed: () {
                                   _searchController.clear();
                                   setState(() => _searchQuery = '');
@@ -415,16 +415,16 @@ class _SearchResultsSliver extends ConsumerWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.search_off_rounded,
-                      size: 48, color: Colors.grey.shade300),
+                      size: 48, color: Theme.of(context).colorScheme.outlineVariant),
                   const SizedBox(height: 12),
                   Text('Aucun produit trouvé',
-                      style: TextStyle(color: Colors.grey.shade500)),
+                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                   const SizedBox(height: 16),
                   FilledButton.icon(
                     icon: const Icon(Icons.add_circle_outline),
                     label: Text("Créer '$lastQuery' à la volée"),
                     style: FilledButton.styleFrom(
-                      backgroundColor: Colors.amber.shade700,
+                      backgroundColor: AppTheme.warning,
                     ),
                     onPressed: () => onCreateDraft(context, ref, lastQuery),
                   ),
@@ -615,27 +615,27 @@ class _PendingSalesBanner extends ConsumerWidget {
           margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: Colors.amber.shade50,
+            color: AppTheme.warning,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.amber.shade300),
+            border: Border.all(color: AppTheme.warning),
           ),
           child: Row(
             children: [
               Icon(Icons.pending_actions_rounded,
-                  color: Colors.amber.shade800, size: 22),
+                  color: AppTheme.warning, size: 22),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   '$count vente${count > 1 ? 's' : ''} en attente de validation',
                   style: TextStyle(
-                    color: Colors.amber.shade900,
+                    color: AppTheme.warning,
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
                   ),
                 ),
               ),
               Icon(Icons.chevron_right_rounded,
-                  color: Colors.amber.shade700, size: 20),
+                  color: AppTheme.warning, size: 20),
             ],
           ),
         ),

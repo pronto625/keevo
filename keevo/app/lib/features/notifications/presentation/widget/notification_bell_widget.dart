@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -23,7 +24,7 @@ class NotificationBellWidget extends ConsumerWidget {
           style: const TextStyle(color: Colors.white, fontSize: 10),
         ),
         isLabelVisible: count > 0,
-        backgroundColor: const Color(0xFFFA5252),
+        backgroundColor: AppTheme.errorColor,
         child: const Icon(Icons.notifications_outlined),
       ),
       onPressed: () => context.go('/notifications'),

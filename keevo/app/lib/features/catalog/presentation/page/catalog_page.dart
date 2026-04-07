@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -155,7 +156,7 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
                                             const Text('Catalogue synchronisé'),
                                           ],
                                         ),
-                                        backgroundColor: Colors.green,
+                                        backgroundColor: AppTheme.success,
                                         behavior: SnackBarBehavior.floating,
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(12),
@@ -286,16 +287,16 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
                   children: [
                     Chip(
                       avatar: const Icon(Icons.filter_alt_rounded,
-                          size: 18, color: Colors.orange),
+                          size: 18, color: AppTheme.warning),
                       label: const Text('Brouillons uniquement'),
                       deleteIcon: const Icon(Icons.close, size: 18),
                       onDeleted: () {
                         ref.read(showDraftsOnlyProvider.notifier).state = false;
                       },
-                      backgroundColor: Colors.orange.withOpacity(0.12),
+                      backgroundColor: AppTheme.warning.withOpacity(0.12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20),
-                        side: BorderSide(color: Colors.orange.withOpacity(0.3)),
+                        side: BorderSide(color: AppTheme.warning.withOpacity(0.3)),
                       ),
                     ),
                   ],
@@ -311,16 +312,16 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
                   children: [
                     Chip(
                       avatar: const Icon(Icons.warning_rounded,
-                          size: 18, color: Colors.red),
+                          size: 18, color: AppTheme.errorColor),
                       label: const Text('Stock bas uniquement'),
                       deleteIcon: const Icon(Icons.close, size: 18),
                       onDeleted: () {
                         ref.read(showLowStockOnlyProvider.notifier).state = false;
                       },
-                      backgroundColor: Colors.red.withOpacity(0.12),
+                      backgroundColor: AppTheme.errorColor.withOpacity(0.12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20),
-                        side: BorderSide(color: Colors.red.withOpacity(0.3)),
+                        side: BorderSide(color: AppTheme.errorColor.withOpacity(0.3)),
                       ),
                     ),
                   ],
@@ -487,7 +488,7 @@ class _ModernTabDelegate extends SliverPersistentHeaderDelegate {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.remove_shopping_cart_outlined, size: 16, color: Colors.red),
+                  Icon(Icons.remove_shopping_cart_outlined, size: 16, color: AppTheme.errorColor),
                   const SizedBox(width: 6),
                   const Text('Rupture'),
                 ],
@@ -497,7 +498,7 @@ class _ModernTabDelegate extends SliverPersistentHeaderDelegate {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.warning_amber_rounded, size: 16, color: Colors.orange),
+                  Icon(Icons.warning_amber_rounded, size: 16, color: AppTheme.warning),
                   const SizedBox(width: 6),
                   const Text('Stock Bas'),
                 ],
@@ -534,7 +535,7 @@ class _ProductListView extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const Icon(Icons.error_outline, size: 48, color: AppTheme.errorColor),
             const SizedBox(height: 12),
             Text(
               'Erreur : $error',
@@ -668,7 +669,7 @@ class _CategoryManagerSheetState
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Catégorie « $name » créée'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppTheme.success,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -676,7 +677,7 @@ class _CategoryManagerSheetState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Erreur : $e'), backgroundColor: AppTheme.errorColor),
         );
       }
     } finally {
@@ -714,7 +715,7 @@ class _CategoryManagerSheetState
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-                content: Text('Erreur : $e'), backgroundColor: Colors.red),
+                content: Text('Erreur : $e'), backgroundColor: AppTheme.errorColor),
           );
         }
       }
@@ -739,7 +740,7 @@ class _CategoryManagerSheetState
               child: const Text('Annuler')),
           FilledButton(
             style:
-                FilledButton.styleFrom(backgroundColor: Colors.red),
+                FilledButton.styleFrom(backgroundColor: AppTheme.errorColor),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Supprimer'),
           ),
@@ -753,7 +754,7 @@ class _CategoryManagerSheetState
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-                content: Text('Erreur : $e'), backgroundColor: Colors.red),
+                content: Text('Erreur : $e'), backgroundColor: AppTheme.errorColor),
           );
         }
       }
@@ -890,7 +891,7 @@ class _CategoryManagerSheetState
                                 IconButton(
                                   icon: const Icon(Icons.delete_outline,
                                       size: 20),
-                                  color: Colors.red,
+                                  color: AppTheme.errorColor,
                                   tooltip: 'Supprimer',
                                   onPressed: () => _deleteCategory(cat),
                                 ),

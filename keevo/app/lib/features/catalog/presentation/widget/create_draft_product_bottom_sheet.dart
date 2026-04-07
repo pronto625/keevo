@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -217,9 +218,9 @@ class _CreateDraftProductBottomSheetState
                 const SizedBox(height: 8),
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
+                    color: AppTheme.warning,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.amber.shade200),
+                    border: Border.all(color: AppTheme.warning),
                   ),
                   padding: const EdgeInsets.all(8),
                   child: Column(
@@ -228,7 +229,7 @@ class _CreateDraftProductBottomSheetState
                       Text(
                         'Produit(s) existant(s) :',
                         style: theme.textTheme.labelSmall?.copyWith(
-                          color: Colors.amber.shade800,
+                          color: AppTheme.warning,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -242,7 +243,7 @@ class _CreateDraftProductBottomSheetState
                               child: Row(
                                 children: [
                                   const Icon(Icons.check_circle_outline,
-                                      size: 18, color: Colors.green),
+                                      size: 18, color: AppTheme.success),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
@@ -253,7 +254,7 @@ class _CreateDraftProductBottomSheetState
                                   Text(
                                     'Sélectionner',
                                     style: theme.textTheme.labelSmall
-                                        ?.copyWith(color: Colors.blue),
+                                        ?.copyWith(color: theme.colorScheme.primary),
                                   ),
                                 ],
                               ),

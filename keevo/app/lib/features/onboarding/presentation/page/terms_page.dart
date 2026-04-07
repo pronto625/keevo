@@ -249,7 +249,7 @@ class _TermsPageState extends State<TermsPage> {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withAlpha(10),
+                    color: cs.shadow.withAlpha(10),
                     blurRadius: 8,
                     offset: const Offset(0, -2),
                   ),

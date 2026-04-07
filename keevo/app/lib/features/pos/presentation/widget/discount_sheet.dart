@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -133,7 +134,7 @@ class _DiscountSheetState extends ConsumerState<DiscountSheet> {
           FilledButton(
             onPressed: _apply,
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF3B5BDB),
+              backgroundColor: AppTheme.primary,
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
             child: const Text('Appliquer'),
@@ -149,7 +150,7 @@ class _DiscountSheetState extends ConsumerState<DiscountSheet> {
                     Navigator.pop(context);
                   },
                   child: const Text('Supprimer la réduction',
-                      style: TextStyle(color: Colors.red)),
+                      style: TextStyle(color: AppTheme.errorColor)),
                 ),
               TextButton(
                 onPressed: () => Navigator.pop(context),

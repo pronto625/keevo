@@ -54,7 +54,7 @@ class _OnboardingPageState extends State<OnboardingPage>
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: FadeTransition(
           opacity: _fadeAnim,

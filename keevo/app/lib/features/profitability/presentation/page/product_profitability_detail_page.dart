@@ -32,7 +32,7 @@ class ProductProfitabilityDetailPage extends ConsumerWidget {
     final dataAsync = ref.watch(productProfitabilityDetailProvider(args));
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
@@ -195,22 +195,23 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       elevation: 0,
       shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: Colors.grey.shade200)),
+          side: BorderSide(color: cs.outlineVariant)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title,
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: Colors.black54)),
+                    color: cs.onSurfaceVariant)),
             const SizedBox(height: 10),
             child,
           ],
@@ -230,7 +231,7 @@ class _PriceStat extends StatelessWidget {
   Widget build(BuildContext context) => Column(
         children: [
           Text(label,
-              style: const TextStyle(fontSize: 11, color: Colors.black45)),
+              style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const SizedBox(height: 2),
           Text(value,
               style: const TextStyle(
@@ -252,7 +253,7 @@ class _MetricItem extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label,
-              style: const TextStyle(fontSize: 11, color: Colors.black45)),
+              style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
           Text(value,
               style: TextStyle(
                   fontWeight: FontWeight.bold,

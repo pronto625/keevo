@@ -16,6 +16,7 @@ import '../../features/stores/presentation/provider/store_provider.dart';
 import '../../features/sync_indicator/presentation/widget/sync_warning_banner.dart';
 import '../di/providers.dart';
 import '../router/app_router.dart';
+import '../theme/app_theme.dart';
 import '../sync/auto_closure_notification_checker.dart';
 import '../sync/sync_trigger_notifier.dart';
 import 'offline_gate_banner.dart';
@@ -221,15 +222,15 @@ class _MainShellState extends ConsumerState<MainShell> {
         icon: Badge(
           label: Text(pendingSalesCount > 9 ? '9+' : '$pendingSalesCount'),
           isLabelVisible: pendingSalesCount > 0,
-          backgroundColor: Colors.amber,
-          textColor: Colors.black87,
+          backgroundColor: AppTheme.warning,
+          textColor: AppTheme.darkSurface,
           child: const Icon(Icons.point_of_sale_outlined),
         ),
         selectedIcon: Badge(
           label: Text(pendingSalesCount > 9 ? '9+' : '$pendingSalesCount'),
           isLabelVisible: pendingSalesCount > 0,
-          backgroundColor: Colors.amber,
-          textColor: Colors.black87,
+          backgroundColor: AppTheme.warning,
+          textColor: AppTheme.darkSurface,
           child: const Icon(Icons.point_of_sale_rounded),
         ),
         label: 'Caisse',
@@ -239,26 +240,26 @@ class _MainShellState extends ConsumerState<MainShell> {
           icon: Badge(
             label: Text(lowStockCount > 9 ? '9+' : '$lowStockCount'),
             isLabelVisible: lowStockCount > 0,
-            backgroundColor: const Color(0xFFFCC419),
-            textColor: Colors.black87,
+            backgroundColor: AppTheme.warning,
+            textColor: AppTheme.darkSurface,
             child: Badge(
               label: Text(draftCount > 9 ? '9+' : '$draftCount'),
               isLabelVisible: draftCount > 0 && lowStockCount == 0,
-              backgroundColor: const Color(0xFFFCC419),
-              textColor: Colors.black87,
+              backgroundColor: AppTheme.warning,
+              textColor: AppTheme.darkSurface,
               child: const Icon(Icons.inventory_2_outlined),
             ),
           ),
           selectedIcon: Badge(
             label: Text(lowStockCount > 9 ? '9+' : '$lowStockCount'),
             isLabelVisible: lowStockCount > 0,
-            backgroundColor: const Color(0xFFFCC419),
-            textColor: Colors.black87,
+            backgroundColor: AppTheme.warning,
+            textColor: AppTheme.darkSurface,
             child: Badge(
               label: Text(draftCount > 9 ? '9+' : '$draftCount'),
               isLabelVisible: draftCount > 0 && lowStockCount == 0,
-              backgroundColor: const Color(0xFFFCC419),
-              textColor: Colors.black87,
+              backgroundColor: AppTheme.warning,
+              textColor: AppTheme.darkSurface,
               child: const Icon(Icons.inventory_2_rounded),
             ),
           ),

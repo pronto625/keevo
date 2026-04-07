@@ -18,7 +18,7 @@ class SubscriptionPage extends ConsumerWidget {
     final asyncSub = ref.watch(subscriptionInfoProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
       body: asyncSub.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, _) => Center(
@@ -164,7 +164,7 @@ class _PlanCard extends StatelessWidget {
         ),
       'PREMIUM_TRIAL' => (
           'Premium Trial',
-          const [Color(0xFF3B5BDB), Color(0xFF9B59B6)],
+          const [AppTheme.primary, Color(0xFF9B59B6)],
           Icons.auto_awesome_rounded
         ),
       _ => (
@@ -319,7 +319,7 @@ class _UsageCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(10),
+            color: Theme.of(context).colorScheme.shadow.withAlpha(10),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -394,13 +394,13 @@ class _PremiumCta extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: const LinearGradient(
-          colors: [Color(0xFFFF6B6B), Color(0xFFFF8E53)],
+          colors: [AppTheme.secondary, Color(0xFFFF8E53)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFF6B6B).withAlpha(80),
+            color: AppTheme.secondary.withAlpha(80),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -453,7 +453,7 @@ class _PremiumCta extends StatelessWidget {
               child: const Text(
                 'Voir',
                 style: TextStyle(
-                  color: Color(0xFFFF6B6B),
+                  color: AppTheme.secondary,
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
                 ),

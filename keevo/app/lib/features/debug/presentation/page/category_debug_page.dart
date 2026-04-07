@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -52,7 +53,7 @@ class CategoryDebugPage extends ConsumerWidget {
                       loading: () => const CircularProgressIndicator(),
                       error: (error, stack) => Text(
                         'Erreur: $error',
-                        style: const TextStyle(color: Colors.red),
+                        style: const TextStyle(color: AppTheme.errorColor),
                       ),
                       data: (prefs) {
                         if (prefs == null) {
@@ -92,7 +93,7 @@ class CategoryDebugPage extends ConsumerWidget {
                       loading: () => const CircularProgressIndicator(),
                       error: (error, stack) => Text(
                         'Erreur catégories: $error',
-                        style: const TextStyle(color: Colors.red),
+                        style: const TextStyle(color: AppTheme.errorColor),
                       ),
                       data: (categories) {
                         if (categories.isEmpty) {
@@ -111,7 +112,7 @@ class CategoryDebugPage extends ConsumerWidget {
                                   Icon(
                                     cat.isCustom ? Icons.star : Icons.category,
                                     size: 16,
-                                    color: cat.isCustom ? Colors.orange : Colors.blue,
+                                    color: cat.isCustom ? AppTheme.warning : Theme.of(context).colorScheme.primary,
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(child: Text(cat.name)),

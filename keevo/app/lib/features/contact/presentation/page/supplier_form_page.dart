@@ -114,7 +114,7 @@ class _SupplierFormPageState extends ConsumerState<SupplierFormPage>
               const SizedBox(width: 12),
               Expanded(child: Text(e.toString())),
             ]),
-            backgroundColor: Colors.red.shade600,
+            backgroundColor: AppTheme.errorColor,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             margin: const EdgeInsets.all(16),
@@ -432,7 +432,7 @@ class _SaveButton extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: isSaving
-              ? [Colors.grey.shade400, Colors.grey.shade600]
+              ? [Theme.of(context).colorScheme.outline, Theme.of(context).colorScheme.onSurfaceVariant]
               : [color, color.withOpacity(0.8)],
         ),
         borderRadius: BorderRadius.circular(16),

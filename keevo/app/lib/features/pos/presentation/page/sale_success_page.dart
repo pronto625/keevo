@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -67,8 +68,8 @@ class _SaleSuccessPageState extends State<SaleSuccessPage>
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: isPending
-                ? [Colors.amber.shade600, Colors.amber.shade800]
-                : const [Color(0xFF51CF66), Color(0xFF37B24D)],
+                ? [AppTheme.warning, AppTheme.warning]
+                : const [AppTheme.success, Color(0xFF37B24D)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),

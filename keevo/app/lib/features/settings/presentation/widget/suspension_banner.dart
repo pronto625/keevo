@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/theme/app_theme.dart';
 import '../provider/account_status_provider.dart';
 
 /// SuspensionBanner — displays a contextual banner based on [AccountStatus].
@@ -19,13 +20,13 @@ class SuspensionBanner extends ConsumerWidget {
 
     return switch (status) {
       AccountStatus.suspended => _Banner(
-          color: Colors.red.shade700,
+          color: AppTheme.errorColor,
           icon: Icons.block_outlined,
           message:
               'Votre compte est suspendu. Contactez le support pour plus d\'informations.',
         ),
       AccountStatus.trialExpired => _Banner(
-          color: Colors.amber.shade700,
+          color: AppTheme.warning,
           icon: Icons.access_time_outlined,
           message:
               'Votre période d\'essai est terminée. Passez au plan Premium pour continuer.',

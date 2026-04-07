@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -46,7 +47,7 @@ class _SyncRequiredModalState extends ConsumerState<SyncRequiredModal> {
           messenger.showSnackBar(
             const SnackBar(
               content: Text('✅ Synchronisation réussie — accès complet restauré'),
-              backgroundColor: Color(0xFF51CF66),
+              backgroundColor: AppTheme.success,
               duration: Duration(seconds: 4),
             ),
           );
@@ -93,7 +94,7 @@ class _SyncRequiredModalState extends ConsumerState<SyncRequiredModal> {
     return AlertDialog(
       title: const Row(
         children: [
-          Icon(Icons.sync_problem, color: Color(0xFFFA5252)),
+          Icon(Icons.sync_problem, color: AppTheme.errorColor),
           SizedBox(width: 8),
           Text('Synchronisation requise'),
         ],
@@ -124,18 +125,18 @@ class _SyncRequiredModalState extends ConsumerState<SyncRequiredModal> {
             const SizedBox(height: 12),
             Text(
               _errorMessage!,
-              style: const TextStyle(color: Color(0xFFFA5252), fontSize: 13),
+              style: const TextStyle(color: AppTheme.errorColor, fontSize: 13),
             ),
           ],
           if (!isOnline) ...[
             const SizedBox(height: 12),
-            const Row(
+            Row(
               children: [
-                Icon(Icons.wifi_off, size: 16, color: Colors.grey),
-                SizedBox(width: 6),
+                Icon(Icons.wifi_off, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                const SizedBox(width: 6),
                 Text(
                   'Hors-ligne — connexion requise',
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12),
                 ),
               ],
             ),

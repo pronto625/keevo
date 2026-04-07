@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -129,6 +130,7 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
   @override
   Widget build(BuildContext context) {
     final summaryAsync = ref.watch(todaySummaryProvider(widget.storeId));
+    final cs = Theme.of(context).colorScheme;
 
     return Container(
       decoration: const BoxDecoration(
@@ -146,7 +148,7 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey.shade300,
+                color: cs.outlineVariant,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -156,7 +158,7 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
           // Title
           Row(
             children: [
-              const Icon(Icons.nightlight_round, color: Color(0xFF3B5BDB)),
+              const Icon(Icons.nightlight_round, color: AppTheme.primary),
               const SizedBox(width: 8),
               const Text(
                 'Résumé de la journée',
@@ -175,8 +177,8 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
             builder: (context, _) {
               return LinearProgressIndicator(
                 value: 1 - _progressController.value,
-                backgroundColor: Colors.grey.shade200,
-                valueColor: const AlwaysStoppedAnimation(Color(0xFF3B5BDB)),
+                backgroundColor: cs.outlineVariant,
+                valueColor: const AlwaysStoppedAnimation(AppTheme.primary),
               );
             },
           ),
@@ -196,7 +198,7 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
                 padding: const EdgeInsets.all(32),
                 child: Text(
                   'Erreur: $e',
-                  style: const TextStyle(color: Colors.red),
+                  style: const TextStyle(color: AppTheme.errorColor),
                 ),
               ),
             ),
@@ -211,18 +213,18 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.red.shade50,
+                color: AppTheme.errorColor,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.shade200),
+                border: Border.all(color: AppTheme.errorColor),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.error_outline, color: Colors.red.shade700),
+                  Icon(Icons.error_outline, color: AppTheme.errorColor),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       _errorMessage!,
-                      style: TextStyle(color: Colors.red.shade800, fontWeight: FontWeight.w500),
+                      style: TextStyle(color: AppTheme.errorColor, fontWeight: FontWeight.w500),
                     ),
                   ),
                 ],
@@ -250,7 +252,7 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
                 child: ElevatedButton(
                   onPressed: _isClosing ? null : _confirmClosure,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF3B5BDB),
+                    backgroundColor: AppTheme.primary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
@@ -309,20 +311,20 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.amber.shade50,
+              color: AppTheme.warning,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.amber.shade200),
+              border: Border.all(color: AppTheme.warning),
             ),
             child: Row(
               children: [
-                const Icon(Icons.warning_rounded, color: Colors.amber),
+                const Icon(Icons.warning_rounded, color: AppTheme.warning),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     '🔶 ${summary.pendingSalesCount} vente(s) en attente — '
                     '${_currencyFormat.format(summary.pendingSalesTotal)} (non comptabilisé)',
                     style: TextStyle(
-                      color: Colors.amber.shade800,
+                      color: AppTheme.warning,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -341,15 +343,16 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
     required String value,
     String? subValue,
   }) {
+    final cs = Theme.of(context).colorScheme;
     return Row(
       children: [
-        Icon(icon, color: Colors.grey.shade600, size: 24),
+        Icon(icon, color: cs.onSurfaceVariant, size: 24),
         const SizedBox(width: 12),
         Expanded(
           child: Text(
             label,
             style: TextStyle(
-              color: Colors.grey.shade700,
+              color: cs.onSurface,
               fontSize: 14,
             ),
           ),
@@ -368,7 +371,7 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
               Text(
                 subValue,
                 style: TextStyle(
-                  color: Colors.grey.shade600,
+                  color: cs.onSurfaceVariant,
                   fontSize: 13,
                 ),
               ),
@@ -386,12 +389,12 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.green.shade50,
+              color: AppTheme.success,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
               children: [
-                Icon(Icons.payments, color: Colors.green.shade700),
+                Icon(Icons.payments, color: AppTheme.success),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
@@ -402,7 +405,7 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
                         _currencyFormat.format(summary.cashAmount),
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.green.shade700,
+                          color: AppTheme.success,
                         ),
                       ),
                     ],
@@ -418,12 +421,12 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.blue.shade50,
+              color: Theme.of(context).colorScheme.primaryContainer,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
               children: [
-                Icon(Icons.phone_android, color: Colors.blue.shade700),
+                Icon(Icons.phone_android, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
@@ -434,7 +437,7 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
                         _currencyFormat.format(summary.momoAmount),
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.blue.shade700,
+                          color: Theme.of(context).colorScheme.primary,
                         ),
                       ),
                     ],

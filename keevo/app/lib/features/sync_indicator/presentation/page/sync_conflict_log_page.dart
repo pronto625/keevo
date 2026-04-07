@@ -1,3 +1,4 @@
+import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -23,7 +24,7 @@ class SyncConflictLogPage extends ConsumerWidget {
             : _buildConflictList(conflicts),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
-          child: Text('Erreur: $e', style: const TextStyle(color: Colors.red)),
+          child: Text('Erreur: $e', style: const TextStyle(color: AppTheme.errorColor)),
         ),
       ),
     );
@@ -34,7 +35,7 @@ class SyncConflictLogPage extends ConsumerWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.check_circle_outline, size: 64, color: Colors.green),
+          const Icon(Icons.check_circle_outline, size: 64, color: AppTheme.success),
           const SizedBox(height: 16),
           Text(
             'Aucun conflit de synchronisation',
@@ -68,8 +69,8 @@ class _ConflictTile extends StatelessWidget {
             ? Icons.warning_amber_rounded
             : Icons.info_outline,
         color: conflict.conflictType == 'STOCK_NEGATIVE'
-            ? Colors.amber
-            : Colors.blue,
+            ? AppTheme.warning
+            : Theme.of(context).colorScheme.primary,
       ),
       title: Text(conflict.displayTitle, style: const TextStyle(fontSize: 14)),
       subtitle: Text(dateStr, style: const TextStyle(fontSize: 12)),

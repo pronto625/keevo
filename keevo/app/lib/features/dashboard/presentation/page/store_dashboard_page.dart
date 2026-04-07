@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/theme/app_theme.dart';
 import '../../domain/model/dashboard_snapshot.dart';
 import '../provider/dashboard_providers.dart';
 import '../widget/sales_evolution_chart.dart';
@@ -62,9 +63,9 @@ class _StoreDetail extends ConsumerWidget {
       StoreStatusLevel.enBaisse => 'EN BAISSE',
     };
     final statusColor = switch (status) {
-      StoreStatusLevel.stable => const Color(0xFF51CF66),
-      StoreStatusLevel.attention => const Color(0xFFFCC419),
-      StoreStatusLevel.enBaisse => const Color(0xFFFA5252),
+      StoreStatusLevel.stable => AppTheme.success,
+      StoreStatusLevel.attention => AppTheme.warning,
+      StoreStatusLevel.enBaisse => AppTheme.errorColor,
     };
 
     final chartPeriod = ref.watch(storeChartPeriodProvider(storeId));
@@ -218,7 +219,7 @@ class _LowStockSection extends StatelessWidget {
           child: Row(
             children: [
               const Icon(Icons.warning_amber_rounded,
-                  size: 18, color: Color(0xFFFA5252)),
+                  size: 18, color: AppTheme.errorColor),
               const SizedBox(width: 6),
               Text(
                 'Stock Bas (${items.length})',
@@ -248,13 +249,13 @@ class _LowStockSection extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFA5252).withValues(alpha: 0.1),
+                      color: AppTheme.errorColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       '${item.quantity} / ${item.threshold}',
                       style: const TextStyle(
-                        color: Color(0xFFFA5252),
+                        color: AppTheme.errorColor,
                         fontWeight: FontWeight.w600,
                         fontSize: 12,
                       ),
@@ -285,8 +286,9 @@ class _AdminSectionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     return Material(
-      color: Colors.white,
+      color: cs.cardBg,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -295,18 +297,18 @@ class _AdminSectionButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.grey.shade200),
+            border: Border.all(color: cs.outlineVariant),
           ),
           child: Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF3B5BDB).withValues(alpha: 0.08),
+                  color: cs.primary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(icon,
-                    color: const Color(0xFF3B5BDB), size: 22),
+                    color: cs.primary, size: 22),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -319,11 +321,11 @@ class _AdminSectionButton extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(subtitle,
                         style: theme.textTheme.bodySmall?.copyWith(
-                            color: Colors.grey.shade500)),
+                            color: cs.muted)),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, color: Colors.grey.shade400),
+              Icon(Icons.chevron_right, color: cs.muted),
             ],
           ),
         ),

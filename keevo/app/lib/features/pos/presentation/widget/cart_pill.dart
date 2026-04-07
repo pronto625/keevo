@@ -44,7 +44,7 @@ class CartPill extends StatelessWidget {
                   width: double.infinity,
                   decoration: BoxDecoration(
                     color: hasDraftProducts
-                        ? Colors.amber.shade700
+                        ? AppTheme.warning
                         : AppTheme.darkSurface,
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
@@ -132,7 +132,7 @@ class CartPill extends StatelessWidget {
                                   horizontal: 18, vertical: 10),
                               decoration: BoxDecoration(
                                 color: hasDraftProducts
-                                    ? Colors.amber.shade900
+                                    ? AppTheme.warning
                                     : AppTheme.primary,
                                 borderRadius: BorderRadius.circular(12),
                               ),

@@ -438,7 +438,7 @@ class _SupplierCard extends ConsumerWidget {
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: supplier.archived
-                          ? [Colors.grey.shade300, Colors.grey.shade500]
+                          ? [theme.colorScheme.outlineVariant, theme.colorScheme.onSurfaceVariant]
                           : [primary.withOpacity(0.7), primary],
                     ),
                     borderRadius: BorderRadius.circular(16),

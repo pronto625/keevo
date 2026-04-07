@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/theme/app_theme.dart';
 import '../../domain/model/dashboard_snapshot.dart';
 
 /// SalesEvolutionChart — bar chart with period filter tabs and touch tooltips.
@@ -34,8 +35,8 @@ class SalesEvolutionChart extends StatefulWidget {
 class _SalesEvolutionChartState extends State<SalesEvolutionChart> {
   int? _selectedIndex;
 
-  static const _barColor = Color(0xFF3B5BDB);
-  static const _selectedBarColor = Color(0xFF4DABF7);
+  static const _barColor = AppTheme.primary;
+  static const _selectedBarColor = AppTheme.primaryGradientEnd;
 
   static NumberFormat? _currencyFormatInstance;
   static NumberFormat get _currencyFormat =>
@@ -219,6 +220,8 @@ class _SalesEvolutionChartState extends State<SalesEvolutionChart> {
                   barColor: _barColor,
                   selectedColor: _selectedBarColor,
                   xLabels: xLabels,
+                  labelColor: colorScheme.onSurfaceVariant,
+                  gridColor: colorScheme.outline.withValues(alpha: 0.18),
                 ),
               ),
             ),
@@ -264,6 +267,8 @@ class _BarChartPainter extends CustomPainter {
   final Color barColor;
   final Color selectedColor;
   final List<String> xLabels;
+  final Color labelColor;
+  final Color gridColor;
 
   /// Left padding — reserved for y-axis labels.
   static const double kLeftPad = 44.0;
@@ -277,6 +282,8 @@ class _BarChartPainter extends CustomPainter {
     required this.barColor,
     required this.selectedColor,
     required this.xLabels,
+    required this.labelColor,
+    required this.gridColor,
   });
 
   @override
@@ -292,11 +299,11 @@ class _BarChartPainter extends CustomPainter {
     const originX = kLeftPad;
     final originY = chartH;
 
-    final labelStyle = TextStyle(fontSize: 9, color: Colors.grey[500]);
+    final labelStyle = TextStyle(fontSize: 9, color: labelColor);
 
     // ── Y-axis grid lines + labels (0, 50%, 100%) ──────────────
     final gridPaint = Paint()
-      ..color = Colors.grey.withValues(alpha: 0.18)
+      ..color = gridColor
       ..strokeWidth = 0.5;
 
     for (int level = 0; level <= 2; level++) {
