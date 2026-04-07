@@ -94,107 +94,107 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────────
   # Job 2 : iOS IPA  (macOS required)
   # ─────────────────────────────────────────────────────────────────────────────
-  build-ios:
-    name: Build iOS IPA
-    runs-on: macos-latest
+  # build-ios:
+  #   name: Build iOS IPA
+  #   runs-on: macos-latest
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
 
-      - name: Set up Flutter ${{ env.FLUTTER_VERSION }}
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: 'stable'
-          cache: true
+  #     - name: Set up Flutter ${{ env.FLUTTER_VERSION }}
+  #       uses: subosito/flutter-action@v2
+  #       with:
+  #         flutter-version: ${{ env.FLUTTER_VERSION }}
+  #         channel: 'stable'
+  #         cache: true
 
-      - name: Install dependencies
-        working-directory: keevo/app
-        run: flutter pub get
+  #     - name: Install dependencies
+  #       working-directory: keevo/app
+  #       run: flutter pub get
 
-      - name: Run code generation
-        working-directory: keevo/app
-        run: flutter pub run build_runner build --delete-conflicting-outputs
+  #     - name: Run code generation
+  #       working-directory: keevo/app
+  #       run: flutter pub run build_runner build --delete-conflicting-outputs
 
-      - name: Import distribution certificate & provisioning profile
-        env:
-          CERTIFICATE_P12_BASE64: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
-          CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
-          PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
-          KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
-        run: |
-          set -euo pipefail
-          KEYCHAIN_PATH="${RUNNER_TEMP}/keevo-signing.keychain-db"
-          security create-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
-          security default-keychain -s "${KEYCHAIN_PATH}"
-          security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
-          security set-keychain-settings -t 3600 -u "${KEYCHAIN_PATH}"
-          echo "${CERTIFICATE_P12_BASE64}" | base64 --decode > "${RUNNER_TEMP}/dist.p12"
-          security import "${RUNNER_TEMP}/dist.p12" \
-            -k "${KEYCHAIN_PATH}" \
-            -P "${CERTIFICATE_PASSWORD}" \
-            -T /usr/bin/codesign \
-            -T /usr/bin/xcodebuild
-          security set-key-partition-list \
-            -S apple-tool:,apple:,codesign: \
-            -s -k "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
-          PP_DIR="${HOME}/Library/MobileDevice/Provisioning Profiles"
-          mkdir -p "${PP_DIR}"
-          echo "${PROVISIONING_PROFILE_BASE64}" | base64 --decode > "${PP_DIR}/keevo.mobileprovision"
+  #     - name: Import distribution certificate & provisioning profile
+  #       env:
+  #         CERTIFICATE_P12_BASE64: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
+  #         CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+  #         PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+  #         KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
+  #       run: |
+  #         set -euo pipefail
+  #         KEYCHAIN_PATH="${RUNNER_TEMP}/keevo-signing.keychain-db"
+  #         security create-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
+  #         security default-keychain -s "${KEYCHAIN_PATH}"
+  #         security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
+  #         security set-keychain-settings -t 3600 -u "${KEYCHAIN_PATH}"
+  #         echo "${CERTIFICATE_P12_BASE64}" | base64 --decode > "${RUNNER_TEMP}/dist.p12"
+  #         security import "${RUNNER_TEMP}/dist.p12" \
+  #           -k "${KEYCHAIN_PATH}" \
+  #           -P "${CERTIFICATE_PASSWORD}" \
+  #           -T /usr/bin/codesign \
+  #           -T /usr/bin/xcodebuild
+  #         security set-key-partition-list \
+  #           -S apple-tool:,apple:,codesign: \
+  #           -s -k "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
+  #         PP_DIR="${HOME}/Library/MobileDevice/Provisioning Profiles"
+  #         mkdir -p "${PP_DIR}"
+  #         echo "${PROVISIONING_PROFILE_BASE64}" | base64 --decode > "${PP_DIR}/keevo.mobileprovision"
 
-      - name: Build Flutter iOS (no codesign)
-        working-directory: keevo/app
-        env:
-          APP_DOMAIN: ${{ secrets.APP_DOMAIN }}
-        run: flutter build ios --release --no-codesign --dart-define=API_BASE_URL=https://${APP_DOMAIN}
+  #     - name: Build Flutter iOS (no codesign)
+  #       working-directory: keevo/app
+  #       env:
+  #         APP_DOMAIN: ${{ secrets.APP_DOMAIN }}
+  #       run: flutter build ios --release --no-codesign --dart-define=API_BASE_URL=https://${APP_DOMAIN}
 
-      - name: Archive with Xcode
-        working-directory: keevo/app/ios
-        env:
-          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
-          IOS_PROVISIONING_PROFILE_SPECIFIER: ${{ secrets.IOS_PROVISIONING_PROFILE_SPECIFIER }}
-        run: |
-          xcodebuild archive \
-            -workspace Runner.xcworkspace \
-            -scheme Runner \
-            -configuration Release \
-            -archivePath "${RUNNER_TEMP}/keevo.xcarchive" \
-            CODE_SIGN_STYLE=Manual \
-            DEVELOPMENT_TEAM="${IOS_TEAM_ID}" \
-            PROVISIONING_PROFILE_SPECIFIER="${IOS_PROVISIONING_PROFILE_SPECIFIER}" \
-            | xcpretty || true
+  #     - name: Archive with Xcode
+  #       working-directory: keevo/app/ios
+  #       env:
+  #         IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+  #         IOS_PROVISIONING_PROFILE_SPECIFIER: ${{ secrets.IOS_PROVISIONING_PROFILE_SPECIFIER }}
+  #       run: |
+  #         xcodebuild archive \
+  #           -workspace Runner.xcworkspace \
+  #           -scheme Runner \
+  #           -configuration Release \
+  #           -archivePath "${RUNNER_TEMP}/keevo.xcarchive" \
+  #           CODE_SIGN_STYLE=Manual \
+  #           DEVELOPMENT_TEAM="${IOS_TEAM_ID}" \
+  #           PROVISIONING_PROFILE_SPECIFIER="${IOS_PROVISIONING_PROFILE_SPECIFIER}" \
+  #           | xcpretty || true
 
-      - name: Export IPA (Ad Hoc)
-        env:
-          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
-        run: |
-          cat > "${RUNNER_TEMP}/export-options.plist" << PLIST
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-            "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key><string>ad-hoc</string>
-            <key>teamID</key><string>${IOS_TEAM_ID}</string>
-            <key>compileBitcode</key><false/>
-            <key>stripSwiftSymbols</key><true/>
-          </dict>
-          </plist>
-          PLIST
-          xcodebuild -exportArchive \
-            -archivePath        "${RUNNER_TEMP}/keevo.xcarchive" \
-            -exportPath         "${RUNNER_TEMP}/ipa" \
-            -exportOptionsPlist "${RUNNER_TEMP}/export-options.plist" \
-            | xcpretty || true
-          mv "${RUNNER_TEMP}/ipa/"*.ipa "${RUNNER_TEMP}/ipa/keevo.ipa"
+  #     - name: Export IPA (Ad Hoc)
+  #       env:
+  #         IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+  #       run: |
+  #         cat > "${RUNNER_TEMP}/export-options.plist" << PLIST
+  #         <?xml version="1.0" encoding="UTF-8"?>
+  #         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  #           "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+  #         <plist version="1.0">
+  #         <dict>
+  #           <key>method</key><string>ad-hoc</string>
+  #           <key>teamID</key><string>${IOS_TEAM_ID}</string>
+  #           <key>compileBitcode</key><false/>
+  #           <key>stripSwiftSymbols</key><true/>
+  #         </dict>
+  #         </plist>
+  #         PLIST
+  #         xcodebuild -exportArchive \
+  #           -archivePath        "${RUNNER_TEMP}/keevo.xcarchive" \
+  #           -exportPath         "${RUNNER_TEMP}/ipa" \
+  #           -exportOptionsPlist "${RUNNER_TEMP}/export-options.plist" \
+  #           | xcpretty || true
+  #         mv "${RUNNER_TEMP}/ipa/"*.ipa "${RUNNER_TEMP}/ipa/keevo.ipa"
 
-      - name: Upload IPA artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-ipa
-          path: ${{ runner.temp }}/ipa/keevo.ipa
-          retention-days: 1
+  #     - name: Upload IPA artifact
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: ios-ipa
+  #         path: ${{ runner.temp }}/ipa/keevo.ipa
+  #         retention-days: 1
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Job 3 : Create GitHub Release — attach APK + IPA as assets.
@@ -207,7 +207,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build-apk
-      - build-ios
+      # - build-ios
 
     steps:
       - name: Checkout
@@ -229,11 +229,11 @@ jobs:
           name: android-apk
           path: dist/
 
-      - name: Download IPA artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ios-ipa
-          path: dist/
+      # - name: Download IPA artifact
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     name: ios-ipa
+      #     path: dist/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -254,20 +254,16 @@ jobs:
             | Plateforme | Fichier | Lien direct |
             |---|---|---|
             | Android | `keevo.apk` | [⬇ Télécharger APK](https://github.com/${{ github.repository }}/releases/latest/download/keevo.apk) |
-            | iOS (Ad Hoc) | `keevo.ipa` | [⬇ Télécharger IPA](https://github.com/${{ github.repository }}/releases/latest/download/keevo.ipa) |
 
             > **Android :** activez *Sources inconnues* (Paramètres → Sécurité) avant d'installer.
-            > **iOS :** profil Ad Hoc — l'appareil doit être enregistré dans le provisioning profile.
           files: |
             dist/keevo.apk
-            dist/keevo.ipa
 
       - name: Print download URLs
         run: |
           echo "────────────────────────────────────────────────────────────────────────"
           echo "  Release page : https://github.com/${{ github.repository }}/releases/latest"
           echo "  APK (latest) : https://github.com/${{ github.repository }}/releases/latest/download/keevo.apk"
-          echo "  IPA (latest) : https://github.com/${{ github.repository }}/releases/latest/download/keevo.ipa"
           echo "────────────────────────────────────────────────────────────────────────"
 
 # ─── Required GitHub Actions Secrets ─────────────────────────────────────────────────────────────────
