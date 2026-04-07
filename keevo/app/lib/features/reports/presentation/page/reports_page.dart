@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/di/providers.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/app_error_widget.dart';
 import '../../../pos/domain/model/day_closure_model.dart';
 import '../../../pos/presentation/provider/day_closure_providers.dart';
 import '../../../pos/presentation/widget/day_close_success_overlay.dart';
@@ -83,12 +84,7 @@ class ReportsPage extends ConsumerWidget {
                 padding: EdgeInsets.all(64),
                 child: Center(child: CircularProgressIndicator()),
               ),
-              error: (e, _) => Padding(
-                padding: const EdgeInsets.all(32),
-                child: Center(
-                    child: Text('Erreur: $e',
-                        style: const TextStyle(color: AppTheme.errorColor))),
-              ),
+              error: (e, _) => AppErrorWidget(error: e),
               data: (summary) => _buildContent(
                 context,
                 ref,
@@ -273,19 +269,19 @@ class ReportsPage extends ConsumerWidget {
               decoration: BoxDecoration(
                 color: AppTheme.warning,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.warning),
+                border: Border.all(color: AppTheme.onWarning.withOpacity(0.2)),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.warning_rounded,
-                      color: AppTheme.warning, size: 20),
+                  const Icon(Icons.warning_rounded,
+                      color: AppTheme.onWarning, size: 20),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       '${summary.pendingSalesCount} vente(s) en attente — '
                       '${_currencyFormat.format(summary.pendingSalesTotal)}',
-                      style: TextStyle(
-                        color: AppTheme.warning,
+                      style: const TextStyle(
+                        color: AppTheme.onWarning,
                         fontWeight: FontWeight.w500,
                         fontSize: 13,
                       ),

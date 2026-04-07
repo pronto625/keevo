@@ -119,7 +119,8 @@ class FcmService {
       onDidReceiveNotificationResponse: (response) {
         final deepLink = response.payload;
         if (deepLink != null && deepLink.isNotEmpty) {
-          router.go(deepLink);
+          // Use push() so OS back button returns to the previous screen.
+          router.push(deepLink);
         }
       },
     );
@@ -166,7 +167,8 @@ class FcmService {
   void _onTap(RemoteMessage message, GoRouter router) {
     final deepLink = message.data['deepLink'] as String?;
     if (deepLink != null && deepLink.isNotEmpty) {
-      router.go(deepLink);
+      // Use push() so OS back button returns to the previous screen.
+      router.push(deepLink);
     }
 
     // Mark as read if we have an ID

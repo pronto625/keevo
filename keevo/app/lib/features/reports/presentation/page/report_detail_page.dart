@@ -1,4 +1,5 @@
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/app_error_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -32,7 +33,7 @@ class ReportDetailPage extends ConsumerWidget {
       appBar: AppBar(title: const Text('Détail du rapport')),
       body: reportAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Erreur: $e')),
+        error: (e, _) => AppErrorWidget(error: e),
         data: (r) {
           if (r == null) {
             return const Center(child: Text('Rapport introuvable.'));

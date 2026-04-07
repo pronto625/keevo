@@ -1,4 +1,5 @@
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/app_error_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -26,7 +27,7 @@ class PendingSalesPage extends ConsumerWidget {
       ),
       body: pendingSalesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Erreur: $e')),
+        error: (e, _) => AppErrorWidget(error: e),
         data: (sales) {
           if (sales.isEmpty) {
             return Center(
@@ -79,12 +80,11 @@ class _PendingSaleTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: AppTheme.warning),
+        side: BorderSide(color: AppTheme.onWarning.withOpacity(0.2)),
       ),
       color: AppTheme.warning,
       child: InkWell(
@@ -97,11 +97,11 @@ class _PendingSaleTile extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppTheme.warning,
+                  color: AppTheme.onWarning.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(Icons.pending_actions,
-                    color: AppTheme.warning, size: 24),
+                child: const Icon(Icons.pending_actions,
+                    color: AppTheme.onWarning, size: 24),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -111,6 +111,7 @@ class _PendingSaleTile extends StatelessWidget {
                     Text(
                       _currencyFormat.format(sale.totalAmount),
                       style: const TextStyle(
+                        color: AppTheme.onWarning,
                         fontWeight: FontWeight.w700,
                         fontSize: 16,
                       ),
@@ -119,14 +120,14 @@ class _PendingSaleTile extends StatelessWidget {
                     Text(
                       '${sale.items.length} article${sale.items.length > 1 ? 's' : ''} · ${_dateFormat.format(sale.createdAt)}',
                       style: TextStyle(
-                        color: cs.onSurfaceVariant,
+                        color: AppTheme.onWarning.withOpacity(0.65),
                         fontSize: 13,
                       ),
                     ),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, color: cs.outline),
+              const Icon(Icons.chevron_right, color: AppTheme.onWarning),
             ],
           ),
         ),

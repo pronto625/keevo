@@ -35,6 +35,8 @@ public interface ProfitabilityRepository {
 
     /** Current catalogue cost snapshot for a product (includes price-range stats). */
     record RawProductCostRow(
+            String productName,
+            String categoryName,
             int    cataloguePrice,
             int    buyPrice,
             int    transportCost,

@@ -1,6 +1,7 @@
 import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../profitability/presentation/page/product_profitability_list_page.dart';
 import '../../../profitability/presentation/page/store_performance_page.dart';
@@ -28,6 +29,13 @@ class OwnerReportsPage extends ConsumerWidget {
       child: Scaffold(
         appBar: AppBar(
           automaticallyImplyLeading: false,
+          leading: context.canPop()
+              ? IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                      color: Colors.white),
+                  onPressed: () => context.pop(),
+                )
+              : null,
           backgroundColor: AppTheme.primary,
           title: const Text(
             'Rapports',

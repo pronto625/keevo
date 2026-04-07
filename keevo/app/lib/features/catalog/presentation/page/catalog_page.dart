@@ -1,4 +1,5 @@
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/app_error_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -78,6 +79,15 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
             pinned: true,
             elevation: 0,
             backgroundColor: Colors.transparent,
+            // Show back button when navigated from a notification deep-link.
+            leading: context.canPop()
+                ? IconButton(
+                    icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                        color: Colors.white),
+                    onPressed: () => context.pop(),
+                  )
+                : null,
+            automaticallyImplyLeading: false,
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
                 decoration: BoxDecoration(
@@ -677,7 +687,7 @@ class _CategoryManagerSheetState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e'), backgroundColor: AppTheme.errorColor),
+          SnackBar(content: Text(appErrorMessage(e)), backgroundColor: AppTheme.errorColor),
         );
       }
     } finally {
@@ -715,7 +725,7 @@ class _CategoryManagerSheetState
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-                content: Text('Erreur : $e'), backgroundColor: AppTheme.errorColor),
+                content: Text(appErrorMessage(e)), backgroundColor: AppTheme.errorColor),
           );
         }
       }
@@ -754,7 +764,7 @@ class _CategoryManagerSheetState
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-                content: Text('Erreur : $e'), backgroundColor: AppTheme.errorColor),
+                content: Text(appErrorMessage(e)), backgroundColor: AppTheme.errorColor),
           );
         }
       }
@@ -837,8 +847,7 @@ class _CategoryManagerSheetState
             child: categoriesAsync.when(
               loading: () =>
                   const Center(child: CircularProgressIndicator()),
-              error: (e, _) =>
-                  Center(child: Text('Erreur : $e')),
+              error: (e, _) => AppErrorWidget(error: e),
               data: (categories) {
                 if (categories.isEmpty) {
                   return Center(

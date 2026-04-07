@@ -1,4 +1,5 @@
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/app_error_widget.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -162,8 +163,7 @@ class _HistoryTab extends ConsumerWidget {
               itemBuilder: (_, i) => _EventTile(event: events[i]),
             ),
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) =>
-          Center(child: Text('Erreur: $e', style: const TextStyle(color: AppTheme.errorColor))),
+      error: (e, _) => AppErrorWidget(error: e),
     );
   }
 }
@@ -237,8 +237,7 @@ class _ConflitsTab extends ConsumerWidget {
               itemBuilder: (_, i) => _ConflictTile(conflict: conflicts[i]),
             ),
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) =>
-          Center(child: Text('Erreur: $e', style: const TextStyle(color: AppTheme.errorColor))),
+      error: (e, _) => AppErrorWidget(error: e),
     );
   }
 }
@@ -353,8 +352,7 @@ class _QueueTab extends ConsumerWidget {
               itemBuilder: (_, i) => _QueueTile(op: ops[i]),
             ),
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) =>
-          Center(child: Text('Erreur: $e', style: const TextStyle(color: AppTheme.errorColor))),
+      error: (e, _) => AppErrorWidget(error: e),
     );
   }
 }

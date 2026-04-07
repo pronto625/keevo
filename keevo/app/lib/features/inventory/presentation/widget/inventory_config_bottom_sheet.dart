@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widget/app_error_widget.dart';
+
 import '../../../catalog/presentation/provider/category_provider.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../../stores/presentation/provider/store_provider.dart';
@@ -59,7 +61,7 @@ class _InventoryConfigBottomSheetState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: $e')),
+          SnackBar(content: Text(appErrorMessage(e))),
         );
       }
     }
@@ -124,7 +126,7 @@ class _InventoryConfigBottomSheetState
                 onChanged: (v) => setState(() => _selectedStoreId = v),
               ),
               loading: () => const LinearProgressIndicator(),
-              error: (e, _) => Text('Erreur: $e'),
+              error: (e, _) => AppErrorInline(error: e),
             ),
             const SizedBox(height: 16),
 
@@ -170,7 +172,7 @@ class _InventoryConfigBottomSheetState
                       .toList(),
                 ),
                 loading: () => const CircularProgressIndicator(),
-                error: (e, _) => Text('Erreur: $e'),
+                error: (e, _) => AppErrorInline(error: e),
               ),
               const SizedBox(height: 16),
             ],

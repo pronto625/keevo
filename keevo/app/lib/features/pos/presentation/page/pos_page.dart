@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/storage/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/app_error_widget.dart';
 import '../../../../features/sync_indicator/presentation/widget/sync_indicator.dart';
 import '../../../catalog/presentation/provider/category_provider.dart';
 import '../../../catalog/presentation/widget/create_draft_product_bottom_sheet.dart';
@@ -130,6 +131,13 @@ class _PosPageState extends ConsumerState<PosPage> {
                 snap: true,
                 pinned: false,
                 automaticallyImplyLeading: false,
+                leading: context.canPop()
+                    ? IconButton(
+                        icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                            color: Colors.white),
+                        onPressed: () => context.pop(),
+                      )
+                    : null,
                 elevation: 0,
                 backgroundColor: AppTheme.primary,
                 flexibleSpace: FlexibleSpaceBar(
@@ -336,7 +344,7 @@ class _FrequentProductsSliver extends ConsumerWidget {
         child: Center(child: CircularProgressIndicator()),
       ),
       error: (e, _) => SliverFillRemaining(
-        child: Center(child: Text('Erreur: $e')),
+        child: AppErrorWidget(error: e),
       ),
       data: (products) {
         if (products.isEmpty) {
@@ -404,7 +412,7 @@ class _SearchResultsSliver extends ConsumerWidget {
         child: Center(child: CircularProgressIndicator()),
       ),
       error: (e, _) => SliverFillRemaining(
-        child: Center(child: Text('Erreur: $e')),
+        child: AppErrorWidget(error: e),
       ),
       data: (results) {
         if (results.isEmpty) {
@@ -617,25 +625,25 @@ class _PendingSalesBanner extends ConsumerWidget {
           decoration: BoxDecoration(
             color: AppTheme.warning,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.warning),
+            border: Border.all(color: AppTheme.onWarning.withOpacity(0.2)),
           ),
           child: Row(
             children: [
-              Icon(Icons.pending_actions_rounded,
-                  color: AppTheme.warning, size: 22),
+              const Icon(Icons.pending_actions_rounded,
+                  color: AppTheme.onWarning, size: 22),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   '$count vente${count > 1 ? 's' : ''} en attente de validation',
-                  style: TextStyle(
-                    color: AppTheme.warning,
+                  style: const TextStyle(
+                    color: AppTheme.onWarning,
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
                   ),
                 ),
               ),
-              Icon(Icons.chevron_right_rounded,
-                  color: AppTheme.warning, size: 20),
+              const Icon(Icons.chevron_right_rounded,
+                  color: AppTheme.onWarning, size: 20),
             ],
           ),
         ),

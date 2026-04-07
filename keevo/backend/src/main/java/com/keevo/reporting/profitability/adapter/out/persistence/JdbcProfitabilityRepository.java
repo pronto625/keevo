@@ -103,18 +103,24 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
 
     @Override
     public Optional<RawProductCostRow> findProductCosts(UUID productId) {
+        // LEFT JOIN so the row is returned even when the product has no sales yet.
         String sql =
-            "SELECT p.price, p.buy_price, p.transport_cost, " +
-            "  MIN(si.applied_unit_price) AS min_applied, " +
-            "  MAX(si.applied_unit_price) AS max_applied, " +
-            "  AVG(si.applied_unit_price::float) AS avg_applied " +
+            "SELECT p.name AS product_name, " +
+            "  c.name AS category_name, " +
+            "  p.price, p.buy_price, p.transport_cost, " +
+            "  COALESCE(MIN(si.applied_unit_price), 0) AS min_applied, " +
+            "  COALESCE(MAX(si.applied_unit_price), 0) AS max_applied, " +
+            "  COALESCE(AVG(si.applied_unit_price::float), 0.0) AS avg_applied " +
             "FROM products p " +
-            "JOIN sale_items si ON si.product_id = p.id " +
+            "LEFT JOIN categories c ON c.id = p.category_id " +
+            "LEFT JOIN sale_items si ON si.product_id = p.id " +
             "WHERE p.id = ?::uuid " +
-            "GROUP BY p.price, p.buy_price, p.transport_cost";
+            "GROUP BY p.name, c.name, p.price, p.buy_price, p.transport_cost";
 
         List<RawProductCostRow> result = jdbc.query(sql,
                 (rs, rowNum) -> new RawProductCostRow(
+                        rs.getString("product_name"),
+                        rs.getString("category_name"),
                         rs.getInt("price"),
                         rs.getInt("buy_price"),
                         rs.getInt("transport_cost"),

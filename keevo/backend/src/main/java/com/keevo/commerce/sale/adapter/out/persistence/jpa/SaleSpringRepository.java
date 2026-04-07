@@ -9,9 +9,17 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface SaleSpringRepository extends JpaRepository<SaleJpaEntity, UUID> {
+
+    /**
+     * Loads a sale with its items in a single JOIN FETCH query.
+     * Use this instead of findById() whenever items need to be mapped to the domain model.
+     */
+    @Query("SELECT s FROM SaleJpaEntity s LEFT JOIN FETCH s.items WHERE s.id = :id")
+    Optional<SaleJpaEntity> findByIdWithItems(@Param("id") UUID id);
 
     @Query("SELECT s FROM SaleJpaEntity s JOIN s.items i WHERE s.status = 'PENDING_VALIDATION' AND i.productId = :productId")
     List<SaleJpaEntity> findPendingByProductId(@Param("productId") UUID productId);

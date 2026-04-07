@@ -36,6 +36,13 @@ class SettingsPage extends ConsumerWidget {
             expandedHeight: 140,
             pinned: true,
             automaticallyImplyLeading: false,
+            leading: context.canPop()
+                ? IconButton(
+                    icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                        color: Colors.white),
+                    onPressed: () => context.pop(),
+                  )
+                : null,
             elevation: 0,
             backgroundColor: Colors.transparent,
             flexibleSpace: FlexibleSpaceBar(

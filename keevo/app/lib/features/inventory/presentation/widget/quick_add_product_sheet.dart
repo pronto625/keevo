@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widget/app_error_widget.dart';
+
 import '../../../catalog/presentation/provider/category_provider.dart';
 import '../../data/datasource/remote_quick_add_datasource.dart';
 import '../provider/quick_add_product_provider.dart';
@@ -386,7 +388,7 @@ class _QuickAddProductSheetState
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(
-          content: Text('Erreur : $e'),
+          content: Text(appErrorMessage(e)),
           behavior: SnackBarBehavior.floating,
         ),
       );

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/widget/app_error_widget.dart';
+
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../../stores/presentation/provider/store_provider.dart';
 import '../provider/inventory_session_provider.dart';
@@ -119,7 +121,7 @@ class InventoryLaunchPage extends ConsumerWidget {
               child: Center(child: CircularProgressIndicator()),
             ),
             error: (e, _) => SliverFillRemaining(
-              child: Center(child: Text('Erreur: $e')),
+              child: AppErrorWidget(error: e),
             ),
           ),
         ],

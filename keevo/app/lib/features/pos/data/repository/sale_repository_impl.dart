@@ -303,7 +303,7 @@ class SaleRepositoryImpl implements SaleRepository {
         'mobileMoneyRef': sale.mobileMoneyRef,
         'clientId': sale.clientId,
         'discountAmount': sale.discountAmount,
-        'status': sale.status,
+        'requestedStatus': sale.status,
         'items': sale.items
             .map((i) => {
                   'itemId': i.id,

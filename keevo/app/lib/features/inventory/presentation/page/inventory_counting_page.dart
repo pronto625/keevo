@@ -1,4 +1,5 @@
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/app_error_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -79,14 +80,7 @@ class _InventoryCountingPageState
       floatingActionButton: null,
       body: productsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, st) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text('Erreur : $e',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: theme.colorScheme.error)),
-          ),
-        ),
+        error: (e, st) => AppErrorWidget(error: e),
         data: (products) {
           final filtered = _applyFilters(products, filter, search);
           final total = products.length;

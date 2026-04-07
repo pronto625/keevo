@@ -1,4 +1,5 @@
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/app_error_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
@@ -68,9 +69,7 @@ class InventoryGapReportPage extends ConsumerWidget {
       ),
       body: reportAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, st) => Center(
-          child: Text('Erreur: $e'),
-        ),
+        error: (e, st) => AppErrorWidget(error: e),
         data: (report) => _buildReportBody(context, ref, report),
       ),
       bottomNavigationBar: reportAsync.whenOrNull(

@@ -61,16 +61,13 @@ class ProfitabilityRepositoryImpl implements ProfitabilityRepository {
     required ProfitabilityParams params,
   }) async {
     if (await _connectivity.isOnline()) {
-      try {
-        return await _remote.fetchProductDetail(
-          productId: productId,
-          from: _fmt(params.from),
-          to: _fmt(params.to),
-        );
-      } catch (e) {
-        dev.log('Remote profitability detail failed, using local: $e',
-            name: 'ProfitabilityRepository');
-      }
+      // Re-throw API errors (4xx) — they are intentional domain responses.
+      // Only fall back to local for network/connectivity errors.
+      return await _remote.fetchProductDetail(
+        productId: productId,
+        from: _fmt(params.from),
+        to: _fmt(params.to),
+      );
     }
     final detail = await _local.getProductProfitabilityDetail(
       productId: productId,
@@ -78,7 +75,7 @@ class ProfitabilityRepositoryImpl implements ProfitabilityRepository {
       to: params.to,
     );
     if (detail == null) {
-      throw Exception('Product not found: $productId');
+      throw Exception('Aucune donnée disponible hors ligne pour ce produit.');
     }
     return detail;
   }

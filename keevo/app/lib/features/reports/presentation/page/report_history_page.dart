@@ -1,4 +1,5 @@
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/app_error_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -66,22 +67,9 @@ class _ReportHistoryPageState extends ConsumerState<ReportHistoryPage> {
           Expanded(
             child: reportsAsync.when(
               loading: () => const _ReportListSkeleton(),
-              error: (e, _) => Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error_outline,
-                        size: 48, color: AppTheme.errorColor),
-                    const SizedBox(height: 12),
-                    Text('Erreur: $e',
-                        style: const TextStyle(color: AppTheme.errorColor)),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () => ref.invalidate(reportHistoryProvider),
-                      child: const Text('Réessayer'),
-                    ),
-                  ],
-                ),
+              error: (e, _) => AppErrorWidget(
+                error: e,
+                onRetry: () => ref.invalidate(reportHistoryProvider),
               ),
               data: (reports) {
                 if (reports.isEmpty) {

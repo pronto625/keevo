@@ -117,18 +117,19 @@ class CartBottomSheet extends ConsumerWidget {
                 decoration: BoxDecoration(
                   color: AppTheme.warning,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.warning),
+                  border: Border.all(color: AppTheme.onWarning.withValues(alpha: 0.2)),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline, color: AppTheme.warning, size: 20),
+                    Icon(Icons.info_outline, color: AppTheme.onWarning, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'Cette vente contient des produits en brouillon. Elle sera validée quand l\'admin les confirmera.',
                         style: TextStyle(
-                          color: AppTheme.warning,
+                          color: AppTheme.onWarning,
                           fontSize: 12,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ),
@@ -364,7 +365,7 @@ class _CartItemTileState extends State<_CartItemTile> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             SizedBox(
-                              width: 80,
+                              width: 110,
                               child: TextField(
                                 controller: _controller,
                                 keyboardType: TextInputType.number,
@@ -402,10 +403,13 @@ class _CartItemTileState extends State<_CartItemTile> {
                             children: [
                               Text(
                                 _currencyFormat.format(item.appliedUnitPrice),
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: cs.onSurfaceVariant,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  color: AppTheme.primary,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
+                              const SizedBox(width: 4),
+                              Icon(Icons.edit_rounded, size: 14, color: cs.onSurfaceVariant),
                               if (item.isPriceOverridden)
                                 Padding(
                                   padding: const EdgeInsets.only(left: 6),

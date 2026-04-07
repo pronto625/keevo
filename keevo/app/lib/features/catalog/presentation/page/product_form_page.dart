@@ -1,4 +1,5 @@
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/app_error_widget.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -338,7 +339,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
               children: [
                 const Icon(Icons.error_rounded, color: Colors.white, size: 20),
                 const SizedBox(width: 12),
-                Expanded(child: Text('Erreur inattendue : $e')),
+                Expanded(child: Text(appErrorMessage(e))),
               ],
             ),
             backgroundColor: AppTheme.errorColor,
@@ -483,7 +484,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
               child: SlideTransition(
                 position: _slideAnimation,
                 child: Container(
-                  margin: const EdgeInsets.all(20),
+                  margin: const EdgeInsets.symmetric(vertical: 16),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.surface,
                     borderRadius: BorderRadius.circular(24),
@@ -496,7 +497,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
                     ],
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.all(24),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
                     child: Form(
                       key: _formKey,
                       child: Column(

@@ -27,7 +27,7 @@ class NotificationBellWidget extends ConsumerWidget {
         backgroundColor: AppTheme.errorColor,
         child: const Icon(Icons.notifications_outlined),
       ),
-      onPressed: () => context.go('/notifications'),
+      onPressed: () => context.push('/notifications'),
       tooltip: 'Notifications',
     );
   }

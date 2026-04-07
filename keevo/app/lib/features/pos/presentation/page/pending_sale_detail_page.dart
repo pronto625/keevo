@@ -1,4 +1,5 @@
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/app_error_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -65,31 +66,34 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
             ),
             child: Column(
               children: [
-                Icon(Icons.pending_actions,
-                    size: 40, color: AppTheme.warning),
+                const Icon(Icons.pending_actions,
+                    size: 40, color: AppTheme.onWarning),
                 const SizedBox(height: 8),
                 Text(
                   _currencyFormat.format(sale.totalAmount),
                   style: const TextStyle(
-                      fontSize: 28, fontWeight: FontWeight.w800),
+                      color: AppTheme.onWarning,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   _dateFormat.format(sale.createdAt),
-                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  style: TextStyle(
+                      color: AppTheme.onWarning.withOpacity(0.65)),
                 ),
                 const SizedBox(height: 4),
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: AppTheme.warning,
+                    color: AppTheme.onWarning.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text(
+                  child: const Text(
                     'EN ATTENTE DE VALIDATION',
                     style: TextStyle(
-                      color: AppTheme.warning,
+                      color: AppTheme.onWarning,
                       fontWeight: FontWeight.w600,
                       fontSize: 12,
                     ),
@@ -153,6 +157,7 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
                             onPressed: () => _showValidateDialog(sale.id),
                             style: FilledButton.styleFrom(
                               backgroundColor: AppTheme.warning,
+                              foregroundColor: AppTheme.onWarning,
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12)),
@@ -172,28 +177,19 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
   }
 
   void _showValidateDialog(String saleId) {
-    final controller = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Valider la vente'),
-        content: TextField(
-          controller: controller,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            hintText: 'Justification (optionnel)',
-            border: OutlineInputBorder(),
-          ),
-        ),
+        content: const Text('Confirmer la validation de cette vente ?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Retour')),
           FilledButton(
             onPressed: () {
-              final text = controller.text.trim();
               Navigator.pop(ctx);
-              _doValidate(saleId, text);
+              _doValidate(saleId, '');
             },
             child: const Text('Confirmer'),
           ),
@@ -203,19 +199,11 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
   }
 
   void _showCancelDialog(String saleId) {
-    final controller = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Annuler la vente'),
-        content: TextField(
-          controller: controller,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            hintText: 'Justification (optionnel)',
-            border: OutlineInputBorder(),
-          ),
-        ),
+        content: const Text('Cette action est irréversible. Confirmer l’annulation ?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx),
@@ -223,9 +211,8 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppTheme.errorColor),
             onPressed: () {
-              final text = controller.text.trim();
               Navigator.pop(ctx);
-              _doCancel(saleId, text);
+              _doCancel(saleId, '');
             },
             child: const Text('Confirmer annulation'),
           ),
@@ -301,7 +288,7 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: $e')),
+          SnackBar(content: Text(appErrorMessage(e))),
         );
       }
     } finally {
@@ -380,7 +367,7 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
                   if (ctx.mounted) {
                     ScaffoldMessenger.of(ctx).showSnackBar(
                       SnackBar(
-                        content: Text('Erreur promotion: $e'),
+                        content: Text(appErrorMessage(e)),
                         backgroundColor: AppTheme.errorColor,
                       ),
                     );
@@ -399,7 +386,8 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
         ),
       );
     } finally {
-      stockController.dispose();
+      // Defer dispose so the TextField's animation completes before releasing the controller.
+      WidgetsBinding.instance.addPostFrameCallback((_) => stockController.dispose());
     }
   }
 
@@ -417,7 +405,7 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: $e')),
+          SnackBar(content: Text(appErrorMessage(e))),
         );
       }
     } finally {

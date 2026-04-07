@@ -19,6 +19,8 @@ class AppTheme {
   static const Color secondary = Color(0xFFFF6B6B);
   static const Color success = Color(0xFF51CF66);
   static const Color warning = Color(0xFFFCC419);
+  /// Couleur de texte/icône accessible sur fond [warning] (ambre).
+  static const Color onWarning = Color(0xFF4A2C00);
   static const Color errorColor = Color(0xFFFA5252);
   static const Color darkSurface = Color(0xFF0D1B2A);
 

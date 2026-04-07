@@ -1,3 +1,5 @@
+import 'dart:math' show min;
+
 import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
@@ -28,14 +30,19 @@ class MarginSparkline extends StatelessWidget {
       );
     }
 
-    return SizedBox(
-      height: 60,
-      child: CustomPaint(
-        painter: _SparklinePainter(
-          entries: entries,
-          zeroLineColor: Theme.of(context).colorScheme.outlineVariant,
+    final cs = Theme.of(context).colorScheme;
+    return ClipRect(
+      child: SizedBox(
+        height: 60,
+        child: CustomPaint(
+          painter: _SparklinePainter(
+            entries: entries,
+            positiveColor: AppTheme.success,
+            negativeColor: cs.error,
+            zeroLineColor: cs.outlineVariant,
+          ),
+          child: const SizedBox.expand(),
         ),
-        child: const SizedBox.expand(),
       ),
     );
   }
@@ -43,9 +50,16 @@ class MarginSparkline extends StatelessWidget {
 
 class _SparklinePainter extends CustomPainter {
   final List<DailyMarginEntry> entries;
+  final Color positiveColor;
+  final Color negativeColor;
   final Color zeroLineColor;
 
-  _SparklinePainter({required this.entries, required this.zeroLineColor});
+  _SparklinePainter({
+    required this.entries,
+    required this.positiveColor,
+    required this.negativeColor,
+    required this.zeroLineColor,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -55,16 +69,23 @@ class _SparklinePainter extends CustomPainter {
     if (maxVal == 0) return;
 
     final barCount = entries.length;
-    final barWidth = size.width / (barCount * 2 - 1);
+    // Cap bar width so the sparkline stays readable with few data points.
+    const maxBarWidth = 20.0;
+    final rawBarWidth = size.width / (barCount * 2 - 1);
+    final barWidth = min(rawBarWidth, maxBarWidth);
     final gap = barWidth;
     final midY = size.height / 2;
 
+    // Clamp bar height so bars never overflow the widget bounds.
+    // Maximum half-height is 90% of midY so bars always stay in [0, size.height].
+    final maxPaint = midY * 0.9;
+
     for (int i = 0; i < barCount; i++) {
       final margin = entries[i].marginXaf;
-      final barColor = margin >= 0 ? AppTheme.success : AppTheme.errorColor;
+      final barColor = margin >= 0 ? positiveColor : negativeColor;
       final paint = Paint()..color = barColor..style = PaintingStyle.fill;
 
-      final barHeight = (margin.abs() / maxVal) * (size.height * 0.8);
+      final barHeight = (margin.abs() / maxVal) * maxPaint;
       final x = i * (barWidth + gap);
 
       final rect = margin >= 0

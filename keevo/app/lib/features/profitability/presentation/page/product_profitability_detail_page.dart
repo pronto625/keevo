@@ -70,7 +70,7 @@ class ProductProfitabilityDetailPage extends ConsumerWidget {
               child: Center(child: CircularProgressIndicator()),
             ),
             error: (e, _) => SliverFillRemaining(
-              child: Center(child: Text('Erreur: $e')),
+              child: _ErrorState(error: e),
             ),
             data: (detail) => SliverList(
               delegate: SliverChildListDelegate([
@@ -261,4 +261,42 @@ class _MetricItem extends StatelessWidget {
                   color: valueColor)),
         ],
       );
+}
+
+class _ErrorState extends StatelessWidget {
+  final Object error;
+  const _ErrorState({required this.error});
+
+  String _message() {
+    final msg = error.toString();
+    if (msg.contains('PRODUCT_NOT_FOUND') || msg.contains('introuvable')) {
+      return 'Ce produit est introuvable ou a été supprimé.';
+    }
+    if (msg.contains('hors ligne') || msg.contains('offline') || msg.contains('SocketException')) {
+      return 'Pas de connexion — données indisponibles hors ligne.';
+    }
+    return 'Impossible de charger les données. Réessayez plus tard.';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline_rounded, size: 56, color: cs.error),
+            const SizedBox(height: 16),
+            Text(
+              _message(),
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 15, color: cs.onSurfaceVariant),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

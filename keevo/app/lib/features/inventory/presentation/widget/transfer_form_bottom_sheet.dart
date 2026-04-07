@@ -1,4 +1,5 @@
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/app_error_widget.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -296,8 +297,7 @@ class _TransferFormBottomSheetState
                       productsAsync.when(
                         loading: () => LinearProgressIndicator(
                             color: cs.primary, backgroundColor: cs.primaryContainer),
-                        error: (e, _) => Text('Erreur produits: $e',
-                            style: TextStyle(color: cs.error)),
+                        error: (e, _) => AppErrorInline(error: e),
                         data: (products) =>
                             DropdownButtonFormField<ProductModel>(
                           value: _selectedProduct,

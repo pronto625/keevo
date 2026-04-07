@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widget/app_error_widget.dart';
+
 import '../../../../core/theme/app_theme.dart';
 import '../../../../features/settings/presentation/widget/plan_limit_bottom_sheet.dart';
 import '../../domain/exception/store_exception.dart';
@@ -225,7 +227,7 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
               child: Center(child: CircularProgressIndicator()),
             ),
             error: (err, _) => SliverFillRemaining(
-              child: Center(child: Text('Erreur: $err')),
+              child: AppErrorWidget(error: err),
             ),
             data: (stores) {
               if (stores.isEmpty) {

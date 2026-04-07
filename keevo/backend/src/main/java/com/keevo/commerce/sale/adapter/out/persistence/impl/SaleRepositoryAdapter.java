@@ -37,7 +37,7 @@ public class SaleRepositoryAdapter implements SaleRepository {
 
     @Override
     public Optional<Sale> findById(UUID saleId) {
-        return springRepository.findById(saleId).map(this::toDomain);
+        return springRepository.findByIdWithItems(saleId).map(this::toDomain);
     }
 
     // ── Mapping ───────────────────────────────────────────────

@@ -1,7 +1,6 @@
 package com.keevo.messaging.notification.application.listener;
 
 import com.keevo.catalog.product.domain.event.CsvImportCompletedEvent;
-import com.keevo.catalog.product.domain.event.ProductCreatedProgressivelyEvent;
 import com.keevo.messaging.notification.domain.model.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationPort;
 import org.slf4j.Logger;
@@ -13,17 +12,15 @@ import org.springframework.stereotype.Component;
 import java.util.Map;
 
 /**
- * DraftProductNotificationListener — handles domain events related to draft products
- * and CSV import completion, then dispatches notifications via {@link NotificationPort}.
+ * DraftProductNotificationListener — handles CSV import completion events and dispatches
+ * a consolidated notification via {@link NotificationPort}.
  *
- * <p>Async: each notification is dispatched on a separate thread-pool thread.
- * ({@code @EnableAsync} required — see {@link com.keevo.shared.infrastructure.config.AsyncConfig}).
+ * <p>The individual draft-product notification (one per product) has been intentionally
+ * removed. The owner is now notified at the more meaningful moment: when a sale containing
+ * draft products is submitted as PENDING_VALIDATION (see
+ * {@link SaleDraftValidatedNotificationListener#onSalePendingValidation}).
  *
- * <p>Owner self-notification: if the OWNER creates a draft, a notification IS sent as a
- * reminder to validate the product. This is intentional ("Sérénité par défaut" — both
- * owner and employee drafts trigger the validation reminder).
- *
- * <p>Story 2.4 — AC9 (draft notification), AC9 CSV batch notification.
+ * <p>Story 2.4 — AC9 CSV batch notification.
  */
 @Component
 public class DraftProductNotificationListener {
@@ -34,38 +31,6 @@ public class DraftProductNotificationListener {
 
     public DraftProductNotificationListener(NotificationPort notificationPort) {
         this.notificationPort = notificationPort;
-    }
-
-    /**
-     * AC9: Notify the owner when a DRAFT product is created (by self or by employee).
-     * Owner self-notification is intentional — acts as a reminder to validate.
-     */
-    @Async
-    @EventListener
-    public void onDraftCreated(ProductCreatedProgressivelyEvent event) {
-        log.info("[DRAFT] New draft '{}' by {} (role={}) in tenant {}",
-                event.productName(), event.actorId(), event.actorRole(), event.tenantId());
-
-        try {
-            String body = event.actorName() + " a enregistré un nouveau produit en brouillon : '"
-                    + event.productName() + "' — Validez-le pour l'activer dans votre catalogue";
-
-            notificationPort.notifyOwners(event.tenantId(), NotificationPayload.of(
-                    "DRAFT_PRODUCT_PENDING_VALIDATION",
-                    "\uD83D\uDD36 Produit en attente de validation",
-                    body,
-                    "/products/" + event.productId() + "/edit",
-                    Map.of(
-                            "productId",   event.productId().toString(),
-                            "productName", event.productName(),
-                            "tenantId",    event.tenantId()
-                    )
-            ));
-        } catch (Exception e) {
-            // Best-effort — draft creation must never fail due to notification error
-            log.warn("[NOTIFICATION] Failed to notify owners for draft '{}': {}",
-                    event.productName(), e.getMessage());
-        }
     }
 
     /**

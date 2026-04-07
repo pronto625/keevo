@@ -55,36 +55,45 @@ public class ProfitabilityReportBuilder {
      * @throws DomainException PRODUCT_NOT_FOUND if no cost data found for the product.
      */
     public ProductProfitabilityDetail buildDetail(ProfitabilityQuery query, UUID productId) {
-        // Re-use buildEntries filtered to a specific product via a targeted query
-        var rows = repo.findRawByPeriod(
-                query.tenantId(), query.from(), query.to(), query.storeId());
-
-        var productRow = rows.stream()
-                .filter(r -> r.productId().equals(productId))
-                .findFirst()
+        // Fetch product cost info first — throws PRODUCT_NOT_FOUND only if product doesn't exist.
+        var costs = repo.findProductCosts(productId)
                 .orElseThrow(() -> new DomainException("PRODUCT_NOT_FOUND"));
 
-        var entry = toEntry(productRow, query.storeId());
-
-        var costsOpt = repo.findProductCosts(productId);
-        var costs = costsOpt.orElseThrow(() -> new DomainException("PRODUCT_NOT_FOUND"));
-
-        List<RawDailyMarginRow> dailyRows = repo.findDailyMarginLast7(
-                query.tenantId(), productId, query.to());
-
-        List<DailyMarginEntry> sparkline = dailyRows.stream()
+        List<DailyMarginEntry> sparkline = repo.findDailyMarginLast7(
+                query.tenantId(), productId, query.to()).stream()
                 .map(r -> new DailyMarginEntry(r.date(), r.dailyMargin()))
                 .toList();
 
-        return new ProductProfitabilityDetail(
-                entry.productId(), entry.productName(), entry.categoryName(),
-                entry.unitsSold(), entry.totalRevenue(), entry.totalCost(),
-                entry.grossMarginXaf(), entry.marginPercent(), entry.isLoss(), entry.storeId(),
-                costs.cataloguePrice(), costs.buyPrice(), costs.transportCost(),
-                costs.minAppliedPrice(), costs.maxAppliedPrice(), costs.avgAppliedPrice(),
-                sparkline,
-                null, null, 0   // topStore populated at service layer if multi-store
-        );
+        // Look for sales data in the requested period.
+        var rows = repo.findRawByPeriod(
+                query.tenantId(), query.from(), query.to(), query.storeId());
+        var productRowOpt = rows.stream()
+                .filter(r -> r.productId().equals(productId))
+                .findFirst();
+
+        if (productRowOpt.isPresent()) {
+            // Sales found: compute full metrics.
+            var entry = toEntry(productRowOpt.get(), query.storeId());
+            return new ProductProfitabilityDetail(
+                    entry.productId(), entry.productName(), entry.categoryName(),
+                    entry.unitsSold(), entry.totalRevenue(), entry.totalCost(),
+                    entry.grossMarginXaf(), entry.marginPercent(), entry.isLoss(), entry.storeId(),
+                    costs.cataloguePrice(), costs.buyPrice(), costs.transportCost(),
+                    costs.minAppliedPrice(), costs.maxAppliedPrice(), costs.avgAppliedPrice(),
+                    sparkline,
+                    null, null, 0
+            );
+        } else {
+            // Product exists but no completed sales in this period: return zero metrics.
+            return new ProductProfitabilityDetail(
+                    productId, costs.productName(), costs.categoryName(),
+                    0, 0L, 0L, 0L, 0.0, false, query.storeId(),
+                    costs.cataloguePrice(), costs.buyPrice(), costs.transportCost(),
+                    costs.minAppliedPrice(), costs.maxAppliedPrice(), costs.avgAppliedPrice(),
+                    sparkline,
+                    null, null, 0
+            );
+        }
     }
 
     // ── private helpers ──────────────────────────────────────────────────────

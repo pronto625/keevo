@@ -362,7 +362,11 @@ class ProductRepositoryImpl implements ProductRepository {
       await _local.upsert(model);
       return model;
     } catch (e) {
-      if (e is ProductException) rethrow;
+      // Only rethrow server-side errors (4xx/5xx with HTTP response).
+      // When DioException has no response (connection refused, timeout, SSL),
+      // _mapError() sets statusCode: null — we fall through to local draft
+      // creation so the POS keeps working offline.
+      if (e is ProductException && e.statusCode != null) rethrow;
       // Offline fallback: write locally as DRAFT, sync queue will push later.
       return _local.insertDraft(
         name: name,
