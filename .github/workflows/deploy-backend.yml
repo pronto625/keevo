@@ -109,7 +109,7 @@ jobs:
             echo "→ Writing RSA key pair for JWT…"
             printf '%s\n' "${JWT_PRIVATE_KEY_PEM}" > keys/private_key.pem
             printf '%s\n' "${JWT_PUBLIC_KEY_PEM}"  > keys/public_key.pem
-            chmod 600 keys/private_key.pem keys/public_key.pem
+            chmod 644 keys/private_key.pem keys/public_key.pem
 
             echo "→ Authenticating with GHCR…"
             echo "${GHCR_PAT}" | docker login ghcr.io -u "${GH_ACTOR}" --password-stdin
