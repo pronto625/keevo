@@ -8,6 +8,7 @@ import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.google.firebase.messaging.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
@@ -33,9 +34,9 @@ public class FcmNotificationAdapter implements NotificationPort {
     private final FirebaseMessaging firebaseMessaging;
     private final DeviceTokenRepository deviceTokenRepository;
 
-    public FcmNotificationAdapter(FirebaseMessaging firebaseMessaging,
+    public FcmNotificationAdapter(ObjectProvider<FirebaseMessaging> firebaseMessagingProvider,
                                   DeviceTokenRepository deviceTokenRepository) {
-        this.firebaseMessaging = firebaseMessaging;
+        this.firebaseMessaging = firebaseMessagingProvider.getIfAvailable();
         this.deviceTokenRepository = deviceTokenRepository;
     }
 

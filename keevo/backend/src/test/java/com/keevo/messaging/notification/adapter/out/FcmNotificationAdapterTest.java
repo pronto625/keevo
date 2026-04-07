@@ -5,12 +5,13 @@ import com.keevo.messaging.notification.domain.model.DevicePlatform;
 import com.keevo.messaging.notification.domain.model.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.DeviceTokenRepository;
 import com.google.firebase.messaging.*;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.time.Instant;
 import java.util.List;
@@ -30,8 +31,15 @@ class FcmNotificationAdapterTest {
     @Mock
     private DeviceTokenRepository deviceTokenRepository;
 
-    @InjectMocks
     private FcmNotificationAdapter adapter;
+
+    @BeforeEach
+    void setUp() {
+        @SuppressWarnings("unchecked")
+        ObjectProvider<FirebaseMessaging> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(firebaseMessaging);
+        adapter = new FcmNotificationAdapter(provider, deviceTokenRepository);
+    }
 
     private DeviceToken makeToken(String token) {
         return new DeviceToken(UUID.randomUUID(), UUID.randomUUID(), token,
