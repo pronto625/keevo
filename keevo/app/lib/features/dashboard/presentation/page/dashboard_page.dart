@@ -250,7 +250,7 @@ class _MetricGrid extends ConsumerWidget {
             crossAxisCount: crossAxisCount,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            childAspectRatio: 1.5,
+            childAspectRatio: 1.4,
             mainAxisSpacing: 4,
             crossAxisSpacing: 4,
             children: [

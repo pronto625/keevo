@@ -539,6 +539,7 @@ class _ProductListView extends ConsumerWidget {
     };
 
     return listAsync.when(
+      skipLoadingOnReload: true,
       loading: () =>
           const Center(child: CircularProgressIndicator()),
       error: (error, _) => Center(

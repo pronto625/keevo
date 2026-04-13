@@ -7,6 +7,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/di/providers.dart';
 import '../../../../core/network/auth_interceptor.dart';
+import '../../../../core/network/retry_interceptor.dart';
 import '../../../../core/router/app_router.dart';
 import '../../data/datasource/remote_auth_datasource.dart';
 import '../../data/repository/auth_repository_impl.dart';
@@ -45,7 +46,8 @@ String? _extractFirstNameFromJwt(String accessToken) {
 /// Base API URL — replace with environment-based config in Story 1.3.
 const _apiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://10.0.3.2:4500', // local dev (Genymotion); prod: --dart-define=API_BASE_URL=https://<domain>
+  // defaultValue: 'http://10.0.3.2:4500', 
+  defaultValue: 'http://localhost:4500',// local dev (Genymotion); prod: --dart-define=API_BASE_URL=https://<domain>
 );
 
 /// Secure storage — singleton instance (AC5).
@@ -67,6 +69,7 @@ final _refreshDioProvider = Provider<Dio>((ref) {
     receiveTimeout: const Duration(seconds: 10),
     headers: const {'Content-Type': 'application/json'},
   ));
+  dio.interceptors.add(RetryOnConnectionClosedInterceptor(dio));
   ref.onDispose(dio.close);
   return dio;
 });
@@ -80,6 +83,9 @@ final dioProvider = Provider<Dio>((ref) {
     receiveTimeout: const Duration(seconds: 10),
     headers: const {'Content-Type': 'application/json'},
   ));
+
+  // Retry once on HTTP keep-alive connection-closed errors before giving up.
+  dio.interceptors.add(RetryOnConnectionClosedInterceptor(dio));
 
   // AC3: JWT interceptor — injects token + handles 401 TOKEN_EXPIRED refresh
   dio.interceptors.add(AuthInterceptor(

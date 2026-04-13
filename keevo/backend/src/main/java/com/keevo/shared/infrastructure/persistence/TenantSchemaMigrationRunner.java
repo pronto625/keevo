@@ -111,6 +111,20 @@ public class TenantSchemaMigrationRunner implements ApplicationRunner {
             stmt.execute(TenantSchemaProvisioner.DDL_NOTIFICATION_COOLDOWNS_IDX_TYPE_STORE);
             stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_TREND_NOTIFICATION);
 
+            // Migration M5 (Story 4.1 / 4.2 / 4.3): sales column migrations
+            stmt.execute(TenantSchemaProvisioner.DDL_SALES_MIGRATE_STATUS);
+            stmt.execute(TenantSchemaProvisioner.DDL_SALES_MIGRATE_OCCURRED_AT);
+            stmt.execute(TenantSchemaProvisioner.DDL_SALES_DROP_STATUS_CHECK);
+            stmt.execute(TenantSchemaProvisioner.DDL_SALES_ADD_STATUS_CHECK_V2);
+            stmt.execute(TenantSchemaProvisioner.DDL_SALES_MIGRATE_DISCOUNT_AMOUNT);
+            stmt.execute(TenantSchemaProvisioner.DDL_SALE_ITEMS);             // CREATE TABLE IF NOT EXISTS
+            stmt.execute(TenantSchemaProvisioner.DDL_SALE_ITEMS_IDX_SALE);
+            stmt.execute(TenantSchemaProvisioner.DDL_SALE_ITEMS_MIGRATE_CATALOGUE_PRICE);
+
+            // Migration M6 (Story 5.2): updated_at for delta-pull sync
+            stmt.execute(TenantSchemaProvisioner.DDL_SALES_MIGRATE_UPDATED_AT);
+            stmt.execute(TenantSchemaProvisioner.DDL_SALE_ITEMS_MIGRATE_UPDATED_AT);
+
             stmt.execute("SET search_path TO public");
         }
     }

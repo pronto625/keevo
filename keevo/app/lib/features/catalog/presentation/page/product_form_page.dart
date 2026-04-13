@@ -285,6 +285,12 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
       }
 
       if (mounted) {
+        // Invalidate all product list providers so the catalog page refreshes
+        // immediately when we pop back, regardless of GoRouter's shell lifecycle.
+        ref.invalidate(productListProvider);
+        ref.invalidate(archivedProductListProvider);
+        ref.invalidate(outOfStockProductListProvider);
+        ref.invalidate(lowStockProductListProvider);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(

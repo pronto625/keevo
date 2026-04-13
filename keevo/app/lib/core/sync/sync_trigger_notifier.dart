@@ -11,9 +11,12 @@ import '../../features/catalog/presentation/provider/category_provider.dart';
 import '../../features/catalog/presentation/provider/product_provider.dart';
 import '../../features/catalog/presentation/provider/stock_provider.dart';
 import '../../features/contact/presentation/provider/contact_provider.dart';
+import '../../features/dashboard/presentation/provider/dashboard_providers.dart';
 import '../../features/inventory/presentation/provider/global_stock_provider.dart';
+import '../../features/pos/presentation/provider/day_closure_providers.dart';
 import '../../features/reports/presentation/provider/report_history_providers.dart';
 import '../../features/stores/presentation/provider/store_provider.dart';
+import '../../features/team/presentation/provider/employee_provider.dart';
 import '../di/providers.dart';
 import '../storage/app_constants.dart';
 import 'sync_gate_provider.dart';
@@ -221,16 +224,33 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
 
   /// Invalidate all Riverpod providers for entity types refreshed by pull.
   void _invalidateAllProviders() {
+    // ── Catalog ───────────────────────────────────────────────────────────
     ref.invalidate(stockNotifierProvider);
     ref.invalidate(productListForPickerProvider);
     ref.invalidate(productListProvider);
-    ref.invalidate(globalStockOverviewProvider);
-    ref.invalidate(storeStockDetailProvider);
+    ref.invalidate(archivedProductListProvider);
+    ref.invalidate(outOfStockProductListProvider);
+    ref.invalidate(lowStockProductListProvider);
     ref.invalidate(categoriesProvider);
+    // ── Contacts ─────────────────────────────────────────────────────────
     ref.invalidate(clientListNotifierProvider);
     ref.invalidate(supplierListNotifierProvider);
+    // ── Stores ───────────────────────────────────────────────────────────
     ref.invalidate(storeListNotifierProvider);
-    ref.invalidate(reportHistoryProvider());
+    // ── Inventory ────────────────────────────────────────────────────────
+    ref.invalidate(globalStockOverviewProvider);
+    ref.invalidate(storeStockDetailProvider);
+    // ── Dashboard ────────────────────────────────────────────────────────
+    ref.invalidate(dashboardSnapshotProvider);
+    // ── Team ─────────────────────────────────────────────────────────────
+    ref.invalidate(employeeListProvider);
+    // ── Reports & Day closure ─────────────────────────────────────────────
+    ref.invalidate(reportHistoryProvider);
+    ref.invalidate(todaySummaryProvider);
+    ref.invalidate(dayClosureStateProvider);
+    ref.invalidate(todaySalesCountProvider);
+    ref.invalidate(lastClosureProvider);
+    ref.invalidate(salesHistoryProvider);
   }
 
   void _scheduleRetry() {

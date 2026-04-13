@@ -29,6 +29,9 @@ public class StockLevelJpaEntity {
     @Column(name = "quantity", nullable = false)
     private Integer quantity = 0;
 
+    @Column(name = "minimum_threshold", nullable = false)
+    private Integer minimumThreshold = 0;
+
     @Column(name = "updated_at", nullable = false, columnDefinition = "TIMESTAMPTZ")
     private Instant updatedAt;
 
@@ -36,12 +39,13 @@ public class StockLevelJpaEntity {
 
     public StockLevelJpaEntity(UUID id, UUID productId, UUID variantId, UUID storeId,
                                 Integer quantity, Instant updatedAt) {
-        this.id        = id;
-        this.productId = productId;
-        this.variantId = variantId;
-        this.storeId   = storeId;
-        this.quantity  = quantity != null ? quantity : 0;
-        this.updatedAt = updatedAt;
+        this.id               = id;
+        this.productId        = productId;
+        this.variantId        = variantId;
+        this.storeId          = storeId;
+        this.quantity         = quantity != null ? quantity : 0;
+        this.minimumThreshold = 0;
+        this.updatedAt        = updatedAt;
     }
 
     public UUID getId()             { return id; }
@@ -58,6 +62,9 @@ public class StockLevelJpaEntity {
 
     public Integer getQuantity()                { return quantity; }
     public void setQuantity(Integer quantity)   { this.quantity = quantity; }
+
+    public Integer getMinimumThreshold()                        { return minimumThreshold; }
+    public void setMinimumThreshold(Integer minimumThreshold)   { this.minimumThreshold = minimumThreshold; }
 
     public Instant getUpdatedAt()               { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }

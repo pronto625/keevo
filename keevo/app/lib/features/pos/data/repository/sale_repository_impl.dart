@@ -128,6 +128,22 @@ class SaleRepositoryImpl implements SaleRepository {
 
   @override
   Future<List<Sale>> getPendingSales(String? storeId) async {
+    // Online-first: fetch from backend (authoritative source for OWNER).
+    // PENDING_VALIDATION sales may exist on the server without being in the
+    // local DB (created by another device, or sync pull not yet received).
+    if (await _connectivity.isOnline()) {
+      try {
+        final remoteSales = await _remote.getPendingSales();
+        // Filter by storeId if provided (OWNER with active store selected).
+        if (storeId != null) {
+          return remoteSales.where((s) => s.storeId == storeId).toList();
+        }
+        return remoteSales;
+      } catch (_) {
+        // Remote unavailable — fall through to local
+      }
+    }
+    // Offline fallback: read from local Drift DB.
     final query = _db.select(_db.sales)
       ..where((s) {
         final cond = s.status.equals('PENDING_VALIDATION');
@@ -182,16 +198,54 @@ class SaleRepositoryImpl implements SaleRepository {
   Future<void> validateSale(String saleId, String justification,
       {Map<String, String>? productIdRemappings,
       Map<String, int>? initialStockEntries}) async {
-    await _remote.validateSale(saleId, justification,
-        productIdRemappings: productIdRemappings,
-        initialStockEntries: initialStockEntries);
+    if (await _connectivity.isOnline()) {
+      try {
+        await _remote.validateSale(saleId, justification,
+            productIdRemappings: productIdRemappings,
+            initialStockEntries: initialStockEntries);
+        await _local.updateSaleStatus(saleId, 'COMPLETED');
+        return;
+      } catch (_) {
+        // Backend unreachable — fall through to offline path
+      }
+    }
+    // Offline: update locally + queue for sync
     await _local.updateSaleStatus(saleId, 'COMPLETED');
+    await _syncService.queueOperation(
+      operation: 'VALIDATE_SALE',
+      payload: {
+        'saleId': saleId,
+        'justification': justification,
+        if (productIdRemappings != null && productIdRemappings.isNotEmpty)
+          'productIdRemappings': productIdRemappings,
+        if (initialStockEntries != null && initialStockEntries.isNotEmpty)
+          'initialStockEntries': initialStockEntries,
+      },
+      entityId: saleId,
+    );
   }
 
   @override
   Future<void> cancelSale(String saleId, String justification) async {
-    await _remote.cancelSale(saleId, justification);
+    if (await _connectivity.isOnline()) {
+      try {
+        await _remote.cancelSale(saleId, justification);
+        await _local.updateSaleStatus(saleId, 'CANCELLED');
+        return;
+      } catch (_) {
+        // Backend unreachable — fall through to offline path
+      }
+    }
+    // Offline: update locally + queue for sync
     await _local.updateSaleStatus(saleId, 'CANCELLED');
+    await _syncService.queueOperation(
+      operation: 'CANCEL_SALE',
+      payload: {
+        'saleId': saleId,
+        'justification': justification,
+      },
+      entityId: saleId,
+    );
   }
 
   @override

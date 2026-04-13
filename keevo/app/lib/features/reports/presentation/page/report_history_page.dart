@@ -53,7 +53,13 @@ class _ReportHistoryPageState extends ConsumerState<ReportHistoryPage> {
             : 'Historique des rapports'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/home');
+            }
+          },
         ),
       ),
       body: Column(

@@ -5,6 +5,7 @@ import com.keevo.commerce.sale.domain.port.in.GetSalesHistoryUseCase;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,7 +28,8 @@ public class GetSalesHistoryService implements GetSalesHistoryUseCase {
 
     @Override
     public Page<Sale> getSalesHistory(SalesHistoryQuery query) {
-        var pageable = PageRequest.of(query.page(), query.size());
+        var pageable = PageRequest.of(query.page(), query.size(),
+                Sort.by(Sort.Direction.DESC, "occurredAt"));
 
         if ("EMPLOYEE".equals(query.role())) {
             // EMPLOYEE always sees only their own sales

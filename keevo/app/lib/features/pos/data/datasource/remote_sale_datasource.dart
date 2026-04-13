@@ -65,6 +65,52 @@ class RemoteSaleDataSource {
     );
   }
 
+  /// GET /api/v1/sales/pending — OWNER-only list of PENDING_VALIDATION sales.
+  Future<List<Sale>> getPendingSales() async {
+    final response = await _dio.get<Map<String, dynamic>>('/api/v1/sales/pending');
+    final list = response.data!['data'] as List<dynamic>;
+    return list.map((item) {
+      final json = item as Map<String, dynamic>;
+      final items = (json['items'] as List<dynamic>?)
+              ?.map((i) {
+                final ij = i as Map<String, dynamic>;
+                return SaleItemModel(
+                  id: ij['id'] as String? ?? '',
+                  productId: ij['productId'] as String? ?? '',
+                  variantId: ij['variantId'] as String?,
+                  productName: ij['productName'] as String? ?? '',
+                  catalogueUnitPrice:
+                      (ij['catalogueUnitPrice'] as num?)?.toInt() ??
+                          (ij['appliedUnitPrice'] as num?)?.toInt() ?? 0,
+                  appliedUnitPrice:
+                      (ij['appliedUnitPrice'] as num?)?.toInt() ?? 0,
+                  quantity: (ij['quantity'] as num?)?.toInt() ?? 0,
+                  subtotal: (ij['subtotal'] as num?)?.toInt() ?? 0,
+                );
+              })
+              .toList() ??
+          [];
+      final createdAt =
+          DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now();
+      return Sale(
+        id: json['id'] as String? ?? '',
+        storeId: json['storeId'] as String? ?? '',
+        employeeId: json['employeeId'] as String? ?? '',
+        clientId: json['clientId'] as String?,
+        paymentMode: PaymentModeEnum.values.firstWhere(
+          (m) => m.value == (json['paymentMode'] as String? ?? 'CASH'),
+          orElse: () => PaymentModeEnum.cash,
+        ),
+        totalAmount: (json['totalAmount'] as num?)?.toInt() ?? 0,
+        discountAmount: (json['discountAmount'] as num?)?.toInt() ?? 0,
+        status: json['status'] as String? ?? 'PENDING_VALIDATION',
+        items: items,
+        occurredAt: createdAt,
+        createdAt: createdAt,
+      );
+    }).toList();
+  }
+
   static final _dateFormat = DateFormat('yyyy-MM-dd');
 
   /// GET /api/v1/sales/history — fetch sales history from backend.

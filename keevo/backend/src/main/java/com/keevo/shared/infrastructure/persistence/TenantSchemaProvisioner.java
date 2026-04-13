@@ -231,6 +231,10 @@ public class TenantSchemaProvisioner {
     static final String DDL_STOCK_LEVELS_IDX_PRODUCT =
             "CREATE INDEX IF NOT EXISTS idx_stock_levels_product_store ON stock_levels(product_id, store_id)";
 
+    /** Migration DDL: adds minimum_threshold to existing stock_levels tables (idempotent) */
+    static final String DDL_STOCK_LEVELS_MIGRATE_MINIMUM_THRESHOLD =
+            "ALTER TABLE stock_levels ADD COLUMN IF NOT EXISTS minimum_threshold INTEGER NOT NULL DEFAULT 0";
+
     // ── Stock movements (Story 2.3) ────────────────────────────────────────────
 
     static final String DDL_STOCK_MOVEMENTS = """
@@ -769,6 +773,7 @@ public class TenantSchemaProvisioner {
             // Story 2.3 — stock tables
             stmt.execute(DDL_STOCK_LEVELS);
             stmt.execute(DDL_STOCK_LEVELS_IDX_PRODUCT);
+            stmt.execute(DDL_STOCK_LEVELS_MIGRATE_MINIMUM_THRESHOLD); // idempotent: adds minimum_threshold if missing
             stmt.execute(DDL_STOCK_MOVEMENTS);
             stmt.execute(DDL_STOCK_MOVEMENTS_IDX_PRODUCT);
             stmt.execute(DDL_STOCK_MOVEMENTS_IDX_STORE);

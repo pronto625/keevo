@@ -143,7 +143,7 @@ class _ProductCardState extends State<ProductCard>
                   flex: 2,
                   child: Padding(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,

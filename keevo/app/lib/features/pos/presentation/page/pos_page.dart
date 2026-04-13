@@ -36,10 +36,12 @@ class _PosPageState extends ConsumerState<PosPage> {
   SectorType? _sectorType;
   String _searchQuery = '';
   String? _selectedCategoryId;
+  late final ScrollController _scrollController;
 
   @override
   void initState() {
     super.initState();
+    _scrollController = ScrollController()..addListener(_onScroll);
     _loadSectorType();
     _checkAutoClosureNotification();
   }
@@ -95,8 +97,24 @@ class _PosPageState extends ConsumerState<PosPage> {
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (_searchQuery.isNotEmpty) return;
+    final pos = _scrollController.position;
+    if (pos.pixels >= pos.maxScrollExtent - 300) {
+      _triggerLoadMore();
+    }
+  }
+
+  void _triggerLoadMore() {
+    final activeStoreId = ref.read(activeStoreIdProvider);
+    if (activeStoreId == null) return;
+    final key = (storeId: activeStoreId, categoryId: _selectedCategoryId);
+    ref.read(frequentProductsProvider(key).notifier).loadMore();
   }
 
   @override
@@ -123,6 +141,7 @@ class _PosPageState extends ConsumerState<PosPage> {
       body: Stack(
         children: [
           CustomScrollView(
+            controller: _scrollController,
             slivers: [
               // ── Blue gradient header (consistent with other screens) ──
               SliverAppBar(
@@ -234,18 +253,25 @@ class _PosPageState extends ConsumerState<PosPage> {
               // Pending sales banner (OWNER only)
               if (!isEmployee) _PendingSalesBanner(storeId: storeId),
               // Product grid or search results
-              _searchQuery.isNotEmpty
-                  ? _SearchResultsSliver(
-                      onAddToCart: (p) => _addProductToCart(p, cartNotifier),
-                      onCreateDraft: _createDraftAndAddToCart,
-                    )
-                  : _FrequentProductsSliver(
-                      storeId: storeId,
-                      sectorType: _sectorType,
-                      isEmployee: isEmployee,
-                      categoryId: _selectedCategoryId,
-                      onAddToCart: (p) => _addProductToCart(p, cartNotifier),
-                    ),
+              if (_searchQuery.isNotEmpty)
+                _SearchResultsSliver(
+                  onAddToCart: (p) => _addProductToCart(p, cartNotifier),
+                  onCreateDraft: _createDraftAndAddToCart,
+                ),
+              if (_searchQuery.isEmpty)
+                _FrequentProductsSliver(
+                  storeId: storeId,
+                  sectorType: _sectorType,
+                  isEmployee: isEmployee,
+                  categoryId: _selectedCategoryId,
+                  onAddToCart: (p) => _addProductToCart(p, cartNotifier),
+                ),
+              // Loading footer when paginating the product grid
+              if (_searchQuery.isEmpty)
+                _PosGridLoadingFooter(
+                  storeId: storeId,
+                  categoryId: _selectedCategoryId,
+                ),
               // Bottom padding: cart pill height + safe area + breathing room
               SliverPadding(
                 padding: EdgeInsets.only(
@@ -318,7 +344,7 @@ class _PosPageState extends ConsumerState<PosPage> {
   }
 }
 
-/// Grid of frequently sold products (AC1 — sale_items.quantity DESC, limit 12).
+/// Grid of frequently sold products — paginated, 24 items per page.
 /// Falls back to all products if no sales exist yet.
 class _FrequentProductsSliver extends ConsumerWidget {
   final String? storeId;
@@ -338,15 +364,16 @@ class _FrequentProductsSliver extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final key = (storeId: storeId, categoryId: categoryId);
-    final asyncProducts = ref.watch(frequentProductsProvider(key));
-    return asyncProducts.when(
+    final asyncState = ref.watch(frequentProductsProvider(key));
+    return asyncState.when(
       loading: () => const SliverFillRemaining(
         child: Center(child: CircularProgressIndicator()),
       ),
       error: (e, _) => SliverFillRemaining(
         child: AppErrorWidget(error: e),
       ),
-      data: (products) {
+      data: (gridState) {
+        final products = gridState.products;
         if (products.isEmpty) {
           return SliverFillRemaining(
             child: _EmptyState(
@@ -390,6 +417,29 @@ class _FrequentProductsSliver extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Loading footer shown below the product grid while the next page is fetching.
+class _PosGridLoadingFooter extends ConsumerWidget {
+  final String? storeId;
+  final String? categoryId;
+
+  const _PosGridLoadingFooter({required this.storeId, required this.categoryId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final key = (storeId: storeId, categoryId: categoryId);
+    final isLoading =
+        ref.watch(frequentProductsProvider(key)).valueOrNull?.isLoadingMore ??
+            false;
+    if (!isLoading) return const SliverToBoxAdapter(child: SizedBox.shrink());
+    return const SliverToBoxAdapter(
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(child: CircularProgressIndicator()),
+      ),
     );
   }
 }

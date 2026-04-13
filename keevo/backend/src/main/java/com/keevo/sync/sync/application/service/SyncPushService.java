@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.UnexpectedRollbackException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -64,20 +65,54 @@ public class SyncPushService implements SyncUseCase {
 
         for (SyncOperation operation : sorted) {
             // Each operation runs in its own transaction — one failure does NOT roll back others (AC3)
-            SyncOperationResult result = transactionTemplate.execute(status -> {
-                SyncOperationResult opResult = processOperation(operation, command);
+            SyncOperationResult result;
+            try {
+                result = transactionTemplate.execute(status -> {
+                    SyncOperationResult opResult = processOperation(operation, command);
 
-                logRepository.save(new SyncOperationsLogEntry(
-                        operation.operationId(),
-                        operation.operationType(),
-                        operation.entityId(),
-                        opResult.status(),
-                        opResult.reason(),
-                        Instant.now(),
-                        operation.clientTimestamp()));
+                    // Skip saving the log entry for DUPLICATE operations — the entry already exists
+                    // and attempting to save it again would cause a primary key constraint violation.
+                    if (opResult.status() != SyncOperationStatus.DUPLICATE) {
+                        logRepository.save(new SyncOperationsLogEntry(
+                                operation.operationId(),
+                                operation.operationType(),
+                                operation.entityId(),
+                                opResult.status(),
+                                opResult.reason(),
+                                Instant.now(),
+                                operation.clientTimestamp()));
+                    }
 
-                return opResult;
-            });
+                    return opResult;
+                });
+            } catch (UnexpectedRollbackException e) {
+                // A @Transactional use case (e.g. CloseDayService) threw a RuntimeException,
+                // which caused Spring AOP to mark the transaction rollback-only before
+                // AbstractSyncOperationHandler could map it to REJECTED.
+                // The data operation was rolled back — record REJECTED in a fresh transaction.
+                log.warn("[Sync] TX rolled back for operation {} ({}): {}",
+                        operation.operationId(), operation.operationType(), e.getMessage());
+                result = new SyncOperationResult(
+                        operation.operationId(), SyncOperationStatus.REJECTED, null, "TRANSACTION_ROLLED_BACK");
+                try {
+                    transactionTemplate.execute(status -> {
+                        if (!logRepository.existsById(operation.operationId())) {
+                            logRepository.save(new SyncOperationsLogEntry(
+                                    operation.operationId(),
+                                    operation.operationType(),
+                                    operation.entityId(),
+                                    SyncOperationStatus.REJECTED,
+                                    "TRANSACTION_ROLLED_BACK",
+                                    Instant.now(),
+                                    operation.clientTimestamp()));
+                        }
+                        return null;
+                    });
+                } catch (Exception logEx) {
+                    log.error("[Sync] Failed to save REJECTED log for operation {}: {}",
+                            operation.operationId(), logEx.getMessage());
+                }
+            }
 
             results.add(result);
 

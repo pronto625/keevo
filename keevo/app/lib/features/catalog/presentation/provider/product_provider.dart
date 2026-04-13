@@ -266,9 +266,11 @@ class ProductActions {
       transportCost: transportCost,
       photoUrl: photoUrl,
     );
-    // Invalidate both lists so UI refreshes.
+    // Invalidate all product lists so every tab refreshes.
     _ref.invalidate(productListProvider);
     _ref.invalidate(archivedProductListProvider);
+    _ref.invalidate(outOfStockProductListProvider);
+    _ref.invalidate(lowStockProductListProvider);
     return result;
   }
 
@@ -298,6 +300,8 @@ class ProductActions {
     );
     _ref.invalidate(productListProvider);
     _ref.invalidate(archivedProductListProvider);
+    _ref.invalidate(outOfStockProductListProvider);
+    _ref.invalidate(lowStockProductListProvider);
     return result;
   }
 
@@ -317,6 +321,8 @@ class ProductActions {
     await useCase.execute(id);
     _ref.invalidate(productListProvider);
     _ref.invalidate(archivedProductListProvider);
+    _ref.invalidate(outOfStockProductListProvider);
+    _ref.invalidate(lowStockProductListProvider);
   }
 
   Future<void> unarchive(String id) async {
@@ -325,6 +331,8 @@ class ProductActions {
     await useCase.execute(id);
     _ref.invalidate(productListProvider);
     _ref.invalidate(archivedProductListProvider);
+    _ref.invalidate(outOfStockProductListProvider);
+    _ref.invalidate(lowStockProductListProvider);
   }
 
   Future<void> syncFromRemote() async {

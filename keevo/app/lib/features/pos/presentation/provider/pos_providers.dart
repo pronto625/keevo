@@ -66,101 +66,192 @@ final activeEmployeeIdProvider = FutureProvider<String?>((ref) async {
   return ref.watch(currentUserIdProvider.future);
 });
 
-/// Frequently sold products for POS grid (AC1 — ordered by sale_items.quantity DESC).
-/// Always shows ALL active products; frequent ones appear first.
-/// Optionally filters by categoryId when a category chip is selected.
-///
-/// AutoDispose: POS page is destroyed on tab switch (GoRouter ShellRoute),
-/// so the provider re-queries fresh stock on each navigation.
-final frequentProductsProvider =
-    FutureProvider.autoDispose.family<List<PosProductResult>, ({String? storeId, String? categoryId})>((ref, key) async {
-  final storeId = key.storeId;
-  final categoryId = key.categoryId;
-  if (storeId == null) return [];
+const _kPosGridPageSize = 24;
 
-  // Sync stock for active store from remote so POS has fresh data.
-  // Silently ignore errors — offline-first: will use cached local data.
-  try {
-    final stockRepo = ref.watch(multiStoreStockRepositoryProvider);
-    await stockRepo.getStoreStockDetail(storeId, page: 0, size: 100, sortLowFirst: false);
-  } catch (_) {}
+/// State for the POS product grid — holds the current page of products
+/// plus pagination metadata.
+class FrequentProductsState {
+  final List<PosProductResult> products;
+  final bool hasMore;
+  final bool isLoadingMore;
 
-  final db = ref.watch(appDatabaseProvider);
-  final repo = ref.watch(saleRepositoryProvider);
-  final ids = await repo.getFrequentProductIds(storeId, limit: 12);
-
-  // Category filter clause (variable must come BEFORE the ORDER BY CASE variables)
-  final String categoryClause;
-  Variable? categoryVar;
-  if (categoryId != null) {
-    categoryClause = 'AND p.category_id = ? ';
-    categoryVar = Variable.withString(categoryId);
-  } else {
-    categoryClause = '';
-  }
-
-  // Build ORDER BY clause: frequent products first (by their position in ids),
-  // then products with stock, then alphabetically.
-  // Always show ALL active non-archived products so brand-new products are visible.
-  final String frequentOrder;
-  final List<Variable> frequentOrderVars;
-  if (ids.isEmpty) {
-    frequentOrder = '1'; // constant — no frequency to sort by
-    frequentOrderVars = [];
-  } else {
-    final placeholders = ids.map((_) => '?').join(',');
-    frequentOrder = 'CASE WHEN p.id IN ($placeholders) THEN 0 ELSE 1 END';
-    frequentOrderVars = ids.map(Variable.withString).toList();
-  }
-
-  // Variables order must match SQL placeholders: storeId, categoryId?, ...ids
-  final variables = [
-    Variable.withString(storeId),
-    if (categoryVar != null) categoryVar,
-    ...frequentOrderVars,
-  ];
-
-  final rows = await db.customSelect(
-    'SELECT p.id, p.name, p.price, p.photo_url, '
-    'COALESCE(d.quantity, 0) as stock, '
-    'c.name as category_name '
-    'FROM products p '
-    'INNER JOIN ('
-    '  SELECT sl.product_id, sl.quantity '
-    '  FROM stock_levels sl '
-    '  WHERE sl.store_id = ? '
-    '  GROUP BY sl.product_id'
-    ') d ON d.product_id = p.id '
-    'LEFT JOIN categories c ON c.id = p.category_id '
-    'WHERE p.archived = 0 AND p.status = \'ACTIVE\' '
-    '$categoryClause'
-    'ORDER BY (CASE WHEN COALESCE(d.quantity, 0) > 0 THEN 0 ELSE 1 END) ASC, '
-    '$frequentOrder ASC, '
-    'p.name ASC '
-    'LIMIT 12',
-    variables: variables,
-  ).get();
-
-  final results = rows
-      .map((r) => PosProductResult(
-            id: r.read<String>('id'),
-            name: r.read<String>('name'),
-            price: r.read<int>('price'),
-            stock: r.read<int>('stock'),
-            photoUrl: r.readNullable<String>('photo_url'),
-            categoryName: r.readNullable<String>('category_name'),
-          ))
-      .toList();
-
-  // Sort: availability first, then frequency (preference), then alphabetical.
-  results.sort((a, b) {
-    final aStock = a.stock > 0 ? 0 : 1;
-    final bStock = b.stock > 0 ? 0 : 1;
-    if (aStock != bStock) return aStock.compareTo(bStock);
-    final aFreq = ids.contains(a.id) ? ids.indexOf(a.id) : ids.length;
-    final bFreq = ids.contains(b.id) ? ids.indexOf(b.id) : ids.length;
-    if (aFreq != bFreq) return aFreq.compareTo(bFreq);
-    return a.name.compareTo(b.name);
+  const FrequentProductsState({
+    required this.products,
+    this.hasMore = true,
+    this.isLoadingMore = false,
   });
-  return results;
-});
+
+  FrequentProductsState copyWith({
+    List<PosProductResult>? products,
+    bool? hasMore,
+    bool? isLoadingMore,
+  }) =>
+      FrequentProductsState(
+        products: products ?? this.products,
+        hasMore: hasMore ?? this.hasMore,
+        isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      );
+}
+
+/// Paginated POS product grid notifier.
+///
+/// [build()] loads the first page ([_kPosGridPageSize] items) on first watch
+/// or after invalidation. [loadMore()] appends the next page when the user
+/// scrolls near the bottom.
+///
+/// AutoDispose: recreated fresh on each POS page navigation (GoRouter
+/// ShellRoute destroys the page on tab switch).
+///
+/// Tenant isolation: every SQL query includes `WHERE sl.store_id = storeId`.
+/// The local Drift DB only contains data synced for the authenticated tenant
+/// (the backend JWT already enforces per-tenant schema isolation at sync time),
+/// so no cross-tenant leakage is possible.
+class FrequentProductsNotifier extends AutoDisposeFamilyAsyncNotifier<
+    FrequentProductsState, ({String? storeId, String? categoryId})> {
+  int _offset = 0;
+  bool _hasMore = true;
+  bool _isLoadingMore = false;
+  List<String> _ids = [];
+
+  @override
+  Future<FrequentProductsState> build(
+      ({String? storeId, String? categoryId}) arg) async {
+    _offset = 0;
+    _hasMore = true;
+    _isLoadingMore = false;
+    _ids = [];
+
+    final storeId = arg.storeId;
+    if (storeId == null) {
+      _hasMore = false;
+      return const FrequentProductsState(products: [], hasMore: false);
+    }
+
+    // Sync stock from remote — offline-first, errors are silently ignored.
+    try {
+      await ref
+          .read(multiStoreStockRepositoryProvider)
+          .getStoreStockDetail(storeId, page: 0, size: 100, sortLowFirst: false);
+    } catch (_) {}
+
+    // Fetch frequent product IDs (most recently sold) for priority ordering.
+    _ids = await ref
+        .read(saleRepositoryProvider)
+        .getFrequentProductIds(storeId, limit: 50);
+
+    final products =
+        await _fetchPage(storeId: storeId, categoryId: arg.categoryId, offset: 0);
+    _offset = _kPosGridPageSize;
+    return FrequentProductsState(products: products, hasMore: _hasMore);
+  }
+
+  bool get isLoadingMore => _isLoadingMore;
+
+  /// Appends the next page. No-op if already loading or no more pages.
+  Future<void> loadMore() async {
+    if (!_hasMore || _isLoadingMore) return;
+    final current = state.valueOrNull;
+    if (current == null) return;
+    final storeId = arg.storeId;
+    if (storeId == null) return;
+
+    _isLoadingMore = true;
+    state = AsyncData(current.copyWith(isLoadingMore: true));
+
+    try {
+      final page = await _fetchPage(
+          storeId: storeId, categoryId: arg.categoryId, offset: _offset);
+      _offset += _kPosGridPageSize;
+      state = AsyncData(FrequentProductsState(
+        products: [...current.products, ...page],
+        hasMore: _hasMore,
+        isLoadingMore: false,
+      ));
+    } catch (_) {
+      state = AsyncData(current.copyWith(isLoadingMore: false));
+    } finally {
+      _isLoadingMore = false;
+    }
+  }
+
+  Future<List<PosProductResult>> _fetchPage({
+    required String storeId,
+    required String? categoryId,
+    required int offset,
+  }) async {
+    final db = ref.read(appDatabaseProvider);
+
+    final String categoryClause;
+    Variable? categoryVar;
+    if (categoryId != null) {
+      categoryClause = 'AND p.category_id = ? ';
+      categoryVar = Variable.withString(categoryId);
+    } else {
+      categoryClause = '';
+    }
+
+    final String frequentOrder;
+    final List<Variable> frequentOrderVars;
+    if (_ids.isEmpty) {
+      frequentOrder = '1';
+      frequentOrderVars = [];
+    } else {
+      final placeholders = _ids.map((_) => '?').join(',');
+      frequentOrder = 'CASE WHEN p.id IN ($placeholders) THEN 0 ELSE 1 END';
+      frequentOrderVars = _ids.map(Variable.withString).toList();
+    }
+
+    // Variable order: storeId, categoryId?, ...ids, limit+1, offset
+    final variables = [
+      Variable.withString(storeId),
+      if (categoryVar != null) categoryVar,
+      ...frequentOrderVars,
+      Variable.withInt(_kPosGridPageSize + 1), // +1 to detect hasMore
+      Variable.withInt(offset),
+    ];
+
+    final rows = await db.customSelect(
+      'SELECT p.id, p.name, p.price, p.photo_url, '
+      'COALESCE(d.quantity, 0) as stock, '
+      'c.name as category_name '
+      'FROM products p '
+      'LEFT JOIN ('
+      '  SELECT sl.product_id, sl.quantity '
+      '  FROM stock_levels sl '
+      '  WHERE sl.store_id = ? '
+      '  GROUP BY sl.product_id'
+      ') d ON d.product_id = p.id '
+      'LEFT JOIN categories c ON c.id = p.category_id '
+      'WHERE p.archived = 0 AND p.status = \'ACTIVE\' '
+      '$categoryClause'
+      'ORDER BY (CASE WHEN COALESCE(d.quantity, 0) > 0 THEN 0 ELSE 1 END) ASC, '
+      '$frequentOrder ASC, '
+      'p.name ASC '
+      'LIMIT ? OFFSET ?',
+      variables: variables,
+    ).get();
+
+    _hasMore = rows.length > _kPosGridPageSize;
+    final limited = _hasMore ? rows.take(_kPosGridPageSize).toList() : rows;
+    return limited
+        .map((r) => PosProductResult(
+              id: r.read<String>('id'),
+              name: r.read<String>('name'),
+              price: r.read<int>('price'),
+              stock: r.read<int>('stock'),
+              photoUrl: r.readNullable<String>('photo_url'),
+              categoryName: r.readNullable<String>('category_name'),
+            ))
+        .toList();
+  }
+}
+
+/// Paginated POS product grid provider.
+///
+/// Keyed by (storeId, categoryId). A new notifier is instantiated for each
+/// unique key combination, so changing the category filter resets the page
+/// automatically.
+final frequentProductsProvider = AsyncNotifierProvider.autoDispose.family<
+    FrequentProductsNotifier,
+    FrequentProductsState,
+    ({String? storeId, String? categoryId})>(FrequentProductsNotifier.new);
