@@ -76,8 +76,12 @@ class ProductRepositoryImpl implements ProductRepository {
       );
     }
 
+    // Separate the remote call from the local upsert so that a DB failure
+    // after a successful remote create never triggers the offline fallback
+    // and never creates a second ghost product in local DB.
+    late ProductResponseDto dto;
     try {
-      final dto = await _remote.create({
+      dto = await _remote.create({
         'name': name,
         if (description != null) 'description': description,
         if (sku != null && sku.isNotEmpty) 'sku': sku,
@@ -86,15 +90,11 @@ class ProductRepositoryImpl implements ProductRepository {
         'buyPrice': buyPrice,
         'transportCost': transportCost,
       });
-      // Merge local photoUrl into the backend model (images are device-local).
-      final model = _dtoToModel(dto).copyWith(photoUrl: photoUrl);
-      await _local.upsert(model);
-      return model;
     } on ProductException {
       // Business/validation error from backend — re-throw so the UI can display it.
       rethrow;
     } catch (_) {
-      // Network unavailable or unexpected error — offline fallback.
+      // Network unavailable — offline fallback: store locally and enqueue sync.
       return _local.insert(
         name: name,
         description: description,
@@ -106,6 +106,11 @@ class ProductRepositoryImpl implements ProductRepository {
         photoUrl: photoUrl,
       );
     }
+    // Remote create succeeded — persist locally with the backend-assigned ID.
+    // Any DB error here propagates to the caller (no silent data duplication).
+    final model = _dtoToModel(dto).copyWith(photoUrl: photoUrl);
+    await _local.upsert(model);
+    return model;
   }
 
   @override
@@ -305,6 +310,25 @@ class ProductRepositoryImpl implements ProductRepository {
     // overwriting local offline changes with stale backend data.
     if (await _syncService.hasPendingOperations()) return;
     final dtos = await _remote.getAll();
+
+    // Archive local ACTIVE products not present on the backend.
+    // This covers two scenarios:
+    //   1. The owner archived a product on their device — remote no longer
+    //      returns it, so we mirror that archivation locally.
+    //   2. A ghost "offline-fallback" copy was created by the previous
+    //      create() bug (local UUID ≠ backend UUID, same name). Now that the
+    //      real product has been synced, the ghost is no longer needed.
+    // DRAFT products are intentionally skipped — they await owner promotion
+    // and are never returned by the backend's getAll().
+    final backendIds = dtos.map((d) => d.id).toSet();
+    final localProducts = await _local.getAll();
+    for (final local in localProducts) {
+      if (local.status != ProductStatus.draft &&
+          !backendIds.contains(local.id)) {
+        await _local.archiveById(local.id);
+      }
+    }
+
     for (final dto in dtos) {
       await _local.upsert(_dtoToModel(dto));
     }

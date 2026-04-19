@@ -130,7 +130,15 @@ final lastClosureProvider = FutureProvider.family<DayClosure?, String>((ref, sto
 });
 
 /// Sales history with date filter.
-final salesHistoryProvider = FutureProvider.family<List<Sale>, SalesHistoryFilter>((ref, filter) async {
+///
+/// Uses [autoDispose] so that re-opening the Sales History page always
+/// re-fetches from the backend (source of truth) instead of serving the
+/// Riverpod-cached result from the previous visit. Without autoDispose an
+/// employee would keep seeing a sale as PENDING_VALIDATION even after the
+/// owner validated it — until the app was fully restarted.
+final salesHistoryProvider =
+    FutureProvider.autoDispose.family<List<Sale>, SalesHistoryFilter>(
+        (ref, filter) async {
   final useCase = ref.watch(getSalesHistoryUseCaseProvider);
   return useCase.execute(filter);
 });
