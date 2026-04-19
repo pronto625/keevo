@@ -35,6 +35,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -167,8 +168,11 @@ public class ReportController {
         requireOwnerOrForbid();
         String tenantId = TenantContext.getCurrentTenant();
         LocalDate todayWAT = LocalDate.now(WAT);
-        Instant weekStart  = todayWAT.minusDays(6).atStartOfDay(WAT).toInstant();
-        Instant weekEnd    = todayWAT.atTime(23, 59, 59).atZone(WAT).toInstant();
+        // Always compute a proper ISO Mon–Sun week, regardless of the trigger day.
+        LocalDate weekEndDate   = todayWAT.with(DayOfWeek.SUNDAY);
+        LocalDate weekStartDate = weekEndDate.minusDays(6);
+        Instant weekStart  = weekStartDate.atStartOfDay(WAT).toInstant();
+        Instant weekEnd    = weekEndDate.atTime(23, 59, 59).atZone(WAT).toInstant();
 
         storeRepository.findAllActive().forEach(store -> {
             var cmd = new WeeklyReportCommand(

@@ -25,7 +25,7 @@ public class MultiStoreSummaryService {
 
     private static final Logger log = LoggerFactory.getLogger(MultiStoreSummaryService.class);
     private static final ZoneId WAT = ZoneId.of("Africa/Lagos");
-    private static final String DEFAULT_OWNER_PHONE = "+243000000000";
+
 
     private final EndOfDayReportRepository reportRepository;
     private final StoreRepository storeRepository;
@@ -74,8 +74,12 @@ public class MultiStoreSummaryService {
 
         log.info("All {} stores closed — generating DAILY_COMBINED for tenant={}", activeStoreCount, command.tenantId());
 
-        // Aggregate from per-store reports
-        List<EndOfDayReport> storeReports = reportRepository.findByDateAndTenant(today, command.tenantId(), ReportType.DAILY);
+        // Aggregate from per-store reports — exclude employee-scoped reports (actorId != null)
+        // to avoid double-counting revenue already included in store-level reports.
+        List<EndOfDayReport> storeReports = reportRepository.findByDateAndTenant(today, command.tenantId(), ReportType.DAILY)
+                .stream()
+                .filter(r -> r.getActorId() == null)
+                .toList();
         int totalRevenue = storeReports.stream().mapToInt(EndOfDayReport::getTotalRevenue).sum();
         int totalSales   = storeReports.stream().mapToInt(EndOfDayReport::getTotalSales).sum();
 
@@ -94,17 +98,24 @@ public class MultiStoreSummaryService {
         );
         reportRepository.save(combined);
 
-        // Deliver combined summary
-        String ownerPhone = userRepository.findOwnerByTenantSchemaName(command.tenantId())
+        // Deliver combined summary — skip if owner phone not found to avoid sending to an unknown recipient.
+        userRepository.findOwnerByTenantSchemaName(command.tenantId())
                 .map(u -> u.getPhoneNumber())
-                .orElse(DEFAULT_OWNER_PHONE);
-        try {
-            whatsAppPort.sendReport(ownerPhone, combinedContent);
-            combined.markSent();
-        } catch (Exception e) {
-            log.warn("Multi-store summary WhatsApp delivery failed: {}", e.getMessage());
-            combined.markFailed();
-        }
-        reportRepository.save(combined);
+                .ifPresentOrElse(
+                        ownerPhone -> {
+                            try {
+                                whatsAppPort.sendReport(ownerPhone, combinedContent);
+                                combined.markSent();
+                            } catch (Exception e) {
+                                log.warn("Multi-store summary WhatsApp delivery failed: {}", e.getMessage());
+                                combined.markFailed();
+                            }
+                            reportRepository.save(combined);
+                        },
+                        () -> {
+                            log.warn("DAILY_COMBINED delivery skipped — no owner phone found for tenant={}", command.tenantId());
+                            combined.markInAppOnly();
+                            reportRepository.save(combined);
+                        });
     }
 }

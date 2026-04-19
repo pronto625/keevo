@@ -88,7 +88,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 23;
+  int get schemaVersion => 24;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -238,6 +238,10 @@ class AppDatabase extends _$AppDatabase {
       if (from < 23) {
         // Story 8.0 — notifications table for local notification storage.
         await migrator.createTable(notifications);
+      }
+      if (from < 24) {
+        // Story 7.2 fix — add actorId column to reports table.
+        await migrator.addColumn(reports, reports.actorId);
       }
     },
   );

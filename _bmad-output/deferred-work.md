@@ -1,5 +1,15 @@
 # Deferred Work
 
+## Deferred from: code review of HF-1-registration-role-persistence-unified-auth-ui (2026-04-19)
+
+- **D1 — CGU links non-tappables**: `TextSpan`s "Conditions d'utilisation" et "Politique de confidentialité" dans `auth_page.dart` ont une décoration underline+couleur mais aucun `GestureRecognizer`. Comportement hérité de l'ancien `RegisterPage`. Ajouter un `TapGestureRecognizer` vers `/docs/politique` lors d'une itération UI dédiée.
+- **D2 — `kUserRoleKey = 'OWNER'` hardcodé sans lecture du serveur**: `auth_provider.dart` Registration.register() écrit `'OWNER'` en dur au lieu de lire le rôle depuis le `RegistrationResult`. La spec l'autorise explicitement ("hardcoded, since registration always creates an OWNER") mais en cas d'évolution du backend (multi-role onboarding), cela causera un privilege assignment silencieux côté client.
+- **D3 — `prefs.setString()` non awaité**: Dans `auth_provider.dart` (Registration et Login) et `auth_page.dart`, les écritures SharedPreferences sont fire-and-forget. Un échec disque est silencieux. À corriger globalement lorsqu'une politique d'erreur persistence sera définie.
+- **D4 — Pattern routing `role == 'OWNER' ? '/dashboard' : '/pos'` dupliqué**: Ce ternaire apparaît en 4 endroits (`app_router.dart`, `auth_page.dart`, `shop_name_page.dart` ×2). Extraire en helper `routeForRole(String? role) → String` lors du prochain refactor routing.
+- **D5 — Router redirect autorise `role == null` sur routes OWNER-only**: le redirect `app_router.dart` vérifie `role == 'EMPLOYEE'` pour rediriger vers `/pos`, mais laisse passer un rôle null silence vers les routes owner. Pre-existing. Ajouter `if (role == null) return '/auth/login';` dans le guard.
+- **D6 — Back en mode login sans historique → `/auth/register`**: comportement hérité de l'ancien `LoginPage`. Peut-être contre-intuitif pour les utilisateurs deep-link. À revoir dans une itération navigation.
+- **D7 — `initialCountryCode: 'CM'` hardcodé**: `auth_page.dart` (et anciens pages) forcent le Cameroun sans détection de locale. Ajouter détection via `flutter_sim_locale` ou prefs dans une itération internationalisation.
+
 ## Deferred from: code review of 8-0-fcm-push-notifications-whatsapp-wassender (2026-04-03)
 
 - `DeviceTokenController.deleteToken()` — pas de vérification de propriété (ownership) sur la suppression de token. Tout utilisateur authentifié connaissant un token peut le supprimer. Surface d'attaque faible (tokens opaques, ~512 chars) mais représente un pattern à améliorer quand une liste par user_id sera disponible.

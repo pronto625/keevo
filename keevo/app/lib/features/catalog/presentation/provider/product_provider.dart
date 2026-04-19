@@ -131,6 +131,12 @@ Future<List<ProductModel>> productList(ProductListRef ref) async {
     return b.updatedAt.compareTo(a.updatedAt);
   });
 
+  // Guard against duplicate names introduced by sync (e.g. local draft + remote
+  // active for the same product).  After sorting, the "best" entry (most stock,
+  // then most recent) is already first; keep it and discard later duplicates.
+  final seenNames = <String>{};
+  products = products.where((p) => seenNames.add(p.name.toLowerCase())).toList();
+
   return products;
 }
 

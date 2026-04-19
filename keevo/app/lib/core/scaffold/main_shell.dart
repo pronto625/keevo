@@ -11,6 +11,7 @@ import '../../features/notifications/presentation/provider/notification_provider
 import '../../features/pos/data/datasource/local_day_closure_datasource.dart';
 import '../../features/pos/presentation/provider/day_closure_providers.dart';
 import '../../features/pos/presentation/provider/pos_providers.dart';
+import '../../features/reports/presentation/provider/report_history_providers.dart';
 import '../../features/stores/presentation/provider/active_store_provider.dart';
 import '../../features/stores/presentation/provider/store_provider.dart';
 import '../../features/sync_indicator/presentation/widget/sync_warning_banner.dart';
@@ -65,7 +66,17 @@ class _MainShellState extends ConsumerState<MainShell> {
     try {
       final fcmService = ref.read(fcmServiceProvider);
       debugPrint('[FCM] Initializing Firebase Messaging...');
-      await fcmService.initialize(appRouter);
+      await fcmService.initialize(
+        appRouter,
+        onMessage: (message) {
+          final type = message.data['type'] as String? ?? '';
+          if (type.contains('REPORT')) {
+            // Invalidate the entire reportHistory family so the list refreshes
+            // immediately instead of waiting for the next periodic sync cycle.
+            ref.invalidate(reportHistoryProvider);
+          }
+        },
+      );
       debugPrint('[FCM] Getting FCM token...');
       final token = await fcmService.getToken();
       if (token == null) {

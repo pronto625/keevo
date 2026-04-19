@@ -9,6 +9,7 @@ import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase;
 import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -37,14 +38,15 @@ public abstract class AbstractReportGenerator {
     /**
      * Template Method — defines the algorithm skeleton.
      * Final: subclasses cannot change the order of steps.
-     * @Transactional ensures PENDING report is persisted before delivery;
-     * on crash mid-delivery the PENDING status can be retried.
+     * @Transactional(REQUIRES_NEW) ensures a fresh, independent transaction is always created.
+     * This is the recommended pattern for @TransactionalEventListener(AFTER_COMMIT) handlers:
+     * REQUIRES_NEW guarantees a new transaction even after the original one commits.
      *
      * <p>Note: NOT final — CGLIB proxying requires the method to be overridable so that the
      * @Transactional advice can intercept the call and delegate to the fully-initialized target
      * bean instance (avoiding NPE on injected fields in the CGLIB proxy subclass instance).
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public EndOfDayReport generateReport(GenerateEndOfDayReportUseCase.GenerateReportCommand command) {
         // Step 1: Collect data (subclass-specific)
         EndOfDayReportData data = collectData(command);

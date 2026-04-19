@@ -18,6 +18,11 @@ class FcmService {
   final RemoteDeviceTokenDataSource? _remoteTokenDataSource;
   final FlutterLocalNotificationsPlugin _flutterLocalNotifications;
 
+  /// Optional callback invoked on every foreground FCM message (after local
+  /// storage and OS notification).  Callers with a Riverpod [Ref] can use this
+  /// to invalidate stale providers without coupling [FcmService] to Riverpod.
+  void Function(RemoteMessage message)? _onMessage;
+
   FcmService({
     required LocalNotificationDataSource localNotifications,
     RemoteDeviceTokenDataSource? remoteTokenDataSource,
@@ -29,7 +34,11 @@ class FcmService {
 
   bool get _isDesktop => Platform.isLinux || Platform.isWindows;
 
-  Future<void> initialize(GoRouter router) async {
+  Future<void> initialize(
+    GoRouter router, {
+    void Function(RemoteMessage message)? onMessage,
+  }) async {
+    _onMessage = onMessage;
     if (_isDesktop) {
       debugPrint('[FCM] Desktop platform — skipping FCM initialization');
       return;
@@ -162,6 +171,9 @@ class FcmService {
         payload: message.data['deepLink'] as String?,
       );
     }
+
+    // Notify caller so Riverpod providers can be invalidated as needed.
+    _onMessage?.call(message);
   }
 
   void _onTap(RemoteMessage message, GoRouter router) {

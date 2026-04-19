@@ -5,12 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/auth/domain/exception/auth_exception.dart';
 import 'package:keevo/features/auth/domain/model/auth_tokens.dart';
 import 'package:keevo/features/auth/domain/model/login_result.dart';
 import 'package:keevo/features/auth/domain/usecase/login_usecase.dart';
-import 'package:keevo/features/auth/presentation/page/login_page.dart';
+import 'package:keevo/features/auth/presentation/page/auth_page.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
@@ -43,19 +45,23 @@ Future<void> _enterPhone(WidgetTester tester, String number) async {
 
 void main() {
   late MockLoginUseCase mockUseCase;
+  late SharedPreferences prefs;
 
-  setUp(() {
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    prefs = await SharedPreferences.getInstance();
     mockUseCase = MockLoginUseCase();
   });
 
   Widget buildPage() => _wrap(
-        const LoginPage(),
+        const AuthPage(initialMode: AuthMode.login),
         overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
           loginUseCaseProvider.overrideWithValue(mockUseCase),
         ],
       );
 
-  group('LoginPage', () {
+  group('AuthPage — Login Mode', () {
     testWidgets('renders phone field and password field', (tester) async {
       await tester.pumpWidget(buildPage());
       await tester.pumpAndSettle();

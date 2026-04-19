@@ -249,7 +249,7 @@ public class EndOfDayReportBuilder {
         return toInt(entityManager.createNativeQuery(
                 "SELECT COUNT(*) FROM sales " +
                 "WHERE store_id = CAST(:sid AS UUID) AND employee_id = CAST(:eid AS UUID) " +
-                "AND status = 'COMPLETED' AND occurred_at >= :start AND occurred_at < :end")
+                "AND status = 'COMPLETED' AND occurred_at >= :start AND occurred_at <= :end")
                 .setParameter("sid", storeId).setParameter("eid", empId)
                 .setParameter("start", start).setParameter("end", end)
                 .getSingleResult());
@@ -259,7 +259,7 @@ public class EndOfDayReportBuilder {
         return toInt(entityManager.createNativeQuery(
                 "SELECT COALESCE(SUM(total_amount), 0) FROM sales " +
                 "WHERE store_id = CAST(:sid AS UUID) AND employee_id = CAST(:eid AS UUID) " +
-                "AND status = 'COMPLETED' AND occurred_at >= :start AND occurred_at < :end")
+                "AND status = 'COMPLETED' AND occurred_at >= :start AND occurred_at <= :end")
                 .setParameter("sid", storeId).setParameter("eid", empId)
                 .setParameter("start", start).setParameter("end", end)
                 .getSingleResult());
@@ -271,7 +271,7 @@ public class EndOfDayReportBuilder {
                 "SELECT COALESCE(SUM(total_amount), 0) FROM sales " +
                 "WHERE store_id = CAST(:sid AS UUID) AND employee_id = CAST(:eid AS UUID) " +
                 "AND status = 'COMPLETED' AND payment_mode = :mode " +
-                "AND occurred_at >= :start AND occurred_at < :end")
+                "AND occurred_at >= :start AND occurred_at <= :end")
                 .setParameter("sid", storeId).setParameter("eid", empId).setParameter("mode", mode)
                 .setParameter("start", start).setParameter("end", end)
                 .getSingleResult());
@@ -281,7 +281,7 @@ public class EndOfDayReportBuilder {
         return toInt(entityManager.createNativeQuery(
                 "SELECT COUNT(*) FROM sales " +
                 "WHERE store_id = CAST(:sid AS UUID) AND employee_id = CAST(:eid AS UUID) " +
-                "AND status = 'PENDING_VALIDATION' AND occurred_at >= :start AND occurred_at < :end")
+                "AND status = 'PENDING_VALIDATION' AND occurred_at >= :start AND occurred_at <= :end")
                 .setParameter("sid", storeId).setParameter("eid", empId)
                 .setParameter("start", start).setParameter("end", end)
                 .getSingleResult());
@@ -291,7 +291,7 @@ public class EndOfDayReportBuilder {
         return toInt(entityManager.createNativeQuery(
                 "SELECT COALESCE(SUM(total_amount), 0) FROM sales " +
                 "WHERE store_id = CAST(:sid AS UUID) AND employee_id = CAST(:eid AS UUID) " +
-                "AND status = 'PENDING_VALIDATION' AND occurred_at >= :start AND occurred_at < :end")
+                "AND status = 'PENDING_VALIDATION' AND occurred_at >= :start AND occurred_at <= :end")
                 .setParameter("sid", storeId).setParameter("eid", empId)
                 .setParameter("start", start).setParameter("end", end)
                 .getSingleResult());
@@ -304,7 +304,7 @@ public class EndOfDayReportBuilder {
                 "SELECT si.product_name, SUM(si.quantity) AS total_qty, SUM(si.subtotal) AS total_revenue " +
                 "FROM sale_items si JOIN sales s ON si.sale_id = s.id " +
                 "WHERE s.store_id = CAST(:sid AS UUID) AND s.employee_id = CAST(:eid AS UUID) " +
-                "AND s.occurred_at >= :start AND s.occurred_at < :end AND s.status = 'COMPLETED' " +
+                "AND s.occurred_at >= :start AND s.occurred_at <= :end AND s.status = 'COMPLETED' " +
                 "GROUP BY si.product_name ORDER BY total_qty DESC LIMIT 3")
                 .setParameter("sid", storeId).setParameter("eid", empId)
                 .setParameter("start", start).setParameter("end", end)

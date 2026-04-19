@@ -49,7 +49,9 @@ class LocalSaleDataSource {
         ));
       }
 
-      // 3. Decrement stock levels + insert stock movements (skip for PENDING_VALIDATION)
+      // 3. Decrement stock levels + insert stock movements.
+      //    Skip for PENDING_VALIDATION — stock is decremented at validation time
+      //    (matches backend RecordSaleService behavior).
       if (sale.status != 'PENDING_VALIDATION') {
         for (final item in sale.items) {
           final stockRow = await (_db.select(_db.stockLevels)
@@ -146,6 +148,126 @@ class LocalSaleDataSource {
         .write(SalesCompanion(status: Value(newStatus)));
   }
 
+  /// Validate a PENDING_VALIDATION sale: record initial stock + decrement + update status.
+  ///
+  /// Mirrors backend ValidateSaleService exactly:
+  ///  1. Record STOCK_ENTRY movements for [initialStockEntries] (user-provided initial stock).
+  ///  2. Record SALE movements (stock out) for each sale item.
+  ///  3. Update sale status to COMPLETED.
+  Future<void> validateAndDecrementStock(
+    String saleId, {
+    Map<String, int>? initialStockEntries,
+  }) async {
+    await _db.transaction(() async {
+      final sale = await (_db.select(_db.sales)
+            ..where((s) => s.id.equals(saleId)))
+          .getSingleOrNull();
+      if (sale == null) return;
+      // Idempotency guard: if the sale was already completed offline
+      // (e.g. a previous validate attempt succeeded locally), skip all
+      // stock mutations to prevent double-decrement on retry.
+      if (sale.status == 'COMPLETED') return;
+
+      final now = DateTime.now();
+
+      // Step 1: Record initial stock entries (STOCK_ENTRY — positive)
+      if (initialStockEntries != null) {
+        for (final entry in initialStockEntries.entries) {
+          final productId = entry.key;
+          final qty = entry.value;
+          if (qty <= 0) continue;
+
+          final stockRow = await (_db.select(_db.stockLevels)
+                ..where((s) =>
+                    s.productId.equals(productId) &
+                    s.storeId.equals(sale.storeId)))
+              .getSingleOrNull();
+
+          final qBefore = stockRow?.quantity ?? 0;
+          final qAfter = qBefore + qty;
+
+          if (stockRow != null) {
+            await (_db.update(_db.stockLevels)
+                  ..where((s) =>
+                      s.productId.equals(productId) &
+                      s.storeId.equals(sale.storeId)))
+                .write(StockLevelsCompanion(
+              quantity: Value(qAfter),
+              updatedAt: Value(now),
+            ));
+          } else {
+            await _db.into(_db.stockLevels).insert(StockLevelsCompanion.insert(
+              id: const Uuid().v4(),
+              productId: productId,
+              storeId: sale.storeId,
+              quantity: qAfter,
+              updatedAt: now,
+            ));
+          }
+
+          await _db.into(_db.stockMovements).insert(
+              StockMovementsCompanion.insert(
+            id: const Uuid().v4(),
+            productId: productId,
+            storeId: sale.storeId,
+            type: 'STOCK_ENTRY',
+            quantityDelta: qty,
+            actorId: sale.employeeId,
+            quantityBefore: Value(qBefore),
+            quantityAfter: Value(qAfter),
+            createdAt: now,
+          ));
+        }
+      }
+
+      // Step 2: Decrement stock for each sale item (SALE — negative)
+      final items = await (_db.select(_db.saleItems)
+            ..where((i) => i.saleId.equals(saleId)))
+          .get();
+
+      for (final item in items) {
+        final stockRow = await (_db.select(_db.stockLevels)
+              ..where((s) =>
+                  s.productId.equals(item.productId) &
+                  s.storeId.equals(sale.storeId)))
+            .getSingleOrNull();
+
+        final qBefore = stockRow?.quantity ?? 0;
+        // Force to 0 if insufficient (matches backend behavior)
+        final qAfter = (qBefore - item.quantity).clamp(0, qBefore);
+
+        if (stockRow != null) {
+          await (_db.update(_db.stockLevels)
+                ..where((s) =>
+                    s.productId.equals(item.productId) &
+                    s.storeId.equals(sale.storeId)))
+              .write(StockLevelsCompanion(
+            quantity: Value(qAfter),
+            updatedAt: Value(now),
+          ));
+        }
+
+        await _db.into(_db.stockMovements).insert(
+            StockMovementsCompanion.insert(
+          id: const Uuid().v4(),
+          productId: item.productId,
+          storeId: sale.storeId,
+          type: 'SALE',
+          quantityDelta: -item.quantity,
+          actorId: sale.employeeId,
+          quantityBefore: Value(qBefore),
+          quantityAfter: Value(qAfter),
+          createdAt: now,
+        ));
+      }
+
+      // Step 3: Update sale status
+      await (_db.update(_db.sales)
+            ..where((s) => s.id.equals(saleId)))
+          .write(const SalesCompanion(status: Value('COMPLETED')));
+    });
+  }
+
   /// Cascade-validate pending sales after a DRAFT product is activated.
   ///
   /// Finds all PENDING_VALIDATION sales in [storeId] that contain [productId],
@@ -189,11 +311,11 @@ class LocalSaleDataSource {
       }
       if (!allActive) continue;
 
-      // All products active — validate and decrement.
+      // All products active — validate and decrement stock.
       await _db.transaction(() async {
         await (_db.update(_db.sales)
               ..where((s) => s.id.equals(saleId)))
-            .write(SalesCompanion(status: const Value('COMPLETED')));
+            .write(const SalesCompanion(status: Value('COMPLETED')));
 
         final now = DateTime.now();
         for (final item in items) {
@@ -204,7 +326,7 @@ class LocalSaleDataSource {
               .getSingleOrNull();
 
           final qBefore = stockRow?.quantity ?? 0;
-          final qAfter = qBefore - item.quantity; // negative allowed for ex-draft
+          final qAfter = (qBefore - item.quantity).clamp(0, qBefore);
 
           if (stockRow != null) {
             await (_db.update(_db.stockLevels)

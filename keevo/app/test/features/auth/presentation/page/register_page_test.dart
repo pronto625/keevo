@@ -4,15 +4,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/auth/domain/model/registration_result.dart';
 import 'package:keevo/features/auth/domain/usecase/register_user_usecase.dart';
-import 'package:keevo/features/auth/presentation/page/register_page.dart';
+import 'package:keevo/features/auth/presentation/page/auth_page.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
 class MockRegisterUserUseCase extends Mock implements RegisterUserUseCase {}
+
+late SharedPreferences _prefs;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -22,7 +26,7 @@ GoRouter _testRouter() {
     routes: [
       GoRoute(
         path: '/auth/register',
-        builder: (_, __) => const RegisterPage(),
+        builder: (_, __) => const AuthPage(),
       ),
       GoRoute(
         path: '/onboarding',
@@ -32,13 +36,20 @@ GoRouter _testRouter() {
         path: '/auth/login',
         builder: (_, __) => const Scaffold(body: Text('Login')),
       ),
+      GoRoute(
+        path: '/onboarding/sector',
+        builder: (_, __) => const Scaffold(body: Text('Sector')),
+      ),
     ],
   );
 }
 
 Widget _buildPage(List<Override> overrides) {
   return ProviderScope(
-    overrides: overrides,
+    overrides: [
+      sharedPreferencesProvider.overrideWithValue(_prefs),
+      ...overrides,
+    ],
     child: MaterialApp.router(
       routerConfig: _testRouter(),
     ),
@@ -46,8 +57,10 @@ Widget _buildPage(List<Override> overrides) {
 }
 
 void main() {
-  setUpAll(() {
+  setUpAll(() async {
     GoogleFonts.config.allowRuntimeFetching = false;
+    SharedPreferences.setMockInitialValues({});
+    _prefs = await SharedPreferences.getInstance();
   });
 
   late MockRegisterUserUseCase mockUseCase;
@@ -56,7 +69,7 @@ void main() {
     mockUseCase = MockRegisterUserUseCase();
   });
 
-  group('RegisterPage', () {
+  group('AuthPage — Register Mode', () {
     testWidgets('renders phone/password fields and submit button',
         (tester) async {
       await tester.pumpWidget(_buildPage([
@@ -66,7 +79,7 @@ void main() {
 
       expect(find.byKey(const Key('phoneField')), findsOneWidget);
       expect(find.byKey(const Key('passwordField')), findsOneWidget);
-      expect(find.byKey(const Key('registerButton')), findsOneWidget);
+      expect(find.byKey(const Key('submitButton')), findsOneWidget);
     });
 
     testWidgets('shows validation error when form submitted empty',
@@ -76,7 +89,7 @@ void main() {
       ]));
       await tester.pump();
 
-      await tester.tap(find.byKey(const Key('registerButton')));
+      await tester.tap(find.byKey(const Key('submitButton')));
       await tester.pumpAndSettle();
 
       // Password field is a plain TextFormField — its validation error is reliable in tests
@@ -100,7 +113,7 @@ void main() {
           find.byKey(const Key('phoneField')), '600000001');
       await tester.enterText(
           find.byKey(const Key('passwordField')), 'SecurePass123!');
-      await tester.tap(find.byKey(const Key('registerButton')));
+      await tester.tap(find.byKey(const Key('submitButton')));
       await tester.pump();
 
       expect(find.byKey(const Key('errorBanner')), findsOneWidget);
@@ -130,7 +143,7 @@ void main() {
           find.byKey(const Key('phoneField')), '600000001');
       await tester.enterText(
           find.byKey(const Key('passwordField')), 'SecurePass123!');
-      await tester.tap(find.byKey(const Key('registerButton')));
+      await tester.tap(find.byKey(const Key('submitButton')));
       await tester.pump();
 
       verify(() => mockUseCase.execute(

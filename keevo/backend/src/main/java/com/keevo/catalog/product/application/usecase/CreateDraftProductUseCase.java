@@ -63,6 +63,7 @@ public class CreateDraftProductUseCase {
     }
 
     public record CreateDraftCommand(
+            UUID    clientId,    // optional: client-specified UUID; null → server generates
             String  name,
             String  description,
             UUID    categoryId,
@@ -72,7 +73,15 @@ public class CreateDraftProductUseCase {
             UUID    actorId,
             String  actorRole,   // "OWNER" or "EMPLOYEE"
             String  actorName
-    ) {}
+    ) {
+        /** Backward-compatible constructor — server generates UUID. */
+        public CreateDraftCommand(String name, String description, UUID categoryId,
+                                  Integer price, Integer buyPrice, Integer transportCost,
+                                  UUID actorId, String actorRole, String actorName) {
+            this(null, name, description, categoryId, price, buyPrice, transportCost,
+                 actorId, actorRole, actorName);
+        }
+    }
 
     /**
      * Execute DRAFT product creation.
@@ -82,6 +91,14 @@ public class CreateDraftProductUseCase {
      */
     @Transactional
     public Product execute(CreateDraftCommand command) {
+
+        // Idempotency: if a client-specified UUID already exists, return the existing product.
+        if (command.clientId() != null) {
+            var existing = productRepository.findById(command.clientId());
+            if (existing.isPresent()) {
+                return existing.get();
+            }
+        }
 
         // Name uniqueness (applies to both DRAFT and ACTIVE)
         if (productRepository.existsByName(command.name())) {
@@ -101,7 +118,7 @@ public class CreateDraftProductUseCase {
         var now = Instant.now();
 
         var draft = new Product(
-                UUID.randomUUID(),
+                command.clientId() != null ? command.clientId() : UUID.randomUUID(),
                 command.name().trim(),
                 command.description(),
                 sku,

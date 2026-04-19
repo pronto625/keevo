@@ -164,6 +164,11 @@ development_status:
   epic-8-retrospective: optional
 
   # ─────────────────────────────────────────────────────────
+  # Hotfixes
+  # ─────────────────────────────────────────────────────────
+  HF-1-registration-role-persistence-unified-auth-ui: done  # 2026-04-19 — code review PASSED | P1: password trim symmetry register/login in _submit() | P2: mode guard on ref.listen callbacks (fantôme navigation) | 14/14 Flutter tests GREEN
+
+  # ─────────────────────────────────────────────────────────
   # Epic 9: Super Admin Dashboard (Toor)
   # ─────────────────────────────────────────────────────────
   epic-9: backlog

@@ -178,6 +178,18 @@ class Registration extends _$Registration {
             password: password,
           ),
     );
+    // AC1 (HF-1): Persist role + phone after successful registration so
+    // currentUserRoleProvider rebuilds immediately — no re-login required.
+    state.whenData((result) {
+      if (result != null) {
+        final prefs = ref.read(sharedPreferencesProvider);
+        prefs.setString(kUserRoleKey, 'OWNER'); // Registration always creates OWNER
+        prefs.setString(kUserPhoneKey, phoneNumber);
+        ref.read(activeStoreIdProvider.notifier).setActiveStore(null);
+        ref.invalidate(currentUserRoleProvider);
+        ref.invalidate(currentUserPhoneProvider);
+      }
+    });
   }
 }
 

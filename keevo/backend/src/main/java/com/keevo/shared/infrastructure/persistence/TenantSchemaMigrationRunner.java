@@ -76,24 +76,17 @@ public class TenantSchemaMigrationRunner implements ApplicationRunner {
         try (Connection conn = dataSource.getConnection();
              Statement stmt = conn.createStatement()) {
 
-            // Guard: table may not exist yet if sync hasn't run for this tenant
-            try (PreparedStatement check = conn.prepareStatement(
-                    "SELECT 1 FROM information_schema.tables " +
-                    "WHERE table_schema = ? AND table_name = 'stock_transfers'")) {
-                check.setString(1, schema);
-                try (ResultSet rs = check.executeQuery()) {
-                    if (!rs.next()) return; // Table not provisioned yet — skip
-                }
-            }
-
             stmt.execute("SET search_path TO \"" + schema + "\"");
 
-            // Migration M1: add IN_TRANSIT to status CHECK constraint
-            stmt.execute(TenantSchemaProvisioner.DDL_STOCK_TRANSFERS_MIGRATE_IN_TRANSIT);
+            // Migration M1: add IN_TRANSIT to status CHECK constraint (guarded — table may not exist)
+            if (tableExists(conn, schema, "stock_transfers")) {
+                stmt.execute(TenantSchemaProvisioner.DDL_STOCK_TRANSFERS_MIGRATE_IN_TRANSIT);
+            }
 
-            // Migration M2 (Story 7.2): ensure reports table exists, then add actor_id
+            // Migration M2 (Story 7.2): ensure reports table exists, then add actor_id + store_name
             stmt.execute(TenantSchemaProvisioner.DDL_REPORTS);           // CREATE TABLE IF NOT EXISTS
             stmt.execute(TenantSchemaProvisioner.DDL_REPORTS_MIGRATE_ACTOR_ID); // ADD COLUMN IF NOT EXISTS
+            stmt.execute(TenantSchemaProvisioner.DDL_REPORTS_MIGRATE_STORE_NAME); // ADD COLUMN IF NOT EXISTS
 
             // Migration M3 (Story 7.5): add report-preference columns to tenant_preferences
             stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_EOD_ENABLED);
@@ -111,21 +104,34 @@ public class TenantSchemaMigrationRunner implements ApplicationRunner {
             stmt.execute(TenantSchemaProvisioner.DDL_NOTIFICATION_COOLDOWNS_IDX_TYPE_STORE);
             stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_TREND_NOTIFICATION);
 
-            // Migration M5 (Story 4.1 / 4.2 / 4.3): sales column migrations
-            stmt.execute(TenantSchemaProvisioner.DDL_SALES_MIGRATE_STATUS);
-            stmt.execute(TenantSchemaProvisioner.DDL_SALES_MIGRATE_OCCURRED_AT);
-            stmt.execute(TenantSchemaProvisioner.DDL_SALES_DROP_STATUS_CHECK);
-            stmt.execute(TenantSchemaProvisioner.DDL_SALES_ADD_STATUS_CHECK_V2);
-            stmt.execute(TenantSchemaProvisioner.DDL_SALES_MIGRATE_DISCOUNT_AMOUNT);
-            stmt.execute(TenantSchemaProvisioner.DDL_SALE_ITEMS);             // CREATE TABLE IF NOT EXISTS
-            stmt.execute(TenantSchemaProvisioner.DDL_SALE_ITEMS_IDX_SALE);
-            stmt.execute(TenantSchemaProvisioner.DDL_SALE_ITEMS_MIGRATE_CATALOGUE_PRICE);
+            // Migration M5 (Story 4.1 / 4.2 / 4.3): sales column migrations (guarded — tables may not exist)
+            if (tableExists(conn, schema, "sales")) {
+                stmt.execute(TenantSchemaProvisioner.DDL_SALES_MIGRATE_STATUS);
+                stmt.execute(TenantSchemaProvisioner.DDL_SALES_MIGRATE_OCCURRED_AT);
+                stmt.execute(TenantSchemaProvisioner.DDL_SALES_DROP_STATUS_CHECK);
+                stmt.execute(TenantSchemaProvisioner.DDL_SALES_ADD_STATUS_CHECK_V2);
+                stmt.execute(TenantSchemaProvisioner.DDL_SALES_MIGRATE_DISCOUNT_AMOUNT);
+                stmt.execute(TenantSchemaProvisioner.DDL_SALE_ITEMS);             // CREATE TABLE IF NOT EXISTS
+                stmt.execute(TenantSchemaProvisioner.DDL_SALE_ITEMS_IDX_SALE);
+                stmt.execute(TenantSchemaProvisioner.DDL_SALE_ITEMS_MIGRATE_CATALOGUE_PRICE);
 
-            // Migration M6 (Story 5.2): updated_at for delta-pull sync
-            stmt.execute(TenantSchemaProvisioner.DDL_SALES_MIGRATE_UPDATED_AT);
-            stmt.execute(TenantSchemaProvisioner.DDL_SALE_ITEMS_MIGRATE_UPDATED_AT);
+                // Migration M6 (Story 5.2): updated_at for delta-pull sync
+                stmt.execute(TenantSchemaProvisioner.DDL_SALES_MIGRATE_UPDATED_AT);
+                stmt.execute(TenantSchemaProvisioner.DDL_SALE_ITEMS_MIGRATE_UPDATED_AT);
+            }
 
             stmt.execute("SET search_path TO public");
+        }
+    }
+
+    private boolean tableExists(Connection conn, String schema, String tableName) throws SQLException {
+        try (PreparedStatement check = conn.prepareStatement(
+                "SELECT 1 FROM information_schema.tables WHERE table_schema = ? AND table_name = ?")) {
+            check.setString(1, schema);
+            check.setString(2, tableName);
+            try (ResultSet rs = check.executeQuery()) {
+                return rs.next();
+            }
         }
     }
 }

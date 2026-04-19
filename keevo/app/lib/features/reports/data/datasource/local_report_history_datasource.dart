@@ -15,6 +15,7 @@ class LocalReportHistoryDataSource {
     required int size,
     String? type,
     String? storeId,
+    String? actorId,
   }) async {
     final query = _db.select(_db.reports)
       ..orderBy([(t) => OrderingTerm.desc(t.reportDate)])
@@ -24,6 +25,9 @@ class LocalReportHistoryDataSource {
     }
     if (storeId != null) {
       query.where((t) => t.storeId.equals(storeId));
+    }
+    if (actorId != null) {
+      query.where((t) => t.actorId.equals(actorId));
     }
     final rows = await query.get();
     return rows.map(_mapToModel).toList();
@@ -41,6 +45,7 @@ class LocalReportHistoryDataSource {
           id: Value(model.id),
           tenantId: Value(model.tenantId),
           storeId: Value(model.storeId),
+          actorId: Value(model.actorId),
           storeName: Value(model.storeName),
           reportType: Value(model.reportType),
           reportDate: Value(model.reportDate),
@@ -70,6 +75,7 @@ class LocalReportHistoryDataSource {
       id: row.id,
       tenantId: row.tenantId,
       storeId: row.storeId,
+      actorId: row.actorId,
       storeName: row.storeName,
       reportType: row.reportType,
       reportDate: row.reportDate,

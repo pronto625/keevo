@@ -618,6 +618,10 @@ public class TenantSchemaProvisioner {
     static final String DDL_REPORTS_MIGRATE_ACTOR_ID =
             "ALTER TABLE reports ADD COLUMN IF NOT EXISTS actor_id UUID";
 
+    /** Migration DDL: adds store_name to existing reports tables (idempotent — Story 7.2) */
+    static final String DDL_REPORTS_MIGRATE_STORE_NAME =
+            "ALTER TABLE reports ADD COLUMN IF NOT EXISTS store_name VARCHAR(255)";
+
     static final String DDL_REPORTS_IDX_TENANT_TYPE =
             "CREATE INDEX IF NOT EXISTS idx_reports_tenant_type ON reports (tenant_id, report_type)";
     static final String DDL_REPORTS_IDX_DATE =

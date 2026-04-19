@@ -7,9 +7,8 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../features/auth/domain/model/membership_dto.dart';
-import '../../features/auth/presentation/page/login_page.dart';
+import '../../features/auth/presentation/page/auth_page.dart';
 import '../../features/auth/presentation/page/password_change_page.dart';
-import '../../features/auth/presentation/page/register_page.dart';
 import '../../features/auth/presentation/page/tenant_picker_page.dart';
 import '../../features/catalog/domain/model/product_model.dart';
 import '../../features/catalog/presentation/page/catalog_page.dart';
@@ -295,13 +294,13 @@ final GoRouter appRouter = GoRouter(
           final role = prefs.getString(kUserRoleKey);
           return (role == 'OWNER') ? '/dashboard' : '/pos';
         }
-        return null; // proceed to LoginPage
+        return null; // proceed to AuthPage in login mode
       },
-      builder: (_, __) => const LoginPage(),
+      builder: (_, __) => const AuthPage(initialMode: AuthMode.login),
     ),
     GoRoute(
       path: '/auth/register',
-      builder: (_, __) => const RegisterPage(),
+      builder: (_, __) => const AuthPage(initialMode: AuthMode.register),
     ),
 
     // ── Password change (Story 3.5 — full-screen, no bottom nav) ─────────
@@ -315,7 +314,7 @@ final GoRouter appRouter = GoRouter(
       path: '/tenant-picker',
       builder: (_, state) {
         final extra = state.extra as Map<String, dynamic>?;
-        if (extra == null) return const LoginPage();
+        if (extra == null) return const AuthPage(initialMode: AuthMode.login);
         return TenantPickerPage(
           loginToken: extra['loginToken'] as String,
           memberships: (extra['memberships'] as List).cast<MembershipDto>(),

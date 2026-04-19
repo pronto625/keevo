@@ -2,6 +2,8 @@ package com.keevo.sync.sync.application.handler;
 
 import com.keevo.catalog.product.application.usecase.ArchiveProductUseCase;
 import com.keevo.catalog.product.application.usecase.ArchiveProductUseCase.ArchiveProductDto;
+import com.keevo.catalog.product.application.usecase.CreateDraftProductUseCase;
+import com.keevo.catalog.product.application.usecase.CreateDraftProductUseCase.CreateDraftCommand;
 import com.keevo.catalog.product.application.usecase.CreateProductUseCase;
 import com.keevo.catalog.product.application.usecase.CreateProductUseCase.CreateProductDto;
 import com.keevo.catalog.product.application.usecase.UnarchiveProductUseCase;
@@ -21,15 +23,18 @@ import java.util.UUID;
 public class ProductSyncHandler extends AbstractSyncOperationHandler {
 
     private final CreateProductUseCase createProduct;
+    private final CreateDraftProductUseCase createDraftProduct;
     private final UpdateProductUseCase updateProduct;
     private final ArchiveProductUseCase archiveProduct;
     private final UnarchiveProductUseCase unarchiveProduct;
 
     public ProductSyncHandler(CreateProductUseCase createProduct,
+                              CreateDraftProductUseCase createDraftProduct,
                               UpdateProductUseCase updateProduct,
                               ArchiveProductUseCase archiveProduct,
                               UnarchiveProductUseCase unarchiveProduct) {
         this.createProduct = createProduct;
+        this.createDraftProduct = createDraftProduct;
         this.updateProduct = updateProduct;
         this.archiveProduct = archiveProduct;
         this.unarchiveProduct = unarchiveProduct;
@@ -37,7 +42,7 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
 
     @Override
     public Set<String> supportedTypes() {
-        return Set.of("CREATE_PRODUCT", "UPDATE_PRODUCT", "ARCHIVE_PRODUCT", "UNARCHIVE_PRODUCT", "PROMOTE_PRODUCT");
+        return Set.of("CREATE_PRODUCT", "CREATE_DRAFT_PRODUCT", "UPDATE_PRODUCT", "ARCHIVE_PRODUCT", "UNARCHIVE_PRODUCT", "PROMOTE_PRODUCT");
     }
 
     @Override
@@ -91,19 +96,41 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         productId.toString(), null);
             }
-            case "PROMOTE_PRODUCT" -> {
-                var product = createProduct.execute(new CreateProductDto(
+            case "CREATE_DRAFT_PRODUCT" -> {
+                // Create draft with the client-specified UUID so subsequent ops (CREATE_SALE,
+                // VALIDATE_SALE) can reference the same ID without remapping.
+                UUID clientId = p.get("id") != null ? UUID.fromString((String) p.get("id")) : null;
+                var draft = createDraftProduct.execute(new CreateDraftCommand(
+                        clientId,
                         (String) p.get("name"),
                         (String) p.get("description"),
-                        (String) p.get("sku"),
+                        p.get("categoryId") != null ? UUID.fromString((String) p.get("categoryId")) : null,
+                        p.get("priceVente") != null ? ((Number) p.get("priceVente")).intValue() : null,
+                        null,  // buyPrice
+                        null,  // transportCost
+                        actorId,
+                        "OWNER",
+                        "Sync"));
+                yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
+                        draft.getId().toString(), null);
+            }
+            case "PROMOTE_PRODUCT" -> {
+                // Promote the EXISTING draft product (by its local UUID) to ACTIVE.
+                // Uses updateProduct so DRAFT→ACTIVE logic and cascade events fire correctly.
+                UUID productId = UUID.fromString((String) p.get("productId"));
+                var promoted = updateProduct.execute(new UpdateProductDto(
+                        productId,
+                        (String) p.get("name"),
+                        (String) p.get("description"),
+                        null,  // sku — keep existing
                         p.get("categoryId") != null ? UUID.fromString((String) p.get("categoryId")) : null,
                         p.get("price") != null ? ((Number) p.get("price")).intValue() : null,
                         p.get("buyPrice") != null ? ((Number) p.get("buyPrice")).intValue() : null,
                         p.get("transportCost") != null ? ((Number) p.get("transportCost")).intValue() : null,
-                        p.get("stockQuantity") != null ? ((Number) p.get("stockQuantity")).intValue() : null,
+                        null,  // stockQuantity — keep existing
                         actorId));
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
-                        product.getId().toString(), null);
+                        promoted.getId().toString(), null);
             }
             default -> new SyncOperationResult(operation.operationId(), SyncOperationStatus.REJECTED,
                     null, "UNKNOWN_OPERATION_TYPE");

@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/services/api_service.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
-import '../../../identity/presentation/provider/tenant_preferences_provider.dart';
 import '../../data/repository/category_repository_impl.dart';
 import '../../domain/model/category_model.dart';
 import '../../domain/repository/category_repository.dart';
@@ -38,18 +37,10 @@ final categoriesProvider = FutureProvider.autoDispose<List<CategoryModel>>((ref)
   ref.watch(categoryRefreshProvider);
 
   final repository = ref.watch(categoryRepositoryProvider);
-  
-  // Get tenant preferences to access sector type
-  final tenantPrefs = await ref.watch(tenantPreferencesProvider.future);
-  
-  // If no tenant preferences (onboarding not completed), return empty list
-  if (tenantPrefs == null) {
-    return <CategoryModel>[];
-  }
-  
-  // Try to get local categories first
+
+  // Try to get local categories first (persisted in Drift DB)
   final localCategories = await repository.getLocalCategories();
-  
+
   // If no local categories, sync from API (happens after onboarding)
   if (localCategories.isEmpty) {
     try {
@@ -59,20 +50,13 @@ final categoriesProvider = FutureProvider.autoDispose<List<CategoryModel>>((ref)
       return <CategoryModel>[];
     }
   }
-  
+
   return localCategories;
 });
 
-/// Provides root categories only (parentId = null) for the current tenant sector
+/// Provides root categories only (parentId = null)
 final rootCategoriesProvider = FutureProvider.autoDispose<List<CategoryModel>>((ref) async {
   final repository = ref.watch(categoryRepositoryProvider);
-  
-  // Check if tenant has completed onboarding
-  final tenantPrefs = await ref.watch(tenantPreferencesProvider.future);
-  if (tenantPrefs == null) {
-    return <CategoryModel>[];
-  }
-  
   return await repository.getRootCategories();
 });
 

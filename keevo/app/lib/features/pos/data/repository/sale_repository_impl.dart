@@ -134,11 +134,26 @@ class SaleRepositoryImpl implements SaleRepository {
     if (await _connectivity.isOnline()) {
       try {
         final remoteSales = await _remote.getPendingSales();
+        // Remove sales that were already validated/cancelled OFFLINE but whose
+        // VALIDATE_SALE / CANCEL_SALE sync operation hasn't reached the backend
+        // yet.  Without this filter the sale would reappear in the list after
+        // every provider refresh, making the user think validation failed.
+        final filtered = <Sale>[];
+        for (final s in remoteSales) {
+          final localRow = await (_db.select(_db.sales)
+                ..where((r) => r.id.equals(s.id)))
+              .getSingleOrNull();
+          final localStatus = localRow?.status;
+          if (localStatus == 'COMPLETED' || localStatus == 'CANCELLED') {
+            continue; // Offline action already taken — skip until sync confirms
+          }
+          filtered.add(s);
+        }
         // Filter by storeId if provided (OWNER with active store selected).
         if (storeId != null) {
-          return remoteSales.where((s) => s.storeId == storeId).toList();
+          return filtered.where((s) => s.storeId == storeId).toList();
         }
-        return remoteSales;
+        return filtered;
       } catch (_) {
         // Remote unavailable — fall through to local
       }
@@ -209,8 +224,9 @@ class SaleRepositoryImpl implements SaleRepository {
         // Backend unreachable — fall through to offline path
       }
     }
-    // Offline: update locally + queue for sync
-    await _local.updateSaleStatus(saleId, 'COMPLETED');
+    // Offline: validate + initial stock + decrement (matches backend ValidateSaleService)
+    await _local.validateAndDecrementStock(saleId,
+        initialStockEntries: initialStockEntries);
     await _syncService.queueOperation(
       operation: 'VALIDATE_SALE',
       payload: {
@@ -236,7 +252,7 @@ class SaleRepositoryImpl implements SaleRepository {
         // Backend unreachable — fall through to offline path
       }
     }
-    // Offline: update locally + queue for sync
+    // Offline: just update status (no stock to restore — never decremented)
     await _local.updateSaleStatus(saleId, 'CANCELLED');
     await _syncService.queueOperation(
       operation: 'CANCEL_SALE',

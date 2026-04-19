@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/di/providers.dart';
 import '../../../../core/storage/app_constants.dart';
 import '../../domain/model/sector_type.dart';
 import '../provider/onboarding_provider.dart';
@@ -55,7 +56,9 @@ class _ShopNamePageState extends ConsumerState<ShopNamePage> {
     await prefs.setBool(kOnboardingWizardSeenKey, true);
     await prefs.setString(kSectorTypeKey, widget.sectorType.apiCode);
     if (!mounted) return;
-    router.go('/pos');
+    // AC2 (HF-1): Route OWNER to /dashboard; EMPLOYEE stays on /pos.
+    final role = prefs.getString(kUserRoleKey);
+    router.go(role == 'OWNER' ? '/dashboard' : '/pos');
   }
 
   /// Returns a user-friendly error message, OR null for errors that are
@@ -98,7 +101,9 @@ class _ShopNamePageState extends ConsumerState<ShopNamePage> {
           await prefs.setBool(kOnboardingWizardSeenKey, true);
           await prefs.setString(kSectorTypeKey, widget.sectorType.apiCode);
           if (!mounted) return;
-          router.go('/pos');
+          // AC2 (HF-1): Route OWNER to /dashboard; EMPLOYEE stays on /pos.
+          final role = prefs.getString(kUserRoleKey);
+          router.go(role == 'OWNER' ? '/dashboard' : '/pos');
         }
       });
       if (next.hasError) {

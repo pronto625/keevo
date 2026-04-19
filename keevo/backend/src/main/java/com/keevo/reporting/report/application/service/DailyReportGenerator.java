@@ -92,10 +92,13 @@ public class DailyReportGenerator extends AbstractReportGenerator
                 .orElse(null); // null → AbstractReportGenerator.deliverReport marks IN_APP_ONLY
     }
 
-    /** Employee reports are stored in DB only — not delivered via WhatsApp. */
+    /** Employee reports are stored in-app only — not delivered via WhatsApp. */
     @Override
     protected void deliverReport(EndOfDayReport report, GenerateReportCommand command) {
         if (command.actorId() != null) {
+            // Mark explicitly as IN_APP_ONLY so the report never stays PENDING.
+            report.markInAppOnly();
+            reportRepository.save(report);
             return;
         }
         super.deliverReport(report, command);

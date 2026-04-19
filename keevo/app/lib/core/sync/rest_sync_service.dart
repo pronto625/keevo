@@ -88,9 +88,21 @@ class RestSyncService implements SyncService {
           if (result['conflictData'] != null) {
             conflicts.add(result);
           }
-          await (_database.delete(_database.syncQueue)
-                ..where((t) => t.id.equals(opId)))
-              .go();
+          // Delete the confirmed op AND any duplicates for the same
+          // (entityId, operation) — pre-existing duplicates from before
+          // the dedup guard was in place would otherwise stay REJECTED forever.
+          final confirmedOp = ops.firstWhere((o) => o.id == opId);
+          if (confirmedOp.entityId != null) {
+            await (_database.delete(_database.syncQueue)
+                  ..where((t) =>
+                      t.entityId.equals(confirmedOp.entityId!) &
+                      t.operation.equals(confirmedOp.operation)))
+                .go();
+          } else {
+            await (_database.delete(_database.syncQueue)
+                  ..where((t) => t.id.equals(opId)))
+                .go();
+          }
         } else if (status == 'REJECTED') {
           final currentOp = ops.firstWhere((o) => o.id == opId);
           await (_database.update(_database.syncQueue)
@@ -497,7 +509,12 @@ class RestSyncService implements SyncService {
         'synced, created_at) '
         'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?) '
         'ON CONFLICT(id) DO UPDATE SET '
-        'status = excluded.status, synced = 1, '
+        // Never downgrade a locally-completed/cancelled sale with stale
+        // server state (e.g. server still shows PENDING_VALIDATION because
+        // the VALIDATE_SALE sync operation hasn't been applied yet).
+        'status = CASE WHEN sales.status = ? OR sales.status = ? '
+        'THEN sales.status ELSE excluded.status END, '
+        'synced = 1, '
         'occurred_at = excluded.occurred_at, created_at = excluded.created_at',
         [
           map['id'],
@@ -510,6 +527,9 @@ class RestSyncService implements SyncService {
           map['status'] ?? 'COMPLETED',
           _toLocalIso(map['occurredAt']),
           _toLocalIso(map['createdAt']),
+          // Parameters for the CASE guard in ON CONFLICT DO UPDATE:
+          'COMPLETED',
+          'CANCELLED',
         ],
       );
       // Delete existing sale_items then re-insert from server (authoritative)
@@ -705,8 +725,8 @@ class RestSyncService implements SyncService {
         'INSERT INTO reports '
         '(id, tenant_id, store_id, store_name, report_type, report_date, '
         'content, delivery_status, delivery_attempts, last_attempt_at, '
-        'total_revenue, total_sales, is_automatic, created_at) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) '
+        'total_revenue, total_sales, is_automatic, created_at, actor_id) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) '
         'ON CONFLICT(id) DO UPDATE SET '
         'delivery_status = excluded.delivery_status, '
         'delivery_attempts = excluded.delivery_attempts, '
@@ -727,6 +747,7 @@ class RestSyncService implements SyncService {
           map['totalSales'] ?? 0,
           ((map['isAutomatic'] ?? map['automatic']) == true ? 1 : 0),
           _toLocalIso(map['createdAt']),
+          map['actorId'],
         ],
       );
     }
@@ -779,6 +800,24 @@ class RestSyncService implements SyncService {
     String? entityId,
   }) async {
     const uuid = Uuid();
+
+    // Deduplicate: if the same (entityId, operation) already exists in the queue
+    // (e.g. user taps Validate twice while offline), skip the insert.
+    // Use get() instead of getSingleOrNull() to be safe against pre-existing
+    // duplicates (which would make getSingleOrNull throw StateError).
+    if (entityId != null) {
+      final existing = await (_database.select(_database.syncQueue)
+            ..where((t) =>
+                t.entityId.equals(entityId) & t.operation.equals(operation)))
+          .get();
+      if (existing.isNotEmpty) {
+        dev.log(
+          '⏭️ Skipping duplicate $operation for entity $entityId',
+          name: 'RestSync',
+        );
+        return;
+      }
+    }
 
     dev.log('📥 Queueing operation: $operation', name: 'RestSync');
 

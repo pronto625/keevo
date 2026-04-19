@@ -2,6 +2,8 @@ package com.keevo.sync.sync.application.handler;
 
 import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase;
 import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase.ValidateSaleCommand;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
@@ -56,8 +58,18 @@ public class ValidateSaleSyncHandler extends AbstractSyncOperationHandler {
                             e -> ((Number) e.getValue()).intValue()));
         }
 
-        validateSaleUseCase.validateSale(
-                new ValidateSaleCommand(saleId, actorId, justification, productIdRemappings, initialStockEntries));
+        try {
+            validateSaleUseCase.validateSale(
+                    new ValidateSaleCommand(saleId, actorId, justification, productIdRemappings, initialStockEntries));
+        } catch (DomainException e) {
+            // Idempotency: if the sale was already completed (e.g. cascade-validated after
+            // PROMOTE_PRODUCT), treat the operation as successfully applied rather than rejected.
+            if (e.getErrorCode() == ErrorCode.SALE_NOT_PENDING) {
+                return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
+                        saleId.toString(), null);
+            }
+            throw e;
+        }
 
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                 saleId.toString(), null);

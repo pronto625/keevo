@@ -97,6 +97,11 @@ class RecordSaleNotifier extends Notifier<RecordSaleState> {
       ref.invalidate(todaySummaryProvider);
       ref.invalidate(todaySalesCountProvider);
       ref.invalidate(dayClosureStateProvider);
+      // Invalidate pending-sale providers so badge/banner update after a draft
+      if (status == 'PENDING_VALIDATION') {
+        ref.invalidate(pendingSalesCountProvider);
+        ref.invalidate(pendingSalesProvider);
+      }
       state = RecordSaleSuccess(sale);
     } catch (e) {
       state = RecordSaleError(e.toString());

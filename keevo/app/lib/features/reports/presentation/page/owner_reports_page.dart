@@ -17,51 +17,80 @@ import 'reports_page.dart';
 ///   📈 Rentabilité  — ProductProfitabilityListPage (Story 7.4)
 ///   🏪 Boutiques    — StorePerformancePage (Story 7.4)
 ///
+/// Uses a StatefulWidget with an explicit TabController to keep it stable across
+/// provider-driven rebuilds, preventing GlobalKey conflicts that can arise when
+/// DefaultTabController is embedded in a ConsumerWidget that rebuilds.
+///
 /// EMPLOYEE route `/reports` still points to [ReportsPage] (no tabs).
-class OwnerReportsPage extends ConsumerWidget {
+class OwnerReportsPage extends ConsumerStatefulWidget {
   const OwnerReportsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<OwnerReportsPage> createState() => _OwnerReportsPageState();
+}
+
+class _OwnerReportsPageState extends ConsumerState<OwnerReportsPage>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 4, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final activeStoreId = ref.watch(activeStoreIdProvider);
-    return DefaultTabController(
-      length: 4,
-      child: Scaffold(
-        appBar: AppBar(
-          automaticallyImplyLeading: false,
-          leading: context.canPop()
-              ? IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                      color: Colors.white),
-                  onPressed: () => context.pop(),
-                )
-              : null,
-          backgroundColor: AppTheme.primary,
-          title: const Text(
-            'Rapports',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          bottom: const TabBar(
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white60,
-            indicatorColor: Colors.white,
-            tabs: [
-              Tab(icon: Icon(Icons.today_outlined), text: 'Jour'),
-              Tab(icon: Icon(Icons.history_outlined), text: 'Historique'),
-              Tab(icon: Icon(Icons.trending_up_outlined), text: 'Rentabilité'),
-              Tab(icon: Icon(Icons.storefront_outlined), text: 'Boutiques'),
-            ],
-          ),
+    return Scaffold(
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: context.canPop()
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                    color: Colors.white),
+                onPressed: () => context.pop(),
+              )
+            : null,
+        backgroundColor: AppTheme.primary,
+        title: const Text(
+          'Rapports',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-        body: TabBarView(
-          // Keep each tab alive so state (scroll position, filters) is preserved
-          children: [
-            _KeepAliveTab(child: ReportsPage()),
-            _KeepAliveTab(child: ReportHistoryPage(storeId: activeStoreId)),
-            _KeepAliveTab(child: ProductProfitabilityListPage(storeId: activeStoreId)),
-            _KeepAliveTab(child: StorePerformancePage()),
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white60,
+          indicatorColor: Colors.white,
+          tabs: const [
+            Tab(icon: Icon(Icons.today_outlined), text: 'Jour'),
+            Tab(icon: Icon(Icons.history_outlined), text: 'Historique'),
+            Tab(icon: Icon(Icons.trending_up_outlined), text: 'Rentabilité'),
+            Tab(icon: Icon(Icons.storefront_outlined), text: 'Boutiques'),
           ],
         ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        // Stable ValueKeys prevent Flutter from confusing instances across
+        // rebuilds, especially with AutomaticKeepAliveClientMixin active.
+        children: [
+          _KeepAliveTab(key: const ValueKey('tab-jour'), child: ReportsPage()),
+          _KeepAliveTab(
+              key: const ValueKey('tab-historique'),
+              child: ReportHistoryPage(storeId: activeStoreId)),
+          _KeepAliveTab(
+              key: const ValueKey('tab-rentabilite'),
+              child: ProductProfitabilityListPage(storeId: activeStoreId)),
+          const _KeepAliveTab(
+              key: ValueKey('tab-boutiques'), child: StorePerformancePage()),
+        ],
       ),
     );
   }
@@ -71,7 +100,7 @@ class OwnerReportsPage extends ConsumerWidget {
 
 class _KeepAliveTab extends StatefulWidget {
   final Widget child;
-  const _KeepAliveTab({required this.child});
+  const _KeepAliveTab({required super.key, required this.child});
 
   @override
   State<_KeepAliveTab> createState() => _KeepAliveTabState();
@@ -88,3 +117,4 @@ class _KeepAliveTabState extends State<_KeepAliveTab>
     return widget.child;
   }
 }
+

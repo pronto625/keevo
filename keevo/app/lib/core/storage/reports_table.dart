@@ -8,6 +8,7 @@ class Reports extends Table {
   TextColumn get id => text()();
   TextColumn get tenantId => text()();
   TextColumn get storeId => text()();
+  TextColumn get actorId => text().nullable()();
   TextColumn get storeName => text().nullable()();
   TextColumn get reportType => text()(); // 'DAILY' | 'DAILY_COMBINED' | 'WEEKLY'
   DateTimeColumn get reportDate => dateTime()();

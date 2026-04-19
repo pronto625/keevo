@@ -1,6 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
 import com.keevo.catalog.product.application.usecase.ArchiveProductUseCase;
+import com.keevo.catalog.product.application.usecase.CreateDraftProductUseCase;
 import com.keevo.catalog.product.application.usecase.CreateProductUseCase;
 import com.keevo.catalog.product.application.usecase.UnarchiveProductUseCase;
 import com.keevo.catalog.product.application.usecase.UpdateProductUseCase;
@@ -27,6 +28,7 @@ import static org.mockito.Mockito.when;
 class ProductSyncHandlerTest {
 
     @Mock private CreateProductUseCase createProduct;
+    @Mock private CreateDraftProductUseCase createDraftProduct;
     @Mock private UpdateProductUseCase updateProduct;
     @Mock private ArchiveProductUseCase archiveProduct;
     @Mock private UnarchiveProductUseCase unarchiveProduct;
@@ -38,7 +40,7 @@ class ProductSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new ProductSyncHandler(createProduct, updateProduct, archiveProduct, unarchiveProduct);
+        handler = new ProductSyncHandler(createProduct, createDraftProduct, updateProduct, archiveProduct, unarchiveProduct);
     }
 
     private Product dummyProduct(UUID id, String name) {
