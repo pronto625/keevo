@@ -35,6 +35,8 @@ class _ApplyAdjustmentsButtonState
   int get _totalGaps =>
       widget.summary.totalShortage + widget.summary.totalSurplus;
 
+  bool get _isAllConcordant => _totalGaps == 0;
+
   @override
   Widget build(BuildContext context) {
     return FilledButton.icon(
@@ -50,7 +52,11 @@ class _ApplyAdjustmentsButtonState
             )
           : const Icon(Icons.check_circle_outline),
       label: Text(
-        _isApplying ? 'Application en cours…' : 'Appliquer les ajustements',
+        _isApplying
+            ? 'Application en cours…'
+            : _isAllConcordant
+                ? 'Valider l\'inventaire'
+                : 'Appliquer les ajustements',
       ),
       style: FilledButton.styleFrom(
         minimumSize: const Size.fromHeight(48),
@@ -59,30 +65,51 @@ class _ApplyAdjustmentsButtonState
   }
 
   Future<void> _showConfirmDialog(BuildContext context) async {
+    final Widget dialogContent = _isAllConcordant
+        ? Text.rich(
+            TextSpan(
+              children: [
+                const TextSpan(
+                    text:
+                        'Tous les stocks correspondent. Valider et clôturer cette session ? Cette action est '),
+                const TextSpan(
+                  text: 'irréversible',
+                  style: TextStyle(
+                    color: AppTheme.errorColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const TextSpan(text: '.'),
+              ],
+            ),
+          )
+        : Text.rich(
+            TextSpan(
+              children: [
+                const TextSpan(text: 'Appliquer '),
+                TextSpan(
+                  text: '$_totalGaps',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const TextSpan(
+                    text: ' ajustements de stock ? Cette action est '),
+                const TextSpan(
+                  text: 'irréversible',
+                  style: TextStyle(
+                    color: AppTheme.errorColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const TextSpan(text: '.'),
+              ],
+            ),
+          );
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Confirmer les ajustements'),
-        content: Text.rich(
-          TextSpan(
-            children: [
-              const TextSpan(text: 'Appliquer '),
-              TextSpan(
-                text: '$_totalGaps',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const TextSpan(text: ' ajustements de stock ? Cette action est '),
-              const TextSpan(
-                text: 'irréversible',
-                style: TextStyle(
-                  color: AppTheme.errorColor,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const TextSpan(text: '.'),
-            ],
-          ),
-        ),
+        content: dialogContent,
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),

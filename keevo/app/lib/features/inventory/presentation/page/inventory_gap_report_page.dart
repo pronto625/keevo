@@ -121,39 +121,61 @@ class InventoryGapReportPage extends ConsumerWidget {
     final isInProgress = report.sessionStatus == 'IN_PROGRESS';
     final hasGaps =
         report.summary.totalShortage > 0 || report.summary.totalSurplus > 0;
+    final role = ref.watch(currentUserRoleProvider);
 
     // VALIDATED — no bar
     if (report.sessionStatus == 'VALIDATED') return null;
 
     // No gaps — all concordant
     if (!hasGaps && isInProgress) {
-      return SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF40C057).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
+      final concordantBanner = Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF40C057).withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.check_circle, color: Color(0xFF40C057)),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Aucun ajustement nécessaire — tous les stocks correspondent',
+              ),
             ),
-            child: const Row(
+          ],
+        ),
+      );
+
+      // OWNER can still validate (close) the session even with 0 gaps
+      if (role == 'OWNER') {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.check_circle, color: Color(0xFF40C057)),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Aucun ajustement nécessaire — tous les stocks correspondent',
-                  ),
+                concordantBanner,
+                const SizedBox(height: 8),
+                ApplyAdjustmentsButton(
+                  sessionId: sessionId,
+                  summary: report.summary,
                 ),
               ],
             ),
           ),
+        );
+      }
+
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: concordantBanner,
         ),
       );
     }
 
     // IN_PROGRESS + has gaps + OWNER only → show button (AC1)
-    final role = ref.watch(currentUserRoleProvider);
     if (isInProgress && hasGaps && role == 'OWNER') {
       return SafeArea(
         child: Padding(

@@ -165,9 +165,12 @@ void main() {
     expect(find.text('Appliquer les ajustements'), findsNothing);
   });
 
-  testWidgets('shows no-adjustment banner when all concordant', (tester) async {
+  testWidgets(
+      'shows concordant banner AND validate button for OWNER when all concordant',
+      (tester) async {
     await tester.pumpWidget(
       _buildPage(
+        role: 'OWNER',
         report: _makeReport(totalShortage: 0, totalSurplus: 0),
       ),
     );
@@ -181,6 +184,30 @@ void main() {
           'Aucun ajustement nécessaire — tous les stocks correspondent'),
       findsOneWidget,
     );
+    // OWNER can still validate (close) the session
+    expect(find.text('Valider l\'inventaire'), findsOneWidget);
+  });
+
+  testWidgets(
+      'shows concordant banner only (no button) for EMPLOYEE when all concordant',
+      (tester) async {
+    await tester.pumpWidget(
+      _buildPage(
+        role: 'EMPLOYEE',
+        report: _makeReport(totalShortage: 0, totalSurplus: 0),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(ListView), const Offset(0, -500));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+          'Aucun ajustement nécessaire — tous les stocks correspondent'),
+      findsOneWidget,
+    );
+    expect(find.text('Valider l\'inventaire'), findsNothing);
     expect(find.text('Appliquer les ajustements'), findsNothing);
   });
 
@@ -195,6 +222,30 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Confirmer les ajustements'), findsOneWidget);
+    expect(find.textContaining('irréversible'), findsOneWidget);
+    expect(find.text('Annuler'), findsOneWidget);
+    expect(find.text('Confirmer'), findsOneWidget);
+  });
+
+  testWidgets(
+      'concordant validate button shows correct dialog (no N adjustments)',
+      (tester) async {
+    await tester.pumpWidget(
+      _buildPage(
+        role: 'OWNER',
+        report: _makeReport(totalShortage: 0, totalSurplus: 0),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(ListView), const Offset(0, -500));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Valider l\'inventaire'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Confirmer les ajustements'), findsOneWidget);
+    expect(find.textContaining('Tous les stocks correspondent'), findsOneWidget);
     expect(find.textContaining('irréversible'), findsOneWidget);
     expect(find.text('Annuler'), findsOneWidget);
     expect(find.text('Confirmer'), findsOneWidget);
