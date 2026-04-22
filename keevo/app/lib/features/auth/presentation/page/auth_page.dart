@@ -50,6 +50,19 @@ class _AuthPageState extends ConsumerState<AuthPage> {
     super.dispose();
   }
 
+  /// Automatically switches to login mode when [registrationProvider] reports
+  /// USER_ALREADY_EXISTS. Intentionally does NOT reset the form so the phone
+  /// number and password entered by the user are preserved — they can proceed
+  /// directly to login without re-typing anything.
+  void _autoSwitchToLogin() {
+    ref.invalidate(registrationProvider);
+    setState(() => _mode = AuthMode.login);
+    // Trigger login automatically after the mode switch rebuilds the widget.
+    // At this point _completePhone and _passwordController still hold the
+    // values the user just typed, so _submit() can fire immediately.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _submit());
+  }
+
   /// Switches between register and login modes, resetting form and providers.
   void _toggleMode() {
     // Clear stale errors from the provider that is being deactivated.
@@ -109,11 +122,19 @@ class _AuthPageState extends ConsumerState<AuthPage> {
     final cs = Theme.of(context).colorScheme;
 
     // Navigate on successful registration (guard: skip if already in login mode).
+    // Also auto-transitions to login when the phone already has an account.
     ref.listen(registrationProvider, (_, next) {
       if (_mode != AuthMode.register) return;
       next.whenData((result) {
         if (result != null) context.go('/onboarding/sector');
       });
+      if (next.hasError) {
+        final error = next.error;
+        if (error is AuthException &&
+            error.domainCode == 'USER_ALREADY_EXISTS') {
+          _autoSwitchToLogin();
+        }
+      }
     });
 
     // Navigate on successful login (guard: skip if already in register mode).
