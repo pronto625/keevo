@@ -1,37 +1,43 @@
 import 'dart:developer' as dev;
 
+import 'package:uuid/uuid.dart';
+
 import '../../../../core/sync/connectivity_service.dart';
 import '../../../../core/sync/sync_service.dart';
+import '../../../../core/sync/sync_trigger_dispatcher.dart';
 import '../../domain/model/stock_transfer_model.dart';
 import '../../domain/repository/stock_transfer_repository.dart';
 import '../datasource/local_stock_transfer_datasource.dart';
 import '../datasource/remote_stock_transfer_datasource.dart';
 
-/// StockTransferRepositoryImpl — Backend-first implementation of StockTransferRepository.
+/// StockTransferRepositoryImpl — Offline-first implementation (Story 5.6).
 ///
-/// Online strategy: remote first, cache result locally + apply local stock change.
-/// Offline strategy:
+/// executeTransfer() always uses the local path:
 ///   1. Validate against local stock_levels (throws if insufficient)
 ///   2. Apply local stock change atomically
 ///   3. Queue in sync_queue via SyncService
 ///   4. Save transfer record as PENDING_SYNC
+///   5. Trigger background push (fire-and-forget)
 ///
-/// Story 3.3 + 5.1.
+/// Story 3.3 + 5.6.
 class StockTransferRepositoryImpl implements StockTransferRepository {
   final LocalStockTransferDataSource _local;
   final RemoteStockTransferDataSource _remote;
   final ConnectivityService _connectivity;
   final SyncService _syncService;
+  final SyncTriggerDispatcher _syncTriggerDispatcher;
 
   const StockTransferRepositoryImpl({
     required LocalStockTransferDataSource local,
     required RemoteStockTransferDataSource remote,
     required ConnectivityService connectivity,
     required SyncService syncService,
+    required SyncTriggerDispatcher syncTriggerDispatcher,
   })  : _local = local,
         _remote = remote,
         _connectivity = connectivity,
-        _syncService = syncService;
+        _syncService = syncService,
+        _syncTriggerDispatcher = syncTriggerDispatcher;
 
   @override
   Future<StockTransferModel> executeTransfer({
@@ -42,46 +48,17 @@ class StockTransferRepositoryImpl implements StockTransferRepository {
     required int quantity,
     String? notes,
   }) async {
-    if (await _connectivity.isOnline()) {
-      try {
-        final transfer = await _remote.executeTransfer(
-          sourceStoreId: sourceStoreId,
-          destinationStoreId: destinationStoreId,
-          productId: productId,
-          variantId: variantId,
-          quantity: quantity,
-          notes: notes,
-        );
-        await _local.saveTransfer(transfer);
-        await _local.applyLocalStockChange(
-          productId: productId,
-          variantId: variantId,
-          sourceStoreId: sourceStoreId,
-          destinationStoreId: destinationStoreId,
-          quantity: quantity,
-        );
-        return transfer;
-      } catch (_) {
-        // Backend unreachable despite connectivity — fallback to offline path
-        return _offlineTransfer(
-          sourceStoreId: sourceStoreId,
-          destinationStoreId: destinationStoreId,
-          productId: productId,
-          variantId: variantId,
-          quantity: quantity,
-          notes: notes,
-        );
-      }
-    } else {
-      return _offlineTransfer(
-        sourceStoreId: sourceStoreId,
-        destinationStoreId: destinationStoreId,
-        productId: productId,
-        variantId: variantId,
-        quantity: quantity,
-        notes: notes,
-      );
-    }
+    // Offline-first (Story 5.6): always use local path for instant UX.
+    final result = await _offlineTransfer(
+      sourceStoreId: sourceStoreId,
+      destinationStoreId: destinationStoreId,
+      productId: productId,
+      variantId: variantId,
+      quantity: quantity,
+      notes: notes,
+    );
+    _syncTriggerDispatcher.triggerPushIfIdle();
+    return result;
   }
 
   Future<StockTransferModel> _offlineTransfer({
@@ -114,7 +91,7 @@ class StockTransferRepositoryImpl implements StockTransferRepository {
     );
 
     // 3. Enqueue for background sync via SyncService
-    final id = DateTime.now().millisecondsSinceEpoch.toString();
+    final id = const Uuid().v4();
     final payload = <String, dynamic>{
       'sourceStoreId': sourceStoreId,
       'destinationStoreId': destinationStoreId,

@@ -8,14 +8,14 @@ import '../../domain/model/stock_movement_model.dart';
 import '../../domain/repository/stock_repository.dart';
 import '../../../../core/sync/connectivity_service.dart';
 import '../../../../core/sync/sync_service.dart';
+import '../../../../core/sync/sync_trigger_dispatcher.dart';
 import '../datasource/local_stock_datasource.dart';
 import '../datasource/remote_stock_datasource.dart';
 
-/// StockRepositoryImpl — online-first with offline fallback.
+/// StockRepositoryImpl — Offline-first writes (Story 5.6).
 ///
-/// Strategy:
-/// - Read: try remote first, cache to local, fall back to local on error.
-/// - Write: remote first, update local cache on success.
+/// Read: try remote first, cache to local, fall back to local on error.
+/// Write: always local-first, queue sync for background push.
 ///
 /// Story 2.3.
 class StockRepositoryImpl implements StockRepository {
@@ -23,16 +23,19 @@ class StockRepositoryImpl implements StockRepository {
   final RemoteStockDataSource _remote;
   final SyncService _syncService;
   final ConnectivityService _connectivity;
+  final SyncTriggerDispatcher _syncTriggerDispatcher;
 
   const StockRepositoryImpl({
     required LocalStockDataSource local,
     required RemoteStockDataSource remote,
     required SyncService syncService,
     required ConnectivityService connectivity,
+    required SyncTriggerDispatcher syncTriggerDispatcher,
   })  : _local = local,
         _remote = remote,
         _syncService = syncService,
-        _connectivity = connectivity;
+        _connectivity = connectivity,
+        _syncTriggerDispatcher = syncTriggerDispatcher;
 
   // ── Stock Levels ─────────────────────────────────────────────────────────
 
@@ -155,38 +158,16 @@ class StockRepositoryImpl implements StockRepository {
     required int quantity,
     String? notes,
   }) async {
-    if (await _connectivity.isOnline()) {
-      try {
-        final movement = await _remote.recordEntry(
-          productId: productId,
-          variantId: variantId,
-          storeId: storeId,
-          quantity: quantity,
-          notes: notes,
-        );
-        await _local.insertMovement(movement);
-        await _refreshLocalLevels(productId);
-        return movement;
-      } catch (e) {
-        dev.log('[Stock] Remote recordEntry failed — offline fallback: $e',
-            name: 'StockRepository');
-        return _recordEntryLocally(
-          productId: productId,
-          variantId: variantId,
-          storeId: storeId,
-          quantity: quantity,
-          notes: notes,
-        );
-      }
-    } else {
-      return _recordEntryLocally(
-        productId: productId,
-        variantId: variantId,
-        storeId: storeId,
-        quantity: quantity,
-        notes: notes,
-      );
-    }
+    // Offline-first (Story 5.6): always use local path, no remote call.
+    final movement = await _recordEntryLocally(
+      productId: productId,
+      variantId: variantId,
+      storeId: storeId,
+      quantity: quantity,
+      notes: notes,
+    );
+    _syncTriggerDispatcher.triggerPushIfIdle();
+    return movement;
   }
 
   Future<StockMovementModel> _recordEntryLocally({
@@ -246,38 +227,16 @@ class StockRepositoryImpl implements StockRepository {
     required int newQuantity,
     required String notes,
   }) async {
-    if (await _connectivity.isOnline()) {
-      try {
-        final movement = await _remote.adjustStock(
-          productId: productId,
-          variantId: variantId,
-          storeId: storeId,
-          newQuantity: newQuantity,
-          notes: notes,
-        );
-        await _local.insertMovement(movement);
-        await _refreshLocalLevels(productId);
-        return movement;
-      } catch (e) {
-        dev.log('[Stock] Remote adjustStock failed — offline fallback: $e',
-            name: 'StockRepository');
-        return _adjustStockLocally(
-          productId: productId,
-          variantId: variantId,
-          storeId: storeId,
-          newQuantity: newQuantity,
-          notes: notes,
-        );
-      }
-    } else {
-      return _adjustStockLocally(
-        productId: productId,
-        variantId: variantId,
-        storeId: storeId,
-        newQuantity: newQuantity,
-        notes: notes,
-      );
-    }
+    // Offline-first (Story 5.6): always use local path, no remote call.
+    final movement = await _adjustStockLocally(
+      productId: productId,
+      variantId: variantId,
+      storeId: storeId,
+      newQuantity: newQuantity,
+      notes: notes,
+    );
+    _syncTriggerDispatcher.triggerPushIfIdle();
+    return movement;
   }
 
   Future<StockMovementModel> _adjustStockLocally({

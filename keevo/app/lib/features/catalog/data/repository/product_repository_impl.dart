@@ -8,21 +8,22 @@ import '../../domain/model/product_status.dart';
 import '../../domain/repository/product_repository.dart';
 import '../../../../core/sync/connectivity_service.dart';
 import '../../../../core/sync/sync_service.dart';
+import '../../../../core/sync/sync_trigger_dispatcher.dart';
 import '../datasource/local_product_datasource.dart';
 import '../datasource/remote_csv_import_datasource.dart';
 import '../datasource/remote_product_datasource.dart';
 
-/// ProductRepositoryImpl — Backend-first write-through Strategy implementation.
+/// ProductRepositoryImpl — Offline-first write strategy (Story 5.6).
 ///
 /// ALL reads come from local Drift DB — no network required.
-/// Writes go to the backend first (source of truth) when online,
-/// fall back to local + sync_queue when offline.
+/// ALL writes go local-first, then queue a sync operation for background push.
 class ProductRepositoryImpl implements ProductRepository {
   final LocalProductDataSource _local;
   final RemoteProductDataSource _remote;
   final RemoteCsvImportDataSource _remoteCsv;
   final ConnectivityService _connectivity;
   final SyncService _syncService;
+  final SyncTriggerDispatcher _syncTriggerDispatcher;
 
   const ProductRepositoryImpl({
     required LocalProductDataSource local,
@@ -30,11 +31,13 @@ class ProductRepositoryImpl implements ProductRepository {
     required RemoteCsvImportDataSource remoteCsv,
     required ConnectivityService connectivity,
     required SyncService syncService,
+    required SyncTriggerDispatcher syncTriggerDispatcher,
   })  : _local = local,
         _remote = remote,
         _remoteCsv = remoteCsv,
         _connectivity = connectivity,
-        _syncService = syncService;
+        _syncService = syncService,
+        _syncTriggerDispatcher = syncTriggerDispatcher;
 
   @override
   Future<List<ProductModel>> getAll() => _local.getAll();
@@ -59,10 +62,6 @@ class ProductRepositoryImpl implements ProductRepository {
     int transportCost = 0,
     String? photoUrl,
   }) async {
-    // Remote first: backend assigns canonical UUID and SKU.
-    // On success, upsert locally with the backend-assigned ID so that
-    // syncFromRemote() won't create a duplicate on next launch.
-
     // Check local name uniqueness first
     final existing = await _local.search(name);
     final duplicate = existing.any(
@@ -76,40 +75,18 @@ class ProductRepositoryImpl implements ProductRepository {
       );
     }
 
-    // Separate the remote call from the local upsert so that a DB failure
-    // after a successful remote create never triggers the offline fallback
-    // and never creates a second ghost product in local DB.
-    late ProductResponseDto dto;
-    try {
-      dto = await _remote.create({
-        'name': name,
-        if (description != null) 'description': description,
-        if (sku != null && sku.isNotEmpty) 'sku': sku,
-        if (categoryId != null) 'categoryId': categoryId,
-        'price': price,
-        'buyPrice': buyPrice,
-        'transportCost': transportCost,
-      });
-    } on ProductException {
-      // Business/validation error from backend — re-throw so the UI can display it.
-      rethrow;
-    } catch (_) {
-      // Network unavailable — offline fallback: store locally and enqueue sync.
-      return _local.insert(
-        name: name,
-        description: description,
-        sku: sku,
-        categoryId: categoryId,
-        price: price,
-        buyPrice: buyPrice,
-        transportCost: transportCost,
-        photoUrl: photoUrl,
-      );
-    }
-    // Remote create succeeded — persist locally with the backend-assigned ID.
-    // Any DB error here propagates to the caller (no silent data duplication).
-    final model = _dtoToModel(dto).copyWith(photoUrl: photoUrl);
-    await _local.upsert(model);
+    // Offline-first (Story 5.6): _local.insert() generates UUID + queues CREATE_PRODUCT.
+    final model = await _local.insert(
+      name: name,
+      description: description,
+      sku: sku,
+      categoryId: categoryId,
+      price: price,
+      buyPrice: buyPrice,
+      transportCost: transportCost,
+      photoUrl: photoUrl,
+    );
+    _syncTriggerDispatcher.triggerPushIfIdle();
     return model;
   }
 
@@ -136,42 +113,21 @@ class ProductRepositoryImpl implements ProductRepository {
       if (photoUrl != null) 'photoUrl': photoUrl,
     };
 
-    if (await _connectivity.isOnline()) {
-      try {
-        if (payload.isNotEmpty) {
-          final dto = await _remote.update(id, payload);
-          final model = _dtoToModel(dto).copyWith(photoUrl: photoUrl);
-          await _local.upsert(model);
-          return model;
-        }
-        return (await _local.getById(id))!;
-      } catch (_) {
-        // Fallback: save local + enqueue
-        final localResult = await _local.updateById(
-          id: id, name: name, description: description, sku: sku,
-          categoryId: categoryId, price: price, buyPrice: buyPrice,
-          transportCost: transportCost, photoUrl: photoUrl,
-        );
-        await _syncService.queueOperation(
-          operation: 'UPDATE_PRODUCT',
-          payload: {'productId': id, ...payload},
-          entityId: id,
-        );
-        return localResult;
-      }
-    } else {
-      final localResult = await _local.updateById(
-        id: id, name: name, description: description, sku: sku,
-        categoryId: categoryId, price: price, buyPrice: buyPrice,
-        transportCost: transportCost, photoUrl: photoUrl,
-      );
+    // Offline-first (Story 5.6): write locally, queue UPDATE_PRODUCT, trigger push.
+    final localResult = await _local.updateById(
+      id: id, name: name, description: description, sku: sku,
+      categoryId: categoryId, price: price, buyPrice: buyPrice,
+      transportCost: transportCost, photoUrl: photoUrl,
+    );
+    if (payload.isNotEmpty) {
       await _syncService.queueOperation(
         operation: 'UPDATE_PRODUCT',
         payload: {'productId': id, ...payload},
         entityId: id,
       );
-      return localResult;
+      _syncTriggerDispatcher.triggerPushIfIdle();
     }
+    return localResult;
   }
 
   @override
@@ -258,50 +214,25 @@ class ProductRepositoryImpl implements ProductRepository {
 
   @override
   Future<void> archive(String id) async {
-    if (await _connectivity.isOnline()) {
-      try {
-        await _remote.archive(id);
-        await _local.archiveById(id);
-      } catch (_) {
-        await _local.archiveById(id);
-        await _syncService.queueOperation(
-          operation: 'ARCHIVE_PRODUCT',
-          payload: {'productId': id},
-          entityId: id,
-        );
-      }
-    } else {
-      await _local.archiveById(id);
-      await _syncService.queueOperation(
-        operation: 'ARCHIVE_PRODUCT',
-        payload: {'productId': id},
-        entityId: id,
-      );
-    }
+    // Offline-first (Story 5.6).
+    await _local.archiveById(id);
+    await _syncService.queueOperation(
+      operation: 'ARCHIVE_PRODUCT',
+      payload: {'productId': id},
+      entityId: id,
+    );
+    _syncTriggerDispatcher.triggerPushIfIdle();
   }
 
   @override
   Future<void> unarchive(String id) async {
-    if (await _connectivity.isOnline()) {
-      try {
-        await _remote.unarchive(id);
-        await _local.unarchiveById(id);
-      } catch (_) {
-        await _local.unarchiveById(id);
-        await _syncService.queueOperation(
-          operation: 'UNARCHIVE_PRODUCT',
-          payload: {'productId': id},
-          entityId: id,
-        );
-      }
-    } else {
-      await _local.unarchiveById(id);
-      await _syncService.queueOperation(
-        operation: 'UNARCHIVE_PRODUCT',
-        payload: {'productId': id},
-        entityId: id,
-      );
-    }
+    await _local.unarchiveById(id);
+    await _syncService.queueOperation(
+      operation: 'UNARCHIVE_PRODUCT',
+      payload: {'productId': id},
+      entityId: id,
+    );
+    _syncTriggerDispatcher.triggerPushIfIdle();
   }
 
   @override

@@ -1,25 +1,19 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/di/providers.dart';
-import '../../../../core/services/api_service.dart';
+import '../../../../core/sync/riverpod_sync_trigger_dispatcher.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
 import '../../data/repository/category_repository_impl.dart';
 import '../../domain/model/category_model.dart';
 import '../../domain/repository/category_repository.dart';
 
-/// Provider for CategoryRepository with authenticated API service
+/// Provider for CategoryRepository using offline-first strategy (Story 5.6)
 final categoryRepositoryProvider = Provider<CategoryRepository>((ref) {
-  final database = ref.watch(appDatabaseProvider);
-  // Use authenticated API service from auth module when available
-  ApiService apiService;
-  try {
-    final dio = ref.read(dioProvider);
-    apiService = DioApiService(dio: dio);
-  } catch (e) {
-    // Fallback to default if not authenticated  
-    apiService = StubApiService();
-  }
-  return CategoryRepositoryImpl(database, apiService);
+  return CategoryRepositoryImpl(
+    ref.watch(appDatabaseProvider),
+    ref.watch(syncServiceProvider),
+    ref.watch(syncTriggerDispatcherProvider),
+  );
 });
 
 /// Provides all active categories for the current tenant sector.
@@ -41,12 +35,13 @@ final categoriesProvider = FutureProvider.autoDispose<List<CategoryModel>>((ref)
   // Try to get local categories first (persisted in Drift DB)
   final localCategories = await repository.getLocalCategories();
 
-  // If no local categories, sync from API (happens after onboarding)
+  // If no local categories (fresh install / first login), trigger a pull sync.
   if (localCategories.isEmpty) {
     try {
-      return await repository.syncFromApi();
+      await ref.read(syncServiceProvider).pull();
+      return await repository.getLocalCategories();
     } catch (e) {
-      // If sync fails, return empty list (offline mode)
+      // Offline or pull failed — return empty list.
       return <CategoryModel>[];
     }
   }
@@ -99,11 +94,9 @@ final categoryActionsProvider = Provider<CategoryActions>((ref) {
   return CategoryActions(ref);
 });
 
-/// Trigger category sync from API
+/// Trigger a full pull sync then invalidate the category provider.
 Future<void> refreshCategories(WidgetRef ref) async {
-  final repository = ref.read(categoryRepositoryProvider);
-  await repository.syncFromApi();
-  // Trigger provider refresh
+  await ref.read(syncServiceProvider).pull();
   ref.read(categoryRefreshProvider.notifier).state++;
 }
 

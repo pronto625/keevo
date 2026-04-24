@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/sync/riverpod_sync_trigger_dispatcher.dart';
 import '../../../../core/sync/sync_gate_guard.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
 import '../../data/datasource/local_stock_datasource.dart';
@@ -53,6 +54,7 @@ final stockRepositoryProvider = Provider<StockRepository>((ref) {
     remote: ref.watch(remoteStockDataSourceProvider),
     syncService: ref.watch(syncServiceProvider),
     connectivity: ref.watch(connectivityServiceProvider),
+    syncTriggerDispatcher: ref.watch(syncTriggerDispatcherProvider),
   );
 });
 

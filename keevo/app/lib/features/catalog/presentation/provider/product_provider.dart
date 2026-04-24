@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/sync/riverpod_sync_trigger_dispatcher.dart';
 import '../../../../core/sync/sync_gate_guard.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
 import '../../data/datasource/local_product_datasource.dart';
@@ -50,6 +51,7 @@ final productRepositoryProvider = Provider<ProductRepository>((ref) {
     remoteCsv: ref.watch(remoteCsvImportDataSourceProvider),
     connectivity: ref.watch(connectivityServiceProvider),
     syncService: ref.watch(syncServiceProvider),
+    syncTriggerDispatcher: ref.watch(syncTriggerDispatcherProvider),
   );
 });
 

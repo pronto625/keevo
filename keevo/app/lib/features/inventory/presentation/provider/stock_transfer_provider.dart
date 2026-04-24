@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/sync/riverpod_sync_trigger_dispatcher.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
 import '../../../catalog/presentation/provider/product_provider.dart';
 import '../../../stores/presentation/provider/store_provider.dart';
@@ -34,6 +35,7 @@ final stockTransferRepositoryProvider =
     remote: ref.watch(remoteStockTransferDsProvider),
     connectivity: ref.watch(connectivityServiceProvider),
     syncService: ref.watch(syncServiceProvider),
+    syncTriggerDispatcher: ref.watch(syncTriggerDispatcherProvider),
   );
 });
 

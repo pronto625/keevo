@@ -18,10 +18,14 @@ class AppTheme {
   static const Color primaryGradientEnd = Color(0xFF4DABF7);
   static const Color secondary = Color(0xFFFF6B6B);
   static const Color success = Color(0xFF51CF66);
+  /// Couleur de texte/icône accessible sur fond [success] (vert lime).
+  static const Color onSuccess = Color(0xFF1A4731);
   static const Color warning = Color(0xFFFCC419);
   /// Couleur de texte/icône accessible sur fond [warning] (ambre).
   static const Color onWarning = Color(0xFF4A2C00);
   static const Color errorColor = Color(0xFFFA5252);
+  /// Couleur de texte/icône accessible sur fond [errorColor] (rouge rubis).
+  static const Color onError = Color(0xFFFFFFFF);
   static const Color darkSurface = Color(0xFF0D1B2A);
 
   // ── Neutral greys (semantic) ──────────────────────────────────────────

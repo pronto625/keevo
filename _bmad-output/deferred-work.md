@@ -38,3 +38,9 @@ Any `CREATE_SALE` operations queued before the `_buildPayload()` key rename (`'s
 - **D1 — `ConcurrentHashMap<BatchWindow>` never evicted** — `StockAlertNotificationListener.batchWindows` accumulates one entry per `tenantId:storeId`. Growth bounded by tenant×store count (~40 bytes each). Consider Caffeine cache with TTL or periodic cleanup post-MVP.
 - **D2 — TOCTOU race between cooldown check and upsert** — Two concurrent `@Async` threads for the same product+store could both pass `existsActiveCooldown` and both dispatch. Narrow window, benign duplicate. Consider DB-level advisory lock if notification dedup becomes critical.
 - **D3 — No `@SchedulerLock` for overlapping trend scheduler runs** — If a `detectTrends()` run exceeds 1 hour, the next cron invocation starts concurrently. Consider integrating ShedLock when scaling to many tenants.
+
+---
+
+## Deferred from: code review of 5-6-offline-first-transactional-writes-instant-ux (2026-04-23)
+
+- **F6 — `RiverpodSyncTriggerDispatcher` captures `Ref` at construction** — If the Provider scope is recreated (test overrides or auth scope changes), the captured `_ref` may become stale. Pre-existing pattern across the project; negligible in production. Revisit when Provider scoping is formalized.

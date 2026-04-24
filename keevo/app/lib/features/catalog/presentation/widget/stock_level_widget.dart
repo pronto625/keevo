@@ -172,7 +172,7 @@ class _StockLevelTile extends StatelessWidget {
           '${level.quantity}',
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            color: isLow ? AppTheme.errorColor : AppTheme.success,
+            color: isLow ? AppTheme.onError : AppTheme.onSuccess,
             fontSize: 13,
           ),
         ),

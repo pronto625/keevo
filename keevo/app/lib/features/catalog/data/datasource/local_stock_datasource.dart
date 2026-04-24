@@ -38,25 +38,34 @@ class LocalStockDataSource {
   }
 
   Future<void> upsertLevel(StockLevelModel level) async {
-    // Use raw SQL to upsert on (product_id, store_id) unique index (schema v10)
-    // instead of the PK `id` — prevents duplicate rows when backend rotates UUIDs.
-    await _db.customStatement(
-      'INSERT INTO stock_levels (id, product_id, variant_id, store_id, quantity, minimum_threshold, updated_at) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?) '
-      'ON CONFLICT(product_id, store_id) DO UPDATE SET '
-      'id = excluded.id, variant_id = excluded.variant_id, '
-      'quantity = excluded.quantity, minimum_threshold = excluded.minimum_threshold, '
-      'updated_at = excluded.updated_at',
-      [
-        level.id,
-        level.productId,
-        level.variantId,
-        level.storeId,
-        level.quantity,
-        level.minimumThreshold,
-        level.updatedAt.toIso8601String(),
+    // stock_levels has no UNIQUE(product_id, store_id) constraint — only PK on id.
+    // Use UPDATE + fallback INSERT to avoid SQLite conflict-target errors.
+    final rowsUpdated = await _db.customUpdate(
+      'UPDATE stock_levels SET id = ?, variant_id = ?, quantity = ?, '
+      'minimum_threshold = ?, updated_at = ? '
+      'WHERE product_id = ? AND store_id = ?',
+      variables: [
+        Variable(level.id),
+        Variable(level.variantId),
+        Variable(level.quantity),
+        Variable(level.minimumThreshold),
+        Variable(level.updatedAt.toIso8601String()),
+        Variable(level.productId),
+        Variable(level.storeId),
       ],
+      updates: {_db.stockLevels},
     );
+    if (rowsUpdated == 0) {
+      await _db.into(_db.stockLevels).insert(StockLevelsCompanion.insert(
+        id: level.id,
+        productId: level.productId,
+        variantId: Value(level.variantId),
+        storeId: level.storeId,
+        quantity: level.quantity,
+        minimumThreshold: Value(level.minimumThreshold),
+        updatedAt: level.updatedAt,
+      ));
+    }
   }
 
   Future<void> updateThreshold(String productId, int minimumThreshold) async {
@@ -140,7 +149,35 @@ class LocalStockDataSource {
       ..limit(pageSize, offset: page * pageSize);
 
     final rows = await query.get();
-    return rows.map(_movementToModel).toList();
+    final models = rows.map(_movementToModel).toList();
+
+    // Suppress unsynced orphan duplicates caused by a previous crash during
+    // upsertLevel (each failed retry inserted a new movement with quantityBefore=0).
+    // Keep only the most-recent unsynced movement per (productId, storeId,
+    // movementType, quantityDelta) group; synced movements are preserved as-is.
+    final seen = <String, bool>{};
+    final deduped = <StockMovementModel>[];
+    for (final m in models) {
+      if (m.synced) {
+        deduped.add(m);
+      } else {
+        final key =
+            '${m.productId}|${m.storeId}|${m.movementType}|${m.quantityDelta}';
+        if (!seen.containsKey(key)) {
+          seen[key] = true;
+          deduped.add(m);
+        }
+        // Asynchronously delete the extra orphan to keep the DB clean.
+        else {
+          _db.customUpdate(
+            'DELETE FROM stock_movements WHERE id = ?',
+            variables: [Variable.withString(m.id)],
+            updates: {_db.stockMovements},
+          );
+        }
+      }
+    }
+    return deduped;
   }
 
   /// Insert a new movement (from a local mutation — not yet synced).

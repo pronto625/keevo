@@ -127,6 +127,7 @@ development_status:
   5-3-resolution-de-conflits-delta-stock-last-write-wins: done             # code review — 5H 6M 4L issues found, fixes applied (H2-H5, M1-M3, L3-L4)
   5-4-limite-7-jours-hors-ligne-gate-de-deverrouillage: done
   5-5-monitoring-sync-recuperation-derreurs-coherence-multi-device: done             # Code review: 2C 3H 2M 4L findings — all fixed | H1: SyncErrorLogCleanupJob rewritten (multi-tenant iteration via JdbcTemplate) | H2: SyncControllerDevicesTest renamed (standaloneSetup limitation) | M2: FAB offline check | L1-L3: conflict count + relative time + entityId | Backend: 37/37 GREEN | Flutter: 28/28 GREEN
+  5-6-offline-first-transactional-writes-instant-ux: done                    # 2026-04-22 — Course correction: migrate all transactional writes (sale, product, category, client, supplier, stock entry, stock transfer) to offline-first pattern (local Drift write → queue → silent background triggerPush). New SyncTriggerDispatcher abstraction. 5 new backend sync handlers. 7 Flutter test suites + 3 backend handler test suites. | Code review 2026-04-23 PASSED: F1 CategorySyncHandler UUID preserved (bypass CreateCategoryUseCase, inject CategoryRepository, idempotency via findById) | F2 syncFromApi() replaced with syncServiceProvider.pull() in category_provider.dart | F3 recordSale_isImmediatelyVisibleInGetSalesForToday test added (real Drift DB, today's date) | F4 TOGGLE_CATEGORY set-based isActive payload + handler set-based logic | 25/25 backend handler tests GREEN, 5/5 sale offline-first tests GREEN, 4/4 category offline-first tests GREEN
   epic-5-retrospective: optional
 
   # ─────────────────────────────────────────────────────────
@@ -167,6 +168,7 @@ development_status:
   # Hotfixes
   # ─────────────────────────────────────────────────────────
   HF-1-registration-role-persistence-unified-auth-ui: done  # 2026-04-19 — code review PASSED | P1: password trim symmetry register/login in _submit() | P2: mode guard on ref.listen callbacks (fantôme navigation) | 14/14 Flutter tests GREEN
+  HF-2-stabilisation-online-rbac-employe-notifications-transferts: ready-for-dev
 
   # ─────────────────────────────────────────────────────────
   # Epic 9: Super Admin Dashboard (Toor)

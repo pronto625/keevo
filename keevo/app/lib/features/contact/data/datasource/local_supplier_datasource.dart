@@ -52,6 +52,14 @@ class LocalSupplierDataSource {
     return _toModel(row, productIds: productIds);
   }
 
+  Future<SupplierModel?> getByProductId(String productId) async {
+    final link = await (_db.select(_db.productSuppliers)
+          ..where((ps) => ps.productId.equals(productId)))
+        .getSingleOrNull();
+    if (link == null) return null;
+    return getById(link.supplierId);
+  }
+
   Future<List<String>> _getProductIds(String supplierId) async {
     final links = await (_db.select(_db.productSuppliers)
           ..where((ps) => ps.supplierId.equals(supplierId)))

@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import '../../../../core/storage/app_database.dart' hide Sale, SaleItem;
 import '../../../../core/sync/connectivity_service.dart';
 import '../../../../core/sync/sync_service.dart';
+import '../../../../core/sync/sync_trigger_dispatcher.dart';
 import '../../domain/model/payment_mode_enum.dart';
 import '../../domain/model/sale_model.dart';
 import '../../domain/model/sales_history_filter.dart';
@@ -12,13 +13,16 @@ import '../../domain/repository/sale_repository.dart';
 import '../datasource/local_sale_datasource.dart';
 import '../datasource/remote_sale_datasource.dart';
 
-/// SaleRepositoryImpl — Backend-first: online writes go to backend FIRST.
+/// SaleRepositoryImpl — Offline-first: local write → queue → background push.
+///
+/// Story 5.6: recordSale() is now always instant regardless of connectivity.
 class SaleRepositoryImpl implements SaleRepository {
   final LocalSaleDataSource _local;
   final RemoteSaleDataSource _remote;
   final AppDatabase _db;
   final ConnectivityService _connectivity;
   final SyncService _syncService;
+  final SyncTriggerDispatcher _syncTriggerDispatcher;
 
   const SaleRepositoryImpl(
     this._local,
@@ -26,34 +30,21 @@ class SaleRepositoryImpl implements SaleRepository {
     this._db, {
     required ConnectivityService connectivity,
     required SyncService syncService,
+    required SyncTriggerDispatcher syncTriggerDispatcher,
   })  : _connectivity = connectivity,
-        _syncService = syncService;
+        _syncService = syncService,
+        _syncTriggerDispatcher = syncTriggerDispatcher;
 
   @override
   Future<void> recordSale(Sale sale) async {
-    if (await _connectivity.isOnline()) {
-      // PATH A: Backend-first
-      try {
-        await _remote.pushSale(sale);
-        await _local.insertAll(sale, synced: true);
-      } catch (_) {
-        // Backend unreachable despite connectivity — fallback
-        await _local.insertAll(sale, synced: false);
-        await _syncService.queueOperation(
-          operation: 'CREATE_SALE',
-          payload: _buildPayload(sale),
-          entityId: sale.id,
-        );
-      }
-    } else {
-      // PATH B: Offline-first
-      await _local.insertAll(sale, synced: false);
-      await _syncService.queueOperation(
-        operation: 'CREATE_SALE',
-        payload: _buildPayload(sale),
-        entityId: sale.id,
-      );
-    }
+    // Offline-first (Story 5.6): always write locally first for instant UX.
+    await _local.insertAll(sale, synced: false);
+    await _syncService.queueOperation(
+      operation: 'CREATE_SALE',
+      payload: _buildPayload(sale),
+      entityId: sale.id,
+    );
+    _syncTriggerDispatcher.triggerPushIfIdle();
   }
 
   @override

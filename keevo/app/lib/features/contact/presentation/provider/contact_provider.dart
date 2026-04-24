@@ -1,6 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/sync/riverpod_sync_trigger_dispatcher.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
 import '../../data/datasource/local_client_datasource.dart';
 import '../../data/datasource/local_supplier_datasource.dart';
@@ -41,6 +42,7 @@ final clientRepositoryProvider = Provider<ClientRepository>((ref) {
     remote: ref.watch(remoteClientDataSourceProvider),
     connectivity: ref.watch(connectivityServiceProvider),
     syncService: ref.watch(syncServiceProvider),
+    syncTriggerDispatcher: ref.watch(syncTriggerDispatcherProvider),
   );
 });
 
@@ -50,6 +52,7 @@ final supplierRepositoryProvider = Provider<SupplierRepository>((ref) {
     remote: ref.watch(remoteSupplierDataSourceProvider),
     connectivity: ref.watch(connectivityServiceProvider),
     syncService: ref.watch(syncServiceProvider),
+    syncTriggerDispatcher: ref.watch(syncTriggerDispatcherProvider),
   );
 });
 
@@ -195,13 +198,22 @@ class SupplierListNotifier extends _$SupplierListNotifier {
 
 // ── Product-supplier lookup ──────────────────────────────────────────────────
 
-/// Fetches the supplier linked to a product via GET /api/v1/products/{id}/supplier.
-/// Returns null when no supplier is linked or the product is not found.
+/// Fetches the supplier linked to a product.
+/// Tries remote first (and caches result locally), falls back to local on error.
 @riverpod
 Future<SupplierModel?> productSupplier(
   ProductSupplierRef ref,
   String productId,
 ) async {
   final remote = ref.watch(remoteSupplierDataSourceProvider);
-  return remote.getByProductId(productId);
+  final local = ref.watch(localSupplierDataSourceProvider);
+  try {
+    final supplier = await remote.getByProductId(productId);
+    if (supplier != null) {
+      await local.upsert(supplier);
+    }
+    return supplier;
+  } catch (_) {
+    return local.getByProductId(productId);
+  }
 }

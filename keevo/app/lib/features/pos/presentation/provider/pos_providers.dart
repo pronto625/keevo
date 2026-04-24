@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' show Variable;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/sync/riverpod_sync_trigger_dispatcher.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
 import '../../../inventory/presentation/provider/global_stock_provider.dart';
 import '../../data/datasource/local_sale_datasource.dart';
@@ -32,6 +33,7 @@ final saleRepositoryProvider = Provider<SaleRepository>((ref) {
     ref.watch(appDatabaseProvider),
     connectivity: ref.watch(connectivityServiceProvider),
     syncService: ref.watch(syncServiceProvider),
+    syncTriggerDispatcher: ref.watch(syncTriggerDispatcherProvider),
   );
 });
 
