@@ -24,8 +24,8 @@ import 'offline_gate_banner.dart';
 
 /// MainShell — persistent bottom navigation scaffold wrapping the main sections.
 ///
-/// UX spec: OWNER sees 4 onglets: Caisse / Catalogue / Rapports / Plus
-/// EMPLOYEE sees 2 onglets: Caisse / Plus (AC5 — restricted navigation)
+/// UX spec: OWNER sees 5 onglets:   Dashboard / Caisse / Catalogue / Rapports / Plus
+/// EMPLOYEE sees 4 onglets: Caisse / Catalogue (read-only) / Rapports / Plus (HF-2 AC5)
 ///
 /// Clients & Fournisseurs are accessible from the Plus (Settings) page.
 class MainShell extends ConsumerStatefulWidget {
@@ -40,8 +40,8 @@ class _MainShellState extends ConsumerState<MainShell> {
   /// OWNER tab routes — full navigation (5 tabs: Dashboard / Caisse / Catalogue / Rapports / Plus)
   static const _ownerRoutes = ['/dashboard', '/pos', '/products', '/reports', '/settings'];
 
-  /// EMPLOYEE tab routes — POS + Rapports (day closure) + settings (AC5)
-  static const _employeeRoutes = ['/pos', '/reports', '/settings'];
+  /// EMPLOYEE tab routes — POS + Catalogue (read-only) + Rapports (day closure) + settings (HF-2 AC5)
+  static const _employeeRoutes = ['/pos', '/products', '/reports', '/settings'];
 
   static int _tabIndex(String location, List<String> routes) {
     for (int i = routes.length - 1; i >= 0; i--) {
@@ -209,9 +209,8 @@ class _MainShellState extends ConsumerState<MainShell> {
       }
     }
 
-    final pendingSalesCount = isEmployee
-        ? 0
-        : (ref.watch(pendingSalesCountProvider(storeId)).valueOrNull ?? 0);
+    final pendingSalesCount =
+        ref.watch(pendingSalesCountProvider(storeId)).valueOrNull ?? 0;
 
     // Low stock badge — sum lowStockCount across all stores (AC8)
     final lowStockCount = isEmployee
@@ -246,36 +245,36 @@ class _MainShellState extends ConsumerState<MainShell> {
         ),
         label: 'Caisse',
       ),
-      if (!isEmployee)
-        NavigationDestination(
-          icon: Badge(
-            label: Text(lowStockCount > 9 ? '9+' : '$lowStockCount'),
-            isLabelVisible: lowStockCount > 0,
+      // Catalogue — read-only for EMPLOYEE (mutation actions hidden in CatalogPage itself)
+      NavigationDestination(
+        icon: Badge(
+          label: Text(lowStockCount > 9 ? '9+' : '$lowStockCount'),
+          isLabelVisible: lowStockCount > 0 && !isEmployee,
+          backgroundColor: AppTheme.warning,
+          textColor: AppTheme.darkSurface,
+          child: Badge(
+            label: Text(draftCount > 9 ? '9+' : '$draftCount'),
+            isLabelVisible: draftCount > 0 && lowStockCount == 0 && !isEmployee,
             backgroundColor: AppTheme.warning,
             textColor: AppTheme.darkSurface,
-            child: Badge(
-              label: Text(draftCount > 9 ? '9+' : '$draftCount'),
-              isLabelVisible: draftCount > 0 && lowStockCount == 0,
-              backgroundColor: AppTheme.warning,
-              textColor: AppTheme.darkSurface,
-              child: const Icon(Icons.inventory_2_outlined),
-            ),
+            child: const Icon(Icons.inventory_2_outlined),
           ),
-          selectedIcon: Badge(
-            label: Text(lowStockCount > 9 ? '9+' : '$lowStockCount'),
-            isLabelVisible: lowStockCount > 0,
-            backgroundColor: AppTheme.warning,
-            textColor: AppTheme.darkSurface,
-            child: Badge(
-              label: Text(draftCount > 9 ? '9+' : '$draftCount'),
-              isLabelVisible: draftCount > 0 && lowStockCount == 0,
-              backgroundColor: AppTheme.warning,
-              textColor: AppTheme.darkSurface,
-              child: const Icon(Icons.inventory_2_rounded),
-            ),
-          ),
-          label: 'Catalogue',
         ),
+        selectedIcon: Badge(
+          label: Text(lowStockCount > 9 ? '9+' : '$lowStockCount'),
+          isLabelVisible: lowStockCount > 0 && !isEmployee,
+          backgroundColor: AppTheme.warning,
+          textColor: AppTheme.darkSurface,
+          child: Badge(
+            label: Text(draftCount > 9 ? '9+' : '$draftCount'),
+            isLabelVisible: draftCount > 0 && lowStockCount == 0 && !isEmployee,
+            backgroundColor: AppTheme.warning,
+            textColor: AppTheme.darkSurface,
+            child: const Icon(Icons.inventory_2_rounded),
+          ),
+        ),
+        label: 'Catalogue',
+      ),
       const NavigationDestination(
         icon: Icon(Icons.bar_chart_outlined),
         selectedIcon: Icon(Icons.bar_chart_rounded),

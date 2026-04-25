@@ -123,6 +123,13 @@ public class SaleRepositoryAdapter implements SaleRepository {
                 .toList();
     }
 
+        @Override
+        public List<Sale> findByStoreIdAndStatus(UUID storeId, SaleStatus status) {
+            return springRepository.findByStoreIdAndStatus(storeId, status.name()).stream()
+                    .map(this::toDomain)
+                    .toList();
+        }
+
     @Override
     public void updateStatus(UUID saleId, SaleStatus newStatus) {
         springRepository.findById(saleId).ifPresent(entity -> {

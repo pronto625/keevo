@@ -44,4 +44,28 @@ public record PendingSaleResponseDto(
                         .toList()
         );
     }
+
+    /**
+     * AC6: Returns a DTO with all monetary fields zeroed out for EMPLOYEE role.
+     * Quantities and product names remain visible; prices and totals are masked.
+     */
+    public static PendingSaleResponseDto fromForEmployee(Sale sale) {
+        return new PendingSaleResponseDto(
+                sale.getId(),
+                sale.getStoreId(),
+                sale.getEmployeeId(),
+                sale.getStatus().name(),
+                0,  // totalAmount masked
+                0,  // discountAmount masked
+                sale.getCreatedAt(),
+                sale.getItems().stream()
+                        .map(i -> new ItemDto(
+                                i.getProductId(),
+                                i.getProductName(),
+                                0,  // appliedUnitPrice masked
+                                i.getQuantity(),
+                                0)) // subtotal masked
+                        .toList()
+        );
+    }
 }

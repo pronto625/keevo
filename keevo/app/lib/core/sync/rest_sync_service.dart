@@ -333,12 +333,16 @@ class RestSyncService implements SyncService {
     if (levels.isEmpty) return;
     for (final l in levels) {
       final map = l as Map<String, dynamic>;
+      // Conflict target is (product_id, store_id) — the natural business key.
+      // The server may assign a different UUID than the locally-generated one,
+      // so conflicting on id alone would miss existing rows and hit the
+      // UNIQUE INDEX on (product_id, store_id), crashing the transaction.
       await _database.customStatement(
         'INSERT INTO stock_levels (id, product_id, variant_id, store_id, '
         'quantity, minimum_threshold, updated_at) '
         'VALUES (?, ?, ?, ?, ?, ?, ?) '
-        'ON CONFLICT(id) DO UPDATE SET '
-        'product_id = excluded.product_id, store_id = excluded.store_id, '
+        'ON CONFLICT(product_id, store_id) DO UPDATE SET '
+        'id = excluded.id, '
         'variant_id = excluded.variant_id, '
         'quantity = excluded.quantity, '
         'minimum_threshold = excluded.minimum_threshold, '

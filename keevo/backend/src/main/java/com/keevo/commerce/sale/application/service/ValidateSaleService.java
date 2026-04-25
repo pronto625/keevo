@@ -51,6 +51,7 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
         }
 
         Sale sale = loadPendingSale(command.saleId());
+        enforceEmployeeStoreScope(command.assignedStoreId(), sale.getStoreId());
         validateJustification(command.justification());
 
         // Step 1: Record initial stock entries for newly promoted draft products.
@@ -119,6 +120,7 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
     @Override
     public void cancelPendingSale(CancelPendingSaleCommand command) {
         Sale sale = loadPendingSale(command.saleId());
+        enforceEmployeeStoreScope(command.assignedStoreId(), sale.getStoreId());
         validateJustification(command.justification());
 
         saleRepository.updateStatus(sale.getId(), SaleStatus.CANCELLED);
@@ -132,6 +134,11 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
     @Override
     public List<Sale> getPendingSales() {
         return saleRepository.findByStatus(SaleStatus.PENDING_VALIDATION);
+    }
+
+    @Override
+    public List<Sale> getPendingSalesByStore(UUID storeId) {
+        return saleRepository.findByStoreIdAndStatus(storeId, SaleStatus.PENDING_VALIDATION);
     }
 
     private Sale loadPendingSale(UUID saleId) {
@@ -149,6 +156,14 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
         if (justification != null && !justification.isBlank() && justification.trim().length() < 10) {
             throw new DomainException(ErrorCode.JUSTIFICATION_TOO_SHORT,
                     "Justification must be at least 10 characters");
+        }
+    }
+
+    private void enforceEmployeeStoreScope(UUID assignedStoreId, UUID saleStoreId) {
+        // OWNER flow passes null assignedStoreId and is unrestricted.
+        if (assignedStoreId != null && !assignedStoreId.equals(saleStoreId)) {
+            throw new DomainException(ErrorCode.FORBIDDEN,
+                    "Employee cannot operate pending sale outside assigned store");
         }
     }
 }

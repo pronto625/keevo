@@ -41,22 +41,23 @@ class StockRepositoryImpl implements StockRepository {
 
   @override
   Future<List<StockLevelModel>> getLevels(String productId) async {
-    // Guard: if sync_queue has pending operations, prefer local data
-    // to avoid overwriting offline stock decrements with stale backend values.
-    if (await _syncService.hasPendingOperations()) {
-      return _local.getLevels(productId);
-    }
-    try {
-      final levels = await _remote.getLevels(productId);
-      for (final level in levels) {
-        await _local.upsertLevel(level);
+    // Best-effort: refresh local cache from remote when no pending operations.
+    // Always return LOCAL data so the catalog reads the same source as the POS
+    // (which only queries the local DB). Returning remote data directly caused
+    // the catalog to show a cross-store sum when the owner has no active store
+    // selected, making per-product stock appear doubled vs POS.
+    if (!await _syncService.hasPendingOperations()) {
+      try {
+        final levels = await _remote.getLevels(productId);
+        for (final level in levels) {
+          await _local.upsertLevel(level);
+        }
+      } catch (e) {
+        dev.log('[Stock] Remote getLevels failed — using local cache: $e',
+            name: 'StockRepository');
       }
-      return levels;
-    } catch (e) {
-      dev.log('[Stock] Remote getLevels failed — using local cache: $e',
-          name: 'StockRepository');
-      return _local.getLevels(productId);
     }
+    return _local.getLevels(productId);
   }
 
   @override

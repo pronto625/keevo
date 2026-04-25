@@ -54,16 +54,17 @@ class LocalSaleDataSource {
       //    (matches backend RecordSaleService behavior).
       if (sale.status != 'PENDING_VALIDATION') {
         for (final item in sale.items) {
-          final stockRow = await (_db.select(_db.stockLevels)
+          // B1: use .get() to handle potential duplicate (product_id, store_id) rows.
+          final stockRows = await (_db.select(_db.stockLevels)
                 ..where((s) =>
                     s.productId.equals(item.productId) &
                     s.storeId.equals(sale.storeId)))
-              .getSingleOrNull();
+              .get();
 
-          final quantityBefore = stockRow?.quantity ?? 0;
+          final quantityBefore = stockRows.fold<int>(0, (sum, r) => sum + r.quantity);
           final quantityAfter = (quantityBefore - item.quantity).clamp(0, quantityBefore);
 
-          if (stockRow != null) {
+          if (stockRows.isNotEmpty) {
             await (_db.update(_db.stockLevels)
                   ..where((s) =>
                       s.productId.equals(item.productId) &
@@ -110,12 +111,17 @@ class LocalSaleDataSource {
 
   /// Get available stock for a product in a store.
   Future<int> getAvailableStock(String productId, String storeId) async {
-    final row = await (_db.select(_db.stockLevels)
+    // B1: use .get() instead of .getSingleOrNull() — duplicate rows can exist
+    // when upsertLevel() is bypassed (catalog insert / sync pull races).
+    // Use MAX (not SUM) — duplicates represent the same physical stock, not
+    // additional stock. Consistent with getLevelByStore() in LocalStockDataSource.
+    final rows = await (_db.select(_db.stockLevels)
           ..where((s) =>
               s.productId.equals(productId) &
               s.storeId.equals(storeId)))
-        .getSingleOrNull();
-    return row?.quantity ?? 0;
+        .get();
+    if (rows.isEmpty) return 0;
+    return rows.map((r) => r.quantity).reduce((a, b) => a > b ? a : b);
   }
 
   /// Query pending validation sales for a store.
@@ -177,16 +183,17 @@ class LocalSaleDataSource {
           final qty = entry.value;
           if (qty <= 0) continue;
 
-          final stockRow = await (_db.select(_db.stockLevels)
+          // B1: use .get() to handle potential duplicate (product_id, store_id) rows.
+          final stockRowsEntry = await (_db.select(_db.stockLevels)
                 ..where((s) =>
                     s.productId.equals(productId) &
                     s.storeId.equals(sale.storeId)))
-              .getSingleOrNull();
+              .get();
 
-          final qBefore = stockRow?.quantity ?? 0;
+          final qBefore = stockRowsEntry.fold<int>(0, (sum, r) => sum + r.quantity);
           final qAfter = qBefore + qty;
 
-          if (stockRow != null) {
+          if (stockRowsEntry.isNotEmpty) {
             await (_db.update(_db.stockLevels)
                   ..where((s) =>
                       s.productId.equals(productId) &
@@ -226,17 +233,18 @@ class LocalSaleDataSource {
           .get();
 
       for (final item in items) {
-        final stockRow = await (_db.select(_db.stockLevels)
+        // B1: use .get() to handle potential duplicate (product_id, store_id) rows.
+        final stockRowsDecrement = await (_db.select(_db.stockLevels)
               ..where((s) =>
                   s.productId.equals(item.productId) &
                   s.storeId.equals(sale.storeId)))
-            .getSingleOrNull();
+            .get();
 
-        final qBefore = stockRow?.quantity ?? 0;
+        final qBefore = stockRowsDecrement.fold<int>(0, (sum, r) => sum + r.quantity);
         // Force to 0 if insufficient (matches backend behavior)
         final qAfter = (qBefore - item.quantity).clamp(0, qBefore);
 
-        if (stockRow != null) {
+        if (stockRowsDecrement.isNotEmpty) {
           await (_db.update(_db.stockLevels)
                 ..where((s) =>
                     s.productId.equals(item.productId) &
@@ -319,16 +327,17 @@ class LocalSaleDataSource {
 
         final now = DateTime.now();
         for (final item in items) {
-          final stockRow = await (_db.select(_db.stockLevels)
+          // B1: use .get() to handle potential duplicate (product_id, store_id) rows.
+          final stockRowsCascade = await (_db.select(_db.stockLevels)
                 ..where((s) =>
                     s.productId.equals(item.productId) &
                     s.storeId.equals(storeId)))
-              .getSingleOrNull();
+              .get();
 
-          final qBefore = stockRow?.quantity ?? 0;
+          final qBefore = stockRowsCascade.fold<int>(0, (sum, r) => sum + r.quantity);
           final qAfter = (qBefore - item.quantity).clamp(0, qBefore);
 
-          if (stockRow != null) {
+          if (stockRowsCascade.isNotEmpty) {
             await (_db.update(_db.stockLevels)
                   ..where((s) =>
                       s.productId.equals(item.productId) &

@@ -106,19 +106,20 @@ class ProductSyncHandlerTest {
     void handle_promoteProduct_delegatesToCreateProductUseCase() {
         var productId = UUID.randomUUID();
         var op = new SyncOperation("op-1", "PROMOTE_PRODUCT", productId.toString(),
-                Map.of("name", "Promoted Product", "price", 5000), Instant.now());
+                Map.of("productId", productId.toString(), "name", "Promoted Product", "price", 5000), Instant.now());
 
-        when(createProduct.execute(any())).thenReturn(dummyProduct(productId, "Promoted Product"));
+        when(updateProduct.execute(any())).thenReturn(dummyProduct(productId, "Promoted Product"));
 
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(createProduct).execute(any());
+        verify(updateProduct).execute(any());
     }
 
     @Test
     void supportedTypes_containsAllProductTypes() {
         assertThat(handler.supportedTypes()).containsExactlyInAnyOrder(
-                "CREATE_PRODUCT", "UPDATE_PRODUCT", "ARCHIVE_PRODUCT", "UNARCHIVE_PRODUCT", "PROMOTE_PRODUCT");
+                "CREATE_PRODUCT", "CREATE_DRAFT_PRODUCT", "UPDATE_PRODUCT",
+                "ARCHIVE_PRODUCT", "UNARCHIVE_PRODUCT", "PROMOTE_PRODUCT");
     }
 }

@@ -30,6 +30,7 @@ class _CreateEmployeePageState extends ConsumerState<CreateEmployeePage> {
   String? _completePhone;
   bool _phoneValid = false;
   StoreModel? _selectedStore;
+  bool _successHandled = false;
 
   @override
   void dispose() {
@@ -63,14 +64,26 @@ class _CreateEmployeePageState extends ConsumerState<CreateEmployeePage> {
       next.whenOrNull(
         data: (result) {
           if (result == null) return;
-          showTempPasswordBottomSheet(
-            context: context,
-            employeeName:
-                '${result.employee.firstName} ${result.employee.lastName}',
-            storeName: _selectedStore?.name ?? '',
-            temporaryPassword: result.temporaryPassword,
-          ).then((_) {
-            if (mounted) context.pop(); // Back to team page
+          if (_successHandled) return;
+          _successHandled = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            showTempPasswordBottomSheet(
+              context: context,
+              employeeName:
+                  '${result.employee.firstName} ${result.employee.lastName}',
+              storeName: _selectedStore?.name ?? '',
+              temporaryPassword: result.temporaryPassword,
+            ).then((_) {
+              if (!mounted) return;
+              // B2: use go() fallback when pop() is unavailable (e.g. GoRouter
+              // stack was reset during the bottom-sheet async gap).
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/settings/team');
+              }
+            });
           });
         },
         error: (error, _) {

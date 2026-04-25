@@ -179,6 +179,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             var auth = new UsernamePasswordAuthenticationToken(
                     userId, null,
                     List.of(new SimpleGrantedAuthority("ROLE_" + role)));
+            // AC5: expose storeId in details so controllers can scope queries for EMPLOYEE
+            if ("EMPLOYEE".equals(role)) {
+                auth.setDetails(jwtTokenProvider.extractStoreId(claims));
+            }
             SecurityContextHolder.getContext().setAuthentication(auth);
 
             filterChain.doFilter(request, response);

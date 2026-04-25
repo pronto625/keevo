@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/sync/sync_status.dart';
 import '../../../../core/sync/sync_status_provider.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
 import '../provider/global_stock_provider.dart';
 import '../widget/store_product_stock_tile.dart';
@@ -82,6 +83,16 @@ class _GlobalStockOverviewPageState
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => context.push('/stock/transfers'),
+        backgroundColor: AppTheme.primary,
+        icon: const Icon(Icons.swap_horiz_rounded, color: Colors.white),
+        label: const Text(
+          'Transfert',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        ),
+        heroTag: 'stock_transfer_fab',
+      ),
       body: CustomScrollView(
         slivers: [
           // ── App bar — même style que CatalogPage ───────────────────────

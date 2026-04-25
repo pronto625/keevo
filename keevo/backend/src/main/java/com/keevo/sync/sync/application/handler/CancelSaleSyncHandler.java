@@ -41,7 +41,7 @@ public class CancelSaleSyncHandler extends AbstractSyncOperationHandler {
         String justification = (String) p.get("justification");
 
         cancelPendingSaleUseCase.cancelPendingSale(
-                new CancelPendingSaleCommand(saleId, actorId, justification));
+                new CancelPendingSaleCommand(saleId, actorId, null, justification));
 
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                 saleId.toString(), null);

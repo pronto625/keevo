@@ -70,6 +70,12 @@ public class EmployeeRepositoryAdapter implements EmployeeRepository {
         return entityToDomain(jpa.save(entity));
     }
 
+    @Override
+    public List<Employee> findByStoreId(UUID storeId) {
+        return jpa.findByStoreIdAndStatus(storeId, EmployeeStatus.ACTIVE.name()).stream()
+                .map(this::entityToDomain).toList();
+    }
+
     // ── Private helpers ──────────────────────────────────────────
 
     private EmployeeJpaEntity findEntityOrThrow(UUID id) {

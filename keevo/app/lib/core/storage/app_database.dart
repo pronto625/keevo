@@ -54,6 +54,7 @@ part 'app_database.g.dart';
 /// Schema version 21: users.firstName column added; sales index added (Story 7.1).
 /// Schema version 22: reports table added for end-of-day report history (Story 7.2).
 /// Schema version 23: notifications table added for local notification storage (Story 8.0).
+/// Schema version 25: stock_levels UNIQUE constraint added to Drift uniqueKeys (HF-2 fix).
 @DriftDatabase(tables: [
   SyncQueue,
   Products,
@@ -88,7 +89,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 24;
+  int get schemaVersion => 25;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -242,6 +243,23 @@ class AppDatabase extends _$AppDatabase {
       if (from < 24) {
         // Story 7.2 fix — add actorId column to reports table.
         await migrator.addColumn(reports, reports.actorId);
+      }
+      if (from < 25) {
+        // HF-2 fix: ensure UNIQUE constraint on stock_levels (product_id, store_id).
+        // Step 1: deduplicate existing rows before creating the index.
+        // Keep only the row with the highest quantity per (product_id, store_id) pair.
+        // Devices that accumulated duplicate rows due to the missing uniqueKeys will
+        // have their duplicates collapsed; the MAX quantity is the authoritative value.
+        await customStatement(
+          'DELETE FROM stock_levels WHERE rowid NOT IN ('
+          '  SELECT MAX(rowid) FROM stock_levels GROUP BY product_id, store_id'
+          ')',
+        );
+        // Step 2: now safe to create the unique index (no duplicates remain).
+        await customStatement(
+          'CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_levels_product_store '
+          'ON stock_levels (product_id, store_id)',
+        );
       }
     },
   );

@@ -12,6 +12,7 @@ import '../provider/product_provider.dart';
 import '../provider/stock_provider.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../../pos/presentation/provider/pos_providers.dart';
+import '../../../pos/presentation/provider/day_closure_providers.dart';
 import '../../../../core/di/providers.dart';
 import 'cross_store_availability_bottom_sheet.dart';
 
@@ -641,6 +642,8 @@ class ProductCard extends ConsumerWidget {
                       container.invalidate(pendingSalesProvider(storeId));
                       container.invalidate(pendingSalesCountProvider(storeId));
                       container.invalidate(stockNotifierProvider(newId));
+                      container.invalidate(todaySummaryProvider(storeId));
+                      container.invalidate(dayClosureStateProvider(storeId));
                     }
                   }
                   container.read(showDraftsOnlyProvider.notifier).state = false;

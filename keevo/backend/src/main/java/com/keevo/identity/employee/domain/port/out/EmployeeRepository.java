@@ -29,4 +29,10 @@ public interface EmployeeRepository {
     Employee updateStatus(UUID employeeId, EmployeeStatus status);
 
     Employee updatePasswordChangeRequired(UUID employeeId, boolean required);
+
+    /**
+     * Find all active employees assigned to a given store.
+     * Used by notification recipient resolution for transfer events (HF-2 AC2).
+     */
+    List<Employee> findByStoreId(UUID storeId);
 }

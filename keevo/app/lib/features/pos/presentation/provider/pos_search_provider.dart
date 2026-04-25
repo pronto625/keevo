@@ -11,6 +11,7 @@ class PosProductResult {
   final int stock;
   final String? photoUrl;
   final String? categoryName;
+  final String status;
 
   const PosProductResult({
     required this.id,
@@ -19,7 +20,10 @@ class PosProductResult {
     required this.stock,
     this.photoUrl,
     this.categoryName,
+    this.status = 'ACTIVE',
   });
+
+  bool get isDraft => status == 'DRAFT';
 }
 
 /// PosSearchNotifier — fuzzy product search from local Drift products table.
@@ -48,7 +52,7 @@ class PosSearchNotifier extends Notifier<AsyncValue<List<PosProductResult>>> {
 
       if (storeId != null) {
         rows = await db.customSelect(
-          'SELECT p.id, p.name, p.price, p.photo_url, '
+          'SELECT p.id, p.name, p.price, p.photo_url, p.status, '
           'COALESCE(d.quantity, 0) as stock '
           'FROM products p '
           'LEFT JOIN ('
@@ -57,7 +61,7 @@ class PosSearchNotifier extends Notifier<AsyncValue<List<PosProductResult>>> {
           '  WHERE sl.store_id = ? '
           '  GROUP BY sl.product_id'
           ') d ON d.product_id = p.id '
-          'WHERE p.archived = 0 AND p.status = \'ACTIVE\' AND LOWER(p.name) LIKE ? '
+          "WHERE p.archived = 0 AND p.status IN ('ACTIVE', 'DRAFT') AND LOWER(p.name) LIKE ? "
           'ORDER BY (CASE WHEN COALESCE(d.quantity, 0) > 0 THEN 0 ELSE 1 END) ASC, p.name ASC '
           'LIMIT 50',
           variables: [
@@ -67,7 +71,7 @@ class PosSearchNotifier extends Notifier<AsyncValue<List<PosProductResult>>> {
         ).get();
       } else {
         rows = await db.customSelect(
-          'SELECT p.id, p.name, p.price, p.photo_url, '
+          'SELECT p.id, p.name, p.price, p.photo_url, p.status, '
           'COALESCE(agg.total_stock, 0) as stock '
           'FROM products p '
           'LEFT JOIN ('
@@ -79,7 +83,7 @@ class PosSearchNotifier extends Notifier<AsyncValue<List<PosProductResult>>> {
           '  ) d '
           '  GROUP BY d.product_id'
           ') agg ON agg.product_id = p.id '
-          'WHERE p.archived = 0 AND p.status = \'ACTIVE\' AND LOWER(p.name) LIKE ? '
+          "WHERE p.archived = 0 AND p.status IN ('ACTIVE', 'DRAFT') AND LOWER(p.name) LIKE ? "
           'ORDER BY (CASE WHEN COALESCE(agg.total_stock, 0) > 0 THEN 0 ELSE 1 END) ASC, p.name ASC '
           'LIMIT 50',
           variables: [
@@ -94,6 +98,7 @@ class PosSearchNotifier extends Notifier<AsyncValue<List<PosProductResult>>> {
             price: r.read<int>('price'),
             stock: r.read<int>('stock'),
             photoUrl: r.readNullable<String>('photo_url'),
+            status: r.read<String>('status'),
           )).toList();
 
       state = AsyncData(results);

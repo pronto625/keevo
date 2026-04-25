@@ -29,12 +29,17 @@ class LocalStockDataSource {
     String productId,
     String storeId,
   ) async {
-    final row = await (_db.select(_db.stockLevels)
+    // B1: use .get() instead of .getSingleOrNull() — duplicate rows can exist
+    // when upsertLevel() is bypassed (catalog insert / sync pull races).
+    // Take the row with the highest quantity as the authoritative value.
+    final rows = await (_db.select(_db.stockLevels)
           ..where(
             (l) => l.productId.equals(productId) & l.storeId.equals(storeId),
           ))
-        .getSingleOrNull();
-    return row != null ? _levelToModel(row) : null;
+        .get();
+    if (rows.isEmpty) return null;
+    final row = rows.reduce((a, b) => a.quantity >= b.quantity ? a : b);
+    return _levelToModel(row);
   }
 
   Future<void> upsertLevel(StockLevelModel level) async {

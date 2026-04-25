@@ -19,8 +19,13 @@ class RiverpodSyncTriggerDispatcher implements SyncTriggerDispatcher {
   void triggerPushIfIdle() {
     // Fire-and-forget: NEVER await in calling code — this is purely background.
     Future.microtask(() async {
-      if (await _connectivity.isOnline()) {
-        _ref.read(syncTriggerNotifierProvider.notifier).triggerPush();
+      try {
+        if (await _connectivity.isOnline()) {
+          _ref.read(syncTriggerNotifierProvider.notifier).triggerPush();
+        }
+      } on StateError {
+        // Ref stale — ProviderScope rebuilt (auth change / employee creation).
+        // Sync will be triggered on the next write operation. Swallow silently.
       }
     });
   }

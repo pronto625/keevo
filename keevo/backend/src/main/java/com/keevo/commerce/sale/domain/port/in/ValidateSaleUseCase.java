@@ -9,14 +9,14 @@ import java.util.UUID;
  */
 public interface ValidateSaleUseCase {
 
-    record ValidateSaleCommand(UUID saleId, UUID actorId, String justification,
+    record ValidateSaleCommand(UUID saleId, UUID actorId, UUID assignedStoreId, String justification,
                                 Map<UUID, UUID> productIdRemappings,
                                 Map<UUID, Integer> initialStockEntries) {
         public ValidateSaleCommand(UUID saleId, UUID actorId, String justification) {
-            this(saleId, actorId, justification, null, null);
+            this(saleId, actorId, null, justification, null, null);
         }
         public ValidateSaleCommand(UUID saleId, UUID actorId, String justification, Map<UUID, UUID> productIdRemappings) {
-            this(saleId, actorId, justification, productIdRemappings, null);
+            this(saleId, actorId, null, justification, productIdRemappings, null);
         }
     }
 

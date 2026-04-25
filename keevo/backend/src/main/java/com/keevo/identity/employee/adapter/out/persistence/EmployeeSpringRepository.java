@@ -15,4 +15,7 @@ public interface EmployeeSpringRepository extends JpaRepository<EmployeeJpaEntit
     Optional<EmployeeJpaEntity> findByUserId(UUID userId);
 
     List<EmployeeJpaEntity> findAllByOrderByStatusAscCreatedAtAsc();
+
+    /** HF-2 AC2: find employees assigned to a specific store for notification routing. */
+    List<EmployeeJpaEntity> findByStoreIdAndStatus(UUID storeId, String status);
 }

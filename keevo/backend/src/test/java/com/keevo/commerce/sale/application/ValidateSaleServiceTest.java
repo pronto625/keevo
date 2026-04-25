@@ -157,7 +157,7 @@ class ValidateSaleServiceTest {
     void cancelPendingSale_withJustification_transitionsToCancelled() {
         when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(pendingSale()));
 
-        service.cancelPendingSale(new CancelPendingSaleCommand(SALE_ID, ACTOR_ID,
+        service.cancelPendingSale(new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null,
                 "Produit finalement non disponible chez le fournisseur"));
 
         verify(saleRepository).updateStatus(SALE_ID, SaleStatus.CANCELLED);
@@ -171,7 +171,7 @@ class ValidateSaleServiceTest {
     void cancelPendingSale_noStockRestoration() {
         when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(pendingSale()));
 
-        service.cancelPendingSale(new CancelPendingSaleCommand(SALE_ID, ACTOR_ID,
+        service.cancelPendingSale(new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null,
                 "Stock jamais décrémenté en PENDING"));
 
         verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
@@ -181,7 +181,7 @@ class ValidateSaleServiceTest {
     void cancelPendingSale_withoutJustification_succeeds() {
         when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(pendingSale()));
 
-        service.cancelPendingSale(new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null));
+        service.cancelPendingSale(new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null, null));
 
         verify(saleRepository).updateStatus(SALE_ID, SaleStatus.CANCELLED);
     }
@@ -191,7 +191,7 @@ class ValidateSaleServiceTest {
         when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(completedSale()));
 
         assertThatThrownBy(() -> service.cancelPendingSale(
-                new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, "Trying to cancel completed")))
+                new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null, "Trying to cancel completed")))
                 .isInstanceOf(DomainException.class);
     }
 }

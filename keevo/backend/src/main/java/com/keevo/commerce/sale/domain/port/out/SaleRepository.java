@@ -53,6 +53,9 @@ public interface SaleRepository {
     Page<Sale> findByStoreIdAndDateRangeAndStatus(UUID storeId, Instant from, Instant to,
                                                    SaleStatus status, Pageable pageable);
 
+    /** AC5: Find pending sales for a specific store (for EMPLOYEE role). */
+    List<Sale> findByStoreIdAndStatus(UUID storeId, SaleStatus status);
+
     /**
      * Check if any sales exist for a store within a date range with given status.
      * Used by scheduler to check if closure already triggered.

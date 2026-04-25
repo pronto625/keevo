@@ -109,7 +109,7 @@ class MultiStoreSummaryServiceTest {
         when(reportRepository.findByDateAndTenant(any(), anyString(), eq(ReportType.DAILY)))
                 .thenReturn(List.of(stubReport(UUID.randomUUID(), "A", 50000, 3)));
         when(formatter.formatCombinedSummary(anyString(), any(), anyInt(), anyInt())).thenReturn("Résumé");
-        when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.empty());
+        when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.of(owner()));
 
         service.checkAndGenerateCombinedSummary(command);
 
@@ -125,7 +125,7 @@ class MultiStoreSummaryServiceTest {
         when(reportRepository.findByDateAndTenant(any(), anyString(), eq(ReportType.DAILY)))
                 .thenReturn(List.of(stubReport(UUID.randomUUID(), "A", 50000, 3)));
         when(formatter.formatCombinedSummary(anyString(), any(), anyInt(), anyInt())).thenReturn("Résumé");
-        when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.empty());
+        when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.of(owner()));
         doThrow(new RuntimeException("WhatsApp error")).when(whatsAppPort).sendReport(anyString(), anyString());
 
         service.checkAndGenerateCombinedSummary(command);
@@ -133,5 +133,11 @@ class MultiStoreSummaryServiceTest {
         // Verify the combined report was saved twice (once before delivery, once after failure)
         verify(reportRepository, times(2)).save(argThat(r ->
                 r.getReportType() == ReportType.DAILY_COMBINED));
+    }
+
+    private com.keevo.identity.auth.domain.model.User owner() {
+        return new com.keevo.identity.auth.domain.model.User(
+                UUID.randomUUID(), "+237600000999", "hash",
+                com.keevo.identity.auth.domain.model.Role.OWNER, true, Instant.now());
     }
 }

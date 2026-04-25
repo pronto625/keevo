@@ -81,12 +81,12 @@ class StockTransferRepositoryImpl implements StockTransferRepository {
       );
     }
 
-    // 2. Apply local stock change immediately
-    await _local.applyLocalStockChange(
+    // 2. AC1: Only decrement source at Step 1. Destination is credited at Step 2
+    //    (completeTransfer) to prevent premature destination stock inflation.
+    await _local.applySourceDecrement(
       productId: productId,
       variantId: variantId,
       sourceStoreId: sourceStoreId,
-      destinationStoreId: destinationStoreId,
       quantity: quantity,
     );
 
@@ -170,11 +170,20 @@ class StockTransferRepositoryImpl implements StockTransferRepository {
   @override
   Future<StockTransferModel> completeTransfer(String transferId) async {
     if (await _connectivity.isOnline()) {
+      final existingLocal = await _local.getTransferById(transferId);
+      if (existingLocal?.status == 'COMPLETED') {
+        return existingLocal!;
+      }
       final transfer = await _remote.completeTransfer(transferId);
-      // Persist updated status locally (COMPLETED). Local stock_levels will
-      // be refreshed on next full sync since destination-only credits are
-      // complex to apply partially without a source deduction here.
+      // Persist updated status locally (COMPLETED).
       await _local.saveTransfer(transfer);
+      // AC1: Credit destination stock locally now that transfer is completed.
+      await _local.applyDestinationIncrement(
+        productId: transfer.productId,
+        variantId: transfer.variantId,
+        destinationStoreId: transfer.destinationStoreId,
+        quantity: transfer.quantity,
+      );
       return transfer;
     } else {
       throw StateError('La réception nécessite une connexion active.');

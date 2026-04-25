@@ -18,13 +18,20 @@ public interface SaleSpringRepository extends JpaRepository<SaleJpaEntity, UUID>
      * Loads a sale with its items in a single JOIN FETCH query.
      * Use this instead of findById() whenever items need to be mapped to the domain model.
      */
-    @Query("SELECT s FROM SaleJpaEntity s LEFT JOIN FETCH s.items WHERE s.id = :id")
-    Optional<SaleJpaEntity> findByIdWithItems(@Param("id") UUID id);
+        /**
+         * AC4 fix: DISTINCT prevents IncorrectResultSizeDataAccessException when a sale has
+         * multiple items (JOIN FETCH creates N rows, DISTINCT collapses them to 1 entity).
+         */
+        @Query("SELECT DISTINCT s FROM SaleJpaEntity s LEFT JOIN FETCH s.items WHERE s.id = :id")
+        Optional<SaleJpaEntity> findByIdWithItems(@Param("id") UUID id);
 
-    @Query("SELECT s FROM SaleJpaEntity s JOIN s.items i WHERE s.status = 'PENDING_VALIDATION' AND i.productId = :productId")
+        @Query("SELECT DISTINCT s FROM SaleJpaEntity s JOIN s.items i WHERE s.status = 'PENDING_VALIDATION' AND i.productId = :productId")
     List<SaleJpaEntity> findPendingByProductId(@Param("productId") UUID productId);
 
     List<SaleJpaEntity> findByStatus(String status);
+
+        /** AC5: EMPLOYEE-scoped pending sales — filter by store and status. */
+        List<SaleJpaEntity> findByStoreIdAndStatus(UUID storeId, String status);
 
     // ── Story 4.4 — Sales History queries ─────────────────────────────────────
 

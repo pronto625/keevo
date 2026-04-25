@@ -7,6 +7,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+import java.util.UUID;
+
 /**
  * Stub notification adapter — logs the notification payload.
  *
@@ -24,6 +27,13 @@ public class LoggingNotificationAdapter implements NotificationPort {
         log.info("[NOTIFICATION STUB] tenant={} type={} title='{}' body='{}' deepLink={} metadata={}",
                 tenantId, payload.type(), payload.title(), payload.body(),
                 payload.deepLink(), payload.metadata());
+    }
+
+    @Override
+    public void notifyUsers(String tenantId, List<UUID> userIds, NotificationPayload payload) {
+        if (userIds == null || userIds.isEmpty()) return;
+        log.info("[NOTIFICATION STUB] tenant={} recipients={} type={} title='{}' deepLink={}",
+                tenantId, userIds.size(), payload.type(), payload.title(), payload.deepLink());
     }
 }
 

@@ -8,7 +8,7 @@ import java.util.UUID;
  */
 public interface CancelPendingSaleUseCase {
 
-    record CancelPendingSaleCommand(UUID saleId, UUID actorId, String justification) {}
+    record CancelPendingSaleCommand(UUID saleId, UUID actorId, UUID assignedStoreId, String justification) {}
 
     void cancelPendingSale(CancelPendingSaleCommand command);
 }

@@ -66,6 +66,13 @@ public class DeviceTokenRepositoryAdapter implements DeviceTokenRepository {
         return save(deviceToken);
     }
 
+    @Override
+    public List<DeviceToken> findByUserIds(List<UUID> userIds) {
+        if (userIds == null || userIds.isEmpty()) return List.of();
+        return springRepo.findByUserIds(userIds)
+                .stream().map(this::toDomain).collect(Collectors.toList());
+    }
+
     private DeviceTokenJpaEntity toEntity(DeviceToken dt) {
         return new DeviceTokenJpaEntity(
                 dt.id(), dt.userId(), dt.token(), dt.platform().name(),

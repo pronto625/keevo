@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -58,21 +59,12 @@ public class FcmNotificationAdapter implements NotificationPort {
                     .map(DeviceToken::token)
                     .collect(Collectors.toList());
 
-            Map<String, String> data = new HashMap<>();
-            data.put("type", payload.type());
-            if (payload.deepLink() != null) {
-                data.put("deepLink", payload.deepLink());
-            }
-            if (payload.metadata() != null) {
-                data.putAll(payload.metadata());
-            }
-
             MulticastMessage message = MulticastMessage.builder()
                     .setNotification(Notification.builder()
                             .setTitle(payload.title())
                             .setBody(payload.body())
                             .build())
-                    .putAllData(data)
+                    .putAllData(buildData(payload))
                     .addAllTokens(tokens)
                     .build();
 
@@ -85,6 +77,43 @@ public class FcmNotificationAdapter implements NotificationPort {
         } finally {
             TenantContext.clear();
         }
+    }
+
+    @Override
+    public void notifyUsers(String tenantId, List<UUID> userIds, NotificationPayload payload) {
+        if (firebaseMessaging == null || userIds == null || userIds.isEmpty()) return;
+        TenantContext.setCurrentTenant(tenantId);
+        try {
+            List<DeviceToken> tokens = deviceTokenRepository.findByUserIds(userIds);
+            if (tokens.isEmpty()) {
+                log.debug("[FCM] No tokens found for {} users in tenant={}", userIds.size(), tenantId);
+                return;
+            }
+            Map<String, String> data = buildData(payload);
+            List<String> tokenStrings = tokens.stream().map(DeviceToken::token).collect(Collectors.toList());
+            MulticastMessage message = MulticastMessage.builder()
+                    .setNotification(Notification.builder()
+                            .setTitle(payload.title())
+                            .setBody(payload.body())
+                            .build())
+                    .putAllData(data)
+                    .addAllTokens(tokenStrings)
+                    .build();
+            BatchResponse response = firebaseMessaging.sendEachForMulticast(message);
+            processResponse(response, tokens);
+        } catch (Exception e) {
+            log.warn("[FCM] notifyUsers failed for tenant={} type={}: {}", tenantId, payload.type(), e.getMessage());
+        } finally {
+            TenantContext.clear();
+        }
+    }
+
+    private Map<String, String> buildData(NotificationPayload payload) {
+        Map<String, String> data = new HashMap<>();
+        data.put("type", payload.type());
+        if (payload.deepLink() != null) data.put("deepLink", payload.deepLink());
+        if (payload.metadata() != null) data.putAll(payload.metadata());
+        return data;
     }
 
     private void processResponse(BatchResponse response, List<DeviceToken> tokens) {

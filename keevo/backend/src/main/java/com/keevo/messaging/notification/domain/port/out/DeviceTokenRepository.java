@@ -13,4 +13,6 @@ public interface DeviceTokenRepository {
     List<DeviceToken> findOwnerTokens();
     int deleteByToken(String token);
     DeviceToken upsert(DeviceToken deviceToken);
+    /** HF-2 AC2: retrieve tokens for a set of specific user IDs (owner + destination employees). */
+    List<DeviceToken> findByUserIds(List<UUID> userIds);
 }

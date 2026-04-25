@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../pos/presentation/page/pending_sales_page.dart';
 import '../../../profitability/presentation/page/product_profitability_list_page.dart';
 import '../../../profitability/presentation/page/store_performance_page.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
@@ -16,12 +17,13 @@ import 'reports_page.dart';
 ///   🕐 Historique   — existing ReportHistoryPage
 ///   📈 Rentabilité  — ProductProfitabilityListPage (Story 7.4)
 ///   🏪 Boutiques    — StorePerformancePage (Story 7.4)
+///   📝 Brouillons   — PendingSalesPage
 ///
 /// Uses a StatefulWidget with an explicit TabController to keep it stable across
 /// provider-driven rebuilds, preventing GlobalKey conflicts that can arise when
 /// DefaultTabController is embedded in a ConsumerWidget that rebuilds.
 ///
-/// EMPLOYEE route `/reports` still points to [ReportsPage] (no tabs).
+/// EMPLOYEE route `/reports` points to [EmployeeReportsPage] (Jour + Brouillons).
 class OwnerReportsPage extends ConsumerStatefulWidget {
   const OwnerReportsPage({super.key});
 
@@ -36,7 +38,7 @@ class _OwnerReportsPageState extends ConsumerState<OwnerReportsPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
   }
 
   @override
@@ -73,6 +75,7 @@ class _OwnerReportsPageState extends ConsumerState<OwnerReportsPage>
             Tab(icon: Icon(Icons.history_outlined), text: 'Historique'),
             Tab(icon: Icon(Icons.trending_up_outlined), text: 'Rentabilité'),
             Tab(icon: Icon(Icons.storefront_outlined), text: 'Boutiques'),
+            Tab(icon: Icon(Icons.pending_actions_outlined), text: 'Brouillons'),
           ],
         ),
       ),
@@ -90,6 +93,8 @@ class _OwnerReportsPageState extends ConsumerState<OwnerReportsPage>
               child: ProductProfitabilityListPage(storeId: activeStoreId)),
           const _KeepAliveTab(
               key: ValueKey('tab-boutiques'), child: StorePerformancePage()),
+          const _KeepAliveTab(
+              key: ValueKey('tab-brouillons'), child: PendingSalesPage()),
         ],
       ),
     );
@@ -115,6 +120,80 @@ class _KeepAliveTabState extends State<_KeepAliveTab>
   Widget build(BuildContext context) {
     super.build(context);
     return widget.child;
+  }
+}
+
+// ── Employee reports page — Jour + Brouillons (B3.3) ─────────────────────────
+
+/// EmployeeReportsPage — 2-tab hub for EMPLOYEE role.
+///
+///   📋 Jour       — ReportsPage (day summary, financial amounts hidden via B3.4)
+///   📝 Brouillons — PendingSalesPage (store-scoped pending validation sales)
+///
+/// Rentabilité and Boutiques are intentionally absent — financial data is
+/// OWNER-only (AC6 / HF-2).
+class EmployeeReportsPage extends ConsumerStatefulWidget {
+  const EmployeeReportsPage({super.key});
+
+  @override
+  ConsumerState<EmployeeReportsPage> createState() =>
+      _EmployeeReportsPageState();
+}
+
+class _EmployeeReportsPageState extends ConsumerState<EmployeeReportsPage>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: context.canPop()
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                    color: Colors.white),
+                onPressed: () => context.pop(),
+              )
+            : null,
+        backgroundColor: AppTheme.primary,
+        title: const Text(
+          'Rapports',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white60,
+          indicatorColor: Colors.white,
+          tabs: const [
+            Tab(icon: Icon(Icons.today_outlined), text: 'Jour'),
+            Tab(icon: Icon(Icons.pending_actions_outlined), text: 'Brouillons'),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: const [
+          _KeepAliveTab(
+              key: ValueKey('emp-tab-jour'), child: ReportsPage()),
+          _KeepAliveTab(
+              key: ValueKey('emp-tab-brouillons'), child: PendingSalesPage()),
+        ],
+      ),
+    );
   }
 }
 

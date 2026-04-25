@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:keevo/core/theme/app_theme.dart';
 import 'package:keevo/features/profitability/domain/model/product_profitability_model.dart';
 
 void main() {
@@ -51,7 +52,7 @@ void main() {
         marginLevel: 'LOSS',
       );
 
-      expect(entry.marginColor, Colors.red);
+      expect(entry.marginColor, AppTheme.errorColor);
     });
 
     test('marginLevel_returnsLow_whenBelow10Percent', () {
@@ -69,7 +70,7 @@ void main() {
         marginLevel: 'LOW',
       );
 
-      expect(entry.marginColor, Colors.red);
+      expect(entry.marginColor, AppTheme.errorColor);
     });
 
     test('marginLevel_returnsModerate_when10to19Percent', () {
@@ -87,7 +88,7 @@ void main() {
         marginLevel: 'MODERATE',
       );
 
-      expect(entry.marginColor, Colors.orange);
+      expect(entry.marginColor, AppTheme.warning);
     });
 
     test('marginLevel_returnsProfitable_when20PlusPercent', () {
@@ -105,17 +106,17 @@ void main() {
         marginLevel: 'PROFITABLE',
       );
 
-      expect(entry.marginColor, Colors.green);
+      expect(entry.marginColor, AppTheme.success);
     });
 
     test('marginLevel_color_matchesPricingCalculatorWidget', () {
       // Mirrors _MarginLevel enum in pricing_calculator_widget.dart:
       // LOSS/LOW → red, MODERATE → orange, PROFITABLE → green
       final cases = [
-        ('LOSS', Colors.red),
-        ('LOW', Colors.red),
-        ('MODERATE', Colors.orange),
-        ('PROFITABLE', Colors.green),
+        ('LOSS', AppTheme.errorColor),
+        ('LOW', AppTheme.errorColor),
+        ('MODERATE', AppTheme.warning),
+        ('PROFITABLE', AppTheme.success),
       ];
 
       for (final (level, expected) in cases) {

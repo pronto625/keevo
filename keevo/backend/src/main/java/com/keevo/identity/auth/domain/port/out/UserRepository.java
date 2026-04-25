@@ -39,6 +39,12 @@ public interface UserRepository {
     Optional<User> findOwnerByTenantSchemaName(String schemaName);
 
     /**
+     * HF-2 AC2 — find all OWNER users for a tenant schema.
+     * Used by transfer notification fan-out where multiple owners can exist.
+     */
+    List<User> findOwnersByTenantSchemaName(String schemaName);
+
+    /**
      * Story 1.7 — Two-step login: load all active memberships for a user together with
      * tenant metadata (code, name, schemaName) for the login session response.
      *

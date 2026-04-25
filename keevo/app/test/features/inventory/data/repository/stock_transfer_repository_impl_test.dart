@@ -6,6 +6,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:sqlite3/open.dart';
 import 'package:keevo/core/sync/connectivity_service.dart';
 import 'package:keevo/core/sync/sync_service.dart';
+import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
 import 'package:keevo/features/inventory/data/datasource/local_stock_transfer_datasource.dart';
 import 'package:keevo/features/inventory/data/datasource/remote_stock_transfer_datasource.dart';
 import 'package:keevo/features/inventory/data/repository/stock_transfer_repository_impl.dart';
@@ -15,6 +16,7 @@ class _MockLocal extends Mock implements LocalStockTransferDataSource {}
 class _MockRemote extends Mock implements RemoteStockTransferDataSource {}
 class _MockConnectivity extends Mock implements ConnectivityService {}
 class _MockSyncService extends Mock implements SyncService {}
+class _MockSyncTriggerDispatcher extends Mock implements SyncTriggerDispatcher {}
 
 class _FakeStockTransferModel extends Fake implements StockTransferModel {}
 
@@ -34,6 +36,7 @@ void main() {
   late _MockRemote mockRemote;
   late _MockConnectivity mockConnectivity;
   late _MockSyncService mockSyncService;
+  late _MockSyncTriggerDispatcher mockSyncTriggerDispatcher;
   late StockTransferRepositoryImpl repository;
 
   setUpAll(() {
@@ -57,29 +60,35 @@ void main() {
     mockRemote = _MockRemote();
     mockConnectivity = _MockConnectivity();
     mockSyncService = _MockSyncService();
+    mockSyncTriggerDispatcher = _MockSyncTriggerDispatcher();
+    when(() => mockSyncTriggerDispatcher.triggerPushIfIdle()).thenReturn(null);
   });
 
   group('StockTransferRepositoryImpl (Story 3.3 — Task 13)', () {
-    test('executeTransfer online — calls remote, saves locally, returns model',
+    test('executeTransfer online — still uses offline-first queue path',
         () async {
       when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
+      when(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).thenAnswer((_) async {});
       repository = StockTransferRepositoryImpl(
         local: mockLocal,
         remote: mockRemote,
         connectivity: mockConnectivity,
         syncService: mockSyncService,
+        syncTriggerDispatcher: mockSyncTriggerDispatcher,
       );
-      when(() => mockRemote.executeTransfer(
-            sourceStoreId: any(named: 'sourceStoreId'),
-            destinationStoreId: any(named: 'destinationStoreId'),
+      when(() => mockLocal.getLocalStock(
             productId: any(named: 'productId'),
-            quantity: any(named: 'quantity'),
-          )).thenAnswer((_) async => fakeTransfer);
+            storeId: any(named: 'storeId'),
+          )).thenAnswer((_) async => 10);
       when(() => mockLocal.saveTransfer(any())).thenAnswer((_) async {});
-      when(() => mockLocal.applyLocalStockChange(
+      when(() => mockLocal.applySourceDecrement(
             productId: any(named: 'productId'),
+            variantId: any(named: 'variantId'),
             sourceStoreId: any(named: 'sourceStoreId'),
-            destinationStoreId: any(named: 'destinationStoreId'),
             quantity: any(named: 'quantity'),
           )).thenAnswer((_) async {});
 
@@ -90,20 +99,26 @@ void main() {
         quantity: 5,
       );
 
-      verify(() => mockRemote.executeTransfer(
-            sourceStoreId: 'src-001',
-            destinationStoreId: 'dst-001',
+      verifyNever(() => mockRemote.executeTransfer(
+        sourceStoreId: any(named: 'sourceStoreId'),
+        destinationStoreId: any(named: 'destinationStoreId'),
+        productId: any(named: 'productId'),
+        quantity: any(named: 'quantity'),
+          ));
+      verify(() => mockLocal.applySourceDecrement(
             productId: 'prod-001',
+        variantId: null,
+            sourceStoreId: 'src-001',
             quantity: 5,
           )).called(1);
-      verify(() => mockLocal.saveTransfer(fakeTransfer)).called(1);
-      verify(() => mockLocal.applyLocalStockChange(
-            productId: 'prod-001',
-            sourceStoreId: 'src-001',
-            destinationStoreId: 'dst-001',
-            quantity: 5,
+      verify(() => mockSyncService.queueOperation(
+        operation: 'STOCK_TRANSFER',
+        payload: any(named: 'payload'),
+        entityId: any(named: 'entityId'),
           )).called(1);
-      expect(result.id, 'tf-001');
+      verify(() => mockLocal.saveTransfer(any())).called(1);
+      verify(() => mockSyncTriggerDispatcher.triggerPushIfIdle()).called(1);
+      expect(result.status, 'PENDING_SYNC');
     });
 
     test('executeTransfer offline — validates stock, updates locally, queues to sync, returns PENDING_SYNC',
@@ -119,15 +134,16 @@ void main() {
         remote: mockRemote,
         connectivity: mockConnectivity,
         syncService: mockSyncService,
+        syncTriggerDispatcher: mockSyncTriggerDispatcher,
       );
       when(() => mockLocal.getLocalStock(
             productId: any(named: 'productId'),
             storeId: any(named: 'storeId'),
           )).thenAnswer((_) async => 10); // 10 available
-      when(() => mockLocal.applyLocalStockChange(
+      when(() => mockLocal.applySourceDecrement(
             productId: any(named: 'productId'),
+        variantId: any(named: 'variantId'),
             sourceStoreId: any(named: 'sourceStoreId'),
-            destinationStoreId: any(named: 'destinationStoreId'),
             quantity: any(named: 'quantity'),
           )).thenAnswer((_) async {});
       when(() => mockLocal.saveTransfer(any())).thenAnswer((_) async {});
@@ -149,13 +165,14 @@ void main() {
             productId: 'prod-001',
             storeId: 'src-001',
           )).called(1);
-      verify(() => mockLocal.applyLocalStockChange(
+      verify(() => mockLocal.applySourceDecrement(
             productId: 'prod-001',
+        variantId: null,
             sourceStoreId: 'src-001',
-            destinationStoreId: 'dst-001',
             quantity: 5,
           )).called(1);
       verify(() => mockLocal.saveTransfer(any())).called(1);
+      verify(() => mockSyncTriggerDispatcher.triggerPushIfIdle()).called(1);
       expect(result.status, 'PENDING_SYNC');
     });
 
@@ -167,6 +184,7 @@ void main() {
         remote: mockRemote,
         connectivity: mockConnectivity,
         syncService: mockSyncService,
+        syncTriggerDispatcher: mockSyncTriggerDispatcher,
       );
       when(() => mockRemote.getHistory()).thenAnswer((_) async => [fakeTransfer]);
       when(() => mockLocal.saveTransfer(any())).thenAnswer((_) async {});
@@ -185,6 +203,7 @@ void main() {
         remote: mockRemote,
         connectivity: mockConnectivity,
         syncService: mockSyncService,
+        syncTriggerDispatcher: mockSyncTriggerDispatcher,
       );
       when(() => mockLocal.getHistory()).thenAnswer((_) async => [fakeTransfer]);
 

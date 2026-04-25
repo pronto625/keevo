@@ -145,6 +145,8 @@ public class SaleDraftValidatedNotificationListener {
         } catch (Exception e) {
             // Best-effort — sale validation MUST NOT fail due to notification errors
             log.warn("[SALE-VALIDATED] Unexpected error for sale={}: {}", event.saleId(), e.getMessage());
+        } finally {
+            TenantContext.clear();
         }
     }
 
@@ -183,7 +185,8 @@ public class SaleDraftValidatedNotificationListener {
             String title = "🔶 Vente en attente de validation";
             String body = employeeName + " — " + storeName + " : " + productNames
                     + " — Validez la vente pour activer les produits brouillons";
-            String deepLink = "/pos/pending-sales";
+            // AC7: router-valid path — /pos/pending/{id} navigates to PendingSaleDetailPage
+            String deepLink = "/pos/pending/" + event.saleId();
 
             NotificationPayload payload = NotificationPayload.of(
                     "SALE_PENDING_DRAFT_PRODUCTS",
@@ -222,6 +225,8 @@ public class SaleDraftValidatedNotificationListener {
 
         } catch (Exception e) {
             log.warn("[SALE-PENDING] Unexpected error for sale={}: {}", event.saleId(), e.getMessage());
+        } finally {
+            TenantContext.clear();
         }
     }
 }

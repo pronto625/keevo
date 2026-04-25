@@ -11,6 +11,7 @@ import '../../../catalog/presentation/provider/stock_provider.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../domain/model/sale_model.dart';
 import '../provider/pos_providers.dart';
+import '../../../../core/di/providers.dart';
 
 /// PendingSaleDetailPage — OWNER views sale details + validates/cancels.
 /// Story 4.3 AC6-AC7.
@@ -38,14 +39,35 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final sale = widget.sale;
-    if (sale == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Vente en attente')),
-        body: const Center(child: Text('Vente non trouvée')),
-      );
+    final isEmployee = ref.watch(currentUserRoleProvider) == 'EMPLOYEE';
+    final providedSale = widget.sale;
+    if (providedSale != null) {
+      return _buildSaleScaffold(context, providedSale, isEmployee);
     }
 
+    final saleAsync = ref.watch(saleByIdProvider(widget.saleId));
+    return saleAsync.when(
+      loading: () => Scaffold(
+        appBar: AppBar(title: const Text('Vente en attente')),
+        body: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (_, __) => Scaffold(
+        appBar: AppBar(title: const Text('Vente en attente')),
+        body: const Center(child: Text('Erreur de chargement de la vente')),
+      ),
+      data: (loadedSale) {
+        if (loadedSale == null) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('Vente en attente')),
+            body: const Center(child: Text('Vente non trouvée')),
+          );
+        }
+        return _buildSaleScaffold(context, loadedSale, isEmployee);
+      },
+    );
+  }
+
+  Widget _buildSaleScaffold(BuildContext context, Sale sale, bool isEmployee) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Détail vente en attente'),
@@ -69,18 +91,18 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
                 const Icon(Icons.pending_actions,
                     size: 40, color: AppTheme.onWarning),
                 const SizedBox(height: 8),
-                Text(
-                  _currencyFormat.format(sale.totalAmount),
-                  style: const TextStyle(
-                      color: AppTheme.onWarning,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w800),
-                ),
+                if (!isEmployee)
+                  Text(
+                    _currencyFormat.format(sale.totalAmount),
+                    style: const TextStyle(
+                        color: AppTheme.onWarning,
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800),
+                  ),
                 const SizedBox(height: 4),
                 Text(
                   _dateFormat.format(sale.createdAt),
-                  style: TextStyle(
-                      color: AppTheme.onWarning.withOpacity(0.65)),
+                  style: TextStyle(color: AppTheme.onWarning.withOpacity(0.65)),
                 ),
                 const SizedBox(height: 4),
                 Container(
@@ -116,13 +138,19 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
                   title: Text(item.productName,
                       style: const TextStyle(fontWeight: FontWeight.w600)),
                   subtitle: Text(
-                    '${item.quantity} × ${_currencyFormat.format(item.appliedUnitPrice)}',
-                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13),
+                    isEmployee
+                        ? 'Qté: ${item.quantity}'
+                        : '${item.quantity} × ${_currencyFormat.format(item.appliedUnitPrice)}',
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 13),
                   ),
-                  trailing: Text(
-                    _currencyFormat.format(item.subtotal),
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
+                  trailing: isEmployee
+                      ? null
+                      : Text(
+                          _currencyFormat.format(item.subtotal),
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
                 );
               },
             ),
@@ -141,7 +169,8 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
                             onPressed: () => _showCancelDialog(sale.id),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: AppTheme.errorColor,
-                              side: const BorderSide(color: AppTheme.errorColor),
+                              side:
+                                  const BorderSide(color: AppTheme.errorColor),
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12)),
@@ -184,8 +213,7 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
         content: const Text('Confirmer la validation de cette vente ?'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Retour')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Retour')),
           FilledButton(
             onPressed: () {
               Navigator.pop(ctx);
@@ -203,11 +231,11 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Annuler la vente'),
-        content: const Text('Cette action est irréversible. Confirmer l’annulation ?'),
+        content: const Text(
+            'Cette action est irréversible. Confirmer l’annulation ?'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Retour')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Retour')),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppTheme.errorColor),
             onPressed: () {
@@ -268,7 +296,8 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
         saleId,
         justification,
         productIdRemappings: remappings.isNotEmpty ? remappings : null,
-        initialStockEntries: initialStockEntries.isNotEmpty ? initialStockEntries : null,
+        initialStockEntries:
+            initialStockEntries.isNotEmpty ? initialStockEntries : null,
       );
 
       // Invalidate pending sale lists so UI refreshes
@@ -335,8 +364,7 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
                     labelText: 'Stock initial',
                     hintText: '0',
                     suffixText: 'unités',
-                    helperText:
-                        'Quantité disponible (doit couvrir la vente)',
+                    helperText: 'Quantité disponible (doit couvrir la vente)',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -350,13 +378,11 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
             ),
             FilledButton(
               onPressed: () async {
-                final initialStock =
-                    int.tryParse(stockController.text) ?? 0;
+                final initialStock = int.tryParse(stockController.text) ?? 0;
                 try {
                   // Promote the product
                   final actions = ref.read(productActionsProvider);
-                  final newId =
-                      await actions.promoteToActive(item.productId);
+                  final newId = await actions.promoteToActive(item.productId);
 
                   // Stock entry will be handled by the backend
                   // during validateSale (using the sale's authoritative storeId)
@@ -387,7 +413,8 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
       );
     } finally {
       // Defer dispose so the TextField's animation completes before releasing the controller.
-      WidgetsBinding.instance.addPostFrameCallback((_) => stockController.dispose());
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => stockController.dispose());
     }
   }
 

@@ -26,4 +26,8 @@ public interface DeviceTokenSpringRepository extends JpaRepository<DeviceTokenJp
     @Transactional
     @Query("DELETE FROM DeviceTokenJpaEntity d WHERE d.token = :token")
     int deleteByTokenValue(@Param("token") String token);
+
+    /** HF-2 AC2: find tokens for a specific set of user IDs. */
+    @Query("SELECT d FROM DeviceTokenJpaEntity d WHERE d.userId IN :userIds")
+    List<DeviceTokenJpaEntity> findByUserIds(@Param("userIds") List<UUID> userIds);
 }

@@ -60,7 +60,7 @@ public class ValidateSaleSyncHandler extends AbstractSyncOperationHandler {
 
         try {
             validateSaleUseCase.validateSale(
-                    new ValidateSaleCommand(saleId, actorId, justification, productIdRemappings, initialStockEntries));
+                    new ValidateSaleCommand(saleId, actorId, null, justification, productIdRemappings, initialStockEntries));
         } catch (DomainException e) {
             // Idempotency: if the sale was already completed (e.g. cascade-validated after
             // PROMOTE_PRODUCT), treat the operation as successfully applied rather than rejected.

@@ -11,7 +11,9 @@ import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase.ValidateSaleCo
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,7 +23,6 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/sales")
-@PreAuthorize("hasRole('OWNER')")
 public class PendingSaleController {
 
     private final GetPendingSalesUseCase getPendingSalesUseCase;
@@ -37,36 +38,63 @@ public class PendingSaleController {
     }
 
     @GetMapping("/pending")
+    @PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
     public ResponseEntity<ApiResponseWrapper<List<PendingSaleResponseDto>>> getPendingSales() {
-        var sales = getPendingSalesUseCase.getPendingSales();
+        UUID assignedStoreId = extractAssignedStoreId();
+        boolean isEmployee = isEmployeeRole();
+        if (isEmployee && assignedStoreId == null) {
+            throw new AccessDeniedException("EMPLOYEE store assignment is missing");
+        }
+        var sales = (assignedStoreId != null)
+                ? getPendingSalesUseCase.getPendingSalesByStore(assignedStoreId)
+                : getPendingSalesUseCase.getPendingSales();
         var dtos = sales.stream()
-                .map(PendingSaleResponseDto::from)
+            .map(s -> isEmployee ? PendingSaleResponseDto.fromForEmployee(s) : PendingSaleResponseDto.from(s))
                 .toList();
         return ResponseEntity.ok(ApiResponseWrapper.ok(dtos));
     }
 
     @PostMapping("/{id}/validate")
+    @PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
     public ResponseEntity<ApiResponseWrapper<Map<String, String>>> validateSale(
             @PathVariable UUID id,
             @Valid @RequestBody ValidateSaleRequestDto request) {
         UUID actorId = extractActorId();
+        UUID assignedStoreId = extractAssignedStoreId();
         validateSaleUseCase.validateSale(new ValidateSaleCommand(
-                id, actorId, request.justification(), request.productIdRemappings(),
+                id, actorId, assignedStoreId, request.justification(), request.productIdRemappings(),
                 request.initialStockEntries()));
         return ResponseEntity.ok(ApiResponseWrapper.ok(Map.of("message", "Sale validated")));
     }
 
     @PostMapping("/{id}/cancel")
+    @PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
     public ResponseEntity<ApiResponseWrapper<Map<String, String>>> cancelSale(
             @PathVariable UUID id,
             @Valid @RequestBody CancelSaleRequestDto request) {
         UUID actorId = extractActorId();
+        UUID assignedStoreId = extractAssignedStoreId();
         cancelPendingSaleUseCase.cancelPendingSale(
-                new CancelPendingSaleCommand(id, actorId, request.justification()));
+                new CancelPendingSaleCommand(id, actorId, assignedStoreId, request.justification()));
         return ResponseEntity.ok(ApiResponseWrapper.ok(Map.of("message", "Sale cancelled")));
     }
 
     private UUID extractActorId() {
         return (UUID) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+    }
+
+    private boolean isEmployeeRole() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_EMPLOYEE".equals(a.getAuthority()));
+    }
+
+    /**
+     * AC5: Returns the store UUID embedded in JWT details for EMPLOYEE tokens,
+     * or null for OWNER tokens (OWNER sees all stores).
+     */
+    private UUID extractAssignedStoreId() {
+        Object details = SecurityContextHolder.getContext().getAuthentication().getDetails();
+        return (details instanceof UUID storeId) ? storeId : null;
     }
 }

@@ -2,6 +2,7 @@ package com.keevo.catalog.stock.application.usecase;
 
 import com.keevo.catalog.stock.domain.entity.MovementType;
 import com.keevo.catalog.stock.domain.event.StockTransferredEvent;
+import com.keevo.catalog.stock.domain.event.TransferCreatedEvent;
 import com.keevo.catalog.stock.domain.model.StockTransfer;
 import com.keevo.catalog.stock.domain.model.StockTransfer.TransferStatus;
 import com.keevo.catalog.stock.domain.port.in.TransferStockCommand;
@@ -118,13 +119,24 @@ public class ExecuteTransferService implements TransferStockUseCase {
         );
         var saved = transferRepository.save(transfer);
 
-        // 7. Publish event (GoF: Observer)
+        // 7. Publish events (GoF: Observer)
         eventPublisher.publishEvent(new StockTransferredEvent(
             saved.getId(),
             command.sourceStoreId(),
             command.destinationStoreId(),
             command.productId(),
             command.variantId(),
+            command.quantity(),
+            command.actorId(),
+            TenantContext.getCurrentTenant(),
+            now
+        ));
+        // AC2: dedicated event for notification routing (distinct from audit event)
+        eventPublisher.publishEvent(new TransferCreatedEvent(
+            saved.getId(),
+            command.sourceStoreId(),
+            command.destinationStoreId(),
+            command.productId(),
             command.quantity(),
             command.actorId(),
             TenantContext.getCurrentTenant(),

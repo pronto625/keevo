@@ -1,5 +1,17 @@
 # Deferred Work
 
+## Deferred from: code review of HF-2-stabilisation-online-rbac-employe-notifications-transferts (2026-04-24)
+
+- **B3 — CRITIQUE : EMPLOYEE sans accès aux ventes brouillons (4 sous-problèmes UI)** — identifié le 2026-04-25 :
+  - **B3.1** `main_shell.dart` L212 : `pendingSalesCount = isEmployee ? 0 : ...` — badge onglet Caisse toujours 0 pour l'employé. Fix : utiliser `ref.watch(pendingSalesCountProvider(storeId)).valueOrNull ?? 0` (déjà store-scoped).
+  - **B3.2** `pos_page.dart` L254 : `if (!isEmployee) _PendingSalesBanner(storeId: storeId)` — bannière masquée pour l'employé. Fix : retirer le guard.
+  - **B3.3** `app_router.dart` : `EMPLOYEE → ReportsPage` (vue simple, aucun onglet Brouillons). Fix : ajouter un onglet Brouillons à `ReportsPage` en réutilisant `PendingSalesPage`.
+  - **B3.4** `reports_page.dart` L281 : `pendingSalesTotal` affiché avec formatage monétaire pour les employés. Fix : masquer via check `isEmployee` (cohérence AC6).
+  - Criticité HAUTE — l'employé ne peut valider aucune vente brouillon sans deep link FCM. Cibler HF-3.
+
+- **D1 — N+1 pending sales list** (`SaleSpringRepository.findByStoreIdAndStatus` + `findByStatus`): items chargés en lazy pour chaque vente de la liste. Fonctionne correctement dans `@Transactional` mais génère N requêtes DB supplémentaires. Fix future : `@Query` avec `JOIN FETCH DISTINCT` analogue à `findByIdWithItems`. Pré-existant (HF-2 ajoute `findByStoreIdAndStatus`).
+- **D2 — Mismatch variant/stock dans `ValidateSaleService.validateSale()`**: disponibilité lue avec `findByProductAndStore` (sans variantId) mais décrémentée à niveau variant via `recordOperation(item.getVariantId())`. Peut déclencher `StockForcedZeroEvent` à tort si le produit a des variants. Pré-existant Story 4.3.
+
 ## Deferred from: code review of HF-1-registration-role-persistence-unified-auth-ui (2026-04-19)
 
 - **D1 — CGU links non-tappables**: `TextSpan`s "Conditions d'utilisation" et "Politique de confidentialité" dans `auth_page.dart` ont une décoration underline+couleur mais aucun `GestureRecognizer`. Comportement hérité de l'ancien `RegisterPage`. Ajouter un `TapGestureRecognizer` vers `/docs/politique` lors d'une itération UI dédiée.

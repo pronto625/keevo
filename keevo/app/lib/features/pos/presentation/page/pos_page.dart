@@ -250,8 +250,8 @@ class _PosPageState extends ConsumerState<PosPage> {
                   onCategorySelected: (id) =>
                       setState(() => _selectedCategoryId = id),
                 ),
-              // Pending sales banner (OWNER only)
-              if (!isEmployee) _PendingSalesBanner(storeId: storeId),
+              // Pending sales banner (store-scoped for both OWNER and EMPLOYEE)
+              _PendingSalesBanner(storeId: storeId),
               // Product grid or search results
               if (_searchQuery.isNotEmpty)
                 _SearchResultsSliver(
@@ -395,13 +395,38 @@ class _FrequentProductsSliver extends ConsumerWidget {
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
                     final p = products[index];
-                    return ProductCard(
+                    final card = ProductCard(
                       name: p.name,
                       price: p.price,
                       stockQuantity: p.stock,
                       photoUrl: p.photoUrl,
                       categoryName: p.categoryName,
                       onTap: () => onAddToCart(p),
+                    );
+                    if (!p.isDraft) return card;
+                    return Stack(
+                      children: [
+                        card,
+                        Positioned(
+                          top: 6,
+                          right: 6,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppTheme.warning,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              'Brouillon',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ),
+                      ],
                     );
                   },
                   childCount: products.length,
@@ -504,13 +529,38 @@ class _SearchResultsSliver extends ConsumerWidget {
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
                     final p = results[index];
-                    return ProductCard(
+                    final card = ProductCard(
                       name: p.name,
                       price: p.price,
                       stockQuantity: p.stock,
                       photoUrl: p.photoUrl,
                       categoryName: p.categoryName,
                       onTap: () => onAddToCart(p),
+                    );
+                    if (!p.isDraft) return card;
+                    return Stack(
+                      children: [
+                        card,
+                        Positioned(
+                          top: 6,
+                          right: 6,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppTheme.warning,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              'Brouillon',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ),
+                      ],
                     );
                   },
                   childCount: results.length,

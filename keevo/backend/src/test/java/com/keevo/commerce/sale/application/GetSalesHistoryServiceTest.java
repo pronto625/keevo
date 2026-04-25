@@ -129,9 +129,11 @@ class GetSalesHistoryServiceTest {
     void getSalesHistory_withPagination_returnsPaginatedResults() {
         // Given
         var sales = List.of(createSale(EMPLOYEE_ID));
+        var expectedPageable = PageRequest.of(1, 25, org.springframework.data.domain.Sort.by(
+                org.springframework.data.domain.Sort.Direction.DESC, "occurredAt"));
         when(saleRepository.findByStoreIdAndDateRange(
-                eq(STORE_ID), eq(FROM), eq(TO), eq(PageRequest.of(1, 25))))
-                .thenReturn(new PageImpl<>(sales, PageRequest.of(1, 25), 50));
+                eq(STORE_ID), eq(FROM), eq(TO), eq(expectedPageable)))
+                .thenReturn(new PageImpl<>(sales, expectedPageable, 50));
 
         // When - page 1, size 25
         var query = new SalesHistoryQuery(STORE_ID, null, FROM, TO, "OWNER", 1, 25);
@@ -139,7 +141,7 @@ class GetSalesHistoryServiceTest {
 
         // Then
         verify(saleRepository).findByStoreIdAndDateRange(
-                eq(STORE_ID), eq(FROM), eq(TO), eq(PageRequest.of(1, 25)));
+                eq(STORE_ID), eq(FROM), eq(TO), eq(expectedPageable));
         assertThat(result.getNumber()).isEqualTo(1);
         assertThat(result.getSize()).isEqualTo(25);
     }

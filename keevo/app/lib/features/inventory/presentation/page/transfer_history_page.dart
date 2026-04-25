@@ -156,13 +156,14 @@ class _TransferHistoryPageState extends ConsumerState<TransferHistoryPage> {
               ),
               data: (transfers) {
                 // 1. Restrict to active store if set:
-                //    only show transfers where the active store is the
-                //    DESTINATION (i.e. stock to receive). Transfers sent out
-                //    from this store are tracked on the sender's side.
+                //    Show transfers where the active store is either the
+                //    SOURCE (outgoing) or the DESTINATION (incoming).
                 final storeFiltered = activeStoreId == null
                     ? transfers
                     : transfers
-                        .where((t) => t.destinationStoreId == activeStoreId)
+                        .where((t) =>
+                            t.destinationStoreId == activeStoreId ||
+                            t.sourceStoreId == activeStoreId)
                         .toList();
                 // 2. Further filter by status chip
                 final filtered = _filterStatus == null
@@ -563,8 +564,11 @@ class _TransferTileState extends ConsumerState<_TransferTile> {
                 ),
               ],
             ),
-            // ── Row 3: Réceptionner button (IN_TRANSIT only) ──────────
-            if (widget.transfer.status == 'IN_TRANSIT') ...[
+            // ── Row 3: Réceptionner button (IN_TRANSIT, destination store only) ──
+            if (widget.transfer.status == 'IN_TRANSIT' &&
+                (ref.watch(activeStoreIdProvider) == null ||
+                 ref.watch(activeStoreIdProvider) ==
+                     widget.transfer.destinationStoreId)) ...[
               const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,

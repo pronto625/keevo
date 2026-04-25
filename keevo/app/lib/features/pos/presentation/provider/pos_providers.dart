@@ -213,7 +213,7 @@ class FrequentProductsNotifier extends AutoDisposeFamilyAsyncNotifier<
     ];
 
     final rows = await db.customSelect(
-      'SELECT p.id, p.name, p.price, p.photo_url, '
+      'SELECT p.id, p.name, p.price, p.photo_url, p.status, '
       'COALESCE(d.quantity, 0) as stock, '
       'c.name as category_name '
       'FROM products p '
@@ -224,7 +224,7 @@ class FrequentProductsNotifier extends AutoDisposeFamilyAsyncNotifier<
       '  GROUP BY sl.product_id'
       ') d ON d.product_id = p.id '
       'LEFT JOIN categories c ON c.id = p.category_id '
-      'WHERE p.archived = 0 AND p.status = \'ACTIVE\' '
+      "WHERE p.archived = 0 AND p.status IN ('ACTIVE', 'DRAFT') "
       '$categoryClause'
       'ORDER BY (CASE WHEN COALESCE(d.quantity, 0) > 0 THEN 0 ELSE 1 END) ASC, '
       '$frequentOrder ASC, '
@@ -243,6 +243,7 @@ class FrequentProductsNotifier extends AutoDisposeFamilyAsyncNotifier<
               stock: r.read<int>('stock'),
               photoUrl: r.readNullable<String>('photo_url'),
               categoryName: r.readNullable<String>('category_name'),
+              status: r.read<String>('status'),
             ))
         .toList();
   }

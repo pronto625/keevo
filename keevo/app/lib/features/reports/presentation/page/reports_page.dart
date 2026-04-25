@@ -114,6 +114,8 @@ class ReportsPage extends ConsumerWidget {
   ) {
     final isClosed =
         closureStateAsync.valueOrNull == DayCloseButtonState.closed;
+    // B3.4: mask financial totals for EMPLOYEE role (AC6 / HF-2).
+    final isEmployee = ref.watch(currentUserRoleProvider) == 'EMPLOYEE';
 
     // Compute period label: "depuis HH:mm" for same-day closure,
     // "depuis le dd/MM" for an older closure, or "depuis le début de la journée".
@@ -278,8 +280,10 @@ class ReportsPage extends ConsumerWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      '${summary.pendingSalesCount} vente(s) en attente — '
-                      '${_currencyFormat.format(summary.pendingSalesTotal)}',
+                      isEmployee
+                          ? '${summary.pendingSalesCount} vente(s) en attente de validation'
+                          : '${summary.pendingSalesCount} vente(s) en attente — '
+                              '${_currencyFormat.format(summary.pendingSalesTotal)}',
                       style: const TextStyle(
                         color: AppTheme.onWarning,
                         fontWeight: FontWeight.w500,

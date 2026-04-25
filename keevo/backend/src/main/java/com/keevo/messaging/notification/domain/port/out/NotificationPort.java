@@ -2,8 +2,11 @@ package com.keevo.messaging.notification.domain.port.out;
 
 import com.keevo.messaging.notification.domain.model.NotificationPayload;
 
+import java.util.List;
+import java.util.UUID;
+
 /**
- * Port — send a notification to all OWNER-role users of a given tenant.
+ * Port — send push notifications to users of a given tenant.
  *
  * <p>Implementations are best-effort: callers MUST handle exceptions independently
  * and MUST NOT roll back their own transaction if notification delivery fails.
@@ -21,5 +24,17 @@ public interface NotificationPort {
      * @param payload   rich payload with type, title, body, deepLink, metadata
      */
     void notifyOwners(String tenantId, NotificationPayload payload);
+
+    /**
+     * Notify a specific set of users identified by their user IDs.
+     *
+     * <p>HF-2 AC2: used for recipient strategies that include specific employees
+     * (e.g., employees assigned to the destination store of a transfer).
+     *
+     * @param tenantId  tenant schema name
+     * @param userIds   explicit list of user IDs to target; empty list is a no-op
+     * @param payload   rich notification payload
+     */
+    void notifyUsers(String tenantId, List<UUID> userIds, NotificationPayload payload);
 }
 

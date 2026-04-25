@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/di/providers.dart';
 import '../provider/product_provider.dart';
 import '../provider/category_provider.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
@@ -58,6 +59,7 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isEmployee = ref.watch(currentUserRoleProvider) == 'EMPLOYEE';
 
     final activeStoreId = ref.watch(activeStoreIdProvider);
     final storesAsync = ref.watch(storeListNotifierProvider);
@@ -180,41 +182,42 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
                               ),
                             ),
                             const SizedBox(width: 4),
-                            // Menu "..." — CSV import (AC1/AC5)
-                            Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: PopupMenuButton<String>(
-                                icon: const Icon(Icons.more_vert, color: Colors.white),
-                                onSelected: (value) {
-                                  if (value == 'import') {
-                                    context.push('/products/import');
-                                  } else if (value == 'categories') {
-                                    _showCategoriesBottomSheet(context);
-                                  }
-                                },
-                                itemBuilder: (_) => [
-                                  const PopupMenuItem(
-                                    value: 'import',
-                                    child: ListTile(
-                                      leading: Icon(Icons.upload_file),
-                                      title: Text('Importer CSV'),
-                                      contentPadding: EdgeInsets.zero,
+                            // Menu "..." — CSV import + catégories (OWNER only)
+                            if (!isEmployee)
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: PopupMenuButton<String>(
+                                  icon: const Icon(Icons.more_vert, color: Colors.white),
+                                  onSelected: (value) {
+                                    if (value == 'import') {
+                                      context.push('/products/import');
+                                    } else if (value == 'categories') {
+                                      _showCategoriesBottomSheet(context);
+                                    }
+                                  },
+                                  itemBuilder: (_) => [
+                                    const PopupMenuItem(
+                                      value: 'import',
+                                      child: ListTile(
+                                        leading: Icon(Icons.upload_file),
+                                        title: Text('Importer CSV'),
+                                        contentPadding: EdgeInsets.zero,
+                                      ),
                                     ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: 'categories',
-                                    child: ListTile(
-                                      leading: Icon(Icons.category_rounded),
-                                      title: Text('Gérer les catégories'),
-                                      contentPadding: EdgeInsets.zero,
+                                    const PopupMenuItem(
+                                      value: 'categories',
+                                      child: ListTile(
+                                        leading: Icon(Icons.category_rounded),
+                                        title: Text('Gérer les catégories'),
+                                        contentPadding: EdgeInsets.zero,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
                           ],
                         ),
                       ],
@@ -360,8 +363,8 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
           ),
         ],
       ),
-      // FAB moderne
-      floatingActionButton: Container(
+      // FAB "Ajouter un produit" — OWNER only (HF-2 AC5: employees browse read-only)
+      floatingActionButton: isEmployee ? null : Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,

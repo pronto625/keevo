@@ -12,6 +12,7 @@ import '../../features/auth/presentation/page/password_change_page.dart';
 import '../../features/auth/presentation/page/tenant_picker_page.dart';
 import '../../features/catalog/domain/model/product_model.dart';
 import '../../features/catalog/presentation/page/catalog_page.dart';
+import '../../features/catalog/presentation/page/categories_page.dart';
 import '../../features/catalog/presentation/page/csv_import_page.dart';
 import '../../features/catalog/presentation/page/product_form_page.dart';
 import '../../features/contact/domain/model/client_model.dart';
@@ -34,7 +35,6 @@ import '../../features/pos/presentation/page/sale_success_page.dart';
 import '../../features/pos/presentation/page/sales_history_page.dart';
 import '../../features/pos/presentation/page/sale_detail_page.dart';
 import '../../features/pos/domain/model/sale_model.dart';
-import '../../features/reports/presentation/page/reports_page.dart';
 import '../../features/reports/presentation/page/report_history_page.dart';
 import '../../features/reports/presentation/page/report_detail_page.dart';
 import '../../features/reports/presentation/page/owner_reports_page.dart';
@@ -228,16 +228,18 @@ class _SplashRedirectPageState extends ConsumerState<_SplashRedirectPage> {
 }
 
 /// OWNER-only route prefixes — EMPLOYEE users are redirected to /pos (AC5).
+/// Note: catalogue routes (/products, /products/:id/edit, /products/new,
+/// /products/import) are intentionally absent — the catalogue is identical
+/// for OWNER and EMPLOYEE (HF-2 B4 fix). Backend RBAC (403) enforces
+/// authorization at the API level.
 const _ownerOnlyPrefixes = [
   '/dashboard',
-  '/products',
   '/clients',
   '/suppliers',
   '/stores',
   '/settings/subscription',
   '/settings/team',
   '/settings/sync',
-  '/stock/transfers',
   '/audit',
   '/reports/rentabilite',
   '/reports/boutiques',
@@ -266,7 +268,9 @@ final GoRouter appRouter = GoRouter(
   },
   redirect: (context, state) async {
     final path = state.uri.path;
-    if (!_ownerOnlyPrefixes.any((prefix) => path.startsWith(prefix))) {
+    final isOwnerOnlyPath =
+        _ownerOnlyPrefixes.any((prefix) => path.startsWith(prefix));
+    if (!isOwnerOnlyPath) {
       return null;
     }
     final prefs = await SharedPreferences.getInstance();
@@ -376,7 +380,7 @@ final GoRouter appRouter = GoRouter(
                 .read(currentUserRoleProvider);
             return role == 'OWNER'
                 ? const OwnerReportsPage()
-                : const ReportsPage();
+                : const EmployeeReportsPage(); // B3.3: Jour + Brouillons for EMPLOYEE
           },
         ),
         GoRoute(
@@ -405,6 +409,12 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/suppliers',
       builder: (_, __) => const SupplierListPage(),
+    ),
+
+    // ── Catégories (full-screen, accessed from Plus) ──────────────────────
+    GoRoute(
+      path: '/settings/categories',
+      builder: (_, __) => const CategoriesPage(),
     ),
 
 
