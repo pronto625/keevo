@@ -1,5 +1,10 @@
 # Deferred Work
 
+## Deferred from: code review of HF-2 — 2ème passe (2026-04-25)
+
+- **D1 (decision_needed) — `DayClosureDeltaProvider.java` : `totalTransactions` mappe sur le mauvais index** : la requête SQL sélectionne `total_sales, total_revenue` (indices 4 et 5). Le code `map.put("totalTransactions", num(row[4]))` duplique `totalSales` — aucune colonne `total_transactions` n'existe dans le DDL actuel. Impact : chaque payload de sync day_closure envoie `totalTransactions == totalSales`. À investiguer : soit la clé est supprimée du payload, soit la requête SQL est étendue pour inclure la colonne manquante. Fichier : `catalog/dayclosure/adapter/out/persistence/DayClosureDeltaProvider.java`.
+- **P2 — `PendingSaleController.java` : EMPLOYEE peut annuler une vente brouillon** : `cancelSale` porte `@PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")`. AC5 n'autorise l'EMPLOYEE qu'à **valider** (pas annuler). L'annulation devrait rester OWNER-only : `@PreAuthorize("hasRole('OWNER')")`. Fichier : `commerce/sale/adapter/in/rest/PendingSaleController.java` L71.
+
 ## Deferred from: code review of HF-2-stabilisation-online-rbac-employe-notifications-transferts (2026-04-24)
 
 - **B3 — CRITIQUE : EMPLOYEE sans accès aux ventes brouillons (4 sous-problèmes UI)** — identifié le 2026-04-25 :

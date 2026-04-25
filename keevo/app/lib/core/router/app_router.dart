@@ -240,6 +240,7 @@ const _ownerOnlyPrefixes = [
   '/settings/subscription',
   '/settings/team',
   '/settings/sync',
+  '/settings/categories',
   '/audit',
   '/reports/rentabilite',
   '/reports/boutiques',

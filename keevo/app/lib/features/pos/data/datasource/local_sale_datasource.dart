@@ -61,7 +61,7 @@ class LocalSaleDataSource {
                     s.storeId.equals(sale.storeId)))
               .get();
 
-          final quantityBefore = stockRows.fold<int>(0, (sum, r) => sum + r.quantity);
+          final quantityBefore = stockRows.fold<int>(0, (max, r) => r.quantity > max ? r.quantity : max);
           final quantityAfter = (quantityBefore - item.quantity).clamp(0, quantityBefore);
 
           if (stockRows.isNotEmpty) {
@@ -190,7 +190,7 @@ class LocalSaleDataSource {
                     s.storeId.equals(sale.storeId)))
               .get();
 
-          final qBefore = stockRowsEntry.fold<int>(0, (sum, r) => sum + r.quantity);
+          final qBefore = stockRowsEntry.fold<int>(0, (max, r) => r.quantity > max ? r.quantity : max);
           final qAfter = qBefore + qty;
 
           if (stockRowsEntry.isNotEmpty) {
@@ -240,7 +240,7 @@ class LocalSaleDataSource {
                   s.storeId.equals(sale.storeId)))
             .get();
 
-        final qBefore = stockRowsDecrement.fold<int>(0, (sum, r) => sum + r.quantity);
+        final qBefore = stockRowsDecrement.fold<int>(0, (max, r) => r.quantity > max ? r.quantity : max);
         // Force to 0 if insufficient (matches backend behavior)
         final qAfter = (qBefore - item.quantity).clamp(0, qBefore);
 
@@ -334,7 +334,7 @@ class LocalSaleDataSource {
                     s.storeId.equals(storeId)))
               .get();
 
-          final qBefore = stockRowsCascade.fold<int>(0, (sum, r) => sum + r.quantity);
+          final qBefore = stockRowsCascade.fold<int>(0, (max, r) => r.quantity > max ? r.quantity : max);
           final qAfter = (qBefore - item.quantity).clamp(0, qBefore);
 
           if (stockRowsCascade.isNotEmpty) {

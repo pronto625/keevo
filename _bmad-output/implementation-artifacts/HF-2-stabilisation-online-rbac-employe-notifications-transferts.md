@@ -1,10 +1,11 @@
 # Story HF-2: Stabilisation Online — RBAC Employé, Notifications Transferts & Ventes Brouillons
 
-**Status:** review
+**Status:** done
 **Code Review:** 2026-04-24 — PASSED (adversarial, 2 deferred items D1+D2)
 **Révision:** 2026-04-25 — Revue code livré : ACs 8–11 ajoutés (scope confirmé déjà en prod pour OWNER), bug B3 identifié (employé sans accès ventes brouillons — 4 sous-problèmes UI)
 **Révision 2:** 2026-04-25 — Bugs B1, B2, B3 corrigés (voir Dev Agent Record ci-dessous)
 **Révision 3:** 2026-04-25 — B1 complété (3 autres getSingleOrNull dans insertAll/validateAndDecrementStock/cascadeValidatePendingSales), + B4 corrigé (stock mismatch + catalogue EMPLOYEE)
+**Révision 4 (code review 2ème passe):** 2026-04-25 — P1/P3/P4 corrigés ; D1 + P2 ajournés dans deferred-work.md
 **Story Key:** HF-2-stabilisation-online-rbac-employe-notifications-transferts
 
 ---
@@ -404,3 +405,21 @@ Bugs B1 et B2 identifiés post-code-review et documentés ci-dessus pour traitem
 ### Validation
 
 `flutter analyze` — 0 erreurs, 0 warnings. `info` pré-existants uniquement.
+
+---
+
+## Code Review — 2ème passe (2026-04-25)
+
+Revue adversariale post-Révision 3 (commit `0427589`, 64 fichiers, 1683 insertions, 319 suppressions).
+
+### Findings
+
+| ID | Décision | Fichier | Description |
+|---|---|---|---|
+| **D1** | Ajourné | `DayClosureDeltaProvider.java` | `totalTransactions` mappe sur `row[4]` (= `totalSales`). Aucune colonne `total_transactions` dans le DDL. Payload de sync corrompu silencieusement. Voir `deferred-work.md`. |
+| **P1** | ✅ Corrigé | `app_database_test.dart`, `users_first_name_migration_test.dart` | Assertions `schemaVersion == 24` → `25` (migration v25 ajoutée en Révision 3). |
+| **P2** | Ajourné | `PendingSaleController.java` L71 | `cancelSale` autorise EMPLOYEE (`hasAnyRole('OWNER', 'EMPLOYEE')`). Non prévu par AC5. Voir `deferred-work.md`. |
+| **P3** | ✅ Corrigé | `app_router.dart` | `/settings/categories` absent de `_ownerOnlyPrefixes`. EMPLOYEE pouvait accéder à `CategoriesPage`. Ajouté. |
+| **P4** | ✅ Corrigé | `local_sale_datasource.dart` L64/193/243/337 | `fold SUM` au lieu de `fold MAX` pour lignes stock dupliquées (cohérence avec `getAvailableStock()` L124 qui utilise déjà MAX). |
+| Defer | Ajourné (pré-existant D2) | `ValidateSaleService.java` | Race condition read-then-decrement concurrent. Pré-existant Story 4.3. |
+| Defer | Ajourné | `transfer_history_page.dart` | `ref.watch(activeStoreIdProvider)` appelé deux fois dans la même condition. |

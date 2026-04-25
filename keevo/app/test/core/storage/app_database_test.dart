@@ -36,7 +36,7 @@ void main() {
 
     tearDown(() async => db.close());
 
-    test('schemaVersion is 24', () => expect(db.schemaVersion, 24));
+    test('schemaVersion is 25', () => expect(db.schemaVersion, 25));
 
     test('Products table accepts integer price (XAF — no floats)', () async {
       const id = 'prod-001';
