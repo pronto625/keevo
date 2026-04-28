@@ -118,9 +118,15 @@ final dayClosureStateProvider = FutureProvider.family<DayCloseButtonState, Strin
 });
 
 /// Today's summary for the bottom sheet preview.
-final todaySummaryProvider = FutureProvider.family<DayClosureSummary, String>((ref, storeId) async {
+///
+/// Key: `({String storeId, String? employeeId})`.
+/// Pass `employeeId: null` for OWNER (all store sales) or
+/// the current user's id for EMPLOYEE (scoped to their own sales).
+final todaySummaryProvider =
+    FutureProvider.family<DayClosureSummary, ({String storeId, String? employeeId})>(
+        (ref, args) async {
   final repository = ref.watch(dayClosureRepositoryProvider);
-  return repository.computeTodaySummary(storeId, null);
+  return repository.computeTodaySummary(args.storeId, args.employeeId);
 });
 
 /// Last closure for the store — used to display the period label in Reports.

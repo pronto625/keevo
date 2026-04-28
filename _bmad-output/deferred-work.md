@@ -1,5 +1,11 @@
 # Deferred Work
 
+## Deferred from: bugfix spec-hf2-ghost-badge-sales-scoping (2026-04-28)
+
+- **D1 — Pas de test pour le path EMPLOYEE scopé**: `todaySummaryProvider` avec `employeeId != null` n'a aucune couverture de test. Les tests adaptés (`day_close_button_test.dart`, `day_summary_bottom_sheet_test.dart`) n'exercent que le chemin OWNER (`employeeId: null`). Ajouter un test widget où `currentUserRoleProvider` retourne EMPLOYEE + `currentUserIdProvider` retourne un userId, et vérifier que `todaySummaryProvider((storeId: X, employeeId: userId))` est bien invoqué.
+- **D2 — `currentUserIdProvider` état d'erreur → fallback silencieux store-wide**: Si le storage est indisponible et `currentUserIdProvider` retourne `AsyncError`, `userIdAsync.valueOrNull` retourne `null` → un EMPLOYEE voit tout le magasin sans erreur UI. À adresser lorsqu'une politique globale de gestion d'erreurs provider sera définie.
+- **D3 — Null semantics de `computeTodaySummary` non documentés côté repository**: Le contrat de `null` comme `employeeId` (= "toutes les ventes") n'est documenté qu'au niveau du provider Riverpod. Si `computeTodaySummary(storeId, null)` est appelé directement depuis un background job ou un usecase futur, l'élevation de visibilité est silencieuse. Documenter dans la doc du repository ou dans le domain layer.
+
 ## Deferred from: code review of HF-2 — 2ème passe (2026-04-25)
 
 - **D1 (decision_needed) — `DayClosureDeltaProvider.java` : `totalTransactions` mappe sur le mauvais index** : la requête SQL sélectionne `total_sales, total_revenue` (indices 4 et 5). Le code `map.put("totalTransactions", num(row[4]))` duplique `totalSales` — aucune colonne `total_transactions` n'existe dans le DDL actuel. Impact : chaque payload de sync day_closure envoie `totalTransactions == totalSales`. À investiguer : soit la clé est supprimée du payload, soit la requête SQL est étendue pour inclure la colonne manquante. Fichier : `catalog/dayclosure/adapter/out/persistence/DayClosureDeltaProvider.java`.

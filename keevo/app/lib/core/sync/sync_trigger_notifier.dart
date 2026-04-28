@@ -14,6 +14,7 @@ import '../../features/contact/presentation/provider/contact_provider.dart';
 import '../../features/dashboard/presentation/provider/dashboard_providers.dart';
 import '../../features/inventory/presentation/provider/global_stock_provider.dart';
 import '../../features/pos/presentation/provider/day_closure_providers.dart';
+import '../../features/pos/presentation/provider/pos_providers.dart';
 import '../../features/reports/presentation/provider/report_history_providers.dart';
 import '../../features/stores/presentation/provider/store_provider.dart';
 import '../../features/team/presentation/provider/employee_provider.dart';
@@ -251,6 +252,9 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
     ref.invalidate(todaySalesCountProvider);
     ref.invalidate(lastClosureProvider);
     ref.invalidate(salesHistoryProvider);
+    // ── POS — Pending sales ───────────────────────────────────────────────
+    ref.invalidate(pendingSalesProvider);
+    ref.invalidate(pendingSalesCountProvider);
   }
 
   void _scheduleRetry() {

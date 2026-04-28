@@ -17,11 +17,13 @@ import '../provider/day_closure_providers.dart';
 class DaySummaryBottomSheet extends ConsumerStatefulWidget {
   final String storeId;
   final String actorId;
+  final String? employeeId;
 
   const DaySummaryBottomSheet({
     super.key,
     required this.storeId,
     required this.actorId,
+    this.employeeId,
   });
 
   /// Shows the bottom sheet and handles auto-dismiss.
@@ -31,6 +33,7 @@ class DaySummaryBottomSheet extends ConsumerStatefulWidget {
     required WidgetRef ref,
     required String storeId,
     required String actorId,
+    String? employeeId,
   }) async {
     final result = await showModalBottomSheet<bool>(
       context: context,
@@ -40,6 +43,7 @@ class DaySummaryBottomSheet extends ConsumerStatefulWidget {
       builder: (context) => DaySummaryBottomSheet(
         storeId: storeId,
         actorId: actorId,
+        employeeId: employeeId,
       ),
     );
     return result == true;
@@ -129,7 +133,10 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
 
   @override
   Widget build(BuildContext context) {
-    final summaryAsync = ref.watch(todaySummaryProvider(widget.storeId));
+    final summaryAsync = ref.watch(todaySummaryProvider((
+      storeId: widget.storeId,
+      employeeId: widget.employeeId,
+    )));
     final cs = Theme.of(context).colorScheme;
 
     return Container(

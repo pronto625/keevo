@@ -26,7 +26,10 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            todaySummaryProvider(testStoreId).overrideWith(
+            todaySummaryProvider((
+              storeId: testStoreId,
+              employeeId: null,
+            )).overrideWith(
               (ref) => Future.value(mockSummary),
             ),
           ],
@@ -51,7 +54,10 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            todaySummaryProvider(testStoreId).overrideWith(
+            todaySummaryProvider((
+              storeId: testStoreId,
+              employeeId: null,
+            )).overrideWith(
               (ref) => Future.value(mockSummary),
             ),
           ],

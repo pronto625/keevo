@@ -110,7 +110,10 @@ void main() {
             todaySalesCountProvider(testStoreId).overrideWith(
               (ref) => Future.value(3),
             ),
-            todaySummaryProvider(testStoreId).overrideWith(
+            todaySummaryProvider((
+              storeId: testStoreId,
+              employeeId: null,
+            )).overrideWith(
               (ref) => Future.value(const domain.DayClosureSummary(
                 totalSales: 3,
                 totalRevenue: 50000,

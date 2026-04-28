@@ -642,7 +642,7 @@ class ProductCard extends ConsumerWidget {
                       container.invalidate(pendingSalesProvider(storeId));
                       container.invalidate(pendingSalesCountProvider(storeId));
                       container.invalidate(stockNotifierProvider(newId));
-                      container.invalidate(todaySummaryProvider(storeId));
+                      container.invalidate(todaySummaryProvider); // invalidate whole family
                       container.invalidate(dayClosureStateProvider(storeId));
                     }
                   }

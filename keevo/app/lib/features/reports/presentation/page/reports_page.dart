@@ -29,9 +29,14 @@ class ReportsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final storeId = ref.watch(activeStoreIdProvider) ?? 'default';
-    final summaryAsync = ref.watch(todaySummaryProvider(storeId));
-    final closureStateAsync = ref.watch(dayClosureStateProvider(storeId));
+    final isEmployee = ref.watch(currentUserRoleProvider) == 'EMPLOYEE';
     final userIdAsync = ref.watch(currentUserIdProvider);
+    // OWNER: employeeId=null → all store sales. EMPLOYEE: scoped to own sales.
+    final summaryAsync = ref.watch(todaySummaryProvider((
+      storeId: storeId,
+      employeeId: isEmployee ? userIdAsync.valueOrNull : null,
+    )));
+    final closureStateAsync = ref.watch(dayClosureStateProvider(storeId));
     final lastClosureAsync = ref.watch(lastClosureProvider(storeId));
 
     return Scaffold(
@@ -580,6 +585,7 @@ class _ClosureButton extends ConsumerWidget {
       ref: ref,
       storeId: storeId,
       actorId: actorId,
+      employeeId: null, // closure always shows full store totals
     );
 
     if (!context.mounted) return;
