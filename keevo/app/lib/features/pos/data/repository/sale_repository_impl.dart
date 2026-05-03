@@ -39,6 +39,43 @@ class SaleRepositoryImpl implements SaleRepository {
   Future<void> recordSale(Sale sale) async {
     // Offline-first (Story 5.6): always write locally first for instant UX.
     await _local.insertAll(sale, synced: false);
+
+    // Queue RECORD_STOCK_ENTRY + PROMOTE_PRODUCT BEFORE the sale so backend
+    // processes them in order within the same sync batch (stock check passes).
+    for (final entry in sale.initialStockEntries.entries) {
+      await _syncService.queueOperation(
+        operation: 'RECORD_STOCK_ENTRY',
+        payload: {
+          'productId': entry.key,
+          'storeId': sale.storeId,
+          'quantity': entry.value,
+          'notes': 'Stock initial — premier checkout',
+        },
+        entityId: entry.key,
+      );
+    }
+
+    for (final productId in sale.originalDraftProductIds) {
+      String? productName;
+      int? price;
+      for (final item in sale.items) {
+        if (item.productId == productId) {
+          productName = item.productName;
+          price = item.appliedUnitPrice;
+          break;
+        }
+      }
+      await _syncService.queueOperation(
+        operation: 'PROMOTE_PRODUCT',
+        payload: {
+          'productId': productId,
+          if (productName != null) 'name': productName,
+          if (price != null) 'price': price,
+        },
+        entityId: productId,
+      );
+    }
+
     await _syncService.queueOperation(
       operation: 'CREATE_SALE',
       payload: _buildPayload(sale),
@@ -365,6 +402,8 @@ class SaleRepositoryImpl implements SaleRepository {
         'clientId': sale.clientId,
         'discountAmount': sale.discountAmount,
         'requestedStatus': sale.status,
+        if (sale.originalDraftProductIds.isNotEmpty)
+          'originalDraftProductIds': sale.originalDraftProductIds,
         'items': sale.items
             .map((i) => {
                   'itemId': i.id,

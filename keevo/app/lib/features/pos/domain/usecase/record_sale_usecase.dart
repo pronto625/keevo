@@ -22,6 +22,8 @@ class RecordSaleUseCase {
     String? mobileRef,
     int discountAmount = 0,
     String status = 'COMPLETED',
+    List<String> originalDraftProductIds = const [],
+    Map<String, int> initialStockEntries = const {},
   }) async {
     final now = DateTime.now();
     final saleId = const Uuid().v4();
@@ -52,6 +54,8 @@ class RecordSaleUseCase {
       items: items,
       occurredAt: now,
       createdAt: now,
+      originalDraftProductIds: originalDraftProductIds,
+      initialStockEntries: initialStockEntries,
     );
 
     await _repository.recordSale(sale);

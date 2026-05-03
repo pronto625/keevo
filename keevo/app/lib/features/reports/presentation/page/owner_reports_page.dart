@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../pos/presentation/page/pending_sales_page.dart';
 import '../../../profitability/presentation/page/product_profitability_list_page.dart';
 import '../../../profitability/presentation/page/store_performance_page.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
@@ -38,7 +37,7 @@ class _OwnerReportsPageState extends ConsumerState<OwnerReportsPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -75,7 +74,6 @@ class _OwnerReportsPageState extends ConsumerState<OwnerReportsPage>
             Tab(icon: Icon(Icons.history_outlined), text: 'Historique'),
             Tab(icon: Icon(Icons.trending_up_outlined), text: 'Rentabilité'),
             Tab(icon: Icon(Icons.storefront_outlined), text: 'Boutiques'),
-            Tab(icon: Icon(Icons.pending_actions_outlined), text: 'Brouillons'),
           ],
         ),
       ),
@@ -93,8 +91,6 @@ class _OwnerReportsPageState extends ConsumerState<OwnerReportsPage>
               child: ProductProfitabilityListPage(storeId: activeStoreId)),
           const _KeepAliveTab(
               key: ValueKey('tab-boutiques'), child: StorePerformancePage()),
-          const _KeepAliveTab(
-              key: ValueKey('tab-brouillons'), child: PendingSalesPage()),
         ],
       ),
     );
@@ -147,7 +143,7 @@ class _EmployeeReportsPageState extends ConsumerState<EmployeeReportsPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 1, vsync: this);
   }
 
   @override
@@ -180,7 +176,6 @@ class _EmployeeReportsPageState extends ConsumerState<EmployeeReportsPage>
           indicatorColor: Colors.white,
           tabs: const [
             Tab(icon: Icon(Icons.today_outlined), text: 'Jour'),
-            Tab(icon: Icon(Icons.pending_actions_outlined), text: 'Brouillons'),
           ],
         ),
       ),
@@ -189,8 +184,6 @@ class _EmployeeReportsPageState extends ConsumerState<EmployeeReportsPage>
         children: const [
           _KeepAliveTab(
               key: ValueKey('emp-tab-jour'), child: ReportsPage()),
-          _KeepAliveTab(
-              key: ValueKey('emp-tab-brouillons'), child: PendingSalesPage()),
         ],
       ),
     );

@@ -26,7 +26,7 @@ public class CategoryDeltaProvider implements DeltaEntityProvider {
     @SuppressWarnings("unchecked")
     public List<Map<String, Object>> queryDelta(Instant since) {
         String sql = "SELECT id, name, parent_id, is_active, is_custom, created_at, updated_at " +
-                "FROM categories WHERE updated_at > :since";
+                "FROM categories WHERE updated_at >= :since";
         Query query = em.createNativeQuery(sql);
         query.setParameter("since", java.sql.Timestamp.from(since));
         query.setMaxResults(1000);

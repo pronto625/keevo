@@ -1,6 +1,7 @@
 package com.keevo.messaging.notification.application.listener;
 
 import com.keevo.commerce.sale.domain.model.Sale;
+import com.keevo.commerce.sale.domain.model.SaleDraftProductsUpgradedEvent;
 import com.keevo.commerce.sale.domain.model.SaleManuallyValidatedEvent;
 import com.keevo.commerce.sale.domain.model.SalePendingValidationEvent;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
@@ -225,6 +226,87 @@ public class SaleDraftValidatedNotificationListener {
 
         } catch (Exception e) {
             log.warn("[SALE-PENDING] Unexpected error for sale={}: {}", event.saleId(), e.getMessage());
+        } finally {
+            TenantContext.clear();
+        }
+    }
+
+    /**
+     * Fires when an employee finalises a sale that contained originally-draft products
+     * (new flow — stock entered at checkout, sale recorded as COMPLETED immediately).
+     * Notifies the owner so they know new products were activated.
+     */
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onSaleDraftProductsUpgraded(SaleDraftProductsUpgradedEvent event) {
+        log.info("[SALE-DRAFT-UPGRADED] sale={} actor={} tenant={}",
+                event.saleId(), event.actorId(), event.tenantId());
+        try {
+            TenantContext.setCurrentTenant(event.tenantId());
+
+            Sale sale = saleRepository.findById(event.saleId()).orElse(null);
+            if (sale == null) {
+                log.warn("[SALE-DRAFT-UPGRADED] Sale {} not found — skipping notification", event.saleId());
+                return;
+            }
+
+            String employeeName = employeeRepository.findByUserId(sale.getEmployeeId())
+                    .map(e -> e.getFirstName() + " " + e.getLastName())
+                    .orElseGet(() -> userRepository.findById(sale.getEmployeeId())
+                            .map(u -> u.getPhoneNumber())
+                            .orElse("Employé inconnu"));
+
+            String storeName = storeRepository.findById(sale.getStoreId())
+                    .map(Store::name)
+                    .orElse("Boutique");
+
+            String productNames = sale.getItems().stream()
+                    .filter(item -> event.originalDraftProductIds().contains(item.getProductId()))
+                    .map(item -> item.getProductName())
+                    .collect(Collectors.joining(", "));
+
+            String title = "🆕 Nouveaux produits activés";
+            String body = employeeName + " — " + storeName + " : " + productNames
+                    + " (produits brouillons activés lors d'une vente)";
+            String deepLink = "/pos/sales-history/" + event.saleId();
+
+            NotificationPayload payload = NotificationPayload.of(
+                    "SALE_DRAFT_PRODUCTS_UPGRADED",
+                    title,
+                    body,
+                    deepLink,
+                    Map.of("saleId", event.saleId().toString(),
+                            "storeId", event.storeId().toString())
+            );
+
+            StockAlertChannel channel = tenantPreferencesRepository
+                    .findByCurrentTenant()
+                    .map(p -> p.stockAlertChannel())
+                    .orElse(StockAlertChannel.PUSH);
+
+            if (channel == StockAlertChannel.PUSH || channel == StockAlertChannel.BOTH) {
+                try {
+                    notificationPort.notifyOwners(event.tenantId(), payload);
+                } catch (Exception e) {
+                    log.warn("[SALE-DRAFT-UPGRADED] Push failed for sale={}: {}", event.saleId(), e.getMessage());
+                }
+            }
+
+            if (channel == StockAlertChannel.WHATSAPP || channel == StockAlertChannel.BOTH) {
+                String ownerPhone = userRepository.findOwnerByTenantSchemaName(event.tenantId())
+                        .map(u -> u.getPhoneNumber())
+                        .orElse(null);
+                if (ownerPhone != null) {
+                    try {
+                        whatsAppPort.sendReport(ownerPhone, title + "\n" + body);
+                    } catch (Exception e) {
+                        log.warn("[SALE-DRAFT-UPGRADED] WhatsApp failed for sale={}: {}", event.saleId(), e.getMessage());
+                    }
+                }
+            }
+
+        } catch (Exception e) {
+            log.warn("[SALE-DRAFT-UPGRADED] Unexpected error for sale={}: {}", event.saleId(), e.getMessage());
         } finally {
             TenantContext.clear();
         }

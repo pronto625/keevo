@@ -44,7 +44,20 @@ public class CategoryJpaEntity {
     // ── JPA requires no-arg constructor ───────────────────────────────────────
     protected CategoryJpaEntity() {}
 
-    /** Factory constructor — id is intentionally omitted; Hibernate generates it. */
+    /** Constructor with explicit id — used when the caller provides the UUID (e.g. sync handler). */
+    public CategoryJpaEntity(UUID id, String name, UUID parentId,
+                              boolean isActive, boolean isCustom,
+                              Instant createdAt, Instant updatedAt) {
+        this.id = id;
+        this.name = name;
+        this.parentId = parentId;
+        this.isActive = isActive;
+        this.isCustom = isCustom;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
+    }
+
+    /** Constructor without id — Hibernate generates a UUID on persist. */
     public CategoryJpaEntity(String name, UUID parentId,
                               boolean isActive, boolean isCustom,
                               Instant createdAt, Instant updatedAt) {

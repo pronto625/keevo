@@ -40,7 +40,7 @@ public class InventorySessionRepositoryAdapter implements InventorySessionReposi
 
     @Override
     public Optional<InventorySession> findActiveByStoreId(UUID storeId) {
-        return jpaRepository.findByStoreIdAndStatus(storeId, InventorySessionStatus.IN_PROGRESS)
+        return jpaRepository.findFirstByStoreIdAndStatusOrderByStartedAtDesc(storeId, InventorySessionStatus.IN_PROGRESS)
                 .map(this::toDomain);
     }
 

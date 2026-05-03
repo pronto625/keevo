@@ -88,6 +88,13 @@ public class CategorySyncHandler extends AbstractSyncOperationHandler {
                 UUID parentId = p.get("parentId") != null
                         ? UUID.fromString((String) p.get("parentId"))
                         : null;
+                // G3: dedup by name+parentId — if a category with the same name already exists,
+                // return its ID as APPLIED to prevent duplicates from multiple offline devices.
+                var existingByName = categoryRepository.findByNameAndParentId(name, parentId);
+                if (existingByName.isPresent()) {
+                    yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
+                            existingByName.get().id().toString(), null);
+                }
                 Instant now = Instant.now();
                 Category category = new Category(clientId, name, parentId, true, true, now, now);
                 Category saved = categoryRepository.save(category);

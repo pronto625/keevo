@@ -39,9 +39,41 @@ final categoriesProvider = FutureProvider.autoDispose<List<CategoryModel>>((ref)
   if (localCategories.isEmpty) {
     try {
       await ref.read(syncServiceProvider).pull();
+      final afterSync = await repository.getLocalCategories();
+      if (afterSync.isNotEmpty) return afterSync;
+    } catch (_) {}
+
+    // Fallback: direct GET /api/v1/categories for resilience against empty delta.
+    try {
+      final dio = ref.read(dioProvider);
+      final db = ref.read(appDatabaseProvider);
+      final response = await dio.get<Map<String, dynamic>>('/api/v1/categories');
+      final rawCats = response.data!['data'] as List<dynamic>;
+      String? _toLocal(dynamic utcIso) {
+        if (utcIso == null) return null;
+        return DateTime.parse(utcIso as String).toLocal().toIso8601String();
+      }
+      for (final c in rawCats) {
+        final map = c as Map<String, dynamic>;
+        await db.customStatement(
+          'INSERT INTO categories (id, name, parent_id, is_active, is_custom, '
+          'created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) '
+          'ON CONFLICT(id) DO UPDATE SET name = excluded.name, '
+          'parent_id = excluded.parent_id, is_active = excluded.is_active, '
+          'is_custom = excluded.is_custom, updated_at = excluded.updated_at',
+          [
+            map['id'],
+            map['name'],
+            map['parentId'],
+            (map['isActive'] == true) ? 1 : 0,
+            (map['isCustom'] == true) ? 1 : 0,
+            _toLocal(map['createdAt']),
+            _toLocal(map['updatedAt']),
+          ],
+        );
+      }
       return await repository.getLocalCategories();
-    } catch (e) {
-      // Offline or pull failed — return empty list.
+    } catch (_) {
       return <CategoryModel>[];
     }
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/core/sync/sync_status.dart';
@@ -10,6 +11,21 @@ import 'package:keevo/features/pos/presentation/page/pos_page.dart';
 import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
+
+class _FakeFrequentProductsNotifier extends FrequentProductsNotifier {
+  final List<PosProductResult> _products;
+  _FakeFrequentProductsNotifier([this._products = const []]);
+
+  @override
+  Future<FrequentProductsState> build(
+      ({String? storeId, String? categoryId}) arg) async {
+    return FrequentProductsState(products: _products, hasMore: false);
+  }
+}
+
+GoRouter _testRouter(Widget page) => GoRouter(
+      routes: [GoRoute(path: '/', builder: (_, __) => page)],
+    );
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
@@ -30,10 +46,10 @@ void main() {
         sharedPreferencesProvider.overrideWithValue(prefs),
         currentUserRoleProvider.overrideWithValue('OWNER'),
         frequentProductsProvider
-            .overrideWith((ref, key) => Future.value([])),
+            .overrideWith(() => _FakeFrequentProductsNotifier()),
         ...overrides,
       ],
-      child: const MaterialApp(home: PosPage()),
+      child: MaterialApp.router(routerConfig: _testRouter(const PosPage())),
     );
   }
 
@@ -64,14 +80,16 @@ void main() {
     testWidgets('cartPill visible after adding product', (tester) async {
       await tester.pumpWidget(buildApp(
         overrides: [
-          frequentProductsProvider.overrideWith((ref, key) => Future.value([
-                const PosProductResult(
-                  id: 'p1',
-                  name: 'Savon',
-                  price: 500,
-                  stock: 10,
-                ),
-              ])),
+          frequentProductsProvider.overrideWith(
+            () => _FakeFrequentProductsNotifier([
+              const PosProductResult(
+                id: 'p1',
+                name: 'Savon',
+                price: 500,
+                stock: 10,
+              ),
+            ]),
+          ),
         ],
       ));
       await tester.pumpAndSettle();
@@ -97,14 +115,16 @@ void main() {
 
       await tester.pumpWidget(buildApp(
         overrides: [
-          frequentProductsProvider.overrideWith((ref, key) => Future.value([
-                const PosProductResult(
-                  id: 'p1',
-                  name: 'Savon',
-                  price: 500,
-                  stock: 10,
-                ),
-              ])),
+          frequentProductsProvider.overrideWith(
+            () => _FakeFrequentProductsNotifier([
+              const PosProductResult(
+                id: 'p1',
+                name: 'Savon',
+                price: 500,
+                stock: 10,
+              ),
+            ]),
+          ),
         ],
       ));
       await tester.pumpAndSettle();

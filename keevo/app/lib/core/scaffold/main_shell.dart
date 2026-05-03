@@ -209,9 +209,6 @@ class _MainShellState extends ConsumerState<MainShell> {
       }
     }
 
-    final pendingSalesCount =
-        ref.watch(pendingSalesCountProvider(storeId)).valueOrNull ?? 0;
-
     // Low stock badge — sum lowStockCount across all stores (AC8)
     final lowStockCount = isEmployee
         ? 0
@@ -229,20 +226,8 @@ class _MainShellState extends ConsumerState<MainShell> {
           label: 'Dashboard',
         ),
       NavigationDestination(
-        icon: Badge(
-          label: Text(pendingSalesCount > 9 ? '9+' : '$pendingSalesCount'),
-          isLabelVisible: pendingSalesCount > 0,
-          backgroundColor: AppTheme.warning,
-          textColor: AppTheme.darkSurface,
-          child: const Icon(Icons.point_of_sale_outlined),
-        ),
-        selectedIcon: Badge(
-          label: Text(pendingSalesCount > 9 ? '9+' : '$pendingSalesCount'),
-          isLabelVisible: pendingSalesCount > 0,
-          backgroundColor: AppTheme.warning,
-          textColor: AppTheme.darkSurface,
-          child: const Icon(Icons.point_of_sale_rounded),
-        ),
+        icon: const Icon(Icons.point_of_sale_outlined),
+        selectedIcon: const Icon(Icons.point_of_sale_rounded),
         label: 'Caisse',
       ),
       // Catalogue — read-only for EMPLOYEE (mutation actions hidden in CatalogPage itself)

@@ -10,7 +10,7 @@ import java.util.UUID;
 
 public interface JpaInventorySessionRepository extends JpaRepository<InventorySessionJpaEntity, UUID> {
 
-    Optional<InventorySessionJpaEntity> findByStoreIdAndStatus(UUID storeId, InventorySessionStatus status);
+    Optional<InventorySessionJpaEntity> findFirstByStoreIdAndStatusOrderByStartedAtDesc(UUID storeId, InventorySessionStatus status);
 
     Page<InventorySessionJpaEntity> findByStoreIdOrderByStartedAtDesc(UUID storeId, Pageable pageable);
 

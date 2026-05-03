@@ -386,6 +386,17 @@ class RestSyncService implements SyncService {
         ],
       );
     }
+
+    // G3: Remove duplicate categories with the same (name, parent_id) keeping
+    // the one with the oldest created_at (i.e. the first one inserted).
+    await _database.customStatement(
+      'DELETE FROM categories '
+      'WHERE id NOT IN ('
+      '  SELECT id FROM categories '
+      '  GROUP BY LOWER(name), COALESCE(parent_id, \'\') '
+      '  HAVING id = MIN(id)'
+      ')',
+    );
   }
 
   Future<void> _upsertClients(

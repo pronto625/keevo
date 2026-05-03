@@ -1,6 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
 import com.keevo.commerce.sale.domain.model.PaymentMode;
+import com.keevo.commerce.sale.domain.model.SaleDraftProductsUpgradedEvent;
 import com.keevo.commerce.sale.domain.model.SaleStatus;
 import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase;
 import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase.RecordSaleCommand;
@@ -8,17 +9,22 @@ import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase.SaleItemCommand;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.*;
 
 @Component
 public class SaleSyncHandler extends AbstractSyncOperationHandler {
 
     private final RecordSaleUseCase recordSaleUseCase;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public SaleSyncHandler(RecordSaleUseCase recordSaleUseCase) {
+    public SaleSyncHandler(RecordSaleUseCase recordSaleUseCase,
+                           ApplicationEventPublisher eventPublisher) {
         this.recordSaleUseCase = recordSaleUseCase;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -64,6 +70,20 @@ public class SaleSyncHandler extends AbstractSyncOperationHandler {
         recordSaleUseCase.recordSale(new RecordSaleCommand(
                 saleId, actorId, storeId, clientId, paymentMode, mobileMoneyRef,
                 discountAmount, requestedStatus, saleItems));
+
+        // Notify owner when sale contained originally-draft products.
+        @SuppressWarnings("unchecked")
+        List<String> rawDraftIds = p.get("originalDraftProductIds") instanceof List<?>
+                ? (List<String>) p.get("originalDraftProductIds")
+                : List.of();
+        if (!rawDraftIds.isEmpty()) {
+            List<UUID> draftProductIds = rawDraftIds.stream().map(UUID::fromString).toList();
+            int totalAmount = saleItems.stream()
+                    .mapToInt(i -> i.appliedUnitPrice() * i.quantity())
+                    .sum() - discountAmount;
+            eventPublisher.publishEvent(new SaleDraftProductsUpgradedEvent(
+                    saleId, storeId, actorId, draftProductIds, totalAmount, tenantId, Instant.now()));
+        }
 
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                 saleId.toString(), null);

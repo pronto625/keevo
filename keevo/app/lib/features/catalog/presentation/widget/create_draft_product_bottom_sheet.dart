@@ -157,7 +157,8 @@ class _CreateDraftProductBottomSheetState
         padding: const EdgeInsets.all(24),
         child: Form(
           key: _formKey,
-          child: Column(
+          child: SingleChildScrollView(
+            child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -381,6 +382,7 @@ class _CreateDraftProductBottomSheetState
               ),
               const SizedBox(height: 8),
             ],
+          ),
           ),
         ),
       ),

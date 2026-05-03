@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/core/sync/sync_status.dart';
@@ -23,7 +24,16 @@ void main() {
         sharedPreferencesProvider.overrideWithValue(prefs),
         currentUserRoleProvider.overrideWithValue('OWNER'),
       ],
-      child: const MaterialApp(home: PosPage()),
+      child: MaterialApp.router(
+        routerConfig: GoRouter(
+          routes: [
+            GoRoute(
+              path: '/',
+              builder: (_, __) => const PosPage(),
+            ),
+          ],
+        ),
+      ),
     ));
     await tester.pump();
     // Should render the AppBar title without crash

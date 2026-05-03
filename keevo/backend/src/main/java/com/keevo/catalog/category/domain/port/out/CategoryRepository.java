@@ -81,6 +81,14 @@ public interface CategoryRepository {
     Category rename(UUID id, String name);
 
     /**
+     * Find a category by name and parent (case-sensitive exact match).
+     *
+     * <p>Used by {@link com.keevo.sync.sync.application.handler.CategorySyncHandler}
+     * to prevent duplicates when two offline devices create the same category name.
+     */
+    Optional<Category> findByNameAndParentId(String name, UUID parentId);
+
+    /**
      * Deactivate a category (soft-delete — preserves record for audit integrity).
      *
      * <p>Unlike {@link #toggleActive} this always sets {@code isActive = false}.

@@ -37,6 +37,12 @@ class Sale {
   final List<SaleItemModel> items;
   final DateTime occurredAt;
   final DateTime createdAt;
+  /// IDs of products that were DRAFT at checkout time — used to queue
+  /// PROMOTE_PRODUCT + RECORD_STOCK_ENTRY sync ops and notify the owner.
+  final List<String> originalDraftProductIds;
+  /// Initial stock entries for originally-draft products (productId → qty).
+  /// Queued as RECORD_STOCK_ENTRY ops before the CREATE_SALE op.
+  final Map<String, int> initialStockEntries;
 
   const Sale({
     required this.id,
@@ -51,5 +57,7 @@ class Sale {
     required this.items,
     required this.occurredAt,
     required this.createdAt,
+    this.originalDraftProductIds = const [],
+    this.initialStockEntries = const {},
   });
 }

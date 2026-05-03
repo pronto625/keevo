@@ -176,7 +176,7 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('Erreur'), findsOneWidget);
+      expect(find.textContaining('problème'), findsOneWidget);
     });
   });
 }

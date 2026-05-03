@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Instant;
 import java.util.List;
@@ -24,6 +25,7 @@ import static org.mockito.Mockito.*;
 class SaleSyncHandlerTest {
 
     @Mock private RecordSaleUseCase recordSaleUseCase;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     private SaleSyncHandler handler;
 
@@ -32,7 +34,7 @@ class SaleSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new SaleSyncHandler(recordSaleUseCase);
+        handler = new SaleSyncHandler(recordSaleUseCase, eventPublisher);
     }
 
     @Test

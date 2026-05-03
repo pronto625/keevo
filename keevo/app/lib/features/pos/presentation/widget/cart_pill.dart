@@ -9,14 +9,12 @@ import '../../../../core/theme/app_theme.dart';
 class CartPill extends StatelessWidget {
   final int itemCount;
   final int totalAmount;
-  final bool hasDraftProducts;
   final VoidCallback onEncaisser;
 
   const CartPill({
     super.key,
     required this.itemCount,
     required this.totalAmount,
-    this.hasDraftProducts = false,
     required this.onEncaisser,
   });
 
@@ -43,9 +41,7 @@ class CartPill extends StatelessWidget {
                 child: Container(
                   width: double.infinity,
                   decoration: BoxDecoration(
-                    color: hasDraftProducts
-                        ? AppTheme.warning
-                        : AppTheme.darkSurface,
+                    color: AppTheme.darkSurface,
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
@@ -104,9 +100,7 @@ class CartPill extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    hasDraftProducts
-                                        ? 'BROUILLON'
-                                        : '$itemCount ARTICLE${itemCount > 1 ? 'S' : ''}',
+                                    '$itemCount ARTICLE${itemCount > 1 ? 'S' : ''}',
                                     style: TextStyle(
                                       color: Colors.white.withValues(alpha: 0.7),
                                       fontWeight: FontWeight.w600,
@@ -131,18 +125,14 @@ class CartPill extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 18, vertical: 10),
                               decoration: BoxDecoration(
-                                color: hasDraftProducts
-                                    ? AppTheme.warning
-                                    : AppTheme.primary,
+                                color: AppTheme.primary,
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
-                                    hasDraftProducts
-                                        ? 'BROUILLON'
-                                        : 'ENCAISSER',
+                                    'ENCAISSER',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.w700,

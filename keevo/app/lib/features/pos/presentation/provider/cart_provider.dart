@@ -65,3 +65,9 @@ class CartNotifier extends Notifier<List<CartItem>> {
 
 final cartProvider =
     NotifierProvider<CartNotifier, List<CartItem>>(CartNotifier.new);
+
+/// Holds initial stock quantities for originally-draft products during checkout.
+/// Set by CartBottomSheet after the user enters initial stocks via dialogs,
+/// then read and cleared by RecordSaleNotifier.submit().
+final draftInitialStocksProvider =
+    StateProvider<Map<String, int>>((ref) => {});

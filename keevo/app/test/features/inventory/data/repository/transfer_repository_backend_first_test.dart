@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/sync/connectivity_service.dart';
 import 'package:keevo/core/sync/sync_service.dart';
+import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
 import 'package:keevo/features/inventory/data/datasource/local_stock_transfer_datasource.dart';
 import 'package:keevo/features/inventory/data/datasource/remote_stock_transfer_datasource.dart';
 import 'package:keevo/features/inventory/data/repository/stock_transfer_repository_impl.dart';
@@ -16,6 +17,8 @@ class MockRemoteStockTransferDataSource extends Mock
 class MockConnectivityService extends Mock implements ConnectivityService {}
 
 class MockSyncService extends Mock implements SyncService {}
+
+class MockSyncTriggerDispatcher extends Mock implements SyncTriggerDispatcher {}
 
 class FakeStockTransferModel extends Fake implements StockTransferModel {}
 
@@ -39,6 +42,7 @@ void main() {
   late MockRemoteStockTransferDataSource mockRemote;
   late MockConnectivityService mockConnectivity;
   late MockSyncService mockSyncService;
+  late MockSyncTriggerDispatcher mockSyncTrigger;
   late StockTransferRepositoryImpl repo;
 
   setUpAll(() => registerFallbackValue(FakeStockTransferModel()));
@@ -48,11 +52,13 @@ void main() {
     mockRemote = MockRemoteStockTransferDataSource();
     mockConnectivity = MockConnectivityService();
     mockSyncService = MockSyncService();
+    mockSyncTrigger = MockSyncTriggerDispatcher();
     repo = StockTransferRepositoryImpl(
       local: mockLocal,
       remote: mockRemote,
       connectivity: mockConnectivity,
       syncService: mockSyncService,
+      syncTriggerDispatcher: mockSyncTrigger,
     );
   });
 

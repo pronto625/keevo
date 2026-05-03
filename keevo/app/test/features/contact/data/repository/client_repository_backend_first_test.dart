@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/sync/connectivity_service.dart';
 import 'package:keevo/core/sync/sync_service.dart';
+import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
 import 'package:keevo/features/contact/data/datasource/local_client_datasource.dart';
 import 'package:keevo/features/contact/data/datasource/remote_client_datasource.dart';
 import 'package:keevo/features/contact/data/repository/client_repository_impl.dart';
@@ -15,6 +16,8 @@ class MockRemoteClientDataSource extends Mock
 class MockConnectivityService extends Mock implements ConnectivityService {}
 
 class MockSyncService extends Mock implements SyncService {}
+
+class MockSyncTriggerDispatcher extends Mock implements SyncTriggerDispatcher {}
 
 class FakeClientModel extends Fake implements ClientModel {}
 
@@ -32,6 +35,7 @@ void main() {
   late MockRemoteClientDataSource mockRemote;
   late MockConnectivityService mockConnectivity;
   late MockSyncService mockSyncService;
+  late MockSyncTriggerDispatcher mockSyncTrigger;
   late ClientRepositoryImpl repo;
 
   setUpAll(() => registerFallbackValue(FakeClientModel()));
@@ -41,11 +45,13 @@ void main() {
     mockRemote = MockRemoteClientDataSource();
     mockConnectivity = MockConnectivityService();
     mockSyncService = MockSyncService();
+    mockSyncTrigger = MockSyncTriggerDispatcher();
     repo = ClientRepositoryImpl(
       local: mockLocal,
       remote: mockRemote,
       connectivity: mockConnectivity,
       syncService: mockSyncService,
+      syncTriggerDispatcher: mockSyncTrigger,
     );
   });
 

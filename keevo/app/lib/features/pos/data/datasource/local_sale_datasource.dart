@@ -363,6 +363,64 @@ class LocalSaleDataSource {
     return validated;
   }
 
+  /// Apply initial stock entries for originally-draft products at checkout time.
+  ///
+  /// Called before [insertAll] when the sale contained draft products so that
+  /// the stock check after this call sees positive stock for those products.
+  Future<void> applyInitialStockEntries(
+      Map<String, int> entries, String storeId, String actorId) async {
+    if (entries.isEmpty) return;
+    await _db.transaction(() async {
+      final now = DateTime.now();
+      for (final entry in entries.entries) {
+        final productId = entry.key;
+        final qty = entry.value;
+        if (qty <= 0) continue;
+
+        final stockRows = await (_db.select(_db.stockLevels)
+              ..where((s) =>
+                  s.productId.equals(productId) &
+                  s.storeId.equals(storeId)))
+            .get();
+
+        final qBefore =
+            stockRows.fold<int>(0, (max, r) => r.quantity > max ? r.quantity : max);
+        final qAfter = qBefore + qty;
+
+        if (stockRows.isNotEmpty) {
+          await (_db.update(_db.stockLevels)
+                ..where((s) =>
+                    s.productId.equals(productId) &
+                    s.storeId.equals(storeId)))
+              .write(StockLevelsCompanion(
+            quantity: Value(qAfter),
+            updatedAt: Value(now),
+          ));
+        } else {
+          await _db.into(_db.stockLevels).insert(StockLevelsCompanion.insert(
+            id: const Uuid().v4(),
+            productId: productId,
+            storeId: storeId,
+            quantity: qAfter,
+            updatedAt: now,
+          ));
+        }
+
+        await _db.into(_db.stockMovements).insert(StockMovementsCompanion.insert(
+          id: const Uuid().v4(),
+          productId: productId,
+          storeId: storeId,
+          type: 'STOCK_ENTRY',
+          quantityDelta: qty,
+          actorId: actorId,
+          quantityBefore: Value(qBefore),
+          quantityAfter: Value(qAfter),
+          createdAt: now,
+        ));
+      }
+    });
+  }
+
   /// Count pending validation sales.
   Future<int> countPendingSales(String? storeId) async {
     final String sql;

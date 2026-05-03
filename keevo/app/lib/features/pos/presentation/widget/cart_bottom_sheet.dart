@@ -9,7 +9,7 @@ import '../provider/cart_provider.dart';
 import 'discount_sheet.dart';
 
 /// CartBottomSheet — modal bottom sheet showing cart items with quantity controls.
-class CartBottomSheet extends ConsumerWidget {
+class CartBottomSheet extends ConsumerStatefulWidget {
   final VoidCallback onEncaisser;
 
   const CartBottomSheet({super.key, required this.onEncaisser});
@@ -29,13 +29,51 @@ class CartBottomSheet extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CartBottomSheet> createState() => _CartBottomSheetState();
+}
+
+class _CartBottomSheetState extends ConsumerState<CartBottomSheet> {
+  static final _currencyFormat =
+      NumberFormat.currency(locale: 'fr_CM', symbol: 'FCFA', decimalDigits: 0);
+
+  Future<void> _handleEncaisser(BuildContext context) async {
+    final draftItems =
+        ref.read(cartProvider).where((i) => i.isDraft).toList();
+
+    if (draftItems.isEmpty) {
+      widget.onEncaisser();
+      return;
+    }
+
+    final initialStocks = <String, int>{};
+    for (final item in draftItems) {
+      if (!mounted) return;
+      final qty = await _showInitialStockDialog(context, item.productName);
+      if (qty == null) return; // user cancelled
+      initialStocks[item.productId] = qty;
+    }
+
+    if (!mounted) return;
+    ref.read(draftInitialStocksProvider.notifier).state = initialStocks;
+    widget.onEncaisser();
+  }
+
+  Future<int?> _showInitialStockDialog(
+      BuildContext context, String productName) {
+    return showDialog<int>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _InitialStockDialog(productName: productName),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final cart = ref.watch(cartProvider);
     final notifier = ref.read(cartProvider.notifier);
     final subtotal = notifier.totalAmount;
     final discountAmount = notifier.discountAmount;
     final finalTotal = notifier.finalTotal;
-    final hasDrafts = notifier.hasDraftProducts;
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
@@ -110,32 +148,6 @@ class CartBottomSheet extends ConsumerWidget {
               ),
             ),
             Divider(color: cs.outlineVariant),
-            if (hasDrafts)
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppTheme.warning,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.onWarning.withValues(alpha: 0.2)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline, color: AppTheme.onWarning, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Cette vente contient des produits en brouillon. Elle sera validée quand l\'admin les confirmera.',
-                        style: TextStyle(
-                          color: AppTheme.onWarning,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             Expanded(
               child: ListView.separated(
                 controller: scrollController,
@@ -216,22 +228,16 @@ class CartBottomSheet extends ConsumerWidget {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: cart.isNotEmpty
-                        ? (hasDrafts
-                            ? LinearGradient(
-                                colors: [AppTheme.warning, AppTheme.warning],
-                              )
-                            : const LinearGradient(
-                                colors: [AppTheme.primary, AppTheme.primaryGradientEnd],
-                              ))
+                        ? const LinearGradient(
+                            colors: [AppTheme.primary, AppTheme.primaryGradientEnd],
+                          )
                         : null,
                     color: cart.isEmpty ? cs.outlineVariant : null,
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: cart.isNotEmpty
                         ? [
                             BoxShadow(
-                              color: hasDrafts
-                                  ? AppTheme.warning.withValues(alpha: 0.3)
-                                  : AppTheme.primary.withValues(alpha: 0.3),
+                              color: AppTheme.primary.withValues(alpha: 0.3),
                               blurRadius: 12,
                               offset: const Offset(0, 4),
                             ),
@@ -242,11 +248,13 @@ class CartBottomSheet extends ConsumerWidget {
                     color: Colors.transparent,
                     borderRadius: BorderRadius.circular(16),
                     child: InkWell(
-                      onTap: cart.isEmpty ? null : onEncaisser,
+                      onTap: cart.isEmpty
+                          ? null
+                          : () => _handleEncaisser(context),
                       borderRadius: BorderRadius.circular(16),
                       child: Center(
                         child: Text(
-                          hasDrafts ? '🔶 Vente brouillon' : 'Encaisser',
+                          'Encaisser',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 16,
@@ -490,6 +498,76 @@ class _CartItemTileState extends State<_CartItemTile> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Dialog for entering the initial stock quantity of a DRAFT product.
+///
+/// Uses a proper StatefulWidget so the TextEditingController's lifecycle is
+/// tied to the widget — prevents "used after disposed" crashes that occur when
+/// the dialog's close animation is still running after [showDialog] returns.
+class _InitialStockDialog extends StatefulWidget {
+  final String productName;
+  const _InitialStockDialog({required this.productName});
+
+  @override
+  State<_InitialStockDialog> createState() => _InitialStockDialogState();
+}
+
+class _InitialStockDialogState extends State<_InitialStockDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Stock initial'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Combien d\'unités de "${widget.productName}" avez-vous en stock ?',
+            style: const TextStyle(fontSize: 14),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _controller,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Quantité en stock',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: const Text('Annuler'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            final qty = int.tryParse(_controller.text.trim());
+            if (qty != null && qty >= 0) Navigator.of(context).pop(qty);
+          },
+          child: const Text('Confirmer'),
+        ),
+      ],
     );
   }
 }

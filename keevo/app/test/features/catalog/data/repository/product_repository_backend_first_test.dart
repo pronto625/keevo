@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/sync/connectivity_service.dart';
 import 'package:keevo/core/sync/sync_service.dart';
+import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
 import 'package:keevo/features/catalog/data/datasource/local_product_datasource.dart';
 import 'package:keevo/features/catalog/data/datasource/remote_csv_import_datasource.dart';
 import 'package:keevo/features/catalog/data/datasource/remote_product_datasource.dart';
@@ -21,6 +22,8 @@ class MockRemoteCsvImportDataSource extends Mock
 class MockConnectivityService extends Mock implements ConnectivityService {}
 
 class MockSyncService extends Mock implements SyncService {}
+
+class MockSyncTriggerDispatcher extends Mock implements SyncTriggerDispatcher {}
 
 class FakeProductModel extends Fake implements ProductModel {}
 
@@ -54,6 +57,7 @@ void main() {
   late MockRemoteCsvImportDataSource mockRemoteCsv;
   late MockConnectivityService mockConnectivity;
   late MockSyncService mockSyncService;
+  late MockSyncTriggerDispatcher mockSyncTrigger;
   late ProductRepositoryImpl repo;
 
   setUpAll(() => registerFallbackValue(FakeProductModel()));
@@ -64,12 +68,14 @@ void main() {
     mockRemoteCsv = MockRemoteCsvImportDataSource();
     mockConnectivity = MockConnectivityService();
     mockSyncService = MockSyncService();
+    mockSyncTrigger = MockSyncTriggerDispatcher();
     repo = ProductRepositoryImpl(
       local: mockLocal,
       remote: mockRemote,
       remoteCsv: mockRemoteCsv,
       connectivity: mockConnectivity,
       syncService: mockSyncService,
+      syncTriggerDispatcher: mockSyncTrigger,
     );
   });
 

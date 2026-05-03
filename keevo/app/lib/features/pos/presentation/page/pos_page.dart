@@ -250,8 +250,6 @@ class _PosPageState extends ConsumerState<PosPage> {
                   onCategorySelected: (id) =>
                       setState(() => _selectedCategoryId = id),
                 ),
-              // Pending sales banner (store-scoped for both OWNER and EMPLOYEE)
-              _PendingSalesBanner(storeId: storeId),
               // Product grid or search results
               if (_searchQuery.isNotEmpty)
                 _SearchResultsSliver(
@@ -288,7 +286,6 @@ class _PosPageState extends ConsumerState<PosPage> {
             child: CartPill(
               itemCount: cart.length,
               totalAmount: cartNotifier.totalAmount,
-              hasDraftProducts: cartNotifier.hasDraftProducts,
               onEncaisser: () {
                 CartBottomSheet.show(
                   context,
@@ -705,49 +702,3 @@ class _CategoryChipsSliver extends ConsumerWidget {
   }
 }
 
-/// Tappable banner that appears when there are pending-validation sales.
-class _PendingSalesBanner extends ConsumerWidget {
-  final String? storeId;
-  const _PendingSalesBanner({required this.storeId});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final count =
-        ref.watch(pendingSalesCountProvider(storeId)).valueOrNull ?? 0;
-    if (count == 0) return const SliverToBoxAdapter(child: SizedBox.shrink());
-
-    return SliverToBoxAdapter(
-      child: GestureDetector(
-        onTap: () => context.push('/pos/pending'),
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: AppTheme.warning,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.onWarning.withOpacity(0.2)),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.pending_actions_rounded,
-                  color: AppTheme.onWarning, size: 22),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  '$count vente${count > 1 ? 's' : ''} en attente de validation',
-                  style: const TextStyle(
-                    color: AppTheme.onWarning,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-              const Icon(Icons.chevron_right_rounded,
-                  color: AppTheme.onWarning, size: 20),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}

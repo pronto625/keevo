@@ -7,6 +7,7 @@ import 'package:keevo/features/pos/domain/model/sale_model.dart';
 import 'package:keevo/core/storage/app_database.dart' hide Sale, SaleItem;
 import 'package:keevo/core/sync/connectivity_service.dart';
 import 'package:keevo/core/sync/sync_service.dart';
+import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockLocalSaleDataSource extends Mock implements LocalSaleDataSource {}
@@ -18,6 +19,8 @@ class MockAppDatabase extends Mock implements AppDatabase {}
 class MockConnectivityService extends Mock implements ConnectivityService {}
 
 class MockSyncService extends Mock implements SyncService {}
+
+class MockSyncTriggerDispatcher extends Mock implements SyncTriggerDispatcher {}
 
 class FakeSale extends Fake implements Sale {}
 
@@ -48,6 +51,7 @@ void main() {
   late MockAppDatabase mockDb;
   late MockConnectivityService mockConnectivity;
   late MockSyncService mockSyncService;
+  late MockSyncTriggerDispatcher mockSyncTrigger;
   late SaleRepositoryImpl repo;
 
   setUpAll(() => registerFallbackValue(FakeSale()));
@@ -58,26 +62,37 @@ void main() {
     mockDb = MockAppDatabase();
     mockConnectivity = MockConnectivityService();
     mockSyncService = MockSyncService();
+    mockSyncTrigger = MockSyncTriggerDispatcher();
     repo = SaleRepositoryImpl(
       mockLocal,
       mockRemote,
       mockDb,
       connectivity: mockConnectivity,
       syncService: mockSyncService,
+      syncTriggerDispatcher: mockSyncTrigger,
     );
   });
 
   group('SaleRepositoryImpl', () {
-    test('recordSale online — pushes to backend first, saves locally as synced', () async {
+    test('recordSale (Story 5.6) — always writes locally + queues + triggers push', () async {
       final sale = _testSale();
-      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
-      when(() => mockRemote.pushSale(any())).thenAnswer((_) async {});
-      when(() => mockLocal.insertAll(any(), synced: true)).thenAnswer((_) async {});
+      when(() => mockLocal.insertAll(any(), synced: false)).thenAnswer((_) async {});
+      when(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).thenAnswer((_) async {});
 
       await repo.recordSale(sale);
 
-      verify(() => mockRemote.pushSale(sale)).called(1);
-      verify(() => mockLocal.insertAll(sale, synced: true)).called(1);
+      verifyNever(() => mockRemote.pushSale(any()));
+      verify(() => mockLocal.insertAll(sale, synced: false)).called(1);
+      verify(() => mockSyncService.queueOperation(
+            operation: 'CREATE_SALE',
+            payload: any(named: 'payload'),
+            entityId: sale.id,
+          )).called(1);
+      verify(() => mockSyncTrigger.triggerPushIfIdle()).called(1);
     });
 
     test('recordSale online but backend fails — saves locally + queues sync', () async {
