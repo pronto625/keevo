@@ -128,6 +128,17 @@ public class JpaCategoryRepository implements CategoryRepository {
     // ── Mapping helpers ───────────────────────────────────────────────────────
 
     private CategoryJpaEntity toEntity(Category domain) {
+        if (domain.id() == null) {
+            // New entity — let Hibernate generate the UUID via @GeneratedValue
+            return new CategoryJpaEntity(
+                domain.name(),
+                domain.parentId(),
+                domain.isActive(),
+                domain.isCustom(),
+                domain.createdAt(),
+                domain.updatedAt()
+            );
+        }
         return new CategoryJpaEntity(
             domain.id(),
             domain.name(),
