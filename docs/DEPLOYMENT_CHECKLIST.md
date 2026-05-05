@@ -80,7 +80,7 @@ FLYWAY_ENABLED=true
 
 # ─── JWT (inutile ici — injecté via GitHub Secrets) ───────────
 JWT_SECRET=unused_in_prod
-JWT_EXPIRATION_MS=86400000
+JWT_EXPIRATION_MS=15552000000
 
 # ─── FCM Push Notifications ───────────────────────────────────
 KEEVO_FCM_ENABLED=true

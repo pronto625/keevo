@@ -51,7 +51,7 @@ jobs:
           POSTGRES_USER: keevo
           POSTGRES_PASSWORD: ci_password
           JWT_SECRET: ci_test_secret_minimum_256_bits_long_for_hmac_sha256_algorithm
-          JWT_EXPIRATION_MS: 86400000
+          JWT_EXPIRATION_MS: 15552000000
           SPRING_PROFILES_ACTIVE: dev
 
       - name: Upload test results
