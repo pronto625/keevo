@@ -1,6 +1,6 @@
 # Story 9.1: Gestion des Tenants — Super Admin Dashboard (Next.js)
 
-Status: review
+Status: done
 
 ## Story
 
@@ -480,6 +480,42 @@ Claude Sonnet 4.6 (GitHub Copilot)
 
 ### Debug Log References
 
+- Commit: `feat(admin): story 9.1 - gestion des tenants admin` — branch `deploy`, 2026-05-14
+
 ### Completion Notes List
 
+- All 9 tasks + all code-review patches completed and committed
+- Backend: module `admin/tenant` fully implemented (hexagonal architecture)
+- `TenantStatus` enriched with `SUSPENDED`; `TenantJpaEntity` extended with `suspendedAt` + `suspensionReason`
+- `SecurityConfig` updated: `/api/v1/admin/**` requires `SUPER_ADMIN` role
+- Dashboard (Next.js 16): projet initialisé dans `keevo/dashboard/`, auth layer, tenant list page, detail drawer
+- Code review patches appliqués : `middleware.ts`, `Secure` cookie flag, `auditPage` validation, date filters UI
+- 2 items différés (pre-existing) : `"use client"` sur route page, N+1 cross-schema metrics
+
 ### File List
+
+**Backend — nouveaux fichiers**
+- `keevo/backend/src/main/java/com/keevo/admin/tenant/adapter/in/rest/AdminTenantController.java`
+- `keevo/backend/src/main/java/com/keevo/admin/tenant/adapter/in/rest/dto/AdminTenantDetailDto.java`
+- `keevo/backend/src/main/java/com/keevo/admin/tenant/adapter/in/rest/dto/AdminTenantListItemDto.java`
+- `keevo/backend/src/main/java/com/keevo/admin/tenant/adapter/in/rest/dto/TenantListResponse.java`
+- `keevo/backend/src/main/java/com/keevo/admin/tenant/application/service/AdminTenantService.java`
+- `keevo/backend/src/main/java/com/keevo/admin/tenant/domain/model/AdminAuditEvent.java`
+- `keevo/backend/src/main/java/com/keevo/admin/tenant/domain/model/AdminEmployeeInfo.java`
+- `keevo/backend/src/main/java/com/keevo/admin/tenant/domain/model/AdminStoreInfo.java`
+- `keevo/backend/src/main/java/com/keevo/admin/tenant/domain/model/AdminTenantDetail.java`
+- `keevo/backend/src/main/java/com/keevo/admin/tenant/domain/model/AdminTenantListItem.java`
+- `keevo/backend/src/main/java/com/keevo/admin/tenant/domain/port/in/GetTenantDetailQuery.java`
+- `keevo/backend/src/main/java/com/keevo/admin/tenant/domain/port/in/GetTenantDetailUseCase.java`
+- `keevo/backend/src/main/java/com/keevo/admin/tenant/domain/port/in/ListTenantsQuery.java`
+- `keevo/backend/src/main/java/com/keevo/admin/tenant/domain/port/in/ListTenantsUseCase.java`
+- `keevo/backend/src/test/java/com/keevo/admin/tenant/adapter/in/rest/AdminTenantControllerTest.java`
+- `keevo/backend/src/test/java/com/keevo/admin/tenant/application/service/AdminTenantServiceTest.java`
+
+**Backend — fichiers modifiés**
+- `keevo/backend/src/main/java/com/keevo/identity/auth/adapter/out/persistence/entity/TenantJpaEntity.java`
+- `keevo/backend/src/main/java/com/keevo/identity/auth/domain/model/TenantStatus.java`
+- `keevo/backend/src/main/java/com/keevo/shared/infrastructure/security/SecurityConfig.java`
+
+**Dashboard — projet Next.js**
+- `keevo/dashboard/` (projet complet — voir arborescence dans Task 1)
