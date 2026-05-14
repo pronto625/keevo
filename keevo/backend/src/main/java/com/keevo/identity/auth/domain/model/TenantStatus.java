@@ -7,6 +7,8 @@ package com.keevo.identity.auth.domain.model;
  */
 public enum TenantStatus {
     ACTIVE,
+    /** Tenant has requested account deletion; data retained for grace period (Story 8-5). */
+    DELETION_PENDING,
     SUSPENDED,
     DELETED
 }

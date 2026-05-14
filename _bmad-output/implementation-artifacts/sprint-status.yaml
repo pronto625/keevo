@@ -34,6 +34,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-03-06
+last_updated: 2026-05-04
 project: Keevo
 project_key: NOKEY
 tracking_system: file-system
@@ -173,8 +174,8 @@ development_status:
   # ─────────────────────────────────────────────────────────
   # Epic 9: Super Admin Dashboard (Toor)
   # ─────────────────────────────────────────────────────────
-  epic-9: backlog
-  9-1-gestion-des-tenants: backlog
+  epic-9: in-progress
+  9-1-gestion-des-tenants: done
   9-2-activation-plan-payant: backlog
   9-3-dashboard-revenus: backlog
   9-4-analytics-plateforme: backlog

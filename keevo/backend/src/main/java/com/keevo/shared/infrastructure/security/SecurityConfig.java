@@ -12,6 +12,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 /**
  * SecurityConfig — Spring Security 6.x configuration (REST / stateless).
@@ -62,6 +65,9 @@ public class SecurityConfig {
                 // ── CSRF: disabled for stateless REST API ──────────────────────
                 .csrf(csrf -> csrf.disable())
 
+                // ── CORS: configured to allow dashboard origin ─────────────────
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+
                 // ── Sessions: none — JWT is stateless ────────────────────────
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
@@ -89,6 +95,35 @@ public class SecurityConfig {
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    /**
+     * CORS configuration — allows the Next.js dashboard (dev: localhost:3000,
+     * prod: configurable via DASHBOARD_ORIGIN env var) to call the API.
+     */
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        // Dev origin + configurable prod origin
+        String dashboardOrigin = System.getenv("DASHBOARD_ORIGIN");
+        if (dashboardOrigin != null && !dashboardOrigin.isBlank()) {
+            config.addAllowedOrigin(dashboardOrigin);
+        }
+        config.addAllowedOrigin("http://localhost:3000");  // Next.js dev server
+        config.addAllowedMethod("GET");
+        config.addAllowedMethod("POST");
+        config.addAllowedMethod("PUT");
+        config.addAllowedMethod("PATCH");
+        config.addAllowedMethod("DELETE");
+        config.addAllowedMethod("OPTIONS");
+        config.addAllowedHeader("Authorization");
+        config.addAllowedHeader("Content-Type");
+        config.addAllowedHeader("Accept");
+        config.setAllowCredentials(false);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/api/**", config);
+        return source;
     }
 
     /**

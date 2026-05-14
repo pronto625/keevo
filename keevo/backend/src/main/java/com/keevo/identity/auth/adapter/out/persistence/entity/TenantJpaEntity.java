@@ -5,6 +5,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -43,6 +44,10 @@ public class TenantJpaEntity extends JpaBaseEntity {
     @Column(name = "max_employees", nullable = false)
     private int maxEmployees;
 
+    /** Set when tenant requests deletion; cleared on cancellation (Story 8-5 / 9-1). */
+    @Column(name = "deletion_scheduled_at")
+    private Instant deletionScheduledAt;
+
     protected TenantJpaEntity() {}
 
     public TenantJpaEntity(UUID id, String code, String schemaName, String status,
@@ -71,4 +76,5 @@ public class TenantJpaEntity extends JpaBaseEntity {
     public int    getMaxStores()   { return maxStores; }
     public int    getMaxProducts() { return maxProducts; }
     public int    getMaxEmployees(){ return maxEmployees; }
+    public Instant getDeletionScheduledAt() { return deletionScheduledAt; }
 }

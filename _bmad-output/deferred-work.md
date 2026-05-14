@@ -1,5 +1,10 @@
 # Deferred Work
 
+## Deferred from: code review of 9-1-gestion-des-tenants (2026-05-04)
+
+- **D1 — `TenantsPage` — `"use client"` direct sur la route page**: La spec (task 3.8) demande un Server Component shell qui render un Client Component `<TenantsClientPage />`. L'implémentation met `"use client"` directement sur `app/tenants/page.tsx`. Pattern fonctionnel mais diverge de la spec. Impact : perd les bénéfices SSR potentiels pour le shell. Corriger lors d'un refactor Next.js layout.
+- **D2 — N+1 `SELECT schema_name` dans `enrichWithCrossSchemaMetrics`**: Pour chaque ligne retournée par la liste, `safeLoadSchemaName(item.id())` émet une requête supplémentaire. Acceptable pour Phase 1 (<100 tenants) comme documenté dans le code. À optimiser en ajoutant `schema_name` directement en colonne dans la requête principale + stocker en champ temporaire (ou via un `Map<UUID, String>` chargé au préalable pour la page entière). Fichier : `AdminTenantService.java#enrichWithCrossSchemaMetrics`.
+
 ## Deferred from: bugfix spec-hf2-ghost-badge-sales-scoping (2026-04-28)
 
 - **D1 — Pas de test pour le path EMPLOYEE scopé**: `todaySummaryProvider` avec `employeeId != null` n'a aucune couverture de test. Les tests adaptés (`day_close_button_test.dart`, `day_summary_bottom_sheet_test.dart`) n'exercent que le chemin OWNER (`employeeId: null`). Ajouter un test widget où `currentUserRoleProvider` retourne EMPLOYEE + `currentUserIdProvider` retourne un userId, et vérifier que `todaySummaryProvider((storeId: X, employeeId: userId))` est bien invoqué.
