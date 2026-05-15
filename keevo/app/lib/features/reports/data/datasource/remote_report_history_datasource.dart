@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../../domain/exception/report_exception.dart';
 import '../../domain/model/report_history_model.dart';
 
 /// RemoteReportHistoryDataSource — fetches reports from the backend REST API.
@@ -43,6 +44,21 @@ class RemoteReportHistoryDataSource {
   }
 
   Future<void> resend(String reportId) async {
-    await _dio.post<void>('/api/v1/reports/$reportId/resend');
+    try {
+      await _dio.post<void>('/api/v1/reports/$reportId/resend');
+    } on DioException catch (e) {
+      throw _mapError(e);
+    }
+  }
+
+  // ── Mapping helpers ───────────────────────────────────────────────────────
+
+  ReportException _mapError(DioException e) {
+    final data = e.response?.data;
+    final domainCode =
+        (data is Map ? data['domainCode'] as String? : null) ?? 'REPORT_ERROR';
+    final message =
+        (data is Map ? data['error'] as String? : null) ?? e.message ?? '';
+    return ReportException(domainCode: domainCode, message: message);
   }
 }

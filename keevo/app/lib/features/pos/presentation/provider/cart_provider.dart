@@ -35,6 +35,15 @@ class CartNotifier extends Notifier<List<CartItem>> {
     state = state.map((c) => c.id == id ? c.copyWith(quantity: qty) : c).toList();
   }
 
+  /// Sets quantity directly to [qty] — used by the POS quantity dialog (AC6, Story 7.6).
+  /// Ignores invalid (≤ 0) input to avoid accidental deletion.
+  void setQuantity(String itemId, int qty) {
+    if (qty <= 0) return;
+    state = state
+        .map((c) => c.id == itemId ? c.copyWith(quantity: qty) : c)
+        .toList();
+  }
+
   void updatePrice(String id, int newPrice) {
     state = state.map((c) => c.id == id ? c.copyWith(appliedUnitPrice: newPrice) : c).toList();
   }

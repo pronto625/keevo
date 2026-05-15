@@ -36,6 +36,33 @@ class _CartBottomSheetState extends ConsumerState<CartBottomSheet> {
   static final _currencyFormat =
       NumberFormat.currency(locale: 'fr_CM', symbol: 'FCFA', decimalDigits: 0);
 
+  final _sheetController = DraggableScrollableController();
+  bool _wasKeyboardOpen = false;
+
+  @override
+  void dispose() {
+    _sheetController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 100;
+    if (keyboardOpen && !_wasKeyboardOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _sheetController.isAttached) {
+          _sheetController.animateTo(
+            1.0,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    }
+    _wasKeyboardOpen = keyboardOpen;
+  }
+
   Future<void> _handleEncaisser(BuildContext context) async {
     final draftItems =
         ref.read(cartProvider).where((i) => i.isDraft).toList();
@@ -78,10 +105,11 @@ class _CartBottomSheetState extends ConsumerState<CartBottomSheet> {
     final cs = theme.colorScheme;
 
     return DraggableScrollableSheet(
+      controller: _sheetController,
       expand: false,
       initialChildSize: 0.55,
       minChildSize: 0.3,
-      maxChildSize: 0.85,
+      maxChildSize: 1.0,
       builder: (context, scrollController) {
         return Column(
           children: [
@@ -169,6 +197,8 @@ class _CartBottomSheetState extends ConsumerState<CartBottomSheet> {
                     onDismissed: () => notifier.removeItem(item.id),
                     onPriceChanged: (newPrice) =>
                         notifier.updatePrice(item.id, newPrice),
+                    onQuantityChanged: (qty) =>
+                        notifier.setQuantity(item.id, qty),
                   );
                 },
               ),
@@ -280,6 +310,7 @@ class _CartItemTile extends StatefulWidget {
   final VoidCallback onDecrement;
   final VoidCallback onDismissed;
   final void Function(int newPrice) onPriceChanged;
+  final void Function(int newQty) onQuantityChanged;
 
   const _CartItemTile({
     required this.item,
@@ -287,6 +318,7 @@ class _CartItemTile extends StatefulWidget {
     required this.onDecrement,
     required this.onDismissed,
     required this.onPriceChanged,
+    required this.onQuantityChanged,
   });
 
   @override
@@ -294,8 +326,15 @@ class _CartItemTile extends StatefulWidget {
 }
 
 class _CartItemTileState extends State<_CartItemTile> {
-  bool _isEditing = false;
-  late TextEditingController _controller;
+  // ── Price editing ────────────────────────────────────────────────────────
+  bool _isEditingPrice = false;
+  late TextEditingController _priceController;
+  late FocusNode _priceFocus;
+
+  // ── Quantity editing ─────────────────────────────────────────────────────
+  bool _isEditingQty = false;
+  late TextEditingController _qtyController;
+  late FocusNode _qtyFocus;
 
   static final _currencyFormat =
       NumberFormat.currency(locale: 'fr_CM', symbol: 'FCFA', decimalDigits: 0);
@@ -303,32 +342,59 @@ class _CartItemTileState extends State<_CartItemTile> {
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(
-        text: '${widget.item.appliedUnitPrice}');
+    _priceController =
+        TextEditingController(text: '${widget.item.appliedUnitPrice}');
+    _qtyController =
+        TextEditingController(text: '${widget.item.quantity}');
+    _priceFocus = FocusNode()..addListener(_onPriceFocusChange);
+    _qtyFocus = FocusNode()..addListener(_onQtyFocusChange);
   }
 
   @override
   void didUpdateWidget(covariant _CartItemTile oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!_isEditing &&
+    if (!_isEditingPrice &&
         oldWidget.item.appliedUnitPrice != widget.item.appliedUnitPrice) {
-      _controller.text = '${widget.item.appliedUnitPrice}';
+      _priceController.text = '${widget.item.appliedUnitPrice}';
+    }
+    if (!_isEditingQty && oldWidget.item.quantity != widget.item.quantity) {
+      _qtyController.text = '${widget.item.quantity}';
     }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _priceFocus
+      ..removeListener(_onPriceFocusChange)
+      ..dispose();
+    _qtyFocus
+      ..removeListener(_onQtyFocusChange)
+      ..dispose();
+    _priceController.dispose();
+    _qtyController.dispose();
     super.dispose();
   }
 
+  void _onPriceFocusChange() {
+    if (!_priceFocus.hasFocus) _confirmPrice();
+  }
+
+  void _onQtyFocusChange() {
+    if (!_qtyFocus.hasFocus) _confirmQty();
+  }
+
   void _confirmPrice() {
-    final text = _controller.text.trim();
-    final parsed = int.tryParse(text);
-    if (parsed != null && parsed >= 0) {
-      widget.onPriceChanged(parsed);
-    }
-    setState(() => _isEditing = false);
+    if (!_isEditingPrice) return;
+    final parsed = int.tryParse(_priceController.text.trim());
+    if (parsed != null && parsed >= 0) widget.onPriceChanged(parsed);
+    setState(() => _isEditingPrice = false);
+  }
+
+  void _confirmQty() {
+    if (!_isEditingQty) return;
+    final parsed = int.tryParse(_qtyController.text.trim());
+    if (parsed != null && parsed > 0) widget.onQuantityChanged(parsed);
+    setState(() => _isEditingQty = false);
   }
 
   @override
@@ -352,14 +418,14 @@ class _CartItemTileState extends State<_CartItemTile> {
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Product info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
+            // ── Ligne 1 : nom produit + total ligne ──────────────────────
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
                     item.productName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -367,133 +433,177 @@ class _CartItemTileState extends State<_CartItemTile> {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  _isEditing
-                      ? Row(
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _currencyFormat.format(item.subtotal),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            // ── Ligne 2 : prix unitaire (éditable) + stepper quantité ────
+            Row(
+              children: [
+                // Prix — inline editable
+                _isEditingPrice
+                    ? SizedBox(
+                        width: 130,
+                        child: TextField(
+                          controller: _priceController,
+                          focusNode: _priceFocus,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          autofocus: true,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: AppTheme.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 6),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            suffix: const Text('FCFA',
+                                style: TextStyle(fontSize: 11)),
+                          ),
+                          onTapOutside: (_) => _priceFocus.unfocus(),
+                          onSubmitted: (_) => _confirmPrice(),
+                        ),
+                      )
+                    : GestureDetector(
+                        onTap: () {
+                          _priceController.text = '${item.appliedUnitPrice}';
+                          setState(() => _isEditingPrice = true);
+                        },
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            SizedBox(
-                              width: 110,
+                            Text(
+                              _currencyFormat.format(item.appliedUnitPrice),
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: AppTheme.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(Icons.edit_rounded,
+                                size: 13, color: cs.onSurfaceVariant),
+                            if (item.isPriceOverridden)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 6),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.secondary
+                                        .withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text(
+                                    'modifié',
+                                    style: TextStyle(
+                                      color: AppTheme.secondary,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                const Spacer(),
+                // Stepper quantité — inline editable
+                Container(
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerLowest,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: cs.outlineVariant),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      InkWell(
+                        onTap: widget.onDecrement,
+                        borderRadius: const BorderRadius.horizontal(
+                            left: Radius.circular(12)),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 10),
+                          child: Icon(Icons.remove_rounded,
+                              size: 18, color: cs.onSurfaceVariant),
+                        ),
+                      ),
+                      _isEditingQty
+                          ? SizedBox(
+                              width: 52,
                               child: TextField(
-                                controller: _controller,
+                                controller: _qtyController,
+                                focusNode: _qtyFocus,
                                 keyboardType: TextInputType.number,
                                 inputFormatters: [
                                   FilteringTextInputFormatter.digitsOnly,
                                 ],
                                 autofocus: true,
-                                style: const TextStyle(fontSize: 14),
-                                decoration: InputDecoration(
-                                  isDense: true,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 6),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                                onSubmitted: (_) => _confirmPrice(),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            IconButton(
-                              icon: const Icon(Icons.check_rounded, size: 18,
-                                  color: AppTheme.success),
-                              onPressed: _confirmPrice,
-                              visualDensity: VisualDensity.compact,
-                            ),
-                          ],
-                        )
-                      : GestureDetector(
-                          onTap: () => setState(() {
-                            _controller.text = '${item.appliedUnitPrice}';
-                            _isEditing = true;
-                          }),
-                          child: Row(
-                            children: [
-                              Text(
-                                _currencyFormat.format(item.appliedUnitPrice),
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  color: AppTheme.primary,
+                                textAlign: TextAlign.center,
+                                style: theme.textTheme.bodyLarge?.copyWith(
                                   fontWeight: FontWeight.w700,
+                                  color: AppTheme.primary,
                                 ),
+                                decoration: const InputDecoration(
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.symmetric(
+                                      horizontal: 4, vertical: 6),
+                                  border: InputBorder.none,
+                                ),
+                                onTapOutside: (_) => _qtyFocus.unfocus(),
+                                onSubmitted: (_) => _confirmQty(),
                               ),
-                              const SizedBox(width: 4),
-                              Icon(Icons.edit_rounded, size: 14, color: cs.onSurfaceVariant),
-                              if (item.isPriceOverridden)
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 6),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 1),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.secondary
-                                          .withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: const Text(
-                                      'modifié',
-                                      style: TextStyle(
-                                        color: AppTheme.secondary,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                            )
+                          : GestureDetector(
+                              onTap: () {
+                                _qtyController.text = '${item.quantity}';
+                                setState(() => _isEditingQty = true);
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 10),
+                                child: ConstrainedBox(
+                                  constraints:
+                                      const BoxConstraints(minWidth: 28),
+                                  child: Text(
+                                    '${item.quantity}',
+                                    textAlign: TextAlign.center,
+                                    style: theme.textTheme.bodyLarge?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      color: AppTheme.primary,
                                     ),
                                   ),
                                 ),
-                            ],
-                          ),
+                              ),
+                            ),
+                      InkWell(
+                        onTap: widget.onIncrement,
+                        borderRadius: const BorderRadius.horizontal(
+                            right: Radius.circular(12)),
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 10),
+                          child: Icon(Icons.add_rounded,
+                              size: 18, color: AppTheme.primary),
                         ),
-                ],
-              ),
-            ),
-            // Quantity controls
-            Container(
-              decoration: BoxDecoration(
-                color: cs.surfaceContainerLowest,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: cs.outlineVariant),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  InkWell(
-                    onTap: widget.onDecrement,
-                    borderRadius: const BorderRadius.horizontal(
-                        left: Radius.circular(12)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: Icon(Icons.remove_rounded,
-                          size: 18, color: cs.onSurfaceVariant),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text(
-                      '${item.quantity}',
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
                       ),
-                    ),
+                    ],
                   ),
-                  InkWell(
-                    onTap: widget.onIncrement,
-                    borderRadius: const BorderRadius.horizontal(
-                        right: Radius.circular(12)),
-                    child: const Padding(
-                      padding: EdgeInsets.all(8),
-                      child: Icon(Icons.add_rounded,
-                          size: 18, color: AppTheme.primary),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            // Subtotal
-            Text(
-              _currencyFormat.format(item.subtotal),
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+                ),
+              ],
             ),
           ],
         ),

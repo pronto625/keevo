@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/di/providers.dart';
 import '../provider/report_history_providers.dart';
+import '../../domain/exception/report_exception.dart';
 import '../../domain/model/report_history_model.dart';
 
 /// ReportDetailPage — displays the full content of a single end-of-day report
@@ -67,9 +68,13 @@ class _DetailScaffold extends ConsumerWidget {
           ),
         );
       } else if (next is AsyncError) {
+        final err = next.error;
+        final message = err is ReportException
+            ? err.message
+            : 'Échec du renvoi. Réessayez plus tard.';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Échec du renvoi : ${next.error}'),
+            content: Text(message),
             backgroundColor: AppTheme.errorColor,
             behavior: SnackBarBehavior.floating,
           ),

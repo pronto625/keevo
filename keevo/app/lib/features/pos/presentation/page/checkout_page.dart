@@ -39,6 +39,14 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     super.dispose();
   }
 
+  void _goBack() {
+    if (context.canPop()) {
+      context.pop(true); // true = reopen cart on POS
+    } else {
+      context.go('/pos');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final cart = ref.watch(cartProvider);
@@ -64,8 +72,14 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       }
     });
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) {
+        if (!didPop) _goBack();
+      },
+      child: Scaffold(
       appBar: AppBar(
+        leading: BackButton(onPressed: _goBack),
         title: const Text('Encaissement'),
         centerTitle: true,
         backgroundColor: Colors.transparent,
@@ -308,6 +322,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

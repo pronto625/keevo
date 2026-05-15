@@ -36,7 +36,8 @@ class DashboardPage extends ConsumerWidget {
         data: (snapshot) {
           final isEmpty = snapshot.todayCA == 0 &&
               snapshot.yesterdayCA == 0 &&
-              snapshot.totalTransactionsMonth == 0;
+              snapshot.totalTransactionsMonth == 0 &&
+              snapshot.prevMonthTransactions == 0;
           if (isEmpty) {
             return _EmptyState(
               firstName: firstName,

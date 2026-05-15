@@ -94,7 +94,7 @@ void main() {
     await tester.pumpWidget(_buildPage(Future.value(reports)));
     await tester.pumpAndSettle();
 
-    expect(find.text('Boutique Test'), findsNWidgets(2));
+    expect(find.textContaining('Boutique Test'), findsNWidgets(2));
   });
 
   testWidgets('shows error state with retry button on error', (tester) async {

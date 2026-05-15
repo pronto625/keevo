@@ -35,14 +35,18 @@ void main() {
 
   testWidgets('shows store name', (tester) async {
     await tester.pumpWidget(_wrap(ReportHistoryCard(report: _report())));
-    expect(find.text('Boutique Centrale'), findsOneWidget);
+    // Story 7.6 AC5: actorId null → title = "<storeName> — Global"
+    expect(find.textContaining('Boutique Centrale'), findsOneWidget);
+    expect(find.textContaining('Global'), findsOneWidget);
   });
 
   testWidgets('shows "Boutique" when storeName is null', (tester) async {
     await tester.pumpWidget(
       _wrap(ReportHistoryCard(report: _report(storeName: null))),
     );
-    expect(find.text('Boutique'), findsOneWidget);
+    // Story 7.6 AC5: storeName null → "Boutique — Global"
+    expect(find.textContaining('Boutique'), findsOneWidget);
+    expect(find.textContaining('Global'), findsOneWidget);
   });
 
   testWidgets('shows "Quotidien" type badge for DAILY report', (tester) async {

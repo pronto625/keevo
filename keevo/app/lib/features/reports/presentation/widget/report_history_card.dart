@@ -6,14 +6,17 @@ import '../../domain/model/report_history_model.dart';
 
 /// ReportHistoryCard — widget displaying a single report entry in the list.
 /// Story 7.2 — Task 20.
+/// Story 7.6 — adds currentUserId to distinguish own vs others' reports.
 class ReportHistoryCard extends StatelessWidget {
   final ReportHistoryModel report;
   final VoidCallback? onTap;
+  final String? currentUserId;
 
   const ReportHistoryCard({
     super.key,
     required this.report,
     this.onTap,
+    this.currentUserId,
   });
 
   static final _dateFormat = DateFormat('d MMM yyyy', 'fr_FR');
@@ -63,9 +66,10 @@ class ReportHistoryCard extends StatelessWidget {
                     Row(
                       children: [
                         Text(
-                          report.storeName ?? 'Boutique',
+                          _buildTitle(context),
                           style: theme.textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.w600,
+                            color: _titleColor(context),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -122,6 +126,26 @@ class ReportHistoryCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Returns the display title combining store name and actor label.
+  String _buildTitle(BuildContext context) {
+    final base = report.storeName ?? 'Boutique';
+    if (report.actorId == null) {
+      return '$base — Global';
+    }
+    if (report.actorId == currentUserId) {
+      return '$base — Vous';
+    }
+    final name = report.actorName;
+    return '$base — ${name ?? 'Employé'}';
+  }
+
+  Color _titleColor(BuildContext context) {
+    if (report.actorId == currentUserId && currentUserId != null) {
+      return AppTheme.primary;
+    }
+    return Theme.of(context).colorScheme.onSurface;
   }
 
   Color _statusColor(String status, ColorScheme cs) {

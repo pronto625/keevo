@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/di/providers.dart';
 import '../../../team/presentation/provider/employee_provider.dart';
 import '../provider/report_history_providers.dart';
 import '../widget/report_history_card.dart';
@@ -45,6 +46,7 @@ class _ReportHistoryPageState extends ConsumerState<ReportHistoryPage> {
       actorId: widget.adminMode ? _selectedEmployeeId : null,
       type: _typeFilter,
     ));
+    final currentUserId = ref.watch(currentUserIdProvider).valueOrNull;
 
     return Scaffold(
       appBar: AppBar(
@@ -112,6 +114,7 @@ class _ReportHistoryPageState extends ConsumerState<ReportHistoryPage> {
                       final report = reports[index];
                       return ReportHistoryCard(
                         report: report,
+                        currentUserId: currentUserId,
                         onTap: () => context.push(
                             '/reports/history/${report.id}',
                             extra: report),

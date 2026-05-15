@@ -51,7 +51,7 @@ void main() {
     await tester.pumpWidget(_buildPage(Future.value([_weeklyReport()])));
     await tester.pumpAndSettle();
 
-    expect(find.text('Boutique Test'), findsOneWidget);
+    expect(find.textContaining('Boutique Test'), findsOneWidget);
   });
 
   testWidgets('weekly report shows "Semaine du" date label', (tester) async {

@@ -117,6 +117,20 @@ class _PosPageState extends ConsumerState<PosPage> {
     ref.read(frequentProductsProvider(key).notifier).loadMore();
   }
 
+  void _openCartBottomSheet() {
+    CartBottomSheet.show(
+      context,
+      onEncaisser: () {
+        Navigator.of(context).pop(); // close bottom sheet
+        context.push<bool>('/pos/checkout').then((reopenCart) {
+          if (mounted && reopenCart == true) {
+            _openCartBottomSheet();
+          }
+        });
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Boutique active from Settings — null means "all stores"
@@ -286,15 +300,7 @@ class _PosPageState extends ConsumerState<PosPage> {
             child: CartPill(
               itemCount: cart.length,
               totalAmount: cartNotifier.totalAmount,
-              onEncaisser: () {
-                CartBottomSheet.show(
-                  context,
-                  onEncaisser: () {
-                    Navigator.of(context).pop(); // close bottom sheet
-                    context.go('/pos/checkout');
-                  },
-                );
-              },
+              onEncaisser: _openCartBottomSheet,
             ),
           ),
         ],
