@@ -82,7 +82,7 @@ class AbstractReportGeneratorTest {
                 10, 150000, 100000, 50000, 15000,
                 List.of(new EndOfDayReportData.TopProductEntry("Produit A", 5, 50000)),
                 List.of(new EndOfDayReportData.EmployeeEntry("Alice", 7, 100000)),
-                2, 1, 5000
+                2, 1, 5000, null
         );
         generator = new TestableReportGenerator(reportRepository, whatsAppPort, multiStoreSummaryService, data);
         command = new GenerateReportCommand(

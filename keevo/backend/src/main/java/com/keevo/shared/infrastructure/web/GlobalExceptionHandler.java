@@ -86,7 +86,8 @@ public class GlobalExceptionHandler {
             Map.entry("INVENTORY_SESSION_NOT_FOUND",     "Session d'inventaire introuvable"),
             Map.entry("INVENTORY_SESSION_NOT_IN_PROGRESS", "Cette session d'inventaire n'est pas en cours"),
             Map.entry("INVENTORY_STORE_NOT_FOUND",       "Boutique cible introuvable"),
-            Map.entry("INVENTORY_INVALID_CATEGORIES",    "Une ou plusieurs catégories sont invalides")
+            Map.entry("INVENTORY_INVALID_CATEGORIES",    "Une ou plusieurs catégories sont invalides"),
+            Map.entry("WHATSAPP_DELIVERY_FAILED",         "Envoi WhatsApp échoué. Vérifiez votre connexion et réessayez.")
     );
 
     @ExceptionHandler(DomainException.class)
@@ -219,6 +220,7 @@ public class GlobalExceptionHandler {
                  "PASSWORD_CHANGE_REQUIRED",
                  "FORBIDDEN" -> HttpStatus.FORBIDDEN;   // H2 fix: role mismatch is 403, not 401; AUDIT_IMMUTABLE = immutable log
             case "RATE_LIMIT_EXCEEDED" -> HttpStatus.TOO_MANY_REQUESTS;
+            case "WHATSAPP_DELIVERY_FAILED" -> HttpStatus.BAD_GATEWAY;  // upstream WhatsApp failure
             default -> HttpStatus.INTERNAL_SERVER_ERROR;
         };
     }

@@ -102,7 +102,7 @@ public class WeeklyReportGenerator extends AbstractReportGenerator
                 storeName, weekEndDate, LocalTime.of(23, 59), command.isAutomatic(), false,
                 weeklyData.totalSales(), weeklyData.totalRevenue(),
                 weeklyData.cashAmount(), weeklyData.momoAmount(), weeklyData.avgBasket(),
-                List.of(), List.of(), weeklyData.lowStockCount(), 0, 0
+                List.of(), List.of(), weeklyData.lowStockCount(), 0, 0, null
         );
     }
 

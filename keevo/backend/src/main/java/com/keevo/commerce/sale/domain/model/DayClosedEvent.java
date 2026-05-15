@@ -7,6 +7,7 @@ import java.util.UUID;
  * DayClosedEvent — Domain event published when a day is closed.
  * Pure Java record — no Spring imports.
  * Story 4.4 — Clôture Journalière & Historique des Ventes
+ * Story 7.6 — Carries fixed calendar window (windowStart + windowEnd) in WAT.
  *
  * <p>This event triggers:
  * <ul>
@@ -21,6 +22,8 @@ import java.util.UUID;
  * @param isAutomatic true if triggered by scheduler, false if manual
  * @param tenantId    Tenant schema name
  * @param occurredAt  Timestamp when the closure occurred
+ * @param windowStart Start of the reporting window (00:00:00 WAT of reportDate)
+ * @param windowEnd   End of the reporting window (23:59:59.999 WAT of reportDate)
  */
 public record DayClosedEvent(
         UUID closureId,
@@ -30,5 +33,6 @@ public record DayClosedEvent(
         boolean isAutomatic,
         String tenantId,
         Instant occurredAt,
-        Instant windowStart
+        Instant windowStart,
+        Instant windowEnd
 ) {}

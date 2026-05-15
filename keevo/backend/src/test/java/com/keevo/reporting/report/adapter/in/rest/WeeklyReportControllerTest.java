@@ -78,7 +78,9 @@ class WeeklyReportControllerTest {
     private EndOfDayReport sampleReport() {
         return EndOfDayReport.createNew(
                 "kv_test01", UUID.randomUUID(), "Boutique Test",
-                null, ReportType.WEEKLY, LocalDate.now(), "Rapport hebdo",
+                null,
+                null,  // actorName
+                ReportType.WEEKLY, LocalDate.now(), "Rapport hebdo",
                 200000, 10, true);
     }
 

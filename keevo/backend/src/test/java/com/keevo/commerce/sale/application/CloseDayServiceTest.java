@@ -19,6 +19,8 @@ import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 
@@ -168,6 +170,56 @@ class CloseDayServiceTest {
         assertThat(saved.getStoreId()).isEqualTo(STORE_ID);
         assertThat(saved.getActorId()).isEqualTo(ACTOR_ID);
         assertThat(saved.getTenantId()).isEqualTo(TENANT_ID);
+    }
+
+    // ── Story 7.6: Calendar window tests ─────────────────────────────────────
+
+    @Test
+    void windowIsFullCalendarDay_forManualClose() {
+        // Given - manual closure; window = today WAT 00:00 → 23:59:59.999999999
+        ZoneId wat = ZoneId.of("Africa/Lagos");
+        LocalDate today = LocalDate.now(wat);
+        Instant expectedStart = today.atStartOfDay(wat).toInstant();
+        Instant expectedEnd = today.atTime(LocalTime.MAX).atZone(wat).toInstant();
+
+        when(dayClosureRepository.existsByStoreIdAndDate(eq(STORE_ID), any(LocalDate.class)))
+                .thenReturn(false);
+        when(saleRepository.findByStoreIdAndDateRange(eq(STORE_ID), any(), any(), any()))
+                .thenAnswer(inv -> new org.springframework.data.domain.PageImpl<>(List.of()));
+
+        // When
+        service.closeDay(new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, false));
+
+        // Then
+        var eventCaptor = ArgumentCaptor.forClass(DayClosedEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        DayClosedEvent event = eventCaptor.getValue();
+        assertThat(event.windowStart()).isEqualTo(expectedStart);
+        assertThat(event.windowEnd()).isEqualTo(expectedEnd);
+    }
+
+    @Test
+    void windowIsYesterdayCalendarDay_forAutoClose() {
+        // Given - automatic closure; window = yesterday WAT 00:00 → 23:59:59.999999999
+        ZoneId wat = ZoneId.of("Africa/Lagos");
+        LocalDate yesterday = LocalDate.now(wat).minusDays(1);
+        Instant expectedStart = yesterday.atStartOfDay(wat).toInstant();
+        Instant expectedEnd = yesterday.atTime(LocalTime.MAX).atZone(wat).toInstant();
+
+        when(dayClosureRepository.existsByStoreIdAndDate(eq(STORE_ID), any(LocalDate.class)))
+                .thenReturn(false);
+        when(saleRepository.findByStoreIdAndDateRange(eq(STORE_ID), any(), any(), any()))
+                .thenAnswer(inv -> new org.springframework.data.domain.PageImpl<>(List.of()));
+
+        // When
+        service.closeDay(new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, true));
+
+        // Then
+        var eventCaptor = ArgumentCaptor.forClass(DayClosedEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        DayClosedEvent event = eventCaptor.getValue();
+        assertThat(event.windowStart()).isEqualTo(expectedStart);
+        assertThat(event.windowEnd()).isEqualTo(expectedEnd);
     }
 
     // ── Helper methods ────────────────────────────────────────────────────────

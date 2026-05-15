@@ -27,7 +27,8 @@ public record EndOfDayReportData(
         List<EmployeeEntry> employeeBreakdown,
         int lowStockCount,
         int pendingSalesCount,
-        int pendingSalesTotal
+        int pendingSalesTotal,
+        String employeeName   // nullable; set for per-employee reports (Story 7.6)
 ) {
     public record TopProductEntry(String name, int qty, int revenue) {}
     public record EmployeeEntry(String name, int salesCount, int revenue) {}

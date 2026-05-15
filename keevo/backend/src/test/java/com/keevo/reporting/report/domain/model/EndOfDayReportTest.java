@@ -17,6 +17,7 @@ class EndOfDayReportTest {
         return EndOfDayReport.createNew(
                 "kv_abc123", UUID.randomUUID(), "Boutique Cosmos",
                 null,
+                null,  // actorName
                 ReportType.DAILY, LocalDate.now(),
                 "📊 Rapport du jour…", 75000, 12, false
         );

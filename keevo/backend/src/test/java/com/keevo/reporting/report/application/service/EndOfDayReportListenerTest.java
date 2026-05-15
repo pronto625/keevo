@@ -58,7 +58,7 @@ class EndOfDayReportListenerTest {
     private DayClosedEvent buildEvent(boolean isAutomatic) {
         var summary = new DayClosureSummary(5, 100000, null, null, 0, 0, 0, 0, 0);
         return new DayClosedEvent(closureId, storeId, actorId, summary, isAutomatic,
-                "kv_test01", Instant.now(), Instant.EPOCH);
+                "kv_test01", Instant.now(), Instant.EPOCH, Instant.now());
     }
 
     @Test

@@ -61,7 +61,7 @@ class SendTestReportServiceTest {
                 "Boutique Test", LocalDate.now(), LocalTime.now(), false, false,
                 5, 75000, 50000, 25000, 15000,
                 List.of(new TopProductEntry("Produit A", 2, 30000)),
-                List.of(), 3, 0, 0
+                List.of(), 3, 0, 0, null
         );
 
         // WhatsApp is "configured" by default in service tests

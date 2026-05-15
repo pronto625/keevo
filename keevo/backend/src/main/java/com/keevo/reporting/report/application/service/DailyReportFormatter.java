@@ -33,7 +33,7 @@ public class DailyReportFormatter {
         String formattedTime = data.closeTime().format(FR_TIME);
 
         StringBuilder sb = new StringBuilder();
-        sb.append("📊 Rapport du jour — ").append(data.storeName()).append("\n");
+        sb.append("📊 Rapport global — ").append(data.storeName()).append("\n");
         sb.append("📅 ").append(formattedDate)
           .append(" | ⏰ ").append(formattedTime)
           .append(" (").append(closureType).append(")").append("\n\n");
@@ -96,7 +96,10 @@ public class DailyReportFormatter {
         String formattedTime = data.closeTime().format(FR_TIME);
 
         StringBuilder sb = new StringBuilder();
-        sb.append("📊 Votre rapport du jour — ").append(data.storeName()).append("\n");
+        String employeePart = (data.employeeName() != null && !data.employeeName().isBlank())
+                ? " | " + data.employeeName()
+                : "";
+        sb.append("📊 Rapport du jour — ").append(data.storeName()).append(employeePart).append("\n");
         sb.append("📅 ").append(formattedDate)
           .append(" | ⏰ ").append(formattedTime)
           .append(" (").append(closureType).append(")").append("\n\n");

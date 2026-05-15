@@ -183,6 +183,7 @@ class WeeklyReportBuilderTest {
         // Previous week: one WEEKLY report found
         EndOfDayReport prevReport = EndOfDayReport.createNew(
                 "kv_test01", storeId, "Store A", null,
+                null,  // actorName
                 ReportType.WEEKLY, weekEndDate.minusWeeks(1),
                 "previous week content", 100_000, 8, true);
         when(reportRepository.findByDateAndTenant(eq(weekEndDate.minusWeeks(1)), anyString(), eq(ReportType.WEEKLY)))

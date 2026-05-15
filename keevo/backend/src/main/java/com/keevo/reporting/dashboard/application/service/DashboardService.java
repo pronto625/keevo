@@ -33,17 +33,18 @@ public class DashboardService implements GetDashboardSummaryUseCase {
 
     @Override
     public DashboardSummary execute(GetDashboardSummaryQuery query) {
-        ZoneOffset utc = ZoneOffset.UTC;
-        LocalDate today = LocalDate.now(utc);
-        Instant startToday       = today.atStartOfDay().toInstant(utc);
-        Instant startYesterday   = today.minusDays(1).atStartOfDay().toInstant(utc);
-        Instant startDayBefore   = today.minusDays(2).atStartOfDay().toInstant(utc);
-        Instant startOfMonth     = today.withDayOfMonth(1).atStartOfDay().toInstant(utc);
-        Instant startPrevMonth   = today.minusMonths(1).withDayOfMonth(1).atStartOfDay().toInstant(utc);
-        Instant start30DaysAgo   = today.minusDays(29).atStartOfDay().toInstant(utc);
+        // Story 7.6: all date boundaries computed in WAT (Africa/Lagos = UTC+1, no DST)
+        ZoneId wat = ZoneId.of("Africa/Lagos");
+        LocalDate today = LocalDate.now(wat);
+        Instant startToday       = today.atStartOfDay(wat).toInstant();
+        Instant startYesterday   = today.minusDays(1).atStartOfDay(wat).toInstant();
+        Instant startDayBefore   = today.minusDays(2).atStartOfDay(wat).toInstant();
+        Instant startOfMonth     = today.withDayOfMonth(1).atStartOfDay(wat).toInstant();
+        Instant startPrevMonth   = today.minusMonths(1).withDayOfMonth(1).atStartOfDay(wat).toInstant();
+        Instant start30DaysAgo   = today.minusDays(29).atStartOfDay(wat).toInstant();
 
         // Rolling 7-day window for top/worst products (matches UI label "7j")
-        Instant start7DaysAgo = today.minusDays(6).atStartOfDay().toInstant(utc);
+        Instant start7DaysAgo = today.minusDays(6).atStartOfDay(wat).toInstant();
 
         long todayCA     = sumCA(startToday, null);
         long yesterdayCA  = sumCA(startYesterday, startToday);

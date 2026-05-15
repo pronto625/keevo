@@ -16,7 +16,8 @@ public class EndOfDayReport {
     private final String tenantId;
     private final UUID storeId;
     private final String storeName;
-    private final UUID actorId;  // null for auto-scheduled; employee/owner UUID when manually triggered
+    private final UUID actorId;       // null for auto-scheduled; employee/owner UUID when manually triggered
+    private final String actorName;    // nullable; resolved from EmployeeRepository (Story 7.6)
     private final ReportType reportType;
     private final LocalDate reportDate;
     private final String content;
@@ -29,7 +30,7 @@ public class EndOfDayReport {
     private final Instant createdAt;
 
     public EndOfDayReport(UUID id, String tenantId, UUID storeId, String storeName,
-                          UUID actorId,
+                          UUID actorId, String actorName,
                           ReportType reportType, LocalDate reportDate, String content,
                           DeliveryStatus deliveryStatus, int deliveryAttempts,
                           Instant lastAttemptAt, int totalRevenue, int totalSales,
@@ -39,6 +40,7 @@ public class EndOfDayReport {
         this.storeId = storeId;
         this.storeName = storeName;
         this.actorId = actorId;
+        this.actorName = actorName;
         this.reportType = reportType;
         this.reportDate = reportDate;
         this.content = content;
@@ -54,12 +56,12 @@ public class EndOfDayReport {
     // ── Factory ────────────────────────────────────────────────────────────────
 
     public static EndOfDayReport createNew(String tenantId, UUID storeId, String storeName,
-                                           UUID actorId,
+                                           UUID actorId, String actorName,
                                            ReportType reportType, LocalDate reportDate,
                                            String content, int totalRevenue, int totalSales,
                                            boolean isAutomatic) {
         return new EndOfDayReport(
-                UUID.randomUUID(), tenantId, storeId, storeName, actorId, reportType,
+                UUID.randomUUID(), tenantId, storeId, storeName, actorId, actorName, reportType,
                 reportDate, content, DeliveryStatus.PENDING, 0, null,
                 totalRevenue, totalSales, isAutomatic, Instant.now()
         );
@@ -99,6 +101,7 @@ public class EndOfDayReport {
     public UUID getStoreId() { return storeId; }
     public String getStoreName() { return storeName; }
     public UUID getActorId() { return actorId; }
+    public String getActorName() { return actorName; }
     public ReportType getReportType() { return reportType; }
     public LocalDate getReportDate() { return reportDate; }
     public String getContent() { return content; }

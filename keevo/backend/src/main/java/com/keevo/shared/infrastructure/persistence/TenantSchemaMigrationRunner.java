@@ -87,6 +87,7 @@ public class TenantSchemaMigrationRunner implements ApplicationRunner {
             stmt.execute(TenantSchemaProvisioner.DDL_REPORTS);           // CREATE TABLE IF NOT EXISTS
             stmt.execute(TenantSchemaProvisioner.DDL_REPORTS_MIGRATE_ACTOR_ID); // ADD COLUMN IF NOT EXISTS
             stmt.execute(TenantSchemaProvisioner.DDL_REPORTS_MIGRATE_STORE_NAME); // ADD COLUMN IF NOT EXISTS
+            stmt.execute(TenantSchemaProvisioner.DDL_REPORTS_MIGRATE_ACTOR_NAME); // ADD COLUMN IF NOT EXISTS (Story 7.6)
 
             // Migration M3 (Story 7.5): add report-preference columns to tenant_preferences
             stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_EOD_ENABLED);

@@ -34,7 +34,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-03-06
-last_updated: 2026-05-04
+last_updated: 2026-05-14
 project: Keevo
 project_key: NOKEY
 tracking_system: file-system
@@ -151,6 +151,7 @@ development_status:
   7-3-rapport-hebdomadaire-automatique: done
   7-4-dashboard-rentabilite-analyse-par-produit-boutique: review
   7-5-configuration-des-rapports-preferences-whatsapp: done
+  7-6-ameliorations-cloture-dashboard-rapports-quantite-pos: done  # 2026-05-15 — H1+H2 patches applied, curl tests ✅ (AC1–AC6)
   epic-7-retrospective: optional
 
   # ─────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@ package com.keevo.reporting.report.application.service;
 
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
+import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData;
 import com.keevo.reporting.report.domain.model.ReportType;
@@ -33,6 +34,7 @@ public class DailyReportGenerator extends AbstractReportGenerator
     private final DailyReportFormatter formatter;
     private final StoreRepository storeRepository;
     private final UserRepository userRepository;
+    private final EmployeeRepository employeeRepository;
 
     public DailyReportGenerator(EndOfDayReportRepository reportRepository,
                                  WhatsAppPort whatsAppPort,
@@ -40,12 +42,14 @@ public class DailyReportGenerator extends AbstractReportGenerator
                                  EndOfDayReportBuilder builder,
                                  DailyReportFormatter formatter,
                                  StoreRepository storeRepository,
-                                 UserRepository userRepository) {
+                                 UserRepository userRepository,
+                                 EmployeeRepository employeeRepository) {
         super(reportRepository, whatsAppPort, multiStoreSummaryService);
         this.builder = builder;
         this.formatter = formatter;
         this.storeRepository = storeRepository;
         this.userRepository = userRepository;
+        this.employeeRepository = employeeRepository;
     }
 
     @Override
@@ -65,11 +69,15 @@ public class DailyReportGenerator extends AbstractReportGenerator
         Instant windowStart = command.windowStart() != null
                 ? command.windowStart()
                 : reportDate.atStartOfDay(WAT).toInstant();
-        Instant windowEnd = command.closedAt() != null ? command.closedAt() : Instant.now();
+        Instant windowEnd = command.windowEnd() != null ? command.windowEnd()
+                : (command.closedAt() != null ? command.closedAt() : Instant.now());
 
         if (command.actorId() != null) {
+            String actorName = employeeRepository.findById(command.actorId())
+                    .map(e -> e.getFirstName() + " " + e.getLastName())
+                    .orElse(null);
             return builder.buildForEmployee(command.storeId(), command.actorId(),
-                    windowStart, windowEnd, storeName, reportDate, closeTime, command.isAutomatic());
+                    windowStart, windowEnd, storeName, reportDate, closeTime, command.isAutomatic(), actorName);
         }
         return builder.build(command.storeId(), windowStart, windowEnd,
                 storeName, reportDate, closeTime, command.isAutomatic());

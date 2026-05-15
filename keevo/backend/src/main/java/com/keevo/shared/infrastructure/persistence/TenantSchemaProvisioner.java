@@ -622,6 +622,10 @@ public class TenantSchemaProvisioner {
     static final String DDL_REPORTS_MIGRATE_STORE_NAME =
             "ALTER TABLE reports ADD COLUMN IF NOT EXISTS store_name VARCHAR(255)";
 
+    /** Migration DDL: adds actor_name to existing reports tables (idempotent — Story 7.6) */
+    static final String DDL_REPORTS_MIGRATE_ACTOR_NAME =
+            "ALTER TABLE reports ADD COLUMN IF NOT EXISTS actor_name VARCHAR(255)";
+
     static final String DDL_REPORTS_IDX_TENANT_TYPE =
             "CREATE INDEX IF NOT EXISTS idx_reports_tenant_type ON reports (tenant_id, report_type)";
     static final String DDL_REPORTS_IDX_DATE =
@@ -848,7 +852,9 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_INVENTORY_COUNTS_IDX_UNIQUE_VARIANT);
             // Story 7.2 — reports
             stmt.execute(DDL_REPORTS);
-            stmt.execute(DDL_REPORTS_MIGRATE_ACTOR_ID); // idempotent: adds actor_id if missing
+            stmt.execute(DDL_REPORTS_MIGRATE_ACTOR_ID);   // idempotent: adds actor_id if missing
+            stmt.execute(DDL_REPORTS_MIGRATE_STORE_NAME); // idempotent: adds store_name if missing
+            stmt.execute(DDL_REPORTS_MIGRATE_ACTOR_NAME); // idempotent: adds actor_name if missing (Story 7.6)
             stmt.execute(DDL_REPORTS_IDX_TENANT_TYPE);
             stmt.execute(DDL_REPORTS_IDX_DATE);
             stmt.execute(DDL_REPORTS_IDX_DELIVERY_STATUS);

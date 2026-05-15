@@ -3,6 +3,7 @@ package com.keevo.reporting.report.application.service;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
+import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
 import com.keevo.reporting.report.domain.model.DeliveryStatus;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData;
@@ -44,6 +45,7 @@ class DailyReportGeneratorTest {
     @Mock private DailyReportFormatter formatter;
     @Mock private StoreRepository storeRepository;
     @Mock private UserRepository userRepository;
+    @Mock private EmployeeRepository employeeRepository;
 
     private DailyReportGenerator generator;
     private UUID storeId;
@@ -54,7 +56,7 @@ class DailyReportGeneratorTest {
     void setUp() {
         generator = new DailyReportGenerator(
                 reportRepository, whatsAppPort, multiStoreSummaryService,
-                builder, formatter, storeRepository, userRepository);
+                builder, formatter, storeRepository, userRepository, employeeRepository);
         storeId = UUID.randomUUID();
         actorId = UUID.randomUUID();
         command = new GenerateReportCommand(storeId, null, "kv_test01", false, Instant.now(), null);
@@ -65,7 +67,7 @@ class DailyReportGeneratorTest {
                 "Boutique Test", LocalDate.now(), LocalTime.of(20, 0), false,
                 false,
                 5, 100000, 70000, 30000, 20000,
-                List.of(), List.of(), 1, 0, 0
+                List.of(), List.of(), 1, 0, 0, null
         );
     }
 

@@ -44,7 +44,8 @@ class DailyReportFormatterTest {
                 List.of(new EmployeeEntry("Alice", 8, 120000)),
                 2,
                 1,
-                5000
+                5000,
+                null
         );
     }
 
@@ -96,7 +97,7 @@ class DailyReportFormatterTest {
                 "Boutique Test", LocalDate.now(), LocalTime.NOON, true,
                 false,
                 0, 0, 0, 0, 0,
-                List.of(), List.of(), 0, 0, 0
+                List.of(), List.of(), 0, 0, 0, null
         );
         String result = formatter.format(empty);
         assertThat(result).contains("Aucune vente");
@@ -120,9 +121,31 @@ class DailyReportFormatterTest {
                 "Boutique Auto", LocalDate.now(), LocalTime.MIDNIGHT, true,
                 false,
                 2, 30000, 20000, 10000, 15000,
-                List.of(), List.of(), 0, 0, 0
+                List.of(), List.of(), 0, 0, 0, null
         );
         String result = formatter.format(autoData);
         assertThat(result).contains("Auto");
     }
-}
+    @Test
+    void format_globalReport_titleContainsRapportGlobal() {
+        // Story 7.6 AC5: global report header = "Rapport global — <storeName>"
+        String result = formatter.format(sampleData(5, 150000));
+        assertThat(result).contains("Rapport global \u2014 Boutique Kinshasa");
+    }
+
+    @Test
+    void formatEmployee_titleContainsRapportDuJourAndEmployeeName() {
+        // Story 7.6 AC5: employee report header = "Rapport du jour — <storeName> | <employeeName>"
+        EndOfDayReportData empData = new EndOfDayReportData(
+                "Boutique Kinshasa",
+                LocalDate.of(2026, 5, 15),
+                LocalTime.of(20, 30),
+                false, false,
+                3, 60000, 60000, 0, 20000,
+                List.of(), List.of(), 0, 0, 0,
+                "Alice Dupont"
+        );
+        String result = formatter.formatEmployee(empData);
+        assertThat(result).contains("Rapport du jour \u2014 Boutique Kinshasa");
+        assertThat(result).contains("Alice Dupont");
+    }}

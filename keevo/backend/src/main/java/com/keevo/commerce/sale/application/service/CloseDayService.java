@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.UUID;
 
@@ -50,22 +51,25 @@ public class CloseDayService implements CloseDayUseCase {
 
     @Override
     public DayClosure closeDay(CloseDayCommand command) {
-        LocalDate today = LocalDate.now(WAT_ZONE);
+        // Story 7.6: fixed calendar window in WAT.
+        // Automatic closure fires at 00:00 WAT → closes yesterday; manual closes today.
+        LocalDate reportDate = command.isAutomatic()
+                ? LocalDate.now(WAT_ZONE).minusDays(1)
+                : LocalDate.now(WAT_ZONE);
 
-        // Step 1: Check no closure exists
-        if (dayClosureRepository.existsByStoreIdAndDate(command.storeId(), today)) {
+        // Step 1: Check no closure exists for the report date
+        if (dayClosureRepository.existsByStoreIdAndDate(command.storeId(), reportDate)) {
             throw new DomainException(ErrorCode.DAY_ALREADY_CLOSED,
                     "La journée a déjà été clôturée pour cette boutique");
         }
 
-        // Step 2: Load all sales for the sliding window (prev closure → now)
-        Instant now = Instant.now();
-        Instant windowStart = dayClosureRepository.findLastClosureForStore(command.storeId())
-                .map(DayClosure::getClosedAt)
-                .orElse(today.atStartOfDay(WAT_ZONE).toInstant());
+        // Step 2: Fixed calendar window — 00:00:00 to 23:59:59.999 WAT of reportDate
+        Instant windowStart = reportDate.atStartOfDay(WAT_ZONE).toInstant();
+        Instant windowEnd   = reportDate.atTime(LocalTime.MAX).atZone(WAT_ZONE).toInstant();
+        Instant now         = Instant.now();
 
         var salesPage = saleRepository.findByStoreIdAndDateRange(
-                command.storeId(), windowStart, now, PageRequest.of(0, 10000));
+                command.storeId(), windowStart, windowEnd, PageRequest.of(0, 10000));
 
         // Step 3: Build summary
         DayClosureSummary summary = new DayClosureSummaryBuilder()
@@ -84,7 +88,7 @@ public class CloseDayService implements CloseDayUseCase {
         );
         dayClosureRepository.save(closure);
 
-        // Step 5: Publish event with sliding window info
+        // Step 5: Publish event with fixed calendar window
         DayClosedEvent event = new DayClosedEvent(
                 closure.getId(),
                 closure.getStoreId(),
@@ -93,7 +97,8 @@ public class CloseDayService implements CloseDayUseCase {
                 command.isAutomatic(),
                 command.tenantId(),
                 now,
-                windowStart
+                windowStart,
+                windowEnd
         );
         eventPublisher.publishEvent(event);
 

@@ -56,6 +56,7 @@ class ReportDeliveryRetryServiceTest {
         EndOfDayReport r = EndOfDayReport.createNew(
                 "kv_test01", UUID.randomUUID(), "Boutique Test",
                 null,
+                null,  // actorName
                 ReportType.DAILY, LocalDate.now(), "Contenu", 100000, 5, false);
         // Simulate previous failures
         for (int i = 0; i < attempts; i++) {

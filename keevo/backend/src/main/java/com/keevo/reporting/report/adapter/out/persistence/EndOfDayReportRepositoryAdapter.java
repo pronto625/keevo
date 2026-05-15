@@ -88,7 +88,7 @@ public class EndOfDayReportRepositoryAdapter implements EndOfDayReportRepository
     private EndOfDayReportJpaEntity toEntity(EndOfDayReport r) {
         return new EndOfDayReportJpaEntity(
                 r.getId(), r.getTenantId(), r.getStoreId(), r.getStoreName(),
-                r.getActorId(),
+                r.getActorId(), r.getActorName(),
                 r.getReportType().name(), r.getReportDate(), r.getContent(),
                 r.getDeliveryStatus().name(), r.getDeliveryAttempts(), r.getLastAttemptAt(),
                 r.getTotalRevenue(), r.getTotalSales(), r.isAutomatic(), r.getCreatedAt()
@@ -98,7 +98,7 @@ public class EndOfDayReportRepositoryAdapter implements EndOfDayReportRepository
     private EndOfDayReport toDomain(EndOfDayReportJpaEntity e) {
         return new EndOfDayReport(
                 e.getId(), e.getTenantId(), e.getStoreId(), e.getStoreName(),
-                e.getActorId(),
+                e.getActorId(), e.getActorName(),
                 ReportType.valueOf(e.getReportType()),
                 e.getReportDate(), e.getContent(),
                 DeliveryStatus.valueOf(e.getDeliveryStatus()),

@@ -89,7 +89,7 @@ public abstract class AbstractReportGenerator {
                                            EndOfDayReportData data, String content) {
         EndOfDayReport report = EndOfDayReport.createNew(
                 command.tenantId(), command.storeId(), data.storeName(),
-                command.actorId(),
+                command.actorId(), data.employeeName(),
                 getReportType(), data.reportDate(), content,
                 data.totalRevenue(), data.totalSales(), command.isAutomatic()
         );

@@ -72,6 +72,7 @@ class ReportControllerTest {
         return EndOfDayReport.createNew(
                 "kv_test01", UUID.randomUUID(), "Boutique Test",
                 null,
+                null,  // actorName
                 ReportType.DAILY, LocalDate.now(), "Contenu rapport",
                 100000, 5, false);
     }

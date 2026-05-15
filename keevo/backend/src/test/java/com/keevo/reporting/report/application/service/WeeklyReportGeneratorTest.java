@@ -83,7 +83,7 @@ class WeeklyReportGeneratorTest {
         return new EndOfDayReportData(
                 "Boutique Test", SUNDAY, LocalTime.of(23, 59), true, false,
                 10, 200_000, 120_000, 80_000, 20_000,
-                List.of(), List.of(), 2, 0, 0
+                List.of(), List.of(), 2, 0, 0, null
         );
     }
 

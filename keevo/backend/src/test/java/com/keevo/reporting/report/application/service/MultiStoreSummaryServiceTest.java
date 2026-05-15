@@ -51,6 +51,7 @@ class MultiStoreSummaryServiceTest {
     private EndOfDayReport stubReport(UUID storeId, String name, int revenue, int sales) {
         return EndOfDayReport.createNew("kv_test01", storeId, name,
                 null,
+                null,  // actorName
                 ReportType.DAILY, LocalDate.now(), "Contenu", revenue, sales, false);
     }
 

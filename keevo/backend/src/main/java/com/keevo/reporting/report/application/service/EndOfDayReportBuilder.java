@@ -68,7 +68,7 @@ public class EndOfDayReportBuilder {
         return new EndOfDayReportData(
                 storeName, date, closeTime, isAutomatic, false,
                 totalSales, totalRevenue, cashAmount, momoAmount, avgBasket,
-                topProducts, employees, lowStockCount, pendingSalesCount, pendingSalesTotal
+                topProducts, employees, lowStockCount, pendingSalesCount, pendingSalesTotal, null
         );
     }
 
@@ -80,7 +80,8 @@ public class EndOfDayReportBuilder {
     public EndOfDayReportData buildForEmployee(UUID storeId, UUID employeeId,
                                                Instant windowStart, Instant windowEnd,
                                                String storeName, LocalDate date,
-                                               LocalTime closeTime, boolean isAutomatic) {
+                                               LocalTime closeTime, boolean isAutomatic,
+                                               String employeeName) {
         Timestamp start = Timestamp.from(windowStart);
         Timestamp end   = Timestamp.from(windowEnd);
         String sid = storeId.toString();
@@ -101,7 +102,7 @@ public class EndOfDayReportBuilder {
         return new EndOfDayReportData(
                 storeName, date, closeTime, isAutomatic, true,
                 totalSales, totalRevenue, cashAmount, momoAmount, avgBasket,
-                topProducts, List.of(), lowStockCount, pendingSalesCount, pendingSalesTotal
+                topProducts, List.of(), lowStockCount, pendingSalesCount, pendingSalesTotal, employeeName
         );
     }
 
