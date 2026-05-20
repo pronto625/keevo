@@ -8,10 +8,13 @@ import com.keevo.identity.auth.adapter.in.rest.dto.RegistrationRequest;
 import com.keevo.identity.auth.adapter.in.rest.dto.RegistrationResponse;
 import com.keevo.identity.auth.adapter.in.rest.dto.SelectTenantRequest;
 import com.keevo.identity.auth.adapter.in.rest.dto.ChangePasswordRequestDto;
+import com.keevo.identity.auth.adapter.in.rest.dto.UserProfileResponse;
 import com.keevo.identity.auth.domain.model.AuthTokens;
 import com.keevo.identity.auth.domain.model.UserMembershipInfo;
+import com.keevo.identity.auth.domain.model.UserProfileData;
 import com.keevo.identity.auth.domain.port.in.AuthenticateUserCommand;
 import com.keevo.identity.auth.domain.port.in.AuthenticateUserUseCase;
+import com.keevo.identity.auth.domain.port.in.GetUserProfileUseCase;
 import com.keevo.identity.auth.domain.port.in.LoginSessionResult;
 import com.keevo.identity.auth.domain.port.in.RefreshTokenUseCase;
 import com.keevo.identity.auth.domain.port.in.RegisterUserCommand;
@@ -21,6 +24,7 @@ import com.keevo.identity.auth.domain.port.in.SelectTenantCommand;
 import com.keevo.identity.auth.domain.port.in.SelectTenantUseCase;
 import com.keevo.identity.employee.domain.port.in.ChangePasswordCommand;
 import com.keevo.identity.employee.domain.port.in.ChangePasswordUseCase;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -32,6 +36,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -64,17 +69,20 @@ public class AuthController {
     private final SelectTenantUseCase    selectTenantUseCase;
     private final RefreshTokenUseCase    refreshTokenUseCase;
     private final ChangePasswordUseCase  changePasswordUseCase;
+    private final GetUserProfileUseCase  getUserProfileUseCase;
 
     public AuthController(RegisterUserUseCase registerUserUseCase,
                           AuthenticateUserUseCase authenticateUserUseCase,
                           SelectTenantUseCase selectTenantUseCase,
                           RefreshTokenUseCase refreshTokenUseCase,
-                          ChangePasswordUseCase changePasswordUseCase) {
+                          ChangePasswordUseCase changePasswordUseCase,
+                          GetUserProfileUseCase getUserProfileUseCase) {
         this.registerUserUseCase    = registerUserUseCase;
         this.authenticateUserUseCase = authenticateUserUseCase;
         this.selectTenantUseCase    = selectTenantUseCase;
         this.refreshTokenUseCase    = refreshTokenUseCase;
         this.changePasswordUseCase  = changePasswordUseCase;
+        this.getUserProfileUseCase  = getUserProfileUseCase;
     }
 
     @Operation(
@@ -214,6 +222,32 @@ public class AuthController {
         return ResponseEntity.ok(toLoginResponse(tokens));
     }
 
+    // ── Profile (Story 8.6) ───────────────────────────────────────────────────
+
+    @Operation(
+        summary = "Get authenticated user profile",
+        description = """
+            Story 8.6 — AC3, AC4: Returns the profile of the currently authenticated user.
+
+            EMPLOYEE: firstName, lastName, storeId, storeName resolved from employee record.
+            OWNER: firstName, lastName, storeId, storeName are null.
+
+            Requires valid JWT access token.
+            """
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Profile retrieved",
+            content = @Content(schema = @Schema(implementation = UserProfileResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Not authenticated")
+    })
+    @GetMapping("/profile")
+    public ResponseEntity<UserProfileResponse> getProfile() {
+        UUID userId = (UUID) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        String tenantId = TenantContext.getCurrentTenant();
+        UserProfileData data = getUserProfileUseCase.execute(userId, tenantId);
+        return ResponseEntity.ok(toProfileResponse(data));
+    }
+
     // ── Change Password (Story 3.5) ──────────────────────────────────────────
 
     @Operation(
@@ -239,6 +273,18 @@ public class AuthController {
     }
 
     // ── Mapping helpers ───────────────────────────────────────────────────────
+
+    private UserProfileResponse toProfileResponse(UserProfileData data) {
+        return new UserProfileResponse(
+            data.userId(),
+            data.phoneNumber(),
+            data.role(),
+            data.firstName(),
+            data.lastName(),
+            data.storeId(),
+            data.storeName()
+        );
+    }
 
     private LoginSessionResponse toLoginSessionResponse(LoginSessionResult result) {
         List<LoginSessionResponse.MembershipDto> dtos = result.memberships().stream()

@@ -45,8 +45,8 @@ class AuthControllerChangePasswordTest {
 
     @BeforeEach
     void setUp() {
-        // AuthController will gain a ChangePasswordUseCase dependency
-        AuthController authController = new AuthController(null, null, null, null, changePasswordUseCase);
+        // AuthController — standalone setup; pass null for unused use cases (Story 8.6 adds getUserProfileUseCase)
+        AuthController authController = new AuthController(null, null, null, null, changePasswordUseCase, null);
         mockMvc = MockMvcBuilders.standaloneSetup(authController)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

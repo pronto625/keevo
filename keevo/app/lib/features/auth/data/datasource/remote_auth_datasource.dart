@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../domain/exception/auth_exception.dart';
+import '../../domain/model/account_profile.dart';
 import '../../domain/model/auth_tokens.dart';
 import '../../domain/model/login_session_response.dart';
 import '../../domain/model/membership_dto.dart';
@@ -118,6 +119,21 @@ class RemoteAuthDataSource {
         },
       );
       return _mapAuthTokens(response.data!);
+    } on DioException catch (e) {
+      throw _mapAuthError(e);
+    }
+  }
+
+  /// GET /api/v1/auth/profile (Story 8.6 AC3)
+  ///
+  /// Returns the authenticated user's [AccountProfile].
+  /// Requires valid JWT (injected by AuthInterceptor).
+  Future<AccountProfile> getProfile() async {
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(
+        '/api/v1/auth/profile',
+      );
+      return AccountProfile.fromJson(response.data!);
     } on DioException catch (e) {
       throw _mapAuthError(e);
     }

@@ -75,7 +75,7 @@ keevo:
     private-key-path: ${KEEVO_JWT_PRIVATE_KEY_PATH:classpath:keys/private_key.pem}
     public-key-path: ${KEEVO_JWT_PUBLIC_KEY_PATH:classpath:keys/public_key.pem}
     access-token-expiry-hours: 24
-    refresh-token-expiry-days: 30
+    refresh-token-expiry-days: 180  # Story 8.6 AC8 — 6 months
   admin:
     phone: ${ADMIN_PHONE:+237600000000}
     password: ${ADMIN_PASSWORD:Admin@1234!}

@@ -1,3 +1,4 @@
+import '../../domain/model/account_profile.dart';
 import '../../domain/model/auth_tokens.dart';
 import '../../domain/model/login_session_response.dart';
 import '../../domain/model/registration_result.dart';
@@ -61,5 +62,10 @@ class AuthRepositoryImpl implements AuthRepository {
       currentPassword: currentPassword,
       newPassword: newPassword,
     );
+  }
+
+  @override
+  Future<AccountProfile> getProfile() async {
+    return _remoteDataSource.getProfile();
   }
 }

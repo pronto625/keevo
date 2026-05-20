@@ -40,6 +40,8 @@ import '../../features/reports/presentation/page/report_detail_page.dart';
 import '../../features/reports/presentation/page/owner_reports_page.dart';
 import '../../features/reports/domain/model/report_history_model.dart';
 import '../../features/profitability/presentation/page/product_profitability_detail_page.dart';
+import '../../features/auth/presentation/page/user_password_change_page.dart';
+import '../../features/settings/presentation/page/account_page.dart';
 import '../../features/settings/presentation/page/settings_page.dart';
 import '../../features/settings/presentation/page/subscription_page.dart';
 import '../../features/settings/presentation/page/report_preferences_page.dart';
@@ -597,6 +599,16 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/settings/reports',
       builder: (_, __) => const ReportPreferencesPage(),
+    ),
+    // ── Settings > Mon Compte (Story 8.6 — OWNER + EMPLOYEE) ─────────────
+    GoRoute(
+      path: '/settings/account',
+      builder: (_, __) => const AccountPage(),
+    ),
+    // ── Settings > Change Password (Story 8.6 — OWNER + EMPLOYEE) ────────
+    GoRoute(
+      path: '/settings/change-password',
+      builder: (_, __) => const UserPasswordChangePage(),
     ),
     // ── Audit trail (OWNER only — full-screen, no nav bar) ────────────────
     GoRoute(

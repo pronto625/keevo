@@ -22,9 +22,17 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
- * ChangePasswordService — Orchestrates employee password change (Story 3.5 AC4).
+ * ChangePasswordService — Orchestrates password change for EMPLOYEE and OWNER (Story 3.5 AC4, Story 8.6 AC7).
+ *
+ * <p>GoF Strategy pattern: {@code PostPasswordChangeTokenStrategy} is implicit in the
+ * conditional branching by role — adding MANAGER requires only a new branch.
+ *
+ * <p>Story 8.6 AC7: OWNER has no employee record. The previous {@code orElseThrow(EMPLOYEE_NOT_FOUND)}
+ * is replaced with {@code Optional} handling so OWNER callers get a valid token with role=OWNER.
  */
 @Service
 public class ChangePasswordService implements ChangePasswordUseCase {
@@ -76,10 +84,23 @@ public class ChangePasswordService implements ChangePasswordUseCase {
         User updatedUser = user.withPasswordHash(newHash);
         userRepository.save(updatedUser);
 
-        // 5. Find employee and clear passwordChangeRequired flag
-        Employee employee = employeeRepository.findByUserId(command.actorId())
-                .orElseThrow(() -> new DomainException(ErrorCode.EMPLOYEE_NOT_FOUND));
-        employeeRepository.updatePasswordChangeRequired(employee.getId(), false);
+        // 5. Resolve role-specific data — EMPLOYEE or OWNER (Story 8.6 AC7)
+        Optional<Employee> employeeOpt = employeeRepository.findByUserId(command.actorId());
+        String role;
+        UUID storeId = null;
+        String firstName = null;
+        UUID employeeId = null;
+
+        if (employeeOpt.isPresent()) {
+            Employee emp = employeeOpt.get();
+            employeeRepository.updatePasswordChangeRequired(emp.getId(), false);
+            role       = "EMPLOYEE";
+            storeId    = emp.getStoreId();
+            firstName  = emp.getFirstName();
+            employeeId = emp.getId();
+        } else {
+            role = "OWNER";
+        }
 
         // 6. Revoke all existing refresh tokens
         refreshTokenRepository.revokeAllByUserId(command.actorId());
@@ -87,22 +108,24 @@ public class ChangePasswordService implements ChangePasswordUseCase {
         // 7. Generate fresh tokens
         String tenantId = TenantContext.getCurrentTenant();
         String accessToken = jwtTokenProvider.generateAccessToken(
-                command.actorId(), tenantId, "EMPLOYEE", "ACTIVE",
-                employee.getStoreId(), false, employee.getFirstName());
+                command.actorId(), tenantId, role, "ACTIVE",
+                storeId, false, firstName);
         String rawRefreshToken = jwtTokenProvider.generateRefreshToken();
         String tokenHash = hashToken(rawRefreshToken);
         Instant expiresAt = Instant.now().plus(jwtProperties.getRefreshTokenExpiryDays(), ChronoUnit.DAYS);
         refreshTokenRepository.save(RefreshToken.create(
                 command.actorId(), tenantId, tokenHash, expiresAt));
 
-        // 8. Publish event
-        eventPublisher.publishEvent(new EmployeePasswordSetEvent(
-                command.actorId(), employee.getId(), Instant.now()));
+        // 8. Publish event after all writes are complete (EMPLOYEE only)
+        if (employeeId != null) {
+            eventPublisher.publishEvent(new EmployeePasswordSetEvent(
+                    command.actorId(), employeeId, Instant.now()));
+        }
 
         long expiresIn = (long) jwtProperties.getAccessTokenExpiryHours() * 3600;
         return new AuthTokens(accessToken, rawRefreshToken, expiresIn,
-                command.actorId(), tenantId, "EMPLOYEE",
-                employee.getStoreId().toString(), false);
+                command.actorId(), tenantId, role,
+                storeId != null ? storeId.toString() : null, false);
     }
 
     private String hashToken(String rawToken) {

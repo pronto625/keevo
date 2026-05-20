@@ -34,7 +34,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-03-06
-last_updated: 2026-05-14
+last_updated: 2026-05-21  # story 8.6 → done
 project: Keevo
 project_key: NOKEY
 tracking_system: file-system
@@ -164,6 +164,7 @@ development_status:
   8-3-desactivation-employe-revocation-de-sessions: backlog
   8-4-feedback-utilisateur-signalement-de-probleme: backlog
   8-5-suppression-de-compte-donnees-rgpd: backlog
+  8-6-changement-mot-de-passe-volontaire: done  # 2026-05-20 — Voluntary password change from Settings tab (OWNER + EMPLOYEE) + refresh token validity set to 180 days (6 months) | Code review PASSED (adversarial) | H1: EmployeePasswordSetEvent moved after all writes | H2: ScaffoldMessenger captured before context.pop() | H3: ref.read→ref.watch in accountProfileProvider | 11/11 backend tests GREEN | 24/24 curl E2E PASS | 16/16 non-regression PASS
   epic-8-retrospective: optional
 
   # ─────────────────────────────────────────────────────────
@@ -181,4 +182,7 @@ development_status:
   9-3-dashboard-revenus: backlog
   9-4-analytics-plateforme: backlog
   9-5-sante-systeme-alertes-notifications-push-globales: backlog
+  9-6-monitoring-catalogue-produits: review  # 2026-05-20 — Cross-tenant product catalog monitoring page with KPI cards, filters, table, CSV export + Sidebar Monitoring group
+  9-7-monitoring-activite-operationnelle: review
+  9-8-monitoring-sync-sante-devices: review
   epic-9-retrospective: optional

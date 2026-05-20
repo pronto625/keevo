@@ -124,6 +124,23 @@ class SettingsPage extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
+                // ── Section : Compte (OWNER + EMPLOYEE — AC1) ───────────
+                const _SectionLabel('Compte'),
+                const SizedBox(height: 8),
+                _SettingsCard(
+                  children: [
+                    _SettingsTile(
+                      icon: Icons.manage_accounts_rounded,
+                      iconColor: AppTheme.iconBlue,
+                      iconBg: AppTheme.iconBlueBg,
+                      title: 'Mon Compte',
+                      subtitle: phone ?? 'Chargement...',
+                      onTap: () => context.push('/settings/account'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+
                 // ── Section : Gestion (OWNER only — AC5) ────────────────
                 if (isOwner) ...[
                 const _SectionLabel('Gestion'),

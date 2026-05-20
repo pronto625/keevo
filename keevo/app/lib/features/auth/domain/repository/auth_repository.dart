@@ -1,3 +1,4 @@
+import '../model/account_profile.dart';
 import '../model/auth_tokens.dart';
 import '../model/login_session_response.dart';
 import '../model/registration_result.dart';
@@ -47,4 +48,10 @@ abstract interface class AuthRepository {
     required String currentPassword,
     required String newPassword,
   });
+
+  /// GET /auth/profile — Story 8.6 AC3.
+  ///
+  /// Returns the authenticated user's [AccountProfile].
+  /// Requires valid JWT; throws [AuthException] if unauthenticated.
+  Future<AccountProfile> getProfile();
 }

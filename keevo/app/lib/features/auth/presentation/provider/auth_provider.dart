@@ -12,6 +12,7 @@ import '../../../../core/router/app_router.dart';
 import '../../data/datasource/remote_auth_datasource.dart';
 import '../../data/repository/auth_repository_impl.dart';
 import '../../data/repository/secure_token_storage.dart';
+import '../../domain/model/account_profile.dart';
 import '../../domain/model/auth_tokens.dart';
 import '../../domain/model/login_result.dart';
 import '../../domain/model/registration_result.dart';
@@ -302,6 +303,16 @@ class SelectTenant extends _$SelectTenant {
   /// Reset state to initial.
   void reset() => state = const AsyncData(null);
 }
+
+// ── Account Profile FutureProvider (Story 8.6 AC3) ───────────────────────────
+
+/// [accountProfileProvider] loads the authenticated user's profile from the backend.
+///
+/// Uses [FutureProvider.autoDispose] so the provider resets when [AccountPage]
+/// is closed — prevents stale data if the user navigates away and returns.
+final accountProfileProvider = FutureProvider.autoDispose<AccountProfile>((ref) {
+  return ref.watch(authRepositoryProvider).getProfile();
+});
 
 // ── ChangePassword AsyncNotifier (Riverpod code-gen) ─────────────────────────
 
