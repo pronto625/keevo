@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -64,6 +65,13 @@ import '../scaffold/main_shell.dart';
 import '../../features/stores/presentation/provider/active_store_provider.dart';
 import '../storage/app_constants.dart';
 
+// Mirrors the API_BASE_URL from auth_provider.dart so the splash can perform
+// a proactive token refresh without importing auth_provider.
+const _kApiBaseUrl = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'http://localhost:4500',
+);
+
 /// Returns true only if [token] is a structurally valid JWT **and** its `exp`
 /// claim is in the future. Expired or malformed tokens return false.
 bool _isValidJwt(String token) {
@@ -82,6 +90,53 @@ bool _isValidJwt(String token) {
     );
   } catch (_) {
     return false;
+  }
+}
+
+/// Decodes the JWT payload without checking expiry. Returns null for
+/// malformed tokens. Used to distinguish "expired but valid structure"
+/// from garbage, enabling proactive silent refresh on splash.
+Map<String, dynamic>? _decodeJwtPayload(String token) {
+  final parts = token.split('.');
+  if (parts.length != 3 || !token.startsWith('eyJ')) return null;
+  try {
+    final payload = parts[1];
+    final decoded = utf8.decode(
+      base64Url.decode(base64Url.normalize(payload)),
+    );
+    return jsonDecode(decoded) as Map<String, dynamic>;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Attempts a silent token refresh using the stored refresh token.
+/// Returns the new access token on success, null on any failure.
+/// Persists new tokens to secure storage on success.
+Future<String?> _tryProactiveRefresh(FlutterSecureStorage storage) async {
+  final refreshToken = await storage.read(key: 'refresh_token');
+  if (refreshToken == null) return null;
+  try {
+    final dio = Dio(BaseOptions(
+      baseUrl: _kApiBaseUrl,
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 10),
+    ));
+    final response = await dio.post(
+      '/api/v1/auth/refresh',
+      data: {'refreshToken': refreshToken},
+    );
+    final body = response.data as Map<String, dynamic>;
+    final newAccess = body['accessToken'] as String?;
+    final newRefresh = body['refreshToken'] as String?;
+    if (newAccess == null) return null;
+    await storage.write(key: 'jwt_token', value: newAccess);
+    if (newRefresh != null) {
+      await storage.write(key: 'refresh_token', value: newRefresh);
+    }
+    return newAccess;
+  } catch (_) {
+    return null;
   }
 }
 
@@ -145,18 +200,33 @@ class _SplashRedirectPageState extends ConsumerState<_SplashRedirectPage> {
     const storage = FlutterSecureStorage();
     final token = await storage.read(key: 'jwt_token');
 
-    if (token != null && _isValidJwt(token)) {
+    // Resolve the effective access token — use the stored one if still valid,
+    // otherwise attempt a silent refresh before falling back to login.
+    String? effectiveToken;
+    if (token != null) {
+      if (_isValidJwt(token)) {
+        effectiveToken = token;
+      } else if (_decodeJwtPayload(token) != null) {
+        // Expired but structurally valid — try silent refresh (Story 8.6 AC8:
+        // refresh token TTL is 180 days, so this covers the common 2-day gap).
+        effectiveToken = await _tryProactiveRefresh(storage);
+        if (effectiveToken == null) {
+          await storage.delete(key: 'jwt_token');
+          await storage.delete(key: 'refresh_token');
+        }
+      } else {
+        await storage.delete(key: 'jwt_token');
+      }
+    }
+
+    if (effectiveToken != null) {
       if (!mounted) return;
 
       // Ensure EMPLOYEE activeStoreId is set from JWT on cold start.
       // OWNER gets null (all stores).
       String? role;
       try {
-        final parts = token.split('.');
-        final payload = utf8.decode(
-          base64Url.decode(base64Url.normalize(parts[1])),
-        );
-        final claims = jsonDecode(payload) as Map<String, dynamic>;
+        final claims = _decodeJwtPayload(effectiveToken)!;
         role = claims['role'] as String?;
         final jwtStoreId = claims['storeId'] as String?;
         ref.read(activeStoreIdProvider.notifier).setActiveStore(
@@ -182,7 +252,7 @@ class _SplashRedirectPageState extends ConsumerState<_SplashRedirectPage> {
       // a previous install / after a data-clear. Mark it locally and skip
       // the wizard so the user is never stuck in the onboarding loop.
       if (!wizardSeen) {
-        wizardSeen = _isTenantActive(token);
+        wizardSeen = _isTenantActive(effectiveToken);
         if (wizardSeen) {
           await prefs.setBool(kOnboardingWizardSeenKey, true);
         }
@@ -207,17 +277,11 @@ class _SplashRedirectPageState extends ConsumerState<_SplashRedirectPage> {
       return;
     }
 
-    if (token != null) await storage.delete(key: 'jwt_token');
-
+    // No valid session — go to login or first-run onboarding.
     final prefs = await SharedPreferences.getInstance();
     final onboardingSeen = prefs.getBool(kOnboardingSeenKey) ?? false;
     if (!mounted) return;
-
-    if (!onboardingSeen) {
-      context.go('/onboarding');
-    } else {
-      context.go('/auth/login');
-    }
+    context.go(onboardingSeen ? '/auth/login' : '/onboarding');
   }
 
   @override
