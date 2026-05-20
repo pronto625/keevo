@@ -83,11 +83,17 @@ keevo:
     enabled: ${KEEVO_FCM_ENABLED:false}
     credentials-path: ${GOOGLE_APPLICATION_CREDENTIALS:}
   whatsapp:
+    # Providers: noop | wassender | twilio | failover
+    # failover = tries Wassender first, falls back to Twilio automatically
     provider: ${KEEVO_WHATSAPP_PROVIDER:noop}
     wassender:
       api-url: ${WASSENDER_API_URL:}
       api-token: ${WASSENDER_API_TOKEN:}
       default-device: ${WASSENDER_DEFAULT_DEVICE:}
+    twilio:
+      account-sid: ${TWILIO_ACCOUNT_SID:}
+      auth-token: ${TWILIO_AUTH_TOKEN:}
+      from-number: ${TWILIO_FROM_NUMBER:}
 
 # Springdoc OpenAPI / Swagger UI
 springdoc:

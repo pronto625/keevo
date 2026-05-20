@@ -1,5 +1,6 @@
 package com.keevo.messaging.notification.adapter.in.rest;
 
+import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -16,12 +17,15 @@ public class MessagingStatusController {
 
     private final String whatsappProvider;
     private final boolean fcmEnabled;
+    private final WhatsAppPort whatsAppPort;
 
     public MessagingStatusController(
             @Value("${keevo.whatsapp.provider:noop}") String whatsappProvider,
-            @Value("${keevo.fcm.enabled:false}") boolean fcmEnabled) {
+            @Value("${keevo.fcm.enabled:false}") boolean fcmEnabled,
+            WhatsAppPort whatsAppPort) {
         this.whatsappProvider = whatsappProvider;
         this.fcmEnabled = fcmEnabled;
+        this.whatsAppPort = whatsAppPort;
     }
 
     @Operation(summary = "Get messaging infrastructure status")
@@ -29,6 +33,7 @@ public class MessagingStatusController {
     public ResponseEntity<ApiResponseWrapper<Map<String, Object>>> getStatus() {
         Map<String, Object> status = Map.of(
                 "whatsappProvider", whatsappProvider,
+                "whatsappConfigured", whatsAppPort.isConfigured(),
                 "fcmEnabled", fcmEnabled);
         return ResponseEntity.ok(ApiResponseWrapper.ok(status));
     }

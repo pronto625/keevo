@@ -7,7 +7,8 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 
 /**
- * Spring configuration that creates FcmProperties, WassenderProperties, and HTTP clients.
+ * Spring configuration that creates FcmProperties, WassenderProperties, TwilioProperties,
+ * and their respective HTTP clients.
  */
 @Configuration
 public class MessagingPropertiesConfig {
@@ -26,9 +27,26 @@ public class MessagingPropertiesConfig {
         return new WassenderProperties(apiUrl, apiToken);
     }
 
-    /** RestTemplate with Wassender-specific timeouts: connect 10s, read 30s (AC5). */
+    @Bean
+    public TwilioProperties twilioProperties(Environment env) {
+        String accountSid = env.getProperty("keevo.whatsapp.twilio.account-sid", "");
+        String authToken = env.getProperty("keevo.whatsapp.twilio.auth-token", "");
+        String fromNumber = env.getProperty("keevo.whatsapp.twilio.from-number", "");
+        return new TwilioProperties(accountSid, authToken, fromNumber);
+    }
+
+    /** RestTemplate with Wassender-specific timeouts: connect 10s, read 30s. */
     @Bean("wassenderRestTemplate")
     public RestTemplate wassenderRestTemplate() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(10_000);
+        factory.setReadTimeout(30_000);
+        return new RestTemplate(factory);
+    }
+
+    /** RestTemplate with Twilio-specific timeouts: connect 10s, read 30s. */
+    @Bean("twilioRestTemplate")
+    public RestTemplate twilioRestTemplate() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(10_000);
         factory.setReadTimeout(30_000);
