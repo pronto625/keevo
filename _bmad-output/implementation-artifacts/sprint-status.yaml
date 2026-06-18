@@ -34,7 +34,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-03-06
-last_updated: 2026-05-21  # story 9.6 → done
+last_updated: 2026-06-18  # + Epics 10-17 refonte (66 stories) ; gap-analysis appliqué (12-7,13-10,15-8,Epic 17)
 project: Keevo
 project_key: NOKEY
 tracking_system: file-system
@@ -163,7 +163,7 @@ development_status:
   8-2-suivi-activite-employes: backlog
   8-3-desactivation-employe-revocation-de-sessions: backlog
   8-4-feedback-utilisateur-signalement-de-probleme: backlog
-  8-5-suppression-de-compte-donnees-rgpd: backlog
+  8-5-suppression-de-compte-donnees-rgpd: backlog   # ⤳ superseded par 16-6 (RGPD refonte)
   8-6-changement-mot-de-passe-volontaire: done  # 2026-05-20 — Voluntary password change from Settings tab (OWNER + EMPLOYEE) + refresh token validity set to 180 days (6 months) | Code review PASSED (adversarial) | H1: EmployeePasswordSetEvent moved after all writes | H2: ScaffoldMessenger captured before context.pop() | H3: ref.read→ref.watch in accountProfileProvider | 11/11 backend tests GREEN | 24/24 curl E2E PASS | 16/16 non-regression PASS
   epic-8-retrospective: optional
 
@@ -178,11 +178,135 @@ development_status:
   # ─────────────────────────────────────────────────────────
   epic-9: in-progress
   9-1-gestion-des-tenants: done
-  9-2-activation-plan-payant: backlog
-  9-3-dashboard-revenus: backlog
-  9-4-analytics-plateforme: backlog
-  9-5-sante-systeme-alertes-notifications-push-globales: backlog
+  9-2-activation-plan-payant: backlog   # ⤳ superseded par 16-4 (console modules) / 16-2
+  9-3-dashboard-revenus: backlog   # ⤳ superseded par 15-7 (dashboard refonte)
+  9-4-analytics-plateforme: backlog   # ⤳ superseded par 15-7 (dashboard refonte)
+  9-5-sante-systeme-alertes-notifications-push-globales: backlog   # ⤳ superseded par 17-5
   9-6-monitoring-catalogue-produits: done  # 2026-05-21 — code review PASSED | H1: escapeCsv() +\r fix | NR: null sort NPE fix in listTenantSyncHealth() (37 tenants w/ null name) | 13/13 curl tests PASS | 5/5 non-regression PASS | 10/10 unit tests GREEN
   9-7-monitoring-activite-operationnelle: review
   9-8-monitoring-sync-sante-devices: review
   epic-9-retrospective: optional
+
+  # ═════════════════════════════════════════════════════════════════════
+  # REFONTE MODULAIRE — Epics 10-16 (54 stories)
+  # Source: planning-artifacts/epics-refonte-modulaire.md
+  # Ordre conseillé (frontières de risque) : 10 → 11 → 12 → 13 → {14,15} → 16
+  # Chemin critique "socle + 1er module prouvé" : Epics 10→14 (~16-22 sem)
+  # Différé jusqu'à traction : Redis/HA (Epic 11 allégée), canary (16-7), iOS/desktop
+  # ═════════════════════════════════════════════════════════════════════
+
+  # ─────────────────────────────────────────────────────────
+  # Epic 10: Préparation & Garde-fous (Phase 0) — BLOQUANT
+  # ─────────────────────────────────────────────────────────
+  epic-10: in-progress
+  10-1-flyway-baseline-schema-public: done     # 2026-06-15 — story créée (bmad-create-story) | 2026-06-17 implementation complete | 2026-06-18 code review: 3 patches applied (baseline-version→0, ResultSet leak, @AfterAll cleanup), 2 deferred
+  10-2-migrations-versionnees-fin-ddl-auto: backlog
+  10-3-externalisation-secrets-fail-fast: backlog
+  10-4-backups-postgresql-restauration: backlog
+  10-5-environnement-staging: backlog
+  10-6-archunit-modulith-verify-baseline: backlog
+  epic-10-retrospective: optional
+
+  # ─────────────────────────────────────────────────────────
+  # Epic 11: Stabilisation du Socle & Dette (Phase 1 allégée) — BLOQUANT
+  # ─────────────────────────────────────────────────────────
+  epic-11: backlog
+  11-1-logs-json-structures-mdc: backlog
+  11-2-tracing-otel-metriques-prometheus: backlog
+  11-3-audit-append-only-db: backlog
+  11-4-correctifs-rbac-exposition: backlog
+  11-5-correctifs-performance-n1-bug-index: backlog
+  11-6-revocation-session-5min: backlog
+  epic-11-retrospective: optional
+
+  # ─────────────────────────────────────────────────────────
+  # Epic 12: Découplage en Bounded Contexts (Phase 2) — le vrai chantier
+  # ─────────────────────────────────────────────────────────
+  epic-12: backlog
+  12-1-declarer-modules-spring-modulith: backlog
+  12-2a-api-publique-catalog: backlog
+  12-2b-api-publique-inventory: backlog
+  12-2c-api-publique-commerce: backlog
+  12-2d-api-publiques-identity-store-subscription: backlog
+  12-2e-api-reporting-messaging-sync-verify-bloquant: backlog
+  12-3-events-spring-modulith-registry: backlog
+  12-4-registre-events-schema-per-tenant: backlog
+  12-5-realignement-modules-inventory-payment-warehouse: backlog
+  12-6-regles-archunit-complementaires: backlog
+  12-7-sync-module-aware: backlog
+  epic-12-retrospective: optional
+
+  # ─────────────────────────────────────────────────────────
+  # Epic 13: Moteur de Modularité — le Socle (Phase 3)
+  # ─────────────────────────────────────────────────────────
+  epic-13: backlog
+  13-1-modele-donnees-registre-manifest-seed: backlog
+  13-2-module-registry: backlog
+  13-3-dependency-resolver: backlog
+  13-4-module-provisioner-flyway-par-module: backlog
+  13-5-entitlement-service-gating: backlog
+  13-6-capability-registry: backlog
+  13-7-extension-registry: backlog
+  13-8-module-lifecycle-service-api-admin: backlog
+  13-9-conversion-crm-reporting-keevomodule: backlog
+  13-10-passe-gating-entitlement-endpoints-existants: backlog
+  epic-13-retrospective: optional
+
+  # ─────────────────────────────────────────────────────────
+  # Epic 14: Module Pilote Facturation (Phase 4) — preuve de la vision
+  # ─────────────────────────────────────────────────────────
+  epic-14: backlog
+  14-1-module-facturation-autonome: backlog
+  14-2-generation-pdf-envoi-whatsapp: backlog
+  14-3-integration-crm-optionnelle-capability: backlog
+  14-4-bridge-pos-facturation-auto: backlog
+  14-5-point-extension-checkout-facturer: backlog
+  14-6-test-acceptation-vision-4-scenarios: backlog
+  epic-14-retrospective: optional
+
+  # ─────────────────────────────────────────────────────────
+  # Epic 15: Frontend Modulaire (Phase 5)
+  # ─────────────────────────────────────────────────────────
+  epic-15: backlog
+  15-1-entitlements-provider-flutter: backlog
+  15-2-routing-dynamique-go-router: backlog
+  15-3-extension-slot-lazy-loading: backlog
+  15-4a-workspace-melos-keevo-core: backlog
+  15-4b-migration-riverpod-3: backlog
+  15-4c-extraction-keevo-invoicing: backlog
+  15-5-ui-module-facturation: backlog
+  15-6-ecran-mes-modules-owner: backlog
+  15-7-dashboard-nextjs-ci-tests-epic9: backlog
+  15-8-mapping-features-flutter-modules-gating: backlog
+  epic-15-retrospective: optional
+
+  # ─────────────────────────────────────────────────────────
+  # Epic 16: Licences, Migration & Go-Live (Phase 6) — monétisation
+  # ─────────────────────────────────────────────────────────
+  epic-16: backlog
+  16-1-cycle-vie-licences-grace-temps-reel: backlog
+  16-2-a-la-carte-bundles: backlog
+  16-3-claim-jwt-modules-gating-offline: backlog
+  16-4-console-super-admin-modules: backlog
+  16-5-migration-backfill-tenant-modules: backlog
+  16-6-rgpd-suppression-compte-donnees: backlog
+  16-7-go-live-canary-runbook: backlog
+  16-8-profils-plan-plafonds-configurables: backlog
+  epic-16-retrospective: optional
+
+  # ─────────────────────────────────────────────────────────
+  # Epic 17: Complétion Fonctionnelle & Gating Produit (Phase 7)
+  # Referme les FR produit résiduels + features Premium. Dépend d'Epic 13.
+  # 17.1-17.4 remplacent les backlog d'origine 4-5, 4-6, 8-2, 8-4.
+  # ─────────────────────────────────────────────────────────
+  epic-17: backlog
+  17-1-annulation-correction-vente: backlog                  # FR90 — remplace 4-5
+  17-2-leaderboard-vendeurs: backlog                         # FR44 — remplace 4-6
+  17-3-suivi-activite-employes: backlog                      # FR67 — remplace 8-2
+  17-4-feedback-signalement-in-app: backlog                  # FR92 — remplace 8-4
+  17-5-sante-systeme-alertes-proactives-push-global: backlog # FR81/82/83 — remplace 9-5
+  17-6-exports-pdf-excel: backlog                            # FR55 (Premium)
+  17-7-notif-changement-prix-employe: backlog                # Premium (décision)
+  17-8-gating-config-rapports: backlog                       # FR60 (Free fixe / Premium)
+  17-9-regression-e2e-multi-surface: backlog
+  epic-17-retrospective: optional

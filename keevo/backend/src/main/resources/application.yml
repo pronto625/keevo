@@ -45,10 +45,16 @@ spring:
       max-file-size: 10MB
       max-request-size: 12MB
 
-  # Flyway — disabled. Public schema DDL is handled by ddl-auto=update.
+  # Flyway — Story 10.1: baseline migration for public schema.
+  # ddl-auto=update remains active (transition period — Story 10.2 will switch to validate).
   # Tenant schema DDL is handled programmatically by TenantSchemaProvisioner.
   flyway:
-    enabled: false
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    schemas: public
+    default-schema: public
+    locations: classpath:db/migration
 
   # Security
   security:

@@ -1408,7 +1408,7 @@ An earlier version implemented `Persistable<UUID>` with an `@Transient isNew` fl
 
 | Schema | Strategy | Config |
 |--------|------------|--------|
-| **Public** (`users`, `tenants`, `refresh_tokens`) | `ddl-auto=update` — Hibernate auto-creates/alters at startup | `spring.jpa.hibernate.ddl-auto: update` |
+| **Public** (all 28 tables) | **Flyway baseline** (`V1__baseline_public.sql`) + `ddl-auto=update` (transition) | `spring.flyway.enabled: true`, `baseline-on-migrate: true`, `baseline-version: 1`, `schemas: public`. Story 10.2 will switch `ddl-auto` to `validate`. |
 | **Tenant** (`kv_xxxxxx` — per-tenant, at registration) | `TenantSchemaProvisioner` — programmatic DDL via JDBC called by `TenantFactory` during registration | Creates tables + seeds roles/store |
 | **Tenant** (per-tenant, at every login) | `TenantSchemaSyncService` — diffs `information_schema` between `public` and tenant schema; creates missing tables/columns | Called by `JwtAuthFilter` on every authenticated request (no-op after first sync per JVM thanks to `ConcurrentHashMap` cache) |
 

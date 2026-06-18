@@ -1,5 +1,10 @@
 # Deferred Work
 
+## Deferred from: code review of story-10.1-flyway-baseline (2026-06-18)
+
+- **D1 — Test utilise conteneur PG existant au lieu de Testcontainers (AC5)** : `FlywayBaselineIntegrationTest` se connecte à un conteneur PostgreSQL existant via `@DynamicPropertySource` (localhost:5444) au lieu d'utiliser `@Container PostgreSQLContainer<?>`. Cause : Docker API version mismatch (1.32 vs 1.40+). Le test valide AC3/AC4 mais n'est pas CI-portable. Fichier : `FlywayBaselineIntegrationTest.java`.
+- **D2 — CHECK constraints non idempotentes dans V1** : Les CHECK constraints (inventory_sessions scope/status, products status, stock_movements movement_type, stock_transfers status, stores type) sont définies inline dans `CREATE TABLE IF NOT EXISTS` au lieu de blocs `DO $$ IF NOT EXISTS` séparés. Sur base existante (tables créées par Hibernate), les CHECK inline sont silencieusement ignorées. Risque faible : Hibernate gère ses propres CHECK et Story 10.2 migrera vers `ddl-auto=validate`. Fichier : `V1__baseline_public.sql`.
+
 ## Deferred from: code review of 9-1-gestion-des-tenants (2026-05-04)
 
 - **D1 — `TenantsPage` — `"use client"` direct sur la route page**: La spec (task 3.8) demande un Server Component shell qui render un Client Component `<TenantsClientPage />`. L'implémentation met `"use client"` directement sur `app/tenants/page.tsx`. Pattern fonctionnel mais diverge de la spec. Impact : perd les bénéfices SSR potentiels pour le shell. Corriger lors d'un refactor Next.js layout.
