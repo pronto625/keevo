@@ -60,3 +60,14 @@ jobs:
         with:
           name: test-results
           path: keevo/backend/target/surefire-reports/
+
+      - name: Upload architecture reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: architecture-reports
+          path: |
+            keevo/backend/target/spring-modulith-docs/
+            keevo/backend/target/modulith-violations.txt
+            keevo/backend/target/archunit-violations.txt
+          retention-days: 30
