@@ -68,6 +68,12 @@ C'est le **prérequis de tout** le programme de refonte modulaire. Sans gestion 
 - [x] [Review][Defer] Test utilise un conteneur PG existant au lieu de Testcontainers (déviation AC5) — Docker API version mismatch, pré-existant
 - [x] [Review][Defer] CHECK constraints non idempotentes (inline dans CREATE TABLE) — risque réel mais atténué par ddl-auto=update actif
 
+#### Review Findings — 2e passe (2026-06-19, bmad-code-review adversarial)
+
+- [x] [Review][Decision] `notification_cooldowns` absente de `V1__baseline_public.sql` — **RÉSOLU (option 1, Toor)** : table **tenant-only**, V1 reste fidèle au `public` réel. `TenantSchemaSyncService:86` la crée directement dans le tenant depuis `DDL_NOTIFICATION_COOLDOWNS` (pas via `LIKE public.*`), donc `public` n'en a pas besoin. Liste des Dev Notes corrigée (retrait de `notification_cooldowns`). Aucun changement de code requis.
+- [x] [Review][Defer] `UserSyncStateDdlInitializer` duplique la table `user_sync_state` désormais possédée par V1 [sync/sync/adapter/out/persistence/UserSyncStateDdlInitializer.java] — deux sources de vérité (initializer programmatique à `ApplicationReadyEvent` + V1). Pré-existant ; à retirer une fois Flyway propriétaire confirmé (post-10.2).
+- [x] [Review][Defer] Override `docker-java` 3.4.1 (api + transport-zerodep) face à Testcontainers 1.20.4 [pom.xml:17-29] — risque de version-skew si `docker-java-core` reste sur la version de Testcontainers ; vérifier `mvn dependency:tree`. Lié à la dette Testcontainers déjà déférée.
+
 ## Dev Notes
 
 ### 🔴 Le piège n°1 à éviter (lis ceci avant tout)
@@ -76,7 +82,7 @@ C'est le **prérequis de tout** le programme de refonte modulaire. Sans gestion 
 ➡️ **Conséquence : la baseline `V1` DOIT contenir TOUT le schéma `public` (les ≈27 tables), pas seulement les 4 tables globales.** Si tu ne baselines que `users/tenants/user_tenant_memberships/refresh_tokens`, tu casses le mécanisme de copie tenant (les `LIKE public.t` échoueront sur base vierge).
 
 **Tables présentes dans `public` à inclure dans `V1`** (vérifiées via `@Table` sur les entités JPA) :
-`users`, `tenants`, `user_tenant_memberships`, `refresh_tokens` (globales) **+** les tables-template : `audit_log`, `device_tokens`, `notification_cooldowns`, `draft_notifications`, `categories`, `products`, `product_suppliers`, `clients`, `suppliers`, `stores`, `subscriptions`, `tenant_preferences`, `stock_levels`, `stock_movements`, `stock_transfers`, `sales`, `sale_items`, `day_closures`, `employees`, `inventory_sessions`, `inventory_counts`, `reports`, `sync_operations_log`, `sync_conflicts_log` (+ `roles`, `user_roles`, `sync_error_log` créées par `TenantSchemaProvisioner` — vérifier leur présence dans `public` et les inclure si présentes).
+`users`, `tenants`, `user_tenant_memberships`, `refresh_tokens` (globales) **+** les tables-template : `audit_log`, `device_tokens`, `draft_notifications`, `categories`, `products`, `product_suppliers`, `clients`, `suppliers`, `stores`, `subscriptions`, `tenant_preferences`, `stock_levels`, `stock_movements`, `stock_transfers`, `sales`, `sale_items`, `day_closures`, `employees`, `inventory_sessions`, `inventory_counts`, `reports`, `sync_operations_log`, `sync_conflicts_log` (+ `roles`, `user_roles`, `sync_error_log` créées par `TenantSchemaProvisioner` — vérifier leur présence dans `public` et les inclure si présentes).
 > ⚠️ La source de vérité reste le `pg_dump` du `public` réel — la liste ci-dessus sert de contrôle d'exhaustivité, pas de substitut.
 
 ### Fichiers touchés

@@ -34,7 +34,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-03-06
-last_updated: 2026-06-18  # + Epics 10-17 refonte (66 stories) ; gap-analysis appliqué (12-7,13-10,15-8,Epic 17)
+last_updated: 2026-06-19  # + Epics 10-17 refonte (66 stories) ; gap-analysis appliqué (12-7,13-10,15-8,Epic 17) ; 10-2 → done ; 10-3 → ready-for-dev ; 10-4 → ready-for-dev ; 10-5 → review ; 10-6 → review
 project: Keevo
 project_key: NOKEY
 tracking_system: file-system
@@ -199,12 +199,12 @@ development_status:
   # Epic 10: Préparation & Garde-fous (Phase 0) — BLOQUANT
   # ─────────────────────────────────────────────────────────
   epic-10: in-progress
-  10-1-flyway-baseline-schema-public: done     # 2026-06-15 — story créée (bmad-create-story) | 2026-06-17 implementation complete | 2026-06-18 code review: 3 patches applied (baseline-version→0, ResultSet leak, @AfterAll cleanup), 2 deferred
-  10-2-migrations-versionnees-fin-ddl-auto: backlog
-  10-3-externalisation-secrets-fail-fast: backlog
-  10-4-backups-postgresql-restauration: backlog
-  10-5-environnement-staging: backlog
-  10-6-archunit-modulith-verify-baseline: backlog
+  10-1-flyway-baseline-schema-public: done     # 2026-06-15 — story créée (bmad-create-story) | 2026-06-17 implementation complete | 2026-06-18 code review: 3 patches applied (baseline-version→0, ResultSet leak, @AfterAll cleanup), 2 deferred | 2026-06-19 code review 2e passe: 1 decision résolue (notification_cooldowns = tenant-only, spec corrigée), 2 nouveaux defers (UserSyncStateDdlInitializer dup, docker-java skew), 0 patch — reste done
+  10-2-migrations-versionnees-fin-ddl-auto: done     # 2026-06-19 — code review PASSED | P1+P2: flyway_schema_history via Java API + description assertion | P3: architecture.md tree comment fixed | 5 deferred (pre-existing)
+  10-3-externalisation-secrets-fail-fast: in-progress
+  10-4-backups-postgresql-restauration: review     # 2026-06-19 — story créée (bmad-create-story) | 2026-06-19 implementation complete | script backup-db.sh (docker-exec+direct), systemd timer, BACKUP_RESTORE.md, DEPLOYMENT_CHECKLIST §7, deploy-backend.yml backup step, smoke test validated (303 schemas, 29 public tables)
+  10-5-environnement-staging: review     # 2026-06-19 — story créée (bmad-create-story) | implementation complete | application-staging.yml (ddl-auto=validate, no require-ssl), deploy-staging.yml (Template Method, staging-latest tag, ports 8080/8443, keevo_staging_*, postgres_staging_data), STAGING.md (8 sections), BACKUP_RESTORE.md updated, branche staging créée
+  10-6-archunit-modulith-verify-baseline: review     # 2026-06-19 — story créée (bmad-create-story) | 2026-06-19 implementation complete | Spring Modulith 1.4.0 verify() + ArchUnit 1.3.0 baseline (warning mode) | 11 modules detected (admin,catalog,commerce,identity,inventory,messaging,reporting,shared,store,subscription,sync) | 3/3 tests GREEN | modulith-violations.txt (cycles catalog↔identity), archunit-violations.txt (1 rule: @Entity in shared) | spring-modulith-docs/ 25 files (.adoc+.puml) | CI artifact upload added
   epic-10-retrospective: optional
 
   # ─────────────────────────────────────────────────────────
