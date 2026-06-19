@@ -248,6 +248,45 @@ jobs:
             echo "✓ Deploy complete."
             BACKEND_IMAGE="${IMAGE_REF}" docker compose -f docker-compose.prod.yml ps
 
+      # Checkout so the committed backup scripts/units can be copied as-is
+      # (single source of truth — no inline duplication that drifts).
+      - name: Checkout (backup scripts)
+        uses: actions/checkout@v4
+
+      - name: Copy backup scripts to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_SSH_HOST }}
+          username: ${{ secrets.DEPLOY_SSH_USER }}
+          key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.DEPLOY_SSH_PORT || '22' }}
+          source: "keevo/backend/scripts/backup-db.sh,keevo/backend/scripts/keevo-backup.service,keevo/backend/scripts/keevo-backup.timer"
+          target: "keevo/scripts"
+          strip_components: 3
+
+      - name: Install systemd backup timer
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_SSH_HOST }}
+          username: ${{ secrets.DEPLOY_SSH_USER }}
+          key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.DEPLOY_SSH_PORT || '22' }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            DEPLOY_DIR="${HOME}/keevo"
+            chmod +x "${DEPLOY_DIR}/scripts/backup-db.sh"
+
+            # Install the committed systemd units (single source of truth).
+            sudo cp "${DEPLOY_DIR}/scripts/keevo-backup.service" /etc/systemd/system/
+            sudo cp "${DEPLOY_DIR}/scripts/keevo-backup.timer" /etc/systemd/system/
+            sudo systemctl daemon-reload
+            sudo systemctl enable keevo-backup.timer
+            sudo systemctl start keevo-backup.timer
+
+            echo "✓ Backup timer installed (from committed scripts)."
+            systemctl status keevo-backup.timer --no-pager || true
+
 # ─── Required GitHub Secrets ──────────────────────────────────────────────────
 # GHCR_PAT                — GitHub PAT, scope: read:packages
 # DEPLOY_SSH_HOST         — server IP / hostname  (44.223.221.74)
@@ -261,3 +300,8 @@ jobs:
 #                                    (POSTGRES_HOST is overridden by compose → "postgres")
 #                                    + ACME_EMAIL=your@email.com  (for Let's Encrypt)
 #   firebase-credentials.json     → Firebase service-account key
+#   .env.backup                   → backup env vars (mode 600):
+#                                    POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
+#                                    AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION
+#                                    BACKUP_S3_BUCKET, BACKUP_S3_PREFIX
+#                                    (see docs/DEPLOYMENT_CHECKLIST.md § Sauvegardes)

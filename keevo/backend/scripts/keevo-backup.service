@@ -1,0 +1,15 @@
+[Unit]
+Description=Keevo PostgreSQL Backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/home/ubuntu/keevo/.env.backup
+ExecStart=/home/ubuntu/keevo/scripts/backup-db.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=keevo-backup
+
+[Install]
+WantedBy=multi-user.target

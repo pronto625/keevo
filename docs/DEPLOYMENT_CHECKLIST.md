@@ -202,7 +202,58 @@ curl -vI https://keevo.bookandgo.cloud 2>&1 | grep "issuer\|subject"
 
 ---
 
-## 7. Récapitulatif GitHub Secrets requis
+## 7. Sauvegardes PostgreSQL
+
+Le déploiement installe automatiquement le script de backup et le systemd timer via `deploy-backend.yml`.
+
+### 7.1 Variables d'environnement backup
+
+Créer `/home/ubuntu/keevo/.env.backup` (mode `600`) sur le serveur :
+
+```env
+POSTGRES_USER=keevo
+POSTGRES_PASSWORD=<mot_de_passe_prod>
+POSTGRES_DB=keevo_prod
+
+# AWS (pour upload S3)
+AWS_ACCESS_KEY_ID=<aws_key>
+AWS_SECRET_ACCESS_KEY=<aws_secret>
+AWS_DEFAULT_REGION=eu-west-1
+
+# Bucket S3
+BACKUP_S3_BUCKET=keevo-backups-prod
+BACKUP_S3_PREFIX=keevo/
+```
+
+```bash
+sudo chmod 600 /home/ubuntu/keevo/.env.backup
+sudo chown ubuntu:ubuntu /home/ubuntu/keevo/.env.backup
+```
+
+### 7.2 Vérification post-déploiement
+
+```bash
+# 1. Le timer systemd est actif
+systemctl status keevo-backup.timer
+# Attendu : Active: active (waiting)
+
+# 2. Prochaine exécution planifiée
+systemctl list-timers keevo-backup.timer
+# Attendu : NEXT = prochain 02:00 UTC
+
+# 3. Test manuel immédiat
+sudo systemctl start keevo-backup.service
+journalctl -u keevo-backup.service --since "1 minute ago"
+# Attendu : [BACKUP][INFO] Backup complete: keevo_backup_YYYY-MM-DDTHH-MM-SSZ.dump
+```
+
+### 7.3 Politique de cycle de vie S3
+
+Appliquer la Lifecycle Policy sur le bucket (voir `BACKUP_RESTORE.md` §8 pour la configuration JSON).
+
+---
+
+## 8. Récapitulatif GitHub Secrets requis
 
 | Secret | Obligatoire | Utilisé par |
 |---|---|---|
