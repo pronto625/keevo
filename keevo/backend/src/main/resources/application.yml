@@ -84,6 +84,8 @@ keevo:
     refresh-token-expiry-days: 180  # Story 8.6 AC8 — 6 months
   admin:
     phone: ${ADMIN_PHONE:+237600000000}
+    # Story 10.3 (AC2): dev keeps the well-known default Admin@1234! so a local admin is usable.
+    # In prod/staging, ProdSecretsValidator rejects this default (and empty/blank) at boot — fail-fast.
     password: ${ADMIN_PASSWORD:Admin@1234!}
   fcm:
     enabled: ${KEEVO_FCM_ENABLED:false}

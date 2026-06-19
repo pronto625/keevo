@@ -19,6 +19,9 @@ target/
 # ─── Firebase service-account key ─────────────────────────────────────────────
 *.json
 
+# ─── JWT PEM keys — mount as volume at runtime, never bake into image ─────────
+**/keys/*.pem
+
 # ─── OS artefacts ─────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db

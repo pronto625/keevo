@@ -42,7 +42,8 @@ public class FirebaseInitializer implements InitializingBean {
             if (FirebaseApp.getApps().isEmpty()) {
                 String credPath = properties.credentialsPath();
                 if (credPath == null || credPath.isBlank()) {
-                    log.warn("[FCM] Firebase initialization failed — falling back to LoggingNotificationAdapter: credentials path is empty");
+                    log.error("[FailFast] GOOGLE_APPLICATION_CREDENTIALS is not set — FCM will be disabled. "
+                            + "Set the env var to the path of the Firebase service account JSON.");
                     return;
                 }
 
