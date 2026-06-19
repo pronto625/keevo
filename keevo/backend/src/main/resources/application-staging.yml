@@ -1,0 +1,25 @@
+# Staging profile — clone of prod, without require-ssl
+# Traefik staging may not have a valid TLS cert (FQDN/DNS not yet configured).
+# Leaving require-ssl absent lets the app accept HTTP + HTTPS depending on Traefik config.
+
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+
+  jpa:
+    show-sql: false
+    hibernate:
+      # Same rule as prod — Flyway manages schema, Hibernate only validates.
+      ddl-auto: validate
+
+logging:
+  level:
+    root: WARN
+    com.keevo: INFO
+
+server:
+  tomcat:
+    max-threads: 30
+    min-spare-threads: 5
+    accept-count: 50
