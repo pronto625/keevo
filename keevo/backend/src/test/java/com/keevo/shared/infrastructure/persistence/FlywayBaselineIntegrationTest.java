@@ -2,6 +2,7 @@ package com.keevo.shared.infrastructure.persistence;
 
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.MigrationInfo;
+import org.flywaydb.core.api.MigrationState;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -156,5 +157,48 @@ class FlywayBaselineIntegrationTest {
                 }
             }
         }
+    }
+
+    // ── V2 migration tests (Story 10.2) ─────────────────────────────────────────
+
+    @Test
+    void v2DropUsersTenantIdIsApplied() throws Exception {
+        // AC4: V2 migration drops the dangling tenant_id column from public.users
+        // AC5: On a fresh DB, V1 creates users with tenant_id, then V2 drops it
+
+        // Verify tenant_id column does NOT exist in public.users
+        try (Connection conn = dataSource.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(
+                     "SELECT COUNT(*) FROM information_schema.columns " +
+                     "WHERE table_schema = 'public' AND table_name = 'users' " +
+                     "AND column_name = 'tenant_id'")) {
+            rs.next();
+            assertThat(rs.getInt(1))
+                    .as("Column 'tenant_id' should NOT exist in public.users after V2 migration")
+                    .isZero();
+        }
+
+        // Verify V2 is recorded with success=true and correct description (AC4)
+        MigrationInfo v2Migration = java.util.Arrays.stream(flyway.info().applied())
+                .filter(info -> info.getVersion() != null && "2".equals(info.getVersion().getVersion()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("V2 migration not found in applied migrations"));
+
+        assertThat(v2Migration.getState())
+                .as("V2 migration should be in SUCCESS state")
+                .isEqualTo(MigrationState.SUCCESS);
+        assertThat(v2Migration.getDescription())
+                .as("V2 migration description should match filename (AC4)")
+                .containsIgnoringCase("drop users tenant id");
+    }
+
+    @Test
+    void v2IsIdempotent() {
+        // AC6: Re-running migrate after V2 is already applied should be a no-op
+        int migrationsExecuted = flyway.migrate().migrationsExecuted;
+        assertThat(migrationsExecuted)
+                .as("Re-running migrate should execute 0 migrations (V2 already applied)")
+                .isZero();
     }
 }

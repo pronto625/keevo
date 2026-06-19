@@ -21,8 +21,8 @@ spring:
       maximum-pool-size: 10
       minimum-idle: 2
 
-  # JPA — tables are created/updated automatically from JPA entity definitions.
-  # No SQL migration files needed for the public schema.
+  # JPA — schema is managed by Flyway versioned migrations (db/migration/V{n}__*.sql).
+  # ddl-auto=validate ensures Hibernate checks entity↔DB consistency at boot without modifying schema.
   jpa:
     # Disable Open-EntityManager-in-View (OEMIV).
     # With OEMIV enabled, Spring binds an EntityManager (with the caller's TenantContext = "public")
@@ -32,7 +32,7 @@ spring:
     # EntityManager that reads the correct TenantContext at session-creation time.
     open-in-view: false
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: false
     properties:
       hibernate:
@@ -46,7 +46,7 @@ spring:
       max-request-size: 12MB
 
   # Flyway — Story 10.1: baseline migration for public schema.
-  # ddl-auto=update remains active (transition period — Story 10.2 will switch to validate).
+  # ddl-auto=validate active since Story 10.2 (no more transition).
   # Tenant schema DDL is handled programmatically by TenantSchemaProvisioner.
   flyway:
     enabled: true

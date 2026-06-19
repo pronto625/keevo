@@ -5,6 +5,9 @@ spring:
 
   jpa:
     show-sql: false
+    hibernate:
+      # Explicit validate in prod — schema changes MUST go through Flyway migrations.
+      ddl-auto: validate
 
   security:
     require-ssl: true

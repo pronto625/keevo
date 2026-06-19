@@ -1060,7 +1060,7 @@ backend/
 │       ├── tenant/                    # MODULE: Tenant management
 │       └── platform/                  # MODULE: Platform analytics & health
 ├── src/main/resources/
-│   ├── application.yml                # ddl-auto=update, flyway.enabled=false
+│   ├── application.yml                # ddl-auto=validate, flyway.enabled=true
 │   ├── application-dev.yml
 │   ├── application-prod.yml
 │   └── keys/                          # RSA keypair for JWT
@@ -1287,13 +1287,13 @@ public class ProductMcpTools {
 ## Backend Persistence Pattern — Implementation Reference
 
 > **This is the mandatory pattern for every entity in the project.**
-> Tables are created automatically from JPA entity definitions. No SQL migration files.
+> Schema changes go through Flyway versioned migrations. `ddl-auto=validate` detects drift at boot.
 
 ### Core Principles
 
 | Principle | Rule |
 |-----------|------|
-| **No manual SQL** | `ddl-auto=update` creates/alters public schema tables from JPA entities. No `.sql` files, no Flyway. |
+| **Flyway versioned migrations** | Every schema change in `db/migration/V{n}__*.sql`. `ddl-auto=validate` detects drift at boot. No implicit schema changes. |
 | **Clean separation** | Domain model, JPA entity, Spring Data interface, and adapter are 4 distinct classes in 4 distinct sub-packages. |
 | **Domain isolation** | `domain/model/` and `domain/port/` are pure Java — zero Spring or JPA imports. |
 | **Infrastructure isolation** | `@Entity`, `@Repository`, `@Component` live exclusively in `adapter/out/persistence/`. |
@@ -1324,7 +1324,7 @@ public interface UserRepository {
 
 ### Layer 2 — JPA Entity (`adapter/out/persistence/entity/`)
 
-Maps the domain concept to a DB table. **Hibernate auto-creates the table from this class.**
+Maps the domain concept to a DB table. **Table DDL is managed by Flyway migrations; Hibernate validates at boot.**
 
 ```java
 @Entity
@@ -1334,8 +1334,8 @@ public class UserJpaEntity extends JpaBaseEntity {   // JpaBaseEntity handles id
     @Column(name = "phone_number", unique = true, nullable = false, length = 20)
     private String phoneNumber;
 
-    @Column(name = "tenant_id", nullable = false)
-    private UUID tenantId;
+    @Column(name = "password_hash", nullable = false)
+    private String passwordHash;
 
     // ... other columns
 
@@ -1408,14 +1408,14 @@ An earlier version implemented `Persistable<UUID>` with an `@Transient isNew` fl
 
 | Schema | Strategy | Config |
 |--------|------------|--------|
-| **Public** (all 28 tables) | **Flyway baseline** (`V1__baseline_public.sql`) + `ddl-auto=update` (transition) | `spring.flyway.enabled: true`, `baseline-on-migrate: true`, `baseline-version: 1`, `schemas: public`. Story 10.2 will switch `ddl-auto` to `validate`. |
+| **Public** (all 28 tables) | **Flyway versioned migrations** + `ddl-auto=validate` | `spring.flyway.enabled: true`, `baseline-on-migrate: true`, `baseline-version: 0`, `schemas: public`. Every schema change requires a `V{n}__*.sql` migration file. Hibernate validates entity↔DB consistency at boot. (Story 10.2) |
 | **Tenant** (`kv_xxxxxx` — per-tenant, at registration) | `TenantSchemaProvisioner` — programmatic DDL via JDBC called by `TenantFactory` during registration | Creates tables + seeds roles/store |
 | **Tenant** (per-tenant, at every login) | `TenantSchemaSyncService` — diffs `information_schema` between `public` and tenant schema; creates missing tables/columns | Called by `JwtAuthFilter` on every authenticated request (no-op after first sync per JVM thanks to `ConcurrentHashMap` cache) |
 
 `TenantSchemaProvisioner` creates: `users`, `subscriptions`, `roles`, `user_roles`, `stores`, `categories`, `tenant_preferences` + seeds OWNER/EMPLOYEE roles, Free subscription, placeholder store.
 
 **`TenantSchemaSyncService` design:**
-- **Source of truth**: `public` schema (kept current by `ddl-auto=update` at startup)
+- **Source of truth**: `public` schema (kept current by Flyway versioned migrations, validated at boot by `ddl-auto=validate`)
 - **Missing table**: `CREATE TABLE IF NOT EXISTS "kv_xxx"."t" (LIKE public."t" INCLUDING ALL)` — copies column defs, NOT NULL, CHECK constraints, defaults (gen_random_uuid(), NOW()), indexes, storage settings. Foreign keys intentionally excluded.
 - **Missing column**: `ALTER TABLE "kv_xxx"."t" ADD COLUMN IF NOT EXISTS <col_def>` reconstructed from `information_schema.columns`
 - **Cache**: `ConcurrentHashMap<String, Boolean>` — first sync per schema costs 1 transaction; subsequent requests are ~nanosecond hashmap lookup
@@ -1485,9 +1485,8 @@ public.users
     failed_attempts INT DEFAULT 0
     locked_until    TIMESTAMPTZ
     created_at      TIMESTAMPTZ
-    -- NOTE: tenant_id column still physically exists (dangling from Story 1.2).
-    -- It is NOT mapped by Hibernate — completely ignored. Will be removed in a
-    -- future Flyway migration when proper migration strategy is adopted.
+    -- NOTE: tenant_id column removed by Flyway V2 migration (Story 10.2).
+    -- Was dangling from Story 1.2, never mapped by Hibernate since Story 1.7.
 
 public.user_tenant_memberships
     id          UUID PK DEFAULT gen_random_uuid()
@@ -1648,15 +1647,31 @@ public.tenants: { id: 00000000-..., code: KV-ADMIN, schemaName: "public" }
 | Spring Data interface | `{Aggregate}SpringRepository` | `UserSpringRepository` |
 | Adapter | `{Aggregate}RepositoryAdapter` | `UserRepositoryAdapter` |
 
+### Workflow — Adding a Column to an Existing Entity
+
+1. Write the Flyway migration: `src/main/resources/db/migration/V{n}__add_{col}_to_{table}.sql`
+   ```sql
+   ALTER TABLE products ADD COLUMN IF NOT EXISTS sku VARCHAR(50);
+   ```
+2. Add the `@Column` to the JPA entity:
+   ```java
+   @Column(name = "sku", length = 50)
+   private String sku;
+   ```
+3. Start the app → Flyway applies `V{n}` → Hibernate validates → boot OK.
+
+**JAMAIS**: ajouter `@Column` sans migration → `SchemaManagementException` au boot.
+
 ### Checklist — Adding a New Entity
 
+- [ ] Write Flyway migration `V{n}__create_{table}.sql` in `db/migration/`
 - [ ] `domain/model/{Aggregate}.java` — pure Java, no annotations
 - [ ] `domain/port/out/{Aggregate}Repository.java` — pure Java interface
 - [ ] `adapter/out/persistence/entity/{Aggregate}JpaEntity.java` — extends `JpaBaseEntity`, `@Entity @Table`
 - [ ] `adapter/out/persistence/jpa/{Aggregate}SpringRepository.java` — `extends JpaRepository<..., UUID>`
 - [ ] `adapter/out/persistence/impl/{Aggregate}RepositoryAdapter.java` — `@Component implements {Aggregate}Repository`
 - [ ] Inject the **domain port** (not the adapter) into the application service
-- [ ] Start backend → Hibernate auto-creates the table
+- [ ] Start backend → Flyway applies migration → Hibernate validates
 
 ### Forbidden Anti-Patterns
 
@@ -1665,8 +1680,8 @@ public.tenants: { id: 00000000-..., code: KV-ADMIN, schemaName: "public" }
 | Injecting `UserSpringRepository` into a service | Inject `UserRepository` (domain port) |
 | Using `UserJpaEntity` in domain or application layer | Use `User` (domain model) |
 | Putting `@Entity` on a domain model | Create a separate `UserJpaEntity` |
-| Writing `.sql` files for public schema tables | Add `@Column` to the JPA entity |
+| Adding `@Column` to a JPA entity without a matching Flyway migration | Write `V{n}__*.sql` migration + add `@Column` to the JPA entity |
 | Using `@GeneratedValue` for UUID | Set UUID from domain via `setId()` in `JpaBaseEntity` |
 | Business logic in `toEntity()` / `toDomain()` | Pure field translation only |
-| Creating Flyway migrations for new columns | Add the `@Column` field; `ddl-auto=update` handles it |
+| Skipping Flyway migration and relying on `ddl-auto=update` | Every column change requires a `V{n}__*.sql` migration file |
 | Implementing `Persistable<UUID>` in `JpaBaseEntity` | Do NOT add — causes `persist()` on existing entities → HTTP 500. Use default `merge()` strategy. |
