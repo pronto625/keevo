@@ -84,11 +84,16 @@ public class SecurityConfig {
                                 (req, res, e) -> res.sendError(HttpStatus.FORBIDDEN.value(), "Access Denied")))
 
                 // ── Authorization rules ────────────────────────────────────────
+                // S3 defense-in-depth: /api/v1/admin/** requires SUPER_ADMIN at the
+                // filter-chain level so any future admin endpoint is protected by default
+                // even if it forgets the per-method requireSuperAdmin() guard (AC2).
+                // Controllers still keep requireSuperAdmin() as a second layer.
                 .authorizeHttpRequests(auth -> auth
                         .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.FORWARD,
                                 jakarta.servlet.DispatcherType.ERROR)
                         .permitAll()
                         .requestMatchers(PUBLIC_PATHS).permitAll()
+                        .requestMatchers("/api/v1/admin/**").hasRole("SUPER_ADMIN")
                         .anyRequest().authenticated())
 
                 // ── JWT filter: runs before Spring's authentication filter ────
