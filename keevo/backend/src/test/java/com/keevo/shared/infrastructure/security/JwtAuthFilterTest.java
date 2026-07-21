@@ -18,7 +18,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
+import org.springframework.jdbc.core.JdbcTemplate;
+
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.*;
@@ -37,12 +41,23 @@ class JwtAuthFilterTest {
     @Mock JwtTokenProvider jwtTokenProvider;
     @Mock FilterChain filterChain;
     @Mock TenantSchemaSyncService tenantSchemaSyncService;
+    @Mock JdbcTemplate jdbcTemplate;
 
     private JwtAuthFilter filter;
 
     @BeforeEach
     void setUp() {
         filter = new JwtAuthFilter(jwtTokenProvider, new ObjectMapper(), tenantSchemaSyncService, null);
+    }
+
+    /**
+     * Constructs a filter with a mocked {@link JdbcTemplate} for EMPLOYEE-branch tests
+     * that exercise the {@code jdbcTemplate.queryForMap} call. OWNER tests use the
+     * default {@link #setUp()} (jdbcTemplate=null) and are unaffected.
+     */
+    private JwtAuthFilter filterWithJdbc() {
+        return new JwtAuthFilter(jwtTokenProvider, new ObjectMapper(),
+                tenantSchemaSyncService, jdbcTemplate);
     }
 
     // ── Missing Authorization header ───────────────────────────────────────
@@ -257,6 +272,64 @@ class JwtAuthFilterTest {
 
         filter.doFilterInternal(request, response, filterChain);
 
+        verify(filterChain).doFilter(request, response);
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    // ── EMPLOYEE tenantId validation (Story 12.5 — AC3/AC4) ─────────────────
+
+    @Test
+    @DisplayName("EMPLOYEE token with invalid tenantId format → 401 TOKEN_INVALID, no SQL call")
+    void shouldRejectTokenWithInvalidTenantIdFormat() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/products");
+        request.addHeader("Authorization", "Bearer emp.invalid.jwt.token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        UUID userId = UUID.randomUUID();
+        Claims claims = buildClaims(userId, "kv_evil\"; DROP TABLE--", "EMPLOYEE");
+        when(jwtTokenProvider.parseToken("emp.invalid.jwt.token")).thenReturn(claims);
+        when(jwtTokenProvider.extractScope(claims)).thenReturn("access");
+        when(jwtTokenProvider.extractTenantId(claims)).thenReturn("kv_evil\"; DROP TABLE--");
+        when(jwtTokenProvider.extractRole(claims)).thenReturn("EMPLOYEE");
+        when(jwtTokenProvider.extractUserId(claims)).thenReturn(userId);
+        when(jwtTokenProvider.extractTenantStatus(claims)).thenReturn("ACTIVE");
+
+        filterWithJdbc().doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("TOKEN_INVALID");
+        verify(filterChain, never()).doFilter(any(), any());
+        verify(jdbcTemplate, never()).queryForMap(anyString(), any());
+    }
+
+    @Test
+    @DisplayName("EMPLOYEE token with valid kv_xxxxxx tenantId → 200, SQL uses validated schema")
+    void shouldAcceptValidTenantId() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/products");
+        request.addHeader("Authorization", "Bearer emp.valid.jwt.token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        UUID userId = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+        Claims claims = buildClaims(userId, "kv_abc123", "EMPLOYEE");
+        when(jwtTokenProvider.parseToken("emp.valid.jwt.token")).thenReturn(claims);
+        when(jwtTokenProvider.extractScope(claims)).thenReturn("access");
+        when(jwtTokenProvider.extractTenantId(claims)).thenReturn("kv_abc123");
+        when(jwtTokenProvider.extractRole(claims)).thenReturn("EMPLOYEE");
+        when(jwtTokenProvider.extractUserId(claims)).thenReturn(userId);
+        when(jwtTokenProvider.extractTenantStatus(claims)).thenReturn("ACTIVE");
+        when(jwtTokenProvider.extractStoreId(claims)).thenReturn(storeId);
+
+        Map<String, Object> empRow = new HashMap<>();
+        empRow.put("store_id", storeId);
+        empRow.put("status", "ACTIVE");
+        empRow.put("password_change_required", false);
+        when(jdbcTemplate.queryForMap(contains("\"kv_abc123\"."), eq(userId)))
+                .thenReturn(empRow);
+
+        filterWithJdbc().doFilterInternal(request, response, filterChain);
+
+        verify(jdbcTemplate).queryForMap(contains("\"kv_abc123\"."), eq(userId));
         verify(filterChain).doFilter(request, response);
         assertThat(response.getStatus()).isEqualTo(200);
     }

@@ -2,6 +2,7 @@ package com.keevo.shared.infrastructure.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaSyncService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
@@ -143,10 +144,23 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
             // Story 3.5 — EMPLOYEE runtime guards (DB-backed, runs AFTER TenantContext is set).
             if ("EMPLOYEE".equals(role)) {
+                // S5 / ARCH18 (B-HIGH-6): validate tenantId before raw-JDBC interpolation.
+                // The connection provider's search_path gate is bypassed here — JdbcTemplate
+                // uses a fully-qualified "schema"."table" name, so the schema portion MUST be
+                // validated. RS256 signing mitigates forgery but defense-in-depth requires
+                // that no unvalidated claim ever enters a SQL string.
+                String schema;
+                try {
+                    schema = TenantSchema.validate(tenantId);
+                } catch (IllegalArgumentException ex) {
+                    writeError(response, "TOKEN_INVALID");
+                    return;
+                }
+
                 try {
                     Map<String, Object> empRow = jdbcTemplate.queryForMap(
                             "SELECT store_id, status, password_change_required FROM \""
-                            + tenantId + "\".employees WHERE user_id = ? LIMIT 1", userId);
+                            + schema + "\".employees WHERE user_id = ? LIMIT 1", userId);
 
                     if ("INACTIVE".equals(empRow.get("status"))) {
                         writeError(response, "ACCOUNT_INACTIVE");

@@ -9,6 +9,18 @@
 
 > Tous pour la **phase d'enforcement** (Epic 12.2e / Story 12.6) — la baseline warning-mode est correcte telle quelle.
 
+## Deferred from: code review of v1s-12-5-tenantid-validate-jwtfilter (2026-07-21)
+
+- **[v1s-12-5] D3 — OWNER + `tenantId` invalide → 500 au lieu de 401** : `JwtAuthFilter.java:130,190` — les tokens OWNER avec `tenantId` invalide peuplent `TenantContext` puis échouent sur `public` schema → 500. Intentionnel (Option B validation globale différée à la refonte).
+- **[v1s-12-5] D4 — `jdbcTemplate=null` dans `setUp()`** : `JwtAuthFilterTest.java:50` — le filtre par défaut a `jdbcTemplate=null`. Risque NPE si un futur test EMPLOYEE utilise `filter` au lieu de `filterWithJdbc()`. Helper documenté.
+- **[v1s-12-5] D5 — Message d'exception avec input attacker-controlled** : `TenantSchema.java:65` — concaténation du claim JWT brut dans le message. Non exploitable actuellement (catch + discard). Risque si loggé ailleurs sans assainissement.
+- **[v1s-12-5] D6 — Pas de test EMPLOYEE INACTIVE avec `validate()`** : `JwtAuthFilterTest.java` — seul ACTIVE est couvert par `shouldAcceptValidTenantId`. Chemin INACTIVE pré-existant inchangé.
+- **[v1s-12-5] D7 — 4 fichiers dupliquants non migrés vers `TenantSchema`** : `SchemaAwareMultiTenantConnectionProvider`, `TenantSchemaSyncService`, `TenantSchemaProvisioner` — explicitement hors-scope V1-stab. La refonte les fera converger.
+- **[v1s-12-5] D8 — Pas de test `tenantId=null` EMPLOYEE** : `JwtAuthFilterTest.java` — redondant avec AC3 (même code path `IllegalArgumentException` → 401).
+- **[v1s-12-5] D9 — Pas de test `tenantId=""` EMPLOYEE** : `JwtAuthFilterTest.java` — redondant avec AC3.
+- **[v1s-12-5] D10 — `IncorrectResultSizeDataAccessException` (>1 row) → 500** : `JwtAuthFilter.java:155,183` — non catché. Pré-existant, >1 employé pour même `user_id` = bug d'intégrité données.
+- **[v1s-12-5] D11 — `String.matches()` au lieu de `Pattern.compile()`** : `TenantSchemaSyncService.java:116` — pré-existant, impact négligeable (1× par tenant par JVM, caché).
+
 - **[10-6] Convertir la baseline en ratchet à l'enforcement** : `verify()` + règles ArchUnit n'assertent rien (warning mode voulu). À l'activation, asserter le set de violations connues → échec sur toute NOUVELLE violation seulement.
 - **[10-6] Corriger `allowedDependencies` (cible vs réel)** : `identity`/`messaging` nus mais importent plusieurs modules ; `catalog` sans `messaging` ; `store` sans `subscription`. Aligner avant enforcement.
 - **[10-6] Wrapper `detectModulesAndGenerateDocumentation()` en try/catch** : sinon un modèle invalide fait échouer le build malgré l'intention warning-mode.
