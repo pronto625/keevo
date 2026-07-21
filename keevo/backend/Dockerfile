@@ -21,7 +21,7 @@ FROM eclipse-temurin:21-jre-alpine AS runtime
 WORKDIR /app
 
 # Non-root user — principle of least privilege (OWASP A05).
-RUN addgroup -S keevo && adduser -S keevo -G keevo
+RUN addgroup -S -g 1001 keevo && adduser -S -u 1001 -G keevo keevo
 
 COPY --from=builder /app/target/*.jar app.jar
 RUN chown keevo:keevo app.jar

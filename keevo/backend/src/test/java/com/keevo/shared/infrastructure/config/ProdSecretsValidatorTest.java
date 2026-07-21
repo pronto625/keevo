@@ -8,6 +8,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -34,6 +36,10 @@ class ProdSecretsValidatorTest {
     void createRealKeyFiles() throws Exception {
         Path priv = Files.writeString(keyDir.resolve("private.pem"), "-----BEGIN PRIVATE KEY-----\n");
         Path pub = Files.writeString(keyDir.resolve("public.pem"), "-----BEGIN PUBLIC KEY-----\n");
+        // Private key must be mode 600 (owner-only) for the world-readability check (story 12.1).
+        Files.setPosixFilePermissions(priv, Set.of(
+                PosixFilePermission.OWNER_READ,
+                PosixFilePermission.OWNER_WRITE));
         privateKey = priv.toAbsolutePath().toString();
         publicKey = pub.toAbsolutePath().toString();
     }
@@ -162,6 +168,70 @@ class ProdSecretsValidatorTest {
             assertThatThrownBy(validator::validate)
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("not found or empty");
+        }
+    }
+
+    // ── JWT key permissions validation (story 12.1 Task 4) ──────────────────
+
+    @Nested
+    @DisplayName("JWT private key world-readability check")
+    class JwtKeyPermissionsValidation {
+
+        @Test
+        @DisplayName("story 12.1: rejects private key that is world-readable (OTHERS_READ)")
+        void shouldRejectWorldReadablePrivateKey() throws Exception {
+            // Create a private key with 644 (world-readable) — this must be rejected.
+            Path worldReadableKey = Files.writeString(
+                    keyDir.resolve("world-readable.pem"), "-----BEGIN PRIVATE KEY-----\n");
+            Files.setPosixFilePermissions(worldReadableKey, Set.of(
+                    PosixFilePermission.OWNER_READ,
+                    PosixFilePermission.OWNER_WRITE,
+                    PosixFilePermission.OTHERS_READ));  // 604 — world-readable
+
+            var validator = new ProdSecretsValidator(
+                    new AdminProperties("+237600000000", "Str0ngPr0dP@ss!"),
+                    worldReadableKey.toAbsolutePath().toString(), publicKey);
+
+            assertThatThrownBy(validator::validate)
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("world-readable");
+        }
+
+        @Test
+        @DisplayName("story 12.1: accepts private key that is group-readable (640, GROUP_READ) — prod mode")
+        void shouldAcceptGroupReadablePrivateKey() throws Exception {
+            // The prod strategy is chgrp 1001 + chmod 640: the container (group 1001) reads
+            // via GROUP_READ. Only OTHERS_READ (true world-readability) is rejected, so 640
+            // must be accepted (review fix — the original check wrongly rejected GROUP_READ).
+            Path groupReadableKey = Files.writeString(
+                    keyDir.resolve("group-readable.pem"), "-----BEGIN PRIVATE KEY-----\n");
+            Files.setPosixFilePermissions(groupReadableKey, Set.of(
+                    PosixFilePermission.OWNER_READ,
+                    PosixFilePermission.OWNER_WRITE,
+                    PosixFilePermission.GROUP_READ));  // 640 — group-readable (prod mode)
+
+            var validator = new ProdSecretsValidator(
+                    new AdminProperties("+237600000000", "Str0ngPr0dP@ss!"),
+                    groupReadableKey.toAbsolutePath().toString(), publicKey);
+
+            assertThatCode(validator::validate).doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("story 12.1: accepts private key with mode 600 (owner-only)")
+        void shouldAcceptMode600PrivateKey() throws Exception {
+            // The default setup already creates a 600 private key — re-verify explicitly.
+            Path safeKey = Files.writeString(
+                    keyDir.resolve("safe.pem"), "-----BEGIN PRIVATE KEY-----\n");
+            Files.setPosixFilePermissions(safeKey, Set.of(
+                    PosixFilePermission.OWNER_READ,
+                    PosixFilePermission.OWNER_WRITE));  // 600
+
+            var validator = new ProdSecretsValidator(
+                    new AdminProperties("+237600000000", "Str0ngPr0dP@ss!"),
+                    safeKey.toAbsolutePath().toString(), publicKey);
+
+            assertThatCode(validator::validate).doesNotThrowAnyException();
         }
     }
 

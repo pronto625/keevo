@@ -23,7 +23,7 @@
 - **[10-5] `workflow_dispatch` sans garde de branche** (`deploy-staging.yml`) : un dispatch manuel peut builder/déployer staging depuis n'importe quel ref. Ajouter un check `github.ref`.
 - **[10-5] `firebase-credentials.json` bind-mount inconditionnel + pas de garde `.env` 1er deploy** : fichier absent → Docker crée un répertoire au point de montage ; `.env` absent → `compose up` avec vars vides. Rendre le mount conditionnel + `[ -f .env ] || exit 1`.
 - **[10-5] `cancel-in-progress: true`** (`deploy-staging.yml`) : peut interrompre un `docker compose up` SSH en cours → stack staging à moitié déployée. Désactiver l'annulation sur les étapes mutantes.
-- **[10-5] prod `deploy-backend.yml` : clé privée JWT en `chmod 644`** (pré-existant, même bug que staging) : appliquer `chmod 600 keys/private_key.pem` aussi côté prod.
+- **[10-5] prod `deploy-backend.yml` : clé privée JWT en `chmod 644`** ✅ **RÉSOLU** — story `v1s-12-1` (2026-07-21) : split `chmod 600` + `chown 1001:1001` (UID keevo pinné Dockerfile) + assertion pre-flight + grep lint AC4. Plus world-readable check Java (ProdSecretsValidator) en défense-en-profondeur.
 
 ## Deferred from: code review of 10-4-backups-postgresql-restauration (2026-06-19)
 
@@ -49,3 +49,7 @@
 - **[10-2] `@BeforeAll` DROP DATABASE sans `pg_terminate_backend` préalable** (pre-existing, Story 10.1) : si un run précédent s'est crashé, le DROP échoue silencieusement et la suite démarre sur une DB stale avec des migrations déjà appliquées. Fix : ajouter `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='keevo_flyway_test'` avant le DROP.
 - **[10-2] `@ActiveProfiles("flyway-test")` sans fichier `application-flyway-test.yml`** (pre-existing, Story 10.1) : l'annotation est trompeuse. Si un futur développeur crée ce fichier de profil, il pourrait écraser le `@DynamicPropertySource` et pointer le test vers une mauvaise datasource. Envisager de supprimer l'annotation ou de créer un fichier minimal.
 - **[10-2] DDL_USERS dans TenantSchemaProvisioner incomplet** (pre-existing) : `failed_attempts`, `locked_until`, et potentiellement d'autres colonnes sont absentes du DDL statique — elles sont ajoutées dynamiquement par `TenantSchemaSyncService` au premier login. Fenêtre de vulnérabilité entre la création du tenant et son premier accès authentifié.
+
+## Deferred from: code review of v1s-12-1-chmod-jwt-private-key (2026-07-21)
+
+- **Tests `PosixFilePermission` breakent sur runner non-POSIX (Windows)** : `shouldRejectWorldReadablePrivateKey` / `shouldRejectGroupReadablePrivateKey` utilisent `Files.setPosixFilePermissions` et `assertThatThrownBy`. Sur un FS non-POSIX, le check Java skip via `UnsupportedOperationException` → pas d'exception → `assertThatThrownBy` FAIL. CI tourne sur `ubuntu-latest` (POSIX) donc non-bloquant maintenant, mais un futur runner Windows ou un dev sous Windows casserait le build. À adresser si la matrice CI s'élargit.

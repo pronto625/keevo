@@ -111,6 +111,11 @@ jobs:
             echo "→ Writing RSA key pair for JWT (staging)…"
             printf '%s\n' "${JWT_PRIVATE_KEY_PEM}" > keys/private_key.pem
             printf '%s\n' "${JWT_PUBLIC_KEY_PEM}"  > keys/public_key.pem
+            # NOTE: staging chmod 600 is NOT runtime-verified — the staging bring-up (TLS +
+            # non-root container key read) is deferred (deferred-work.md [10-5]). The prod
+            # workflow (deploy-backend.yml) uses the verified chgrp+640 strategy; staging will
+            # adopt the same when its bring-up is completed. Do NOT add a chown here without
+            # the matching host prerequisite + pre-flight assertions (see deploy-backend.yml).
             # Private signing key must not be world-readable (other users on the host).
             chmod 600 keys/private_key.pem
             chmod 644 keys/public_key.pem

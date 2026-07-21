@@ -9,7 +9,10 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
+import java.util.Set;
 
 /**
  * ProdSecretsValidator — Fail-fast guard for required production secrets.
@@ -71,6 +74,7 @@ public class ProdSecretsValidator {
     private void validateJwtKeys() {
         validateJwtKey("KEEVO_JWT_PRIVATE_KEY_PATH", jwtPrivateKeyPath);
         validateJwtKey("KEEVO_JWT_PUBLIC_KEY_PATH", jwtPublicKeyPath);
+        validatePrivateKeyNotWorldReadable("KEEVO_JWT_PRIVATE_KEY_PATH", jwtPrivateKeyPath);
         log.info("[FailFast] JWT key paths ✓");
     }
 
@@ -102,6 +106,51 @@ public class ProdSecretsValidator {
             return !Files.isReadable(path) || Files.size(path) == 0;
         } catch (IOException e) {
             return true;
+        }
+    }
+
+    /**
+     * Defense-in-depth: reject a private key file that is world-readable (OTHERS_READ).
+     *
+     * <p>Group-read ({@code GROUP_READ}) is <em>permitted</em>: the non-root {@code keevo}
+     * container (UID/GID 1001) reads the key via group membership — the deploy script sets
+     * {@code chgrp 1001} + {@code chmod 640} so the container (group 1001) can read while
+     * the file is not world-readable. Only OTHERS_READ (true world-readability) is rejected.
+     *
+     * <p>This runs as the container user, which is the file's group owner in the happy path,
+     * so it mainly catches a <em>manual</em> regression — someone re-permissioning the host
+     * file to 644/646 outside the deploy pipeline and rebooting. The CI pre-flight assertion
+     * ({@code stat -c %a} + container-read check in {@code deploy-backend.yml}) is the primary
+     * enforcement at deploy time; this method is the boot-time backstop.
+     *
+     * <p>Only applies to {@code file:} paths ({@code classpath:} is rejected upstream). On
+     * non-POSIX filesystems the check is skipped (graceful degradation).
+     *
+     * <p>Story 12.1 Task 4 — NFR11 / ARCH16-17 enforcement.
+     */
+    private static void validatePrivateKeyNotWorldReadable(String envVar, String keyPath) {
+        // Only check file: paths — classpath: is already rejected upstream.
+        if (keyPath == null || keyPath.isBlank() || keyPath.startsWith("classpath:")) {
+            return;
+        }
+        Path path = Path.of(keyPath.startsWith("file:") ? keyPath.substring("file:".length()) : keyPath);
+        try {
+            // NOFOLLOW_LINKS: inspect the link/file itself, not a symlink target (symlink swap).
+            Set<PosixFilePermission> perms = Files.getPosixFilePermissions(path, LinkOption.NOFOLLOW_LINKS);
+            if (perms.contains(PosixFilePermission.OTHERS_READ)) {
+                throw new IllegalStateException(
+                        "[FailFast] " + envVar + " private key must not be world-readable "
+                                + "(others-read detected; mode should be 640, group=keevo-jwt). "
+                                + "Ensure chmod 640 and chgrp 1001 (keevo-jwt) on the host.");
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException(
+                    "[FailFast] Cannot read permissions of " + envVar + " private key: " + e.getMessage());
+        } catch (UnsupportedOperationException e) {
+            // Non-POSIX filesystem (e.g. Windows) — skip the check gracefully.
+            log.warn("[FailFast] POSIX file permissions not supported on this filesystem — "
+                    + "skipping world-readability check for private key. "
+                    + "CI pre-flight assertion is the primary enforcement.");
         }
     }
 }
