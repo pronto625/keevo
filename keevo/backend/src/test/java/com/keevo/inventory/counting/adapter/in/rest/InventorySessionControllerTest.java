@@ -180,4 +180,49 @@ class InventorySessionControllerTest {
                         .content("{}"))
                 .andExpect(status().isUnprocessableEntity());
     }
+
+    // ── Story 12.6 — EMPLOYEE store scope (FR36) ──────────────────────
+
+    @Test
+    void POST_sessions_employeeOwnStore_returns201() throws Exception {
+        authenticateAs("EMPLOYEE");
+        // Simulate JwtAuthFilter setting details = assigned storeId
+        UsernamePasswordAuthenticationToken auth =
+                (UsernamePasswordAuthenticationToken) SecurityContextHolder.getContext().getAuthentication();
+        auth.setDetails(storeId);
+
+        var session = InventorySession.create(storeId, InventoryScope.FULL, null, actorId);
+        when(createSessionUseCase.execute(any())).thenReturn(session);
+
+        mockMvc.perform(post("/api/v1/inventory/sessions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(
+                                new java.util.LinkedHashMap<>() {{
+                                    put("storeId", storeId);
+                                    put("scope", "FULL");
+                                }})))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void POST_sessions_employeeOtherStore_returns403() throws Exception {
+        authenticateAs("EMPLOYEE");
+        UUID assignedStoreId = UUID.randomUUID();
+        UsernamePasswordAuthenticationToken auth =
+                (UsernamePasswordAuthenticationToken) SecurityContextHolder.getContext().getAuthentication();
+        auth.setDetails(assignedStoreId);
+
+        UUID otherStoreId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/v1/inventory/sessions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(
+                                new java.util.LinkedHashMap<>() {{
+                                    put("storeId", otherStoreId);
+                                    put("scope", "FULL");
+                                }})))
+                .andExpect(status().isForbidden());
+
+        verify(createSessionUseCase, never()).execute(any());
+    }
 }

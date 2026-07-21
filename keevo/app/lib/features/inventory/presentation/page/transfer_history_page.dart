@@ -1,4 +1,5 @@
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/di/providers.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -195,15 +196,17 @@ class _TransferHistoryPageState extends ConsumerState<TransferHistoryPage> {
         ],
       ),
 
-      // AC1 — FAB opens transfer form
-      floatingActionButton: FloatingActionButton.extended(
-        key: const Key('new_transfer_fab_bottom'),
-        onPressed: _openNewTransfer,
-        icon: const Icon(Icons.swap_horiz_rounded),
-        label: const Text('Nouveau transfert'),
-        backgroundColor: theme.colorScheme.primary,
-        foregroundColor: Colors.white,
-      ),
+      // AC1 — FAB opens transfer form (Story 12.6: OWNER-only)
+      floatingActionButton: ref.watch(currentUserRoleProvider) != 'EMPLOYEE'
+          ? FloatingActionButton.extended(
+              key: const Key('new_transfer_fab_bottom'),
+              onPressed: _openNewTransfer,
+              icon: const Icon(Icons.swap_horiz_rounded),
+              label: const Text('Nouveau transfert'),
+              backgroundColor: theme.colorScheme.primary,
+              foregroundColor: Colors.white,
+            )
+          : null,
     );
   }
 }

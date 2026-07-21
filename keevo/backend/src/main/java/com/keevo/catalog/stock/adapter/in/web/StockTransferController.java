@@ -8,6 +8,8 @@ import com.keevo.catalog.stock.application.usecase.GetTransferHistoryService;
 import com.keevo.catalog.stock.domain.port.in.CompleteTransferCommand;
 import com.keevo.catalog.stock.domain.port.in.GetTransferHistoryQuery;
 import com.keevo.catalog.stock.domain.port.in.TransferStockCommand;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -15,6 +17,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
@@ -59,10 +62,17 @@ public class StockTransferController {
     /**
      * Step 1 — Initiate an inter-store stock transfer.
      * Deducts stock from source. Returns 201 Created with status IN_TRANSIT.
+     * Story 12.6 — OWNER-only (governance).
      */
     @PostMapping
+    @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponseWrapper<StockTransferResponseDto>> transfer(
             @Valid @RequestBody TransferStockRequestDto request) {
+
+        // Defense-in-depth: explicit role check (testable with standaloneSetup)
+        if (!isOwnerRole()) {
+            throw new DomainException(ErrorCode.FORBIDDEN, "Only OWNER can initiate stock transfers");
+        }
 
         UUID actorId = extractActorId();
 
@@ -140,5 +150,11 @@ public class StockTransferController {
                 .getAuthentication()
                 .getPrincipal();
         return UUID.fromString(principal.toString());
+    }
+
+    private boolean isOwnerRole() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_OWNER".equals(a.getAuthority()));
     }
 }

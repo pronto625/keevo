@@ -12,6 +12,8 @@ import com.keevo.catalog.stock.application.usecase.GetStockMovementHistoryUseCas
 import com.keevo.catalog.stock.application.usecase.RecordStockEntryUseCase;
 import com.keevo.catalog.stock.application.usecase.SetStockThresholdUseCase;
 import com.keevo.catalog.stock.domain.entity.MovementType;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -19,6 +21,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
@@ -91,11 +94,18 @@ public class StockController {
 
     /**
      * Records an incoming stock delivery (STOCK_ENTRY movement).
+     * Story 12.6 — EMPLOYEE scoped to assigned store (FR36).
      */
     @PostMapping("/stock/entry")
     public ResponseEntity<ApiResponseWrapper<StockMovementResponseDto>> recordStockEntry(
             @PathVariable UUID productId,
             @Valid @RequestBody RecordStockEntryRequestDto request) {
+
+        UUID assignedStoreId = extractAssignedStoreId();
+        if (assignedStoreId != null && !assignedStoreId.equals(request.storeId())) {
+            throw new DomainException(ErrorCode.FORBIDDEN,
+                    "EMPLOYEE cannot record stock entry for another store");
+        }
 
         UUID actorId = actorIdFromContext();
         var movement = recordStockEntryUseCase.execute(
@@ -112,11 +122,18 @@ public class StockController {
 
     /**
      * Sets the stock to an absolute quantity (ADJUSTMENT movement).
+     * Story 12.6 — EMPLOYEE scoped to assigned store (FR36).
      */
     @PostMapping("/stock/adjust")
     public ResponseEntity<ApiResponseWrapper<StockMovementResponseDto>> adjustStock(
             @PathVariable UUID productId,
             @Valid @RequestBody AdjustStockRequestDto request) {
+
+        UUID assignedStoreId = extractAssignedStoreId();
+        if (assignedStoreId != null && !assignedStoreId.equals(request.storeId())) {
+            throw new DomainException(ErrorCode.FORBIDDEN,
+                    "EMPLOYEE cannot adjust stock for another store");
+        }
 
         UUID actorId = actorIdFromContext();
         var movement = adjustStockUseCase.execute(
@@ -180,5 +197,26 @@ public class StockController {
 
     private UUID actorIdFromContext() {
         return (UUID) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+    }
+
+    /**
+     * Story 12.6 — Returns the store UUID embedded in JWT details for EMPLOYEE tokens,
+     * or null for OWNER tokens (OWNER is never scoped).
+     *
+     * <p>Review fix: an EMPLOYEE authority with no resolvable store UUID (malformed/missing
+     * {@code storeId} claim) must fail closed rather than be treated as unscoped like OWNER.
+     */
+    private UUID extractAssignedStoreId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        Object details = auth.getDetails();
+        if (details instanceof UUID storeId) {
+            return storeId;
+        }
+        boolean isEmployee = auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_EMPLOYEE".equals(a.getAuthority()));
+        if (isEmployee) {
+            throw new DomainException(ErrorCode.FORBIDDEN, "EMPLOYEE token missing assigned store");
+        }
+        return null;
     }
 }

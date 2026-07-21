@@ -6,6 +6,7 @@ import com.keevo.catalog.stock.application.usecase.*;
 import com.keevo.catalog.stock.domain.entity.MovementType;
 import com.keevo.catalog.stock.domain.entity.StockLevel;
 import com.keevo.catalog.stock.domain.entity.StockMovement;
+import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,6 +17,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -25,7 +27,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -52,7 +54,9 @@ class StockControllerTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(stockController).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(stockController)
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
 
         productId = UUID.randomUUID();
         storeId   = UUID.randomUUID();
@@ -61,6 +65,14 @@ class StockControllerTest {
         // Wire SecurityContext so actorIdFromContext() works
         SecurityContextHolder.getContext().setAuthentication(
             new UsernamePasswordAuthenticationToken(actorId, null, List.of()));
+    }
+
+    private void authenticateAsEmployee(UUID storeId) {
+        var auth = new UsernamePasswordAuthenticationToken(
+                actorId, null,
+                List.of(new SimpleGrantedAuthority("ROLE_EMPLOYEE")));
+        auth.setDetails(storeId);
+        SecurityContextHolder.getContext().setAuthentication(auth);
     }
 
     // ── helpers ──────────────────────────────────────────────────────
@@ -177,5 +189,85 @@ class StockControllerTest {
                 .param("page", "0")
                 .param("size", "10"))
             .andExpect(status().isOk());
+    }
+
+    // ── Story 12.6 — EMPLOYEE store scope (FR36) ──────────────────────
+
+    @Test
+    void record_stock_entry_employeeOwnStore_returns201() throws Exception {
+        authenticateAsEmployee(storeId);
+        when(recordStockEntryUseCase.execute(any(), any(), any(), anyInt(), any(), any()))
+            .thenReturn(sampleMovement(MovementType.STOCK_ENTRY));
+
+        String body = """
+            {
+                "storeId": "%s",
+                "quantity": 10,
+                "notes": "reception"
+            }""".formatted(storeId);
+
+        mockMvc.perform(post("/api/v1/products/{id}/stock/entry", productId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+            .andExpect(status().isCreated());
+    }
+
+    @Test
+    void record_stock_entry_employeeOtherStore_returns403() throws Exception {
+        UUID otherStoreId = UUID.randomUUID();
+        authenticateAsEmployee(storeId);
+
+        String body = """
+            {
+                "storeId": "%s",
+                "quantity": 10,
+                "notes": "reception"
+            }""".formatted(otherStoreId);
+
+        mockMvc.perform(post("/api/v1/products/{id}/stock/entry", productId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+            .andExpect(status().isForbidden());
+
+        verify(recordStockEntryUseCase, never()).execute(any(), any(), any(), anyInt(), any(), any());
+    }
+
+    @Test
+    void adjust_stock_employeeOwnStore_returns201() throws Exception {
+        authenticateAsEmployee(storeId);
+        when(adjustStockUseCase.execute(any(), any(), any(), anyInt(), any(), any()))
+            .thenReturn(sampleMovement(MovementType.ADJUSTMENT));
+
+        String body = """
+            {
+                "storeId": "%s",
+                "newQuantity": 15,
+                "notes": "inventaire"
+            }""".formatted(storeId);
+
+        mockMvc.perform(post("/api/v1/products/{id}/stock/adjust", productId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+            .andExpect(status().isCreated());
+    }
+
+    @Test
+    void adjust_stock_employeeOtherStore_returns403() throws Exception {
+        UUID otherStoreId = UUID.randomUUID();
+        authenticateAsEmployee(storeId);
+
+        String body = """
+            {
+                "storeId": "%s",
+                "newQuantity": 15,
+                "notes": "inventaire"
+            }""".formatted(otherStoreId);
+
+        mockMvc.perform(post("/api/v1/products/{id}/stock/adjust", productId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+            .andExpect(status().isForbidden());
+
+        verify(adjustStockUseCase, never()).execute(any(), any(), any(), anyInt(), any(), any());
     }
 }

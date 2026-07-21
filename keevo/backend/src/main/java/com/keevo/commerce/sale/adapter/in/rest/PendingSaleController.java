@@ -8,6 +8,8 @@ import com.keevo.commerce.sale.domain.port.in.CancelPendingSaleUseCase.CancelPen
 import com.keevo.commerce.sale.domain.port.in.GetPendingSalesUseCase;
 import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase;
 import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase.ValidateSaleCommand;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -68,10 +70,14 @@ public class PendingSaleController {
     }
 
     @PostMapping("/{id}/cancel")
-    @PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
+    @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponseWrapper<Map<String, String>>> cancelSale(
             @PathVariable UUID id,
             @Valid @RequestBody CancelSaleRequestDto request) {
+        // Defense-in-depth: explicit role check (testable with standaloneSetup)
+        if (!isOwnerRole()) {
+            throw new DomainException(ErrorCode.FORBIDDEN, "Only OWNER can cancel pending sales");
+        }
         UUID actorId = extractActorId();
         UUID assignedStoreId = extractAssignedStoreId();
         cancelPendingSaleUseCase.cancelPendingSale(
@@ -87,6 +93,12 @@ public class PendingSaleController {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         return auth != null && auth.getAuthorities().stream()
                 .anyMatch(a -> "ROLE_EMPLOYEE".equals(a.getAuthority()));
+    }
+
+    private boolean isOwnerRole() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_OWNER".equals(a.getAuthority()));
     }
 
     /**

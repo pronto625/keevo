@@ -67,6 +67,14 @@ class PendingSaleControllerTest {
                         List.of(new SimpleGrantedAuthority("ROLE_" + role))));
     }
 
+    private void authenticateAsEmployee(UUID storeId) {
+        var auth = new UsernamePasswordAuthenticationToken(
+                actorId, null,
+                List.of(new SimpleGrantedAuthority("ROLE_EMPLOYEE")));
+        auth.setDetails(storeId);
+        SecurityContextHolder.getContext().setAuthentication(auth);
+    }
+
     private Sale pendingSale() {
         var item = new SaleItem(
                 UUID.randomUUID(), saleId, productId, null,
@@ -219,5 +227,36 @@ class PendingSaleControllerTest {
                         .content(payload))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.domainCode").value("JUSTIFICATION_REQUIRED"));
+    }
+
+    // ── Story 12.6 — RBAC tests ─────────────────────────────────────────
+
+    @Test
+    void GET_pending_employeeOwnStore_returns200() throws Exception {
+        authenticateAsEmployee(storeId);
+        when(getPendingSalesUseCase.getPendingSalesByStore(storeId))
+                .thenReturn(List.of(pendingSale()));
+
+        mockMvc.perform(get("/api/v1/sales/pending"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(1)));
+
+        verify(getPendingSalesUseCase).getPendingSalesByStore(storeId);
+        verify(getPendingSalesUseCase, never()).getPendingSales();
+    }
+
+    @Test
+    void POST_cancel_employeeForbidden_shouldReturn403() throws Exception {
+        authenticateAs("EMPLOYEE");
+
+        String payload = mapper.writeValueAsString(Map.of(
+                "justification", "Annulation demandée par le client"));
+
+        mockMvc.perform(post("/api/v1/sales/{id}/cancel", saleId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isForbidden());
+
+        verify(cancelPendingSaleUseCase, never()).cancelPendingSale(any());
     }
 }

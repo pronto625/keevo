@@ -5,6 +5,8 @@ import com.keevo.commerce.sale.domain.model.DayClosure;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase.CloseDayCommand;
 import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import io.jsonwebtoken.Claims;
@@ -13,6 +15,8 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
@@ -96,14 +100,21 @@ public class DayClosureController {
 
     /**
      * GET /api/v1/day-closures?storeId={storeId}&date={date} — Get closure for a store on a date.
+     * Story 12.6 — OWNER-only (governance).
      *
      * @return 200 OK with DayClosureResponseDto or 404 if not found
      */
     @GetMapping
+    @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponseWrapper<DayClosureResponseDto>> getClosure(
             @RequestParam UUID storeId,
             @RequestParam(required = false) String date,
             HttpServletRequest httpRequest) {
+
+        // Defense-in-depth: explicit role check (testable with standaloneSetup)
+        if (!isOwnerRole()) {
+            throw new DomainException(ErrorCode.FORBIDDEN, "Only OWNER can read day closure history");
+        }
 
         LocalDate closureDate = date != null ? LocalDate.parse(date) : LocalDate.now(WAT);
         String tenantId = extractTenantId(httpRequest);
@@ -154,5 +165,11 @@ public class DayClosureController {
             return jwtTokenProvider.extractTenantId(claims);
         }
         throw new IllegalStateException("No valid JWT token found");
+    }
+
+    private boolean isOwnerRole() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_OWNER".equals(a.getAuthority()));
     }
 }

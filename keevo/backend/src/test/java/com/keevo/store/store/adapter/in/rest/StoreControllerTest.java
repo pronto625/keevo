@@ -15,6 +15,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -54,10 +55,16 @@ class StoreControllerTest {
                 .build();
         actorId = UUID.randomUUID();
         storeId = UUID.randomUUID();
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(actorId, null, List.of()));
+        authenticateAs("OWNER");
         sampleStore = new Store(storeId, "Boutique Test", StoreType.STORE,
                 "Yaoundé", "+237690000001", true, Instant.now(), Instant.now());
+    }
+
+    private void authenticateAs(String role) {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(
+                        actorId, null,
+                        List.of(new SimpleGrantedAuthority("ROLE_" + role))));
     }
 
     @Test
@@ -143,18 +150,61 @@ class StoreControllerTest {
     }
 
     @Test
-    @DisplayName("POST /api/v1/stores — no auth context causes error (401 via JwtAuthFilter in integration)")
-    void POST_stores_withoutAuthContext_causesServerError() throws Exception {
-        // In real app, JwtAuthFilter intercepts unauthenticated requests → HTTP 401.
-        // In standaloneSetup (no filter chain), the missing SecurityContext principal
-        // causes a NullPointerException caught by GlobalExceptionHandler → 5xx.
-        // The 401 path is validated in curl-tests-story-3-1.sh Step 11.
+    @DisplayName("POST /api/v1/stores — no auth context returns 403 via requireOwner guard")
+    void POST_stores_withoutAuthContext_returns403() throws Exception {
+        // requireOwner() guard now catches null/empty auth before reaching any use case.
         SecurityContextHolder.clearContext();
         mockMvc.perform(post("/api/v1/stores")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"name":"Unauthorized Store","type":"STORE"}
                                 """))
-                .andExpect(status().is5xxServerError());
+                .andExpect(status().isForbidden());
+    }
+
+    // ── Story 12.6 — EMPLOYEE 403 on all store management endpoints ────
+
+    @Test
+    @DisplayName("POST /api/v1/stores — EMPLOYEE forbidden")
+    void POST_stores_employeeForbidden_shouldReturn403() throws Exception {
+        authenticateAs("EMPLOYEE");
+
+        mockMvc.perform(post("/api/v1/stores")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Employee Store","type":"STORE"}
+                                """))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/stores — EMPLOYEE forbidden")
+    void GET_stores_employeeForbidden_shouldReturn403() throws Exception {
+        authenticateAs("EMPLOYEE");
+
+        mockMvc.perform(get("/api/v1/stores"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("PATCH /api/v1/stores/{id} — EMPLOYEE forbidden")
+    void PATCH_stores_employeeForbidden_shouldReturn403() throws Exception {
+        authenticateAs("EMPLOYEE");
+
+        mockMvc.perform(patch("/api/v1/stores/" + storeId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Updated Name"}
+                                """))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("PATCH /api/v1/stores/{id}/deactivate — EMPLOYEE forbidden")
+    void PATCH_stores_deactivate_employeeForbidden_shouldReturn403() throws Exception {
+        authenticateAs("EMPLOYEE");
+
+        mockMvc.perform(patch("/api/v1/stores/" + storeId + "/deactivate"))
+                .andExpect(status().isForbidden());
     }
 }

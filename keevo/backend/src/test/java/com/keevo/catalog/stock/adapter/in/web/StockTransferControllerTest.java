@@ -1,6 +1,7 @@
 package com.keevo.catalog.stock.adapter.in.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.keevo.catalog.stock.application.usecase.CompleteTransferService;
 import com.keevo.catalog.stock.application.usecase.ExecuteTransferService;
 import com.keevo.catalog.stock.application.usecase.GetTransferHistoryService;
 import com.keevo.catalog.stock.domain.model.StockTransfer;
@@ -17,6 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -27,7 +29,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -39,6 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class StockTransferControllerTest {
 
     @Mock private ExecuteTransferService executeTransferService;
+    @Mock private CompleteTransferService completeTransferService;
     @Mock private GetTransferHistoryService getTransferHistoryService;
 
     @InjectMocks private StockTransferController controller;
@@ -59,8 +62,13 @@ class StockTransferControllerTest {
         destId  = UUID.randomUUID();
         prodId  = UUID.randomUUID();
         actorId = UUID.randomUUID();
+        authenticateAs("OWNER");
+    }
+
+    private void authenticateAs(String role) {
         SecurityContextHolder.getContext().setAuthentication(
-            new UsernamePasswordAuthenticationToken(actorId.toString(), null, List.of()));
+            new UsernamePasswordAuthenticationToken(actorId.toString(), null,
+                    List.of(new SimpleGrantedAuthority("ROLE_" + role))));
     }
 
     private StockTransfer completedTransfer() {
@@ -151,6 +159,46 @@ class StockTransferControllerTest {
 
         mockMvc.perform(get("/api/v1/stock/transfers")
                 .param("source", srcId.toString())
+                .param("page", "0").param("size", "25"))
+            .andExpect(status().isOk());
+    }
+
+    // ── Story 12.6 — POST /transfers OWNER-only ──────────────────────
+
+    @Test
+    void POST_stock_transfers_employeeForbidden_shouldReturn403() throws Exception {
+        authenticateAs("EMPLOYEE");
+
+        mockMvc.perform(post("/api/v1/stock/transfers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(Map.of(
+                    "sourceStoreId", srcId,
+                    "destinationStoreId", destId,
+                    "productId", prodId,
+                    "quantity", 5
+                ))))
+            .andExpect(status().isForbidden());
+
+        verify(executeTransferService, never()).execute(any());
+    }
+
+    @Test
+    void POST_complete_employeeCanReceive_returns200() throws Exception {
+        authenticateAs("EMPLOYEE");
+        UUID transferId = UUID.randomUUID();
+        when(completeTransferService.execute(any())).thenReturn(completedTransfer());
+
+        mockMvc.perform(post("/api/v1/stock/transfers/" + transferId + "/complete"))
+            .andExpect(status().isOk());
+    }
+
+    @Test
+    void GET_history_employeeCanView_returns200() throws Exception {
+        authenticateAs("EMPLOYEE");
+        when(getTransferHistoryService.execute(any()))
+            .thenReturn(new PageImpl<>(List.of(completedTransfer())));
+
+        mockMvc.perform(get("/api/v1/stock/transfers")
                 .param("page", "0").param("size", "25"))
             .andExpect(status().isOk());
     }

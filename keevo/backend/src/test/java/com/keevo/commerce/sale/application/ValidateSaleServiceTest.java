@@ -194,4 +194,62 @@ class ValidateSaleServiceTest {
                 new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null, "Trying to cancel completed")))
                 .isInstanceOf(DomainException.class);
     }
+
+    // ── Story 12.6 — Employee store scope (FR36) ──────────────────────
+
+    @Test
+    void validateSale_employeeOwnStore_succeeds() {
+        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(pendingSale()));
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_A, STORE_ID))
+                .thenReturn(Optional.of(stockLevel(PRODUCT_A, 20)));
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_B, STORE_ID))
+                .thenReturn(Optional.of(stockLevel(PRODUCT_B, 10)));
+
+        // employee assigned to the SAME store as the sale → succeeds
+        service.validateSale(new ValidateSaleCommand(SALE_ID, ACTOR_ID, STORE_ID,
+                "Validation par employé de sa boutique", null, null));
+
+        verify(saleRepository).updateStatus(SALE_ID, SaleStatus.COMPLETED);
+    }
+
+    @Test
+    void validateSale_employeeOtherStore_throwsForbidden() {
+        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(pendingSale()));
+        UUID otherStoreId = UUID.randomUUID();
+
+        // employee assigned to DIFFERENT store → FORBIDDEN
+        assertThatThrownBy(() -> service.validateSale(
+                new ValidateSaleCommand(SALE_ID, ACTOR_ID, otherStoreId,
+                        "Tentative de valider vente d'une autre boutique", null, null)))
+                .isInstanceOf(DomainException.class)
+                .hasMessageContaining("Employee cannot operate pending sale outside assigned store");
+
+        verify(saleRepository, never()).updateStatus(any(), any());
+    }
+
+    @Test
+    void cancelPendingSale_employeeOwnStore_succeeds() {
+        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(pendingSale()));
+
+        // employee assigned to the SAME store as the sale → succeeds
+        service.cancelPendingSale(new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, STORE_ID,
+                "Annulation par employé de sa boutique"));
+
+        verify(saleRepository).updateStatus(SALE_ID, SaleStatus.CANCELLED);
+    }
+
+    @Test
+    void cancelPendingSale_employeeOtherStore_throwsForbidden() {
+        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(pendingSale()));
+        UUID otherStoreId = UUID.randomUUID();
+
+        // employee assigned to DIFFERENT store → FORBIDDEN
+        assertThatThrownBy(() -> service.cancelPendingSale(
+                new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, otherStoreId,
+                        "Tentative d'annuler vente d'une autre boutique")))
+                .isInstanceOf(DomainException.class)
+                .hasMessageContaining("Employee cannot operate pending sale outside assigned store");
+
+        verify(saleRepository, never()).updateStatus(any(), any());
+    }
 }

@@ -215,4 +215,17 @@ class DayClosureControllerTest {
                         .content("{}"))
                 .andExpect(status().isUnprocessableEntity());
     }
+
+    // ── Story 12.6 — GET /day-closures OWNER-only ─────────────────────
+
+    @Test
+    void GET_dayClosures_employeeForbidden_shouldReturn403() throws Exception {
+        authenticateAs("EMPLOYEE");
+
+        mockMvc.perform(get("/api/v1/day-closures")
+                        .header("Authorization", "Bearer fake-token")
+                        .param("storeId", storeId.toString())
+                        .param("date", "2026-03-19"))
+                .andExpect(status().isForbidden());
+    }
 }

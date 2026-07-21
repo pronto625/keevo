@@ -18,6 +18,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
@@ -60,6 +61,13 @@ public class InventorySessionController {
     @PostMapping
     public ResponseEntity<ApiResponseWrapper<InventorySessionResponseDto>> createSession(
             @Valid @RequestBody CreateInventorySessionRequestDto request) {
+
+        // Story 12.6 — EMPLOYEE scoped to assigned store (FR36)
+        UUID assignedStoreId = extractAssignedStoreId();
+        if (assignedStoreId != null && !assignedStoreId.equals(request.storeId())) {
+            throw new DomainException(ErrorCode.FORBIDDEN,
+                    "EMPLOYEE cannot start inventory session for another store");
+        }
 
         UUID actorId = extractActorId();
         var command = new CreateInventorySessionCommand(
@@ -166,5 +174,26 @@ public class InventorySessionController {
         }
         String token = authHeader.substring(7);
         return jwtTokenProvider.extractRole(jwtTokenProvider.parseToken(token));
+    }
+
+    /**
+     * Story 12.6 — Returns the store UUID embedded in JWT details for EMPLOYEE tokens,
+     * or null for OWNER tokens (OWNER is never scoped).
+     *
+     * <p>Review fix: an EMPLOYEE authority with no resolvable store UUID (malformed/missing
+     * {@code storeId} claim) must fail closed rather than be treated as unscoped like OWNER.
+     */
+    private UUID extractAssignedStoreId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        Object details = auth.getDetails();
+        if (details instanceof UUID storeId) {
+            return storeId;
+        }
+        boolean isEmployee = auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_EMPLOYEE".equals(a.getAuthority()));
+        if (isEmployee) {
+            throw new DomainException(ErrorCode.FORBIDDEN, "EMPLOYEE token missing assigned store");
+        }
+        return null;
     }
 }
