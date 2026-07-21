@@ -34,7 +34,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-03-06
-last_updated: 2026-06-19  # + Epics 10-17 refonte (66 stories) ; gap-analysis appliqué (12-7,13-10,15-8,Epic 17) ; 10-2 → done ; 10-3 → ready-for-dev ; 10-4 → ready-for-dev ; 10-5 → review ; 10-6 → review
+last_updated: 2026-07-20  # [2026-07-20] V1 STABILIZATION TRACK ajouté (post-audit AUDIT_CONFORMITE_BMAD.md) — 5 épics v1s-12..16 (31 stories V1, tags A/C) sur branche v1-stabilization (off deploy) pour garder V1 déployable PENDANT la refonte ; refonte réabsorbe les fixes. 3 specs ready-for-dev : spec-notif-owner-actions-employe.md (14.10), spec-edition-complete-employe.md (14.11), spec-mot-de-passe-oublie.md (14.12). Tag B (14.1 variants / 14.3 revenus / 14.4 push+santé / 15.1 Testcontainers / 15.2 E2E / 15.4 ArchUnit / 15.6 envelope) reste refonte-native (Epic 17 + refonte 12-17). Réf backlog : epics-remediation-audit.md. | [2026-07-06] 11-4 → review (35 tests, 4 correctifs RBAC/exposition: cancelSale OWNER-only, deviceToken userId-scoped, CORS prod sans localhost, TenantSchema.validate) | 11-6 → ready-for-dev | 11-1 → done ...
 project: Keevo
 project_key: NOKEY
 tracking_system: file-system
@@ -210,13 +210,13 @@ development_status:
   # ─────────────────────────────────────────────────────────
   # Epic 11: Stabilisation du Socle & Dette (Phase 1 allégée) — BLOQUANT
   # ─────────────────────────────────────────────────────────
-  epic-11: backlog
-  11-1-logs-json-structures-mdc: backlog
-  11-2-tracing-otel-metriques-prometheus: backlog
-  11-3-audit-append-only-db: backlog
-  11-4-correctifs-rbac-exposition: backlog
-  11-5-correctifs-performance-n1-bug-index: backlog
-  11-6-revocation-session-5min: backlog
+  epic-11: in-progress
+  11-1-logs-json-structures-mdc: done       # 2026-06-20 — code review passé | 8 patches : X-Request-Id sanitize (CRLF strip + cap), logback <root> sans level hardcodé, CORS addExposedHeader X-Request-Id, JwtAuthFilter tenantId null-guard, JsonLoggingIntegrationTest rewrite (LogstashEncoder réel + parse JSON), secret-scrub non-tautologique (ListAppender sur JwtAuthFilter logger), CorrelationIdFilterTest @AfterEach isolation, TODO tracingManaged 11.2 ordering | 24/24 tests GREEN
+  11-2-tracing-otel-metriques-prometheus: review  # 2026-06-20 — OTel tracing + Prometheus business/technical metrics | 26/26 tests GREEN | scrape endpoint requires JWT auth | KEEVO_OTLP_ENDPOINT env var for optional OTLP export | CorrelationIdFilter handover with 11.1 (defer to OTel traceId)
+  11-3-audit-append-only-db: in-progress     # 2026-06-20 — implementation started
+  11-4-correctifs-rbac-exposition: review     # 2026-07-06 — implementation complete (dev-story) | 35 tests GREEN, full regression 1491 tests no NEW failures
+  11-5-correctifs-performance-n1-bug-index: ready-for-dev     # 2026-06-20 — story créée (bmad-create-story) | 3 correctifs perf/justesse indépendants : N+1 schema_name liste tenants (AdminTenantService → préchargement Map<UUID,String> en 1 requête IN) ; N+1 items ventes brouillon (SaleSpringRepository.findByStoreIdAndStatus → @Query LEFT JOIN FETCH DISTINCT) ; bug d'index DayClosureDeltaProvider (totalTransactions row[4]→row[5]=total_revenue, contrat client _upsertDayClosures)
+  11-6-revocation-session-5min: ready-for-dev     # 2026-07-06 — story créée (bmad-create-story) : révocation générique via tokens_valid_after (iat cutoff) sur user_tenant_memberships + TokenRevocationPort (cache 60s, purge job) ; check EMPLOYEE employees.status déjà instantané, laissé inchangé
   epic-11-retrospective: optional
 
   # ─────────────────────────────────────────────────────────
@@ -310,3 +310,62 @@ development_status:
   17-8-gating-config-rapports: backlog                       # FR60 (Free fixe / Premium)
   17-9-regression-e2e-multi-surface: backlog
   epic-17-retrospective: optional
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # V1 STABILIZATION TRACK (pre-refonte, parallel) — post-audit 2026-07-20
+  # Source backlog : _bmad-output/planning-artifacts/epics/epics-remediation-audit.md
+  # Audit          : AUDIT_CONFORMITE_BMAD.md
+  # Branche         : v1-stabilization (off deploy) → merges deploy + staging
+  # But             : V1 solide + déployable PENDANT la refonte (refonte réabsorbe les fixes)
+  # Tags            : A = patch V1 now | C = patch V1 + refonte ré-applique
+  #                   (B = refonte-native → NON ici ; voir Epic 17 + refonte 12-17)
+  # Clés préfixées v1s- pour éviter la collision avec les épics refonte 12-17 ci-dessus.
+  # ═══════════════════════════════════════════════════════════════════════
+  v1s-epic-12-security-hardening: backlog            # remediation Epic 12 — 7 stories, tag A, release-blocker
+  v1s-12-1-chmod-jwt-private-key: backlog            # S1 — deploy-backend.yml:112 → chmod 600
+  v1s-12-2-session-revocation-5min: backlog           # S2/B-HIGH-5, NFR12, FR68 — Story 11-6 ; + Flutter force-logout (ties 12.7)
+  v1s-12-3-superadmin-path-enforcement: backlog       # S3 — SecurityConfig /api/v1/admin/** hasRole SUPER_ADMIN
+  v1s-12-4-dashboard-middleware-rename: backlog      # S4 — proxy.ts → middleware.ts (Next.js)
+  v1s-12-5-tenantid-validate-jwtfilter: backlog       # S5/B-HIGH-6 — TenantSchema.validate avant interpolation SQL
+  v1s-12-6-rbac-owner-only-scope-store: backlog       # S6/S7/B-HIGH-9/10, FR36 — + Flutter UI gating EMPLOYEE
+  v1s-12-7-flutter-hardening-storage-logs-https: backlog  # S8/S9/S12, ARCH21 — SecureStorageProvider + redact Bearer + HTTPS default
+  v1s-epic-12-retrospective: optional
+
+  v1s-epic-13-concurrency-integrity: backlog          # remediation Epic 13 — 7 stories, tag A, release-blocker
+  v1s-13-1-optimistic-lock-stock-transfer: backlog    # B-CRIT-1/2 — @Version StockTransfer + StockLevel
+  v1s-13-2-sync-gate-7d-unblock: backlog             # B-CRIT-3, FR74 — pull lève la porte + deviceId lié actor
+  v1s-13-3-dayclosure-weekly-eod-fix: backlog         # B-MED (3 bugs), FR42/52/53 — totalTransactions + fenêtre lundi + EOD timing
+  v1s-13-4-sync-queue-drift-atomic: backlog           # F-HIGH-4 — sync_queue dans la txn Drift (Flutter)
+  v1s-13-5-fr90-sale-cancellation: backlog            # B-HIGH-8/F-CRIT-1, FR90 — V1 patch ; refonte-native = 17-1
+  v1s-13-6-draft-sale-pending-status: backlog         # F-CRIT-2 — record_sale_notifier PENDING_VALIDATION (Flutter)
+  v1s-13-7-offline-inventory-audit-events: backlog    # F-CRIT-3, FR48 — StockMovement ADJUSTMENT + source/inventorySessionId (Flutter)
+  v1s-epic-13-retrospective: optional
+
+  v1s-epic-14-functional-gaps-v1: backlog             # remediation Epic 14 — subset tag A/C (B exclu = refonte)
+  v1s-14-2-leaderboard: backlog                       # FR44, tag C — V1 patch ; refonte-native = 17-2
+  v1s-14-5-rgpd-feedback: backlog                     # FR91/92, tag C — V1 patch ; refonte-native = 17-4 + 16-6
+  v1s-14-6-videos-invite-activity: backlog            # FR7/65/67, tag C — V1 patch ; 17-3 couvre FR67
+  v1s-14-7-export-pdf-excel: backlog                  # FR55, tag C — V1 patch ; refonte-native = 17-6
+  v1s-14-8-api-contract-breaks: backlog                # X-CRIT-1/X-HIGH-2/X-MED-3/4/5, tag A — /unarchive + dest + ReportsDeltaProvider + api_service + envelope meta
+  v1s-14-9-fr20-banners-session-revoke-ui: backlog    # FR20, F-HIGH-5/8, tag A — accountStatusProvider + SuspensionBanner + interceptor (ties 12.2/12.7)
+  v1s-14-10-notif-owner-employee-actions: ready-for-dev  # spec spec-notif-owner-actions-employe.md, tag A — 13 TDD ; + Flutter FCM réception
+  v1s-14-11-employee-full-edit: ready-for-dev         # spec spec-edition-complete-employe.md, tag C — FR66 edit (nom/tel/password/role)
+  v1s-14-12-forgot-password-otp-whatsapp: ready-for-dev  # spec spec-mot-de-passe-oublie.md, tag C — FR3b new, depends 12.2
+  # Tag B (refonte-native, NON V1-stab) : 14.1 variants FR22 (gap refonte), 14.3 revenus FR79 (gap refonte),
+  # 14.4 push+santé FR82/83 (refonte-native = 17-5). À ajouter au backlog refonte si voulu.
+  v1s-epic-14-retrospective: optional
+
+  v1s-epic-15-tests-debt-v1: backlog                  # remediation Epic 15 — subset tag C (B exclu = refonte)
+  v1s-15-3-red-tests-missing-classes: backlog         # CategoryController, CompleteTransferService, WhatsApp adapters, profitability strategies
+  v1s-15-5-reconcile-deferred-dead-code: backlog      # tracker reconcile + UserSyncStateDdlInitializer/common/products removal + TODOs
+  # Tag B (refonte-native, NON V1-stab) : 15.1 Testcontainers, 15.2 E2E, 15.4 ArchUnit ratchet, 15.6 ARCH28 envelope.
+  v1s-epic-15-retrospective: optional
+
+  v1s-epic-16-mobile-hardening-parity: backlog        # remediation Epic 16 — 6 stories, tag A, 100% Flutter
+  v1s-16-1-fcm-token-cleanup-logout: backlog          # 8-0 AC10
+  v1s-16-2-ios-darwin-notifications: backlog          # 8-0 AC4 — foreground display iOS
+  v1s-16-3-dark-mode-colors-white-banner: backlog     # UX20 — 41 Colors.white + offline banner contraste
+  v1s-16-4-catalog-search-debounce-fuzzy: backlog      # UX9 — debounce 300ms + catégorie + fuzzy
+  v1s-16-5-syncindicator-online-stale: backlog        # UX15, 5-4 AC1 — online-stale + daysSinceLastSync
+  v1s-16-6-stockadjust-typo-store-offline-queue: backlog  # FR27/FR30 — typo ADJUSTMENT + store sync_queue (ties 13.4)
+  v1s-epic-16-retrospective: optional
