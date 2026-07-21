@@ -15,6 +15,7 @@ import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -22,6 +23,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.OptimisticLockingFailureException;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -178,13 +180,21 @@ class StockOperationServiceTest {
     // ── RED → GREEN: PRODUCT_NOT_FOUND ────────────────────────────────────
 
     @Test
-    void should_throw_product_not_found_when_product_does_not_exist() {
-        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.empty());
+    @DisplayName("AC4: should propagate OptimisticLockingFailureException on concurrent stock mutation")
+    void shouldNotLoseUpdateOnConcurrentStockMutation() {
+        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
+            .thenReturn(Optional.of(levelWithQuantity(10)));
+        // Save movement succeeds, but save level throws — simulating concurrent write
+        when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(stockLevelRepository.save(any()))
+            .thenThrow(new OptimisticLockingFailureException("Row was updated or deleted by another transaction"));
 
         assertThatThrownBy(() -> service.recordOperation(
-            PRODUCT_ID, null, STORE_ID, MovementType.STOCK_ENTRY, 5, ACTOR_ID, null))
-            .isInstanceOf(DomainException.class)
-            .satisfies(ex -> assertThat(((DomainException) ex).getErrorCode())
-                .isEqualTo(ErrorCode.PRODUCT_NOT_FOUND));
+            PRODUCT_ID, null, STORE_ID, MovementType.STOCK_ENTRY, 5, ACTOR_ID, "delivery"))
+            .isInstanceOf(OptimisticLockingFailureException.class);
+
+        // No events should be published (transaction rolls back)
+        verify(eventPublisher, never()).publishEvent(any());
     }
 }

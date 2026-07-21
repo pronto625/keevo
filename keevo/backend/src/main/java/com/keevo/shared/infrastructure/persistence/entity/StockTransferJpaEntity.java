@@ -49,12 +49,25 @@ public class StockTransferJpaEntity {
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private long version;
+
     public StockTransferJpaEntity() {}
 
+    // Backward-compatible constructor (defaults version=0)
     public StockTransferJpaEntity(UUID id, UUID sourceStoreId, UUID destinationStoreId,
                                   UUID productId, UUID variantId, Integer quantity,
                                   UUID actorId, Instant occurredAt,
                                   TransferStatus status, String notes) {
+        this(id, sourceStoreId, destinationStoreId, productId, variantId, quantity,
+             actorId, occurredAt, status, notes, 0L);
+    }
+
+    public StockTransferJpaEntity(UUID id, UUID sourceStoreId, UUID destinationStoreId,
+                                  UUID productId, UUID variantId, Integer quantity,
+                                  UUID actorId, Instant occurredAt,
+                                  TransferStatus status, String notes, long version) {
         this.id                   = id;
         this.sourceStoreId        = sourceStoreId;
         this.destinationStoreId   = destinationStoreId;
@@ -65,6 +78,7 @@ public class StockTransferJpaEntity {
         this.occurredAt           = occurredAt;
         this.status               = status;
         this.notes                = notes;
+        this.version              = version;
     }
 
     public UUID getId()                   { return id; }
@@ -77,6 +91,7 @@ public class StockTransferJpaEntity {
     public Instant getOccurredAt()        { return occurredAt; }
     public TransferStatus getStatus()     { return status; }
     public String getNotes()              { return notes; }
+    public long   getVersion()            { return version; }
 
     public void setId(UUID id)                                  { this.id = id; }
     public void setSourceStoreId(UUID sourceStoreId)            { this.sourceStoreId = sourceStoreId; }
@@ -88,4 +103,5 @@ public class StockTransferJpaEntity {
     public void setOccurredAt(Instant occurredAt)               { this.occurredAt = occurredAt; }
     public void setStatus(TransferStatus status)                { this.status = status; }
     public void setNotes(String notes)                          { this.notes = notes; }
+    public void setVersion(long version)                        { this.version = version; }
 }

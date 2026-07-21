@@ -224,7 +224,9 @@ public class TenantSchemaProvisioner {
                 variant_id        UUID,
                 store_id          UUID        NOT NULL,
                 quantity          INTEGER     NOT NULL DEFAULT 0,
+                minimum_threshold INTEGER     NOT NULL DEFAULT 0,
                 updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                version           BIGINT      NOT NULL DEFAULT 0,
                 CONSTRAINT uq_stock_level UNIQUE (product_id, store_id)
             )""";
 
@@ -234,6 +236,10 @@ public class TenantSchemaProvisioner {
     /** Migration DDL: adds minimum_threshold to existing stock_levels tables (idempotent) */
     static final String DDL_STOCK_LEVELS_MIGRATE_MINIMUM_THRESHOLD =
             "ALTER TABLE stock_levels ADD COLUMN IF NOT EXISTS minimum_threshold INTEGER NOT NULL DEFAULT 0";
+
+    /** Story v1s-13-1 — optimistic lock column for stock_levels (idempotent) */
+    static final String DDL_STOCK_LEVELS_MIGRATE_VERSION =
+            "ALTER TABLE stock_levels ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0";
 
     // ── Stock movements (Story 2.3) ────────────────────────────────────────────
 
@@ -274,7 +280,8 @@ public class TenantSchemaProvisioner {
                 occurred_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 status               VARCHAR(20) NOT NULL DEFAULT 'COMPLETED'
                                          CHECK (status IN ('COMPLETED','PENDING_SYNC','CONFLICT','IN_TRANSIT')),
-                notes                TEXT
+                notes                TEXT,
+                version              BIGINT      NOT NULL DEFAULT 0
             )""";
 
     /** Migration DDL: adds IN_TRANSIT to status CHECK constraint (idempotent — Story 3.3 hotfix) */
@@ -298,6 +305,10 @@ public class TenantSchemaProvisioner {
     /** Story 5.2 — add updated_at for delta-pull sync on status changes */
     static final String DDL_STOCK_TRANSFERS_MIGRATE_UPDATED_AT =
             "ALTER TABLE stock_transfers ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ";
+
+    /** Story v1s-13-1 — optimistic lock column for stock_transfers (idempotent) */
+    static final String DDL_STOCK_TRANSFERS_MIGRATE_VERSION =
+            "ALTER TABLE stock_transfers ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0";
 
     // ── Clients (Story 2.5) ────────────────────────────────────────────────────
 
@@ -792,6 +803,8 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_STOCK_TRANSFERS_IDX_DEST);
             stmt.execute(DDL_STOCK_TRANSFERS_IDX_PRODUCT);
             stmt.execute(DDL_STOCK_TRANSFERS_MIGRATE_UPDATED_AT); // Story 5.2: add updated_at for delta pull
+            stmt.execute(DDL_STOCK_TRANSFERS_MIGRATE_VERSION);  // Story v1s-13-1: optimistic lock
+            stmt.execute(DDL_STOCK_LEVELS_MIGRATE_VERSION);     // Story v1s-13-1: optimistic lock
             // Story 2.5 — contact tables (clients before sales for FK constraint)
             stmt.execute(DDL_CLIENTS);
             stmt.execute(DDL_CLIENTS_IDX_NAME);

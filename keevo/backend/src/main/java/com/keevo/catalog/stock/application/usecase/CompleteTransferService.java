@@ -22,12 +22,14 @@ import java.time.Instant;
  *
  * <p>Steps (all atomic — single @Transactional):
  * 1. Find the transfer by ID
- * 2. Assert its status is IN_TRANSIT (reject if already COMPLETED / CONFLICT)
- * 3. Call StockOperationService.recordOperation(TRANSFER_IN) on destination
- * 4. Persist updated transfer header with status COMPLETED
- * 5. Publish StockTransferredEvent (GoF: Observer)
+ * 2. ATOMIC status transition IN_TRANSIT → COMPLETED via conditional UPDATE
+ *    (Option A — idempotent: exactly one concurrent caller wins)
+ * 3. If already COMPLETED → return existing (idempotent, no double credit)
+ * 4. Call StockOperationService.recordOperation(TRANSFER_IN) on destination
+ * 5. Re-fetch completed transfer (version incremented by atomic UPDATE)
+ * 6. Publish StockTransferredEvent (GoF: Observer)
  *
- * Story 3.3.
+ * Story 3.3 + v1s-13-1 (B-CRIT-1 fix).
  */
 @Service
 public class CompleteTransferService implements CompleteTransferUseCase {
@@ -48,16 +50,28 @@ public class CompleteTransferService implements CompleteTransferUseCase {
     @Override
     @Transactional
     public StockTransfer execute(CompleteTransferCommand command) {
-        // 1. Fetch the transfer
+        // 1. Fetch the transfer (for data, not for status gating — transitionStatus is the gate)
         var transfer = transferRepository.findById(command.transferId())
                 .orElseThrow(() -> new DomainException(ErrorCode.TRANSFER_NOT_FOUND,
                         "Transfer not found: " + command.transferId()));
 
-        // 2. Validate status — only IN_TRANSIT transfers can be received
-        if (transfer.getStatus() != TransferStatus.IN_TRANSIT) {
+        // 2. ATOMIC transition IN_TRANSIT → COMPLETED (Option A — conditional UPDATE)
+        //    Two concurrent calls: exactly one returns true, the other false.
+        boolean transitioned = transferRepository.transitionStatus(
+                transfer.getId(), TransferStatus.IN_TRANSIT, TransferStatus.COMPLETED);
+
+        if (!transitioned) {
+            // Re-fetch to check current status for idempotent behavior
+            var current = transferRepository.findById(command.transferId())
+                    .orElseThrow(() -> new DomainException(ErrorCode.TRANSFER_NOT_FOUND,
+                            "Transfer not found: " + command.transferId()));
+            if (current.getStatus() == TransferStatus.COMPLETED) {
+                // IDEMPOTENT — already completed, return existing (no double credit, no re-event)
+                return current;
+            }
             throw new DomainException(ErrorCode.TRANSFER_INVALID_STATUS,
                     "Transfer " + command.transferId() + " has status "
-                    + transfer.getStatus() + " — expected IN_TRANSIT");
+                    + current.getStatus() + " — expected IN_TRANSIT");
         }
 
         // 3. TRANSFER_IN on destination (positive delta — goods received)
@@ -67,8 +81,10 @@ public class CompleteTransferService implements CompleteTransferUseCase {
                 MovementType.TRANSFER_IN, transfer.getQuantity(),
                 command.actorId(), transfer.getNotes());
 
-        // 4. Persist updated status
-        var completed = transferRepository.save(transfer.withStatus(TransferStatus.COMPLETED));
+        // 4. Re-fetch completed transfer (version was incremented by the atomic UPDATE)
+        var completed = transferRepository.findById(command.transferId())
+                .orElseThrow(() -> new DomainException(ErrorCode.TRANSFER_NOT_FOUND,
+                        "Transfer disappeared after completion: " + command.transferId()));
 
         // 5. Publish event (GoF: Observer — notifies audit listener)
         var now = Instant.now();

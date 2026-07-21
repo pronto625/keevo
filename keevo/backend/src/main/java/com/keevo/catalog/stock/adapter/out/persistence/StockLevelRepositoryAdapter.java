@@ -73,7 +73,8 @@ public class StockLevelRepositoryAdapter implements StockLevelRepository {
             e.getVariantId(),
             e.getStoreId(),
             e.getQuantity() != null ? e.getQuantity() : 0,
-            e.getUpdatedAt()
+            e.getUpdatedAt(),
+            e.getVersion()
         );
     }
 
@@ -84,7 +85,8 @@ public class StockLevelRepositoryAdapter implements StockLevelRepository {
             level.getVariantId(),
             level.getStoreId(),
             level.getQuantity(),
-            level.getUpdatedAt() != null ? level.getUpdatedAt() : Instant.now()
+            level.getUpdatedAt() != null ? level.getUpdatedAt() : Instant.now(),
+            level.getVersion()
         );
     }
 }

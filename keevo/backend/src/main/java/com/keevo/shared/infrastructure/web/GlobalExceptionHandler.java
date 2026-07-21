@@ -3,6 +3,7 @@ package com.keevo.shared.infrastructure.web;
 import com.keevo.shared.domain.exception.DomainException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authorization.AuthorizationDeniedException;
@@ -88,7 +89,8 @@ public class GlobalExceptionHandler {
             Map.entry("INVENTORY_SESSION_NOT_IN_PROGRESS", "Cette session d'inventaire n'est pas en cours"),
             Map.entry("INVENTORY_STORE_NOT_FOUND",       "Boutique cible introuvable"),
             Map.entry("INVENTORY_INVALID_CATEGORIES",    "Une ou plusieurs catégories sont invalides"),
-            Map.entry("WHATSAPP_DELIVERY_FAILED",         "Envoi WhatsApp échoué. Vérifiez votre connexion et réessayez.")
+            Map.entry("WHATSAPP_DELIVERY_FAILED",         "Envoi WhatsApp échoué. Vérifiez votre connexion et réessayez."),
+            Map.entry("OPTIMISTIC_LOCK",              "Cette donnée a été modifiée par une autre opération, veuillez réessayer")
     );
 
     @ExceptionHandler(DomainException.class)
@@ -155,6 +157,19 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ApiResponseWrapper<Void>> handleOptimisticLock(
+            OptimisticLockingFailureException ex) {
+        log.warn("OPTIMISTIC_LOCK: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponseWrapper.error(
+                        FR_MESSAGES.getOrDefault("OPTIMISTIC_LOCK", "Conflit de version"),
+                        HttpStatus.CONFLICT.name(),
+                        "OPTIMISTIC_LOCK",
+                        null
+                ));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponseWrapper<Void>> handleGeneral(Exception ex) {
         log.error("Unhandled exception — {}: {}", ex.getClass().getSimpleName(), ex.getMessage(), ex);
@@ -199,7 +214,8 @@ public class GlobalExceptionHandler {
                  "DAY_ALREADY_CLOSED",
                  "INVENTORY_SESSION_ALREADY_ACTIVE",
                  "INVENTORY_SESSION_NOT_IN_PROGRESS",
-                 "REPORT_ALREADY_SENT" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4 / 6.1 / 7.2
+                 "REPORT_ALREADY_SENT",
+                 "OPTIMISTIC_LOCK" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4 / 6.1 / 7.2 / v1s-13-1
             case "VALIDATION_ERROR", "INVALID_AMOUNT",
                  "INVALID_PHONE_NUMBER", "INVALID_PASSWORD",
                  "INSUFFICIENT_STOCK",

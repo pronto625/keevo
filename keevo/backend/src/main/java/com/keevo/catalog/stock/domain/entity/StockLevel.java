@@ -19,9 +19,10 @@ public class StockLevel {
     private final UUID storeId;
     private final int quantity;
     private final Instant updatedAt;
+    private final long version;
 
     public StockLevel(UUID id, UUID productId, UUID variantId, UUID storeId,
-                      int quantity, Instant updatedAt) {
+                      int quantity, Instant updatedAt, long version) {
         if (productId == null) throw new IllegalArgumentException("productId cannot be null");
         if (storeId == null)   throw new IllegalArgumentException("storeId cannot be null");
         if (quantity < 0)      throw new IllegalArgumentException("quantity cannot be negative");
@@ -31,6 +32,13 @@ public class StockLevel {
         this.storeId    = storeId;
         this.quantity   = quantity;
         this.updatedAt  = updatedAt;
+        this.version    = version;
+    }
+
+    // Backward-compatible constructor (defaults version=0)
+    public StockLevel(UUID id, UUID productId, UUID variantId, UUID storeId,
+                      int quantity, Instant updatedAt) {
+        this(id, productId, variantId, storeId, quantity, updatedAt, 0L);
     }
 
     public UUID getId()         { return id; }
@@ -39,9 +47,10 @@ public class StockLevel {
     public UUID getStoreId()    { return storeId; }
     public int  getQuantity()   { return quantity; }
     public Instant getUpdatedAt() { return updatedAt; }
+    public long  getVersion()     { return version; }
 
     /** Returns a new StockLevel with the updated quantity and timestamp. */
     public StockLevel withQuantity(int newQuantity) {
-        return new StockLevel(id, productId, variantId, storeId, newQuantity, Instant.now());
+        return new StockLevel(id, productId, variantId, storeId, newQuantity, Instant.now(), version);
     }
 }

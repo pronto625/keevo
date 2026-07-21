@@ -35,10 +35,14 @@ public class StockLevelJpaEntity {
     @Column(name = "updated_at", nullable = false, columnDefinition = "TIMESTAMPTZ")
     private Instant updatedAt;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private long version;
+
     public StockLevelJpaEntity() {}
 
     public StockLevelJpaEntity(UUID id, UUID productId, UUID variantId, UUID storeId,
-                                Integer quantity, Instant updatedAt) {
+                                Integer quantity, Instant updatedAt, long version) {
         this.id               = id;
         this.productId        = productId;
         this.variantId        = variantId;
@@ -46,6 +50,12 @@ public class StockLevelJpaEntity {
         this.quantity         = quantity != null ? quantity : 0;
         this.minimumThreshold = 0;
         this.updatedAt        = updatedAt;
+        this.version          = version;
+    }
+
+    public StockLevelJpaEntity(UUID id, UUID productId, UUID variantId, UUID storeId,
+                                Integer quantity, Instant updatedAt) {
+        this(id, productId, variantId, storeId, quantity, updatedAt, 0L);
     }
 
     public UUID getId()             { return id; }
@@ -68,4 +78,7 @@ public class StockLevelJpaEntity {
 
     public Instant getUpdatedAt()               { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+
+    public long getVersion()                  { return version; }
+    public void setVersion(long version)      { this.version = version; }
 }

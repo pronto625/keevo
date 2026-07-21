@@ -4,6 +4,7 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
@@ -154,5 +155,19 @@ class GlobalExceptionHandlerTest {
         assertThat(resp.getBody().error())
                 .isEqualTo("Une erreur inattendue s'est produite")  // French from FR_MESSAGES
                 .doesNotContain("unexpected");                        // Not the English hardcoded string
+    }
+
+    // ── Optimistic Lock (Story v1s-13-1) ──────────────────────────────────
+
+    @Test
+    @DisplayName("AC4: OptimisticLockingFailureException maps to 409 CONFLICT with OPTIMISTIC_LOCK domainCode")
+    void shouldReturn409ForOptimisticLockException() {
+        ResponseEntity<ApiResponseWrapper<Void>> resp =
+                handler.handleOptimisticLock(new OptimisticLockingFailureException("Row was updated by another transaction"));
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(resp.getBody()).isNotNull();
+        assertThat(resp.getBody().domainCode()).isEqualTo("OPTIMISTIC_LOCK");
+        assertThat(resp.getBody().error()).contains("modifiée");
     }
 }

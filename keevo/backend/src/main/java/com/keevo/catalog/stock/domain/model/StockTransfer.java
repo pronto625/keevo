@@ -26,11 +26,12 @@ public class StockTransfer {
     private final Instant occurredAt;
     private final TransferStatus status;
     private final String notes;
+    private final long version;
 
     public StockTransfer(UUID id, UUID sourceStoreId, UUID destinationStoreId,
                          UUID productId, UUID variantId, int quantity,
                          UUID actorId, Instant occurredAt,
-                         TransferStatus status, String notes) {
+                         TransferStatus status, String notes, long version) {
         if (quantity <= 0) {
             throw new IllegalArgumentException("Quantity must be positive, got: " + quantity);
         }
@@ -47,6 +48,16 @@ public class StockTransfer {
         this.occurredAt         = occurredAt;
         this.status             = status;
         this.notes              = notes;
+        this.version            = version;
+    }
+
+    // Backward-compatible constructor (defaults version=0)
+    public StockTransfer(UUID id, UUID sourceStoreId, UUID destinationStoreId,
+                         UUID productId, UUID variantId, int quantity,
+                         UUID actorId, Instant occurredAt,
+                         TransferStatus status, String notes) {
+        this(id, sourceStoreId, destinationStoreId, productId, variantId, quantity,
+             actorId, occurredAt, status, notes, 0L);
     }
 
     public UUID getId()                 { return id; }
@@ -59,10 +70,17 @@ public class StockTransfer {
     public Instant getOccurredAt()      { return occurredAt; }
     public TransferStatus getStatus()   { return status; }
     public String getNotes()            { return notes; }
+    public long   getVersion()          { return version; }
 
     /** Returns a new immutable instance with the given status. */
     public StockTransfer withStatus(TransferStatus newStatus) {
         return new StockTransfer(id, sourceStoreId, destinationStoreId,
-                productId, variantId, quantity, actorId, occurredAt, newStatus, notes);
+                productId, variantId, quantity, actorId, occurredAt, newStatus, notes, version);
+    }
+
+    /** Returns a new immutable instance with the given version. */
+    public StockTransfer withVersion(long newVersion) {
+        return new StockTransfer(id, sourceStoreId, destinationStoreId,
+                productId, variantId, quantity, actorId, occurredAt, status, notes, newVersion);
     }
 }

@@ -57,6 +57,12 @@ public class StockTransferRepositoryAdapter implements StockTransferRepository {
         return springRepository.findAll(spec, pageable).map(this::toDomain);
     }
 
+    @Override
+    @Transactional
+    public boolean transitionStatus(UUID transferId, TransferStatus expectedStatus, TransferStatus newStatus) {
+        return springRepository.transitionStatus(transferId, expectedStatus, newStatus) > 0;
+    }
+
     // ── Specification builder ────────────────────────────────────────────────
 
     private Specification<StockTransferJpaEntity> buildSpec(
@@ -94,7 +100,8 @@ public class StockTransferRepositoryAdapter implements StockTransferRepository {
                 e.getActorId(),
                 e.getOccurredAt(),
                 e.getStatus(),
-                e.getNotes()
+                e.getNotes(),
+                e.getVersion()
         );
     }
 
@@ -109,7 +116,8 @@ public class StockTransferRepositoryAdapter implements StockTransferRepository {
                 t.getActorId(),
                 t.getOccurredAt() != null ? t.getOccurredAt() : Instant.now(),
                 t.getStatus() != null ? t.getStatus() : TransferStatus.COMPLETED,
-                t.getNotes()
+                t.getNotes(),
+                t.getVersion()
         );
     }
 }

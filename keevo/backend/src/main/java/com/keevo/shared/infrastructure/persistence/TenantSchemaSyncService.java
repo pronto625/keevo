@@ -226,7 +226,11 @@ public class TenantSchemaSyncService {
             stmt.execute(TenantSchemaProvisioner.DDL_SYNC_OPERATIONS_LOG_IDX_ENTITY);
             stmt.execute(TenantSchemaProvisioner.DDL_SYNC_OPERATIONS_LOG_IDX_PROCESSED);
             // Story 5.2 — add updated_at on stock_transfers for delta pull sync
-            stmt.execute(TenantSchemaProvisioner.DDL_STOCK_TRANSFERS_MIGRATE_UPDATED_AT);            // Story 5.2 — add updated_at on sales and sale_items for delta pull sync
+            stmt.execute(TenantSchemaProvisioner.DDL_STOCK_TRANSFERS_MIGRATE_UPDATED_AT);
+            // Story v1s-13-1 — optimistic lock columns
+            stmt.execute(TenantSchemaProvisioner.DDL_STOCK_TRANSFERS_MIGRATE_VERSION);
+            stmt.execute(TenantSchemaProvisioner.DDL_STOCK_LEVELS_MIGRATE_VERSION);
+            // Story 5.2 — add updated_at on sales and sale_items for delta pull sync
             stmt.execute(TenantSchemaProvisioner.DDL_SALES_MIGRATE_UPDATED_AT);
             stmt.execute(TenantSchemaProvisioner.DDL_SALE_ITEMS_MIGRATE_UPDATED_AT);
             // Story 5.3 — sync conflicts log indexes

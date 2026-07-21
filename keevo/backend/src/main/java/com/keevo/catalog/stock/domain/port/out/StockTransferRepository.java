@@ -1,6 +1,7 @@
 package com.keevo.catalog.stock.domain.port.out;
 
 import com.keevo.catalog.stock.domain.model.StockTransfer;
+import com.keevo.catalog.stock.domain.model.StockTransfer.TransferStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -27,4 +28,11 @@ public interface StockTransferRepository {
         Instant to,
         Pageable pageable
     );
+
+    /**
+     * Conditional status transition — atomic UPDATE WHERE status = expectedStatus.
+     * Returns true if a row was updated (exactly one concurrent caller wins).
+     * Story v1s-13-1 (Option A — idempotent completion via conditional UPDATE).
+     */
+    boolean transitionStatus(UUID transferId, TransferStatus expectedStatus, TransferStatus newStatus);
 }

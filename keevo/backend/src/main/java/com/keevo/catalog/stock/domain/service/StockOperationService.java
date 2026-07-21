@@ -154,6 +154,6 @@ public class StockOperationService {
     }
 
     private StockLevel newZeroLevel(UUID productId, UUID variantId, UUID storeId) {
-        return new StockLevel(UUID.randomUUID(), productId, variantId, storeId, 0, Instant.now());
+        return new StockLevel(UUID.randomUUID(), productId, variantId, storeId, 0, Instant.now(), 0L);
     }
 }

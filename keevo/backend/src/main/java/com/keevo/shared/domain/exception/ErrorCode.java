@@ -62,6 +62,9 @@ public enum ErrorCode {
     ACCOUNT_INACTIVE,
     SESSION_REVOKED,   // Story 12.2 — NFR12: token issued before tokens_valid_after cutoff (401)
 
+    // ── Optimistic Lock (Story v1s-13-1) ───────────────────────────
+    OPTIMISTIC_LOCK,    // HTTP 409 — concurrent modification detected, client must retry
+
     // ── Store ─────────────────────────────────────────────────────
     STORE_NOT_FOUND,
     WAREHOUSE_ALREADY_EXISTS,  // HTTP 409 — tenant already has one warehouse (Story 3.1)
