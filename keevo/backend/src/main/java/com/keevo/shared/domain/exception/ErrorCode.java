@@ -102,6 +102,7 @@ public enum ErrorCode {
     SYNC_UNKNOWN_OPERATION_TYPE,   // Story 5.1 — no handler registered for operationType
     // ── Sync Gate (Story 5.4) ─────────────────────────────────────────────
     SYNC_REQUIRED,                 // HTTP 423 — device has not synced for >7 days
+    DEVICE_ID_MISMATCH,            // HTTP 403 — deviceId belongs to a different user (v1s-13-2)
     // ── Subscription / Plan Limits ────────────────────────────────
     SUBSCRIPTION_NOT_FOUND, // HTTP 404 — no active subscription for tenant (Story 2.4)
     PLAN_LIMIT_EXCEEDED,    // HTTP 403 — store/product/employee limit reached on Free plan

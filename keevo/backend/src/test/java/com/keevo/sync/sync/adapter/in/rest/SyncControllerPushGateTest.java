@@ -214,4 +214,79 @@ class SyncControllerPushGateTest {
                         .content(mapper.writeValueAsString(body)))
                 .andExpect(status().isOk());
     }
+
+    // ── AC2: deviceId ownership check (v1s-13-2) ─────────────────────────────
+
+    @Test
+    void shouldRejectDeviceIdNotOwnedByActor() throws Exception {
+        mockJwt("OWNER");
+        UUID otherUserId = UUID.randomUUID();
+
+        // Device exists but belongs to a different user
+        when(userSyncStateRepository.findByDeviceId("device-A"))
+                .thenReturn(Optional.of(new UserSyncState(
+                        "device-A", otherUserId, "kv_abc123",
+                        Instant.now(), null, Instant.now())));
+
+        mockMvc.perform(post("/api/v1/sync/push")
+                        .header("Authorization", "Bearer fake-jwt")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(validPushBody("device-A"))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.domainCode").value("DEVICE_ID_MISMATCH"));
+    }
+
+    @Test
+    void shouldAllowDeviceIdWhenNotYetRegistered() throws Exception {
+        mockJwt("OWNER");
+        // Device not found in DB → first push is allowed (backward-compatible)
+        when(userSyncStateRepository.findByDeviceId("device-new")).thenReturn(Optional.empty());
+        when(syncGateCheckService.isStalePush("device-new")).thenReturn(false);
+        when(syncUseCase.pushBatch(any())).thenReturn(
+                new SyncBatchResult(Instant.now(), List.of()));
+
+        mockMvc.perform(post("/api/v1/sync/push")
+                        .header("Authorization", "Bearer fake-jwt")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(validPushBody("device-new"))))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void shouldAllowDeviceIdWhenOwnedByActor() throws Exception {
+        mockJwt("OWNER");
+        // Device exists and belongs to the current user
+        when(userSyncStateRepository.findByDeviceId("device-own"))
+                .thenReturn(Optional.of(new UserSyncState(
+                        "device-own", actorId, "kv_abc123",
+                        Instant.now(), null, Instant.now())));
+        when(syncGateCheckService.isStalePush("device-own")).thenReturn(false);
+        when(syncUseCase.pushBatch(any())).thenReturn(
+                new SyncBatchResult(Instant.now(), List.of()));
+
+        mockMvc.perform(post("/api/v1/sync/push")
+                        .header("Authorization", "Bearer fake-jwt")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(validPushBody("device-own"))))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void shouldAllowDeviceIdWhenUserIdNull() throws Exception {
+        mockJwt("OWNER");
+        // Device pre-5.4 with user_id = null → tolerated (migration progressive)
+        when(userSyncStateRepository.findByDeviceId("device-legacy"))
+                .thenReturn(Optional.of(new UserSyncState(
+                        "device-legacy", null, "kv_abc123",
+                        Instant.now(), null, Instant.now())));
+        when(syncGateCheckService.isStalePush("device-legacy")).thenReturn(false);
+        when(syncUseCase.pushBatch(any())).thenReturn(
+                new SyncBatchResult(Instant.now(), List.of()));
+
+        mockMvc.perform(post("/api/v1/sync/push")
+                        .header("Authorization", "Bearer fake-jwt")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(validPushBody("device-legacy"))))
+                .andExpect(status().isOk());
+    }
 }

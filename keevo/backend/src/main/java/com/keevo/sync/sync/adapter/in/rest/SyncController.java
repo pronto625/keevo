@@ -1,5 +1,7 @@
 package com.keevo.sync.sync.adapter.in.rest;
 
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.sync.sync.adapter.in.rest.dto.SyncOperationDto;
@@ -61,6 +63,26 @@ public class SyncController {
         this.userSyncStateRepository = userSyncStateRepository;
     }
 
+    /**
+     * Verify that the deviceId belongs to the authenticated actor.
+     * Throws DEVICE_ID_MISMATCH if the device exists and is owned by a different user.
+     * Tolerates: unknown device (Optional.empty) and legacy devices with userId=null.
+     *
+     * @param deviceId the device identifier to verify
+     * @param actorId the authenticated user's ID from JWT
+     * @throws DomainException with ErrorCode.DEVICE_ID_MISMATCH if ownership check fails
+     */
+    private void verifyDeviceOwnership(String deviceId, UUID actorId) {
+        userSyncStateRepository.findByDeviceId(deviceId).ifPresent(s -> {
+            if (s.userId() != null && !s.userId().equals(actorId)) {
+                throw new DomainException(
+                        ErrorCode.DEVICE_ID_MISMATCH,
+                        "Ce device n'est pas associé à votre compte",
+                        Map.of("deviceId", deviceId));
+            }
+        });
+    }
+
     @PostMapping("/push")
     @PreAuthorize("hasAnyRole('OWNER','EMPLOYEE')")
     @Operation(summary = "Push batch of offline operations", description = "Processes a batch of queued offline operations. Each operation is handled independently — partial success is possible.")
@@ -78,10 +100,15 @@ public class SyncController {
         String tenantId = claims.get("tenantId", String.class);
         String deviceId = request.deviceId();
 
+        // ── DeviceId ownership check + gate check (single DB query) ────────────
+        // v1s-13-2: ownership verification (B-CRIT-3 rotation bypass)
+        // v5.4: 7-day offline gate (B-CRIT-3 staleness)
+        Optional<UserSyncState> syncStateOpt = userSyncStateRepository.findByDeviceId(deviceId);
+        verifyDeviceOwnership(deviceId, actorId);
+
         // ── 7-day offline gate check ──────────────────────────────────────────
         if (syncGateCheckService.isStalePush(deviceId)) {
-            Optional<UserSyncState> syncState = userSyncStateRepository.findByDeviceId(deviceId);
-            Instant lastPushAt = syncState.map(UserSyncState::lastPushAt).orElse(null);
+            Instant lastPushAt = syncStateOpt.map(UserSyncState::lastPushAt).orElse(null);
             long daysSince = lastPushAt != null
                     ? ChronoUnit.DAYS.between(lastPushAt, Instant.now())
                     : 0L;
@@ -131,6 +158,9 @@ public class SyncController {
 
         // Register device on pull so it appears in active devices list
         if (deviceId != null && !deviceId.isBlank()) {
+            // ── DeviceId ownership check (v1s-13-2 — B-CRIT-3 rotation bypass) ─────
+            verifyDeviceOwnership(deviceId, actorId);
+
             userSyncStateRepository.upsertOnPull(
                     new UserSyncState(deviceId, actorId, tenantId, null, Instant.now(), Instant.now()));
         }

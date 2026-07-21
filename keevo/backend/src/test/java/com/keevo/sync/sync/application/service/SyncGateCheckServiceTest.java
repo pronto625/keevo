@@ -38,6 +38,14 @@ class SyncGateCheckServiceTest {
         return new UserSyncState(DEVICE_ID, USER_ID, "kv_test", lastPushAt, null, Instant.now());
     }
 
+    private UserSyncState stateWithPullAt(Instant lastPullAt) {
+        return new UserSyncState(DEVICE_ID, USER_ID, "kv_test", null, lastPullAt, Instant.now());
+    }
+
+    private UserSyncState stateWithPushAndPull(Instant lastPushAt, Instant lastPullAt) {
+        return new UserSyncState(DEVICE_ID, USER_ID, "kv_test", lastPushAt, lastPullAt, Instant.now());
+    }
+
     // ── Tests ───────────────────────────────────────────────────────────────
 
     @Test
@@ -82,5 +90,47 @@ class SyncGateCheckServiceTest {
                 .thenReturn(Optional.of(stateWithPushAt(eightDaysAgo)));
 
         assertThat(service.isStalePush(DEVICE_ID)).isTrue();
+    }
+
+    // ── AC1: GREATEST(last_push_at, last_pull_at) ─────────────────────────────
+
+    @Test
+    void shouldUnblockPushAfterSuccessfulPull() {
+        // Pull today unblocks even though last push was 8 days ago
+        Instant eightDaysAgo = Instant.now().minus(8, ChronoUnit.DAYS);
+        when(userSyncStateRepository.findByDeviceId(DEVICE_ID))
+                .thenReturn(Optional.of(stateWithPushAndPull(eightDaysAgo, Instant.now())));
+
+        assertThat(service.isStalePush(DEVICE_ID)).isFalse();
+    }
+
+    @Test
+    void shouldStillBlockWhenBothPushAndPullAreStale() {
+        Instant eightDaysAgo = Instant.now().minus(8, ChronoUnit.DAYS);
+        when(userSyncStateRepository.findByDeviceId(DEVICE_ID))
+                .thenReturn(Optional.of(stateWithPushAndPull(eightDaysAgo, eightDaysAgo)));
+
+        assertThat(service.isStalePush(DEVICE_ID)).isTrue();
+    }
+
+    @Test
+    void shouldBlockWhenOnlyPullIsStale() {
+        // lastPushAt=null, lastPullAt=8 days ago → GREATEST(null, stale) = stale → blocked
+        // Uses stateWithPullAt helper (pull-only device, never pushed)
+        Instant eightDaysAgo = Instant.now().minus(8, ChronoUnit.DAYS);
+        when(userSyncStateRepository.findByDeviceId(DEVICE_ID))
+                .thenReturn(Optional.of(stateWithPullAt(eightDaysAgo)));
+
+        assertThat(service.isStalePush(DEVICE_ID)).isTrue();
+    }
+
+    @Test
+    void shouldUnblockWhenOnlyPullIsRecent() {
+        // lastPushAt=null, lastPullAt=now → GREATEST(null, fresh) = fresh → allowed
+        // Covers the pull-only device scenario (e.g., display terminal receiving prices)
+        when(userSyncStateRepository.findByDeviceId(DEVICE_ID))
+                .thenReturn(Optional.of(stateWithPullAt(Instant.now())));
+
+        assertThat(service.isStalePush(DEVICE_ID)).isFalse();
     }
 }

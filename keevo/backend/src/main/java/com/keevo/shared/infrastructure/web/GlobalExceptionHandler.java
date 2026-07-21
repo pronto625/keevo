@@ -84,6 +84,7 @@ public class GlobalExceptionHandler {
             Map.entry("DAY_ALREADY_CLOSED",        "La journée a déjà été clôturée pour cette boutique"),
             Map.entry("MISSING_PARAMETER",         "Paramètre requis manquant"),
             Map.entry("SYNC_REQUIRED",              "Synchronisation requise — données trop anciennes"),
+            Map.entry("DEVICE_ID_MISMATCH",       "Ce device n'est pas associé à votre compte"),
             Map.entry("INVENTORY_SESSION_ALREADY_ACTIVE", "Un inventaire est déjà en cours pour cette boutique"),
             Map.entry("INVENTORY_SESSION_NOT_FOUND",     "Session d'inventaire introuvable"),
             Map.entry("INVENTORY_SESSION_NOT_IN_PROGRESS", "Cette session d'inventaire n'est pas en cours"),
@@ -236,7 +237,8 @@ public class GlobalExceptionHandler {
                  "ACCOUNT_SUSPENDED",
                  "AUDIT_IMMUTABLE",
                  "PASSWORD_CHANGE_REQUIRED",
-                 "FORBIDDEN" -> HttpStatus.FORBIDDEN;   // H2 fix: role mismatch is 403, not 401; AUDIT_IMMUTABLE = immutable log
+                 "FORBIDDEN",
+                 "DEVICE_ID_MISMATCH" -> HttpStatus.FORBIDDEN;   // H2 fix: role mismatch is 403, not 401; AUDIT_IMMUTABLE = immutable log; DEVICE_ID_MISMATCH = deviceId belongs to another user (v1s-13-2)
             case "RATE_LIMIT_EXCEEDED" -> HttpStatus.TOO_MANY_REQUESTS;
             case "WHATSAPP_DELIVERY_FAILED" -> HttpStatus.BAD_GATEWAY;  // upstream WhatsApp failure
             default -> HttpStatus.INTERNAL_SERVER_ERROR;
