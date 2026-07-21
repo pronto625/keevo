@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/providers.dart';
 import '../../../../core/storage/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../auth/presentation/provider/auth_provider.dart';
 import '../../../stores/domain/model/store_model.dart';
 import '../../../stores/domain/model/store_type.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
@@ -396,8 +396,7 @@ class SettingsPage extends ConsumerWidget {
     );
     if (confirmed != true) return;
 
-    const storage = FlutterSecureStorage();
-    await storage.deleteAll();
+    await ref.read(flutterSecureStorageProvider).deleteAll();
 
     final prefs = ref.read(sharedPreferencesProvider);
     await prefs.remove(kUserRoleKey);

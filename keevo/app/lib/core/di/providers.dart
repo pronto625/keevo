@@ -12,8 +12,8 @@ import '../sync/diagnostics/sync_diagnostic_runner.dart';
 import '../sync/rest_sync_service.dart';
 import '../sync/sync_event_logger.dart';
 import '../sync/sync_service.dart';
-import '../../features/catalog/data/datasource/remote_product_datasource.dart';
 import '../../features/auth/presentation/provider/auth_provider.dart';
+import '../../features/catalog/data/datasource/remote_product_datasource.dart';
 
 /// Encryption key provider — overridden in main.dart with the actual key.
 ///
@@ -63,8 +63,7 @@ final currentUserPhoneProvider = Provider<String?>((ref) {
 /// Current user ID (UUID) — read from FlutterSecureStorage (key: 'user_id').
 /// Used in audit trail to mark entries made by the current user as "Vous".
 final currentUserIdProvider = FutureProvider<String?>((ref) async {
-  const storage = FlutterSecureStorage();
-  return storage.read(key: 'user_id');
+  return ref.read(flutterSecureStorageProvider).read(key: 'user_id');
 });
 
 /// Password change required flag — Story 3.5.
@@ -88,7 +87,7 @@ final syncServiceProvider = Provider<SyncService>((ref) {
     database: database,
     remoteProducts: remoteProducts,
     dio: dio,
-    secureStorage: const FlutterSecureStorage(),
+    secureStorage: ref.watch(flutterSecureStorageProvider),
     prefs: prefs,
   );
 });

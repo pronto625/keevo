@@ -208,5 +208,100 @@ void main() {
       verify(() => handler.next(err)).called(1);
     });
   });
+
+  group('AuthInterceptor.onError() — SESSION_REVOKED / ACCOUNT_INACTIVE', () {
+    late int accountSuspendedCount;
+
+    setUp(() {
+      accountSuspendedCount = 0;
+      interceptor = AuthInterceptor(
+        storage: mockStorage,
+        dio: mockDio,
+        refreshDio: mockRefreshDio,
+        onSessionExpired: () => sessionExpiredCount++,
+        onAccountSuspended: () => accountSuspendedCount++,
+      );
+    });
+
+    test(
+        'AC4: 401 SESSION_REVOKED clears tokens, calls onSessionExpired AND '
+        'onAccountSuspended, then passes through', () async {
+      when(() => mockStorage.clearAll()).thenAnswer((_) async {});
+
+      final handler = MockErrorInterceptorHandler();
+      when(() => handler.next(any())).thenReturn(null);
+
+      final originalRequest = RequestOptions(path: '/api/v1/products');
+      final err = DioException(
+        requestOptions: originalRequest,
+        response: Response(
+          requestOptions: originalRequest,
+          statusCode: 401,
+          data: {'domainCode': 'SESSION_REVOKED'},
+        ),
+      );
+
+      interceptor.onError(err, handler);
+      await _pump();
+
+      verify(() => mockStorage.clearAll()).called(1);
+      expect(sessionExpiredCount, equals(1));
+      expect(accountSuspendedCount, equals(1));
+      verify(() => handler.next(err)).called(1);
+    });
+
+    test(
+        'AC4: 401 ACCOUNT_INACTIVE clears tokens, calls both callbacks, '
+        'then passes through', () async {
+      when(() => mockStorage.clearAll()).thenAnswer((_) async {});
+
+      final handler = MockErrorInterceptorHandler();
+      when(() => handler.next(any())).thenReturn(null);
+
+      final originalRequest = RequestOptions(path: '/api/v1/products');
+      final err = DioException(
+        requestOptions: originalRequest,
+        response: Response(
+          requestOptions: originalRequest,
+          statusCode: 401,
+          data: {'domainCode': 'ACCOUNT_INACTIVE'},
+        ),
+      );
+
+      interceptor.onError(err, handler);
+      await _pump();
+
+      verify(() => mockStorage.clearAll()).called(1);
+      expect(sessionExpiredCount, equals(1));
+      expect(accountSuspendedCount, equals(1));
+      verify(() => handler.next(err)).called(1);
+    });
+
+    test(
+        'INVALID_CREDENTIALS still passes through unchanged '
+        '(not matched by SESSION_REVOKED nor TOKEN_EXPIRED)', () async {
+      final handler = MockErrorInterceptorHandler();
+      when(() => handler.next(any())).thenReturn(null);
+
+      final originalRequest = RequestOptions(path: '/api/v1/products');
+      final err = DioException(
+        requestOptions: originalRequest,
+        response: Response(
+          requestOptions: originalRequest,
+          statusCode: 401,
+          data: {'domainCode': 'INVALID_CREDENTIALS'},
+        ),
+      );
+
+      interceptor.onError(err, handler);
+      await _pump();
+
+      verifyNever(() => mockStorage.getRefreshToken());
+      verifyNever(() => mockStorage.clearAll());
+      expect(sessionExpiredCount, equals(0));
+      expect(accountSuspendedCount, equals(0));
+      verify(() => handler.next(err)).called(1);
+    });
+  });
 }
 

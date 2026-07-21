@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -11,6 +13,7 @@ import '../../features/auth/domain/model/membership_dto.dart';
 import '../../features/auth/presentation/page/auth_page.dart';
 import '../../features/auth/presentation/page/password_change_page.dart';
 import '../../features/auth/presentation/page/tenant_picker_page.dart';
+import '../../features/auth/presentation/provider/auth_provider.dart';
 import '../../features/catalog/domain/model/product_model.dart';
 import '../../features/catalog/presentation/page/catalog_page.dart';
 import '../../features/catalog/presentation/page/categories_page.dart';
@@ -69,8 +72,13 @@ import '../storage/app_constants.dart';
 // a proactive token refresh without importing auth_provider.
 const _kApiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://localhost:4500',
+  defaultValue: 'https://localhost:4500',
 );
+
+/// Global ScaffoldMessenger key — used by AuthInterceptor.onAccountSuspended
+/// to show a SnackBar regardless of which page the user is on when their
+/// session is revoked or account deactivated (Story 12.7 AC4).
+final rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
 /// Returns true only if [token] is a structurally valid JWT **and** its `exp`
 /// claim is in the future. Expired or malformed tokens return false.
@@ -122,6 +130,16 @@ Future<String?> _tryProactiveRefresh(FlutterSecureStorage storage) async {
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
     ));
+    // Match the badCertificateCallback from dioProvider/_refreshDioProvider
+    // so silent refresh works on debug localhost with self-signed certs (AC3).
+    dio.httpClientAdapter = IOHttpClientAdapter(
+      createHttpClient: () {
+        final client = HttpClient();
+        client.badCertificateCallback =
+            (cert, host, port) => kDebugMode && host == 'localhost';
+        return client;
+      },
+    );
     final response = await dio.post(
       '/api/v1/auth/refresh',
       data: {'refreshToken': refreshToken},
@@ -197,7 +215,7 @@ class _SplashRedirectPageState extends ConsumerState<_SplashRedirectPage> {
   }
 
   Future<void> _redirect() async {
-    const storage = FlutterSecureStorage();
+    final storage = ref.read(flutterSecureStorageProvider);
     final token = await storage.read(key: 'jwt_token');
 
     // Resolve the effective access token — use the stored one if still valid,
@@ -321,6 +339,9 @@ const _ownerOnlyPrefixes = [
 /// 2. Navigation bar filtering in MainShell (EMPLOYEE sees only Caisse + Plus)
 /// 3. Settings tiles hiding in SettingsPage (Gestion section hidden for EMPLOYEE)
 /// 4. Backend enforcement via JwtAuthFilter (403 for EMPLOYEE on OWNER-only endpoints)
+///
+/// S12 (Story 12.7 AC5): Global auth guard — any deep link to a non-public route
+/// without a valid JWT is redirected to /splash for session validation.
 final GoRouter appRouter = GoRouter(
   initialLocation: '/splash',
   errorBuilder: (context, state) {
@@ -335,6 +356,26 @@ final GoRouter appRouter = GoRouter(
   },
   redirect: (context, state) async {
     final path = state.uri.path;
+
+    // ── S12 (Story 12.7 AC5): Global auth guard ─────────────────────────
+    // Any deep link to a non-public route without a valid JWT → /splash
+    // Note: /auth/change-password and /tenant-picker require authentication
+    // and must NOT be in this list.
+    const _publicPaths = {
+      '/splash',
+      '/auth/login',
+      '/auth/register',
+    };
+    const _publicPathPrefixes = ['/onboarding'];
+    final isPublicPath = _publicPaths.contains(path) ||
+        _publicPathPrefixes.any((p) => path.startsWith(p));
+    if (!isPublicPath) {
+      final storage = ProviderScope.containerOf(context, listen: false)
+          .read(flutterSecureStorageProvider);
+      final token = await storage.read(key: 'jwt_token');
+      if (token == null || !_isValidJwt(token)) return '/splash';
+    }
+
     final isOwnerOnlyPath =
         _ownerOnlyPrefixes.any((prefix) => path.startsWith(prefix));
     if (!isOwnerOnlyPath) {
@@ -357,7 +398,8 @@ final GoRouter appRouter = GoRouter(
       path: '/auth/login',
       redirect: (context, state) async {
         // AC3: skip login only when a valid, non-expired JWT is present
-        const storage = FlutterSecureStorage();
+        final storage = ProviderScope.containerOf(context, listen: false)
+            .read(flutterSecureStorageProvider);
         final token = await storage.read(key: 'jwt_token');
         if (token != null && _isValidJwt(token)) {
           // Story 7.1: OWNER → /dashboard, EMPLOYEE → /pos

@@ -10,10 +10,15 @@ import '../../features/auth/domain/repository/token_storage.dart';
 /// AC (Story 1.6): Intercepts 403 PLAN_LIMIT_EXCEEDED and invokes
 /// [onPlanLimitExceeded] so the caller can show [PlanLimitBottomSheet].
 ///
+/// AC4 (Story 12.7): Handles 401 SESSION_REVOKED and ACCOUNT_INACTIVE by
+/// clearing tokens and invoking [onAccountSuspended].
+///
 /// Responsibilities:
 /// - [onRequest]: inject [Authorization: Bearer <token>] header if token exists
 /// - [onError]: detect 401 TOKEN_EXPIRED → refresh → retry; on refresh failure,
 ///   call [onSessionExpired] (clear tokens + navigate to login)
+/// - [onError]: detect 401 SESSION_REVOKED / ACCOUNT_INACTIVE → expire session
+///   + call [onAccountSuspended] (show SnackBar)
 /// - [onError]: detect 403 PLAN_LIMIT_EXCEEDED → call [onPlanLimitExceeded]
 ///
 /// Architecture note: the [Dio] instance passed to this interceptor is the
@@ -30,6 +35,12 @@ class AuthInterceptor extends Interceptor {
   /// - [limit]: max allowed count for the current plan
   final void Function(String entity, int limit)? onPlanLimitExceeded;
 
+  /// Called when 401 SESSION_REVOKED or ACCOUNT_INACTIVE is received.
+  /// The caller should show a SnackBar or similar UX informing the user
+  /// their access has been suspended. Tokens are already cleared by this
+  /// interceptor before this callback fires.
+  final void Function()? onAccountSuspended;
+
   /// Guards against concurrent refresh attempts.
   bool _isRefreshing = false;
 
@@ -39,6 +50,7 @@ class AuthInterceptor extends Interceptor {
     required Dio refreshDio,
     required this.onSessionExpired,
     this.onPlanLimitExceeded,
+    this.onAccountSuspended,
   })  : _storage = storage,
         _dio = dio,
         _refreshDio = refreshDio;
@@ -79,6 +91,19 @@ class AuthInterceptor extends Interceptor {
     if (statusCode == 401 && !_isRefreshing) {
       final body = err.response?.data;
       final domainCode = _extractDomainCode(body);
+
+      // AC4 (Story 12.7): SESSION_REVOKED / ACCOUNT_INACTIVE — expire session
+      if (domainCode == 'SESSION_REVOKED' || domainCode == 'ACCOUNT_INACTIVE') {
+        try {
+          await _expireSession();
+          onAccountSuspended?.call();
+        } catch (_) {
+          // Storage failure — still propagate the error so the request
+          // doesn't hang indefinitely.
+        }
+        handler.next(err);
+        return;
+      }
 
       if (domainCode == 'TOKEN_EXPIRED') {
         _isRefreshing = true;

@@ -1,14 +1,19 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/di/providers.dart';
 import '../../../../core/network/auth_interceptor.dart';
+import '../../../../core/network/log_redaction.dart';
 import '../../../../core/network/retry_interceptor.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../../core/storage/secure_storage_provider.dart';
 import '../../data/datasource/remote_auth_datasource.dart';
 import '../../data/repository/auth_repository_impl.dart';
 import '../../data/repository/secure_token_storage.dart';
@@ -48,12 +53,12 @@ String? _extractFirstNameFromJwt(String accessToken) {
 const _apiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
   // defaultValue: 'http://10.0.3.2:4500', 
-  defaultValue: 'http://localhost:4500',// local dev (Genymotion); prod: --dart-define=API_BASE_URL=https://<domain>
+  defaultValue: 'https://localhost:4500',// local dev (Genymotion); prod: --dart-define=API_BASE_URL=https://<domain>
 );
 
-/// Secure storage — singleton instance (AC5).
+/// Secure storage — hardened singleton instance (AC1).
 final flutterSecureStorageProvider = Provider<FlutterSecureStorage>((ref) {
-  return const FlutterSecureStorage();
+  return buildSecureStorage();
 });
 
 /// Token storage provider — AC5: secure token persistence.
@@ -70,6 +75,14 @@ final _refreshDioProvider = Provider<Dio>((ref) {
     receiveTimeout: const Duration(seconds: 10),
     headers: const {'Content-Type': 'application/json'},
   ));
+  dio.httpClientAdapter = IOHttpClientAdapter(
+    createHttpClient: () {
+      final client = HttpClient();
+      client.badCertificateCallback =
+          (cert, host, port) => kDebugMode && host == 'localhost';
+      return client;
+    },
+  );
   dio.interceptors.add(RetryOnConnectionClosedInterceptor(dio));
   ref.onDispose(dio.close);
   return dio;
@@ -85,6 +98,17 @@ final dioProvider = Provider<Dio>((ref) {
     headers: const {'Content-Type': 'application/json'},
   ));
 
+  // HTTPS enforcement — reject invalid certificates in production;
+  // allow self-signed only in debug mode for localhost dev (Story 1.3 AC6).
+  dio.httpClientAdapter = IOHttpClientAdapter(
+    createHttpClient: () {
+      final client = HttpClient();
+      client.badCertificateCallback =
+          (cert, host, port) => kDebugMode && host == 'localhost';
+      return client;
+    },
+  );
+
   // Retry once on HTTP keep-alive connection-closed errors before giving up.
   dio.interceptors.add(RetryOnConnectionClosedInterceptor(dio));
 
@@ -97,16 +121,28 @@ final dioProvider = Provider<Dio>((ref) {
       // Clear tokens (already done in interceptor) + navigate to login
       appRouter.go('/auth/login');
     },
+    onAccountSuspended: () {
+      rootScaffoldMessengerKey.currentState?.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Votre accès a été suspendu, veuillez vous reconnecter.',
+          ),
+        ),
+      );
+    },
   ));
 
-  dio.interceptors.add(LogInterceptor(
-    requestHeader: true,
-    requestBody: true,
-    responseHeader: false,
-    responseBody: true,
-    error: true,
-    logPrint: (o) => debugPrint('[DIO] $o'),
-  ));
+  // LogInterceptor — debug-only; redacts Authorization header even in debug
+  if (kDebugMode) {
+    dio.interceptors.add(LogInterceptor(
+      requestHeader: true,
+      requestBody: true,
+      responseHeader: false,
+      responseBody: true,
+      error: true,
+      logPrint: (o) => debugPrint('[DIO] ${redactAuthorizationHeader(o.toString())}'),
+    ));
+  }
 
   ref.onDispose(dio.close);
   return dio;
