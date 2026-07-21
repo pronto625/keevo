@@ -4,6 +4,7 @@ import com.keevo.identity.auth.domain.model.AuthTokens;
 import com.keevo.identity.auth.domain.model.RefreshToken;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
+import com.keevo.identity.auth.domain.port.out.TokenRevocationPort;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.employee.domain.event.EmployeePasswordSetEvent;
 import com.keevo.identity.employee.domain.model.Employee;
@@ -40,6 +41,7 @@ public class ChangePasswordService implements ChangePasswordUseCase {
     private final UserRepository userRepository;
     private final EmployeeRepository employeeRepository;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final TokenRevocationPort tokenRevocationPort;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtProperties jwtProperties;
@@ -48,6 +50,7 @@ public class ChangePasswordService implements ChangePasswordUseCase {
     public ChangePasswordService(UserRepository userRepository,
                                   EmployeeRepository employeeRepository,
                                   RefreshTokenRepository refreshTokenRepository,
+                                  TokenRevocationPort tokenRevocationPort,
                                   PasswordEncoder passwordEncoder,
                                   JwtTokenProvider jwtTokenProvider,
                                   JwtProperties jwtProperties,
@@ -55,6 +58,7 @@ public class ChangePasswordService implements ChangePasswordUseCase {
         this.userRepository = userRepository;
         this.employeeRepository = employeeRepository;
         this.refreshTokenRepository = refreshTokenRepository;
+        this.tokenRevocationPort = tokenRevocationPort;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
         this.jwtProperties = jwtProperties;
@@ -105,8 +109,15 @@ public class ChangePasswordService implements ChangePasswordUseCase {
         // 6. Revoke all existing refresh tokens
         refreshTokenRepository.revokeAllByUserId(command.actorId());
 
-        // 7. Generate fresh tokens
+        // Story 12.2 — revoke access tokens issued before now (<5min propagation, NFR12).
+        // Password change = credential compromise → revoke across ALL the user's memberships
+        // (multi-tenant, not just the current tenant — a token for another tenant would otherwise
+        // stay valid). Must execute BEFORE step 7 (new token issuance) so the new token's
+        // iat >= tokens_valid_after.
         String tenantId = TenantContext.getCurrentTenant();
+        tokenRevocationPort.revokeAllSessionsEverywhere(command.actorId());
+
+        // 7. Generate fresh tokens
         String accessToken = jwtTokenProvider.generateAccessToken(
                 command.actorId(), tenantId, role, "ACTIVE",
                 storeId, false, firstName);

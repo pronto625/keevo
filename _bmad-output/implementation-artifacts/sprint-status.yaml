@@ -34,7 +34,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-03-06
-last_updated: 2026-07-21  # [2026-07-21] v1s-12-5 → done (code review bmad-code-review — 1 decision resolved, 2 patches applied, 9 defers)
+last_updated: 2026-07-21  # [2026-07-21] v1s-12-2 → done (code review bmad-code-review — 2 decisions résolues: multi-tenant revoke-all + DataAccessException fail-open ; 5 patches appliqués: auto-révocation iat/tva précision-seconde, revokeAllSessionsEverywhere, null-tenant guard, validate tenantId tous rôles, fail-open DB ; 9 defers, 4 dismiss ; 37/37 tests impactés GREEN, 0 NEW régression) ; [2026-07-21] v1s-12-2 → review (implémentation complète: V4 migration + TokenRevocationPort + Jdbc/Cached adapters + extractIssuedAt + JwtAuthFilter revocation check + ErrorCode/GlobalExceptionHandler + service wiring + TDD 51/51 GREEN + 0 NEW regression) ; [2026-07-21] v1s-12-5 → done (code review bmad-code-review — 1 decision resolved, 2 patches applied, 9 defers)
 project: Keevo
 project_key: NOKEY
 tracking_system: file-system
@@ -323,7 +323,7 @@ development_status:
   # ═══════════════════════════════════════════════════════════════════════
   v1s-epic-12-security-hardening: in-progress        # 2026-07-21 — epic V1-stab démarré (story 12.1 créée) | remediation Epic 12 — 7 stories, tag A, release-blocker
   v1s-12-1-chmod-jwt-private-key: done        # 2026-07-21 — code review passed (2 décisions + 9 patchs résolus) : refactor chgrp+640 (chown EPERM sous user SSH non-root) + 4 pre-flight assertions + wire grep lint CI + Java check OTHERS_READ-only/NOFOLLOW_LINKS + revert staging chown. 14/14 GREEN. Prérequis host : groupadd -g 1001 keevo-jwt + usermod -aG.
-  v1s-12-2-session-revocation-5min: backlog           # S2/B-HIGH-5, NFR12, FR68 — Story 11-6 ; + Flutter force-logout (ties 12.7)
+  v1s-12-2-session-revocation-5min: done        # S2/B-HIGH-5, NFR12, FR68 — Story 11-6 ; + Flutter force-logout (ties 12.7). Story créée 2026-07-21 : V4 tokens_valid_after + TokenRevocationPort (Jdbc + Cached≤5min @Primary) + cutoff iat dans JwtAuthFilter (tous rôles) + wiring DeactivateEmployeeService/ChangePasswordService + SESSION_REVOKED ErrorCode/GlobalExceptionHandler. Backend-only (Flutter defer 14.9/12.7). Blocante pour 14.9/14.12. Code review 2026-07-21 : 2 décisions (multi-tenant revoke-all, DB fail-open) + 5 patches + 9 defers + 4 dismiss ; 37/37 tests impactés GREEN, 0 NEW régression (suite DB-backed non exécutable sans Postgres/Testcontainers — à revalider avant release).
   v1s-12-3-superadmin-path-enforcement: done   # 2026-07-21 — code review bmad-code-review passed (0 patch, 6 defer low, 12 dismiss) : AC1-AC5 PASS, SecurityConfig /api/v1/admin/** hasRole SUPER_ADMIN filter-chain + SecurityConfigAdminPathEnforcementTest 2/2 GREEN. Defers : requireSuperAdmin() dead-for-rejection (layered defense), coverage holes (EMPLOYEE/anonymous/roleless/GET-only), SecurityContextHolder no clearContext, magic string SUPER_ADMIN, accessDeniedHandler HTML-vs-JSON, @MockBean deprecated. S3 defense-in-depth fermé.
   v1s-12-4-dashboard-middleware-rename: backlog      # S4 — proxy.ts → middleware.ts (Next.js)
   v1s-12-5-tenantid-validate-jwtfilter: done  # 2026-07-21 — code review bmad-code-review passed (1 decision resolved: Option A accepted; 2 patches applied: P1 catch IAE scoped, P2 SCHEMA_PATTERN private; 9 defers) — AC1-AC5 PASS, 13/13 JwtAuthFilterTest GREEN, 0 régression

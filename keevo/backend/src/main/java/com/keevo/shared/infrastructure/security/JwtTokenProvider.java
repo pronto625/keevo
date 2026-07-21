@@ -235,6 +235,16 @@ public class JwtTokenProvider {
     }
 
     /**
+     * Extract the {@code iat} (issued-at) claim as an Instant. Returns {@code null} if absent
+     * (backward-compatible with very old tokens). Used by JwtAuthFilter for session revocation
+     * cutoff (Story 12.2): {@code iat < tokens_valid_after → 401 SESSION_REVOKED}.
+     */
+    public Instant extractIssuedAt(Claims claims) {
+        Date issuedAt = claims.getIssuedAt();
+        return issuedAt != null ? issuedAt.toInstant() : null;
+    }
+
+    /**
      * Check if a token is expired (without throwing an exception).
      *
      * @return true if expired, false if valid

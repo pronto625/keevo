@@ -1,6 +1,7 @@
 package com.keevo.shared.infrastructure.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.keevo.identity.auth.domain.port.out.TokenRevocationPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaSyncService;
 import io.jsonwebtoken.Claims;
@@ -20,6 +21,8 @@ import org.springframework.mock.web.MockHttpServletResponse;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -42,12 +45,14 @@ class JwtAuthFilterTest {
     @Mock FilterChain filterChain;
     @Mock TenantSchemaSyncService tenantSchemaSyncService;
     @Mock JdbcTemplate jdbcTemplate;
+    @Mock TokenRevocationPort tokenRevocationPort;
 
     private JwtAuthFilter filter;
 
     @BeforeEach
     void setUp() {
-        filter = new JwtAuthFilter(jwtTokenProvider, new ObjectMapper(), tenantSchemaSyncService, null);
+        filter = new JwtAuthFilter(jwtTokenProvider, new ObjectMapper(),
+                tenantSchemaSyncService, null, tokenRevocationPort);
     }
 
     /**
@@ -57,7 +62,7 @@ class JwtAuthFilterTest {
      */
     private JwtAuthFilter filterWithJdbc() {
         return new JwtAuthFilter(jwtTokenProvider, new ObjectMapper(),
-                tenantSchemaSyncService, jdbcTemplate);
+                tenantSchemaSyncService, jdbcTemplate, tokenRevocationPort);
     }
 
     // ── Missing Authorization header ───────────────────────────────────────
@@ -137,16 +142,16 @@ class JwtAuthFilterTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         UUID userId = UUID.randomUUID();
-        Claims mockClaims = buildClaims(userId, "KV-ABC123", "OWNER");
+        Claims mockClaims = buildClaims(userId, "kv_abc123", "OWNER");
         when(jwtTokenProvider.parseToken("valid.jwt.token")).thenReturn(mockClaims);
-        when(jwtTokenProvider.extractTenantId(mockClaims)).thenReturn("KV-ABC123");
+        when(jwtTokenProvider.extractTenantId(mockClaims)).thenReturn("kv_abc123");
         when(jwtTokenProvider.extractRole(mockClaims)).thenReturn("OWNER");
         when(jwtTokenProvider.extractUserId(mockClaims)).thenReturn(userId);
 
         filter.doFilterInternal(request, response, filterChain);
 
         verify(filterChain).doFilter(request, response);
-        verify(tenantSchemaSyncService).syncIfNeeded("KV-ABC123");
+        verify(tenantSchemaSyncService).syncIfNeeded("kv_abc123");
         assertThat(response.getStatus()).isEqualTo(200);
     }
 
@@ -173,9 +178,9 @@ class JwtAuthFilterTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         UUID userId = UUID.randomUUID();
-        Claims mockClaims = buildClaims(userId, "KV-ABC123", "OWNER");
+        Claims mockClaims = buildClaims(userId, "kv_abc123", "OWNER");
         when(jwtTokenProvider.parseToken("valid.jwt.token")).thenReturn(mockClaims);
-        when(jwtTokenProvider.extractTenantId(mockClaims)).thenReturn("KV-ABC123");
+        when(jwtTokenProvider.extractTenantId(mockClaims)).thenReturn("kv_abc123");
         when(jwtTokenProvider.extractRole(mockClaims)).thenReturn("OWNER");
         when(jwtTokenProvider.extractUserId(mockClaims)).thenReturn(userId);
         doThrow(new RuntimeException("downstream error")).when(filterChain).doFilter(any(), any());
@@ -220,9 +225,9 @@ class JwtAuthFilterTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         UUID userId = UUID.randomUUID();
-        Claims mockClaims = buildClaims(userId, "KV-SUSP01", "OWNER");
+        Claims mockClaims = buildClaims(userId, "kv_susp01", "OWNER");
         when(jwtTokenProvider.parseToken("suspended.jwt.token")).thenReturn(mockClaims);
-        when(jwtTokenProvider.extractTenantId(mockClaims)).thenReturn("KV-SUSP01");
+        when(jwtTokenProvider.extractTenantId(mockClaims)).thenReturn("kv_susp01");
         when(jwtTokenProvider.extractRole(mockClaims)).thenReturn("OWNER");
         when(jwtTokenProvider.extractUserId(mockClaims)).thenReturn(userId);
         when(jwtTokenProvider.extractTenantStatus(mockClaims)).thenReturn("SUSPENDED");
@@ -242,9 +247,9 @@ class JwtAuthFilterTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         UUID userId = UUID.randomUUID();
-        Claims mockClaims = buildClaims(userId, "KV-SUSP02", "OWNER");
+        Claims mockClaims = buildClaims(userId, "kv_susp02", "OWNER");
         when(jwtTokenProvider.parseToken("suspended.jwt.token")).thenReturn(mockClaims);
-        when(jwtTokenProvider.extractTenantId(mockClaims)).thenReturn("KV-SUSP02");
+        when(jwtTokenProvider.extractTenantId(mockClaims)).thenReturn("kv_susp02");
         when(jwtTokenProvider.extractRole(mockClaims)).thenReturn("OWNER");
         when(jwtTokenProvider.extractUserId(mockClaims)).thenReturn(userId);
         when(jwtTokenProvider.extractTenantStatus(mockClaims)).thenReturn("SUSPENDED");
@@ -263,9 +268,9 @@ class JwtAuthFilterTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         UUID userId = UUID.randomUUID();
-        Claims mockClaims = buildClaims(userId, "KV-ACT01", "OWNER");
+        Claims mockClaims = buildClaims(userId, "kv_act001", "OWNER");
         when(jwtTokenProvider.parseToken("active.jwt.token")).thenReturn(mockClaims);
-        when(jwtTokenProvider.extractTenantId(mockClaims)).thenReturn("KV-ACT01");
+        when(jwtTokenProvider.extractTenantId(mockClaims)).thenReturn("kv_act001");
         when(jwtTokenProvider.extractRole(mockClaims)).thenReturn("OWNER");
         when(jwtTokenProvider.extractUserId(mockClaims)).thenReturn(userId);
         when(jwtTokenProvider.extractTenantStatus(mockClaims)).thenReturn("ACTIVE");
@@ -330,6 +335,64 @@ class JwtAuthFilterTest {
         filterWithJdbc().doFilterInternal(request, response, filterChain);
 
         verify(jdbcTemplate).queryForMap(contains("\"kv_abc123\"."), eq(userId));
+        verify(filterChain).doFilter(request, response);
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    // ── Story 12.2 — Session revocation cutoff (AC1/AC2) ──────────────────
+
+    @Test
+    @DisplayName("token issued BEFORE tokens_valid_after → 401 SESSION_REVOKED, no filterChain")
+    void shouldRejectTokenIssuedBeforeRevocation() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/products");
+        request.addHeader("Authorization", "Bearer owner.revoked.jwt.token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        UUID userId = UUID.randomUUID();
+        Claims claims = buildClaims(userId, "kv_abc123", "OWNER");
+        when(jwtTokenProvider.parseToken("owner.revoked.jwt.token")).thenReturn(claims);
+        when(jwtTokenProvider.extractScope(claims)).thenReturn("access");
+        when(jwtTokenProvider.extractTenantId(claims)).thenReturn("kv_abc123");
+        when(jwtTokenProvider.extractRole(claims)).thenReturn("OWNER");
+        when(jwtTokenProvider.extractUserId(claims)).thenReturn(userId);
+        when(jwtTokenProvider.extractTenantStatus(claims)).thenReturn("ACTIVE");
+        // Cutoff AFTER iat → revoked
+        when(tokenRevocationPort.getTokensValidAfter(userId, "kv_abc123"))
+                .thenReturn(Instant.now().plus(1, ChronoUnit.MINUTES));
+        when(jwtTokenProvider.extractIssuedAt(claims))
+                .thenReturn(Instant.now().minus(10, ChronoUnit.MINUTES));
+
+        filterWithJdbc().doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("SESSION_REVOKED");
+        verify(filterChain, never()).doFilter(any(), any());
+        verify(tokenRevocationPort).getTokensValidAfter(userId, "kv_abc123");
+    }
+
+    @Test
+    @DisplayName("token issued AFTER tokens_valid_after → 200, filterChain proceeds")
+    void shouldAcceptTokenIssuedAfterRevocation() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/products");
+        request.addHeader("Authorization", "Bearer owner.valid.jwt.token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        UUID userId = UUID.randomUUID();
+        Claims claims = buildClaims(userId, "kv_abc123", "OWNER");
+        when(jwtTokenProvider.parseToken("owner.valid.jwt.token")).thenReturn(claims);
+        when(jwtTokenProvider.extractScope(claims)).thenReturn("access");
+        when(jwtTokenProvider.extractTenantId(claims)).thenReturn("kv_abc123");
+        when(jwtTokenProvider.extractRole(claims)).thenReturn("OWNER");
+        when(jwtTokenProvider.extractUserId(claims)).thenReturn(userId);
+        when(jwtTokenProvider.extractTenantStatus(claims)).thenReturn("ACTIVE");
+        // Cutoff BEFORE iat → allow
+        when(tokenRevocationPort.getTokensValidAfter(userId, "kv_abc123"))
+                .thenReturn(Instant.now().minus(10, ChronoUnit.MINUTES));
+        when(jwtTokenProvider.extractIssuedAt(claims))
+                .thenReturn(Instant.now().minus(1, ChronoUnit.MINUTES));
+
+        filterWithJdbc().doFilterInternal(request, response, filterChain);
+
         verify(filterChain).doFilter(request, response);
         assertThat(response.getStatus()).isEqualTo(200);
     }

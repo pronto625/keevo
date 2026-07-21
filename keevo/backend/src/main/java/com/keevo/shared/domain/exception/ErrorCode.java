@@ -60,6 +60,7 @@ public enum ErrorCode {
     PASSWORD_CHANGE_REQUIRED,
     STORE_REASSIGNED,
     ACCOUNT_INACTIVE,
+    SESSION_REVOKED,   // Story 12.2 — NFR12: token issued before tokens_valid_after cutoff (401)
 
     // ── Store ─────────────────────────────────────────────────────
     STORE_NOT_FOUND,

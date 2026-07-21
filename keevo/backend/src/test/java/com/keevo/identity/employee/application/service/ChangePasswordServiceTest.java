@@ -4,6 +4,7 @@ import com.keevo.identity.auth.domain.model.AuthTokens;
 import com.keevo.identity.auth.domain.model.Role;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
+import com.keevo.identity.auth.domain.port.out.TokenRevocationPort;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.employee.domain.event.EmployeePasswordSetEvent;
 import com.keevo.identity.employee.domain.model.Employee;
@@ -12,8 +13,10 @@ import com.keevo.identity.employee.domain.port.in.ChangePasswordCommand;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.JwtProperties;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,6 +47,7 @@ class ChangePasswordServiceTest {
     @Mock UserRepository userRepository;
     @Mock EmployeeRepository employeeRepository;
     @Mock RefreshTokenRepository refreshTokenRepository;
+    @Mock TokenRevocationPort tokenRevocationPort;
     @Mock PasswordEncoder passwordEncoder;
     @Mock JwtTokenProvider jwtTokenProvider;
     @Mock JwtProperties jwtProperties;
@@ -64,6 +68,11 @@ class ChangePasswordServiceTest {
                 Role.EMPLOYEE, true, Instant.now());
         employee = new Employee(employeeId, userId, UUID.randomUUID(), "Loïc", "Nkoulou",
                 EmployeeStatus.ACTIVE, true, Instant.now());
+    }
+
+    @AfterEach
+    void tearDown() {
+        TenantContext.clear();
     }
 
     @Test
@@ -166,5 +175,28 @@ class ChangePasswordServiceTest {
         assertThat(result.accessToken()).isEqualTo("freshAccessToken");
         assertThat(result.refreshToken()).isEqualTo("freshRefreshToken");
         verify(refreshTokenRepository).revokeAllByUserId(userId);
+    }
+
+    // ── Story 12.2 — Session revocation ─────────────────────────────────
+
+    @Test
+    @DisplayName("execute() should revoke all sessions on password change (Story 12.2)")
+    void shouldRevokeAllSessionsOnPasswordChange() {
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("tempPass123", "$2a$12$oldHash")).thenReturn(true);
+        when(passwordEncoder.encode("NewPass1234")).thenReturn("$2a$12$newHash");
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(employeeRepository.findByUserId(userId)).thenReturn(Optional.of(employee));
+        when(employeeRepository.updatePasswordChangeRequired(employeeId, false)).thenReturn(employee.withPasswordChangeRequired(false));
+        when(jwtTokenProvider.generateAccessToken(any(), any(), any(), any(), any(), anyBoolean(), any()))
+                .thenReturn("token");
+        when(jwtTokenProvider.generateRefreshToken()).thenReturn("refresh");
+        when(jwtProperties.getAccessTokenExpiryHours()).thenReturn(24);
+        TenantContext.setCurrentTenant("kv_abc123");
+
+        changePasswordService.execute(new ChangePasswordCommand(userId, "tempPass123", "NewPass1234"));
+
+        // Password change = credential compromise → revoke across ALL the user's memberships
+        verify(tokenRevocationPort).revokeAllSessionsEverywhere(eq(userId));
     }
 }

@@ -70,6 +70,7 @@ public class GlobalExceptionHandler {
             Map.entry("PASSWORD_CHANGE_REQUIRED",  "Vous devez changer votre mot de passe avant de continuer"),
             Map.entry("STORE_REASSIGNED",          "Votre boutique a été modifiée, veuillez vous reconnecter"),
             Map.entry("ACCOUNT_INACTIVE",          "Ce compte a été désactivé"),
+            Map.entry("SESSION_REVOKED",           "Votre session a été révoquée, veuillez vous reconnecter"),
             Map.entry("SALE_NOT_FOUND",            "Vente introuvable"),
             Map.entry("SALE_ALREADY_EXISTS",       "Cette vente a déjà été enregistrée"),
             Map.entry("VALIDATION_FAILED",         "Données invalides"),
@@ -187,7 +188,8 @@ public class GlobalExceptionHandler {
                  "INVALID_CREDENTIALS", "ACCOUNT_LOCKED",
                  "REFRESH_TOKEN_INVALID",
                  "ACCOUNT_INACTIVE",
-                 "STORE_REASSIGNED" -> HttpStatus.UNAUTHORIZED;
+                 "STORE_REASSIGNED",
+                 "SESSION_REVOKED" -> HttpStatus.UNAUTHORIZED;
             case "EMAIL_ALREADY_EXISTS", "USER_ALREADY_EXISTS",
                  "TENANT_ALREADY_EXISTS",
                  "MEMBERSHIP_ALREADY_EXISTS",

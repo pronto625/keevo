@@ -1,6 +1,7 @@
 package com.keevo.shared.infrastructure.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.keevo.identity.auth.domain.port.out.TokenRevocationPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaSyncService;
@@ -23,6 +24,8 @@ import org.springframework.util.AntPathMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -72,15 +75,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private final ObjectMapper objectMapper;
     private final TenantSchemaSyncService tenantSchemaSyncService;
     private final JdbcTemplate jdbcTemplate;
+    private final TokenRevocationPort tokenRevocationPort;
 
     public JwtAuthFilter(JwtTokenProvider jwtTokenProvider,
                          ObjectMapper objectMapper,
                          TenantSchemaSyncService tenantSchemaSyncService,
-                         JdbcTemplate jdbcTemplate) {
+                         JdbcTemplate jdbcTemplate,
+                         TokenRevocationPort tokenRevocationPort) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.objectMapper = objectMapper;
         this.tenantSchemaSyncService = tenantSchemaSyncService;
         this.jdbcTemplate = jdbcTemplate;
+        this.tokenRevocationPort = tokenRevocationPort;
     }
 
     /**
@@ -126,6 +132,37 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             UUID userId = jwtTokenProvider.extractUserId(claims);
             String tenantStatus = jwtTokenProvider.extractTenantStatus(claims);
 
+            // S5 / ARCH18 (B-HIGH-6, Story 12-5): validate tenantId for ALL roles before it
+            // reaches any SQL path. The connection provider's search_path gate is bypassed by
+            // fully-qualified "schema"."table" JDBC (revocation adapter, EMPLOYEE branch) — the
+            // schema portion MUST be validated. RS256 mitigates forgery but defense-in-depth
+            // requires no unvalidated claim ever enters a SQL string.
+            String schema;
+            try {
+                schema = TenantSchema.validate(tenantId);
+            } catch (IllegalArgumentException ex) {
+                writeError(response, "TOKEN_INVALID");
+                return;
+            }
+
+            // Story 12.2 — NFR12 (<5min session revocation, B-HIGH-5/S2): reject access tokens
+            // issued BEFORE the membership's tokens_valid_after cutoff. Applies to ALL roles
+            // (OWNER + EMPLOYEE), BEFORE TenantContext is set so a revoked token never seeds
+            // the ThreadLocal. EMPLOYEE per-request DB check below remains as defense-in-depth.
+            // NB: `iat` is a JWT NumericDate (seconds, RFC 7519) while `tva` is a timestamp(6)
+            // (microseconds). Truncate tva to seconds before comparing — otherwise a freshly-
+            // minted post-revoke token (revoke + mint within the same second, sub-second tva)
+            // is falsely rejected as SESSION_REVOKED, locking the user out right after a
+            // password change. Sub-second race is within NFR12's <5min tolerance.
+            Instant tva = tokenRevocationPort.getTokensValidAfter(userId, tenantId);
+            if (tva != null) {
+                Instant iat = jwtTokenProvider.extractIssuedAt(claims);
+                if (iat != null && iat.isBefore(tva.truncatedTo(ChronoUnit.SECONDS))) {
+                    writeError(response, "SESSION_REVOKED");
+                    return;
+                }
+            }
+
             // Set multi-tenant context for JPA routing
             TenantContext.setCurrentTenant(tenantId);
 
@@ -143,20 +180,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             tenantSchemaSyncService.syncIfNeeded(tenantId);
 
             // Story 3.5 — EMPLOYEE runtime guards (DB-backed, runs AFTER TenantContext is set).
+            // `schema` was validated above for ALL roles (Story 12-5 defense-in-depth).
             if ("EMPLOYEE".equals(role)) {
-                // S5 / ARCH18 (B-HIGH-6): validate tenantId before raw-JDBC interpolation.
-                // The connection provider's search_path gate is bypassed here — JdbcTemplate
-                // uses a fully-qualified "schema"."table" name, so the schema portion MUST be
-                // validated. RS256 signing mitigates forgery but defense-in-depth requires
-                // that no unvalidated claim ever enters a SQL string.
-                String schema;
-                try {
-                    schema = TenantSchema.validate(tenantId);
-                } catch (IllegalArgumentException ex) {
-                    writeError(response, "TOKEN_INVALID");
-                    return;
-                }
-
                 try {
                     Map<String, Object> empRow = jdbcTemplate.queryForMap(
                             "SELECT store_id, status, password_change_required FROM \""
