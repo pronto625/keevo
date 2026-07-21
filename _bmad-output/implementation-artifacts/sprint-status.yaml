@@ -333,7 +333,7 @@ development_status:
 
   v1s-epic-13-concurrency-integrity: in-progress      # remediation Epic 13 — 7 stories, tag A, release-blocker
   v1s-13-1-optimistic-lock-stock-transfer: done       # B-CRIT-1/2 — @Version StockTransfer + StockLevel | code review 2026-07-21 bmad-code-review passé (2 patches : clearAutomatically=true + test mock chaining ; 3 defers ; ~10 dismiss ; 22/22 tests GREEN, 0 NEW régression)
-  v1s-13-2-sync-gate-7d-unblock: review             # B-CRIT-3, FR74 — pull lève la porte + deviceId lié actor
+  v1s-13-2-sync-gate-7d-unblock: done       # B-CRIT-3, FR74 — pull lève la porte + deviceId lié actor | code review 2026-07-21 bmad-code-review passé (3 patches appliqués : P1 tests pull endpoint ownership check 5 tests SyncControllerPullGateTest, P2 DRY violation verifyDeviceOwnership() extrait méthode privée, P3 requête DB redondante éliminée ; 2 tests ajoutés SyncGateCheckServiceTest pour pull-only scenarios ; 1 decision résolue : helper stateWithPullAt() utilisé pour tests ; 3 defers : TOCTOU race pull, logging sécurité, information disclosure ; 9 dismiss ; 25/25 tests impactés GREEN, 0 NEW régression)
   v1s-13-3-dayclosure-weekly-eod-fix: backlog         # B-MED (3 bugs), FR42/52/53 — totalTransactions + fenêtre lundi + EOD timing
   v1s-13-4-sync-queue-drift-atomic: backlog           # F-HIGH-4 — sync_queue dans la txn Drift (Flutter)
   v1s-13-5-fr90-sale-cancellation: backlog            # B-HIGH-8/F-CRIT-1, FR90 — V1 patch ; refonte-native = 17-1
