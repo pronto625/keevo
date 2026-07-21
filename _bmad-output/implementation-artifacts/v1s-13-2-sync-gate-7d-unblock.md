@@ -3,7 +3,7 @@ baseline_commit: 1299370
 ---
 # Story 13.2: Corriger le verrouillage permanent porte sync 7j — `GREATEST(last_push_at, last_pull_at)` + `deviceId` lié à `actorId`
 
-Status: review
+Status: done
 
 <!-- V1-stabilization track — tag A (patch V1 urgent, release-blocker).
      Branche : v1-stabilization (off deploy d766035, HEAD 1299370 = story 13.1 done).
@@ -132,6 +132,17 @@ Aucune vérification que `deviceId` appartient bien à l'`actorId` du JWT. Un at
   - [x] 3.2 Vérifier que `SyncControllerPushGateTest` existant (push_staleDevice_returns423) passe toujours
   - [x] 3.3 Vérifier que `SyncGateCheckServiceTest` existant (5 tests) passe toujours
   - [x] 3.4 Vérifier que `AdminSyncMonitoringService` (qui lit `last_push_at` pour le dashboard super-admin) n'est pas impacté — l'Option A préserve `last_push_at` réel
+
+### Review Findings
+
+Code review 2026-07-21 (bmad-code-review) — 3 layers: Blind Hunter, Edge Case Hunter, Acceptance Auditor
+
+- [x] [Review][Patch] Tests manquants pour pull endpoint ownership check [SyncControllerPullGateTest.java] — **APPLIED**: 5 tests ajoutés (reject mismatch, allow unknown, allow owned, allow userId null, allow no header)
+- [x] [Review][Patch] DRY violation — logique ownership check dupliquée push/pull [SyncController.java:83-91,146-154] — **APPLIED**: méthode privée `verifyDeviceOwnership()` extraite
+- [x] [Review][Patch] Requête DB redondante sur chemin push [SyncController.java:84,95] — **APPLIED**: `syncStateOpt` réutilisé pour gate check
+- [x] [Review][Defer] TOCTOU race condition sur pull endpoint [SyncController.java:146-157] — deferred, risque théorique faible (nécessite coordination attaquant+victim au même device)
+- [x] [Review][Defer] Logging de sécurité manquant sur échec ownership check — deferred, pattern à normaliser (sync module n'utilise pas AuditPort)
+- [x] [Review][Defer] Risque information disclosure — fuite existence device via 403 vs success — deferred, threat model spéculatif
 
 ## Dev Notes
 
