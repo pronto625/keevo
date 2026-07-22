@@ -186,10 +186,10 @@ class InventorySessionControllerTest {
     @Test
     void POST_sessions_employeeOwnStore_returns201() throws Exception {
         authenticateAs("EMPLOYEE");
-        // Simulate JwtAuthFilter setting details = assigned storeId
+        // Simulate JwtAuthFilter setting details = AuthDetails with assigned storeId
         UsernamePasswordAuthenticationToken auth =
                 (UsernamePasswordAuthenticationToken) SecurityContextHolder.getContext().getAuthentication();
-        auth.setDetails(storeId);
+        auth.setDetails(new com.keevo.shared.infrastructure.security.AuthDetails("Loïc", storeId));
 
         var session = InventorySession.create(storeId, InventoryScope.FULL, null, actorId);
         when(createSessionUseCase.execute(any())).thenReturn(session);
@@ -210,7 +210,7 @@ class InventorySessionControllerTest {
         UUID assignedStoreId = UUID.randomUUID();
         UsernamePasswordAuthenticationToken auth =
                 (UsernamePasswordAuthenticationToken) SecurityContextHolder.getContext().getAuthentication();
-        auth.setDetails(assignedStoreId);
+        auth.setDetails(new com.keevo.shared.infrastructure.security.AuthDetails("Loïc", assignedStoreId));
 
         UUID otherStoreId = UUID.randomUUID();
 

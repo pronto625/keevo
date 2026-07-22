@@ -50,7 +50,10 @@ public class CreateProductUseCase {
         Integer stockQuantity,
         UUID actorId,  // Added for audit trail
         Integer minimumThreshold,  // Story 2.4: CSV import can set initial threshold
-        String status  // Story 4.3: POS draft creation — "DRAFT" or null (defaults to ACTIVE)
+        String status,  // Story 4.3: POS draft creation — "DRAFT" or null (defaults to ACTIVE)
+        String actorRole,  // Story 14.10: "OWNER" or "EMPLOYEE" — for notification dispatch
+        String actorName,  // Story 14.10: display name for notifications
+        String storeName   // Story 14.10: employee's assigned store name (nullable for OWNER)
     ) {
         /** Backward-compatible constructor without minimumThreshold + status. */
         public CreateProductDto(
@@ -58,7 +61,7 @@ public class CreateProductUseCase {
                 Integer price, Integer buyPrice, Integer transportCost,
                 Integer stockQuantity, UUID actorId) {
             this(name, description, sku, categoryId, price, buyPrice, transportCost,
-                 stockQuantity, actorId, 0, null);
+                 stockQuantity, actorId, 0, null, null, null, null);
         }
         /** Backward-compatible constructor without status. */
         public CreateProductDto(
@@ -66,7 +69,7 @@ public class CreateProductUseCase {
                 Integer price, Integer buyPrice, Integer transportCost,
                 Integer stockQuantity, UUID actorId, Integer minimumThreshold) {
             this(name, description, sku, categoryId, price, buyPrice, transportCost,
-                 stockQuantity, actorId, minimumThreshold, null);
+                 stockQuantity, actorId, minimumThreshold, null, null, null, null);
         }
     }
 
@@ -121,6 +124,9 @@ public class CreateProductUseCase {
             saved.getSku(),
             tenantId,
             dto.actorId(),
+            dto.actorRole(),
+            dto.actorName(),
+            dto.storeName(),
             Instant.now()
         ));
         

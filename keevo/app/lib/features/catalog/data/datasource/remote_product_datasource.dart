@@ -55,22 +55,6 @@ class RemoteProductDataSource {
     }
   }
 
-  /// PATCH /api/v1/products/[id]/archive — archive a product on the backend.
-  Future<void> archive(String id) async {
-    try {
-      await _dio.patch<void>('/api/v1/products/$id/archive');
-    } on DioException catch (e) {
-      throw _mapError(e);
-    }
-  }
-  /// PATCH /api/v1/products/[id]/unarchive — unarchive a product on the backend.
-  Future<void> unarchive(String id) async {
-    try {
-      await _dio.patch('/api/v1/products/$id/unarchive');
-    } on DioException catch (e) {
-      throw _mapError(e);
-    }
-  }
   ProductException _mapError(DioException e) {
     // No response = connection refused / timeout — let it propagate so the
     // repository can apply the offline fallback instead of showing an error.

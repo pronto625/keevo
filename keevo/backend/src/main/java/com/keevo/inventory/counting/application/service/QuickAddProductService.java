@@ -18,6 +18,8 @@ import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +36,8 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 @Service
 public class QuickAddProductService implements QuickAddProductUseCase {
+
+    private static final Logger log = LoggerFactory.getLogger(QuickAddProductService.class);
 
     private final InventorySessionRepository sessionRepository;
     private final ProductRepository productRepository;
@@ -101,9 +105,32 @@ public class QuickAddProductService implements QuickAddProductUseCase {
         InventoryCount savedCount = countRepository.save(count);
 
         // 6. Publish events
+        // Story 14.10: extract actorRole/actorName from SecurityContext
+        String actorRole = null;
+        String actorName = null;
+        try {
+            var auth = org.springframework.security.core.context.SecurityContextHolder
+                    .getContext().getAuthentication();
+            if (auth != null) {
+                actorRole = auth.getAuthorities().stream()
+                        .findFirst()
+                        .map(org.springframework.security.core.GrantedAuthority::getAuthority)
+                        .map(a -> a.startsWith("ROLE_") ? a.substring(5) : a)
+                        .orElse(null);
+                var details = auth.getDetails();
+                if (details instanceof com.keevo.shared.infrastructure.security.AuthDetails ad) {
+                    actorName = ad.firstName();
+                }
+                if (actorName == null) actorName = cmd.actorId().toString();
+            }
+        } catch (Exception e) {
+            log.warn("[QUICKADD] Actor-context extraction failed for actorId={}: {}", cmd.actorId(), e.getMessage());
+        }
         eventPublisher.publishEvent(new ProductCreatedEvent(
                 savedProduct.getId(), savedProduct.getName(), savedProduct.getSku(),
-                TenantContext.getCurrentTenant(), cmd.actorId(), now
+                TenantContext.getCurrentTenant(), cmd.actorId(),
+                actorRole, actorName, null,
+                now
         ));
         eventPublisher.publishEvent(new InventoryCountSavedEvent(
                 savedCount.getId(), cmd.sessionId(), savedProduct.getId(), null,

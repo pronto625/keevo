@@ -98,5 +98,57 @@ void main() {
         'src-001',
       );
     });
+
+    test('getHistory passes destinationStoreId as "destination" query parameter', () async {
+      when(() => dio.get<Map<String, dynamic>>(
+            '/api/v1/stock/transfers',
+            queryParameters: any(named: 'queryParameters'),
+          )).thenAnswer((_) async => Response(
+            data: {
+              'data': {'content': [], 'totalElements': 0}
+            },
+            statusCode: 200,
+            requestOptions: RequestOptions(path: '/api/v1/stock/transfers'),
+          ));
+
+      await datasource.getHistory(destinationStoreId: 'dst-001');
+
+      final captured = verify(() => dio.get<Map<String, dynamic>>(
+            '/api/v1/stock/transfers',
+            queryParameters: captureAny(named: 'queryParameters'),
+          )).captured;
+      expect(
+        (captured.first as Map<String, dynamic>)['destination'],
+        'dst-001',
+      );
+    });
+
+    test(
+        'getHistory passes both sourceStoreId and destinationStoreId together',
+        () async {
+      when(() => dio.get<Map<String, dynamic>>(
+            '/api/v1/stock/transfers',
+            queryParameters: any(named: 'queryParameters'),
+          )).thenAnswer((_) async => Response(
+            data: {
+              'data': {'content': [], 'totalElements': 0}
+            },
+            statusCode: 200,
+            requestOptions: RequestOptions(path: '/api/v1/stock/transfers'),
+          ));
+
+      await datasource.getHistory(
+        sourceStoreId: 'src-001',
+        destinationStoreId: 'dst-001',
+      );
+
+      final captured = verify(() => dio.get<Map<String, dynamic>>(
+            '/api/v1/stock/transfers',
+            queryParameters: captureAny(named: 'queryParameters'),
+          )).captured;
+      final queryParameters = captured.first as Map<String, dynamic>;
+      expect(queryParameters['source'], 'src-001');
+      expect(queryParameters['destination'], 'dst-001');
+    });
   });
 }

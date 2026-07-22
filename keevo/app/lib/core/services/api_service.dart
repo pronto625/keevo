@@ -35,7 +35,7 @@ class ApiException implements Exception {
     if (error.response?.data is Map<String, dynamic>) {
       final data = error.response!.data as Map<String, dynamic>;
       message = data['message'] ?? data['error'] ?? 'Unknown error';
-      domainCode = data['code']?.toString();
+      domainCode = data['domainCode']?.toString();
     } else if (error.message != null) {
       message = error.message!;
     }

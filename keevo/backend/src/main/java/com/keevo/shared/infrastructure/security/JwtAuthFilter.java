@@ -131,6 +131,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             String role = jwtTokenProvider.extractRole(claims);
             UUID userId = jwtTokenProvider.extractUserId(claims);
             String tenantStatus = jwtTokenProvider.extractTenantStatus(claims);
+            String firstName = jwtTokenProvider.extractFirstName(claims); // Story 14.10 — may be null
 
             // S5 / ARCH18 (B-HIGH-6, Story 12-5): validate tenantId for ALL roles before it
             // reaches any SQL path. The connection provider's search_path gate is bypassed by
@@ -218,9 +219,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             var auth = new UsernamePasswordAuthenticationToken(
                     userId, null,
                     List.of(new SimpleGrantedAuthority("ROLE_" + role)));
-            // AC5: expose storeId in details so controllers can scope queries for EMPLOYEE
+            // Story 14.10: store firstName + storeId in AuthDetails for controller access
             if ("EMPLOYEE".equals(role)) {
-                auth.setDetails(jwtTokenProvider.extractStoreId(claims));
+                UUID storeId = jwtTokenProvider.extractStoreId(claims);
+                auth.setDetails(AuthDetails.employee(firstName, storeId));
+            } else {
+                auth.setDetails(AuthDetails.owner(firstName));
             }
             SecurityContextHolder.getContext().setAuthentication(auth);
 

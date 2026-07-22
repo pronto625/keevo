@@ -20,7 +20,6 @@ abstract class StockTransferRepository {
   Future<List<StockTransferModel>> getHistory({
     String? sourceStoreId,
     String? destinationStoreId,
-    String? productId,
     int page = 0,
     int pageSize = 20,
   });

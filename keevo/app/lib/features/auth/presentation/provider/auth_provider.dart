@@ -27,6 +27,7 @@ import '../../domain/usecase/change_password_usecase.dart';
 import '../../domain/usecase/login_usecase.dart';
 import '../../domain/usecase/register_user_usecase.dart';
 import '../../domain/usecase/select_tenant_usecase.dart';
+import '../../../settings/presentation/provider/account_status_provider.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 
 part 'auth_provider.g.dart';
@@ -225,6 +226,7 @@ class Registration extends _$Registration {
         ref.read(activeStoreIdProvider.notifier).setActiveStore(null);
         ref.invalidate(currentUserRoleProvider);
         ref.invalidate(currentUserPhoneProvider);
+        ref.invalidate(tenantStatusClaimProvider);
       }
     });
   }
@@ -278,6 +280,7 @@ class Login extends _$Login {
         );
         ref.invalidate(currentUserRoleProvider);
         ref.invalidate(currentUserPhoneProvider);
+        ref.invalidate(tenantStatusClaimProvider);
       }
     });
     state = result;
@@ -332,6 +335,7 @@ class SelectTenant extends _$SelectTenant {
       );
       ref.invalidate(currentUserRoleProvider);
       ref.invalidate(currentUserPhoneProvider);
+      ref.invalidate(tenantStatusClaimProvider);
     });
     state = result;
   }

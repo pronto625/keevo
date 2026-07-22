@@ -129,7 +129,6 @@ class StockTransferRepositoryImpl implements StockTransferRepository {
   Future<List<StockTransferModel>> getHistory({
     String? sourceStoreId,
     String? destinationStoreId,
-    String? productId,
     int page = 0,
     int pageSize = 20,
   }) async {
@@ -137,7 +136,6 @@ class StockTransferRepositoryImpl implements StockTransferRepository {
       return _local.getHistory(
         sourceStoreId: sourceStoreId,
         destinationStoreId: destinationStoreId,
-        productId: productId,
         page: page,
         pageSize: pageSize,
       );
@@ -146,7 +144,6 @@ class StockTransferRepositoryImpl implements StockTransferRepository {
       final transfers = await _remote.getHistory(
         sourceStoreId: sourceStoreId,
         destinationStoreId: destinationStoreId,
-        productId: productId,
         page: page,
         pageSize: pageSize,
       );
@@ -160,7 +157,6 @@ class StockTransferRepositoryImpl implements StockTransferRepository {
       return _local.getHistory(
         sourceStoreId: sourceStoreId,
         destinationStoreId: destinationStoreId,
-        productId: productId,
         page: page,
         pageSize: pageSize,
       );

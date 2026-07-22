@@ -207,7 +207,32 @@ void main() {
             payload: any(named: 'payload'),
             entityId: any(named: 'entityId'),
           )).called(1);
-      verifyNever(() => mockRemote.archive(any()));
+    });
+  });
+
+  group('AC2 — unarchive() offline-first', () {
+    test('unarchive_writesLocalFirst_queuesUnarchiveProduct', () async {
+      final callOrder = <String>[];
+      when(() => mockLocal.unarchiveById(any())).thenAnswer((_) async {
+        callOrder.add('local');
+      });
+      when(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).thenAnswer((_) async {
+        callOrder.add('queue');
+      });
+      when(() => mockDispatcher.triggerPushIfIdle()).thenReturn(null);
+
+      await repo.unarchive('prod-uuid-5-6');
+
+      expect(callOrder, ['local', 'queue']);
+      verify(() => mockSyncService.queueOperation(
+            operation: 'UNARCHIVE_PRODUCT',
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).called(1);
     });
   });
 }

@@ -39,21 +39,19 @@ final stockTransferRepositoryProvider =
   );
 });
 
-// ── Transfer history (keyed by optional storeId / productId) ────────────────
+// ── Transfer history (keyed by optional storeId) ──────────────────────────
 
 @riverpod
 Future<List<StockTransferModel>> transferHistory(
   TransferHistoryRef ref, {
   String? sourceStoreId,
   String? destinationStoreId,
-  String? productId,
   int page = 0,
   int pageSize = 20,
 }) async {
   final transfers = await ref.watch(stockTransferRepositoryProvider).getHistory(
         sourceStoreId: sourceStoreId,
         destinationStoreId: destinationStoreId,
-        productId: productId,
         page: page,
         pageSize: pageSize,
       );

@@ -12,12 +12,15 @@ import com.keevo.catalog.product.application.usecase.ArchiveProductUseCase;
 import com.keevo.catalog.product.application.usecase.GetProductPricingUseCase;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
 import com.keevo.catalog.product.domain.entity.Product;
+import com.keevo.shared.infrastructure.security.AuthDetails;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.store.store.domain.port.out.StoreRepository;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import jakarta.validation.Valid;
@@ -41,6 +44,7 @@ public class ProductController {
     private final GetProductPricingUseCase getProductPricingUseCase;
     private final GetSupplierByProductUseCase getSupplierByProductUseCase;
     private final GetSupplierProfileUseCase getSupplierProfileUseCase;
+    private final StoreRepository storeRepository; // Story 14.10: resolve store names
 
     public ProductController(CreateProductUseCase createProductUseCase,
                            UpdateProductUseCase updateProductUseCase,
@@ -48,7 +52,8 @@ public class ProductController {
                            ProductRepository productRepository,
                            GetProductPricingUseCase getProductPricingUseCase,
                            GetSupplierByProductUseCase getSupplierByProductUseCase,
-                           GetSupplierProfileUseCase getSupplierProfileUseCase) {
+                           GetSupplierProfileUseCase getSupplierProfileUseCase,
+                           StoreRepository storeRepository) {
         this.createProductUseCase = createProductUseCase;
         this.updateProductUseCase = updateProductUseCase;
         this.archiveProductUseCase = archiveProductUseCase;
@@ -56,6 +61,7 @@ public class ProductController {
         this.getProductPricingUseCase = getProductPricingUseCase;
         this.getSupplierByProductUseCase = getSupplierByProductUseCase;
         this.getSupplierProfileUseCase = getSupplierProfileUseCase;
+        this.storeRepository = storeRepository;
     }
 
     /**
@@ -68,6 +74,9 @@ public class ProductController {
         
         // Extract actorId from SecurityContext — set by JwtAuthFilter
         UUID actorId = (UUID) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        String actorRole = extractRole();
+        String actorName = extractActorName();
+        String storeName = resolveEmployeeStoreName();
         
         var dto = new CreateProductUseCase.CreateProductDto(
                 request.name(),
@@ -80,7 +89,10 @@ public class ProductController {
                 request.stockQuantity(),
                 actorId,
                 0,
-                request.status()
+                request.status(),
+                actorRole,
+                actorName,
+                storeName
         );
         
         Product product = createProductUseCase.execute(dto);
@@ -211,5 +223,40 @@ public class ProductController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(ApiResponseWrapper.error("Produit introuvable", "NOT_FOUND", "PRODUCT_NOT_FOUND", null));
         }
+    }
+
+    // ── Story 14.10 helpers ─────────────────────────────────────────────
+
+    /**
+     * Best-effort role extraction for notification dispatch — must never block product
+     * creation. Returns null (skipping the employee-action notification downstream)
+     * rather than throwing when no authority is present.
+     */
+    private String extractRole() {
+        return SecurityContextHolder.getContext().getAuthentication()
+                .getAuthorities().stream()
+                .findFirst()
+                .map(GrantedAuthority::getAuthority)
+                .map(a -> a.startsWith("ROLE_") ? a.substring(5) : a)
+                .orElse(null);
+    }
+
+    private String extractActorName() {
+        Object details = SecurityContextHolder.getContext().getAuthentication().getDetails();
+        if (details instanceof AuthDetails ad && ad.firstName() != null) {
+            return ad.firstName();
+        }
+        return SecurityContextHolder.getContext().getAuthentication().getPrincipal().toString();
+    }
+
+    /** Resolve employee's assigned store name, or null for OWNER. */
+    private String resolveEmployeeStoreName() {
+        Object details = SecurityContextHolder.getContext().getAuthentication().getDetails();
+        if (details instanceof AuthDetails ad && ad.storeId() != null) {
+            return storeRepository.findById(ad.storeId())
+                    .map(s -> s.name())
+                    .orElse(null);
+        }
+        return null;
     }
 }

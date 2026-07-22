@@ -38,7 +38,7 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining("période d'essai est terminée"), findsOneWidget);
+      expect(find.textContaining('plan Gratuit'), findsOneWidget);
     });
 
     testWidgets('hides banner when account is active', (tester) async {
@@ -55,7 +55,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('suspendu'), findsNothing);
-      expect(find.textContaining('essai'), findsNothing);
+      expect(find.textContaining('Gratuit'), findsNothing);
     });
   });
 }

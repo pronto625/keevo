@@ -10,6 +10,7 @@ import '../../../stores/domain/model/store_model.dart';
 import '../../../stores/domain/model/store_type.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../../stores/presentation/provider/store_provider.dart';
+import '../provider/account_status_provider.dart';
 
 /// SettingsPage — "Plus" tab → Paramètres.
 ///
@@ -406,6 +407,7 @@ class SettingsPage extends ConsumerWidget {
 
     ref.invalidate(currentUserRoleProvider);
     ref.invalidate(currentUserPhoneProvider);
+    ref.invalidate(tenantStatusClaimProvider);
 
     if (context.mounted) context.go('/auth/login');
   }

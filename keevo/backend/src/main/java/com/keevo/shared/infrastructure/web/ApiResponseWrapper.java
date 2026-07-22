@@ -12,6 +12,9 @@ import java.time.Instant;
  * <p>Success:
  * <pre>{@code { "data": {...}, "timestamp": "..." } }</pre>
  *
+ * <p>Paginated:
+ * <pre>{@code { "data": [...], "meta": {"page":0,"size":20,"totalElements":150,"totalPages":8}, "timestamp": "..." } }</pre>
+ *
  * <p>Error:
  * <pre>{@code { "error": "message", "code": "NOT_FOUND", "domainCode": "...", "details": {...}, "timestamp": "..." } }</pre>
  */
@@ -22,14 +25,37 @@ public record ApiResponseWrapper<T>(
         String code,
         String domainCode,
         Object details,
+        Object meta,
         Instant timestamp
 ) {
     public static <T> ApiResponseWrapper<T> ok(T data) {
-        return new ApiResponseWrapper<>(data, null, null, null, null, Instant.now());
+        return new ApiResponseWrapper<>(data, null, null, null, null, null, Instant.now());
     }
 
     public static <T> ApiResponseWrapper<T> error(
             String error, String code, String domainCode, Object details) {
-        return new ApiResponseWrapper<>(null, error, code, domainCode, details, Instant.now());
+        return new ApiResponseWrapper<>(null, error, code, domainCode, details, null, Instant.now());
+    }
+
+    /**
+     * Build a paginated success response with {@code meta} containing page, size,
+     * totalElements and totalPages.
+     *
+     * <p>The {@code meta} field is {@code @JsonInclude(NON_NULL)} so it is absent
+     * from JSON serialisation when {@code null} — existing non-paginated endpoints
+     * are unaffected.
+     */
+    public static <T> ApiResponseWrapper<T> paginated(
+            T data,
+            int page,
+            int size,
+            long totalElements,
+            int totalPages) {
+        var meta = java.util.Map.of(
+                "page", page,
+                "size", size,
+                "totalElements", totalElements,
+                "totalPages", totalPages);
+        return new ApiResponseWrapper<>(data, null, null, null, null, meta, Instant.now());
     }
 }

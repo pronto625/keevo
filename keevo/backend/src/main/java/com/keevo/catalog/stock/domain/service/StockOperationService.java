@@ -11,6 +11,7 @@ import com.keevo.catalog.stock.domain.port.out.StockMovementRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -49,15 +50,18 @@ public class StockOperationService {
     private final StockMovementRepository stockMovementRepository;
     private final ProductRepository productRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final StoreRepository storeRepository; // Story 14.10
 
     public StockOperationService(StockLevelRepository stockLevelRepository,
                                  StockMovementRepository stockMovementRepository,
                                  ProductRepository productRepository,
-                                 ApplicationEventPublisher eventPublisher) {
+                                 ApplicationEventPublisher eventPublisher,
+                                 StoreRepository storeRepository) {
         this.stockLevelRepository    = stockLevelRepository;
         this.stockMovementRepository = stockMovementRepository;
         this.productRepository       = productRepository;
         this.eventPublisher          = eventPublisher;
+        this.storeRepository         = storeRepository;
     }
 
     /**
@@ -122,12 +126,40 @@ public class StockOperationService {
         String tenantId = TenantContext.getCurrentTenant();
 
         // 6. Publish stock adjusted event (Observer — decouples audit from domain)
+        // Story 14.10: extract actorRole/actorName/storeName from SecurityContext
+        String actorRole = null;
+        String actorName = null;
+        String storeName = null;
+        try {
+            var auth = org.springframework.security.core.context.SecurityContextHolder
+                    .getContext().getAuthentication();
+            if (auth != null) {
+                actorRole = auth.getAuthorities().stream()
+                        .findFirst()
+                        .map(org.springframework.security.core.GrantedAuthority::getAuthority)
+                        .map(a -> a.startsWith("ROLE_") ? a.substring(5) : a)
+                        .orElse(null);
+                var details = auth.getDetails();
+                if (details instanceof com.keevo.shared.infrastructure.security.AuthDetails ad) {
+                    actorName = ad.firstName();
+                }
+                if (actorName == null) actorName = actorId.toString();
+                // Resolve store name from repository
+                storeName = storeRepository.findById(storeId)
+                        .map(s -> s.name())
+                        .orElse(null);
+            }
+        } catch (Exception e) {
+            log.warn("[STOCK] Actor-context extraction failed for actorId={}: {}", actorId, e.getMessage());
+        }
         eventPublisher.publishEvent(new StockAdjustedEvent(
             productId, variantId, storeId,
             movementType,
             quantityBefore, quantityChange, quantityAfter,
             actorId, notes,
-            tenantId, now
+            tenantId,
+            actorRole, actorName, storeName, product.getName(),
+            now
         ));
 
         // 7. Threshold check — server-side enforcement (cannot be bypassed client-side)

@@ -73,7 +73,7 @@ class PendingSaleControllerTest {
         var auth = new UsernamePasswordAuthenticationToken(
                 actorId, null,
                 List.of(new SimpleGrantedAuthority("ROLE_EMPLOYEE")));
-        auth.setDetails(storeId);
+        auth.setDetails(new com.keevo.shared.infrastructure.security.AuthDetails("Loïc", storeId));
         SecurityContextHolder.getContext().setAuthentication(auth);
     }
 

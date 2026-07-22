@@ -55,6 +55,7 @@ class StockOperationServiceTest {
     @Mock private StockMovementRepository  stockMovementRepository;
     @Mock private ProductRepository        productRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private com.keevo.store.store.domain.port.out.StoreRepository storeRepository; // Story 14.10
 
     @InjectMocks
     private StockOperationService service;

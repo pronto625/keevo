@@ -7,6 +7,7 @@ import com.keevo.inventory.counting.domain.model.InventorySession;
 import com.keevo.inventory.counting.domain.port.in.*;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.security.AuthDetails;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import io.swagger.v3.oas.annotations.Operation;
@@ -180,14 +181,13 @@ public class InventorySessionController {
      * Story 12.6 — Returns the store UUID embedded in JWT details for EMPLOYEE tokens,
      * or null for OWNER tokens (OWNER is never scoped).
      *
-     * <p>Review fix: an EMPLOYEE authority with no resolvable store UUID (malformed/missing
-     * {@code storeId} claim) must fail closed rather than be treated as unscoped like OWNER.
+     * <p>Story 14.10: adapted to {@link AuthDetails}.
      */
     private UUID extractAssignedStoreId() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         Object details = auth.getDetails();
-        if (details instanceof UUID storeId) {
-            return storeId;
+        if (details instanceof AuthDetails ad && ad.storeId() != null) {
+            return ad.storeId();
         }
         boolean isEmployee = auth.getAuthorities().stream()
                 .anyMatch(a -> "ROLE_EMPLOYEE".equals(a.getAuthority()));

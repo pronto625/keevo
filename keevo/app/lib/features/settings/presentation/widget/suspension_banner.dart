@@ -29,7 +29,7 @@ class SuspensionBanner extends ConsumerWidget {
           color: AppTheme.warning,
           icon: Icons.access_time_outlined,
           message:
-              'Votre période d\'essai est terminée. Passez au plan Premium pour continuer.',
+              'Vous êtes sur le plan Gratuit. Passez au plan Premium pour continuer.',
         ),
       AccountStatus.active => const SizedBox.shrink(),
     };

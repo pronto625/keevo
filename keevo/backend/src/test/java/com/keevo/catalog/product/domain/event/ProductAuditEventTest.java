@@ -70,6 +70,9 @@ class ProductAuditEventTest {
             "KEV-TST123",
             tenantId,
             actorId,
+            "OWNER",        // Story 14.10: actorRole
+            "John",         // Story 14.10: actorName
+            "Test Store",   // Story 14.10: storeName
             Instant.now()
         );
 

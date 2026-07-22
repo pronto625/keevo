@@ -12,6 +12,7 @@ import '../../features/pos/data/datasource/local_day_closure_datasource.dart';
 import '../../features/pos/presentation/provider/day_closure_providers.dart';
 import '../../features/pos/presentation/provider/pos_providers.dart';
 import '../../features/reports/presentation/provider/report_history_providers.dart';
+import '../../features/settings/presentation/widget/suspension_banner.dart';
 import '../../features/stores/presentation/provider/active_store_provider.dart';
 import '../../features/stores/presentation/provider/store_provider.dart';
 import '../../features/sync_indicator/presentation/widget/sync_warning_banner.dart';
@@ -74,6 +75,16 @@ class _MainShellState extends ConsumerState<MainShell> {
             // Invalidate the entire reportHistory family so the list refreshes
             // immediately instead of waiting for the next periodic sync cycle.
             ref.invalidate(reportHistoryProvider);
+          }
+          // Story 14.10: employee action notifications — invalidate relevant providers
+          if (type.startsWith('EMPLOYEE_PRODUCT_CREATED') ||
+              type.startsWith('EMPLOYEE_STOCK_MODIFIED')) {
+            // Invalidate product list to show new/changed products immediately
+            ref.invalidate(productListProvider);
+          }
+          if (type.startsWith('EMPLOYEE_STOCK_MODIFIED')) {
+            // Invalidate the multi-store stock overview so quantities refresh too
+            ref.invalidate(globalStockOverviewProvider);
           }
         },
       );
@@ -275,6 +286,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     return Scaffold(
       body: Column(
         children: [
+          const SuspensionBanner(),
           const SyncWarningBanner(),
           const OfflineGateBanner(),
           Expanded(child: widget.child),

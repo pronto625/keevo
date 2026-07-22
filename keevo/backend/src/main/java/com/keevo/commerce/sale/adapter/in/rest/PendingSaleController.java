@@ -13,6 +13,7 @@ import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase;
 import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase.ValidateSaleCommand;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.security.AuthDetails;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -123,9 +124,11 @@ public class PendingSaleController {
     /**
      * AC5: Returns the store UUID embedded in JWT details for EMPLOYEE tokens,
      * or null for OWNER tokens (OWNER sees all stores).
+     *
+     * <p>Story 14.10: adapted to {@link AuthDetails}.
      */
     private UUID extractAssignedStoreId() {
         Object details = SecurityContextHolder.getContext().getAuthentication().getDetails();
-        return (details instanceof UUID storeId) ? storeId : null;
+        return (details instanceof AuthDetails ad) ? ad.storeId() : null;
     }
 }

@@ -159,7 +159,6 @@ class LocalStockTransferDataSource {
   Future<List<StockTransferModel>> getHistory({
     String? sourceStoreId,
     String? destinationStoreId,
-    String? productId,
     int page = 0,
     int pageSize = 20,
   }) async {
@@ -171,9 +170,6 @@ class LocalStockTransferDataSource {
         }
         if (destinationStoreId != null) {
           where = where & t.destinationStoreId.equals(destinationStoreId);
-        }
-        if (productId != null) {
-          where = where & t.productId.equals(productId);
         }
         return where;
       })
