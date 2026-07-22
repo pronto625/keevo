@@ -43,7 +43,6 @@ public class DayClosureDeltaProvider implements DeltaEntityProvider {
         map.put("employeeId", str(row[2]));
         map.put("closedAt", ts(row[3]));
         map.put("totalSales", num(row[4]));
-        map.put("totalTransactions", num(row[4]));
         map.put("totalRevenue", num(row[5]));
         map.put("cashTotal", num(row[6]));
         map.put("mobileMoneyTotal", num(row[7]));

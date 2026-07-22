@@ -1,10 +1,13 @@
 package com.keevo.commerce.sale.adapter.in.rest;
 
 import com.keevo.commerce.sale.adapter.in.rest.dto.CancelSaleRequestDto;
+import com.keevo.commerce.sale.adapter.in.rest.dto.CorrectSaleRequestDto;
 import com.keevo.commerce.sale.adapter.in.rest.dto.PendingSaleResponseDto;
 import com.keevo.commerce.sale.adapter.in.rest.dto.ValidateSaleRequestDto;
 import com.keevo.commerce.sale.domain.port.in.CancelPendingSaleUseCase;
 import com.keevo.commerce.sale.domain.port.in.CancelPendingSaleUseCase.CancelPendingSaleCommand;
+import com.keevo.commerce.sale.domain.port.in.CorrectSaleUseCase;
+import com.keevo.commerce.sale.domain.port.in.CorrectSaleUseCase.CorrectSaleCommand;
 import com.keevo.commerce.sale.domain.port.in.GetPendingSalesUseCase;
 import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase;
 import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase.ValidateSaleCommand;
@@ -30,13 +33,16 @@ public class PendingSaleController {
     private final GetPendingSalesUseCase getPendingSalesUseCase;
     private final ValidateSaleUseCase validateSaleUseCase;
     private final CancelPendingSaleUseCase cancelPendingSaleUseCase;
+    private final CorrectSaleUseCase correctSaleUseCase;
 
     public PendingSaleController(GetPendingSalesUseCase getPendingSalesUseCase,
                                  ValidateSaleUseCase validateSaleUseCase,
-                                 CancelPendingSaleUseCase cancelPendingSaleUseCase) {
+                                 CancelPendingSaleUseCase cancelPendingSaleUseCase,
+                                 CorrectSaleUseCase correctSaleUseCase) {
         this.getPendingSalesUseCase = getPendingSalesUseCase;
         this.validateSaleUseCase = validateSaleUseCase;
         this.cancelPendingSaleUseCase = cancelPendingSaleUseCase;
+        this.correctSaleUseCase = correctSaleUseCase;
     }
 
     @GetMapping("/pending")
@@ -83,6 +89,19 @@ public class PendingSaleController {
         cancelPendingSaleUseCase.cancelPendingSale(
                 new CancelPendingSaleCommand(id, actorId, assignedStoreId, request.justification()));
         return ResponseEntity.ok(ApiResponseWrapper.ok(Map.of("message", "Sale cancelled")));
+    }
+
+    @PostMapping("/{id}/correct")
+    @PreAuthorize("hasRole('OWNER')")
+    public ResponseEntity<ApiResponseWrapper<Map<String, String>>> correctSale(
+            @PathVariable UUID id, @Valid @RequestBody CorrectSaleRequestDto request) {
+        // Defense-in-depth: explicit role check (testable with standaloneSetup)
+        if (!isOwnerRole()) {
+            throw new DomainException(ErrorCode.FORBIDDEN, "Only OWNER can correct a sale");
+        }
+        correctSaleUseCase.correctSale(new CorrectSaleCommand(
+                id, extractActorId(), extractAssignedStoreId(), request.justification(), request.itemQuantities()));
+        return ResponseEntity.ok(ApiResponseWrapper.ok(Map.of("message", "Sale corrected")));
     }
 
     private UUID extractActorId() {

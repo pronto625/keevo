@@ -65,6 +65,18 @@ class RemoteSaleDataSource {
     );
   }
 
+  /// POST /api/v1/sales/{id}/correct — OWNER-only (Story v1s-13-5).
+  Future<void> correctSale(String saleId, String justification,
+      Map<String, int> itemQuantities) async {
+    await _dio.post(
+      '/api/v1/sales/$saleId/correct',
+      data: {
+        'justification': justification,
+        'itemQuantities': itemQuantities,
+      },
+    );
+  }
+
   /// GET /api/v1/sales/pending — OWNER-only list of PENDING_VALIDATION sales.
   Future<List<Sale>> getPendingSales() async {
     final response = await _dio.get<Map<String, dynamic>>('/api/v1/sales/pending');

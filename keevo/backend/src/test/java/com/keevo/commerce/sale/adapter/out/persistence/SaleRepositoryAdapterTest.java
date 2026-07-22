@@ -195,6 +195,34 @@ class SaleRepositoryAdapterTest {
         assertThat(results.getContent().get(0).getStatus()).isEqualTo(SaleStatus.COMPLETED);
     }
 
+    // ── Story v1s-13-5 — Task 5: verify save() merge on existing aggregate ────
+
+    @Test
+    void save_calledTwiceWithSameItemIds_updatesInPlace_noOrphanRemovalDuplication() {
+        var itemId = UUID.randomUUID();
+        var originalItem = new SaleItem(itemId, SALE_ID, PRODUCT_ID, null, "Produit A", 1000, 1000, 5);
+        var original = new Sale(SALE_ID, STORE_ID, EMPLOYEE_ID, null,
+                PaymentMode.CASH, 5000, 0, SaleStatus.COMPLETED, Instant.now(), Instant.now(),
+                List.of(originalItem));
+        adapter.save(original);
+
+        // Second save on the SAME sale id / SAME item id, only quantity/subtotal changed
+        // (mirrors CorrectSaleService rebuilding the Sale aggregate with corrected items).
+        var correctedItem = new SaleItem(itemId, SALE_ID, PRODUCT_ID, null, "Produit A", 1000, 1000, 2);
+        var corrected = new Sale(SALE_ID, STORE_ID, EMPLOYEE_ID, null,
+                PaymentMode.CASH, 2000, 0, SaleStatus.COMPLETED, original.getOccurredAt(), original.getCreatedAt(),
+                List.of(correctedItem));
+        adapter.save(corrected);
+
+        var found = springRepository.findByIdWithItems(SALE_ID);
+        assertThat(found).isPresent();
+        assertThat(found.get().getTotalAmount()).isEqualTo(2000);
+        // Exactly one item — proves UPDATE in place, not delete+reinsert duplication.
+        assertThat(found.get().getItems()).hasSize(1);
+        assertThat(found.get().getItems().get(0).getId()).isEqualTo(itemId);
+        assertThat(found.get().getItems().get(0).getQuantity()).isEqualTo(2);
+    }
+
     @Test
     void existsByStoreIdAndDateRangeAndStatus_returnsTrueWhenExists() {
         // Given - a COMPLETED sale today

@@ -570,9 +570,31 @@ public class AuditEventListener {
                 "Sale",
                 event.saleId(),
                 null,
-                toJson(Map.of("justification", event.justification()))
+                toJson(Map.of(
+                        "justification", event.justification() != null ? event.justification() : "",
+                        "itemsSnapshot", event.itemsSnapshot()
+                ))
         );
         log.info("AUDIT: sale_cancelled saleId={} tenantId={} actorId={}",
+                event.saleId(), event.tenantId(), event.actorId());
+    }
+
+    @EventListener
+    public void on(SaleCorrectedEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "SALE_CORRECTED",
+                "Sale",
+                event.saleId(),
+                null,
+                toJson(Map.of(
+                        "justification", event.justification(),
+                        "beforeSnapshot", event.beforeSnapshot(),
+                        "afterSnapshot", event.afterSnapshot()
+                ))
+        );
+        log.info("AUDIT: sale_corrected saleId={} tenantId={} actorId={}",
                 event.saleId(), event.tenantId(), event.actorId());
     }
 

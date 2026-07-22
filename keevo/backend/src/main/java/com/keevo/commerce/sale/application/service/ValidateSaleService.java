@@ -1,5 +1,7 @@
 package com.keevo.commerce.sale.application.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.catalog.stock.domain.entity.MovementType;
 import com.keevo.catalog.stock.domain.port.out.StockLevelRepository;
 import com.keevo.catalog.stock.domain.service.StockOperationService;
@@ -22,7 +24,7 @@ import java.util.UUID;
 
 /**
  * ValidateSaleService — handles manual validation, cancellation, and listing of pending sales.
- * Story 4.3 AC6, AC9, AC10.
+ * Story 4.3 AC6, AC9, AC10. Story v1s-13-5 extends cancellation to COMPLETED sales.
  */
 @Service
 @Transactional
@@ -32,15 +34,18 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
     private final StockLevelRepository stockLevelRepository;
     private final StockOperationService stockOperationService;
     private final ApplicationEventPublisher eventPublisher;
+    private final ObjectMapper objectMapper;
 
     public ValidateSaleService(SaleRepository saleRepository,
                                StockLevelRepository stockLevelRepository,
                                StockOperationService stockOperationService,
-                               ApplicationEventPublisher eventPublisher) {
+                               ApplicationEventPublisher eventPublisher,
+                               ObjectMapper objectMapper) {
         this.saleRepository = saleRepository;
         this.stockLevelRepository = stockLevelRepository;
         this.stockOperationService = stockOperationService;
         this.eventPublisher = eventPublisher;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -119,16 +124,35 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
 
     @Override
     public void cancelPendingSale(CancelPendingSaleCommand command) {
-        Sale sale = loadPendingSale(command.saleId());
-        enforceEmployeeStoreScope(command.assignedStoreId(), sale.getStoreId());
-        validateJustification(command.justification());
-
-        saleRepository.updateStatus(sale.getId(), SaleStatus.CANCELLED);
-
+        Sale sale = loadSale(command.saleId());
         String tenantId = TenantContext.getCurrentTenant();
-        eventPublisher.publishEvent(new SaleCancelledEvent(
-                sale.getId(), command.actorId(), command.justification(),
-                tenantId, Instant.now()));
+
+        switch (sale.getStatus()) {
+            case CANCELLED -> throw new DomainException(ErrorCode.SALE_ALREADY_CANCELLED,
+                    "Sale " + sale.getId() + " is already cancelled");
+            case PENDING_VALIDATION -> {
+                enforceEmployeeStoreScope(command.assignedStoreId(), sale.getStoreId());
+                validateJustification(command.justification());
+                saleRepository.updateStatus(sale.getId(), SaleStatus.CANCELLED);
+                eventPublisher.publishEvent(new SaleCancelledEvent(
+                        sale.getId(), command.actorId(), command.justification(),
+                        "[]", tenantId, Instant.now()));
+            }
+            case COMPLETED -> {
+                enforceEmployeeStoreScope(command.assignedStoreId(), sale.getStoreId());
+                requireJustification(command.justification());
+                for (SaleItem item : sale.getItems()) {
+                    stockOperationService.recordOperation(
+                            item.getProductId(), item.getVariantId(), sale.getStoreId(),
+                            MovementType.SALE_CANCELLED, item.getQuantity(),
+                            command.actorId(), "Annulation vente " + sale.getId());
+                }
+                saleRepository.updateStatus(sale.getId(), SaleStatus.CANCELLED);
+                eventPublisher.publishEvent(new SaleCancelledEvent(
+                        sale.getId(), command.actorId(), command.justification(),
+                        serializeItems(sale.getItems()), tenantId, Instant.now()));
+            }
+        }
     }
 
     @Override
@@ -152,10 +176,29 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
         return sale;
     }
 
+    private Sale loadSale(UUID saleId) {
+        return saleRepository.findById(saleId)
+                .orElseThrow(() -> new DomainException(ErrorCode.SALE_NOT_FOUND,
+                        "Sale not found: " + saleId));
+    }
+
     private void validateJustification(String justification) {
         if (justification != null && !justification.isBlank() && justification.trim().length() < 10) {
             throw new DomainException(ErrorCode.JUSTIFICATION_TOO_SHORT,
                     "Justification must be at least 10 characters");
+        }
+    }
+
+    /** Strict justification check — used only by COMPLETED-sale cancellation (Story v1s-13-5). */
+    private void requireJustification(String justification) {
+        JustificationPolicy.requireStrict(justification);
+    }
+
+    private String serializeItems(List<SaleItem> items) {
+        try {
+            return objectMapper.writeValueAsString(items);
+        } catch (JsonProcessingException e) {
+            return "[]";
         }
     }
 

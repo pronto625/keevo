@@ -124,9 +124,12 @@ public class WeeklyReportScheduler {
 
         var channel = prefs != null ? prefs.weeklyReportChannel() : null;
 
-        // Monday 00:00:00 WAT → Sunday 23:59:59 WAT
-        Instant weekStart = todayWAT.minusDays(6).atStartOfDay(WAT).toInstant();
-        Instant weekEnd   = todayWAT.atTime(23, 59, 59).atZone(WAT).toInstant();
+        // Monday 00:00:00 WAT → Sunday 23:59:59 WAT (ISO week, invariant regardless of trigger day)
+        // Mirror ReportController.triggerWeekly pattern: todayWAT.with(DayOfWeek.SUNDAY).minusDays(6)
+        LocalDate weekEndLocal   = todayWAT.with(DayOfWeek.SUNDAY);
+        LocalDate weekStartLocal = weekEndLocal.minusDays(6);
+        Instant weekStart = weekStartLocal.atStartOfDay(WAT).toInstant();
+        Instant weekEnd   = weekEndLocal.atTime(23, 59, 59).atZone(WAT).toInstant();
 
         storeRepository.findAllActive().forEach(store -> {
             try {

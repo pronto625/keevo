@@ -1,5 +1,7 @@
 package com.keevo.commerce.sale.application;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.keevo.catalog.stock.domain.entity.MovementType;
 import com.keevo.catalog.stock.domain.entity.StockLevel;
 import com.keevo.catalog.stock.domain.port.out.StockLevelRepository;
 import com.keevo.catalog.stock.domain.service.StockOperationService;
@@ -51,7 +53,8 @@ class ValidateSaleServiceTest {
     void setUp() {
         TenantContext.setCurrentTenant("kv_test");
         service = new ValidateSaleService(
-                saleRepository, stockLevelRepository, stockOperationService, eventPublisher);
+                saleRepository, stockLevelRepository, stockOperationService, eventPublisher,
+                new ObjectMapper());
     }
 
     @AfterEach
@@ -186,13 +189,78 @@ class ValidateSaleServiceTest {
         verify(saleRepository).updateStatus(SALE_ID, SaleStatus.CANCELLED);
     }
 
+    // ── Story v1s-13-5 — Cancellation of COMPLETED sales (AC1-AC3) ────────────
+
     @Test
-    void cancelPendingSale_notPending_throws() {
+    void cancelPendingSale_completedSale_restoresStockAndCancels() {
+        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(completedSale()));
+
+        service.cancelPendingSale(new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null,
+                "Erreur de scan, article rendu au client"));
+
+        verify(saleRepository).updateStatus(SALE_ID, SaleStatus.CANCELLED);
+        // completedSale() has exactly 1 item, quantity=1 → recordOperation called once,
+        // delta must be POSITIVE (restoration), not negative.
+        verify(stockOperationService, times(1)).recordOperation(
+                eq(PRODUCT_A), any(), eq(STORE_ID), eq(MovementType.SALE_CANCELLED),
+                eq(1), eq(ACTOR_ID), any());
+
+        var eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue()).isInstanceOf(SaleCancelledEvent.class);
+        var event = (SaleCancelledEvent) eventCaptor.getValue();
+        assertThat(event.itemsSnapshot()).isNotNull().isNotBlank();
+    }
+
+    @Test
+    void cancelPendingSale_alreadyCancelled_throwsSaleAlreadyCancelled() {
+        var cancelled = new Sale(SALE_ID, STORE_ID, ACTOR_ID, null,
+                PaymentMode.CASH, 3000, 0, SaleStatus.CANCELLED, NOW, NOW,
+                List.of(new SaleItem(UUID.randomUUID(), SALE_ID, PRODUCT_A, null, "Produit A", 3000, 3000, 1)));
+        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(cancelled));
+
+        assertThatThrownBy(() -> service.cancelPendingSale(
+                new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null, "Nouvelle tentative d'annulation")))
+                .isInstanceOf(DomainException.class)
+                .hasMessageContaining("already cancelled");
+
+        verify(saleRepository, never()).updateStatus(any(), any());
+        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
+    }
+
+    @Test
+    void cancelPendingSale_completedSale_blankJustification_throwsJustificationRequired() {
         when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(completedSale()));
 
         assertThatThrownBy(() -> service.cancelPendingSale(
-                new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null, "Trying to cancel completed")))
+                new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null, "   ")))
                 .isInstanceOf(DomainException.class);
+
+        verify(saleRepository, never()).updateStatus(any(), any());
+        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
+    }
+
+    @Test
+    void cancelPendingSale_completedSale_nullJustification_throwsJustificationRequired() {
+        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(completedSale()));
+
+        assertThatThrownBy(() -> service.cancelPendingSale(
+                new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null, null)))
+                .isInstanceOf(DomainException.class);
+
+        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
+    }
+
+    @Test
+    void cancelPendingSale_completedSale_shortJustification_throwsJustificationTooShort() {
+        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(completedSale()));
+
+        assertThatThrownBy(() -> service.cancelPendingSale(
+                new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null, "trop crt")))
+                .isInstanceOf(DomainException.class);
+
+        verify(saleRepository, never()).updateStatus(any(), any());
+        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
     }
 
     // ── Story 12.6 — Employee store scope (FR36) ──────────────────────

@@ -178,6 +178,7 @@ class _StockHistoryPageState extends ConsumerState<StockHistoryPage> {
               PopupMenuItem(value: 'ADJUSTMENT', child: Text('Ajustements')),
               PopupMenuItem(value: 'TRANSFER_IN', child: Text('Transferts entrants')),
               PopupMenuItem(value: 'TRANSFER_OUT', child: Text('Transferts sortants')),
+              PopupMenuItem(value: 'SALE_CANCELLED', child: Text('Annulations')),
             ],
           ),
         ],
@@ -275,6 +276,7 @@ class _MovementTile extends StatelessWidget {
         'ADJUSTMENT' => 'Ajustement',
         'TRANSFER_IN' => 'Transfert entrant',
         'TRANSFER_OUT' => 'Transfert sortant',
+        'SALE_CANCELLED' => 'Vente annulée',
         _ => type,
       };
 }

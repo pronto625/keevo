@@ -266,6 +266,16 @@ public class TenantSchemaProvisioner {
     static final String DDL_STOCK_MOVEMENTS_IDX_STORE =
             "CREATE INDEX IF NOT EXISTS idx_stock_movements_store ON stock_movements(store_id, occurred_at DESC)";
 
+    /** Migration DDL: adds SALE_CANCELLED to movement_type CHECK constraint (idempotent — Story v1s-13-5) */
+    static final String DDL_STOCK_MOVEMENTS_MIGRATE_SALE_CANCELLED = """
+            DO $$ BEGIN
+                ALTER TABLE stock_movements DROP CONSTRAINT IF EXISTS ck_movement_type;
+                ALTER TABLE stock_movements ADD CONSTRAINT ck_movement_type
+                    CHECK (movement_type IN
+                        ('SALE','STOCK_ENTRY','TRANSFER_IN','TRANSFER_OUT','ADJUSTMENT','SALE_CANCELLED'));
+            EXCEPTION WHEN duplicate_object THEN NULL;
+            END $$""";
+
     // ── Stock transfers (Story 3.3) ────────────────────────────────────────────
 
     static final String DDL_STOCK_TRANSFERS = """
@@ -796,6 +806,7 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_STOCK_MOVEMENTS);
             stmt.execute(DDL_STOCK_MOVEMENTS_IDX_PRODUCT);
             stmt.execute(DDL_STOCK_MOVEMENTS_IDX_STORE);
+            stmt.execute(DDL_STOCK_MOVEMENTS_MIGRATE_SALE_CANCELLED); // idempotent: adds SALE_CANCELLED to movement_type constraint
             // Story 3.3 — stock transfers
             stmt.execute(DDL_STOCK_TRANSFERS);
             stmt.execute(DDL_STOCK_TRANSFERS_MIGRATE_IN_TRANSIT); // idempotent: adds IN_TRANSIT to status constraint

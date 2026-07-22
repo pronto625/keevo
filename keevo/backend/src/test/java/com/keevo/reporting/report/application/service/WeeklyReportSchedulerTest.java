@@ -233,6 +233,38 @@ class WeeklyReportSchedulerTest {
         assertThat(captor.getValue().deliveryChannel()).isEqualTo(ReportChannel.IN_APP_ONLY);
     }
 
+    @Test
+    void shouldComputeMondayToSundayWindowWhenTriggeredOnSaturday() {
+        // Given: Saturday 20:05 WAT + prefs day=6 (Saturday)
+        Clock saturdayClock = fixedClockAt(SATURDAY_DATE, "20:05:00", WAT);
+        scheduler = new WeeklyReportScheduler(tenantRepository, storeRepository, reportRepository,
+                weeklyReportGenerator, tenantPreferencesRepository, saturdayClock);
+
+        var tenant = activeTenant();
+        var store = activeStore();
+        when(tenantRepository.findAll()).thenReturn(List.of(tenant));
+        when(storeRepository.findAllActive()).thenReturn(List.of(store));
+        when(tenantPreferencesRepository.findByCurrentTenant())
+                .thenReturn(Optional.of(prefs(6, "20:00:00", true)));  // Saturday
+        when(reportRepository.findByDateAndTenant(any(LocalDate.class), eq(TENANT_SCHEMA), eq(ReportType.WEEKLY)))
+                .thenReturn(List.of());
+        when(weeklyReportGenerator.generateWeeklyReport(any()))
+                .thenReturn(mock(EndOfDayReport.class));
+
+        scheduler.runWeeklyReport();
+
+        var captor = ArgumentCaptor.forClass(GenerateWeeklyReportUseCase.WeeklyReportCommand.class);
+        verify(weeklyReportGenerator).generateWeeklyReport(captor.capture());
+        // weekStart must be Monday, not Sunday
+        LocalDate expectedMonday = SATURDAY_DATE.with(DayOfWeek.SUNDAY).minusDays(6);
+        Instant expectedWeekStart = expectedMonday.atStartOfDay(WAT).toInstant();
+        assertThat(captor.getValue().weekStart()).isEqualTo(expectedWeekStart);
+        // weekEnd must be Sunday
+        LocalDate expectedSunday = SATURDAY_DATE.with(DayOfWeek.SUNDAY);
+        Instant expectedWeekEnd = expectedSunday.atTime(23, 59, 59).atZone(WAT).toInstant();
+        assertThat(captor.getValue().weekEnd()).isEqualTo(expectedWeekEnd);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private Tenant activeTenant() {

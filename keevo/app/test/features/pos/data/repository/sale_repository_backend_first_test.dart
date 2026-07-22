@@ -20,7 +20,17 @@ class MockLocalSaleDataSource extends Mock implements LocalSaleDataSource {}
 
 class MockRemoteSaleDataSource extends Mock implements RemoteSaleDataSource {}
 
-class MockAppDatabase extends Mock implements AppDatabase {}
+/// Fake that executes the transaction callback for real.
+/// Mocktail cannot stub generic methods — this Fake delegates directly.
+class FakeAppDatabase extends Fake implements AppDatabase {
+  @override
+  Future<T> transaction<T>(
+    Future<T> Function() action, {
+    bool requireNew = false,
+  }) {
+    return action();
+  }
+}
 
 class MockConnectivityService extends Mock implements ConnectivityService {}
 
@@ -54,7 +64,7 @@ Sale _testSale({String id = 'sale-1'}) => Sale(
 void main() {
   late MockLocalSaleDataSource mockLocal;
   late MockRemoteSaleDataSource mockRemote;
-  late MockAppDatabase mockDb;
+  late FakeAppDatabase fakeDb;
   late MockConnectivityService mockConnectivity;
   late MockSyncService mockSyncService;
   late MockSyncTriggerDispatcher mockSyncTrigger;
@@ -65,14 +75,15 @@ void main() {
   setUp(() {
     mockLocal = MockLocalSaleDataSource();
     mockRemote = MockRemoteSaleDataSource();
-    mockDb = MockAppDatabase();
+    fakeDb = FakeAppDatabase();
     mockConnectivity = MockConnectivityService();
     mockSyncService = MockSyncService();
     mockSyncTrigger = MockSyncTriggerDispatcher();
+
     repo = SaleRepositoryImpl(
       mockLocal,
       mockRemote,
-      mockDb,
+      fakeDb,
       connectivity: mockConnectivity,
       syncService: mockSyncService,
       syncTriggerDispatcher: mockSyncTrigger,

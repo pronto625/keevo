@@ -598,7 +598,7 @@ class RestSyncService implements SyncService {
           map['employeeId'],
           closedAtLocal,
           map['totalSales'],
-          map['totalTransactions'],
+          map['totalRevenue'],
           map['cashTotal'],
           map['mobileMoneyTotal'],
           isAutomatic,

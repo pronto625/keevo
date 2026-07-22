@@ -80,6 +80,8 @@ public class GlobalExceptionHandler {
             Map.entry("SALE_NOT_PENDING",          "Cette vente n'est pas en attente de validation"),
             Map.entry("JUSTIFICATION_REQUIRED",    "Une justification est requise"),
             Map.entry("JUSTIFICATION_TOO_SHORT",   "La justification doit contenir au moins 10 caractères"),
+            Map.entry("SALE_ALREADY_CANCELLED",    "Cette vente a déjà été annulée"),
+            Map.entry("SALE_NOT_COMPLETED",        "Seule une vente complétée peut être corrigée"),
             Map.entry("INTERNAL_ERROR",            "Une erreur inattendue s'est produite"),
             Map.entry("DAY_ALREADY_CLOSED",        "La journée a déjà été clôturée pour cette boutique"),
             Map.entry("MISSING_PARAMETER",         "Paramètre requis manquant"),
@@ -216,7 +218,8 @@ public class GlobalExceptionHandler {
                  "INVENTORY_SESSION_ALREADY_ACTIVE",
                  "INVENTORY_SESSION_NOT_IN_PROGRESS",
                  "REPORT_ALREADY_SENT",
-                 "OPTIMISTIC_LOCK" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4 / 6.1 / 7.2 / v1s-13-1
+                 "SALE_ALREADY_CANCELLED",
+                 "OPTIMISTIC_LOCK" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4 / 6.1 / 7.2 / v1s-13-1 / v1s-13-5
             case "VALIDATION_ERROR", "INVALID_AMOUNT",
                  "INVALID_PHONE_NUMBER", "INVALID_PASSWORD",
                  "INSUFFICIENT_STOCK",
@@ -224,7 +227,8 @@ public class GlobalExceptionHandler {
                  "VALIDATION_FAILED",
                  "SAME_SOURCE_DESTINATION",
                  "DISCOUNT_EXCEEDS_SUBTOTAL",
-                 "SALE_NOT_PENDING" -> HttpStatus.UNPROCESSABLE_ENTITY;
+                 "SALE_NOT_PENDING",
+                 "SALE_NOT_COMPLETED" -> HttpStatus.UNPROCESSABLE_ENTITY;
             case "JUSTIFICATION_REQUIRED",
                  "JUSTIFICATION_TOO_SHORT" -> HttpStatus.BAD_REQUEST;
             case "SECTOR_TEMPLATE_NOT_FOUND",

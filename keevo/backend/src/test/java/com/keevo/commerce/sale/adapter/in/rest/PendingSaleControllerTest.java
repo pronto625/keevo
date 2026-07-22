@@ -3,6 +3,7 @@ package com.keevo.commerce.sale.adapter.in.rest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.commerce.sale.domain.model.*;
 import com.keevo.commerce.sale.domain.port.in.CancelPendingSaleUseCase;
+import com.keevo.commerce.sale.domain.port.in.CorrectSaleUseCase;
 import com.keevo.commerce.sale.domain.port.in.GetPendingSalesUseCase;
 import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase;
 import com.keevo.shared.domain.exception.DomainException;
@@ -38,6 +39,7 @@ class PendingSaleControllerTest {
     @Mock private GetPendingSalesUseCase getPendingSalesUseCase;
     @Mock private ValidateSaleUseCase validateSaleUseCase;
     @Mock private CancelPendingSaleUseCase cancelPendingSaleUseCase;
+    @Mock private CorrectSaleUseCase correctSaleUseCase;
 
     private MockMvc mockMvc;
     private final ObjectMapper mapper = new ObjectMapper();
@@ -50,7 +52,7 @@ class PendingSaleControllerTest {
     @BeforeEach
     void setUp() {
         var controller = new PendingSaleController(
-                getPendingSalesUseCase, validateSaleUseCase, cancelPendingSaleUseCase);
+                getPendingSalesUseCase, validateSaleUseCase, cancelPendingSaleUseCase, correctSaleUseCase);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -227,6 +229,93 @@ class PendingSaleControllerTest {
                         .content(payload))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.domainCode").value("JUSTIFICATION_REQUIRED"));
+    }
+
+    // ── Story v1s-13-5 — cancel on COMPLETED sale + correct endpoint ─────────
+
+    @Test
+    void POST_cancel_completedSale_returns200() throws Exception {
+        authenticateAs("OWNER");
+        // Controller doesn't know the sale status — mock simply succeeds, proving
+        // no controller change was required for the COMPLETED branch to work.
+        doNothing().when(cancelPendingSaleUseCase).cancelPendingSale(any());
+
+        String payload = mapper.writeValueAsString(Map.of(
+                "justification", "Erreur de scan, article rendu au client"));
+
+        mockMvc.perform(post("/api/v1/sales/{id}/cancel", saleId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.message").exists());
+
+        verify(cancelPendingSaleUseCase).cancelPendingSale(any());
+    }
+
+    @Test
+    void POST_cancel_alreadyCancelled_returns409() throws Exception {
+        authenticateAs("OWNER");
+        doThrow(new DomainException(ErrorCode.SALE_ALREADY_CANCELLED, "already cancelled"))
+                .when(cancelPendingSaleUseCase).cancelPendingSale(any());
+
+        String payload = mapper.writeValueAsString(Map.of(
+                "justification", "Nouvelle tentative d'annulation ici"));
+
+        mockMvc.perform(post("/api/v1/sales/{id}/cancel", saleId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.domainCode").value("SALE_ALREADY_CANCELLED"));
+    }
+
+    @Test
+    void POST_correct_returns200() throws Exception {
+        authenticateAs("OWNER");
+
+        String payload = mapper.writeValueAsString(Map.of(
+                "justification", "Erreur de quantité scannée au comptoir",
+                "itemQuantities", Map.of(productId.toString(), 5)));
+
+        mockMvc.perform(post("/api/v1/sales/{id}/correct", saleId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.message").exists());
+
+        verify(correctSaleUseCase).correctSale(any());
+    }
+
+    @Test
+    void POST_correct_employeeForbidden_returns403() throws Exception {
+        authenticateAs("EMPLOYEE");
+
+        String payload = mapper.writeValueAsString(Map.of(
+                "justification", "Erreur de quantité scannée au comptoir",
+                "itemQuantities", Map.of(productId.toString(), 5)));
+
+        mockMvc.perform(post("/api/v1/sales/{id}/correct", saleId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isForbidden());
+
+        verify(correctSaleUseCase, never()).correctSale(any());
+    }
+
+    @Test
+    void POST_correct_notCompleted_returns422() throws Exception {
+        authenticateAs("OWNER");
+        doThrow(new DomainException(ErrorCode.SALE_NOT_COMPLETED, "not completed"))
+                .when(correctSaleUseCase).correctSale(any());
+
+        String payload = mapper.writeValueAsString(Map.of(
+                "justification", "Erreur de quantité scannée au comptoir",
+                "itemQuantities", Map.of(productId.toString(), 5)));
+
+        mockMvc.perform(post("/api/v1/sales/{id}/correct", saleId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.domainCode").value("SALE_NOT_COMPLETED"));
     }
 
     // ── Story 12.6 — RBAC tests ─────────────────────────────────────────

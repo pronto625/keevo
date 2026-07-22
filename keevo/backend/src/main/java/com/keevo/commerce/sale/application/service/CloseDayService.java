@@ -51,11 +51,10 @@ public class CloseDayService implements CloseDayUseCase {
 
     @Override
     public DayClosure closeDay(CloseDayCommand command) {
-        // Story 7.6: fixed calendar window in WAT.
-        // Automatic closure fires at 00:00 WAT → closes yesterday; manual closes today.
-        LocalDate reportDate = command.isAutomatic()
-                ? LocalDate.now(WAT_ZONE).minusDays(1)
-                : LocalDate.now(WAT_ZONE);
+        // Story 13.3: automatic closures fire at per-tenant eodReportTime (default 20h WAT)
+        // and close the CURRENT day, not yesterday.
+        // Both automatic and manual closures use the current date in WAT.
+        LocalDate reportDate = LocalDate.now(WAT_ZONE);
 
         // Step 1: Check no closure exists for the report date
         if (dayClosureRepository.existsByStoreIdAndDate(command.storeId(), reportDate)) {

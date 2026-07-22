@@ -6,6 +6,7 @@ import '../../../../core/storage/app_database.dart' hide Sale, SaleItem;
 import '../../../../core/sync/connectivity_service.dart';
 import '../../../../core/sync/sync_service.dart';
 import '../../../../core/sync/sync_trigger_dispatcher.dart';
+import '../../domain/exception/offline_action_not_supported_exception.dart';
 import '../../domain/model/payment_mode_enum.dart';
 import '../../domain/model/sale_model.dart';
 import '../../domain/model/sales_history_filter.dart';
@@ -38,49 +39,57 @@ class SaleRepositoryImpl implements SaleRepository {
   @override
   Future<void> recordSale(Sale sale) async {
     // Offline-first (Story 5.6): always write locally first for instant UX.
-    await _local.insertAll(sale, synced: false);
+    // F-HIGH-4 / Story 13.4: wrap in a single _db.transaction() so that
+    // insertAll + all queueOperation() calls are atomic — a crash between
+    // the local write and the sync_queue insert will roll back the sale.
+    await _db.transaction(() async {
+      await _local.insertAll(sale, synced: false);
 
-    // Queue RECORD_STOCK_ENTRY + PROMOTE_PRODUCT BEFORE the sale so backend
-    // processes them in order within the same sync batch (stock check passes).
-    for (final entry in sale.initialStockEntries.entries) {
-      await _syncService.queueOperation(
-        operation: 'RECORD_STOCK_ENTRY',
-        payload: {
-          'productId': entry.key,
-          'storeId': sale.storeId,
-          'quantity': entry.value,
-          'notes': 'Stock initial — premier checkout',
-        },
-        entityId: entry.key,
-      );
-    }
-
-    for (final productId in sale.originalDraftProductIds) {
-      String? productName;
-      int? price;
-      for (final item in sale.items) {
-        if (item.productId == productId) {
-          productName = item.productName;
-          price = item.appliedUnitPrice;
-          break;
-        }
+      // Queue RECORD_STOCK_ENTRY + PROMOTE_PRODUCT BEFORE the sale so backend
+      // processes them in order within the same sync batch (stock check passes).
+      for (final entry in sale.initialStockEntries.entries) {
+        await _syncService.queueOperation(
+          operation: 'RECORD_STOCK_ENTRY',
+          payload: {
+            'productId': entry.key,
+            'storeId': sale.storeId,
+            'quantity': entry.value,
+            'notes': 'Stock initial — premier checkout',
+          },
+          entityId: entry.key,
+        );
       }
-      await _syncService.queueOperation(
-        operation: 'PROMOTE_PRODUCT',
-        payload: {
-          'productId': productId,
-          if (productName != null) 'name': productName,
-          if (price != null) 'price': price,
-        },
-        entityId: productId,
-      );
-    }
 
-    await _syncService.queueOperation(
-      operation: 'CREATE_SALE',
-      payload: _buildPayload(sale),
-      entityId: sale.id,
-    );
+      for (final productId in sale.originalDraftProductIds) {
+        String? productName;
+        int? price;
+        for (final item in sale.items) {
+          if (item.productId == productId) {
+            productName = item.productName;
+            price = item.appliedUnitPrice;
+            break;
+          }
+        }
+        await _syncService.queueOperation(
+          operation: 'PROMOTE_PRODUCT',
+          payload: {
+            'productId': productId,
+            if (productName != null) 'name': productName,
+            if (price != null) 'price': price,
+          },
+          entityId: productId,
+        );
+      }
+
+      await _syncService.queueOperation(
+        operation: 'CREATE_SALE',
+        payload: _buildPayload(sale),
+        entityId: sale.id,
+      );
+    });
+
+    // triggerPushIfIdle must stay OUTSIDE the transaction — it is not a DB
+    // write and must only fire on committed data.
     _syncTriggerDispatcher.triggerPushIfIdle();
   }
 
@@ -271,6 +280,27 @@ class SaleRepositoryImpl implements SaleRepository {
 
   @override
   Future<void> cancelSale(String saleId, String justification) async {
+    // Story v1s-13-5 / Décision D2: cancelling a COMPLETED sale restores stock
+    // server-side and is online-only — no local write, no sync queue fallback,
+    // unlike the PENDING flow below which stays offline-first (unchanged).
+    final localRow = await (_db.select(_db.sales)
+          ..where((s) => s.id.equals(saleId)))
+        .getSingleOrNull();
+
+    // Review patch: fail closed (online-only, no queue) when the local cache
+    // can't prove the sale is PENDING — an unknown/stale local status must
+    // not be allowed to fall through to the offline queue path below, which
+    // the backend would reject outright for an actually-COMPLETED sale (AC5),
+    // permanently desyncing the local cache.
+    if (localRow == null || localRow.status == 'COMPLETED') {
+      if (!await _connectivity.isOnline()) {
+        throw OfflineActionNotSupportedException();
+      }
+      await _remote.cancelSale(saleId, justification);
+      await _local.updateSaleStatus(saleId, 'CANCELLED');
+      return;
+    }
+
     if (await _connectivity.isOnline()) {
       try {
         await _remote.cancelSale(saleId, justification);
@@ -290,6 +320,20 @@ class SaleRepositoryImpl implements SaleRepository {
       },
       entityId: saleId,
     );
+  }
+
+  @override
+  Future<void> correctSale(
+      String saleId, String justification, Map<String, int> itemQuantities) async {
+    // Story v1s-13-5 / Décision D2: online-only, no sync queue.
+    if (!await _connectivity.isOnline()) {
+      throw OfflineActionNotSupportedException();
+    }
+    await _remote.correctSale(saleId, justification, itemQuantities);
+    // Review patch: keep the local cache in sync so the Sale Detail page's
+    // post-success refresh (ref.invalidate(saleByIdProvider)) doesn't show
+    // stale pre-correction quantities/total — getSaleById() is local-only.
+    await _local.updateItemQuantities(saleId, itemQuantities);
   }
 
   @override

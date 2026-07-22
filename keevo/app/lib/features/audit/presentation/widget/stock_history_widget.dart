@@ -332,6 +332,7 @@ class _AuditEntryTile extends StatelessWidget {
         'ADJUSTMENT'    => 'ajusté',
         'TRANSFER_OUT'  => 'transféré (sortie)',
         'TRANSFER_IN'   => 'transféré (entrée)',
+        'SALE_CANCELLED' => 'restauré (vente annulée)',
         _               => 'modifié',
       };
 

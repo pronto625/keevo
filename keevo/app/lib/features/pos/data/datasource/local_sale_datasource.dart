@@ -6,7 +6,12 @@ import '../../domain/model/sale_model.dart';
 
 /// LocalSaleDataSource — persists sale data in Drift (SQLCipher).
 ///
-/// All writes in [insertAll] run in a single atomic transaction.
+/// All writes in [insertAll] run in a single atomic transaction. As of
+/// Story 13.4 (F-HIGH-4), [insertAll] is itself normally called from inside
+/// `SaleRepositoryImpl.recordSale()`'s own outer `_db.transaction()` — Drift
+/// safely nests the two (no savepoint needed, same connection/zone), so
+/// [insertAll] remains atomic on its own AND rolls back with the outer
+/// transaction if a later step (e.g. a `queueOperation` call) fails.
 class LocalSaleDataSource {
   final AppDatabase _db;
 
@@ -145,6 +150,46 @@ class LocalSaleDataSource {
               'createdAt': r.createdAt.toIso8601String(),
             })
         .toList();
+  }
+
+  /// Update local item quantities/subtotals + sale total after a successful
+  /// COMPLETED-sale correction (Story v1s-13-5, AC6/AC8). Recomputes each
+  /// corrected item's subtotal from its existing unitPrice, and the sale's
+  /// totalAmount as the sum of all item subtotals minus the existing
+  /// discountAmount — mirrors CorrectSaleService's server-side recalculation.
+  Future<void> updateItemQuantities(
+    String saleId,
+    Map<String, int> itemQuantities,
+  ) async {
+    await _db.transaction(() async {
+      for (final entry in itemQuantities.entries) {
+        final item = await (_db.select(_db.saleItems)
+              ..where((i) => i.id.equals(entry.key)))
+            .getSingleOrNull();
+        if (item == null) continue;
+        await (_db.update(_db.saleItems)
+              ..where((i) => i.id.equals(entry.key)))
+            .write(SaleItemsCompanion(
+          quantity: Value(entry.value),
+          subtotal: Value(item.unitPrice * entry.value),
+        ));
+      }
+
+      final sale = await (_db.select(_db.sales)
+            ..where((s) => s.id.equals(saleId)))
+          .getSingleOrNull();
+      if (sale == null) return;
+
+      final items = await (_db.select(_db.saleItems)
+            ..where((i) => i.saleId.equals(saleId)))
+          .get();
+      final newSubtotal = items.fold<int>(0, (sum, i) => sum + i.subtotal);
+      await (_db.update(_db.sales)
+            ..where((s) => s.id.equals(saleId)))
+          .write(SalesCompanion(
+        totalAmount: Value(newSubtotal - sale.discountAmount),
+      ));
+    });
   }
 
   /// Update sale status locally.

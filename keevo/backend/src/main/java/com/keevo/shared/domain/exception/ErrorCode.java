@@ -86,6 +86,8 @@ public enum ErrorCode {
     SALE_NOT_PENDING,              // HTTP 422 — trying to validate/cancel a non-pending sale
     JUSTIFICATION_REQUIRED,        // HTTP 400 — missing justification
     JUSTIFICATION_TOO_SHORT,       // HTTP 400 — justification < 10 chars
+    SALE_ALREADY_CANCELLED,        // HTTP 409 — idempotency guard, sale already cancelled
+    SALE_NOT_COMPLETED,            // HTTP 422 — correction only allowed on a COMPLETED sale
 
     // ── Reports (Story 7.2) ───────────────────────────────────────
     REPORT_NOT_FOUND,              // HTTP 404 — report not found

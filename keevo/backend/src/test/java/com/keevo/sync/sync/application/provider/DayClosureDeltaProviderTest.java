@@ -43,5 +43,7 @@ class DayClosureDeltaProviderTest {
         var result = provider.queryDelta(Instant.parse("2026-03-20T10:00:00Z"));
         assertThat(result).hasSize(1);
         assertThat(result.get(0)).containsEntry("totalSales", 50000);
+        assertThat(result.get(0)).doesNotContainKey("totalTransactions");
+        assertThat(result.get(0)).containsEntry("totalRevenue", 10);
     }
 }

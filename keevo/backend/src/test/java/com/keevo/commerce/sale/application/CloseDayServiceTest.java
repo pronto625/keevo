@@ -199,12 +199,12 @@ class CloseDayServiceTest {
     }
 
     @Test
-    void windowIsYesterdayCalendarDay_forAutoClose() {
-        // Given - automatic closure; window = yesterday WAT 00:00 → 23:59:59.999999999
+    void windowIsTodayCalendarDay_forAutoClose() {
+        // Given - automatic closure (Story 13.3: closes TODAY at configured eodReportTime)
         ZoneId wat = ZoneId.of("Africa/Lagos");
-        LocalDate yesterday = LocalDate.now(wat).minusDays(1);
-        Instant expectedStart = yesterday.atStartOfDay(wat).toInstant();
-        Instant expectedEnd = yesterday.atTime(LocalTime.MAX).atZone(wat).toInstant();
+        LocalDate today = LocalDate.now(wat);
+        Instant expectedStart = today.atStartOfDay(wat).toInstant();
+        Instant expectedEnd = today.atTime(LocalTime.MAX).atZone(wat).toInstant();
 
         when(dayClosureRepository.existsByStoreIdAndDate(eq(STORE_ID), any(LocalDate.class)))
                 .thenReturn(false);

@@ -1,3 +1,4 @@
+import '../../../../core/di/providers.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../../domain/model/payment_mode_enum.dart';
 import '../../domain/model/sale_model.dart';
+import '../provider/day_closure_providers.dart';
 import '../provider/pos_providers.dart';
 
 /// SaleDetailPage — Displays details of a single sale.
@@ -56,17 +58,18 @@ class SaleDetailPage extends ConsumerWidget {
   }
 }
 
-class _SaleDetailContent extends StatelessWidget {
+class _SaleDetailContent extends ConsumerWidget {
   final Sale sale;
 
   const _SaleDetailContent({required this.sale});
 
-  final _currencyFormat = const _CurrencyFormat();
-  
+  static const _currencyFormat = _CurrencyFormat();
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final dateFormat = DateFormat("EEEE d MMMM yyyy 'à' HH:mm", 'fr_FR');
+    final isOwner = ref.watch(currentUserRoleProvider) == 'OWNER';
 
     return SingleChildScrollView(
       child: Column(
@@ -135,10 +138,235 @@ class _SaleDetailContent extends StatelessWidget {
             sale.totalAmount,
             isTotal: true,
           ),
+          // Story v1s-13-5 (AC8) — OWNER-only Annuler/Corriger on COMPLETED sales.
+          if (isOwner && sale.status == 'COMPLETED') ...[
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _showCancelDialog(context, ref),
+                      icon: const Icon(Icons.cancel_outlined),
+                      label: const Text('Annuler entièrement'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.errorColor,
+                        side: const BorderSide(color: AppTheme.errorColor),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => _showCorrectSheet(context, ref),
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Corriger un article'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppTheme.warning,
+                        foregroundColor: AppTheme.onWarning,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 24),
         ],
       ),
     );
+  }
+
+  void _refreshAfterOwnerAction(WidgetRef ref) {
+    ref.invalidate(saleByIdProvider(sale.id));
+    ref.invalidate(salesHistoryProvider);
+  }
+
+  void _showCancelDialog(BuildContext context, WidgetRef ref) {
+    final controller = TextEditingController();
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) {
+          final justification = controller.text.trim();
+          final canConfirm = justification.length >= 10;
+          return AlertDialog(
+            title: const Text('Annuler la vente'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                    'Cette action restaure le stock des articles et est irréversible. '
+                    'Une justification est requise (10 caractères minimum).'),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'Justification',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Retour'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: AppTheme.errorColor),
+                onPressed: canConfirm
+                    ? () {
+                        Navigator.pop(ctx);
+                        _doCancel(context, ref, controller.text.trim());
+                      }
+                    : null,
+                child: const Text('Confirmer annulation'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _doCancel(
+      BuildContext context, WidgetRef ref, String justification) async {
+    try {
+      await ref.read(saleRepositoryProvider).cancelSale(sale.id, justification);
+      _refreshAfterOwnerAction(ref);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Vente annulée, stock restauré')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(appErrorMessage(e))),
+        );
+      }
+    }
+  }
+
+  void _showCorrectSheet(BuildContext context, WidgetRef ref) {
+    final justificationController = TextEditingController();
+    final qtyControllers = <String, TextEditingController>{
+      for (final item in sale.items)
+        item.id: TextEditingController(text: '${item.quantity}'),
+    };
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) {
+          final itemQuantities = <String, int>{};
+          for (final item in sale.items) {
+            final newQty = int.tryParse(qtyControllers[item.id]!.text) ?? item.quantity;
+            if (newQty != item.quantity) {
+              itemQuantities[item.id] = newQty;
+            }
+          }
+          final justification = justificationController.text.trim();
+          final canConfirm =
+              itemQuantities.isNotEmpty && justification.length >= 10;
+
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 16,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Corriger un article',
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                  const SizedBox(height: 12),
+                  ...sale.items.map((item) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: Text(item.productName,
+                                  overflow: TextOverflow.ellipsis),
+                            ),
+                            SizedBox(
+                              width: 90,
+                              child: TextField(
+                                controller: qtyControllers[item.id],
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: 'Qté',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                                onChanged: (_) => setState(() {}),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: justificationController,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'Justification (10 caractères minimum)',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: canConfirm
+                          ? () {
+                              Navigator.pop(ctx);
+                              _doCorrect(context, ref, justification, itemQuantities);
+                            }
+                          : null,
+                      child: const Text('Enregistrer la correction'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _doCorrect(BuildContext context, WidgetRef ref,
+      String justification, Map<String, int> itemQuantities) async {
+    try {
+      await ref
+          .read(saleRepositoryProvider)
+          .correctSale(sale.id, justification, itemQuantities);
+      _refreshAfterOwnerAction(ref);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Vente corrigée')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(appErrorMessage(e))),
+        );
+      }
+    }
   }
 
   Widget _buildSectionHeader(String title) {

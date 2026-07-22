@@ -32,8 +32,14 @@ abstract interface class SaleRepository {
       {Map<String, String>? productIdRemappings,
       Map<String, int>? initialStockEntries});
 
-  /// Cancel a pending sale (OWNER-only, Story 4.3).
+  /// Cancel a sale (OWNER-only, Story 4.3 for PENDING; Story v1s-13-5 for COMPLETED
+  /// with stock restoration — online-only for COMPLETED, see Décision D2).
   Future<void> cancelSale(String saleId, String justification);
+
+  /// Correct item quantities on a COMPLETED sale (OWNER-only, online-only, Story v1s-13-5).
+  /// [itemQuantities] maps saleItemId -> new quantity, only for changed items.
+  Future<void> correctSale(
+      String saleId, String justification, Map<String, int> itemQuantities);
 
   /// Get a single sale by ID (Story 4.4 — Sale Detail Page).
   Future<Sale?> getSaleById(String saleId);

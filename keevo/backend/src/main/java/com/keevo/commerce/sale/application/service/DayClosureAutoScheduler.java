@@ -6,24 +6,37 @@ import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
 import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.auth.domain.model.TenantStatus;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
+import com.keevo.identity.onboarding.domain.model.TenantPreferences;
+import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.UUID;
 
 /**
  * DayClosureAutoScheduler — Per-tenant automatic day closure.
  * Story 4.4 — Clôture Journalière & Historique des Ventes
- * Story 7.6 — Fires exactly at 23:00 UTC (= 00:00 WAT); no per-tenant time check needed.
+ * Story 7.6 — Hourly cron, per-tenant eodReportTime (via TenantPreferencesRepository)
+ * Story 13.3 — Fix: hourly cron + per-tenant eodReportTime + fallback 20h WAT (Option A).
+ *
+ * <p>Runs every hour (same cron as WeeklyReportScheduler).
+ * Per-tenant eodReportTime and eodReportEnabled are read live from
+ * tenant_preferences on each tick — no restart needed after config change.
  *
  * <p>GoF Strategy: uses isAutomatic=true which triggers AutoReportStrategy in listener.
- * CloseDayService will derive reportDate = LocalDate.now(WAT).minusDays(1) for automatic closures.
+ * CloseDayService will derive reportDate = LocalDate.now(WAT) for automatic closures
+ * (Story 13.3: no more minusDays(1) — scheduler fires at configured time, closes current day).
+ *
+ * <p>Clock injection via package-private constructor for deterministic unit tests.
  */
 @Component
 public class DayClosureAutoScheduler {
@@ -31,62 +44,87 @@ public class DayClosureAutoScheduler {
     private static final Logger log = LoggerFactory.getLogger(DayClosureAutoScheduler.class);
     private static final UUID SYSTEM_UUID = UUID.fromString("00000000-0000-0000-0000-000000000000");
     private static final ZoneId WAT = ZoneId.of("Africa/Lagos");
+    private static final LocalTime DEFAULT_EOD_TIME = LocalTime.of(20, 0);
 
     private final TenantRepository tenantRepository;
     private final StoreRepository storeRepository;
     private final DayClosureRepository dayClosureRepository;
     private final CloseDayUseCase closeDayUseCase;
+    private final TenantPreferencesRepository tenantPreferencesRepository;
+    private final Clock clock;
 
+    /** Production constructor — Spring calls this; system clock is used. */
+    @Autowired
     public DayClosureAutoScheduler(TenantRepository tenantRepository,
                                    StoreRepository storeRepository,
                                    DayClosureRepository dayClosureRepository,
-                                   CloseDayUseCase closeDayUseCase) {
+                                   CloseDayUseCase closeDayUseCase,
+                                   TenantPreferencesRepository tenantPreferencesRepository) {
+        this(tenantRepository, storeRepository, dayClosureRepository,
+             closeDayUseCase, tenantPreferencesRepository, Clock.systemDefaultZone());
+    }
+
+    /** Package-private constructor for tests with an injected clock. */
+    DayClosureAutoScheduler(TenantRepository tenantRepository,
+                            StoreRepository storeRepository,
+                            DayClosureRepository dayClosureRepository,
+                            CloseDayUseCase closeDayUseCase,
+                            TenantPreferencesRepository tenantPreferencesRepository,
+                            Clock clock) {
         this.tenantRepository = tenantRepository;
         this.storeRepository = storeRepository;
         this.dayClosureRepository = dayClosureRepository;
         this.closeDayUseCase = closeDayUseCase;
+        this.tenantPreferencesRepository = tenantPreferencesRepository;
+        this.clock = clock;
     }
 
     /**
-     * Fires at 23:00 UTC = 00:00 WAT daily.
-     * Pattern: 0 0 23 * * * = second 0, minute 0, hour 23, every day.
+     * Hourly tick — reads per-tenant eodReportTime and eodReportEnabled live.
+     * Pattern: 0 0 * * * * = second 0, minute 0, every hour.
      */
-    @Scheduled(cron = "0 0 23 * * *")
+    @Scheduled(cron = "0 0 * * * *")
     public void runAutoClosure() {
-        log.info("DayClosureAutoScheduler: starting automatic midnight closure");
+        LocalDate todayWAT = LocalDate.now(clock.withZone(WAT));
+        LocalTime nowWAT   = LocalTime.now(clock.withZone(WAT));
 
-        for (Tenant tenant : tenantRepository.findAll()) {
+        tenantRepository.findAll().forEach(tenant -> {
             if (tenant.getStatus() != TenantStatus.ACTIVE) {
-                log.debug("Skipping inactive tenant: {}", tenant.getSchemaName());
-                continue;
+                return;
             }
-
+            TenantContext.setCurrentTenant(tenant.getSchemaName());
             try {
-                TenantContext.setCurrentTenant(tenant.getSchemaName());
-                processTenantsStores(tenant);
+                processTenant(tenant, todayWAT, nowWAT);
             } catch (Exception e) {
-                log.error("Error processing tenant {}: {}", tenant.getSchemaName(), e.getMessage(), e);
+                log.error("DayClosureAutoScheduler error for tenant={}: {}", tenant.getSchemaName(), e.getMessage(), e);
             } finally {
                 TenantContext.clear();
             }
-        }
-
-        log.info("DayClosureAutoScheduler: completed");
+        });
     }
 
-    private void processTenantsStores(Tenant tenant) {
-        var stores = storeRepository.findAllActive();
-        // Fix H2: scheduler fires at 00:00 WAT (day D) but closes day D-1.
-        // Check against D-1 so manual closures of D-1 are correctly detected.
-        LocalDate closureDate = LocalDate.now(WAT).minusDays(1);
+    private void processTenant(Tenant tenant, LocalDate todayWAT, LocalTime nowWAT) {
+        TenantPreferences prefs = tenantPreferencesRepository.findByCurrentTenant().orElse(null);
 
-        for (var store : stores) {
-            if (dayClosureRepository.existsByStoreIdAndDate(store.id(), closureDate)) {
-                log.debug("Store {} already closed for {}", store.id(), closureDate);
-                continue;
+        boolean enabled     = prefs != null ? prefs.eodReportEnabled() : true;
+        LocalTime triggerAt = prefs != null ? parseTime(prefs.eodReportTime()) : DEFAULT_EOD_TIME;
+
+        if (!enabled) {
+            log.debug("EOD auto-close disabled for tenant={}", tenant.getSchemaName());
+            return;
+        }
+        if (nowWAT.isBefore(triggerAt)) {
+            return;
+        }
+
+        // closureDate = todayWAT (Story 13.3: closes the day that ends at configured time)
+        storeRepository.findAllActive().forEach(store -> {
+            if (dayClosureRepository.existsByStoreIdAndDate(store.id(), todayWAT)) {
+                log.debug("Store {} already closed for {}", store.id(), todayWAT);
+                return;
             }
 
-            log.info("Auto-closing store {} for tenant {}", store.id(), tenant.getSchemaName());
+            log.info("Auto-closing store {} for tenant {} at {} WAT", store.id(), tenant.getSchemaName(), nowWAT);
             try {
                 closeDayUseCase.closeDay(new CloseDayCommand(
                         store.id(),
@@ -97,6 +135,16 @@ public class DayClosureAutoScheduler {
             } catch (Exception e) {
                 log.error("Failed to auto-close store {}: {}", store.id(), e.getMessage());
             }
+        });
+    }
+
+    private LocalTime parseTime(String hhMmSs) {
+        if (hhMmSs == null) return DEFAULT_EOD_TIME;
+        try {
+            return LocalTime.parse(hhMmSs);
+        } catch (Exception e) {
+            log.warn("Invalid eodReportTime '{}', falling back to 20:00", hhMmSs);
+            return DEFAULT_EOD_TIME;
         }
     }
 }
