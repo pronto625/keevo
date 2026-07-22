@@ -2,6 +2,7 @@ import 'dart:developer' as dev;
 
 import 'package:drift/drift.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../../core/di/providers.dart';
 import '../../../../core/storage/app_database.dart';
@@ -69,6 +70,10 @@ class ValidateInventoryNotifier extends _$ValidateInventoryNotifier {
         .getSingleOrNull();
     if (session == null) throw Exception('Session not found');
 
+    // Load actorId BEFORE entering the transaction (external call to secure storage).
+    final actorId = await ref.read(currentUserIdProvider.future);
+    if (actorId == null) throw Exception('No authenticated user');
+
     // Load all counts
     final counts = await (db.select(db.inventoryCounts)
           ..where((t) => t.sessionId.equals(sessionId)))
@@ -82,21 +87,78 @@ class ValidateInventoryNotifier extends _$ValidateInventoryNotifier {
         final ecart = count.physical! - count.theoretical;
         if (ecart == 0) continue;
 
-        // Update stock_levels locally
-        final stockLevel = await (db.select(db.stockLevels)
-              ..where((t) =>
-                  t.productId.equals(count.productId) &
-                  t.storeId.equals(session.storeId)))
-            .getSingleOrNull();
+        // Variant-aware stock_levels lookup (defensive pattern, D3).
+        final slQuery = db.select(db.stockLevels)
+          ..where((t) {
+            final baseFilter =
+                t.productId.equals(count.productId) &
+                t.storeId.equals(session.storeId);
+            final cvId = count.variantId;
+            if (cvId == null) {
+              return baseFilter & t.variantId.isNull();
+            }
+            return baseFilter & t.variantId.equals(cvId);
+          });
+        final slRows = await slQuery.get();
+        final stockLevel = slRows.isEmpty ? null : slRows.first;
+
+        // AC2: delta live (mirror backend ValidateInventoryService.loadCurrentStockQuantity).
+        final quantityBefore = stockLevel?.quantity ?? 0;
+        final quantityDelta = count.physical! - quantityBefore;
+        if (quantityDelta == 0) continue; // skip, do NOT count in adjustmentsApplied (AC2)
+
+        final DateTime now = DateTime.now();
+        final minimumThresh = stockLevel?.minimumThreshold ?? 0;
 
         if (stockLevel != null) {
+          // Update existing stock_levels row.
           await (db.update(db.stockLevels)
                 ..where((t) => t.id.equals(stockLevel.id)))
               .write(StockLevelsCompanion(
             quantity: Value(count.physical!),
-            updatedAt: Value(DateTime.now()),
+            updatedAt: Value(now),
+          ));
+        } else {
+          // AC4: create missing stock_levels row instead of silently skipping.
+          await db.into(db.stockLevels).insert(StockLevelsCompanion.insert(
+            id: const Uuid().v4(),
+            productId: count.productId,
+            variantId: Value(count.variantId),
+            storeId: session.storeId,
+            quantity: count.physical!,
+            minimumThreshold: const Value(0),
+            updatedAt: now,
           ));
         }
+
+        // AC1: insert StockMovement audit trail (within same transaction).
+        await db.into(db.stockMovements).insert(StockMovementsCompanion.insert(
+          id: const Uuid().v4(),
+          productId: count.productId,
+          variantId: Value(count.variantId),
+          storeId: session.storeId,
+          type: 'ADJUSTMENT',
+          quantityBefore: Value(quantityBefore),
+          quantityDelta: quantityDelta,
+          quantityAfter: Value(count.physical!),
+          actorId: actorId,
+          reason: Value('INVENTORY:$sessionId'),
+          source: const Value('INVENTORY'),
+          inventorySessionId: Value(sessionId),
+          createdAt: now,
+        ));
+
+        // AC6: threshold breach detection — local best-effort log only.
+        if (minimumThresh > 0 && count.physical! <= minimumThresh) {
+          dev.log(
+            'Threshold breach: product=${count.productId} '
+            'variant=${count.variantId} qty=${count.physical} '
+            'threshold=$minimumThresh',
+            name: 'ValidateInventory',
+            level: 900,
+          );
+        }
+
         adjustmentsApplied++;
       }
 

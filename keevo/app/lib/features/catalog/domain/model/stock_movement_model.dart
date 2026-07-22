@@ -33,6 +33,12 @@ class StockMovementModel with _$StockMovementModel {
     required String actorId,
     String? notes,
 
+    /// Source descriptor — 'INVENTORY' for offline inventory adjustments (Story 13.7).
+    String? source,
+
+    /// Inventory session ID for traceability (Story 13.7).
+    String? inventorySessionId,
+
     required DateTime occurredAt,
 
     @Default(false) bool synced,

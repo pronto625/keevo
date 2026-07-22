@@ -30,6 +30,12 @@ class StockMovements extends Table {
   TextColumn get actorId => text()();
   TextColumn get reason => text().nullable()();
 
+  /// Source descriptor — 'INVENTORY' for offline inventory adjustments (Story 13.7).
+  TextColumn get source => text().nullable()();
+
+  /// Inventory session ID for traceability (Story 13.7).
+  TextColumn get inventorySessionId => text().nullable()();
+
   BoolColumn get synced => boolean().withDefault(const Constant(false))();
   DateTimeColumn get syncedAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime()();

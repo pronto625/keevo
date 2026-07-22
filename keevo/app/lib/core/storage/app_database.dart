@@ -55,6 +55,7 @@ part 'app_database.g.dart';
 /// Schema version 22: reports table added for end-of-day report history (Story 7.2).
 /// Schema version 23: notifications table added for local notification storage (Story 8.0).
 /// Schema version 25: stock_levels UNIQUE constraint added to Drift uniqueKeys (HF-2 fix).
+/// Schema version 26: stock_movements extended with source, inventorySessionId columns (Story 13.7 — offline inventory audit trail).
 @DriftDatabase(tables: [
   SyncQueue,
   Products,
@@ -89,7 +90,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 25;
+  int get schemaVersion => 26;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -260,6 +261,12 @@ class AppDatabase extends _$AppDatabase {
           'CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_levels_product_store '
           'ON stock_levels (product_id, store_id)',
         );
+      }
+      if (from < 26) {
+        // Story 13.7 — stock movements: add source + inventorySessionId columns
+        // (traceability for offline inventory adjustments).
+        await migrator.addColumn(stockMovements, stockMovements.source);
+        await migrator.addColumn(stockMovements, stockMovements.inventorySessionId);
       }
     },
   );
