@@ -1,5 +1,16 @@
 # Deferred Work
 
+## Deferred from: code review of v1s-13-6 (2026-07-22)
+
+- **Code mort validation OWNER (ventes brouillon)** : `PendingSalesPage`, `PendingSaleDetailPage`, `ValidateSaleService` (branche OWNER manuel), `SaleValidationCascadeService`, `pendingSalesCountProvider`, la variante ambre de `SaleSuccessPage` (`saleStatus == 'PENDING_VALIDATION'`) sont tous fonctionnels mais **plus jamais atteints** depuis le 2026-05-03 (commit `30bdd07`, redesign du flux brouillon vers inline stock + auto-promotion). Aucun chemin client ne produit de vente `PENDING_VALIDATION`. Candidat Epic 15 Story 15.5 ("Réconcilier deferred-work + code mort"). Deux options pour le PO : (a) supprimer entièrement l'UI/les services OWNER de validation, ou (b) les repositionner comme outil de secours manuel (ex. import CSV ou future API créant `PENDING_VALIDATION`). Fichiers Flutter : `pending_sales_page.dart`, `pending_sale_detail_page.dart`, `pending_sales_count_provider` (pos_providers.dart), `sale_success_page.dart` (variante ambre). Backend : `ValidateSaleService.java`, `SaleValidationCascadeService.java`, `PendingSaleController.java`.
+- **Test mixed cart `[DRAFT, ACTIVE]`** : ajouter un test `checkout_page_test.dart` avec panier mixte (1 draft + 1 active) → label "🔶 Vente brouillon". `cart.any()` trivialement correct mais renforce la régression UI.
+- **Failure-path draft flow** : scénarios où `applyInitialStockEntries` ou `promoteToActive` throw — pas de test de rollback/consistance. Hors scope story actuelle (happy path uniquement).
+- **Magic strings `'ACTIVE'`/`'DRAFT'`/`'COMPLETED'`** : refactor modèle → enum (`ProductStatus`, `SaleStatus`). Pré-existant dans `cart_item.dart:14,32` et `record_sale_notifier.dart:108`. Modèle-wide, hors scope.
+- **`addTearDown(container.dispose)` manquant** `record_sale_notifier_test.dart:182,235` : les tests AC3/AC4 créent un `ProviderContainer` sans le disposer. Pattern inconsistent dans le fichier (3 tests existants ne le font pas non plus).
+- **Test empty cart rendering** : edge case où le panier est vide sur `CheckoutPage` — vérifier label "Valider la vente" + bouton désactivé. Couverture bonus.
+- **Stale `draftInitialStocksProvider`** `record_sale_notifier.dart:66-67` : si un produit est retiré du panier entre `CartBottomSheet` et `CheckoutPage`, la map conserve l'entrée périmée et `applyInitialStockEntries` l'applique. Comportement pré-existant.
+- **Sémantique accessibilité emoji 🔶** `checkout_page.dart:311` : séparer l'icône du label via `Semantics`/`ExcludeSemantics` pour screen readers. Cosmétique.
+
 ## Deferred from: code review of 10-1-flyway-baseline-schema-public (2026-06-19)
 
 - **[10-1] `UserSyncStateDdlInitializer` duplique `user_sync_state` (désormais dans V1)** : l'initializer crée programmatiquement la table à `ApplicationReadyEvent` alors que V1 la possède maintenant → deux sources de vérité. À retirer une fois Flyway propriétaire confirmé (post-10.2). Fichier : `sync/sync/adapter/out/persistence/UserSyncStateDdlInitializer.java`.

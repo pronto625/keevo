@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/sync/sync_gate_provider.dart';
+import 'package:keevo/features/catalog/data/datasource/local_product_datasource.dart';
+import 'package:keevo/features/catalog/presentation/provider/product_provider.dart';
 import 'package:keevo/features/pos/data/datasource/local_sale_datasource.dart';
 import 'package:keevo/features/pos/domain/model/cart_item.dart';
 import 'package:keevo/features/pos/domain/model/payment_mode_enum.dart';
@@ -16,6 +18,9 @@ class MockSaleRepository extends Mock implements SaleRepository {}
 
 class MockLocalSaleDataSource extends Mock implements LocalSaleDataSource {}
 
+class MockLocalProductDataSource extends Mock
+    implements LocalProductDataSource {}
+
 class FakeSale extends Fake implements Sale {}
 
 CartItem _item({String id = 'p1', int price = 500, int qty = 1}) => CartItem(
@@ -30,6 +35,7 @@ CartItem _item({String id = 'p1', int price = 500, int qty = 1}) => CartItem(
 void main() {
   late MockSaleRepository mockRepo;
   late MockLocalSaleDataSource mockLocalDs;
+  late MockLocalProductDataSource mockProductDs;
 
   setUpAll(() {
     registerFallbackValue(FakeSale());
@@ -38,6 +44,7 @@ void main() {
   setUp(() {
     mockRepo = MockSaleRepository();
     mockLocalDs = MockLocalSaleDataSource();
+    mockProductDs = MockLocalProductDataSource();
   });
 
   ProviderContainer createContainer({List<CartItem> cart = const []}) {
@@ -47,6 +54,7 @@ void main() {
         daysSinceLastSyncProvider.overrideWithValue(0),
         saleRepositoryProvider.overrideWithValue(mockRepo),
         localSaleDataSourceProvider.overrideWithValue(mockLocalDs),
+        localProductDataSourceProvider.overrideWithValue(mockProductDs),
         recordSaleUseCaseProvider
             .overrideWithValue(RecordSaleUseCase(mockRepo)),
       ],
@@ -154,6 +162,93 @@ void main() {
       );
       verifyNever(() => mockLocalDs.getAvailableStock(any(), any()));
       verifyNever(() => mockRepo.recordSale(any()));
+    });
+
+    // ── AC3: Draft product → inline stock + promotion + COMPLETED ─────────
+
+    test('submit_withDraftItem_appliesInitialStockAndPromotesProduct',
+        () async {
+      final draftItem = CartItem(
+        id: 'd1',
+        productId: 'd1',
+        productName: 'Brouillon',
+        unitPrice: 3000,
+        appliedUnitPrice: 3000,
+        quantity: 1,
+        productStatus: 'DRAFT',
+      );
+
+      // Pre-fill draftInitialStocksProvider
+      final container = createContainer(cart: [draftItem]);
+      container
+          .read(draftInitialStocksProvider.notifier)
+          .update((_) => {'d1': 5});
+
+      // Stub local datasources
+      when(() => mockLocalDs.applyInitialStockEntries(any(), any(), any()))
+          .thenAnswer((_) async {});
+      when(() => mockProductDs.promoteToActive(any()))
+          .thenAnswer((_) async {});
+      // After stock applied, draft product has 5 stock
+      when(() => mockLocalDs.getAvailableStock('d1', any()))
+          .thenAnswer((_) async => 5);
+      when(() => mockRepo.recordSale(any())).thenAnswer((_) async {});
+
+      final notifier = container.read(recordSaleNotifierProvider.notifier);
+
+      await notifier.submit(
+        cart: [draftItem],
+        mode: PaymentModeEnum.cash,
+        storeId: 'store-1',
+        employeeId: 'emp-1',
+      );
+
+      final state = container.read(recordSaleNotifierProvider);
+      expect(state, isA<RecordSaleSuccess>());
+
+      // AC3: applyInitialStockEntries called with exact map
+      verify(() => mockLocalDs.applyInitialStockEntries(
+            {'d1': 5}, 'store-1', 'emp-1')).called(1);
+
+      // AC3: promoteToActive called for each draft product
+      verify(() => mockProductDs.promoteToActive('d1')).called(1);
+
+      // AC3: Sale has status COMPLETED and originalDraftProductIds
+      final captured = verify(() => mockRepo.recordSale(captureAny()))
+          .captured
+          .single as Sale;
+      expect(captured.status, 'COMPLETED');
+      expect(captured.originalDraftProductIds, ['d1']);
+
+      // AC3: draftInitialStocksProvider cleared after submit
+      expect(container.read(draftInitialStocksProvider), isEmpty);
+    });
+
+    // ── AC4: No-draft cart — never applies stock or promotes ───────────────
+
+    test('submit_withoutDraftItems_neverAppliesInitialStockOrPromotes',
+        () async {
+      when(() => mockLocalDs.getAvailableStock(any(), any()))
+          .thenAnswer((_) async => 10);
+      when(() => mockRepo.recordSale(any())).thenAnswer((_) async {});
+
+      final container = createContainer(cart: [_item()]);
+      final notifier = container.read(recordSaleNotifierProvider.notifier);
+
+      await notifier.submit(
+        cart: [_item()],
+        mode: PaymentModeEnum.cash,
+        storeId: 'store-1',
+        employeeId: 'emp-1',
+      );
+
+      final state = container.read(recordSaleNotifierProvider);
+      expect(state, isA<RecordSaleSuccess>());
+
+      // AC4: Never called when no draft items
+      verifyNever(
+          () => mockLocalDs.applyInitialStockEntries(any(), any(), any()));
+      verifyNever(() => mockProductDs.promoteToActive(any()));
     });
   });
 }

@@ -9,6 +9,7 @@ CartItem _item({
   String id = 'p1',
   int price = 10000,
   int qty = 2,
+  String productStatus = 'ACTIVE',
 }) =>
     CartItem(
       id: id,
@@ -17,6 +18,7 @@ CartItem _item({
       unitPrice: price,
       appliedUnitPrice: price,
       quantity: qty,
+      productStatus: productStatus,
     );
 
 /// Wraps CheckoutPage with the required ProviderScope + MaterialApp.
@@ -121,6 +123,30 @@ void main() {
             matching: find.byType(InkWell),
           ));
       expect(inkWell.onTap, isNotNull);
+    });
+
+    // ── AC1: Draft cart → "🔶 Vente brouillon" button label ────────────────
+
+    testWidgets('shows Vente brouillon label when cart has a draft item',
+        (tester) async {
+      await tester.pumpWidget(_buildApp(items: [
+        _item(id: 'd1', price: 3000, qty: 1, productStatus: 'DRAFT'),
+      ]));
+      await tester.pumpAndSettle();
+
+      expect(find.text('🔶 Vente brouillon'), findsOneWidget);
+      expect(find.text('Valider la vente'), findsNothing);
+    });
+
+    // ── AC2: No-draft cart → "Valider la vente" (non-regression) ───────────
+
+    testWidgets('keeps Valider la vente label when cart has no draft item',
+        (tester) async {
+      await tester.pumpWidget(_buildApp(items: [_item()]));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Valider la vente'), findsOneWidget);
+      expect(find.text('🔶 Vente brouillon'), findsNothing);
     });
   });
 }

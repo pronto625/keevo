@@ -50,6 +50,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   @override
   Widget build(BuildContext context) {
     final cart = ref.watch(cartProvider);
+    final hasDraftItems = cart.any((c) => c.isDraft);
     final cartNotifier = ref.read(cartProvider.notifier);
     final discountAmount = cartNotifier.discountAmount;
     final finalTotal = cartNotifier.finalTotal;
@@ -305,9 +306,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                                   child: CircularProgressIndicator(
                                       strokeWidth: 2.5, color: Colors.white),
                                 )
-                              : const Text(
-                                  'Valider la vente',
-                                  style: TextStyle(
+                              : Text(
+                                  hasDraftItems
+                                      ? '🔶 Vente brouillon'
+                                      : 'Valider la vente',
+                                  style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 17,
                                     fontWeight: FontWeight.w700,
