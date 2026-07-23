@@ -10,6 +10,7 @@ import com.keevo.catalog.stock.domain.port.in.GetTransferHistoryQuery;
 import com.keevo.catalog.stock.domain.port.in.TransferStockCommand;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.security.AuthDetails;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -99,13 +100,15 @@ public class StockTransferController {
     /**
      * Step 2 — Receive (complete) an IN_TRANSIT transfer at the destination store.
      * Credits stock at the destination. Returns 200 OK with status COMPLETED.
+     * Story v1s-12-9 — EMPLOYEE scoped to assigned store (FR36).
      */
     @PostMapping("/{id}/complete")
     public ResponseEntity<ApiResponseWrapper<StockTransferResponseDto>> complete(
             @PathVariable UUID id) {
 
         UUID actorId = extractActorId();
-        var command  = new CompleteTransferCommand(id, actorId);
+        UUID assignedStoreId = extractAssignedStoreId();
+        var command  = new CompleteTransferCommand(id, actorId, assignedStoreId);
         var result   = completeTransferService.execute(command);
         return ResponseEntity.ok(ApiResponseWrapper.ok(StockTransferResponseDto.from(result)));
     }
@@ -150,6 +153,27 @@ public class StockTransferController {
                 .getAuthentication()
                 .getPrincipal();
         return UUID.fromString(principal.toString());
+    }
+
+    /**
+     * Story v1s-12-9 — Returns the store UUID embedded in JWT details for EMPLOYEE tokens,
+     * or null for OWNER tokens (OWNER is never scoped).
+     *
+     * <p>Adapted from {@link com.keevo.shared.infrastructure.security.AuthDetails}.
+     * Mirrors the exact same pattern as {@link com.keevo.catalog.stock.adapter.in.web.StockController#extractAssignedStoreId()}.
+     */
+    private UUID extractAssignedStoreId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        Object details = auth.getDetails();
+        if (details instanceof AuthDetails ad && ad.storeId() != null) {
+            return ad.storeId();
+        }
+        boolean isEmployee = auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_EMPLOYEE".equals(a.getAuthority()));
+        if (isEmployee) {
+            throw new DomainException(ErrorCode.FORBIDDEN, "EMPLOYEE token missing assigned store");
+        }
+        return null;
     }
 
     private boolean isOwnerRole() {

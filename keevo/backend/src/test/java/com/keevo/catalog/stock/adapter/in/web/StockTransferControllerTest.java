@@ -6,12 +6,15 @@ import com.keevo.catalog.stock.application.usecase.ExecuteTransferService;
 import com.keevo.catalog.stock.application.usecase.GetTransferHistoryService;
 import com.keevo.catalog.stock.domain.model.StockTransfer;
 import com.keevo.catalog.stock.domain.model.StockTransfer.TransferStatus;
+import com.keevo.catalog.stock.domain.port.in.CompleteTransferCommand;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.security.AuthDetails;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -184,7 +187,7 @@ class StockTransferControllerTest {
 
     @Test
     void POST_complete_employeeCanReceive_returns200() throws Exception {
-        authenticateAs("EMPLOYEE");
+        authenticateAsEmployeeWithStore(destId);
         UUID transferId = UUID.randomUUID();
         when(completeTransferService.execute(any())).thenReturn(completedTransfer());
 
@@ -201,5 +204,88 @@ class StockTransferControllerTest {
         mockMvc.perform(get("/api/v1/stock/transfers")
                 .param("page", "0").param("size", "25"))
             .andExpect(status().isOk());
+    }
+
+    // ── Story v1s-12-9 — EMPLOYEE store scope on complete ──────────────────
+
+    private void authenticateAsEmployeeWithStore(UUID storeId) {
+        var auth = new UsernamePasswordAuthenticationToken(actorId.toString(), null,
+                List.of(new SimpleGrantedAuthority("ROLE_EMPLOYEE")));
+        auth.setDetails(new AuthDetails("Loïc", storeId));
+        SecurityContextHolder.getContext().setAuthentication(auth);
+    }
+
+    @Test
+    void POST_complete_employeePassesAssignedStoreIdToCommand() throws Exception {
+        // v1s-12-9 review P1: ArgumentCaptor verifies the controller extracts
+        // assignedStoreId from AuthDetails and forwards it to the command.
+        authenticateAsEmployeeWithStore(destId);
+        UUID transferId = UUID.randomUUID();
+        when(completeTransferService.execute(any())).thenReturn(completedTransfer());
+
+        mockMvc.perform(post("/api/v1/stock/transfers/" + transferId + "/complete"))
+            .andExpect(status().isOk());
+
+        ArgumentCaptor<CompleteTransferCommand> captor = ArgumentCaptor.forClass(CompleteTransferCommand.class);
+        verify(completeTransferService).execute(captor.capture());
+        CompleteTransferCommand cmd = captor.getValue();
+        org.junit.jupiter.api.Assertions.assertEquals(transferId, cmd.transferId());
+        org.junit.jupiter.api.Assertions.assertEquals(actorId, cmd.actorId());
+        org.junit.jupiter.api.Assertions.assertEquals(destId, cmd.assignedStoreId());
+    }
+
+    @Test
+    void POST_complete_employeeDifferentStore_returns403() throws Exception {
+        authenticateAsEmployeeWithStore(UUID.randomUUID()); // different from destId
+        UUID transferId = UUID.randomUUID();
+        var forbidden = new DomainException(ErrorCode.FORBIDDEN,
+                "EMPLOYEE cannot complete a transfer for another store");
+        when(completeTransferService.execute(any())).thenThrow(forbidden);
+
+        mockMvc.perform(post("/api/v1/stock/transfers/" + transferId + "/complete"))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.domainCode").value("FORBIDDEN"));
+    }
+
+    @Test
+    void POST_complete_ownerNeverScoped_returns200() throws Exception {
+        authenticateAs("OWNER");  // no AuthDetails, assignedStoreId = null
+        UUID transferId = UUID.randomUUID();
+        when(completeTransferService.execute(any())).thenReturn(completedTransfer());
+
+        mockMvc.perform(post("/api/v1/stock/transfers/" + transferId + "/complete"))
+            .andExpect(status().isOk());
+    }
+
+    @Test
+    void POST_complete_employeeWithNullStoreId_returns403() throws Exception {
+        // v1s-12-9 review P2: EMPLOYEE with AuthDetails.storeId() == null → FORBIDDEN
+        var auth = new UsernamePasswordAuthenticationToken(actorId.toString(), null,
+                List.of(new SimpleGrantedAuthority("ROLE_EMPLOYEE")));
+        auth.setDetails(new AuthDetails("Test", null));  // storeId = null
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        UUID transferId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/v1/stock/transfers/" + transferId + "/complete"))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.domainCode").value("FORBIDDEN"));
+
+        verify(completeTransferService, never()).execute(any());
+    }
+
+    @Test
+    void POST_complete_employeeWithNoAuthDetails_returns403() throws Exception {
+        // v1s-12-9 review P2: EMPLOYEE with details not instanceof AuthDetails → FORBIDDEN
+        var auth = new UsernamePasswordAuthenticationToken(actorId.toString(), null,
+                List.of(new SimpleGrantedAuthority("ROLE_EMPLOYEE")));
+        auth.setDetails("not-AuthDetails");  // wrong type
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        UUID transferId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/v1/stock/transfers/" + transferId + "/complete"))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.domainCode").value("FORBIDDEN"));
+
+        verify(completeTransferService, never()).execute(any());
     }
 }

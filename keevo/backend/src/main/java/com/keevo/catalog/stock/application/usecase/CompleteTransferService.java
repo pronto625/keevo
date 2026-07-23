@@ -55,6 +55,14 @@ public class CompleteTransferService implements CompleteTransferUseCase {
                 .orElseThrow(() -> new DomainException(ErrorCode.TRANSFER_NOT_FOUND,
                         "Transfer not found: " + command.transferId()));
 
+        // 1.5 Story v1s-12-9 — EMPLOYEE must be assigned to the destination store (FR36).
+        //        OWNER (assignedStoreId == null) is never scoped.
+        if (command.assignedStoreId() != null
+                && !command.assignedStoreId().equals(transfer.getDestinationStoreId())) {
+            throw new DomainException(ErrorCode.FORBIDDEN,
+                    "EMPLOYEE cannot complete a transfer for another store");
+        }
+
         // 2. ATOMIC transition IN_TRANSIT → COMPLETED (Option A — conditional UPDATE)
         //    Two concurrent calls: exactly one returns true, the other false.
         boolean transitioned = transferRepository.transitionStatus(

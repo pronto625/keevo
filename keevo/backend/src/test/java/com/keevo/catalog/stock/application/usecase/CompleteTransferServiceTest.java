@@ -51,6 +51,8 @@ class CompleteTransferServiceTest {
     private static final UUID DESTINATION_STORE_ID = UUID.randomUUID();
     private static final UUID PRODUCT_ID           = UUID.randomUUID();
     private static final UUID ACTOR_ID             = UUID.randomUUID();
+    private static final UUID EMPLOYEE_STORE_ID    = UUID.randomUUID();  // v1s-12-9
+    private static final UUID OTHER_STORE_ID       = UUID.randomUUID();  // v1s-12-9
     private static final String TENANT             = "test_tenant";
 
     @BeforeEach
@@ -95,7 +97,7 @@ class CompleteTransferServiceTest {
                 .thenReturn(Optional.of(transfer))   // first findById
                 .thenReturn(Optional.of(completed)); // re-fetch after transition
 
-        StockTransfer result = service.execute(new CompleteTransferCommand(TRANSFER_ID, ACTOR_ID));
+        StockTransfer result = service.execute(new CompleteTransferCommand(TRANSFER_ID, ACTOR_ID, null));
 
         assertThat(result.getStatus()).isEqualTo(TransferStatus.COMPLETED);
 
@@ -123,7 +125,7 @@ class CompleteTransferServiceTest {
         when(transferRepository.transitionStatus(TRANSFER_ID, TransferStatus.IN_TRANSIT, TransferStatus.COMPLETED))
                 .thenReturn(false);
 
-        StockTransfer result = service.execute(new CompleteTransferCommand(TRANSFER_ID, ACTOR_ID));
+        StockTransfer result = service.execute(new CompleteTransferCommand(TRANSFER_ID, ACTOR_ID, null));
 
         assertThat(result.getStatus()).isEqualTo(TransferStatus.COMPLETED);
 
@@ -141,7 +143,7 @@ class CompleteTransferServiceTest {
     void shouldThrowTransferNotFound() {
         when(transferRepository.findById(TRANSFER_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.execute(new CompleteTransferCommand(TRANSFER_ID, ACTOR_ID)))
+        assertThatThrownBy(() -> service.execute(new CompleteTransferCommand(TRANSFER_ID, ACTOR_ID, null)))
                 .isInstanceOf(DomainException.class)
                 .extracting("domainCode")
                 .isEqualTo(ErrorCode.TRANSFER_NOT_FOUND.name());
@@ -164,12 +166,81 @@ class CompleteTransferServiceTest {
         when(transferRepository.transitionStatus(TRANSFER_ID, TransferStatus.IN_TRANSIT, TransferStatus.COMPLETED))
                 .thenReturn(false);
 
-        assertThatThrownBy(() -> service.execute(new CompleteTransferCommand(TRANSFER_ID, ACTOR_ID)))
+        assertThatThrownBy(() -> service.execute(new CompleteTransferCommand(TRANSFER_ID, ACTOR_ID, null)))
                 .isInstanceOf(DomainException.class)
                 .extracting("domainCode")
                 .isEqualTo(ErrorCode.TRANSFER_INVALID_STATUS.name());
 
         verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
         verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    // ── Story v1s-12-9 — EMPLOYEE store scope on complete ────────────────────
+
+    @Test
+    @DisplayName("v1s-12-9: EMPLOYEE with matching assigned store → success")
+    void employeeWithMatchingStoreShouldSucceed() {
+        var transfer = createInTransitTransfer();  // destination = DESTINATION_STORE_ID
+        var completed = createCompletedTransfer();
+
+        when(transferRepository.findById(TRANSFER_ID)).thenReturn(Optional.of(transfer));
+        when(transferRepository.transitionStatus(TRANSFER_ID, TransferStatus.IN_TRANSIT, TransferStatus.COMPLETED))
+                .thenReturn(true);
+        when(stockOperationService.recordOperation(
+                eq(PRODUCT_ID), eq(null), eq(DESTINATION_STORE_ID),
+                eq(MovementType.TRANSFER_IN), eq(10), eq(ACTOR_ID), anyString()))
+                .thenReturn(null);
+        when(transferRepository.findById(TRANSFER_ID))
+                .thenReturn(Optional.of(transfer))
+                .thenReturn(Optional.of(completed));
+
+        StockTransfer result = service.execute(
+                new CompleteTransferCommand(TRANSFER_ID, ACTOR_ID, DESTINATION_STORE_ID));
+
+        assertThat(result.getStatus()).isEqualTo(TransferStatus.COMPLETED);
+        verify(stockOperationService, times(1)).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
+    }
+
+    @Test
+    @DisplayName("v1s-12-9: EMPLOYEE with different assigned store → FORBIDDEN")
+    void employeeWithDifferentStoreShouldBeForbidden() {
+        var transfer = createInTransitTransfer();  // destination = DESTINATION_STORE_ID
+
+        when(transferRepository.findById(TRANSFER_ID)).thenReturn(Optional.of(transfer));
+
+        assertThatThrownBy(() -> service.execute(
+                new CompleteTransferCommand(TRANSFER_ID, ACTOR_ID, OTHER_STORE_ID)))
+                .isInstanceOf(DomainException.class)
+                .extracting("domainCode")
+                .isEqualTo(ErrorCode.FORBIDDEN.name());
+
+        // recordOperation must NOT be called (guard before transition)
+        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
+        // transitionStatus must NOT be called
+        verify(transferRepository, never()).transitionStatus(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("v1s-12-9: OWNER (null assignedStoreId) → success, never scoped")
+    void ownerNullStoreIdShouldSucceed() {
+        var transfer = createInTransitTransfer();
+        var completed = createCompletedTransfer();
+
+        when(transferRepository.findById(TRANSFER_ID)).thenReturn(Optional.of(transfer));
+        when(transferRepository.transitionStatus(TRANSFER_ID, TransferStatus.IN_TRANSIT, TransferStatus.COMPLETED))
+                .thenReturn(true);
+        when(stockOperationService.recordOperation(
+                eq(PRODUCT_ID), eq(null), eq(DESTINATION_STORE_ID),
+                eq(MovementType.TRANSFER_IN), eq(10), eq(ACTOR_ID), anyString()))
+                .thenReturn(null);
+        when(transferRepository.findById(TRANSFER_ID))
+                .thenReturn(Optional.of(transfer))
+                .thenReturn(Optional.of(completed));
+
+        StockTransfer result = service.execute(
+                new CompleteTransferCommand(TRANSFER_ID, ACTOR_ID, null));
+
+        assertThat(result.getStatus()).isEqualTo(TransferStatus.COMPLETED);
+        verify(stockOperationService, times(1)).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
     }
 }

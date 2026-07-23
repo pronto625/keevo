@@ -449,6 +449,21 @@ class _TransferTileState extends ConsumerState<_TransferTile> {
     }
   }
 
+  /// Story v1s-12-9 — EMPLOYEE strict scope: only show "Réceptionner" when
+  /// activeStoreId exactly matches the transfer's destination store.
+  /// OWNER (role == 'OWNER' or null/unknown) keeps the existing behavior:
+  /// activeStoreId == null (all stores) OR == destinationStoreId.
+  bool _shouldShowReceiveButton(WidgetRef ref) {
+    final role = ref.watch(currentUserRoleProvider);
+    final activeStoreId = ref.watch(activeStoreIdProvider);
+    if (role == 'EMPLOYEE') {
+      return activeStoreId == widget.transfer.destinationStoreId;
+    }
+    // OWNER or unknown role — existing behavior, never scoped
+    return activeStoreId == null ||
+        activeStoreId == widget.transfer.destinationStoreId;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -568,10 +583,10 @@ class _TransferTileState extends ConsumerState<_TransferTile> {
               ],
             ),
             // ── Row 3: Réceptionner button (IN_TRANSIT, destination store only) ──
+            // Story v1s-12-9: EMPLOYEE strict scope (activeStoreId == destinationStoreId),
+            // OWNER unchanged (null OR destination).
             if (widget.transfer.status == 'IN_TRANSIT' &&
-                (ref.watch(activeStoreIdProvider) == null ||
-                 ref.watch(activeStoreIdProvider) ==
-                     widget.transfer.destinationStoreId)) ...[
+                _shouldShowReceiveButton(ref)) ...[
               const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
