@@ -46,6 +46,9 @@ class SecureTokenStorage implements TokenStorage {
   Future<String?> getRefreshToken() => _storage.read(key: _keyRefreshToken);
 
   @override
+  Future<String?> getUserId() => _storage.read(key: _keyUserId);
+
+  @override
   Future<String?> getStoreId() => _storage.read(key: _keyStoreId);
 
   @override

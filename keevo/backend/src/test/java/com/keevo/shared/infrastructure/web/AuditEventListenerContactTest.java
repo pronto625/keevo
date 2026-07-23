@@ -43,7 +43,7 @@ class AuditEventListenerContactTest {
 
     @BeforeEach
     void setUp() {
-        listener = new AuditEventListener(auditPort, objectMapper);
+        listener = new AuditEventListener(auditPort, objectMapper, null);
     }
 
     // ── ClientCreatedEvent ────────────────────────────────────────────────────

@@ -136,3 +136,59 @@ class RegeneratePassword extends _$RegeneratePassword {
     );
   }
 }
+
+// ── Story 14.11 — Update employee profile ─────────────────────────────────
+
+@riverpod
+class UpdateEmployee extends _$UpdateEmployee {
+  @override
+  FutureOr<EmployeeModel?> build() => null;
+
+  Future<void> update(String employeeId, {
+    String? firstName,
+    String? lastName,
+    String? phoneNumber,
+    String? storeId,
+  }) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(
+      () => ref.read(employeeRepositoryProvider).updateEmployee(
+            employeeId,
+            firstName: firstName,
+            lastName: lastName,
+            phoneNumber: phoneNumber,
+            storeId: storeId,
+          ),
+    );
+  }
+}
+
+// ── Story 14.11 — Change employee role ────────────────────────────────────
+
+@riverpod
+class ChangeEmployeeRole extends _$ChangeEmployeeRole {
+  @override
+  FutureOr<void> build() => null;
+
+  Future<void> change(String employeeId, String role) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(
+      () => ref.read(employeeRepositoryProvider).changeRole(employeeId, role),
+    );
+  }
+}
+
+// ── Story 14.11 — Set employee password ───────────────────────────────────
+
+@riverpod
+class SetEmployeePassword extends _$SetEmployeePassword {
+  @override
+  FutureOr<void> build() => null;
+
+  Future<void> set(String employeeId, String newPassword) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(
+      () => ref.read(employeeRepositoryProvider).setPassword(employeeId, newPassword),
+    );
+  }
+}

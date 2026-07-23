@@ -71,6 +71,14 @@ public class EmployeeRepositoryAdapter implements EmployeeRepository {
     }
 
     @Override
+    public Employee updateProfile(UUID employeeId, String firstName, String lastName) {
+        EmployeeJpaEntity entity = findEntityOrThrow(employeeId);
+        entity.setFirstName(firstName);
+        entity.setLastName(lastName);
+        return entityToDomain(jpa.save(entity));
+    }
+
+    @Override
     public List<Employee> findByStoreId(UUID storeId) {
         return jpa.findByStoreIdAndStatus(storeId, EmployeeStatus.ACTIVE.name()).stream()
                 .map(this::entityToDomain).toList();

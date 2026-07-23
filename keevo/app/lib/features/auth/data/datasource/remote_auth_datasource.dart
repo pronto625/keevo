@@ -139,6 +139,47 @@ class RemoteAuthDataSource {
     }
   }
 
+  /// POST /api/v1/auth/forgot-password (Story 14.12)
+  ///
+  /// Always returns 200 {"sent":true} — anti-enumeration.
+  /// Rate-limited server-side: 1/min + 5/hour per phone.
+  Future<bool> forgotPassword({required String phoneNumber}) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/api/v1/auth/forgot-password',
+        data: {'phoneNumber': phoneNumber},
+      );
+      // Null-safe: if server returns 200 without body (proxy/LB edge case),
+      // fail-open to `true` — consistent with D1 anti-enumeration (always success).
+      return (response.data?['sent'] as bool?) ?? true;
+    } on DioException catch (e) {
+      throw _mapAuthError(e);
+    }
+  }
+
+  /// POST /api/v1/auth/reset-password (Story 14.12)
+  ///
+  /// Resets the user's password using an OTP code.
+  /// Throws [AuthException] on INVALID_OR_EXPIRED_CODE, CODE_LOCKED, or VALIDATION_FAILED.
+  Future<void> resetPassword({
+    required String phoneNumber,
+    required String code,
+    required String newPassword,
+  }) async {
+    try {
+      await _dio.post<Map<String, dynamic>>(
+        '/api/v1/auth/reset-password',
+        data: {
+          'phoneNumber': phoneNumber,
+          'code': code,
+          'newPassword': newPassword,
+        },
+      );
+    } on DioException catch (e) {
+      throw _mapAuthError(e);
+    }
+  }
+
   // ── Mapping helpers ─────────────────────────────────────────────────────
 
   LoginSessionResponse _mapLoginSession(Map<String, dynamic> body) {

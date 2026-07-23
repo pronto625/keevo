@@ -61,6 +61,12 @@ public enum ErrorCode {
     STORE_REASSIGNED,
     ACCOUNT_INACTIVE,
     SESSION_REVOKED,   // Story 12.2 — NFR12: token issued before tokens_valid_after cutoff (401)
+    PHONE_ALREADY_REGISTERED, // Story 14.11 — phone number already taken by another user (409)
+    CANNOT_CHANGE_OWN_ROLE,   // Story 14.11 — cannot change your own role (403)
+    CANNOT_DEMOTE_LAST_OWNER, // Story 14.11 — cannot demote the last active owner (403)
+    CANNOT_SET_OWN_PASSWORD,  // Story 14.11 — owner cannot set own password via this endpoint (403)
+    INVALID_OR_EXPIRED_CODE,  // Story 14.12 — password reset code is invalid or expired (422)
+    CODE_LOCKED,              // Story 14.12 — too many failed reset attempts, request new code (422)
 
     // ── Optimistic Lock (Story v1s-13-1) ───────────────────────────
     OPTIMISTIC_LOCK,    // HTTP 409 — concurrent modification detected, client must retry

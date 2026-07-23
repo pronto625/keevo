@@ -144,4 +144,32 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
   @override
   Future<CreateEmployeeResult> regeneratePassword(String employeeId) =>
       _remote.regeneratePassword(employeeId);
+
+  // ── Story 14.11 ───────────────────────────────────────────────────────
+
+  @override
+  Future<EmployeeModel> updateEmployee(String employeeId, {
+    String? firstName,
+    String? lastName,
+    String? phoneNumber,
+    String? storeId,
+  }) async {
+    final result = await _remote.updateEmployee(
+      employeeId,
+      firstName: firstName,
+      lastName: lastName,
+      phoneNumber: phoneNumber,
+      storeId: storeId,
+    );
+    await _local.upsert(result);
+    return result;
+  }
+
+  @override
+  Future<void> changeRole(String employeeId, String role) =>
+      _remote.changeRole(employeeId, role);
+
+  @override
+  Future<void> setPassword(String employeeId, String newPassword) =>
+      _remote.setPassword(employeeId, newPassword);
 }

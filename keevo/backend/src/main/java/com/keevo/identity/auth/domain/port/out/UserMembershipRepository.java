@@ -37,4 +37,9 @@ public interface UserMembershipRepository {
      * Story 3.5 — employee reactivation.
      */
     void reactivateByUserId(UUID userId);
+
+    /**
+     * Story 14.11 — update the role for a specific (userId, tenantId) membership.
+     */
+    void updateRole(UUID userId, UUID tenantId, String newRole);
 }

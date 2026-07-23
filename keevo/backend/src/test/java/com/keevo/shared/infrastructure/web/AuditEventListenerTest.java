@@ -3,6 +3,13 @@ package com.keevo.shared.infrastructure.web;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.identity.auth.domain.model.UserAuthenticatedEvent;
 import com.keevo.identity.auth.domain.model.UserRegisteredEvent;
+import com.keevo.identity.auth.domain.model.PasswordResetRequestedEvent;
+import com.keevo.identity.auth.domain.model.PasswordResetEvent;
+import com.keevo.identity.auth.domain.model.UserMembershipInfo;
+import com.keevo.identity.auth.domain.port.out.UserRepository;
+import com.keevo.identity.employee.domain.event.EmployeePasswordSetByOwnerEvent;
+import com.keevo.identity.employee.domain.event.EmployeeRoleChangedEvent;
+import com.keevo.identity.employee.domain.event.EmployeeUpdatedEvent;
 import com.keevo.identity.onboarding.domain.model.OnboardingCompletedEvent;
 import com.keevo.identity.onboarding.domain.model.SectorType;
 import com.keevo.shared.application.port.AuditPort;
@@ -17,6 +24,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -24,6 +32,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * AuditEventListenerTest — TDD tests for AuditEventListener.
@@ -39,12 +48,15 @@ class AuditEventListenerTest {
     @Mock
     AuditPort auditPort;
 
+    @Mock
+    UserRepository userRepository;
+
     AuditEventListener listener;
     ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach
     void setUp() {
-        listener = new AuditEventListener(auditPort, objectMapper);
+        listener = new AuditEventListener(auditPort, objectMapper, userRepository);
         TenantContext.clear(); // ensure clean thread state before each test
     }
 
@@ -228,5 +240,172 @@ class AuditEventListenerTest {
                 .isEqualTo("kv_already_set");
 
         TenantContext.clear(); // cleanup after test
+    }
+
+    // ── Story 14.11 — Employee events (authenticated endpoints) ──────────────
+
+    @Test
+    @DisplayName("on(EmployeeUpdatedEvent) calls auditPort.record() with EMPLOYEE_UPDATED action")
+    void onEmployeeUpdated_callsAuditPort() {
+        UUID actorId = UUID.randomUUID();
+        UUID employeeId = UUID.randomUUID();
+        EmployeeUpdatedEvent event = new EmployeeUpdatedEvent(
+                actorId, "kv_abc123", employeeId,
+                List.of("firstName", "phoneNumber"), Instant.now());
+
+        listener.on(event);
+
+        verify(auditPort).record(
+                eq(actorId),
+                eq("kv_abc123"),
+                eq("EMPLOYEE_UPDATED"),
+                eq("Employee"),
+                eq(employeeId),
+                eq(null),
+                any()
+        );
+    }
+
+    @Test
+    @DisplayName("on(EmployeeRoleChangedEvent) calls auditPort.record() with before/after role")
+    void onEmployeeRoleChanged_callsAuditPort() {
+        UUID actorId = UUID.randomUUID();
+        UUID employeeId = UUID.randomUUID();
+        EmployeeRoleChangedEvent event = new EmployeeRoleChangedEvent(
+                actorId, "kv_abc123", employeeId,
+                "EMPLOYEE", "OWNER", Instant.now());
+
+        listener.on(event);
+
+        verify(auditPort).record(
+                eq(actorId),
+                eq("kv_abc123"),
+                eq("EMPLOYEE_ROLE_CHANGED"),
+                eq("Employee"),
+                eq(employeeId),
+                any(),  // valueBefore = JSON with previousRole
+                any()   // valueAfter = JSON with newRole
+        );
+    }
+
+    @Test
+    @DisplayName("on(EmployeePasswordSetByOwnerEvent) calls auditPort.record() with forcedReset=true")
+    void onEmployeePasswordSetByOwner_callsAuditPort() {
+        UUID actorId = UUID.randomUUID();
+        UUID employeeId = UUID.randomUUID();
+        EmployeePasswordSetByOwnerEvent event = new EmployeePasswordSetByOwnerEvent(
+                actorId, "kv_abc123", employeeId, Instant.now());
+
+        listener.on(event);
+
+        verify(auditPort).record(
+                eq(actorId),
+                eq("kv_abc123"),
+                eq("EMPLOYEE_PASSWORD_SET_BY_OWNER"),
+                eq("Employee"),
+                eq(employeeId),
+                eq(null),
+                any()   // valueAfter = JSON with forcedReset=true
+        );
+    }
+
+    // ── PasswordResetRequestedEvent (Story 14.12) ─────────────────────────
+
+    @Test
+    @DisplayName("on(PasswordResetRequestedEvent) audits in all user memberships")
+    void onPasswordResetRequested_auditsInAllMemberships() {
+        UUID userId = UUID.randomUUID();
+        var m1 = new UserMembershipInfo("KV-AAA", "Tenant A", "OWNER", "kv_aaa");
+        var m2 = new UserMembershipInfo("KV-BBB", "Tenant B", "EMPLOYEE", "kv_bbb");
+        when(userRepository.findMembershipsWithTenantInfo(userId)).thenReturn(List.of(m1, m2));
+
+        // Capture TenantContext at the moment record() is called — must match the
+        // membership's schemaName (cross-tenant loop, D4).
+        doAnswer(invocation -> {
+            String currentTenant = TenantContext.getCurrentTenant();
+            String expectedSchema = invocation.getArgument(1); // 2nd arg = tenantId/schema
+            assertThat(currentTenant)
+                    .as("TenantContext MUST be set to schemaName when auditPort.record() is called")
+                    .isEqualTo(expectedSchema);
+            return null;
+        }).when(auditPort).record(any(), any(), any(), any(), any(), any(), any());
+
+        var event = new PasswordResetRequestedEvent(userId, "+237600000000", Instant.now());
+        listener.on(event);
+
+        // Must audit in BOTH tenants
+        verify(auditPort).record(
+                eq(userId), eq("kv_aaa"), eq("PASSWORD_RESET_REQUESTED"),
+                eq("User"), eq(userId), eq(null), any());
+        verify(auditPort).record(
+                eq(userId), eq("kv_bbb"), eq("PASSWORD_RESET_REQUESTED"),
+                eq("User"), eq(userId), eq(null), any());
+
+        // After the event handler completes, TenantContext MUST be cleared
+        assertThat(TenantContext.getCurrentTenant())
+                .as("TenantContext MUST be cleared after on(PasswordResetRequestedEvent)")
+                .isNull();
+    }
+
+    @Test
+    @DisplayName("on(PasswordResetEvent) audits in all user memberships")
+    void onPasswordReset_auditsInAllMemberships() {
+        UUID userId = UUID.randomUUID();
+        var m1 = new UserMembershipInfo("KV-AAA", "Tenant A", "OWNER", "kv_aaa");
+        when(userRepository.findMembershipsWithTenantInfo(userId)).thenReturn(List.of(m1));
+
+        // Capture TenantContext at record() time — must equal schemaName
+        doAnswer(invocation -> {
+            String currentTenant = TenantContext.getCurrentTenant();
+            String expectedSchema = invocation.getArgument(1);
+            assertThat(currentTenant)
+                    .as("TenantContext MUST be set to schemaName when auditPort.record() is called")
+                    .isEqualTo(expectedSchema);
+            return null;
+        }).when(auditPort).record(any(), any(), any(), any(), any(), any(), any());
+
+        var event = new PasswordResetEvent(userId, Instant.now());
+        listener.on(event);
+
+        verify(auditPort).record(
+                eq(userId), eq("kv_aaa"), eq("PASSWORD_RESET"),
+                eq("User"), eq(userId), eq(null), any());
+
+        // After the event handler completes, TenantContext MUST be cleared
+        assertThat(TenantContext.getCurrentTenant())
+                .as("TenantContext MUST be cleared after on(PasswordResetEvent)")
+                .isNull();
+    }
+
+    @Test
+    @DisplayName("on(PasswordResetEvent) continues loop even if one tenant's audit throws")
+    void onPasswordReset_continuesLoopOnAuditFailure() {
+        UUID userId = UUID.randomUUID();
+        var m1 = new UserMembershipInfo("KV-AAA", "Tenant A", "OWNER", "kv_aaa");
+        var m2 = new UserMembershipInfo("KV-BBB", "Tenant B", "EMPLOYEE", "kv_bbb");
+        var m3 = new UserMembershipInfo("KV-CCC", "Tenant C", "OWNER", "kv_ccc");
+        when(userRepository.findMembershipsWithTenantInfo(userId))
+                .thenReturn(List.of(m1, m2, m3));
+
+        // First tenant's audit throws — listener must catch, log, continue to next tenant
+        doThrow(new RuntimeException("DB connection lost"))
+                .when(auditPort).record(eq(userId), eq("kv_aaa"), any(), any(), any(), any(), any());
+
+        var event = new PasswordResetEvent(userId, Instant.now());
+        // Must NOT throw — best-effort audit per tenant
+        listener.on(event);
+
+        // kv_aaa failed, but kv_bbb and kv_ccc must still be attempted
+        verify(auditPort).record(eq(userId), eq("kv_aaa"), eq("PASSWORD_RESET"),
+                eq("User"), eq(userId), eq(null), any());
+        verify(auditPort).record(eq(userId), eq("kv_bbb"), eq("PASSWORD_RESET"),
+                eq("User"), eq(userId), eq(null), any());
+        verify(auditPort).record(eq(userId), eq("kv_ccc"), eq("PASSWORD_RESET"),
+                eq("User"), eq(userId), eq(null), any());
+
+        // TenantContext MUST be cleared even after the exception path
+        assertThat(TenantContext.getCurrentTenant())
+                .as("TenantContext MUST be cleared even when audit throws")
+                .isNull();
     }
 }

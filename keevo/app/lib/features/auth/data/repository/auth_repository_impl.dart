@@ -68,4 +68,22 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<AccountProfile> getProfile() async {
     return _remoteDataSource.getProfile();
   }
+
+  @override
+  Future<bool> forgotPassword({required String phoneNumber}) async {
+    return _remoteDataSource.forgotPassword(phoneNumber: phoneNumber);
+  }
+
+  @override
+  Future<void> resetPassword({
+    required String phoneNumber,
+    required String code,
+    required String newPassword,
+  }) async {
+    return _remoteDataSource.resetPassword(
+      phoneNumber: phoneNumber,
+      code: code,
+      newPassword: newPassword,
+    );
+  }
 }

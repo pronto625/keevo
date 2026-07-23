@@ -102,6 +102,18 @@ public final class User {
                         failedAttempts, lockedUntil);
     }
 
+    /** Story 14.11 — returns a copy with the given phone number. */
+    public User withPhoneNumber(String newPhoneNumber) {
+        return new User(id, newPhoneNumber, passwordHash, role, active, createdAt,
+                        failedAttempts, lockedUntil);
+    }
+
+    /** Story 14.11 — returns a copy with the given role. */
+    public User withRole(Role newRole) {
+        return new User(id, phoneNumber, passwordHash, newRole, active, createdAt,
+                        failedAttempts, lockedUntil);
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

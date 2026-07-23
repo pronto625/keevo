@@ -199,4 +199,37 @@ class ChangePasswordServiceTest {
         // Password change = credential compromise → revoke across ALL the user's memberships
         verify(tokenRevocationPort).revokeAllSessionsEverywhere(eq(userId));
     }
+
+    @Test
+    @DisplayName("REGRESSION (Story 14.11 Task 5.2): promoted employee (Role.OWNER with Employee record) "
+            + "gets JWT role=OWNER after forced password change — NOT 'EMPLOYEE' from heuristic")
+    void shouldIssueOwnerRoleJwtAfterPromotionAndForcedPasswordChange() {
+        // Employee was promoted to OWNER → User.role = OWNER (synced by ChangeEmployeeRoleService)
+        // but Employee record still exists (not deleted on promotion)
+        User promotedUser = new User(userId, "+237690000001", "$2a$12$oldHash",
+                Role.OWNER, true, Instant.now());
+        when(userRepository.findById(userId)).thenReturn(Optional.of(promotedUser));
+        when(passwordEncoder.matches("tempPass123", "$2a$12$oldHash")).thenReturn(true);
+        when(passwordEncoder.encode("NewPass1234")).thenReturn("$2a$12$newHash");
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(employeeRepository.findByUserId(userId)).thenReturn(Optional.of(employee));
+        when(employeeRepository.updatePasswordChangeRequired(employeeId, false)).thenReturn(employee.withPasswordChangeRequired(false));
+        when(jwtTokenProvider.generateRefreshToken()).thenReturn("refresh");
+        when(jwtProperties.getAccessTokenExpiryHours()).thenReturn(24);
+        TenantContext.setCurrentTenant("kv_abc123");
+
+        changePasswordService.execute(new ChangePasswordCommand(userId, "tempPass123", "NewPass1234"));
+
+        // CRITICAL: the role passed to generateAccessToken MUST be "OWNER" (from User.role),
+        // NOT "EMPLOYEE" (from the old heuristic employeeOpt.isPresent() ? "EMPLOYEE" : "OWNER")
+        verify(jwtTokenProvider).generateAccessToken(
+                eq(userId),
+                any(),
+                eq("OWNER"),       // ← this is the regression assertion
+                any(),
+                any(),
+                anyBoolean(),
+                any()
+        );
+    }
 }

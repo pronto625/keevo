@@ -23,4 +23,20 @@ public interface WhatsAppPort {
      * @param reportText  Message content (WhatsApp formatted)
      */
     void sendReport(String phoneNumber, String reportText);
+
+    /**
+     * Story 14.12 — Send an OTP (one-time password) for password reset.
+     *
+     * <p>Default implementation delegates to {@link #sendReport(String, String)}
+     * so all existing adapters work without modification (D5).
+     *
+     * @param phoneNumber Recipient phone (E.164 format)
+     * @param code        6-digit OTP code
+     */
+    default void sendOtp(String phoneNumber, String code) {
+        sendReport(phoneNumber,
+                "Votre code de réinitialisation Keevo est " + code
+                + ". Il expire dans 10 minutes."
+                + " Si vous n'avez pas demandé, ignorez ce message.");
+    }
 }

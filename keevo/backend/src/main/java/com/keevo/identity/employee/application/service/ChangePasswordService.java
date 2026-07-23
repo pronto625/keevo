@@ -90,7 +90,10 @@ public class ChangePasswordService implements ChangePasswordUseCase {
 
         // 5. Resolve role-specific data — EMPLOYEE or OWNER (Story 8.6 AC7)
         Optional<Employee> employeeOpt = employeeRepository.findByUserId(command.actorId());
-        String role;
+        // Story 14.11 — derive role from User.role, NOT from employee existence heuristic.
+        // An employee promoted to OWNER still has an employee record, so employeeOpt.isPresent()
+        // would incorrectly return "EMPLOYEE". User.role is kept in sync by ChangeEmployeeRoleService.
+        String role = updatedUser.getRole().name();
         UUID storeId = null;
         String firstName = null;
         UUID employeeId = null;
@@ -98,12 +101,9 @@ public class ChangePasswordService implements ChangePasswordUseCase {
         if (employeeOpt.isPresent()) {
             Employee emp = employeeOpt.get();
             employeeRepository.updatePasswordChangeRequired(emp.getId(), false);
-            role       = "EMPLOYEE";
             storeId    = emp.getStoreId();
             firstName  = emp.getFirstName();
             employeeId = emp.getId();
-        } else {
-            role = "OWNER";
         }
 
         // 6. Revoke all existing refresh tokens

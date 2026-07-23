@@ -13,12 +13,23 @@ public record EmployeeResponseDto(
         UUID storeId,
         String status,
         boolean passwordChangeRequired,
-        Instant createdAt
+        Instant createdAt,
+        String role
 ) {
+    /** @deprecated use {@link #fromDomain(Employee, String)} to include role */
+    @Deprecated
     public static EmployeeResponseDto fromDomain(Employee e) {
         return new EmployeeResponseDto(
                 e.getId(), e.getUserId(), e.getFirstName(), e.getLastName(),
                 e.getStoreId(), e.getStatus().name(),
-                e.isPasswordChangeRequired(), e.getCreatedAt());
+                e.isPasswordChangeRequired(), e.getCreatedAt(), null);
+    }
+
+    /** Story 14.11 — factory with role resolved from membership. */
+    public static EmployeeResponseDto fromDomain(Employee e, String role) {
+        return new EmployeeResponseDto(
+                e.getId(), e.getUserId(), e.getFirstName(), e.getLastName(),
+                e.getStoreId(), e.getStatus().name(),
+                e.isPasswordChangeRequired(), e.getCreatedAt(), role);
     }
 }

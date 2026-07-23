@@ -88,6 +88,44 @@ class RemoteEmployeeDataSource {
       status: json['status'] as String,
       passwordChangeRequired: json['passwordChangeRequired'] as bool? ?? false,
       createdAt: DateTime.parse(json['createdAt'] as String),
+      role: json['role'] as String? ?? 'EMPLOYEE',
+    );
+  }
+
+  // ── Story 14.11 ───────────────────────────────────────────────────────
+
+  /// PATCH /api/v1/employees/{id} — partial profile update
+  Future<EmployeeModel> updateEmployee(String employeeId, {
+    String? firstName,
+    String? lastName,
+    String? phoneNumber,
+    String? storeId,
+  }) async {
+    final body = <String, dynamic>{};
+    if (firstName != null) body['firstName'] = firstName;
+    if (lastName != null) body['lastName'] = lastName;
+    if (phoneNumber != null) body['phoneNumber'] = phoneNumber;
+    if (storeId != null) body['storeId'] = storeId;
+    final response = await _dio.patch<Map<String, dynamic>>(
+      '/api/v1/employees/$employeeId',
+      data: body,
+    );
+    return _mapEmployee(response.data!['data'] as Map<String, dynamic>);
+  }
+
+  /// PATCH /api/v1/employees/{id}/role
+  Future<void> changeRole(String employeeId, String role) async {
+    await _dio.patch<Map<String, dynamic>>(
+      '/api/v1/employees/$employeeId/role',
+      data: {'role': role},
+    );
+  }
+
+  /// POST /api/v1/employees/{id}/password
+  Future<void> setPassword(String employeeId, String newPassword) async {
+    await _dio.post<Map<String, dynamic>>(
+      '/api/v1/employees/$employeeId/password',
+      data: {'newPassword': newPassword},
     );
   }
 }

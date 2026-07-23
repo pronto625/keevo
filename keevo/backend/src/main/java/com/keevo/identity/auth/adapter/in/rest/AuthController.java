@@ -9,6 +9,10 @@ import com.keevo.identity.auth.adapter.in.rest.dto.RegistrationResponse;
 import com.keevo.identity.auth.adapter.in.rest.dto.SelectTenantRequest;
 import com.keevo.identity.auth.adapter.in.rest.dto.ChangePasswordRequestDto;
 import com.keevo.identity.auth.adapter.in.rest.dto.UserProfileResponse;
+import com.keevo.identity.auth.adapter.in.rest.dto.ForgotPasswordRequestDto;
+import com.keevo.identity.auth.adapter.in.rest.dto.ForgotPasswordResponseDto;
+import com.keevo.identity.auth.adapter.in.rest.dto.ResetPasswordRequestDto;
+import com.keevo.identity.auth.adapter.in.rest.dto.ResetPasswordResponseDto;
 import com.keevo.identity.auth.domain.model.AuthTokens;
 import com.keevo.identity.auth.domain.model.UserMembershipInfo;
 import com.keevo.identity.auth.domain.model.UserProfileData;
@@ -22,6 +26,10 @@ import com.keevo.identity.auth.domain.port.in.RegisterUserUseCase;
 import com.keevo.identity.auth.domain.port.in.RegistrationResult;
 import com.keevo.identity.auth.domain.port.in.SelectTenantCommand;
 import com.keevo.identity.auth.domain.port.in.SelectTenantUseCase;
+import com.keevo.identity.auth.domain.port.in.RequestPasswordResetCommand;
+import com.keevo.identity.auth.domain.port.in.RequestPasswordResetUseCase;
+import com.keevo.identity.auth.domain.port.in.ResetPasswordCommand;
+import com.keevo.identity.auth.domain.port.in.ResetPasswordUseCase;
 import com.keevo.identity.employee.domain.port.in.ChangePasswordCommand;
 import com.keevo.identity.employee.domain.port.in.ChangePasswordUseCase;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -70,19 +78,25 @@ public class AuthController {
     private final RefreshTokenUseCase    refreshTokenUseCase;
     private final ChangePasswordUseCase  changePasswordUseCase;
     private final GetUserProfileUseCase  getUserProfileUseCase;
+    private final RequestPasswordResetUseCase requestPasswordResetUseCase;
+    private final ResetPasswordUseCase   resetPasswordUseCase;
 
     public AuthController(RegisterUserUseCase registerUserUseCase,
                           AuthenticateUserUseCase authenticateUserUseCase,
                           SelectTenantUseCase selectTenantUseCase,
                           RefreshTokenUseCase refreshTokenUseCase,
                           ChangePasswordUseCase changePasswordUseCase,
-                          GetUserProfileUseCase getUserProfileUseCase) {
+                          GetUserProfileUseCase getUserProfileUseCase,
+                          RequestPasswordResetUseCase requestPasswordResetUseCase,
+                          ResetPasswordUseCase resetPasswordUseCase) {
         this.registerUserUseCase    = registerUserUseCase;
         this.authenticateUserUseCase = authenticateUserUseCase;
         this.selectTenantUseCase    = selectTenantUseCase;
         this.refreshTokenUseCase    = refreshTokenUseCase;
         this.changePasswordUseCase  = changePasswordUseCase;
         this.getUserProfileUseCase  = getUserProfileUseCase;
+        this.requestPasswordResetUseCase = requestPasswordResetUseCase;
+        this.resetPasswordUseCase   = resetPasswordUseCase;
     }
 
     @Operation(
@@ -270,6 +284,60 @@ public class AuthController {
         AuthTokens tokens = changePasswordUseCase.execute(
                 new ChangePasswordCommand(userId, request.currentPassword(), request.newPassword()));
         return ResponseEntity.ok(toLoginResponse(tokens));
+    }
+
+    // ── Forgot Password (Story 14.12) ────────────────────────────────────────
+
+    @Operation(
+        summary = "Request password reset via OTP",
+        description = """
+            Story 14.12 — Sends a 6-digit OTP via WhatsApp for password reset.
+
+            Public endpoint — no authentication required.
+            Anti-enumeration: always returns 200 {"sent":true} regardless of
+            whether the phone number exists or is rate-limited.
+            Rate-limited: 1 request/min + 5/hour per phone number.
+            """
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "OTP sent if phone exists (silent otherwise)",
+            content = @Content(schema = @Schema(implementation = ForgotPasswordResponseDto.class))),
+        @ApiResponse(responseCode = "422", description = "Validation error")
+    })
+    @SecurityRequirements
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ForgotPasswordResponseDto> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequestDto request) {
+        requestPasswordResetUseCase.execute(
+                new RequestPasswordResetCommand(request.phoneNumber()));
+        return ResponseEntity.ok(new ForgotPasswordResponseDto(true));
+    }
+
+    // ── Reset Password (Story 14.12) ──────────────────────────────────────────
+
+    @Operation(
+        summary = "Reset password using OTP",
+        description = """
+            Story 14.12 — Verifies a 6-digit OTP code and resets the password.
+
+            Public endpoint — no authentication required.
+            Revokes ALL existing sessions across all tenants.
+            Does NOT issue new tokens — user must re-login via normal two-step flow.
+            Token is locked after 5 failed attempts.
+            """
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Password reset successful",
+            content = @Content(schema = @Schema(implementation = ResetPasswordResponseDto.class))),
+        @ApiResponse(responseCode = "422", description = "Invalid/expired code, locked token, or weak password")
+    })
+    @SecurityRequirements
+    @PostMapping("/reset-password")
+    public ResponseEntity<ResetPasswordResponseDto> resetPassword(
+            @Valid @RequestBody ResetPasswordRequestDto request) {
+        resetPasswordUseCase.execute(new ResetPasswordCommand(
+                request.phoneNumber(), request.code(), request.newPassword()));
+        return ResponseEntity.ok(new ResetPasswordResponseDto(true));
     }
 
     // ── Mapping helpers ───────────────────────────────────────────────────────

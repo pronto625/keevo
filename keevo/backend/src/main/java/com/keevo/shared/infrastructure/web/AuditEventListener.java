@@ -4,6 +4,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.identity.auth.domain.model.UserAuthenticatedEvent;
 import com.keevo.identity.auth.domain.model.UserRegisteredEvent;
+import com.keevo.identity.auth.domain.model.PasswordResetRequestedEvent;
+import com.keevo.identity.auth.domain.model.PasswordResetEvent;
+import com.keevo.identity.auth.domain.model.UserMembershipInfo;
+import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.onboarding.domain.model.OnboardingCompletedEvent;
 import com.keevo.catalog.contact.domain.event.ClientArchivedEvent;
 import com.keevo.catalog.contact.domain.event.ClientCreatedEvent;
@@ -25,6 +29,9 @@ import com.keevo.inventory.counting.domain.event.InventoryValidatedEvent;
 import com.keevo.store.store.domain.event.StoreCreatedEvent;
 import com.keevo.store.store.domain.event.StoreDeactivatedEvent;
 import com.keevo.store.store.domain.event.StoreUpdatedEvent;
+import com.keevo.identity.employee.domain.event.EmployeeUpdatedEvent;
+import com.keevo.identity.employee.domain.event.EmployeeRoleChangedEvent;
+import com.keevo.identity.employee.domain.event.EmployeePasswordSetByOwnerEvent;
 import com.keevo.shared.application.port.AuditPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.slf4j.Logger;
@@ -32,6 +39,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -71,10 +79,13 @@ public class AuditEventListener {
 
     private final AuditPort auditPort;
     private final ObjectMapper objectMapper;
+    private final UserRepository userRepository;
 
-    public AuditEventListener(AuditPort auditPort, ObjectMapper objectMapper) {
+    public AuditEventListener(AuditPort auditPort, ObjectMapper objectMapper,
+                               UserRepository userRepository) {
         this.auditPort    = auditPort;
         this.objectMapper = objectMapper;
+        this.userRepository = userRepository;
     }
 
     /**
@@ -464,6 +475,69 @@ public class AuditEventListener {
                 event.storeId(), event.name(), event.tenantId(), event.actorId());
     }
 
+    // ── Employee events (Story 14.11) ────────────────────────────────────────
+
+    /**
+     * Handle employee profile updated event.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
+     */
+    @EventListener
+    public void on(EmployeeUpdatedEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "EMPLOYEE_UPDATED",
+                "Employee",
+                event.employeeId(),
+                null,
+                toJson(Map.of("fieldsChanged", event.fieldsChanged()))
+        );
+        log.info("AUDIT: employee_updated employeeId={} fieldsChanged={} tenantId={} actorId={}",
+                event.employeeId(), event.fieldsChanged(), event.tenantId(), event.actorId());
+    }
+
+    /**
+     * Handle employee role changed event.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
+     */
+    @EventListener
+    public void on(EmployeeRoleChangedEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "EMPLOYEE_ROLE_CHANGED",
+                "Employee",
+                event.employeeId(),
+                toJson(Map.of("role", event.previousRole())),
+                toJson(Map.of("role", event.newRole()))
+        );
+        log.info("AUDIT: employee_role_changed employeeId={} {}→{} tenantId={} actorId={}",
+                event.employeeId(), event.previousRole(), event.newRole(),
+                event.tenantId(), event.actorId());
+    }
+
+    /**
+     * Handle employee password set by owner event.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
+     */
+    @EventListener
+    public void on(EmployeePasswordSetByOwnerEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "EMPLOYEE_PASSWORD_SET_BY_OWNER",
+                "Employee",
+                event.employeeId(),
+                null,
+                toJson(Map.of("forcedReset", true))
+        );
+        log.info("AUDIT: employee_password_set_by_owner employeeId={} tenantId={} actorId={}",
+                event.employeeId(), event.tenantId(), event.actorId());
+    }
+
     // ── Sale events (Story 4.1) ──────────────────────────────────────────────
 
     /**
@@ -759,6 +833,85 @@ public class AuditEventListener {
         );
         log.info("AUDIT: inventory_validated sessionId={} adjustments={} tenantId={} actorId={}",
                 event.sessionId(), event.adjustmentCount(), event.tenantId(), event.actorId());
+    }
+
+    // ── Template Method helper ────────────────────────────────────────────────
+
+    /**
+     * Story 14.12 — Handle password reset requested event (cross-tenant audit, D4).
+     *
+     * <p><b>PUBLIC endpoint</b> — /auth/forgot-password has no JWT, no TenantContext.
+     * Must audit in EVERY tenant where the user has a membership (the password reset
+     * affects all memberships, like revokeAllSessionsEverywhere).
+     *
+     * <p>Anti-PII: only userId is logged, never the phone number (AC5).
+     */
+    @EventListener
+    public void on(PasswordResetRequestedEvent event) {
+        List<UserMembershipInfo> memberships =
+                userRepository.findMembershipsWithTenantInfo(event.userId());
+        for (UserMembershipInfo m : memberships) {
+            TenantContext.setCurrentTenant(m.schemaName());
+            try {
+                auditPort.record(
+                        event.userId(),
+                        m.schemaName(),
+                        "PASSWORD_RESET_REQUESTED",
+                        "User",
+                        event.userId(),
+                        null,
+                        toJson(Map.of("userId", event.userId().toString()))
+                );
+                log.info("AUDIT: password_reset_requested userId={} schema={}",
+                        event.userId(), m.schemaName());
+            } catch (Exception e) {
+                // Best-effort audit per tenant — one tenant's audit failure must NOT
+                // skip remaining tenants nor propagate to the caller (which would roll
+                // back the outer @Transactional and fail the user's password reset).
+                log.error("AUDIT FAILED: password_reset_requested userId={} schema={} error={}",
+                        event.userId(), m.schemaName(), e.getMessage(), e);
+            } finally {
+                TenantContext.clear();
+            }
+        }
+    }
+
+    /**
+     * Story 14.12 — Handle password reset completed event (cross-tenant audit, D4).
+     *
+     * <p><b>PUBLIC endpoint</b> — /auth/reset-password has no JWT, no TenantContext.
+     * Same cross-tenant loop as PasswordResetRequestedEvent.
+     *
+     * <p>Anti-PII: only userId is logged, never the phone number or new password (AC5).
+     */
+    @EventListener
+    public void on(PasswordResetEvent event) {
+        List<UserMembershipInfo> memberships =
+                userRepository.findMembershipsWithTenantInfo(event.userId());
+        for (UserMembershipInfo m : memberships) {
+            TenantContext.setCurrentTenant(m.schemaName());
+            try {
+                auditPort.record(
+                        event.userId(),
+                        m.schemaName(),
+                        "PASSWORD_RESET",
+                        "User",
+                        event.userId(),
+                        null,
+                        toJson(Map.of("userId", event.userId().toString()))
+                );
+                log.info("AUDIT: password_reset userId={} schema={}",
+                        event.userId(), m.schemaName());
+            } catch (Exception e) {
+                // Best-effort audit per tenant — one tenant's audit failure must NOT
+                // skip remaining tenants nor propagate to the caller (which would roll
+                // back the outer @Transactional and fail the user's password reset).
+                log.error("AUDIT FAILED: password_reset userId={} schema={} error={}",
+                        event.userId(), m.schemaName(), e.getMessage(), e);
+            } finally {
+                TenantContext.clear();
+            }
+        }
     }
 
     // ── Template Method helper ────────────────────────────────────────────────

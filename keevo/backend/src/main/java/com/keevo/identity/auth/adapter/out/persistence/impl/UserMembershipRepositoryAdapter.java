@@ -71,6 +71,15 @@ public class UserMembershipRepositoryAdapter implements UserMembershipRepository
         }
     }
 
+    @Override
+    public void updateRole(UUID userId, UUID tenantId, String newRole) {
+        UserTenantMembershipJpaEntity entity = springRepository
+                .findByUserIdAndTenantId(userId, tenantId)
+                .orElseThrow(() -> new DomainException(ErrorCode.MEMBERSHIP_NOT_FOUND));
+        entity.setRole(newRole);
+        springRepository.save(entity);
+    }
+
     // ── Mapping ──────────────────────────────────────────────────────────────
 
     private UserTenantMembershipJpaEntity toEntity(UserTenantMembership m) {

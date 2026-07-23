@@ -31,6 +31,11 @@ public interface EmployeeRepository {
     Employee updatePasswordChangeRequired(UUID employeeId, boolean required);
 
     /**
+     * Story 14.11 — update first and last name in a single DB call.
+     */
+    Employee updateProfile(UUID employeeId, String firstName, String lastName);
+
+    /**
      * Find all active employees assigned to a given store.
      * Used by notification recipient resolution for transfer events (HF-2 AC2).
      */

@@ -36,19 +36,31 @@ public class EmployeeController {
     private final DeactivateEmployeeUseCase deactivateEmployeeUseCase;
     private final ReactivateEmployeeUseCase reactivateEmployeeUseCase;
     private final RegeneratePasswordUseCase regeneratePasswordUseCase;
+    private final UpdateEmployeeUseCase updateEmployeeUseCase;
+    private final ChangeEmployeeRoleUseCase changeEmployeeRoleUseCase;
+    private final SetEmployeePasswordUseCase setEmployeePasswordUseCase;
+    private final EmployeeRoleResolver employeeRoleResolver;
 
     public EmployeeController(CreateEmployeeUseCase createEmployeeUseCase,
                                ListEmployeesUseCase listEmployeesUseCase,
                                ReassignStoreUseCase reassignStoreUseCase,
                                DeactivateEmployeeUseCase deactivateEmployeeUseCase,
                                ReactivateEmployeeUseCase reactivateEmployeeUseCase,
-                               RegeneratePasswordUseCase regeneratePasswordUseCase) {
+                               RegeneratePasswordUseCase regeneratePasswordUseCase,
+                               UpdateEmployeeUseCase updateEmployeeUseCase,
+                               ChangeEmployeeRoleUseCase changeEmployeeRoleUseCase,
+                               SetEmployeePasswordUseCase setEmployeePasswordUseCase,
+                               EmployeeRoleResolver employeeRoleResolver) {
         this.createEmployeeUseCase = createEmployeeUseCase;
         this.listEmployeesUseCase = listEmployeesUseCase;
         this.reassignStoreUseCase = reassignStoreUseCase;
         this.deactivateEmployeeUseCase = deactivateEmployeeUseCase;
         this.reactivateEmployeeUseCase = reactivateEmployeeUseCase;
         this.regeneratePasswordUseCase = regeneratePasswordUseCase;
+        this.updateEmployeeUseCase = updateEmployeeUseCase;
+        this.changeEmployeeRoleUseCase = changeEmployeeRoleUseCase;
+        this.setEmployeePasswordUseCase = setEmployeePasswordUseCase;
+        this.employeeRoleResolver = employeeRoleResolver;
     }
 
     @Operation(summary = "Create a new employee")
@@ -67,7 +79,8 @@ public class EmployeeController {
                 request.lastName(), request.storeId());
         CreateEmployeeResult result = createEmployeeUseCase.execute(command);
         TempPasswordResponseDto dto = new TempPasswordResponseDto(
-                EmployeeResponseDto.fromDomain(result.employee()),
+                EmployeeResponseDto.fromDomain(result.employee(),
+                        employeeRoleResolver.resolveRole(result.employee().getUserId())),
                 result.temporaryPassword());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponseWrapper.ok(dto));
@@ -81,7 +94,8 @@ public class EmployeeController {
         UUID actorId = extractActorId();
         List<EmployeeResponseDto> dtos = listEmployeesUseCase
                 .execute(new ListEmployeesQuery(actorId))
-                .stream().map(EmployeeResponseDto::fromDomain).toList();
+                .stream().map(e -> EmployeeResponseDto.fromDomain(e,
+                        employeeRoleResolver.resolveRole(e.getUserId()))).toList();
         return ResponseEntity.ok(ApiResponseWrapper.ok(dtos));
     }
 
@@ -98,7 +112,9 @@ public class EmployeeController {
         UUID actorId = extractActorId();
         Employee updated = reassignStoreUseCase.execute(
                 new ReassignStoreCommand(actorId, employeeId, request.storeId()));
-        return ResponseEntity.ok(ApiResponseWrapper.ok(EmployeeResponseDto.fromDomain(updated)));
+        return ResponseEntity.ok(ApiResponseWrapper.ok(
+                EmployeeResponseDto.fromDomain(updated,
+                        employeeRoleResolver.resolveRole(updated.getUserId()))));
     }
 
     @Operation(summary = "Deactivate employee access")
@@ -142,9 +158,73 @@ public class EmployeeController {
         CreateEmployeeResult result = regeneratePasswordUseCase.execute(
                 new RegeneratePasswordCommand(actorId, employeeId));
         TempPasswordResponseDto dto = new TempPasswordResponseDto(
-                EmployeeResponseDto.fromDomain(result.employee()),
+                EmployeeResponseDto.fromDomain(result.employee(),
+                        employeeRoleResolver.resolveRole(result.employee().getUserId())),
                 result.temporaryPassword());
         return ResponseEntity.ok(ApiResponseWrapper.ok(dto));
+    }
+
+    // ── Story 14.11 — new endpoints ──────────────────────────────────────
+
+    @Operation(summary = "Update employee profile (name, phone, store)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Profile updated"),
+            @ApiResponse(responseCode = "403", description = "Not an OWNER"),
+            @ApiResponse(responseCode = "404", description = "Employee not found"),
+            @ApiResponse(responseCode = "409", description = "Phone already registered by another user")
+    })
+    @PatchMapping("/{employeeId}")
+    public ResponseEntity<ApiResponseWrapper<EmployeeResponseDto>> updateEmployee(
+            @PathVariable UUID employeeId,
+            @Valid @RequestBody UpdateEmployeeRequestDto request) {
+        requireOwnerOrForbid();
+        if (!request.hasAtLeastOneField()) {
+            throw new DomainException(ErrorCode.VALIDATION_FAILED,
+                    "At least one field must be provided for update");
+        }
+        UUID actorId = extractActorId();
+        Employee updated = updateEmployeeUseCase.execute(
+                new UpdateEmployeeCommand(actorId, employeeId,
+                        request.firstName(), request.lastName(),
+                        request.phoneNumber(), request.storeId()));
+        return ResponseEntity.ok(ApiResponseWrapper.ok(
+                EmployeeResponseDto.fromDomain(updated,
+                        employeeRoleResolver.resolveRole(updated.getUserId()))));
+    }
+
+    @Operation(summary = "Change employee role (OWNER ↔ EMPLOYEE)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Role changed"),
+            @ApiResponse(responseCode = "403", description = "Not an OWNER, or anti-lockout guard"),
+            @ApiResponse(responseCode = "404", description = "Employee not found")
+    })
+    @PatchMapping("/{employeeId}/role")
+    public ResponseEntity<ApiResponseWrapper<Void>> changeRole(
+            @PathVariable UUID employeeId,
+            @Valid @RequestBody ChangeRoleRequestDto request) {
+        requireOwnerOrForbid();
+        UUID actorId = extractActorId();
+        changeEmployeeRoleUseCase.execute(
+                new ChangeEmployeeRoleCommand(actorId, employeeId, request.role()));
+        return ResponseEntity.ok(ApiResponseWrapper.ok(null));
+    }
+
+    @Operation(summary = "Set a new password for an employee")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Password set"),
+            @ApiResponse(responseCode = "403", description = "Not an OWNER"),
+            @ApiResponse(responseCode = "404", description = "Employee not found"),
+            @ApiResponse(responseCode = "422", description = "Weak password")
+    })
+    @PostMapping("/{employeeId}/password")
+    public ResponseEntity<ApiResponseWrapper<Void>> setPassword(
+            @PathVariable UUID employeeId,
+            @Valid @RequestBody SetPasswordRequestDto request) {
+        requireOwnerOrForbid();
+        UUID actorId = extractActorId();
+        setEmployeePasswordUseCase.execute(
+                new SetEmployeePasswordCommand(actorId, employeeId, request.newPassword()));
+        return ResponseEntity.ok(ApiResponseWrapper.ok(null));
     }
 
     /**

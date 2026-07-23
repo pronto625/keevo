@@ -68,6 +68,10 @@ public class GlobalExceptionHandler {
             Map.entry("SAME_SOURCE_DESTINATION",    "Source et destination doivent être différentes"),
             Map.entry("CSV_PARSE_ERROR",           "Erreur de lecture du fichier CSV"),
             Map.entry("EMPLOYEE_NOT_FOUND",        "Employé introuvable"),
+            Map.entry("PHONE_ALREADY_REGISTERED",  "Ce numéro de téléphone est déjà utilisé par un autre compte"),
+            Map.entry("CANNOT_CHANGE_OWN_ROLE",    "Vous ne pouvez pas modifier votre propre rôle"),
+            Map.entry("CANNOT_DEMOTE_LAST_OWNER",  "Impossible de rétrograder le dernier propriétaire actif"),
+            Map.entry("CANNOT_SET_OWN_PASSWORD",   "Vous ne pouvez pas définir votre propre mot de passe via cet endpoint"),
             Map.entry("PASSWORD_CHANGE_REQUIRED",  "Vous devez changer votre mot de passe avant de continuer"),
             Map.entry("STORE_REASSIGNED",          "Votre boutique a été modifiée, veuillez vous reconnecter"),
             Map.entry("ACCOUNT_INACTIVE",          "Ce compte a été désactivé"),
@@ -85,6 +89,8 @@ public class GlobalExceptionHandler {
             Map.entry("INTERNAL_ERROR",            "Une erreur inattendue s'est produite"),
             Map.entry("DAY_ALREADY_CLOSED",        "La journée a déjà été clôturée pour cette boutique"),
             Map.entry("MISSING_PARAMETER",         "Paramètre requis manquant"),
+            Map.entry("INVALID_OR_EXPIRED_CODE", "Code invalide ou expiré"),
+            Map.entry("CODE_LOCKED",             "Trop de tentatives, demandez un nouveau code"),
             Map.entry("SYNC_REQUIRED",              "Synchronisation requise — données trop anciennes"),
             Map.entry("DEVICE_ID_MISMATCH",       "Ce device n'est pas associé à votre compte"),
             Map.entry("INVENTORY_SESSION_ALREADY_ACTIVE", "Un inventaire est déjà en cours pour cette boutique"),
@@ -219,7 +225,8 @@ public class GlobalExceptionHandler {
                  "INVENTORY_SESSION_NOT_IN_PROGRESS",
                  "REPORT_ALREADY_SENT",
                  "SALE_ALREADY_CANCELLED",
-                 "OPTIMISTIC_LOCK" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4 / 6.1 / 7.2 / v1s-13-1 / v1s-13-5
+                 "OPTIMISTIC_LOCK",
+                 "PHONE_ALREADY_REGISTERED" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4 / 6.1 / 7.2 / v1s-13-1 / v1s-13-5 / v1s-14-11
             case "VALIDATION_ERROR", "INVALID_AMOUNT",
                  "INVALID_PHONE_NUMBER", "INVALID_PASSWORD",
                  "INSUFFICIENT_STOCK",
@@ -228,7 +235,9 @@ public class GlobalExceptionHandler {
                  "SAME_SOURCE_DESTINATION",
                  "DISCOUNT_EXCEEDS_SUBTOTAL",
                  "SALE_NOT_PENDING",
-                 "SALE_NOT_COMPLETED" -> HttpStatus.UNPROCESSABLE_ENTITY;
+                 "SALE_NOT_COMPLETED",
+                 "INVALID_OR_EXPIRED_CODE",
+                 "CODE_LOCKED" -> HttpStatus.UNPROCESSABLE_ENTITY;
             case "JUSTIFICATION_REQUIRED",
                  "JUSTIFICATION_TOO_SHORT" -> HttpStatus.BAD_REQUEST;
             case "SECTOR_TEMPLATE_NOT_FOUND",
@@ -242,7 +251,10 @@ public class GlobalExceptionHandler {
                  "AUDIT_IMMUTABLE",
                  "PASSWORD_CHANGE_REQUIRED",
                  "FORBIDDEN",
-                 "DEVICE_ID_MISMATCH" -> HttpStatus.FORBIDDEN;   // H2 fix: role mismatch is 403, not 401; AUDIT_IMMUTABLE = immutable log; DEVICE_ID_MISMATCH = deviceId belongs to another user (v1s-13-2)
+                 "DEVICE_ID_MISMATCH",
+                 "CANNOT_CHANGE_OWN_ROLE",
+                 "CANNOT_DEMOTE_LAST_OWNER",
+                 "CANNOT_SET_OWN_PASSWORD" -> HttpStatus.FORBIDDEN;   // H2 fix: role mismatch is 403, not 401; AUDIT_IMMUTABLE = immutable log; DEVICE_ID_MISMATCH = deviceId belongs to another user (v1s-13-2); CANNOT_* = role anti-lockout (v1s-14-11)
             case "RATE_LIMIT_EXCEEDED" -> HttpStatus.TOO_MANY_REQUESTS;
             case "WHATSAPP_DELIVERY_FAILED" -> HttpStatus.BAD_GATEWAY;  // upstream WhatsApp failure
             default -> HttpStatus.INTERNAL_SERVER_ERROR;

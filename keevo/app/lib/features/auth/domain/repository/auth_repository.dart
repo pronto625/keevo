@@ -54,4 +54,22 @@ abstract interface class AuthRepository {
   /// Returns the authenticated user's [AccountProfile].
   /// Requires valid JWT; throws [AuthException] if unauthenticated.
   Future<AccountProfile> getProfile();
+
+  /// POST /auth/forgot-password — Story 14.12.
+  ///
+  /// Requests a password reset OTP via WhatsApp.
+  /// Always returns true (anti-enumeration — server always returns 200).
+  /// Rate-limited server-side: 1/min + 5/hour per phone.
+  Future<bool> forgotPassword({required String phoneNumber});
+
+  /// POST /auth/reset-password — Story 14.12.
+  ///
+  /// Resets the password using an OTP code.
+  /// Throws [AuthException] with INVALID_OR_EXPIRED_CODE, CODE_LOCKED,
+  /// or VALIDATION_FAILED.
+  Future<void> resetPassword({
+    required String phoneNumber,
+    required String code,
+    required String newPassword,
+  });
 }

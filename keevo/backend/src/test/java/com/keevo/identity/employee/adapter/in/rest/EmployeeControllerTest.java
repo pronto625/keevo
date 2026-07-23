@@ -43,6 +43,10 @@ class EmployeeControllerTest {
     @Mock DeactivateEmployeeUseCase deactivateEmployeeUseCase;
     @Mock ReactivateEmployeeUseCase reactivateEmployeeUseCase;
     @Mock RegeneratePasswordUseCase regeneratePasswordUseCase;
+    @Mock UpdateEmployeeUseCase updateEmployeeUseCase;
+    @Mock ChangeEmployeeRoleUseCase changeEmployeeRoleUseCase;
+    @Mock SetEmployeePasswordUseCase setEmployeePasswordUseCase;
+    @Mock EmployeeRoleResolver employeeRoleResolver;
 
     @InjectMocks EmployeeController employeeController;
 
@@ -181,5 +185,158 @@ class EmployeeControllerTest {
         mockMvc.perform(post("/api/v1/employees/" + employeeId + "/regenerate-password"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.temporaryPassword").value("NewTmp12345"));
+    }
+
+    // ── Story 14.11 — new endpoint tests ─────────────────────────────────
+
+    private void setEmployeeRole() {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(actorId, null,
+                        List.of(new SimpleGrantedAuthority("ROLE_EMPLOYEE"))));
+    }
+
+    @Test
+    @DisplayName("PATCH /employees/{id} returns 403 for EMPLOYEE (not OWNER)")
+    void shouldReturn403ForEmployeeOnProfileUpdate() throws Exception {
+        setEmployeeRole();
+        mockMvc.perform(patch("/api/v1/employees/" + employeeId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"firstName":"NewName"}
+                                """))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(updateEmployeeUseCase);
+    }
+
+    @Test
+    @DisplayName("PATCH /employees/{id}/role returns 403 for EMPLOYEE (not OWNER)")
+    void shouldReturn403ForEmployeeOnRoleChange() throws Exception {
+        setEmployeeRole();
+        mockMvc.perform(patch("/api/v1/employees/" + employeeId + "/role")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"role":"OWNER"}
+                                """))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(changeEmployeeRoleUseCase);
+    }
+
+    @Test
+    @DisplayName("POST /employees/{id}/password returns 403 for EMPLOYEE (not OWNER)")
+    void shouldReturn403ForEmployeeOnPasswordSet() throws Exception {
+        setEmployeeRole();
+        mockMvc.perform(post("/api/v1/employees/" + employeeId + "/password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"newPassword":"NewPass123"}
+                                """))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(setEmployeePasswordUseCase);
+    }
+
+    @Test
+    @DisplayName("PATCH /employees/{id} returns 409 on duplicate phone number")
+    void shouldReturn409OnDuplicatePhoneOnUpdate() throws Exception {
+        doThrow(new DomainException(ErrorCode.PHONE_ALREADY_REGISTERED, "Phone already taken"))
+                .when(updateEmployeeUseCase).execute(any());
+
+        mockMvc.perform(patch("/api/v1/employees/" + employeeId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"phoneNumber":"+237690000999"}
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.domainCode").value("PHONE_ALREADY_REGISTERED"));
+    }
+
+    @Test
+    @DisplayName("PATCH /employees/{id} returns 200 on success")
+    void shouldUpdateEmployeeProfileSuccessfully() throws Exception {
+        when(updateEmployeeUseCase.execute(any())).thenReturn(sampleEmployee);
+
+        mockMvc.perform(patch("/api/v1/employees/" + employeeId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"firstName":"NewName","phoneNumber":"+237690000001"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.firstName").value("Loïc"));
+    }
+
+    @Test
+    @DisplayName("PATCH /employees/{id} returns 400 on empty body")
+    void shouldRejectEmptyPatchBody() throws Exception {
+        mockMvc.perform(patch("/api/v1/employees/" + employeeId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.domainCode").value("VALIDATION_FAILED"));
+    }
+
+    @Test
+    @DisplayName("PATCH /employees/{id} returns 422 on empty firstName (@Size validation)")
+    void shouldRejectEmptyFirstName() throws Exception {
+        mockMvc.perform(patch("/api/v1/employees/" + employeeId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"firstName":""}
+                                """))
+                .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
+    @DisplayName("PATCH /employees/{id}/role returns 200 on success")
+    void shouldChangeRoleSuccessfully() throws Exception {
+        doNothing().when(changeEmployeeRoleUseCase).execute(any());
+
+        mockMvc.perform(patch("/api/v1/employees/" + employeeId + "/role")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"role":"OWNER"}
+                                """))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("POST /employees/{id}/password returns 200 on success")
+    void shouldSetPasswordSuccessfully() throws Exception {
+        doNothing().when(setEmployeePasswordUseCase).execute(any());
+
+        mockMvc.perform(post("/api/v1/employees/" + employeeId + "/password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"newPassword":"NewPass123"}
+                                """))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("POST /employees/{id}/password returns 422 on weak password")
+    void shouldReturn422OnWeakPassword() throws Exception {
+        doThrow(new DomainException(ErrorCode.VALIDATION_FAILED, "Weak password"))
+                .when(setEmployeePasswordUseCase).execute(any());
+
+        mockMvc.perform(post("/api/v1/employees/" + employeeId + "/password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"newPassword":"short"}
+                                """))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.domainCode").value("VALIDATION_FAILED"));
+    }
+
+    @Test
+    @DisplayName("POST /employees/{id}/password returns 403 when owner sets own password (D2)")
+    void shouldReturn403OnSelfPasswordSet() throws Exception {
+        doThrow(new DomainException(ErrorCode.CANNOT_SET_OWN_PASSWORD, "Cannot set own password"))
+                .when(setEmployeePasswordUseCase).execute(any());
+
+        mockMvc.perform(post("/api/v1/employees/" + employeeId + "/password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"newPassword":"NewPass123"}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.domainCode").value("CANNOT_SET_OWN_PASSWORD"));
     }
 }

@@ -387,4 +387,58 @@ class ChangePassword extends _$ChangePassword {
   }
 }
 
+// ── ForgotPassword AsyncNotifier (Riverpod code-gen) — Story 14.12 ────────────
+
+/// [ForgotPassword] manages the forgot-password async lifecycle.
+///
+/// State: [AsyncValue<bool?>]
+/// - Initial / reset: AsyncData(null)
+/// - Loading: AsyncLoading()
+/// - Success: AsyncData(true) (anti-enumeration — always true)
+/// - Error: AsyncError(exception, stackTrace)
+@riverpod
+class ForgotPassword extends _$ForgotPassword {
+  @override
+  FutureOr<bool?> build() => null;
+
+  Future<void> requestReset({required String phoneNumber}) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(
+      () => ref.read(authRepositoryProvider).forgotPassword(
+            phoneNumber: phoneNumber,
+          ),
+    );
+  }
+}
+
+// ── ResetPassword AsyncNotifier (Riverpod code-gen) — Story 14.12 ─────────────
+
+/// [ResetPassword] manages the reset-password async lifecycle.
+///
+/// State: [AsyncValue<bool?>]
+/// - Initial / reset: AsyncData(null)
+/// - Loading: AsyncLoading()
+/// - Success: AsyncData(true)
+/// - Error: AsyncError(AuthException, stackTrace)
+@riverpod
+class ResetPassword extends _$ResetPassword {
+  @override
+  FutureOr<bool?> build() => null;
+
+  Future<void> reset({
+    required String phoneNumber,
+    required String code,
+    required String newPassword,
+  }) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(
+      () => ref.read(authRepositoryProvider).resetPassword(
+            phoneNumber: phoneNumber,
+            code: code,
+            newPassword: newPassword,
+          ),
+    );
+  }
+}
+
 

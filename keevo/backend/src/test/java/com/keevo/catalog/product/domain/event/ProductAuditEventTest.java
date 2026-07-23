@@ -45,7 +45,7 @@ class ProductAuditEventTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        listener = new AuditEventListener(auditPort, objectMapper);
+        listener = new AuditEventListener(auditPort, objectMapper, null);
         TenantContext.clear(); // ensure clean thread state before each test
     }
 

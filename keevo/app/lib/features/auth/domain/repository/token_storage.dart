@@ -24,6 +24,9 @@ abstract interface class TokenStorage {
   /// Retrieve the stored refresh token (null if not set).
   Future<String?> getRefreshToken();
 
+  /// Retrieve the stored user ID (null if not set) — Story 14.11 (Task 9.1bis).
+  Future<String?> getUserId();
+
   /// Retrieve the stored store ID (null for OWNER) — Story 3.5.
   Future<String?> getStoreId();
 

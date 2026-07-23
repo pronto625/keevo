@@ -19,4 +19,17 @@ abstract class EmployeeRepository {
   Future<void> reactivateEmployee(String employeeId);
 
   Future<CreateEmployeeResult> regeneratePassword(String employeeId);
+
+  // ── Story 14.11 ───────────────────────────────────────────────────
+
+  Future<EmployeeModel> updateEmployee(String employeeId, {
+    String? firstName,
+    String? lastName,
+    String? phoneNumber,
+    String? storeId,
+  });
+
+  Future<void> changeRole(String employeeId, String role);
+
+  Future<void> setPassword(String employeeId, String newPassword);
 }

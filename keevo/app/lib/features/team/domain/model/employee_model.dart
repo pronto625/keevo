@@ -15,6 +15,7 @@ class EmployeeModel with _$EmployeeModel {
     required String status,
     required bool passwordChangeRequired,
     required DateTime createdAt,
+    @Default('EMPLOYEE') String role,
   }) = _EmployeeModel;
 
   factory EmployeeModel.fromJson(Map<String, dynamic> json) =>

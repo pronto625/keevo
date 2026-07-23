@@ -14,6 +14,8 @@ import '../../features/auth/domain/model/membership_dto.dart';
 import '../../features/auth/presentation/page/auth_page.dart';
 import '../../features/auth/presentation/page/password_change_page.dart';
 import '../../features/auth/presentation/page/tenant_picker_page.dart';
+import '../../features/auth/presentation/page/forgot_password_page.dart';
+import '../../features/auth/presentation/page/reset_password_page.dart';
 import '../../features/auth/presentation/provider/auth_provider.dart';
 import '../../features/catalog/domain/model/product_model.dart';
 import '../../features/catalog/presentation/page/catalog_page.dart';
@@ -366,6 +368,8 @@ final GoRouter appRouter = GoRouter(
       '/splash',
       '/auth/login',
       '/auth/register',
+      '/auth/forgot-password',
+      '/auth/reset-password',
     };
     const _publicPathPrefixes = ['/onboarding'];
     final isPublicPath = _publicPaths.contains(path) ||
@@ -415,6 +419,16 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/auth/register',
       builder: (_, __) => const AuthPage(initialMode: AuthMode.register),
+    ),
+
+    // ── Forgot/Reset password (Story 14.12 — public, no auth) ──────────
+    GoRoute(
+      path: '/auth/forgot-password',
+      builder: (_, __) => const ForgotPasswordPage(),
+    ),
+    GoRoute(
+      path: '/auth/reset-password',
+      builder: (_, __) => const ResetPasswordPage(),
     ),
 
     // ── Password change (Story 3.5 — full-screen, no bottom nav) ─────────

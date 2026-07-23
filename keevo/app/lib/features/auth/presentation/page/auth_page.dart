@@ -330,6 +330,16 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                       ),
 
                       const SizedBox(height: 16),
+
+                      // ── Mot de passe oublié (Story 14.12, login mode only) ──
+                      if (_mode == AuthMode.login)
+                        Center(
+                          child: TextButton(
+                            onPressed: () => context.push('/auth/forgot-password'),
+                            child: const Text('Mot de passe oublié ?'),
+                          ),
+                        ),
+
                       Center(
                         child: TextButton(
                           onPressed: _toggleMode,

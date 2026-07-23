@@ -64,6 +64,16 @@ public final class Employee {
         return new Employee(id, userId, storeId, firstName, lastName, status, required, createdAt);
     }
 
+    /** Story 14.11 — returns a copy with the given first name. */
+    public Employee withFirstName(String newFirstName) {
+        return new Employee(id, userId, storeId, newFirstName, lastName, status, passwordChangeRequired, createdAt);
+    }
+
+    /** Story 14.11 — returns a copy with the given last name. */
+    public Employee withLastName(String newLastName) {
+        return new Employee(id, userId, storeId, firstName, newLastName, status, passwordChangeRequired, createdAt);
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
