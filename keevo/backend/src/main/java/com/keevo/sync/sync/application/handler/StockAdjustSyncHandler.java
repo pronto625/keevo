@@ -2,6 +2,8 @@ package com.keevo.sync.sync.application.handler;
 
 import com.keevo.catalog.stock.application.usecase.AdjustStockUseCase;
 import com.keevo.catalog.stock.application.usecase.RecordStockEntryUseCase;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
@@ -44,6 +46,13 @@ public class StockAdjustSyncHandler extends AbstractSyncOperationHandler {
         UUID storeId = UUID.fromString((String) p.get("storeId"));
         int quantity = ((Number) p.get("quantity")).intValue();
         String notes = (String) p.get("notes");
+
+        // Story v1s-12-8 AC3: mirror StockController scope check (FR36)
+        UUID assignedStoreId = extractAssignedStoreId();
+        if (assignedStoreId != null && !assignedStoreId.equals(storeId)) {
+            throw new DomainException(ErrorCode.FORBIDDEN,
+                    "EMPLOYEE cannot modify stock for another store");
+        }
 
         if ("RECORD_STOCK_ENTRY".equals(operation.operationType())) {
             recordStockEntryUseCase.execute(productId, variantId, storeId, quantity, actorId, notes);

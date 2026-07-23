@@ -4,9 +4,8 @@ import com.keevo.commerce.sale.domain.model.PaymentMode;
 import com.keevo.commerce.sale.domain.model.Sale;
 import com.keevo.commerce.sale.domain.model.SaleItem;
 import com.keevo.commerce.sale.domain.model.SaleStatus;
-import com.keevo.commerce.sale.domain.port.in.CancelPendingSaleUseCase;
-import com.keevo.commerce.sale.domain.port.in.CancelPendingSaleUseCase.CancelPendingSaleCommand;
-import com.keevo.commerce.sale.domain.port.out.SaleRepository;
+import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase;
+import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase.ValidateSaleCommand;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.AuthDetails;
@@ -26,7 +25,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,15 +32,15 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
- * CancelSaleSyncHandlerTest — Story v1s-13-5 AC5 + v1s-12-8 AC2/AC6.
+ * ValidateSaleSyncHandlerTest — Story v1s-12-8 AC1/AC6.
+ * No dedicated test existed before this story.
  */
 @ExtendWith(MockitoExtension.class)
-class CancelSaleSyncHandlerTest {
+class ValidateSaleSyncHandlerTest {
 
-    @Mock private CancelPendingSaleUseCase cancelPendingSaleUseCase;
-    @Mock private SaleRepository saleRepository;
+    @Mock private ValidateSaleUseCase validateSaleUseCase;
 
-    private CancelSaleSyncHandler handler;
+    private ValidateSaleSyncHandler handler;
 
     private static final UUID SALE_ID = UUID.randomUUID();
     private static final UUID ACTOR_ID = UUID.randomUUID();
@@ -51,7 +49,7 @@ class CancelSaleSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new CancelSaleSyncHandler(cancelPendingSaleUseCase, saleRepository);
+        handler = new ValidateSaleSyncHandler(validateSaleUseCase);
     }
 
     @AfterEach
@@ -74,77 +72,68 @@ class CancelSaleSyncHandlerTest {
         SecurityContextHolder.getContext().setAuthentication(auth);
     }
 
-    private Sale saleWithStatus(SaleStatus status) {
-        var item = new SaleItem(UUID.randomUUID(), SALE_ID, UUID.randomUUID(), null,
-                "Produit", 1000, 1000, 1);
-        return new Sale(SALE_ID, STORE_ID, ACTOR_ID, null,
-                PaymentMode.CASH, 1000, 0, status, Instant.now(), Instant.now(), List.of(item));
-    }
-
     private SyncOperation buildOp() {
-        return new SyncOperation("op-1", "CANCEL_SALE", SALE_ID.toString(),
-                Map.of("saleId", SALE_ID.toString(), "justification", "Client a changé d'avis"),
-                Instant.now());
+        return new SyncOperation("op-1", "VALIDATE_SALE", SALE_ID.toString(),
+                Map.of("saleId", SALE_ID.toString()), Instant.now());
     }
 
     @Test
-    void apply_pendingSale_ownerSucceeds() {
-        authenticateAsOwner();
-        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(saleWithStatus(SaleStatus.PENDING_VALIDATION)));
-
-        var result = handler.handle(buildOp(), ACTOR_ID, TENANT_ID);
-
-        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(cancelPendingSaleUseCase).cancelPendingSale(any());
-    }
-
-    @Test
-    void apply_pendingSale_employeeSameStore_applied() {
+    void apply_employeeSameStore_applied() {
         authenticateAsEmployee(STORE_ID);
-        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(saleWithStatus(SaleStatus.PENDING_VALIDATION)));
 
-        var result = handler.handle(buildOp(), ACTOR_ID, TENANT_ID);
+        var op = buildOp();
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         // Review P2: ArgumentCaptor verifies the handler actually transmitted
         // the assignedStoreId from the SecurityContext (not null).
-        ArgumentCaptor<CancelPendingSaleCommand> captor = ArgumentCaptor.forClass(CancelPendingSaleCommand.class);
-        verify(cancelPendingSaleUseCase).cancelPendingSale(captor.capture());
+        ArgumentCaptor<ValidateSaleCommand> captor = ArgumentCaptor.forClass(ValidateSaleCommand.class);
+        verify(validateSaleUseCase).validateSale(captor.capture());
         assertThat(captor.getValue().assignedStoreId()).isEqualTo(STORE_ID);
     }
 
     @Test
-    void apply_pendingSale_employeeCrossStore_rejectedForbidden() {
+    void apply_employeeCrossStore_rejectedForbidden() {
         UUID otherStoreId = UUID.randomUUID();
         authenticateAsEmployee(otherStoreId);
-        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(saleWithStatus(SaleStatus.PENDING_VALIDATION)));
+
         // Review P2: doAnswer captures the command to verify assignedStoreId was
         // correctly transmitted, then simulates enforceEmployeeStoreScope() rejection.
         doAnswer(invocation -> {
-            CancelPendingSaleCommand cmd = invocation.getArgument(0);
+            ValidateSaleCommand cmd = invocation.getArgument(0);
             assertThat(cmd.assignedStoreId()).isEqualTo(otherStoreId);
             throw new DomainException(ErrorCode.FORBIDDEN,
                     "Employee cannot operate pending sale outside assigned store");
-        }).when(cancelPendingSaleUseCase).cancelPendingSale(any());
+        }).when(validateSaleUseCase).validateSale(any());
 
-        var result = handler.handle(buildOp(), ACTOR_ID, TENANT_ID);
+        var op = buildOp();
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).isEqualTo("FORBIDDEN");
     }
 
     @Test
-    void apply_completedSale_rejectedForbidden() {
+    void apply_owner_unscoped() {
         authenticateAsOwner();
-        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(saleWithStatus(SaleStatus.COMPLETED)));
 
-        var op = new SyncOperation("op-2", "CANCEL_SALE", SALE_ID.toString(),
-                Map.of("saleId", SALE_ID.toString(), "justification", "Tentative offline sur vente complétée"),
-                Instant.now());
-
+        var op = buildOp();
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
-        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
-        verify(cancelPendingSaleUseCase, never()).cancelPendingSale(any());
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        verify(validateSaleUseCase).validateSale(any());
+    }
+
+    @Test
+    void apply_saleNotPending_idempotentApplied() {
+        authenticateAsOwner();
+
+        doThrow(new DomainException(ErrorCode.SALE_NOT_PENDING, "not pending"))
+                .when(validateSaleUseCase).validateSale(any());
+
+        var op = buildOp();
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
     }
 }

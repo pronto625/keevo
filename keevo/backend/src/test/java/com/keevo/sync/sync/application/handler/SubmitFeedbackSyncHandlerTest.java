@@ -113,10 +113,10 @@ class SubmitFeedbackSyncHandlerTest {
 
     private SyncOperation createOperation(Map<String, Object> payload) {
         return new SyncOperation(
-                UUID.randomUUID(),
-                "SUBMIT_FEEDBACK",
-                payload,
                 UUID.randomUUID().toString(),
+                "SUBMIT_FEEDBACK",
+                UUID.randomUUID().toString(),
+                payload,
                 Instant.now()
         );
     }

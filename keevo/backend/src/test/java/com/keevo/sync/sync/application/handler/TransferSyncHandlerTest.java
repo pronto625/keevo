@@ -6,13 +6,18 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -20,6 +25,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+/**
+ * TransferSyncHandlerTest — Story v1s-12-8 AC4/AC6.
+ */
 @ExtendWith(MockitoExtension.class)
 class TransferSyncHandlerTest {
 
@@ -35,34 +43,63 @@ class TransferSyncHandlerTest {
         handler = new TransferSyncHandler(transferStockUseCase);
     }
 
-    @Test
-    void handle_validTransfer_delegatesToExecuteTransferService() {
-        var transferId = UUID.randomUUID();
-        var mockTransfer = mock(StockTransfer.class);
-        when(mockTransfer.getId()).thenReturn(transferId);
-        when(transferStockUseCase.execute(any())).thenReturn(mockTransfer);
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
 
-        var op = new SyncOperation("op-1", "STOCK_TRANSFER", UUID.randomUUID().toString(),
+    private void authenticateAsOwner() {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(
+                        ACTOR_ID, null,
+                        List.of(new SimpleGrantedAuthority("ROLE_OWNER"))));
+    }
+
+    private void authenticateAsEmployee() {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(
+                        ACTOR_ID, null,
+                        List.of(new SimpleGrantedAuthority("ROLE_EMPLOYEE"))));
+    }
+
+    private SyncOperation buildOp() {
+        return new SyncOperation("op-1", "STOCK_TRANSFER", UUID.randomUUID().toString(),
                 Map.of("sourceStoreId", UUID.randomUUID().toString(),
                         "destinationStoreId", UUID.randomUUID().toString(),
                         "productId", UUID.randomUUID().toString(),
                         "quantity", 10),
                 Instant.now());
+    }
 
-        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+    @Test
+    void handle_validTransfer_owner_delegates() {
+        authenticateAsOwner();
+        var transferId = UUID.randomUUID();
+        var mockTransfer = mock(StockTransfer.class);
+        when(mockTransfer.getId()).thenReturn(transferId);
+        when(transferStockUseCase.execute(any())).thenReturn(mockTransfer);
+
+        var result = handler.handle(buildOp(), ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         verify(transferStockUseCase).execute(any());
     }
 
     @Test
+    void handle_validTransfer_employee_rejectedForbidden() {
+        authenticateAsEmployee();
+
+        var result = handler.handle(buildOp(), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("FORBIDDEN");
+        verify(transferStockUseCase, never()).execute(any());
+    }
+
+    @Test
     void handle_invalidTransfer_returnsRejected() {
-        var op = new SyncOperation("op-1", "STOCK_TRANSFER", UUID.randomUUID().toString(),
-                Map.of("sourceStoreId", UUID.randomUUID().toString(),
-                        "destinationStoreId", UUID.randomUUID().toString(),
-                        "productId", UUID.randomUUID().toString(),
-                        "quantity", 10),
-                Instant.now());
+        authenticateAsOwner();
+        var op = buildOp();
 
         doThrow(new DomainException(ErrorCode.INSUFFICIENT_STOCK))
                 .when(transferStockUseCase).execute(any());

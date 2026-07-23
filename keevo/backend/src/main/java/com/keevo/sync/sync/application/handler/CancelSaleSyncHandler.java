@@ -58,8 +58,9 @@ public class CancelSaleSyncHandler extends AbstractSyncOperationHandler {
                     "Cancelling a completed sale requires an online OWNER-authenticated request");
         }
 
+        UUID assignedStoreId = extractAssignedStoreId();
         cancelPendingSaleUseCase.cancelPendingSale(
-                new CancelPendingSaleCommand(saleId, actorId, null, justification));
+                new CancelPendingSaleCommand(saleId, actorId, assignedStoreId, justification));
 
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                 saleId.toString(), null);
