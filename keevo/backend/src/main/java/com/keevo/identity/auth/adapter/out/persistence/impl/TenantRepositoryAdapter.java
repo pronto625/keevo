@@ -56,13 +56,15 @@ public class TenantRepositoryAdapter implements TenantRepository {
     // ── Mapping ──────────────────────────────────────────────────────────────
 
     private TenantJpaEntity toEntity(Tenant t) {
-        return new TenantJpaEntity(
+        TenantJpaEntity entity = new TenantJpaEntity(
             t.getId(), t.getCode(), t.getSchemaName(),
             t.getName(), t.getStatus().name(), t.getPlanType().name(),
             t.getPlanType().getMaxStores(),
             t.getPlanType().getMaxProducts(),
             t.getPlanType().getMaxEmployees()
         );
+        entity.setDeletionScheduledAt(t.getDeletionScheduledAt());
+        return entity;
     }
 
     private Tenant toDomain(TenantJpaEntity e) {
@@ -71,7 +73,8 @@ public class TenantRepositoryAdapter implements TenantRepository {
             e.getName() != null ? e.getName() : e.getCode(),
             TenantStatus.valueOf(e.getStatus()),
             PlanType.valueOf(e.getPlanType()),
-            e.getCreatedAt() != null ? e.getCreatedAt() : Instant.now()
+            e.getCreatedAt() != null ? e.getCreatedAt() : Instant.now(),
+            e.getDeletionScheduledAt()
         );
     }
 

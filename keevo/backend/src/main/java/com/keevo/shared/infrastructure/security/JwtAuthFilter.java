@@ -177,6 +177,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 return;
             }
 
+            // DELETION_PENDING tenants: block all write operations (Story 14.5, FR91).
+            // Mirror of SUSPENDED above — same pattern, distinct domainCode for client diagnostics.
+            // Read operations (GET, HEAD) are always permitted during the grace period.
+            // EXCEPTION: /api/v1/account/delete/cancel is whitelisted (owner must be able to cancel).
+            if ("DELETION_PENDING".equals(tenantStatus)
+                    && isWriteMethod(request.getMethod())
+                    && !request.getRequestURI().equals("/api/v1/account/delete/cancel")) {
+                writeErrorWithStatus(response, "ACCOUNT_DELETION_PENDING",
+                        jakarta.servlet.http.HttpServletResponse.SC_FORBIDDEN);
+                return;
+            }
+
             // Sync tenant schema against public (no-op if already done this JVM lifetime)
             tenantSchemaSyncService.syncIfNeeded(tenantId);
 

@@ -2,6 +2,8 @@ package com.keevo.shared.infrastructure.web;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.keevo.identity.auth.domain.model.AccountDeletionCancelledEvent;
+import com.keevo.identity.auth.domain.model.AccountDeletionRequestedEvent;
 import com.keevo.identity.auth.domain.model.UserAuthenticatedEvent;
 import com.keevo.identity.auth.domain.model.UserRegisteredEvent;
 import com.keevo.identity.auth.domain.model.PasswordResetRequestedEvent;
@@ -536,6 +538,50 @@ public class AuditEventListener {
         );
         log.info("AUDIT: employee_password_set_by_owner employeeId={} tenantId={} actorId={}",
                 event.employeeId(), event.tenantId(), event.actorId());
+    }
+
+    // ── Account deletion events (Story 14.5, FR91) ──────────────────────────
+
+    /**
+     * Handle account deletion requested event.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
+     */
+    @EventListener
+    public void on(AccountDeletionRequestedEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId().toString(),
+                "ACCOUNT_DELETION_REQUESTED",
+                "Tenant",
+                event.tenantId(),
+                null,
+                toJson(Map.of(
+                        "scheduledDeletionAt", event.scheduledDeletionAt().toString()
+                ))
+        );
+        log.info("AUDIT: account_deletion_requested tenantId={} actorId={} scheduledDeletion={}",
+                event.tenantId(), event.actorId(), event.scheduledDeletionAt());
+    }
+
+    /**
+     * Handle account deletion cancelled event.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
+     */
+    @EventListener
+    public void on(AccountDeletionCancelledEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId().toString(),
+                "ACCOUNT_DELETION_CANCELLED",
+                "Tenant",
+                event.tenantId(),
+                null,
+                toJson(Map.of("cancelledAt", event.cancelledAt().toString()))
+        );
+        log.info("AUDIT: account_deletion_cancelled tenantId={} actorId={}",
+                event.tenantId(), event.actorId());
     }
 
     // ── Sale events (Story 4.1) ──────────────────────────────────────────────

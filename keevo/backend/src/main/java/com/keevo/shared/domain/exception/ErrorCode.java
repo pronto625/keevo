@@ -115,7 +115,10 @@ public enum ErrorCode {
     SUBSCRIPTION_NOT_FOUND, // HTTP 404 — no active subscription for tenant (Story 2.4)
     PLAN_LIMIT_EXCEEDED,    // HTTP 403 — store/product/employee limit reached on Free plan
     ACCOUNT_SUSPENDED,      // HTTP 403 — tenant status = SUSPENDED (manual admin lockout)
+    ACCOUNT_DELETION_PENDING, // HTTP 403 — tenant status = DELETION_PENDING (Story 14.5)
     RATE_LIMIT_EXCEEDED,    // HTTP 429 — >100 req/min per tenant
+    DELETION_ALREADY_REQUESTED, // HTTP 409 — deletion already pending (Story 14.5)
+    DELETION_NOT_PENDING,       // HTTP 409 — no deletion pending to cancel (Story 14.5)
     // ── Audit ─────────────────────────────────────────────────────────────
     AUDIT_IMMUTABLE,        // HTTP 403 — attempt to modify or delete an immutable audit entry
     // ── WhatsApp (Story 8.0) ──────────────────────────────────────────────

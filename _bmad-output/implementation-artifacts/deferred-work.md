@@ -284,3 +284,11 @@
 - **Gap** : l'enforcement applicatif de l'immutabilité de `audit_log` est complet (port sans update/delete, entité `@Immutable`, guards 403 `AUDIT_IMMUTABLE`, tests) — livré par Story 1.8. Mais aucune protection niveau base de données n'existe : pas de trigger `BEFORE UPDATE/DELETE`, pas de `REVOKE UPDATE, DELETE`, pas de RLS. L'immutabilité actuelle protège contre le code applicatif normal, pas contre une requête SQL directe ou un futur bug ORM.
 - **Fichiers** : `V1__baseline_public.sql:22-30` (définit `audit_log` comme table standard), `AuditPort.java`, `AuditLogSpringRepository.java`, `AuditLogJpaEntity.java`, `AuditController.java`.
 - **Ne pas corriger ici** — requires une migration Flyway (nouveau code de production, hors scope hygiène).
+
+## Deferred from: code review of v1s-14-5-rgpd-feedback (2026-07-23)
+
+- **Pas de distributed lock sur `AccountDeletionScheduler`** : `SubscriptionExpiryScheduler` a le même pattern (commentaire "add @SchedulerLock for multi-instance"). Multi-instance → tous les schedulers tournent à 03:00, race condition. Pré-existant, pas introduit par cette story.
+- **`AdminFeedbackController` bypass la couche application feedback** : injecte `FeedbackRepository` directement, viole l'architecture hexagonale. Pas de bug fonctionnel aujourd'hui, refactor possible quand la couche application gagnera de la logique (auth, cache).
+- **`AccountDeletionScheduler.findAll()` charge tous les tenants** : scalability — charge tenants ACTIFS/SUSPENDED/DELETED chaque jour. Optimisation possible avec `findByStatusAndDeletionScheduledAtBefore`, pas urgent pour petit SaaS.
+- **Modèle domaine `Feedback` sans null-safety** : constructeur accepte null pour tous les champs, inconsistent avec `Tenant`/`User`. Cosmétique — contraintes DB catchent les null.
+- **Transition `SUSPENDED` → `DELETION_PENDING` autorisée** : un tenant SUSPENDED peut demander la suppression puis annuler → repasse ACTIVE (bypass suspension). Unclear si bug ou feature (RGPD right to deletion).

@@ -77,4 +77,7 @@ public class TenantJpaEntity extends JpaBaseEntity {
     public int    getMaxProducts() { return maxProducts; }
     public int    getMaxEmployees(){ return maxEmployees; }
     public Instant getDeletionScheduledAt() { return deletionScheduledAt; }
+    public void setDeletionScheduledAt(Instant deletionScheduledAt) {
+        this.deletionScheduledAt = deletionScheduledAt;
+    }
 }

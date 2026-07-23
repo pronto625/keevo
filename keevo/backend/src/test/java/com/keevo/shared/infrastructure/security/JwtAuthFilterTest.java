@@ -260,6 +260,51 @@ class JwtAuthFilterTest {
         assertThat(response.getStatus()).isEqualTo(200);
     }
 
+    // ── DELETION_PENDING tenant (Story 14.5, FR91) ─────────────────────────
+
+    @Test
+    @DisplayName("DELETION_PENDING tenant + POST returns 403 ACCOUNT_DELETION_PENDING")
+    void should_return_403_when_tenant_deletion_pending_and_write_method() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/stores");
+        request.addHeader("Authorization", "Bearer deletion.jwt.token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        UUID userId = UUID.randomUUID();
+        Claims mockClaims = buildClaims(userId, "kv_del001", "OWNER");
+        when(jwtTokenProvider.parseToken("deletion.jwt.token")).thenReturn(mockClaims);
+        when(jwtTokenProvider.extractTenantId(mockClaims)).thenReturn("kv_del001");
+        when(jwtTokenProvider.extractRole(mockClaims)).thenReturn("OWNER");
+        when(jwtTokenProvider.extractUserId(mockClaims)).thenReturn(userId);
+        when(jwtTokenProvider.extractTenantStatus(mockClaims)).thenReturn("DELETION_PENDING");
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(403);
+        assertThat(response.getContentAsString()).contains("ACCOUNT_DELETION_PENDING");
+        verify(filterChain, never()).doFilter(any(), any());
+    }
+
+    @Test
+    @DisplayName("DELETION_PENDING tenant + GET passes through (reads always allowed)")
+    void should_allow_get_for_deletion_pending_tenant() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/products");
+        request.addHeader("Authorization", "Bearer deletion.jwt.token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        UUID userId = UUID.randomUUID();
+        Claims mockClaims = buildClaims(userId, "kv_del002", "OWNER");
+        when(jwtTokenProvider.parseToken("deletion.jwt.token")).thenReturn(mockClaims);
+        when(jwtTokenProvider.extractTenantId(mockClaims)).thenReturn("kv_del002");
+        when(jwtTokenProvider.extractRole(mockClaims)).thenReturn("OWNER");
+        when(jwtTokenProvider.extractUserId(mockClaims)).thenReturn(userId);
+        when(jwtTokenProvider.extractTenantStatus(mockClaims)).thenReturn("DELETION_PENDING");
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
     @Test
     @DisplayName("ACTIVE tenant + POST passes through normally")
     void should_allow_post_for_active_tenant() throws Exception {

@@ -20,15 +20,22 @@ public final class Tenant {
     private final TenantStatus status;
     private final PlanType planType;
     private final Instant createdAt;
+    private final Instant deletionScheduledAt;
 
-    /** Legacy constructor (name defaults to code for backward compatibility). */
+    /** Legacy constructor (name defaults to code, deletionScheduledAt defaults to null). */
     public Tenant(UUID id, String code, String schemaName,
                   TenantStatus status, PlanType planType, Instant createdAt) {
-        this(id, code, schemaName, code, status, planType, createdAt);
+        this(id, code, schemaName, code, status, planType, createdAt, null);
     }
 
     public Tenant(UUID id, String code, String schemaName, String name,
                   TenantStatus status, PlanType planType, Instant createdAt) {
+        this(id, code, schemaName, name, status, planType, createdAt, null);
+    }
+
+    public Tenant(UUID id, String code, String schemaName, String name,
+                  TenantStatus status, PlanType planType, Instant createdAt,
+                  Instant deletionScheduledAt) {
         this.id         = Objects.requireNonNull(id,         "id must not be null");
         this.code       = Objects.requireNonNull(code,       "code must not be null");
         this.schemaName = Objects.requireNonNull(schemaName, "schemaName must not be null");
@@ -36,6 +43,7 @@ public final class Tenant {
         this.status     = Objects.requireNonNull(status,     "status must not be null");
         this.planType   = Objects.requireNonNull(planType,   "planType must not be null");
         this.createdAt  = Objects.requireNonNull(createdAt,  "createdAt must not be null");
+        this.deletionScheduledAt = deletionScheduledAt;
     }
 
     /** Derive schema name from tenant code. E.g., KV-ABC123 → kv_abc123 */
@@ -51,6 +59,13 @@ public final class Tenant {
     public TenantStatus getStatus() { return status; }
     public PlanType getPlanType()   { return planType; }
     public Instant getCreatedAt()   { return createdAt; }
+    public Instant getDeletionScheduledAt() { return deletionScheduledAt; }
+
+    /** Returns new Tenant instance with updated status and deletionScheduledAt (Story 14.5). */
+    public Tenant withStatus(TenantStatus newStatus, Instant newDeletionScheduledAt) {
+        return new Tenant(id, code, schemaName, name, newStatus, planType, createdAt,
+                          newDeletionScheduledAt);
+    }
 
     @Override
     public boolean equals(Object o) {

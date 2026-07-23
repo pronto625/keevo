@@ -98,6 +98,9 @@ public class GlobalExceptionHandler {
             Map.entry("INVENTORY_SESSION_NOT_IN_PROGRESS", "Cette session d'inventaire n'est pas en cours"),
             Map.entry("INVENTORY_STORE_NOT_FOUND",       "Boutique cible introuvable"),
             Map.entry("INVENTORY_INVALID_CATEGORIES",    "Une ou plusieurs catégories sont invalides"),
+            Map.entry("ACCOUNT_DELETION_PENDING",  "Suppression de compte en cours — écriture bloquée"),
+            Map.entry("DELETION_ALREADY_REQUESTED", "Une demande de suppression est déjà en cours"),
+            Map.entry("DELETION_NOT_PENDING",       "Aucune demande de suppression en cours"),
             Map.entry("WHATSAPP_DELIVERY_FAILED",         "Envoi WhatsApp échoué. Vérifiez votre connexion et réessayez."),
             Map.entry("OPTIMISTIC_LOCK",              "Cette donnée a été modifiée par une autre opération, veuillez réessayer")
     );
@@ -226,7 +229,9 @@ public class GlobalExceptionHandler {
                  "REPORT_ALREADY_SENT",
                  "SALE_ALREADY_CANCELLED",
                  "OPTIMISTIC_LOCK",
-                 "PHONE_ALREADY_REGISTERED" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4 / 6.1 / 7.2 / v1s-13-1 / v1s-13-5 / v1s-14-11
+                 "PHONE_ALREADY_REGISTERED",
+                 "DELETION_ALREADY_REQUESTED",
+                 "DELETION_NOT_PENDING" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4 / 6.1 / 7.2 / v1s-13-1 / v1s-13-5 / v1s-14-11 / 14.5
             case "VALIDATION_ERROR", "INVALID_AMOUNT",
                  "INVALID_PHONE_NUMBER", "INVALID_PASSWORD",
                  "INSUFFICIENT_STOCK",
@@ -248,6 +253,7 @@ public class GlobalExceptionHandler {
             case "CSV_PARSE_ERROR" -> HttpStatus.UNPROCESSABLE_ENTITY;  // Story 2.4 malformed CSV
             case "PLAN_LIMIT_EXCEEDED",
                  "ACCOUNT_SUSPENDED",
+                 "ACCOUNT_DELETION_PENDING",
                  "AUDIT_IMMUTABLE",
                  "PASSWORD_CHANGE_REQUIRED",
                  "FORBIDDEN",

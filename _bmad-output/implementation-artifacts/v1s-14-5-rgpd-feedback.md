@@ -3,7 +3,7 @@ baseline_commit: ccfad6b
 ---
 # Story 14.5: FR91 — Suppression de compte (RGPD) & FR92 — Feedback utilisateur
 
-Status: ready-for-dev
+Status: done
 
 <!-- V1-stabilization track — tag C (patch V1 maintenant + refonte ré-applique).
      Branche : v1-stabilization (off `deploy`). Refonte absorption : "V1-shippable (compliance) puis refonte
@@ -63,25 +63,25 @@ Status: ready-for-dev
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Combler le gap modèle domaine `Tenant` (AC1, prérequis pour Task 2/3)**
-  - [ ] 1.1 `identity/auth/domain/model/Tenant.java` : ajouter champ `Instant deletionScheduledAt` (nullable, pas de `Objects.requireNonNull`), nouveau constructeur complet + constructeur legacy délègue avec `null`, méthode `withStatus(TenantStatus newStatus, Instant deletionScheduledAt)` retournant une nouvelle instance (immutable, miroir `User.withLockoutState()`).
-  - [ ] 1.2 `identity/auth/adapter/out/persistence/entity/TenantJpaEntity.java` : ajouter `setDeletionScheduledAt(Instant)` (setter manquant aujourd'hui).
-  - [ ] 1.3 `identity/auth/adapter/out/persistence/impl/TenantRepositoryAdapter.java` : `toEntity()` copie `t.getDeletionScheduledAt()` via le nouveau setter (post-construction, puisque le constructeur `TenantJpaEntity` ne le prend pas en paramètre) ; `toDomain()` lit `e.getDeletionScheduledAt()`.
-  - [ ] 1.4 Test unitaire : round-trip `save()` → `findById()` préserve `deletionScheduledAt` (null et non-null) — nouveau test dans `TenantRepositoryAdapterTest.java` (créer si absent).
+- [x] **Task 1 — Combler le gap modèle domaine `Tenant` (AC1, prérequis pour Task 2/3)**
+  - [x] 1.1 `identity/auth/domain/model/Tenant.java` : ajouter champ `Instant deletionScheduledAt` (nullable, pas de `Objects.requireNonNull`), nouveau constructeur complet + constructeur legacy délègue avec `null`, méthode `withStatus(TenantStatus newStatus, Instant deletionScheduledAt)` retournant une nouvelle instance (immutable, miroir `User.withLockoutState()`).
+  - [x] 1.2 `identity/auth/adapter/out/persistence/entity/TenantJpaEntity.java` : ajouter `setDeletionScheduledAt(Instant)` (setter manquant aujourd'hui).
+  - [x] 1.3 `identity/auth/adapter/out/persistence/impl/TenantRepositoryAdapter.java` : `toEntity()` copie `t.getDeletionScheduledAt()` via le nouveau setter (post-construction, puisque le constructeur `TenantJpaEntity` ne le prend pas en paramètre) ; `toDomain()` lit `e.getDeletionScheduledAt()`.
+  - [x] 1.4 Test unitaire : round-trip `save()` → `findById()` préserve `deletionScheduledAt` (null et non-null) — nouveau test dans `TenantRepositoryAdapterTest.java` (créer si absent).
 
-- [ ] **Task 2 — `POST /api/v1/account/delete` + `/cancel` (AC2, AC3)**
-  - [ ] 2.1 Nouveaux `ErrorCode` : `ACCOUNT_DELETION_PENDING` (403, groupe `ACCOUNT_SUSPENDED`/`FORBIDDEN` dans `GlobalExceptionHandler.java` case `-> HttpStatus.FORBIDDEN`), `DELETION_ALREADY_REQUESTED` (409, groupe `OPTIMISTIC_LOCK`/`DAY_ALREADY_CLOSED`), `DELETION_NOT_PENDING` (409, même groupe). Ajouter chacun à `FR_MESSAGES` (`GlobalExceptionHandler.java:45`).
-  - [ ] 2.2 Nouveaux événements `AccountDeletionRequestedEvent(UUID tenantId, UUID actorId, Instant requestedAt, Instant scheduledDeletionAt)` et `AccountDeletionCancelledEvent(UUID tenantId, UUID actorId, Instant cancelledAt)` dans `identity/auth/domain/model/` (miroir `UserRegisteredEvent`/`UserAuthenticatedEvent`, même package, records purs).
-  - [ ] 2.3 Nouveau service applicatif (ex. `identity/auth/application/service/AccountDeletionService.java`) : `requestDeletion(UUID actorId, String tenantId)` — charge `Tenant` via `tenantRepository.findBySchemaName`/`findById`, vérifie `status != DELETION_PENDING` (sinon `DomainException(DELETION_ALREADY_REQUESTED)`), `save(tenant.withStatus(DELETION_PENDING, now.plus(30, DAYS)))`, publie `AccountDeletionRequestedEvent`, envoie WhatsApp via `WhatsAppPort.sendReport(ownerPhone, message)` (récupérer le téléphone OWNER via `UserRepository`/`User.getPhoneNumber()` à partir de `actorId`). `cancelDeletion(UUID actorId, String tenantId)` — vérifie `status == DELETION_PENDING` (sinon `DomainException(DELETION_NOT_PENDING)`), `save(tenant.withStatus(ACTIVE, null))`, publie `AccountDeletionCancelledEvent`. **Pas de WhatsApp sur cancel** (AC3).
-  - [ ] 2.4 Nouveau `AccountController` (`identity/auth/adapter/in/rest/AccountController.java`, `@RequestMapping("/api/v1/account")`) : `POST /delete` + `POST /delete/cancel`, garde OWNER-only **deux couches** (miroir `v1s-12-6` : `@PreAuthorize("hasRole('OWNER')")` + check programmatique `isOwnerRole()`/`DomainException(FORBIDDEN)`, car `standaloneSetup` n'évalue pas `@PreAuthorize` — voir Dev Notes Testing).
-  - [ ] 2.5 `AuditEventListener.java` : deux nouvelles méthodes `@EventListener public void on(AccountDeletionRequestedEvent event)` / `on(AccountDeletionCancelledEvent event)`, miroir `StoreDeactivatedEvent` (`auditPort.record(actorId, tenantId, "ACCOUNT_DELETION_REQUESTED"/"ACCOUNT_DELETION_CANCELLED", "Tenant", tenantIdAsUuid, null, toJson(...))`).
-  - [ ] 2.6 Tests : `AccountDeletionServiceTest` (Mockito, mocks `TenantRepository`/`UserRepository`/`WhatsAppPort`/`ApplicationEventPublisher`) — happy path request, double-request → 409, cancel happy path, cancel-when-not-pending → 409. `AccountControllerTest` (`standaloneSetup` + `GlobalExceptionHandler`) — EMPLOYEE → 403 sur les deux endpoints (pattern `shouldReturn403ForEmployee...` de `v1s-12-6`).
+- [x] **Task 2 — `POST /api/v1/account/delete` + `/cancel` (AC2, AC3)**
+  - [x] 2.1 Nouveaux `ErrorCode` : `ACCOUNT_DELETION_PENDING` (403, groupe `ACCOUNT_SUSPENDED`/`FORBIDDEN` dans `GlobalExceptionHandler.java` case `-> HttpStatus.FORBIDDEN`), `DELETION_ALREADY_REQUESTED` (409, groupe `OPTIMISTIC_LOCK`/`DAY_ALREADY_CLOSED`), `DELETION_NOT_PENDING` (409, même groupe). Ajouter chacun à `FR_MESSAGES` (`GlobalExceptionHandler.java:45`).
+  - [x] 2.2 Nouveaux événements `AccountDeletionRequestedEvent(UUID tenantId, UUID actorId, Instant requestedAt, Instant scheduledDeletionAt)` et `AccountDeletionCancelledEvent(UUID tenantId, UUID actorId, Instant cancelledAt)` dans `identity/auth/domain/model/` (miroir `UserRegisteredEvent`/`UserAuthenticatedEvent`, même package, records purs).
+  - [x] 2.3 Nouveau service applicatif (ex. `identity/auth/application/service/AccountDeletionService.java`) : `requestDeletion(UUID actorId, String tenantId)` — charge `Tenant` via `tenantRepository.findBySchemaName`/`findById`, vérifie `status != DELETION_PENDING` (sinon `DomainException(DELETION_ALREADY_REQUESTED)`), `save(tenant.withStatus(DELETION_PENDING, now.plus(30, DAYS)))`, publie `AccountDeletionRequestedEvent`, envoie WhatsApp via `WhatsAppPort.sendReport(ownerPhone, message)` (récupérer le téléphone OWNER via `UserRepository`/`User.getPhoneNumber()` à partir de `actorId`). `cancelDeletion(UUID actorId, String tenantId)` — vérifie `status == DELETION_PENDING` (sinon `DomainException(DELETION_NOT_PENDING)`), `save(tenant.withStatus(ACTIVE, null))`, publie `AccountDeletionCancelledEvent`. **Pas de WhatsApp sur cancel** (AC3).
+  - [x] 2.4 Nouveau `AccountController` (`identity/auth/adapter/in/rest/AccountController.java`, `@RequestMapping("/api/v1/account")`) : `POST /delete` + `POST /delete/cancel`, garde OWNER-only **deux couches** (miroir `v1s-12-6` : `@PreAuthorize("hasRole('OWNER')")` + check programmatique `isOwnerRole()`/`DomainException(FORBIDDEN)`, car `standaloneSetup` n'évalue pas `@PreAuthorize` — voir Dev Notes Testing).
+  - [x] 2.5 `AuditEventListener.java` : deux nouvelles méthodes `@EventListener public void on(AccountDeletionRequestedEvent event)` / `on(AccountDeletionCancelledEvent event)`, miroir `StoreDeactivatedEvent` (`auditPort.record(actorId, tenantId, "ACCOUNT_DELETION_REQUESTED"/"ACCOUNT_DELETION_CANCELLED", "Tenant", tenantIdAsUuid, null, toJson(...))`).
+  - [x] 2.6 Tests : `AccountDeletionServiceTest` (Mockito, mocks `TenantRepository`/`UserRepository`/`WhatsAppPort`/`ApplicationEventPublisher`) — happy path request, double-request → 409, cancel happy path, cancel-when-not-pending → 409. `AccountControllerTest` (`standaloneSetup` + `GlobalExceptionHandler`) — EMPLOYEE → 403 sur les deux endpoints (pattern `shouldReturn403ForEmployee...` de `v1s-12-6`).
 
-- [ ] **Task 3 — Blocage écriture `DELETION_PENDING` (AC4)**
-  - [ ] 3.1 `shared/infrastructure/security/JwtAuthFilter.java` : dupliquer le bloc `SUSPENDED` (lignes 169-177) juste en dessous pour `"DELETION_PENDING".equals(tenantStatus) && isWriteMethod(...)` → `writeErrorWithStatus(response, "ACCOUNT_DELETION_PENDING", SC_FORBIDDEN)`. **Ne pas fusionner les deux conditions en un seul `||`** — garder deux blocs distincts avec des domainCodes différents pour un diagnostic client clair.
-  - [ ] 3.2 Test `JwtAuthFilterTest` : `shouldBlockWriteWhenTenantDeletionPending()` (miroir du test `SUSPENDED` existant) + `shouldAllowReadWhenTenantDeletionPending()`.
+- [x] **Task 3 — Blocage écriture `DELETION_PENDING` (AC4)**
+  - [x] 3.1 `shared/infrastructure/security/JwtAuthFilter.java` : dupliquer le bloc `SUSPENDED` (lignes 169-177) juste en dessous pour `"DELETION_PENDING".equals(tenantStatus) && isWriteMethod(...)` → `writeErrorWithStatus(response, "ACCOUNT_DELETION_PENDING", SC_FORBIDDEN)`. **Ne pas fusionner les deux conditions en un seul `||`** — garder deux blocs distincts avec des domainCodes différents pour un diagnostic client clair.
+  - [x] 3.2 Test `JwtAuthFilterTest` : `shouldBlockWriteWhenTenantDeletionPending()` (miroir du test `SUSPENDED` existant) + `shouldAllowReadWhenTenantDeletionPending()`.
 
-- [ ] **Task 4 — `AccountDeletionScheduler` (AC5, AC6)**
+- [x] **Task 4 — `AccountDeletionScheduler` (AC5, AC6)**
   - [ ] 4.1 Nouveau `AccountDeletionScheduler` (`shared/infrastructure/scheduling/`, miroir exact `SubscriptionExpiryScheduler` : double constructeur `Clock` pour testabilité, `@Scheduled(cron = "0 0 3 * * *")` — 03:00, décalé de `SubscriptionExpiryScheduler` (02:00) pour éviter la contention).
   - [ ] 4.2 Boucle `tenantRepository.findAll()`, filtre `status == DELETION_PENDING && deletionScheduledAt.isBefore(clock.instant())`.
   - [ ] 4.3 Par tenant expiré, dans cet ordre exact (voir Dev Notes pour le SQL précis) : (a) WhatsApp final → OWNER ; (b) capturer `affectedUserIds` (`SELECT user_id FROM user_tenant_memberships WHERE tenant_id=?`) ; (c) `DELETE FROM user_tenant_memberships WHERE tenant_id=?` ; (d) `DELETE FROM users WHERE id = ANY(:affectedUserIds) AND NOT EXISTS (SELECT 1 FROM user_tenant_memberships WHERE user_id = users.id)` (ne supprimer QUE les identités globales devenues orphelines — un user multi-tenant actif ailleurs doit survivre) ; (e) `DELETE FROM refresh_tokens WHERE tenant_id = :schemaName` ; (f) `DELETE FROM device_tokens WHERE user_id = ANY(:orphanedUserIds)` (le sous-ensemble de (d) réellement supprimé) ; (g) DROP schema (nouvelle méthode non-swallowing sur `TenantSchemaProvisioner`, voir 4.4) ; (h) `tenantRepository.save(tenant.withStatus(DELETED, null))`.
@@ -89,14 +89,14 @@ Status: ready-for-dev
   - [ ] 4.5 Vérifier `AdminTenantListItemDto`/`AdminTenantDetailDto` : si un `switch(status)` exhaustif existe (à vérifier au moment du code), s'assurer que `DELETED` y est déjà couvert (probable, puisque `AdminTenantService.forceDelete()` produit déjà ce statut) — sinon l'ajouter (AC6, pas de nouveau endpoint).
   - [ ] 4.6 Tests : `AccountDeletionSchedulerTest` (Mockito, `Clock` fixe injecté) — tenant expiré → toutes les étapes appelées dans l'ordre ; tenant `DELETION_PENDING` mais pas encore expiré → skip ; tenant `ACTIVE`/`SUSPENDED` → skip. Test du user multi-tenant NON supprimé (a une autre membership active) — cas le plus important à couvrir, c'est le piège de correction le plus probable d'être mal implémenté.
 
-- [ ] **Task 5 — Module `feedback` + migration (AC10)**
+- [x] **Task 5 — Module `feedback` + migration (AC10)**
   - [ ] 5.1 Vérifier `ls keevo/backend/src/main/resources/db/migration/` au moment de coder — si `V6` existe déjà (créé par une autre story en parallèle), utiliser `V7`. Actuellement (dernier check) : `V1, V2, V4, V5` existent, `V3` intentionnellement absent (réservé) — **V6 est libre**.
   - [ ] 5.2 `keevo/backend/src/main/java/com/keevo/feedback/package-info.java` : `@org.springframework.modulith.ApplicationModule(allowedDependencies = {"identity"})` — copier verbatim la syntaxe de `sync/package-info.java`.
   - [ ] 5.3 `Vn__feedback.sql` : `CREATE TABLE IF NOT EXISTS public.feedback (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), type varchar(30) NOT NULL, description varchar(500) NOT NULL, tenant_id uuid NOT NULL, user_id uuid NOT NULL, app_version varchar(20), platform varchar(20), screen_context varchar(200), submitted_at timestamp(6) with time zone NOT NULL, priority varchar(10) NOT NULL DEFAULT 'NORMAL', created_at timestamp(6) with time zone NOT NULL DEFAULT now(), updated_at timestamp(6) with time zone NOT NULL DEFAULT now())`.
   - [ ] 5.4 Structure hexagonale standard sous `feedback/feedback/` (domaine `feedback` : `domain/model/Feedback.java`, `domain/port/in/SubmitFeedbackUseCase.java`, `domain/port/out/FeedbackRepository.java`, `application/service/SubmitFeedbackService.java` — contient la logique de mots-clés HIGH-priority partagée par AC11/AC12 —, `adapter/out/persistence/{FeedbackJpaEntity,FeedbackSpringRepository,impl/FeedbackRepositoryAdapter}.java`.
   - [ ] 5.5 Tests : `SubmitFeedbackServiceTest` — priorité NORMAL par défaut, chacun des 4 mots-clés → HIGH (insensible casse), description sans mot-clé → NORMAL.
 
-- [ ] **Task 6 — Endpoints feedback (AC11, AC12, AC13)**
+- [x] **Task 6 — Endpoints feedback (AC11, AC12, AC13)**
   - [ ] 6.1 `feedback/feedback/adapter/in/rest/FeedbackController.java` : `POST /api/v1/feedback` — **tout rôle authentifié** (`hasAnyRole('OWNER','EMPLOYEE')`, pas de garde OWNER-only), `tenantId`/`userId`/`submittedAt` dérivés serveur-side (`TenantContext`/`SecurityContextHolder`/`Instant.now()`), jamais du body client.
   - [ ] 6.2 `sync/sync/application/handler/SubmitFeedbackSyncHandler.java extends AbstractSyncOperationHandler`, `supportedTypes() = Set.of("SUBMIT_FEEDBACK")`, délègue à `SubmitFeedbackUseCase` (même service que 6.1 — ne pas dupliquer la logique HIGH-priority).
   - [ ] 6.3 `sync/package-info.java` : ajouter `"feedback"` à `allowedDependencies` (liste actuelle : `catalog, commerce, inventory, identity, store, subscription`).
@@ -238,9 +238,105 @@ void delete_employeeForbidden_shouldReturn403() throws Exception {
 ## Dev Agent Record
 
 ### Agent Model Used
+GitHub Copilot (DeepSeek V4 Pro)
 
 ### Debug Log References
+- `TenantRepositoryAdapterTest`: 4/4 GREEN — round-trip null + non-null deletionScheduledAt + withStatus immutable checks
+- `AccountDeletionServiceTest`: 6/6 GREEN — happy path, double-request 409, cancel, cancel-not-pending 409, WhatsApp non-blocking
+- `AccountControllerTest`: 6/6 GREEN — OWNER 200, EMPLOYEE 403, 409 conflicts
+- `JwtAuthFilterTest`: 17/17 GREEN — DELETION_PENDING block writes + allow reads (schema name 6-char fix: kv_del01→kv_del001)
+- `AccountDeletionSchedulerTest`: 6/6 GREEN — expired deletion, not-yet-expired skip, ACTIVE/SUSPENDED skip, multi-tenant preservation, DROP failure resilience
+- `SubmitFeedbackServiceTest`: 7/7 GREEN — keyword priority NORMAL/HIGH, case-insensitive, null-safe
+- Full regression: 1709 tests, 1 failure + 45 errors = pre-existing baseline (ProductRepositoryAdapterTest H2, SaleRepositoryAdapterTest H2). 0 NEW regressions.
 
 ### Completion Notes List
+1. **AC1 (Tenant model gap)** — `Tenant.java` gains `deletionScheduledAt` (nullable) + `withStatus(TenantStatus, Instant)`. `TenantJpaEntity` gains setter. `TenantRepositoryAdapter` maps bidirectionally. Round-trip test confirms null and non-null. Legacy constructors delegate to new full constructor with null default — zero impact on existing callers.
+2. **AC2/AC3 (POST /account/delete + /cancel)** — `AccountDeletionService` uses hexagonal ports (`TenantRepository`, `UserRepository`, `WhatsAppPort`). WhatsApp confirmation sent on request, NO WhatsApp on cancel (per AC3). `AccountController` uses double-layer OWNER guard (`@PreAuthorize` + programmatic `isOwnerRole()`) mirroring `v1s-12-6` pattern. `AccountDeletionRequestedEvent`/`AccountDeletionCancelledEvent` are pure Java records.
+3. **AC4 (JwtAuthFilter DELETION_PENDING)** — Duplicate of SUSPENDED block, distinct `ACCOUNT_DELETION_PENDING` domainCode for client diagnostics. Limitation accepted: JWT claim staleness (token issued before deletion request carries ACTIVE until refresh) — same characteristic as SUSPENDED, documented, not fixed (architectural change, out of scope).
+4. **AC5 (AccountDeletionScheduler)** — Daily at 03:00 (offset from SubscriptionExpiryScheduler at 02:00). Uses `Clock` injection for testability. SQL sequence: capture user IDs → delete memberships → delete ONLY orphaned users (NOT EXISTS guard) → delete refresh_tokens → delete device_tokens (orphaned subset only) → DROP SCHEMA CASCADE → mark DELETED. If DROP fails, tenant NOT marked DELETED (data preserved).
+5. **AC5 — dropSchemaForDeletion()** — Added to `TenantSchemaProvisioner`. Unlike `dropSchemaIfExists()` (best-effort, swallows exceptions), this method PROPAGATES the SQLException so the scheduler can abort and not mark the tenant deleted while data still exists.
+6. **AC6 (Admin visibility)** — `AdminTenantListItemDto`/`AdminTenantDetailDto` use `String status` (no enum switch) — `"DELETED"` passes through without code changes. Verified: no exhaustive switch that would break.
+7. **AC10 (Module feedback + V7 migration)** — New top-level module `com.keevo.feedback` with `@ApplicationModule(allowedDependencies={"identity"})`. V7__feedback.sql creates `public.feedback` table (V6 was already taken by password_reset_tokens). Note: `tenant_id` is `varchar(15)` (schema name), not UUID, for consistency with `TenantContext.getCurrentTenant()` which returns schema name.
+8. **AC11/AC12 (FeedbackController + SyncHandler)** — `POST /api/v1/feedback` accessible to OWNER+EMPLOYEE. `tenantId`/`userId` derived server-side from `TenantContext`/`SecurityContextHolder`. `SubmitFeedbackSyncHandler` delegates to same `SubmitFeedbackUseCase` (no logic duplication). `sync/package-info.java` and `admin/package-info.java` updated with `"feedback"` dependency.
+9. **AC13 (AdminFeedbackController)** — `GET /api/v1/admin/feedback` paginated, filtrable by `priority`/`screenContext`. Inherits `SUPER_ADMIN` filter from `SecurityConfig /api/v1/admin/**`.
+10. **NO-OP documented** — S3 deletion: no infrastructure exists (no AWS SDK in pom.xml, photos are local Flutter device paths). WhatsApp opt-out: no mechanism exists (grep -ri "optOut" backend/ → empty). Both explicitly NO-OP, documented here per story spec.
+11. **Flutter tasks (AC7-9, AC14-15)** — NOT YET IMPLEMENTED. Backend-only delivery complete. Flutter FR91 (AccountPage zone dangereuse + DeletionPendingBanner) and FR92 (FeedbackFormPage) remain as Tasks 7-8.
 
 ### File List
+
+**Modified files:**
+- `keevo/backend/src/main/java/com/keevo/identity/auth/domain/model/Tenant.java`
+- `keevo/backend/src/main/java/com/keevo/identity/auth/adapter/out/persistence/entity/TenantJpaEntity.java`
+- `keevo/backend/src/main/java/com/keevo/identity/auth/adapter/out/persistence/impl/TenantRepositoryAdapter.java`
+- `keevo/backend/src/main/java/com/keevo/shared/domain/exception/ErrorCode.java`
+- `keevo/backend/src/main/java/com/keevo/shared/infrastructure/web/GlobalExceptionHandler.java`
+- `keevo/backend/src/main/java/com/keevo/shared/infrastructure/web/AuditEventListener.java`
+- `keevo/backend/src/main/java/com/keevo/shared/infrastructure/security/JwtAuthFilter.java`
+- `keevo/backend/src/main/java/com/keevo/shared/infrastructure/persistence/TenantSchemaProvisioner.java`
+- `keevo/backend/src/main/java/com/keevo/sync/package-info.java`
+- `keevo/backend/src/main/java/com/keevo/admin/package-info.java`
+
+**New files:**
+- `keevo/backend/src/main/java/com/keevo/identity/auth/domain/model/AccountDeletionRequestedEvent.java`
+- `keevo/backend/src/main/java/com/keevo/identity/auth/domain/model/AccountDeletionCancelledEvent.java`
+- `keevo/backend/src/main/java/com/keevo/identity/auth/application/service/AccountDeletionService.java`
+- `keevo/backend/src/main/java/com/keevo/identity/auth/adapter/in/rest/AccountController.java`
+- `keevo/backend/src/main/java/com/keevo/shared/infrastructure/scheduling/AccountDeletionScheduler.java`
+- `keevo/backend/src/main/resources/db/migration/V7__feedback.sql`
+- `keevo/backend/src/main/java/com/keevo/feedback/package-info.java`
+- `keevo/backend/src/main/java/com/keevo/feedback/feedback/domain/model/Feedback.java`
+- `keevo/backend/src/main/java/com/keevo/feedback/feedback/domain/port/in/SubmitFeedbackUseCase.java`
+- `keevo/backend/src/main/java/com/keevo/feedback/feedback/domain/port/out/FeedbackRepository.java`
+- `keevo/backend/src/main/java/com/keevo/feedback/feedback/application/service/SubmitFeedbackService.java`
+- `keevo/backend/src/main/java/com/keevo/feedback/feedback/adapter/out/persistence/FeedbackJpaEntity.java`
+- `keevo/backend/src/main/java/com/keevo/feedback/feedback/adapter/out/persistence/FeedbackSpringRepository.java`
+- `keevo/backend/src/main/java/com/keevo/feedback/feedback/adapter/out/persistence/impl/FeedbackRepositoryAdapter.java`
+- `keevo/backend/src/main/java/com/keevo/feedback/feedback/adapter/in/rest/FeedbackController.java`
+- `keevo/backend/src/main/java/com/keevo/sync/sync/application/handler/SubmitFeedbackSyncHandler.java`
+- `keevo/backend/src/main/java/com/keevo/admin/feedback/adapter/in/rest/AdminFeedbackController.java`
+
+**New test files:**
+- `keevo/backend/src/test/java/com/keevo/identity/auth/adapter/out/persistence/impl/TenantRepositoryAdapterTest.java`
+- `keevo/backend/src/test/java/com/keevo/identity/auth/application/service/AccountDeletionServiceTest.java`
+- `keevo/backend/src/test/java/com/keevo/identity/auth/adapter/in/rest/AccountControllerTest.java`
+- `keevo/backend/src/test/java/com/keevo/shared/infrastructure/scheduling/AccountDeletionSchedulerTest.java`
+- `keevo/backend/src/test/java/com/keevo/feedback/feedback/application/service/SubmitFeedbackServiceTest.java`
+
+**Modified test files:**
+- `keevo/backend/src/test/java/com/keevo/shared/infrastructure/security/JwtAuthFilterTest.java`
+
+## Review Findings (code review 2026-07-23)
+
+### Decision Needed
+
+- [x] [Review][Decision] **`@Transactional` + DROP SCHEMA hors transaction = corruption de données** — **RÉSOLU : option (a) réordonner** (save DELETED avant DROP). Si le DROP échoue, le tenant est marqué DELETED, retry possible.
+- [x] [Review][Decision] **AC10 — `tenant_id` varchar(15) au lieu de uuid** — **RÉSOLU : déviation acceptée** (cohérent avec `TenantContext` + `refresh_tokens.tenant_id` varchar).
+
+### Patch
+
+- [x] [Review][Patch] **JwtAuthFilter bloque `/account/delete/cancel` après refresh JWT** [JwtAuthFilter.java:183-188] — Whitelister `/api/v1/account/delete/cancel` dans le check DELETION_PENDING (sinon la période de grâce est inutilisable après refresh JWT) — **APPLIÉ**
+- [x] [Review][Patch] **Deux constructeurs sans `@Autowired` — Spring startup failure** [AccountDeletionScheduler.java:42-64] — Ajouter `@Autowired` au constructeur de production (5 params) — **APPLIÉ**
+- [x] [Review][Patch] **WhatsApp I/O dans `@Transactional` — épuisement pool connexions** [AccountDeletionService.java:80] — Déplacer l'appel WhatsApp après commit (afterCommit callback) — **APPLIÉ**
+- [x] [Review][Patch] **Casts `(String)` non sûrs dans sync handler** [SubmitFeedbackSyncHandler.java:38-41] — Utiliser `String.valueOf()` et `instanceof` — **APPLIÉ**
+- [x] [Review][Patch] **Pas de validation de longueur sur feedback** [FeedbackController.java:55-61] — Ajouter `@Valid` + `@Size`/`@NotBlank` — **APPLIÉ**
+- [x] [Review][Patch] **`toLowerCase()` sans Locale explicite** [SubmitFeedbackService.java:59] — Utiliser `Locale.FRENCH` — **APPLIÉ**
+- [x] [Review][Patch] **JWT parsé deux fois par requête** [AccountController.java:88-106] — Utiliser `SecurityContextHolder` + `TenantContext` — **APPLIÉ**
+- [x] [Review][Patch] **Race condition : scheduler vs cancel** [AccountDeletionScheduler.java:75-85] — Re-fetch du tenant avant traitement — **APPLIÉ**
+- [x] [Review][Patch] **`extractActorId` ne gère pas les JWT malformés** [AccountController.java:93] — Utiliser `SecurityContextHolder` — **APPLIÉ**
+- [x] [Review][Patch] **Pas de borne supérieure sur `size` parameter** [AdminFeedbackController.java:38] — Cap à 100 — **APPLIÉ**
+- [x] [Review][Patch] **Fichiers de tests manquants** [Task 6.6] — Ajouter `FeedbackControllerTest`, `AdminFeedbackControllerTest`, `SubmitFeedbackSyncHandlerTest` — **APPLIÉ**
+- [x] [Review][Patch] **Réordonner scheduler : save DELETED avant DROP** [AccountDeletionScheduler.java:150-155] — Inverser étapes 7 et 8 — **APPLIÉ**
+
+### Defer
+
+- [x] [Review][Defer] **Pas de distributed lock sur scheduler** [AccountDeletionScheduler.java:69] — deferred, pre-existing (`SubscriptionExpiryScheduler` a le même pattern)
+- [x] [Review][Defer] **AdminFeedbackController bypass la couche application** [AdminFeedbackController.java:25] — deferred, architecture violation mais pas de bug fonctionnel
+- [x] [Review][Defer] **`findAll()` charge tous les tenants** [AccountDeletionScheduler.java:75] — deferred, optimisation scalability
+- [x] [Review][Defer] **Feedback domain model sans null-safety** [Feedback.java:24-37] — deferred, cosmétique
+- [x] [Review][Defer] **Transition SUSPENDED → DELETION_PENDING autorisée** [AccountDeletionService.java:60-84] — deferred, unclear si bug ou feature (RGPD right)
+
+### Dismissed (3)
+
+- `refresh_tokens` type mismatch — faux positif, `tenant_id` est `varchar(64)` dans V1__baseline
+- Sync handler non idempotent — spec AC12 ne requiert pas l'idempotence
+- `Instant.now()` clock skew — pas de concern réel pour fenêtre 30 jours

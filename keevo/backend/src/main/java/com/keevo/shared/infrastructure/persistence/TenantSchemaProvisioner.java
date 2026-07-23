@@ -756,6 +756,33 @@ public class TenantSchemaProvisioner {
         }
     }
 
+    /**
+     * Drop a tenant schema for definitive account deletion (Story 14.5, FR91).
+     *
+     * <p><b>NOT best-effort</b> — unlike {@link #dropSchemaIfExists(String)},
+     * this method propagates the SQLException so the caller can abort the
+     * deletion transaction and avoid marking the tenant DELETED while data
+     * still exists on disk.
+     *
+     * <p>Same guard regex as {@link #dropSchemaIfExists(String)}.
+     *
+     * @param schemaName the schema name to drop (e.g., "kv_abc123")
+     * @throws RuntimeException wrapping SQLException if the DROP fails
+     */
+    public void dropSchemaForDeletion(String schemaName) {
+        if (!schemaName.matches("^kv_[a-z0-9]{6}$")) {
+            throw new IllegalArgumentException("Invalid tenant schema name format: " + schemaName);
+        }
+        try (Connection conn = dataSource.getConnection();
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP SCHEMA IF EXISTS \"" + schemaName + "\" CASCADE");
+            log.info("Dropped tenant schema for deletion: {}", schemaName);
+        } catch (SQLException e) {
+            log.error("Failed to drop schema '{}' for deletion: {}", schemaName, e.getMessage(), e);
+            throw new RuntimeException("Failed to drop schema: " + schemaName, e);
+        }
+    }
+
     // ── Private steps ─────────────────────────────────────────────────────────
 
     private void createSchema(Connection conn, String schemaName) throws SQLException {
