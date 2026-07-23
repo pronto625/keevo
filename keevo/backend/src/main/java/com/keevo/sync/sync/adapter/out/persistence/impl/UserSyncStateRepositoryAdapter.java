@@ -18,7 +18,7 @@ import java.util.UUID;
  * UserSyncStateRepositoryAdapter — JdbcTemplate implementation of {@link UserSyncStateRepository}.
  *
  * <p>Operates on the PUBLIC schema ({@code public.user_sync_state}).
- * DDL is handled by {@link com.keevo.sync.sync.adapter.out.persistence.UserSyncStateDdlInitializer}.
+ * DDL is managed by Flyway (see {@code V1__baseline_public.sql}).
  */
 @Repository
 public class UserSyncStateRepositoryAdapter implements UserSyncStateRepository {

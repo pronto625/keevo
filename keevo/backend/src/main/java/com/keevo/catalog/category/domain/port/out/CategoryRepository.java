@@ -29,29 +29,21 @@ public interface CategoryRepository {
 
     /**
      * Persist or update a single category.
-     *
-     * <p>TODO Story 2.1: implement in JPA adapter.
      */
     Category save(Category category);
 
     /**
      * Find a category by its UUID.
-     *
-     * <p>TODO Story 2.1: implement in JPA adapter.
      */
     Optional<Category> findById(UUID id);
 
     /**
      * Return all active categories (root and subcategories).
-     *
-     * <p>TODO Story 2.1: implement in JPA adapter.
      */
     List<Category> findAllActive();
 
     /**
      * Return all direct children of a given parent category.
-     *
-     * <p>TODO Story 3.1: implement in JPA adapter.
      */
     List<Category> findByParentId(UUID parentId);
 
@@ -59,7 +51,6 @@ public interface CategoryRepository {
      * Toggle a category between active and inactive states.
      *
      * <p>AC11: deactivating preserves the record for historical integrity.
-     * <p>TODO Story 2.1: implement in JPA adapter.
      */
     Category toggleActive(UUID id);
 
@@ -67,7 +58,6 @@ public interface CategoryRepository {
      * Create a custom (merchant-defined) category.
      *
      * <p>AC12: custom categories have {@code is_custom = true}.
-     * <p>TODO Story 2.1: implement in JPA adapter.
      */
     Category createCustom(String name, UUID parentId);
 

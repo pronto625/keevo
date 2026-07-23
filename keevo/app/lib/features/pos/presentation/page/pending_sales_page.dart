@@ -11,6 +11,10 @@ import '../provider/pos_providers.dart';
 
 /// PendingSalesPage — OWNER-only list of PENDING_VALIDATION sales.
 /// Story 4.3 AC6.
+///
+/// Note v1s-15-5 (2026-07-23): currently unreachable from normal client flows
+/// since the 2026-05-03 draft-sale redesign (commit 30bdd07, Story v1s-13-6).
+/// Retained as manual-rescue / admin tool. See deferred-work.md v1s-15-5 Décision D1.
 class PendingSalesPage extends ConsumerWidget {
   const PendingSalesPage({super.key});
 

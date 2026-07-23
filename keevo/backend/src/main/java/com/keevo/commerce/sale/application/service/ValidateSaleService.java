@@ -25,6 +25,15 @@ import java.util.UUID;
 /**
  * ValidateSaleService — handles manual validation, cancellation, and listing of pending sales.
  * Story 4.3 AC6, AC9, AC10. Story v1s-13-5 extends cancellation to COMPLETED sales.
+ *
+ * <p><b>Note v1s-15-5 (2026-07-23) — currently unreachable from client:</b>
+ * Since the 2026-05-03 draft-sale redesign (commit {@code 30bdd07}, Story v1s-13-6),
+ * no Flutter client path produces {@code PENDING_VALIDATION} sales — the flow was replaced by
+ * inline initial stock entry + auto-promotion. This service and {@link PendingSaleController}
+ * are retained as a manual-rescue / admin tool for scenarios where {@code PENDING_VALIDATION}
+ * sales could be reintroduced (e.g., CSV import, future administration API). Until then,
+ * these code paths are tested and functional but exercised by zero production traffic.
+ * See: {@code _bmad-output/implementation-artifacts/deferred-work.md} (v1s-15-5, Décision D1 — Option b).
  */
 @Service
 @Transactional

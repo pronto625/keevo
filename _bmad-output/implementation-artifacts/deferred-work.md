@@ -50,7 +50,7 @@
 
 ## Deferred from: code review of v1s-13-6 (2026-07-22)
 
-- **Code mort validation OWNER (ventes brouillon)** : `PendingSalesPage`, `PendingSaleDetailPage`, `ValidateSaleService` (branche OWNER manuel), `SaleValidationCascadeService`, `pendingSalesCountProvider`, la variante ambre de `SaleSuccessPage` (`saleStatus == 'PENDING_VALIDATION'`) sont tous fonctionnels mais **plus jamais atteints** depuis le 2026-05-03 (commit `30bdd07`, redesign du flux brouillon vers inline stock + auto-promotion). Aucun chemin client ne produit de vente `PENDING_VALIDATION`. Candidat Epic 15 Story 15.5 ("Réconcilier deferred-work + code mort"). Deux options pour le PO : (a) supprimer entièrement l'UI/les services OWNER de validation, ou (b) les repositionner comme outil de secours manuel (ex. import CSV ou future API créant `PENDING_VALIDATION`). Fichiers Flutter : `pending_sales_page.dart`, `pending_sale_detail_page.dart`, `pending_sales_count_provider` (pos_providers.dart), `sale_success_page.dart` (variante ambre). Backend : `ValidateSaleService.java`, `SaleValidationCascadeService.java`, `PendingSaleController.java`.
+- **Code mort validation OWNER (ventes brouillon)** : `PendingSalesPage`, `PendingSaleDetailPage`, `ValidateSaleService` (branche OWNER manuel), `SaleValidationCascadeService`, `pendingSalesCountProvider`, la variante ambre de `SaleSuccessPage` (`saleStatus == 'PENDING_VALIDATION'`) sont tous fonctionnels mais **plus jamais atteints** depuis le 2026-05-03 (commit `30bdd07`, redesign du flux brouillon vers inline stock + auto-promotion). Aucun chemin client ne produit de vente `PENDING_VALIDATION`. **Décision v1s-15-5 (2026-07-23) — Option (b) conservé comme outil de secours manuel** : commentaires de tête de classe ajoutés sur `ValidateSaleService.java` et `pending_sales_page.dart` expliquant l'état "actuellement inatteignable, conservé comme outil de secours". Les services/controllers backend et les pages Flutter sont conservés tels quels, prêts à être réactivés si un futur flow (import CSV, API d'administration) réintroduit `PENDING_VALIDATION`. Fichiers Flutter : `pending_sales_page.dart`, `pending_sale_detail_page.dart`, `pending_sales_count_provider` (pos_providers.dart), `sale_success_page.dart` (variante ambre). Backend : `ValidateSaleService.java`, `SaleValidationCascadeService.java`, `PendingSaleController.java`.
 - **Test mixed cart `[DRAFT, ACTIVE]`** : ajouter un test `checkout_page_test.dart` avec panier mixte (1 draft + 1 active) → label "🔶 Vente brouillon". `cart.any()` trivialement correct mais renforce la régression UI.
 - **Failure-path draft flow** : scénarios où `applyInitialStockEntries` ou `promoteToActive` throw — pas de test de rollback/consistance. Hors scope story actuelle (happy path uniquement).
 - **Magic strings `'ACTIVE'`/`'DRAFT'`/`'COMPLETED'`** : refactor modèle → enum (`ProductStatus`, `SaleStatus`). Pré-existant dans `cart_item.dart:14,32` et `record_sale_notifier.dart:108`. Modèle-wide, hors scope.
@@ -61,7 +61,6 @@
 
 ## Deferred from: code review of 10-1-flyway-baseline-schema-public (2026-06-19)
 
-- **[10-1] `UserSyncStateDdlInitializer` duplique `user_sync_state` (désormais dans V1)** : l'initializer crée programmatiquement la table à `ApplicationReadyEvent` alors que V1 la possède maintenant → deux sources de vérité. À retirer une fois Flyway propriétaire confirmé (post-10.2). Fichier : `sync/sync/adapter/out/persistence/UserSyncStateDdlInitializer.java`.
 - **[10-1] Override `docker-java` 3.4.1 vs Testcontainers 1.20.4** (`pom.xml:17-29`) : seuls `docker-java-api` et `docker-java-transport-zerodep` sont épinglés ; si `docker-java-core` reste sur la version de Testcontainers, risque de `NoSuchMethodError`/`NoClassDefFoundError`. Vérifier `mvn dependency:tree`. Lié à la dette Testcontainers déjà déférée.
 
 ## Deferred from: code review of 10-6-archunit-modulith-verify-baseline (2026-06-19)
@@ -214,3 +213,74 @@
 - **[v1s-14-11] TOCTOU race anti-lockout (pas de `SELECT FOR UPDATE`)** [`ChangeEmployeeRoleService.java:95-99`] — deuxOwners concurrents peuvent tous deux lire `size() == 2`, passer le guard, et se démettre simultanément → 0 OWNER actif. Aucun locking pessimiste dans le codebase. Recommandation : si jugé prioritaire, ajouter `SELECT ... FOR UPDATE` ou un advisory lock tenant-level.
 - **[v1s-14-11] Flutter `UpdateEmployee` n'invalide pas `EmployeeList`** [`employee_provider.dart:143-164`] — après un update réussi, la liste affiche encore les anciennes données jusqu'au refresh manuel. Pattern consistant avec `DeactivateEmployee`, `ReassignStore` (aucun n'invalide). Recommandation : story Flutter d'harmonisation de l'invalidation cache.
 - **[v1s-14-11] UI pages AC6 pending** [`edit_employee_page.dart`, `EmployeeCard`, router] — spec acknowledge "UI pages pending". edit_employee_page.dart, section sécurité, dialogs de confirmation, router wiring, build_runner — tous à livrer. Recommandation : prochaine story Flutter dédiée.
+
+## Deferred from: _bmad-output/deferred-work.md (migré depuis legacy, 2026-07-23)
+
+> **Audit v1s-15-5** : toutes les entrées ci-dessous ont été vérifiées contre le code actuel (2026-07-23) et confirmées toujours valides. Les entrées résolues (cancelSale RBAC, totalTransactions dupliqué, B3.1-B3.4 badge/bannière/onglet/montant, Ventes brouillon offline) ne sont PAS migrées — voir Dev Agent Record de v1s-15-5 pour le détail.
+
+### Migré depuis: code review of story-10.1-flyway-baseline (2026-06-18)
+
+- **D1 — Test utilise conteneur PG existant au lieu de Testcontainers (AC5)** : `FlywayBaselineIntegrationTest` se connecte à un conteneur PostgreSQL existant via `@DynamicPropertySource` (localhost:5444) au lieu d'utiliser `@Container PostgreSQLContainer<?>`. Cause : Docker API version mismatch (1.32 vs 1.40+). Le test valide AC3/AC4 mais n'est pas CI-portable. Fichier : `shared/infrastructure/persistence/FlywayBaselineIntegrationTest.java`.
+- **D2 — CHECK constraints non idempotentes dans V1** : Les CHECK constraints (inventory_sessions scope/status, products status, stock_movements movement_type, stock_transfers status, stores type) sont définies inline dans `CREATE TABLE IF NOT EXISTS` au lieu de blocs `DO $$ IF NOT EXISTS` séparés. Sur base existante (tables créées par Hibernate), les CHECK inline sont silencieusement ignorées. Risque faible : Hibernate gère ses propres CHECK et Story 10.2 a migré vers `ddl-auto=validate`. Fichier : `V1__baseline_public.sql`.
+
+### Migré depuis: code review of 9-1-gestion-des-tenants (2026-05-04)
+
+- **D1 — `TenantsPage` — `"use client"` direct sur la route page**: La spec (task 3.8) demande un Server Component shell qui render un Client Component `<TenantsClientPage />`. L'implémentation met `"use client"` directement sur `app/tenants/page.tsx`. Pattern fonctionnel mais diverge de la spec. Impact : perd les bénéfices SSR potentiels pour le shell. Corriger lors d'un refactor Next.js layout.
+- **D2 — N+1 `SELECT schema_name` dans `enrichWithCrossSchemaMetrics`**: Pour chaque ligne retournée par la liste, `safeLoadSchemaName(item.id())` émet une requête supplémentaire. Acceptable pour Phase 1 (<100 tenants) comme documenté dans le code. À optimiser en ajoutant `schema_name` directement en colonne dans la requête principale + stocker en champ temporaire (ou via un `Map<UUID, String>` chargé au préalable pour la page entière). Fichier : `AdminTenantService.java#enrichWithCrossSchemaMetrics`.
+
+### Migré depuis: bugfix spec-hf2-ghost-badge-sales-scoping (2026-04-28)
+
+- **D1 — Pas de test pour le path EMPLOYEE scopé**: `todaySummaryProvider` avec `employeeId != null` n'a aucune couverture de test. Les tests adaptés (`day_close_button_test.dart`, `day_summary_bottom_sheet_test.dart`) n'exercent que le chemin OWNER (`employeeId: null`). Ajouter un test widget où `currentUserRoleProvider` retourne EMPLOYEE + `currentUserIdProvider` retourne un userId, et vérifier que `todaySummaryProvider((storeId: X, employeeId: userId))` est bien invoqué.
+- **D2 — `currentUserIdProvider` état d'erreur → fallback silencieux store-wide**: Si le storage est indisponible et `currentUserIdProvider` retourne `AsyncError`, `userIdAsync.valueOrNull` retourne `null` → un EMPLOYEE voit tout le magasin sans erreur UI. À adresser lorsqu'une politique globale de gestion d'erreurs provider sera définie.
+- **D3 — Null semantics de `computeTodaySummary` non documentés côté repository**: Le contrat de `null` comme `employeeId` (= "toutes les ventes") n'est documenté qu'au niveau du provider Riverpod. Si `computeTodaySummary(storeId, null)` est appelé directement depuis un background job ou un usecase futur, l'élevation de visibilité est silencieuse. Documenter dans la doc du repository ou dans le domain layer.
+
+### Migré depuis: code review of HF-1-registration-role-persistence-unified-auth-ui (2026-04-19)
+
+- **D1 — CGU links non-tappables**: `TextSpan`s "Conditions d'utilisation" et "Politique de confidentialité" dans `auth_page.dart` ont une décoration underline+couleur mais aucun `GestureRecognizer`. Comportement hérité de l'ancien `RegisterPage`. Ajouter un `TapGestureRecognizer` vers `/docs/politique` lors d'une itération UI dédiée.
+- **D2 — `kUserRoleKey = 'OWNER'` hardcodé sans lecture du serveur**: `auth_provider.dart` Registration.register() écrit `'OWNER'` en dur au lieu de lire le rôle depuis le `RegistrationResult`. La spec l'autorise explicitement ("hardcoded, since registration always creates an OWNER") mais en cas d'évolution du backend (multi-role onboarding), cela causera un privilege assignment silencieux côté client.
+- **D3 — `prefs.setString()` non awaité**: Dans `auth_provider.dart` (Registration et Login) et `auth_page.dart`, les écritures SharedPreferences sont fire-and-forget. Un échec disque est silencieux. À corriger globalement lorsqu'une politique d'erreur persistence sera définie.
+- **D4 — Pattern routing `role == 'OWNER' ? '/dashboard' : '/pos'` dupliqué**: Ce ternaire apparaît en 4 endroits (`app_router.dart`, `auth_page.dart`, `shop_name_page.dart` ×2). Extraire en helper `routeForRole(String? role) → String` lors du prochain refactor routing.
+- **D5 — Router redirect autorise `role == null` sur routes OWNER-only**: le redirect `app_router.dart` vérifie `role == 'EMPLOYEE'` pour rediriger vers `/pos`, mais laisse passer un rôle null silence vers les routes owner. Pre-existing. Ajouter `if (role == null) return '/auth/login';` dans le guard.
+- **D6 — Back en mode login sans historique → `/auth/register`**: comportement hérité de l'ancien `LoginPage`. Peut-être contre-intuitif pour les utilisateurs deep-link. À revoir dans une itération navigation.
+- **D7 — `initialCountryCode: 'CM'` hardcodé**: `auth_page.dart` (et anciens pages) forcent le Cameroun sans détection de locale. Ajouter détection via `flutter_sim_locale` ou prefs dans une itération internationalisation.
+
+### Migré depuis: code review of 8-0-fcm-push-notifications-whatsapp-wassender (2026-04-03)
+
+- `DeviceTokenController.deleteToken()` — pas de vérification de propriété (ownership) sur la suppression de token. Tout utilisateur authentifié connaissant un token peut le supprimer. Surface d'attaque faible (tokens opaques, ~512 chars) mais représente un pattern à améliorer quand une liste par user_id sera disponible.
+
+### Migré depuis: code review of 7-5-configuration-des-rapports-preferences-whatsapp (2026-04-02)
+
+- `WhatsAppPort.isConfigured()` has a `default return true` — any new adapter that forgets to override would silently send real test reports. Consider making the method abstract, or at minimum adding a code smell lint rule. Pre-existing design decision; not caused by Story 7.5 changes.
+
+### Migré depuis: cart UI session (2026-04-07) — entrée stale sync_queue
+
+- **Stale sync_queue payloads with `'status'` key**: Any `CREATE_SALE` operations queued before the `_buildPayload()` key rename (`'status'` → `'requestedStatus'`) will sync as COMPLETED (not PENDING_VALIDATION). These are pre-existing broken payloads — the rename doesn't make them worse, but they should be cleared manually if observed in production. A future migration step could detect and fix `sync_queue` entries that contain `"status"` instead of `"requestedStatus"`.
+- **Note v1s-15-5** : l'entrée "Ventes brouillon en mode offline" du même bloc legacy n'est PAS migrée — obsolète depuis le pivot v1s-13-6 (commit `30bdd07`, 2026-05-03) qui a remplacé le flux brouillon par saisie de stock initial inline + auto-promotion.
+
+### Migré depuis: code review of 8-1-alertes-stock-critique-tendances-de-ventes (2026-04-04)
+
+- **D1 — `ConcurrentHashMap<BatchWindow>` never evicted** — `StockAlertNotificationListener.batchWindows` (et `StockModificationNotificationListener`, `ProductCreationNotificationListener`) accumule une entrée par `tenantId:storeId` (ou `tenantId:actorId`). Growth bounded by tenant×store count (~40 bytes each). Consider Caffeine cache with TTL or periodic cleanup post-MVP.
+- **D2 — TOCTOU race between cooldown check and upsert** — Two concurrent `@Async` threads for the same product+store could both pass `existsActiveCooldown` and both dispatch. Narrow window, benign duplicate. Consider DB-level advisory lock if notification dedup becomes critical.
+- **D3 — No `@SchedulerLock` for overlapping trend scheduler runs** — If a `detectTrends()` run exceeds 1 hour, the next cron invocation starts concurrently. Consider integrating ShedLock when scaling to many tenants.
+
+### Migré depuis: code review of 5-6-offline-first-transactional-writes-instant-ux (2026-04-23)
+
+- **F6 — `RiverpodSyncTriggerDispatcher` captures `Ref` at construction** — If the Provider scope is recreated (test overrides or auth scope changes), the captured `_ref` may become stale. Pre-existing pattern across the project; negligible in production. Revisit when Provider scoping is formalized.
+
+---
+
+## Nouveaux defers créés par v1s-15-5 (2026-07-23)
+
+### D2 — Gap audit event Category (toggleActive / createCustom)
+
+- **Source** : `JpaCategoryRepository.java:79,96` (lignes après suppression TODOs) — les 2 TODOs `// TODO: emit audit event for category toggle / custom category creation` ont été retirés du code dans v1s-15-5 et convertis en cette entrée defer. Les appels `jpaRepository.save()` sont aux lignes 79 (`toggleActive`) et 96 (`createCustom`) ; l'émission d'événement d'audit devrait se situer entre `save()` et `return toDomain()`.
+- **Gap** : les mutations `toggleActive` et `createCustom` de Category ne sont pas auditées, contrairement à la majorité des écritures métier du système (Story 1.8). L'émission d'un domain event + listener d'audit est une nouvelle fonctionnalité, hors scope d'une story de nettoyage.
+- **Cross-référence** : même voisinage de code que le D2 de `v1s-15-3-red-tests-missing-classes.md` (3 use cases Category lèvent `IllegalArgumentException` non catchée → 500). Les deux gaps (audit manquant + 500 sur erreur) pourront être traités dans une même story de suivi Category.
+- **Fichiers** : `JpaCategoryRepository.java`, `CategoryRepository.java`.
+
+### D3 — Gap DB-level enforcement audit log (trigger/REVOKE)
+
+- **Source** : réconciliation `sprint-status.yaml` `11-3-audit-append-only-db` (v1s-15-5 AC5).
+- **Gap** : l'enforcement applicatif de l'immutabilité de `audit_log` est complet (port sans update/delete, entité `@Immutable`, guards 403 `AUDIT_IMMUTABLE`, tests) — livré par Story 1.8. Mais aucune protection niveau base de données n'existe : pas de trigger `BEFORE UPDATE/DELETE`, pas de `REVOKE UPDATE, DELETE`, pas de RLS. L'immutabilité actuelle protège contre le code applicatif normal, pas contre une requête SQL directe ou un futur bug ORM.
+- **Fichiers** : `V1__baseline_public.sql:22-30` (définit `audit_log` comme table standard), `AuditPort.java`, `AuditLogSpringRepository.java`, `AuditLogJpaEntity.java`, `AuditController.java`.
+- **Ne pas corriger ici** — requires une migration Flyway (nouveau code de production, hors scope hygiène).

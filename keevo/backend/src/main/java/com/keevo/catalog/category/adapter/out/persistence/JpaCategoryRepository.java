@@ -78,8 +78,6 @@ public class JpaCategoryRepository implements CategoryRepository {
         
         CategoryJpaEntity savedEntity = jpaRepository.save(entity);
         
-        // TODO: emit audit event for category toggle
-        
         return toDomain(savedEntity);
     }
 
@@ -96,8 +94,6 @@ public class JpaCategoryRepository implements CategoryRepository {
         );
         
         CategoryJpaEntity savedEntity = jpaRepository.save(entity);
-        
-        // TODO: emit audit event for custom category creation
         
         return toDomain(savedEntity);
     }
