@@ -1,5 +1,20 @@
 # Deferred Work
 
+## Deferred from: code review of v1s-15-3-red-tests-missing-classes (2026-07-23)
+
+- **`@PreAuthorize`/RBAC jamais exercé dans `CategoryControllerTest`** : `CategoryController` porte `@PreAuthorize("hasAnyRole('OWNER','EMPLOYEE')")` (classe) et `@PreAuthorize("hasRole('OWNER')")` (DELETE), mais `standaloneSetup` ne monte aucune chaîne de sécurité. Gap de convention project-wide (40/41 tests de controller ne testent pas la sécurité, y compris `EmployeeControllerTest` mirror explicite de ce test) — candidat pour une story RBAC/security-testing dédiée.
+- **`DELETE /categories/{id}` not-found jamais caractérisé** : `categoryRepository.deactivate(id)` lève `IllegalArgumentException` (`JpaCategoryRepository.java:120-125`) — même famille de gap 500 que D2, mais non identifié par l'investigation D2 de cette story (qui n'a listé que les 3 use cases Create/Toggle/Rename). Ajouter un test miroir des 3 déjà présents.
+- **Paramètre UUID malformé jamais testé** sur aucun endpoint `CategoryController` — 400 via `MethodArgumentTypeMismatchException`, handler déjà présent dans `GlobalExceptionHandler`, juste jamais exercé.
+- **`StockMovementRepositoryAdapterTest` — mapping `variantId` non-null jamais vérifié** (seul le cas `null` est testé).
+- **`EmployeeRepositoryAdapterTest` — `findByUserId` : branche `Optional.empty()` non testée** (seul le cas "trouvé" est couvert).
+- **`EmployeeRepositoryAdapterTest` — `EmployeeStatus.valueOf(status)` sur donnée corrompue** : lève une `IllegalArgumentException` non gérée en cas de statut inconnu/corrompu en base, aucun test ne couvre ce cas.
+- **`FailoverWhatsAppAdapterTest` — combinaisons non testées** : "token Wassender blank/null ET Twilio échoue aussi" et "Twilio non configuré pendant un failover".
+- **`sanitizePhone` — branche "préfixer +" jamais exercée** dans `TwilioWhatsAppAdapterTest` ni `FailoverWhatsAppAdapterTest` (tous les numéros de test commencent déjà par `+`).
+- **`JdbcProfitabilityRepositoryTest.findDailyMarginLast7` — `RowMapper` jamais invoqué/asserté** (seule la fenêtre de dates est vérifiée).
+- **`ReportHistoryServiceTest` — `resendReport` avec téléphone propriétaire null/blank jamais testé.**
+- **`ReportHistoryServiceTest` — renvoi d'un rapport déjà `SENT`/`FAILED` jamais testé**, alors que `ReportHistoryService.java:65` documente explicitement ce comportement comme intentionnel (pas de garde). Règle métier documentée avec zéro couverture.
+- **`EmployeeRepositoryAdapterTest` — réflexion sur le champ privé `createdAt` de `JpaBaseEntity`** pour simuler `@PrePersist` : couplage fragile, casse de façon opaque sur un refactor sans rapport avec cette story.
+
 ## Deferred from: code review of v1s-14-12-forgot-password-otp-whatsapp (2026-07-23)
 
 - **`@Transactional` englobe `whatsAppPort.sendOtp()` — pool connexions DB épuisable** : `RequestPasswordResetService.java:58,91`. Network call synchrone 5-30s dans transaction = connexion DB immobilisée. Acceptable V1 (faible volume, single instance), à refactorer avec TransactionTemplate ou `@TransactionalEvent` avant scale.
