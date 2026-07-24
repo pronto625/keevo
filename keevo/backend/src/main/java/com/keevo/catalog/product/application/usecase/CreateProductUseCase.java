@@ -7,6 +7,9 @@ import com.keevo.catalog.product.domain.event.ProductCreatedEvent;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.subscription.plan.application.service.PlanLimitGuard;
+import com.keevo.subscription.plan.domain.port.out.ProductCountPort;
+import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
@@ -29,11 +32,20 @@ public class CreateProductUseCase {
 
     private final ProductRepository productRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final ProductCountPort productCountPort;
+    private final SubscriptionRepository subscriptionRepository;
+    private final PlanLimitGuard planLimitGuard;
 
-    public CreateProductUseCase(ProductRepository productRepository, 
-                               ApplicationEventPublisher eventPublisher) {
+    public CreateProductUseCase(ProductRepository productRepository,
+                               ApplicationEventPublisher eventPublisher,
+                               ProductCountPort productCountPort,
+                               SubscriptionRepository subscriptionRepository,
+                               PlanLimitGuard planLimitGuard) {
         this.productRepository = productRepository;
         this.eventPublisher = eventPublisher;
+        this.productCountPort = productCountPort;
+        this.subscriptionRepository = subscriptionRepository;
+        this.planLimitGuard = planLimitGuard;
     }
 
     /**
@@ -112,6 +124,14 @@ public class CreateProductUseCase {
             now, // createdAt
             now  // updatedAt
         );
+
+        // Plan limit check — all roles (mirrors CreateDraftProductUseCase AC3)
+        int currentCount = productCountPort.countActiveProducts();
+        var planType = subscriptionRepository.findActivePlan()
+                .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
+                        "Aucun abonnement actif"))
+                .getPlanType();
+        planLimitGuard.checkProductLimit(planType, currentCount);
 
         // Save product
         var saved = productRepository.save(product);

@@ -55,7 +55,7 @@ class ProductCountAdapterTest {
     @DisplayName("countActiveProducts() returns 0 when products table does not exist")
     void countActiveProducts_tableAbsent_returns0() {
         when(jdbcTemplate.queryForObject(
-                eq("SELECT COUNT(*) FROM \"kv_test\".products WHERE is_active = TRUE"),
+                eq("SELECT COUNT(*) FROM \"kv_test\".products WHERE status = 'ACTIVE'"),
                 eq(Integer.class)))
                 .thenThrow(new org.springframework.dao.DataAccessException("relation products does not exist") {});
 
@@ -68,7 +68,7 @@ class ProductCountAdapterTest {
     @DisplayName("countActiveProducts() returns actual count when table exists")
     void countActiveProducts_tableExists_returnsCount() {
         when(jdbcTemplate.queryForObject(
-                eq("SELECT COUNT(*) FROM \"kv_test\".products WHERE is_active = TRUE"),
+                eq("SELECT COUNT(*) FROM \"kv_test\".products WHERE status = 'ACTIVE'"),
                 eq(Integer.class)))
                 .thenReturn(42);
 
@@ -81,7 +81,7 @@ class ProductCountAdapterTest {
     @DisplayName("countActiveProducts() returns 0 when jdbcTemplate returns null")
     void countActiveProducts_nullResult_returns0() {
         when(jdbcTemplate.queryForObject(
-                eq("SELECT COUNT(*) FROM \"kv_test\".products WHERE is_active = TRUE"),
+                eq("SELECT COUNT(*) FROM \"kv_test\".products WHERE status = 'ACTIVE'"),
                 eq(Integer.class)))
                 .thenReturn(null);
 

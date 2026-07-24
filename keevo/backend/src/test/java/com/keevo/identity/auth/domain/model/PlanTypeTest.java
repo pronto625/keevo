@@ -6,15 +6,15 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * PlanTypeTest — Story 3.1: Verify FREE plan allows up to 3 stores.
+ * PlanTypeTest — Story 14.13: Verify FREE plan limits (FR16 revision 2026-03-06: 1 store, 500 products, 3 employees).
  */
 @DisplayName("PlanType")
 class PlanTypeTest {
 
     @Test
-    @DisplayName("FREE plan should allow up to 3 stores (AC2 — Story 3.1)")
-    void freePlan_shouldAllowUpTo3Stores() {
-        assertThat(PlanType.FREE.getMaxStores()).isEqualTo(3);
+    @DisplayName("FREE plan should allow up to 1 store (FR16 — Story 14.13)")
+    void freePlan_shouldAllowUpTo1Store() {
+        assertThat(PlanType.FREE.getMaxStores()).isEqualTo(1);
     }
 
     @Test
@@ -30,8 +30,8 @@ class PlanTypeTest {
     }
 
     @Test
-    @DisplayName("FREE plan should allow up to 5 employees")
-    void freePlan_shouldAllowUpTo5Employees() {
-        assertThat(PlanType.FREE.getMaxEmployees()).isEqualTo(5);
+    @DisplayName("FREE plan should allow up to 3 employees (FR16 — Story 14.13)")
+    void freePlan_shouldAllowUpTo3Employees() {
+        assertThat(PlanType.FREE.getMaxEmployees()).isEqualTo(3);
     }
 }

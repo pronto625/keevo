@@ -44,7 +44,7 @@ public class ProductCountAdapter implements ProductCountPort {
         String schema = TenantContext.getCurrentTenant();
         try {
             Integer count = jdbcTemplate.queryForObject(
-                    "SELECT COUNT(*) FROM \"" + schema + "\".products WHERE is_active = TRUE",
+                    "SELECT COUNT(*) FROM \"" + schema + "\".products WHERE status = 'ACTIVE'",
                     Integer.class);
             return count != null ? count : 0;
         } catch (Exception e) {

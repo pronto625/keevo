@@ -19,14 +19,14 @@ class PlanLimitGuardTest {
 
     @Test
     void storeAtLimit_throwsPlanLimitExceeded() {
-        assertThatThrownBy(() -> guard.checkStoreLimit(PlanType.FREE, 3))
+        assertThatThrownBy(() -> guard.checkStoreLimit(PlanType.FREE, 1))
                 .isInstanceOf(DomainException.class)
                 .satisfies(ex -> {
                     DomainException de = (DomainException) ex;
                     assertThat(de.getErrorCode()).isEqualTo(ErrorCode.PLAN_LIMIT_EXCEEDED);
                     assertThat(de.getDetails().get("entity")).isEqualTo("stores");
-                    assertThat(de.getDetails().get("limit")).isEqualTo(3);
-                    assertThat(de.getDetails().get("current")).isEqualTo(3);
+                    assertThat(de.getDetails().get("limit")).isEqualTo(1);
+                    assertThat(de.getDetails().get("current")).isEqualTo(1);
                 });
     }
 
@@ -43,12 +43,12 @@ class PlanLimitGuardTest {
 
     @Test
     void employeeAtLimit_throwsPlanLimitExceeded() {
-        assertThatThrownBy(() -> guard.checkEmployeeLimit(PlanType.FREE, 5))
+        assertThatThrownBy(() -> guard.checkEmployeeLimit(PlanType.FREE, 3))
                 .isInstanceOf(DomainException.class)
                 .satisfies(ex -> {
                     DomainException de = (DomainException) ex;
                     assertThat(de.getDetails().get("entity")).isEqualTo("employees");
-                    assertThat(de.getDetails().get("limit")).isEqualTo(5);
+                    assertThat(de.getDetails().get("limit")).isEqualTo(3);
                 });
     }
 
