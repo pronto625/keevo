@@ -46,12 +46,21 @@ class LocalProductDataSource {
 
   Future<List<ProductModel>> search(String query) async {
     final q = '%${query.toLowerCase()}%';
+    final matchingCategoryIds = await (_db.selectOnly(_db.categories)
+          ..addColumns([_db.categories.id])
+          ..where(_db.categories.name.lower().like(q) &
+              _db.categories.isActive.equals(true)))
+        .map((row) => row.read(_db.categories.id)!)
+        .get();
     final rows = await (_db.select(_db.products)
           ..where(
             (p) =>
                 p.archived.equals(false) &
                 (p.name.lower().like(q) |
-                    p.sku.lower().like(q)),
+                    p.sku.lower().like(q) |
+                    (matchingCategoryIds.isEmpty
+                        ? const Constant(false)
+                        : p.categoryId.isIn(matchingCategoryIds))),
           )
           ..orderBy([(p) => OrderingTerm.asc(p.name)]))
         .get();

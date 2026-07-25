@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
 import 'package:flutter/material.dart';
@@ -32,6 +34,7 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   final _searchController = TextEditingController();
+  Timer? _debounce;
 
   @override
   void initState() {
@@ -46,14 +49,17 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _tabController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
   void _onSearchChanged(String query) {
-    // Debounce is handled by Riverpod invalidation cadence.
-    ref.read(productSearchQueryProvider.notifier).state = query;
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      ref.read(productSearchQueryProvider.notifier).state = query;
+    });
   }
 
   @override
@@ -560,31 +566,46 @@ class _ProductListView extends ConsumerWidget {
       ),
       data: (products) {
         if (products.isEmpty) {
+          final query = ref.watch(productSearchQueryProvider);
+          final isEmployee = ref.watch(currentUserRoleProvider) == 'EMPLOYEE';
+          final showSearchEmpty = tab == CatalogTab.active && query.isNotEmpty;
+
           return Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  switch (tab) {
-                    CatalogTab.active     => Icons.inventory_2_outlined,
-                    CatalogTab.archived   => Icons.archive_outlined,
-                    CatalogTab.outOfStock => Icons.remove_shopping_cart_outlined,
-                    CatalogTab.lowStock   => Icons.warning_amber_rounded,
-                  },
+                  showSearchEmpty
+                      ? Icons.search_off_rounded
+                      : switch (tab) {
+                          CatalogTab.active     => Icons.inventory_2_outlined,
+                          CatalogTab.archived   => Icons.archive_outlined,
+                          CatalogTab.outOfStock => Icons.remove_shopping_cart_outlined,
+                          CatalogTab.lowStock   => Icons.warning_amber_rounded,
+                        },
                   size: 64,
                   color: Theme.of(context).colorScheme.outlineVariant,
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  switch (tab) {
-                    CatalogTab.active     => 'Aucun produit dans le catalogue',
-                    CatalogTab.archived   => 'Aucun produit archivé',
-                    CatalogTab.outOfStock => 'Aucun produit en rupture de stock',
-                    CatalogTab.lowStock   => 'Aucun produit en stock bas',
-                  },
+                  showSearchEmpty
+                      ? 'Aucun résultat pour «\u202F$query\u202F»'
+                      : switch (tab) {
+                          CatalogTab.active     => 'Aucun produit dans le catalogue',
+                          CatalogTab.archived   => 'Aucun produit archivé',
+                          CatalogTab.outOfStock => 'Aucun produit en rupture de stock',
+                          CatalogTab.lowStock   => 'Aucun produit en stock bas',
+                        },
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
-                if (tab == CatalogTab.active) ...[
+                if (showSearchEmpty && !isEmployee) ...[
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: () => context.push('/products/new'),
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Créer un produit'),
+                  ),
+                ] else if (!showSearchEmpty && tab == CatalogTab.active) ...[
                   const SizedBox(height: 8),
                   const Text('Appuyez sur + pour ajouter votre premier produit'),
                 ] else if (tab == CatalogTab.archived) ...[
