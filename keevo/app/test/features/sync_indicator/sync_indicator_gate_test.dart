@@ -25,12 +25,24 @@ class _FakeSyncTriggerNotifier extends SyncTriggerNotifier {
   Future<void> triggerPush() async {}
 }
 
+class _FakeSyncingTriggerNotifier extends SyncTriggerNotifier {
+  @override
+  SyncTriggerState build() => const SyncTriggerState.syncing();
+
+  @override
+  Future<void> triggerSync() async {}
+
+  @override
+  Future<void> triggerPush() async {}
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 Widget _wrapIndicator({
   required SyncGateState gateState,
   int days = 0,
   required SharedPreferences prefs,
+  bool isSyncing = false,
 }) {
   return ProviderScope(
     overrides: [
@@ -40,8 +52,9 @@ Widget _wrapIndicator({
       syncStatusProvider.overrideWith((ref) => Stream.value(SyncStatus.online)),
       connectivityStreamProvider
           .overrideWith((ref) => Stream.value([ConnectivityResult.wifi])),
-      syncTriggerNotifierProvider
-          .overrideWith(() => _FakeSyncTriggerNotifier()),
+      syncTriggerNotifierProvider.overrideWith(() => isSyncing
+          ? _FakeSyncingTriggerNotifier()
+          : _FakeSyncTriggerNotifier()),
       sharedPreferencesProvider.overrideWithValue(prefs),
     ],
     child: MaterialApp(
@@ -120,6 +133,67 @@ void main() {
           reason: 'Open gate must not show blocked label');
       expect(find.text('En ligne'), findsOneWidget,
           reason: 'Open gate with online status must show En ligne');
+    });
+
+    // ── Story 16.5: online-stale indicator ────────────────────────────
+
+    testWidgets('shouldShowWarningWhenOnlineAndStaleDay5', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+
+      await tester.pumpWidget(
+          _wrapIndicator(gateState: SyncGateState.warning, days: 5, prefs: prefs));
+      await tester.pumpAndSettle();
+
+      // Label must show "En ligne (sync J-5)"
+      expect(find.text('En ligne (sync J-5)'), findsOneWidget,
+          reason: 'Online+warning at day 5 must show "En ligne (sync J-5)"');
+
+      // Dot must be amber #FCC419
+      final dot = tester.widget<Container>(find.byKey(const Key('sync_dot')));
+      expect((dot.decoration as BoxDecoration).color, const Color(0xFFFCC419),
+          reason: 'Online+warning dot must be amber #FCC419');
+    });
+
+    testWidgets('shouldShowCriticalDay6', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+
+      await tester.pumpWidget(
+          _wrapIndicator(gateState: SyncGateState.critical, days: 6, prefs: prefs));
+      await tester.pumpAndSettle();
+
+      // Label must contain "Sync urgente"
+      expect(find.textContaining('Sync urgente'), findsOneWidget,
+          reason: 'Online+critical at day 6 must show "⚠ Sync urgente"');
+
+      // Dot must be red #FA5252
+      final dot = tester.widget<Container>(find.byKey(const Key('sync_dot')));
+      expect((dot.decoration as BoxDecoration).color, const Color(0xFFFA5252),
+          reason: 'Online+critical dot must be red #FA5252');
+    });
+
+    testWidgets('shouldShowSyncingSpinnerEvenWhenGateIsCritical',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+
+      await tester.pumpWidget(_wrapIndicator(
+          gateState: SyncGateState.critical,
+          days: 6,
+          prefs: prefs,
+          isSyncing: true));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // A manual sync in-flight must win over the online-stale critical label.
+      expect(find.text('Synchronisation...'), findsOneWidget,
+          reason:
+              'SyncTriggerSyncing must show the syncing label regardless of gate state');
+      expect(find.textContaining('Sync urgente'), findsNothing,
+          reason:
+              'SyncTriggerSyncing must override the online-stale critical label');
+      expect(find.byType(CircularProgressIndicator), findsOneWidget,
+          reason: 'Manual sync in-flight must show the spinner');
     });
   });
 }

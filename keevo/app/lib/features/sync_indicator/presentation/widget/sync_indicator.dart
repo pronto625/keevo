@@ -54,6 +54,7 @@ class SyncIndicator extends ConsumerWidget {
     final asyncStatus = ref.watch(syncStatusProvider);
     final days = ref.watch(daysOfflineProvider);
     final gateState = ref.watch(syncGateStateProvider);
+    final daysSinceLastSync = ref.watch(daysSinceLastSyncProvider);
 
     // Story 5.4: blocked state — tapping opens SyncRequiredModal directly
     if (gateState == SyncGateState.blocked) {
@@ -92,33 +93,52 @@ class SyncIndicator extends ConsumerWidget {
           final triggerState = ref.watch(syncTriggerNotifierProvider);
           final isSyncing = triggerState is SyncTriggerSyncing;
           if (isSyncing) {
-            return _buildIndicator(SyncStatus.syncing, 0);
+            return _buildIndicator(SyncStatus.syncing,
+                days: 0, gateState: gateState, daysSinceLastSync: daysSinceLastSync);
           }
           return asyncStatus.when(
-            data: (status) => _buildIndicator(status, days),
-            loading: () => _buildIndicator(SyncStatus.online, 0),
-            error: (_, __) => _buildIndicator(SyncStatus.offlineCritical, 0),
+            data: (status) => _buildIndicator(status,
+                days: days, gateState: gateState, daysSinceLastSync: daysSinceLastSync),
+            loading: () => _buildIndicator(SyncStatus.online,
+                days: 0, gateState: gateState, daysSinceLastSync: daysSinceLastSync),
+            error: (_, __) => _buildIndicator(SyncStatus.offlineCritical,
+                days: 0, gateState: gateState, daysSinceLastSync: daysSinceLastSync),
           );
         }),
       ),
     );
   }
 
-  Widget _buildIndicator(SyncStatus status, int days) {
+  Widget _buildIndicator(SyncStatus status,
+      {required int days,
+      required SyncGateState gateState,
+      required int daysSinceLastSync}) {
+    final isOnlineStaleWarning =
+        status == SyncStatus.online && gateState == SyncGateState.warning;
+    final isOnlineStaleCritical =
+        status == SyncStatus.online && gateState == SyncGateState.critical;
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _buildStatusDot(status),
+        _buildStatusDot(status,
+            isOnlineStaleWarning: isOnlineStaleWarning,
+            isOnlineStaleCritical: isOnlineStaleCritical),
         const SizedBox(width: 6),
         Text(
-          _label(status, days),
+          isOnlineStaleCritical
+              ? '⚠ Sync urgente'
+              : isOnlineStaleWarning
+                  ? 'En ligne (sync J-$daysSinceLastSync)'
+                  : _label(status, days),
           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
         ),
       ],
     );
   }
 
-  Widget _buildStatusDot(SyncStatus status) {
+  Widget _buildStatusDot(SyncStatus status,
+      {bool isOnlineStaleWarning = false, bool isOnlineStaleCritical = false}) {
     if (status == SyncStatus.syncing) {
       return const SizedBox(
         width: 10,
@@ -131,7 +151,11 @@ class SyncIndicator extends ConsumerWidget {
       width: 10,
       height: 10,
       decoration: BoxDecoration(
-        color: _dotColor(status),
+        color: isOnlineStaleCritical
+            ? AppTheme.errorColor
+            : isOnlineStaleWarning
+                ? AppTheme.warning
+                : _dotColor(status),
         shape: BoxShape.circle,
       ),
     );
