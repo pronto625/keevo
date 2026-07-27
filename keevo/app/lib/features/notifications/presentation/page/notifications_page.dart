@@ -45,7 +45,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         actions: [
           if (unread > 0)
             TextButton(
-              onPressed: () => ref.read(markAllAsReadProvider),
+              onPressed: () => ref.refresh(markAllAsReadProvider),
               child: const Text('Tout marquer comme lu'),
             ),
         ],
