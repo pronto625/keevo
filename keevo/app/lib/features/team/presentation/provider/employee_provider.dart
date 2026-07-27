@@ -144,7 +144,7 @@ class UpdateEmployee extends _$UpdateEmployee {
   @override
   FutureOr<EmployeeModel?> build() => null;
 
-  Future<void> update(String employeeId, {
+  Future<void> updateProfile(String employeeId, {
     String? firstName,
     String? lastName,
     String? phoneNumber,

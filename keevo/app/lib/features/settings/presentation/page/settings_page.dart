@@ -6,6 +6,7 @@ import '../../../../core/di/providers.dart';
 import '../../../../core/storage/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
+import '../../../notifications/presentation/provider/notification_provider.dart';
 import '../../../stores/domain/model/store_model.dart';
 import '../../../stores/domain/model/store_type.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
@@ -396,6 +397,21 @@ class SettingsPage extends ConsumerWidget {
       ),
     );
     if (confirmed != true) return;
+
+    // FCM token cleanup — best-effort (mirrors main_shell.dart _initFcm pattern).
+    // Must run BEFORE flutterSecureStorageProvider.deleteAll() so the auth
+    // token is still attached to the Dio interceptor for the backend call.
+    final token = await ref.read(fcmServiceProvider).getToken();
+    if (token != null) {
+      try {
+        await ref.read(remoteDeviceTokenDataSourceProvider).deleteToken(token);
+      } catch (e) {
+        debugPrint('[FCM] Remote token deletion on logout failed: $e');
+      }
+    }
+    // Unconditional: local unsubscribe must happen regardless of whether the
+    // remote delete above succeeded or failed (AC3).
+    await ref.read(fcmServiceProvider).deleteToken();
 
     await ref.read(flutterSecureStorageProvider).deleteAll();
 

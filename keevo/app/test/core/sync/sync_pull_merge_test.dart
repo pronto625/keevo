@@ -209,6 +209,49 @@ void main() {
       expect(cats.first.name, 'Local Cat');
     });
 
+    test(
+        'category_deletePending_TOGGLE_CATEGORY_isActiveFalse_isNotReactivated',
+        () async {
+      // Story 14.14 AC3: deleteCategory() soft-deactivates locally
+      // (isActive=false) and queues a TOGGLE_CATEGORY(isActive:false) op.
+      // A stale pull that still reports the server-side isActive=true
+      // (i.e. arrives before the queued push has been processed) must NOT
+      // reactivate the category locally, thanks to the AC7 pending-entity
+      // guard below.
+      await db.customStatement(
+        'INSERT INTO categories (id, name, is_active, is_custom, created_at, updated_at) '
+        'VALUES (?, ?, 0, 1, ?, ?)',
+        ['cat-del-1', 'À supprimer', '2026-03-19T10:00:00.000Z', '2026-03-19T10:00:00.000Z'],
+      );
+      await _insertPendingSyncOp(
+        entityId: 'cat-del-1',
+        operation: 'TOGGLE_CATEGORY',
+      );
+
+      stubPull(entities: {
+        'categories': [
+          {
+            'id': 'cat-del-1',
+            'name': 'À supprimer',
+            'parentId': null,
+            'isActive': true, // server hasn't processed the delete push yet
+            'isCustom': true,
+            'createdAt': '2026-03-19T10:00:00.000Z',
+            'updatedAt': '2026-03-21T10:00:00.000Z',
+          }
+        ]
+      });
+
+      await syncService.pull();
+
+      final cats = await db.select(db.categories).get();
+      expect(cats, hasLength(1));
+      expect(cats.first.id, 'cat-del-1');
+      expect(cats.first.isActive, isFalse,
+          reason: 'AC7 guard must skip the stale pull upsert because '
+              'cat-del-1 has a pending unsynced TOGGLE_CATEGORY op');
+    });
+
     test('client_withPendingPush_isNotOverwritten', () async {
       await db.customStatement(
         'INSERT INTO clients (id, name, phone, archived, created_at, updated_at) '

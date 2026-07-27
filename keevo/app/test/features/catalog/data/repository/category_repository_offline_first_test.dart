@@ -145,5 +145,88 @@ void main() {
       verify(() => mockDispatcher.triggerPushIfIdle()).called(1);
     });
   });
+
+  group('Story 14.14 — deleteCategory() soft-deactivate + sync', () {
+    test('AC1 — deleteCategory_active_setsIsActiveFalse_queuesToggleCategory',
+        () async {
+      final created = await repo.createCustomCategory('À supprimer');
+      clearInteractions(mockSyncService);
+      clearInteractions(mockDispatcher);
+      when(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).thenAnswer((_) async {});
+      when(() => mockDispatcher.triggerPushIfIdle()).thenReturn(null);
+
+      final beforeDelete = DateTime.now();
+      await repo.deleteCategory(created.id);
+
+      // Verify local state: isActive should be false, row still exists,
+      // updatedAt bumped, and no physical delete (AC1 — other fields
+      // survive the soft-deactivate untouched).
+      final allRows = await db.select(db.categories).get();
+      final deleted = allRows.firstWhere((r) => r.id == created.id);
+      expect(deleted.isActive, isFalse);
+      expect(deleted.name, created.name);
+      expect(deleted.isCustom, created.isCustom);
+      expect(deleted.createdAt, created.createdAt);
+      expect(
+        deleted.updatedAt.isAfter(beforeDelete) ||
+            deleted.updatedAt.isAtSameMomentAs(beforeDelete),
+        isTrue,
+        reason: 'updatedAt must be bumped by deleteCategory()',
+      );
+
+      // Verify sync: TOGGLE_CATEGORY queued with isActive=false
+      verify(() => mockSyncService.queueOperation(
+            operation: 'TOGGLE_CATEGORY',
+            payload: {'categoryId': created.id, 'isActive': false},
+            entityId: created.id,
+          )).called(1);
+      verify(() => mockDispatcher.triggerPushIfIdle()).called(1);
+
+      // Verify not visible in active-only query
+      final activeCats = await repo.getLocalCategories();
+      expect(activeCats.any((c) => c.id == created.id), isFalse);
+    });
+
+    test('AC1 — deleteCategory_alreadyInactive_isNoOp',
+        () async {
+      final created = await repo.createCustomCategory('Déjà désactivée');
+      // Toggle it off first
+      await repo.toggleCategoryStatus(created.id);
+      clearInteractions(mockSyncService);
+      clearInteractions(mockDispatcher);
+      when(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).thenAnswer((_) async {});
+      when(() => mockDispatcher.triggerPushIfIdle()).thenReturn(null);
+
+      await repo.deleteCategory(created.id);
+
+      // No new sync operation should be queued
+      verifyNever(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          ));
+      verifyNever(() => mockDispatcher.triggerPushIfIdle());
+    });
+
+    // AC3 (non-régression : la catégorie supprimée ne réapparaît plus après
+    // un pull) is validated end-to-end against the real pull path — not
+    // here. See sync_pull_merge_test.dart,
+    // 'category_deletePending_TOGGLE_CATEGORY_isActiveFalse_isNotReactivated',
+    // which exercises RestSyncService.pull() (mocked Dio) with a pending
+    // TOGGLE_CATEGORY(isActive:false) op and asserts the local row stays
+    // isActive=false when the server still reports isActive=true (AC7
+    // guard in rest_sync_service.dart's _upsertCategories()). A previous
+    // version of this test simulated the pull via a raw db.customStatement()
+    // that bypassed that guard entirely, so it could not prove AC3 either
+    // way — it has been replaced by the real-path test above.
+  });
 }
 

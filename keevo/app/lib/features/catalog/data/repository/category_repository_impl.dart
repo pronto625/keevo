@@ -139,10 +139,25 @@ class CategoryRepositoryImpl implements CategoryRepository {
 
   @override
   Future<void> deleteCategory(String categoryId) async {
-    // Local delete only — categories are managed by admin, no sync queue.
-    await (_database.delete(_database.categories)
+    // Offline-first: soft-deactivate via TOGGLE_CATEGORY (set-based, idempotent).
+    // Mirrors toggleCategoryStatus() but forces isActive=false (idempotent if already false).
+    final category = await (_database.select(_database.categories)
           ..where((c) => c.id.equals(categoryId)))
-        .go();
+        .getSingle();
+    if (!category.isActive) return; // already inactive — no-op
+    final now = DateTime.now();
+    await (_database.update(_database.categories)
+          ..where((c) => c.id.equals(categoryId)))
+        .write(CategoriesCompanion(
+      isActive: const Value(false),
+      updatedAt: Value(now),
+    ));
+    await _syncService.queueOperation(
+      operation: 'TOGGLE_CATEGORY',
+      payload: {'categoryId': categoryId, 'isActive': false},
+      entityId: categoryId,
+    );
+    _syncTriggerDispatcher.triggerPushIfIdle();
   }
 
   /// Map Drift Category to CategoryModel
