@@ -20,6 +20,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class SyncPushService implements SyncUseCase {
@@ -53,13 +54,85 @@ public class SyncPushService implements SyncUseCase {
         this.syncErrorLogRepository = syncErrorLogRepository;
     }
 
+    /**
+     * Operation types that mutate a product entity.
+     * These must be processed BEFORE stock operations that reference the same product.
+     */
+    private static final Set<String> PRODUCT_MUTATION_TYPES = Set.of(
+            "CREATE_PRODUCT", "CREATE_DRAFT_PRODUCT", "UPDATE_PRODUCT",
+            "PROMOTE_PRODUCT", "ARCHIVE_PRODUCT", "UNARCHIVE_PRODUCT");
+
+    /**
+     * Operation types that mutate stock for a product.
+     * These must be processed AFTER product mutations for the same product.
+     */
+    private static final Set<String> STOCK_MUTATION_TYPES = Set.of(
+            "RECORD_STOCK_ENTRY", "STOCK_ADJUST");
+
+    /**
+     * Extracts the productId from an operation's payload, if present.
+     */
+    private String productIdOf(SyncOperation op) {
+        Object pid = op.payload().get("productId");
+        return pid != null ? pid.toString() : null;
+    }
+
+    /**
+     * Priority for topological sort: product mutations (0) before stock mutations (1).
+     * All other types get priority 2 (neutral — sorted by timestamp only).
+     */
+    private int topologicalPriority(SyncOperation op) {
+        if (PRODUCT_MUTATION_TYPES.contains(op.operationType())) return 0;
+        if (STOCK_MUTATION_TYPES.contains(op.operationType())) return 1;
+        return 2;
+    }
+
+    /**
+     * Sorts operations with dependency awareness: for the same productId,
+     * product mutations (CREATE/UPDATE/PROMOTE) always come before
+     * stock mutations (RECORD_STOCK_ENTRY/STOCK_ADJUST).
+     *
+     * <p>Within the same priority level, chronological order is preserved.
+     * Operations without a productId are sorted by timestamp only.
+     */
+    private List<SyncOperation> topologicalSort(List<SyncOperation> operations) {
+        // Build a map of productId → earliest timestamp among product mutations
+        Map<String, Instant> productMutationEarliest = operations.stream()
+                .filter(op -> PRODUCT_MUTATION_TYPES.contains(op.operationType()))
+                .filter(op -> productIdOf(op) != null)
+                .collect(Collectors.groupingBy(
+                        this::productIdOf,
+                        Collectors.mapping(SyncOperation::clientTimestamp,
+                                Collectors.minBy(Comparator.nullsLast(Comparator.naturalOrder())))))
+                .entrySet().stream()
+                .filter(e -> e.getValue().isPresent())
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().get()));
+
+        return operations.stream()
+                .sorted(Comparator
+                        // 1. Topological priority (product before stock)
+                        .comparingInt(this::topologicalPriority)
+                        // 2. For stock ops, use the product mutation's earliest timestamp as tiebreaker
+                        //    so stock ops are grouped right after their product mutation
+                        .thenComparing((SyncOperation op) -> {
+                            if (STOCK_MUTATION_TYPES.contains(op.operationType())) {
+                                String pid = productIdOf(op);
+                                if (pid != null) {
+                                    Instant earliest = productMutationEarliest.get(pid);
+                                    return earliest != null ? earliest : op.clientTimestamp();
+                                }
+                            }
+                            return op.clientTimestamp();
+                        }, Comparator.nullsLast(Comparator.naturalOrder()))
+                        // 3. Within same priority, chronological order
+                        .thenComparing(SyncOperation::clientTimestamp,
+                                Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList();
+    }
+
     @Override
     public SyncBatchResult pushBatch(PushBatchCommand command) {
-        List<SyncOperation> sorted = command.operations().stream()
-                .sorted(Comparator.comparing(
-                        SyncOperation::clientTimestamp,
-                        Comparator.nullsLast(Comparator.naturalOrder())))
-                .toList();
+        List<SyncOperation> sorted = topologicalSort(command.operations());
 
         List<SyncOperationResult> results = new ArrayList<>();
 

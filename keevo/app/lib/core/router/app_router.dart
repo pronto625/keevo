@@ -54,6 +54,7 @@ import '../../features/settings/presentation/page/subscription_page.dart';
 import '../../features/settings/presentation/page/report_preferences_page.dart';
 import '../../features/sync_indicator/presentation/page/sync_conflict_log_page.dart';
 import '../../features/sync_indicator/presentation/page/sync_settings_page.dart';
+import '../sync/sync_trigger_notifier.dart';
 import '../../features/stores/presentation/page/stores_list_page.dart';
 import '../../features/inventory/presentation/page/global_stock_overview_page.dart';
 import '../../features/inventory/presentation/page/inventory_counting_page.dart';
@@ -75,7 +76,7 @@ import '../storage/app_constants.dart';
 // a proactive token refresh without importing auth_provider.
 const _kApiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'https://localhost:4500',
+  defaultValue: 'http://localhost:4500',
 );
 
 /// Global ScaffoldMessenger key — used by AuthInterceptor.onAccountSuspended
@@ -178,25 +179,6 @@ bool _isTenantActive(String token) {
   }
 }
 
-/// Placeholder page shown until each feature is implemented
-class _PlaceholderPage extends StatelessWidget {
-  final String title;
-  const _PlaceholderPage({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: Center(
-        child: Text(
-          title,
-          style: Theme.of(context).textTheme.headlineMedium,
-        ),
-      ),
-    );
-  }
-}
-
 /// Écran de démarrage invisible — redirige vers l'onboarding au premier
 /// lancement ou directement vers l'inscription si déjà vu.
 class _SplashRedirectPage extends ConsumerStatefulWidget {
@@ -242,6 +224,10 @@ class _SplashRedirectPageState extends ConsumerState<_SplashRedirectPage> {
 
     if (effectiveToken != null) {
       if (!mounted) return;
+
+      // Story 16.8 AC1: pull latest server state after JWT validation at
+      // cold start — fire-and-forget, do NOT block navigation.
+      ref.read(syncTriggerNotifierProvider.notifier).onAppStartup();
 
       // Ensure EMPLOYEE activeStoreId is set from JWT on cold start.
       // OWNER gets null (all stores).
@@ -680,11 +666,6 @@ final GoRouter appRouter = GoRouter(
         final sessionId = state.pathParameters['sessionId']!;
         return InventoryGapReportPage(sessionId: sessionId);
       },
-    ),
-
-    GoRoute(
-      path: '/reports',
-      builder: (_, __) => const _PlaceholderPage(title: 'Reports'),
     ),
 
     // ── Settings > Boutiques (full-screen, nav bar hidden) ────────────────

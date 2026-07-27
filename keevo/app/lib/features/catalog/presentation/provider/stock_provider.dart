@@ -124,7 +124,12 @@ class StockState {
 /// Accessed via [stockNotifierProvider](productId).
 ///
 /// Story 2.3.
-@riverpod
+///
+/// keepAlive: true — prevents autoDispose from dropping the cached level
+/// state when StockLevelWidget scrolls off-screen while a stock entry
+/// bottom sheet is open. The provider is invalidated explicitly by
+/// SyncTriggerNotifier after a full pull cycle.
+@Riverpod(keepAlive: true)
 class StockNotifier extends _$StockNotifier {
   @override
   StockState build(String productId) {

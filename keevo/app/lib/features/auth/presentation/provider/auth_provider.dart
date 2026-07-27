@@ -14,6 +14,7 @@ import '../../../../core/network/log_redaction.dart';
 import '../../../../core/network/retry_interceptor.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/storage/secure_storage_provider.dart';
+import '../../../../core/sync/sync_trigger_notifier.dart';
 import '../../data/datasource/remote_auth_datasource.dart';
 import '../../data/repository/auth_repository_impl.dart';
 import '../../data/repository/secure_token_storage.dart';
@@ -54,7 +55,7 @@ String? _extractFirstNameFromJwt(String accessToken) {
 const _apiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
   // defaultValue: 'http://10.0.3.2:4500', 
-  defaultValue: 'https://localhost:4500',// local dev (Genymotion); prod: --dart-define=API_BASE_URL=https://<domain>
+  defaultValue: 'http://localhost:4500',// local dev (Genymotion); prod: --dart-define=API_BASE_URL=https://<domain>
 );
 
 /// Secure storage — hardened singleton instance (AC1).
@@ -281,6 +282,9 @@ class Login extends _$Login {
         ref.invalidate(currentUserRoleProvider);
         ref.invalidate(currentUserPhoneProvider);
         ref.invalidate(tenantStatusClaimProvider);
+
+        // Story 16.8 AC2: pull latest server state after fresh login.
+        ref.read(syncTriggerNotifierProvider.notifier).onAppStartup();
       }
     });
     state = result;
@@ -336,6 +340,9 @@ class SelectTenant extends _$SelectTenant {
       ref.invalidate(currentUserRoleProvider);
       ref.invalidate(currentUserPhoneProvider);
       ref.invalidate(tenantStatusClaimProvider);
+
+      // Story 16.8 AC2: pull latest server state after tenant selection.
+      ref.read(syncTriggerNotifierProvider.notifier).onAppStartup();
     });
     state = result;
   }
@@ -415,15 +422,14 @@ class ForgotPassword extends _$ForgotPassword {
 
 /// [ResetPassword] manages the reset-password async lifecycle.
 ///
-/// State: [AsyncValue<bool?>]
+/// State: [AsyncValue<void>]
 /// - Initial / reset: AsyncData(null)
 /// - Loading: AsyncLoading()
-/// - Success: AsyncData(true)
 /// - Error: AsyncError(AuthException, stackTrace)
 @riverpod
 class ResetPassword extends _$ResetPassword {
   @override
-  FutureOr<bool?> build() => null;
+  FutureOr<void> build() => null;
 
   Future<void> reset({
     required String phoneNumber,
