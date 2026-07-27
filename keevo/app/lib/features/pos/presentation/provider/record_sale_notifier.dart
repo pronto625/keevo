@@ -115,7 +115,6 @@ class RecordSaleNotifier extends Notifier<RecordSaleState> {
       ref.invalidate(posSearchProvider);
       ref.invalidate(stockNotifierProvider);
       ref.invalidate(todaySummaryProvider);
-      ref.invalidate(todaySalesCountProvider);
       ref.invalidate(dayClosureStateProvider);
       if (draftItems.isNotEmpty) {
         ref.invalidate(pendingDraftsCountProvider);

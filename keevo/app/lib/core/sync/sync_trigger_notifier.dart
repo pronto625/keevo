@@ -249,7 +249,6 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
     ref.invalidate(reportHistoryProvider);
     ref.invalidate(todaySummaryProvider);
     ref.invalidate(dayClosureStateProvider);
-    ref.invalidate(todaySalesCountProvider);
     ref.invalidate(lastClosureProvider);
     ref.invalidate(salesHistoryProvider);
     // ── POS — Pending sales ───────────────────────────────────────────────

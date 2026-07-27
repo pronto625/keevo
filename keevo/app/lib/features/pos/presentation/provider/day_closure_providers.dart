@@ -14,7 +14,13 @@ import '../../domain/usecase/close_day_usecase.dart';
 import '../../domain/usecase/get_sales_history_usecase.dart';
 import 'pos_providers.dart';
 
-/// DayCloseButtonState — visual state of the day close button.
+/// DayCloseButtonState — visual state of the day-closure UI.
+///
+/// Drives `_ClosureButton` in `reports_page.dart` (the production day-close
+/// button) and the day-close gating in `pos_speed_dial.dart`. The standalone
+/// `DayCloseButton` widget that originally consumed this enum has been
+/// removed (v1s-16-10); the enum name is retained to avoid a cross-file
+/// rename cascade.
 enum DayCloseButtonState {
   /// Button is available — user can close the day
   available,
@@ -68,21 +74,6 @@ final getSalesHistoryUseCaseProvider = Provider<GetSalesHistoryUseCase>((ref) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // State providers
-
-/// Unclosed completed sales count for badge display.
-///
-/// If a closure was already done today, shows only sales made after it.
-final todaySalesCountProvider = FutureProvider.family<int, String>((ref, storeId) async {
-  final repository = ref.watch(dayClosureRepositoryProvider);
-  final now = DateTime.now();
-  final startOfDay = DateTime(now.year, now.month, now.day);
-
-  final lastClosure = await repository.getLastClosure(storeId);
-  if (lastClosure != null && lastClosure.closedAt.isAfter(startOfDay)) {
-    return repository.getSalesCountAfter(storeId, lastClosure.closedAt);
-  }
-  return repository.getTodaySalesCount(storeId);
-});
 
 /// Day close button state: available, closed, or noSales.
 ///
@@ -166,7 +157,6 @@ class CloseDayNotifier extends StateNotifier<AsyncValue<DayClosureSummary?>> {
       state = AsyncValue.data(summary);
       // Invalidate related providers to refresh UI
       _ref.invalidate(dayClosureStateProvider);
-      _ref.invalidate(todaySalesCountProvider);
       _ref.invalidate(todaySummaryProvider);
       _ref.invalidate(reportHistoryProvider);
     } catch (e, st) {
