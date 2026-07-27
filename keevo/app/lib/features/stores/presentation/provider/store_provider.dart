@@ -1,6 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/sync/riverpod_sync_trigger_dispatcher.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
 import '../../data/datasource/local_store_datasource.dart';
 import '../../data/datasource/remote_store_datasource.dart';
@@ -27,6 +28,8 @@ final storeRepositoryProvider = Provider<StoreRepository>((ref) {
   return StoreRepositoryImpl(
     local: ref.watch(localStoreDataSourceProvider),
     remote: ref.watch(remoteStoreDataSourceProvider),
+    syncService: ref.watch(syncServiceProvider),
+    syncTriggerDispatcher: ref.watch(syncTriggerDispatcherProvider),
   );
 });
 

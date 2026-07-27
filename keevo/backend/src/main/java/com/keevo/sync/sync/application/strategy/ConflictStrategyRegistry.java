@@ -21,7 +21,7 @@ public class ConflictStrategyRegistry {
             "ARCHIVE_PRODUCT", "UNARCHIVE_PRODUCT",
             "UPDATE_CLIENT", "ARCHIVE_CLIENT",
             "UPDATE_SUPPLIER", "ARCHIVE_SUPPLIER",
-            "STORE_UPDATE",
+            "CREATE_STORE", "UPDATE_STORE", "DEACTIVATE_STORE",
             "CREATE_EMPLOYEE", "REASSIGN_EMPLOYEE",
             "DEACTIVATE_EMPLOYEE", "REACTIVATE_EMPLOYEE");
 

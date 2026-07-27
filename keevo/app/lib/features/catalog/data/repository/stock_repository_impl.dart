@@ -256,7 +256,7 @@ class StockRepositoryImpl implements StockRepository {
       productId: productId,
       variantId: variantId,
       storeId: storeId,
-      movementType: 'STOCK_ADJUST',
+      movementType: 'ADJUSTMENT',
       quantityBefore: before,
       quantityDelta: delta,
       quantityAfter: newQuantity,

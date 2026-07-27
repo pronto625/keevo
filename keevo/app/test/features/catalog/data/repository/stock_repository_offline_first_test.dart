@@ -132,6 +132,14 @@ void main() {
             newQuantity: any(named: 'newQuantity'),
             notes: any(named: 'notes'),
           ));
+
+      // AC2 + AC3: the local movement field MUST be 'ADJUSTMENT' …
+      final capturedMovement = verify(() => mockLocal.insertMovement(captureAny()))
+          .captured
+          .single as StockMovementModel;
+      expect(capturedMovement.movementType, 'ADJUSTMENT');
+
+      // … but the wire operation sent to the backend MUST stay 'STOCK_ADJUST'.
       verify(() => mockSyncService.queueOperation(
             operation: 'STOCK_ADJUST',
             payload: any(named: 'payload'),
