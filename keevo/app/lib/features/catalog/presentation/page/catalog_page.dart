@@ -369,8 +369,8 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
           ),
         ],
       ),
-      // FAB "Ajouter un produit" — OWNER only (HF-2 AC5: employees browse read-only)
-      floatingActionButton: isEmployee ? null : Container(
+      // FAB "Ajouter un produit" — OWNER + EMPLOYEE
+      floatingActionButton: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -567,7 +567,6 @@ class _ProductListView extends ConsumerWidget {
       data: (products) {
         if (products.isEmpty) {
           final query = ref.watch(productSearchQueryProvider);
-          final isEmployee = ref.watch(currentUserRoleProvider) == 'EMPLOYEE';
           final showSearchEmpty = tab == CatalogTab.active && query.isNotEmpty;
 
           return Center(
@@ -598,7 +597,7 @@ class _ProductListView extends ConsumerWidget {
                         },
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
-                if (showSearchEmpty && !isEmployee) ...[
+                if (showSearchEmpty) ...[
                   const SizedBox(height: 16),
                   FilledButton.icon(
                     onPressed: () => context.push('/products/new'),
