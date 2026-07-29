@@ -347,11 +347,19 @@ jobs:
                   GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase
                   KEEVO_JWT_PRIVATE_KEY_PATH: file:/run/secrets/jwt/private_key.pem
                   KEEVO_JWT_PUBLIC_KEY_PATH: file:/run/secrets/jwt/public_key.pem
+                labels:
+                  - "traefik.enable=true"
+                  - "traefik.http.routers.keevo-backend.rule=Host(\`${APP_DOMAIN}\`)"
+                  - "traefik.http.routers.keevo-backend.entrypoints=websecure"
+                  - "traefik.http.routers.keevo-backend.tls=true"
+                  - "traefik.http.routers.keevo-backend.tls.certresolver=letsencrypt"
+                  - "traefik.http.services.keevo-backend.loadbalancer.server.port=4500"
                 volumes:
                   - ./firebase-credentials.json:/run/secrets/firebase:ro
                   - ./keys:/run/secrets/jwt:ro
                 networks:
                   - keevo_net
+                  - traefik-public
 
             volumes:
               postgres_data:
@@ -359,6 +367,8 @@ jobs:
             networks:
               keevo_net:
                 driver: bridge
+              traefik-public:
+                external: true
             COMPOSE
             fi
 
