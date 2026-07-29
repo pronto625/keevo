@@ -12,8 +12,8 @@ public class JwtProperties {
 
     private String privateKeyPath;
     private String publicKeyPath;
-    private int accessTokenExpiryHours = 24;
-    private int refreshTokenExpiryDays = 30;
+    private int accessTokenExpiryHours = 1440; // 60 days
+    private int refreshTokenExpiryDays = 360;
 
     public JwtProperties() {}
 

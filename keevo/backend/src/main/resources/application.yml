@@ -80,8 +80,8 @@ keevo:
   jwt:
     private-key-path: ${KEEVO_JWT_PRIVATE_KEY_PATH:classpath:keys/private_key.pem}
     public-key-path: ${KEEVO_JWT_PUBLIC_KEY_PATH:classpath:keys/public_key.pem}
-    access-token-expiry-hours: 24
-    refresh-token-expiry-days: 180  # Story 8.6 AC8 — 6 months
+    access-token-expiry-hours: 1440  # 60 days
+    refresh-token-expiry-days: 360   # 360 days
   admin:
     phone: ${ADMIN_PHONE:+237600000000}
     # Story 10.3 (AC2): dev keeps the well-known default Admin@1234! so a local admin is usable.
