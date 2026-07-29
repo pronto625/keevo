@@ -53,10 +53,10 @@ chmod 700 /home/deploy/.ssh
 chmod 600 /home/deploy/.ssh/authorized_keys
 ```
 
-### 2.3 Créer le groupe keevo-jwt (GID 1001)
+### 2.3 Créer le groupe keevo-jwt (GID 2001)
 
 ```bash
-groupadd -g 1001 keevo-jwt
+groupadd -g 2001 keevo-jwt
 usermod -aG keevo-jwt deploy
 ```
 
@@ -169,9 +169,8 @@ FLYWAY_ENABLED=true
 
 # ─── JWT ──────────────────────────────────────────────────────
 # Les clés RSA sont injectées via GitHub Secrets → /run/secrets/jwt/
-# JWT_SECRET n'est pas utilisé en prod (RSA), mais requis par le code
+# JWT_SECRET n'est pas utilisé en prod (RSA), mais conservé par compatibilité
 JWT_SECRET=unused_in_prod_with_rsa_keys
-JWT_EXPIRATION_MS=15552000000
 
 # ─── Admin bootstrap ──────────────────────────────────────────
 ADMIN_PHONE=+2376XXXXXXXXX

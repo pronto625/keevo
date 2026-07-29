@@ -110,45 +110,45 @@ jobs:
             printf '%s\n' "${JWT_PRIVATE_KEY_PEM}" > keys/private_key.pem
             printf '%s\n' "${JWT_PUBLIC_KEY_PEM}"  > keys/public_key.pem
 
-            # The non-root `keevo` container (USER keevo, UID/GID 1001 per Dockerfile) must read
+            # The non-root `keevo` container (USER keevo, UID/GID 2001 per Dockerfile) must read
             # the private key, but the SSH deploy user is a non-root sudoer that CANNOT `chown`
             # to a different UID (no CAP_CHOWN). Strategy: keep the deploy user as OWNER (so
-            # re-deploys can truncate the file) and let the container read via GROUP — `chgrp 1001`
-            # + `chmod 640`. The deploy user must be a member of group GID 1001 on the host
+            # re-deploys can truncate the file) and let the container read via GROUP — `chgrp 2001`
+            # + `chmod 640`. The deploy user must be a member of group GID 2001 on the host
             # (chgrp to a group you don't belong to requires root). Do NOT revert to `644`
             # (commit 708fa3e) — the public key alone may be world-readable, not the private one.
             #
             # One-time host prerequisite (run once as root on the prod host):
-            #   sudo groupadd -g 1001 keevo-jwt && sudo usermod -aG keevo-jwt "${USER:-$(id -un)}"
+            #   sudo groupadd -g 2001 keevo-jwt && sudo usermod -aG keevo-jwt "${USER:-$(id -un)}"
             # NOTE: assumes the Docker daemon is NOT configured with user-namespace remapping
-            # (userns-remap). With userns-remap, host GID 1001 maps to a different in-container
+            # (userns-remap). With userns-remap, host GID 2001 maps to a different in-container
             # GID and the container would NOT be in this group → boot fails on key read.
-            chgrp 1001 keys
+            chgrp 2001 keys
             chmod 750 keys
-            chgrp 1001 keys/private_key.pem keys/public_key.pem
+            chgrp 2001 keys/private_key.pem keys/public_key.pem
             chmod 640 keys/private_key.pem
             chmod 644 keys/public_key.pem
 
             # Pre-flight assertions (AC2) — fail the deploy BEFORE `docker compose up`.
-            # 1. Deploy user must be in group 1001, else chgrp above failed or no-op'd.
+            # 1. Deploy user must be in group 2001, else chgrp above failed or no-op'd.
             case " $(id -G) " in
-              *" 1001 "*) ;;
-              *) echo "❌ deploy user is not in group 1001 (keevo-jwt) — run the host prerequisite (see comment above)" >&2; exit 1 ;;
+              *" 2001 "*) ;;
+              *) echo "❌ deploy user is not in group 2001 (keevo-jwt) — run the host prerequisite (see comment above)" >&2; exit 1 ;;
             esac
-            # 2. GID 1001 must be the keevo-jwt group (not a colliding host service account).
-            test "$(getent group 1001 | cut -d: -f1)" = "keevo-jwt" || {
-              echo "❌ GID 1001 is not 'keevo-jwt' on this host (collision?) — got: $(getent group 1001)" >&2; exit 1
+            # 2. GID 2001 must be the keevo-jwt group (not a colliding host service account).
+            test "$(getent group 2001 | cut -d: -f1)" = "keevo-jwt" || {
+              echo "❌ GID 2001 is not 'keevo-jwt' on this host (collision?) — got: $(getent group 2001)" >&2; exit 1
             }
             # 3. Private key must NOT be world-readable (mode 640, no others-read).
             test "$(stat -c %a keys/private_key.pem)" = "640" || {
               echo "❌ private_key.pem must be mode 640 (got $(stat -c %a keys/private_key.pem))" >&2; exit 1
             }
-            # 4. (defense-in-depth) The container UID/GID 1001 can actually read the key.
-            docker run --rm -v "${DEPLOY_DIR}/keys:/keys:ro" --user 1001:1001 alpine \
+            # 4. (defense-in-depth) The container UID/GID 2001 can actually read the key.
+            docker run --rm -v "${DEPLOY_DIR}/keys:/keys:ro" --user 2001:2001 alpine \
               sh -c 'test -r /keys/private_key.pem' || {
-                echo "❌ container UID 1001 cannot read keys/private_key.pem — check group/dir perms" >&2; exit 1
+                echo "❌ container UID 2001 cannot read keys/private_key.pem — check group/dir perms" >&2; exit 1
               }
-            echo "✓ private_key.pem mode 640, group=keevo-jwt(1001), container-readable OK"
+            echo "✓ private_key.pem mode 640, group=keevo-jwt(2001), container-readable OK"
 
             echo "→ Authenticating with GHCR…"
             echo "${GHCR_PAT}" | docker login ghcr.io -u "${GH_ACTOR}" --password-stdin
