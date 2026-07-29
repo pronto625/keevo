@@ -134,6 +134,7 @@ Va dans **Settings → Secrets and variables → Actions → Repository secrets*
 | `DEPLOY_SSH_PRIVATE_KEY` | `cat ~/.ssh/keevo-server` (le contenu ENTIER, avec les `-----BEGIN...`) |
 | `DEPLOY_SSH_PORT` | `22` |
 | `APP_DOMAIN` | Ton domaine (ex: `keevo.lipagar.com`) |
+| `ACME_EMAIL` | Ton email pour Let's Encrypt (ex: `contact@lipagar.com`) |
 | `JWT_PRIVATE_KEY_PEM` | `cat /tmp/private_key.pem` (étape 1) |
 | `JWT_PUBLIC_KEY_PEM` | `cat /tmp/public_key.pem` (étape 1) |
 

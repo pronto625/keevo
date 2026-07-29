@@ -84,6 +84,7 @@ jobs:
           GH_ACTOR: ${{ github.actor }}
           IMAGE_REF: ${{ needs.build-and-push.outputs.image_ref }}
           APP_DOMAIN: ${{ secrets.APP_DOMAIN }}
+          ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
           JWT_PRIVATE_KEY_PEM: ${{ secrets.JWT_PRIVATE_KEY_PEM }}
           JWT_PUBLIC_KEY_PEM: ${{ secrets.JWT_PUBLIC_KEY_PEM }}
         with:
@@ -91,7 +92,7 @@ jobs:
           username: ${{ secrets.DEPLOY_SSH_USER }}
           key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
           port: ${{ secrets.DEPLOY_SSH_PORT || '22' }}
-          envs: GHCR_PAT,GH_ACTOR,IMAGE_REF,APP_DOMAIN,JWT_PRIVATE_KEY_PEM,JWT_PUBLIC_KEY_PEM
+          envs: GHCR_PAT,GH_ACTOR,IMAGE_REF,APP_DOMAIN,ACME_EMAIL,JWT_PRIVATE_KEY_PEM,JWT_PUBLIC_KEY_PEM
 
           # ── Script that runs on the remote server ──────────────────────────────
           # Prerequisites on server:
@@ -154,9 +155,26 @@ jobs:
             echo "→ Authenticating with GHCR…"
             echo "${GHCR_PAT}" | docker login ghcr.io -u "${GH_ACTOR}" --password-stdin
 
-            echo "→ Writing traefik/dynamic.yml…"
-            mkdir -p traefik
-            cat > traefik/dynamic.yml << DYNAMIC
+            # ── Detect whether port 80 is already taken (external Traefik) ──────
+            PORT80_FREE=false
+            if ! ss -tlnp 2>/dev/null | grep -q ':80 ' && \
+               ! docker ps --filter "publish=80" --format '{{.Names}}' 2>/dev/null | grep -q .; then
+              PORT80_FREE=true
+            fi
+
+            if ${PORT80_FREE}; then
+              echo "→ Port 80 free — deploying full stack (traefik + postgres + backend)"
+              TRAEFIK_ENABLED=true
+            else
+              echo "→ Port 80 already in use (external Traefik detected) — deploying postgres + backend only"
+              TRAEFIK_ENABLED=false
+            fi
+
+            # ── Traefik dynamic config (only if we manage Traefik) ──────────────
+            if ${TRAEFIK_ENABLED}; then
+              echo "→ Writing traefik/dynamic.yml…"
+              mkdir -p traefik
+              cat > traefik/dynamic.yml << DYNAMIC
             http:
               routers:
                 backend:
@@ -177,9 +195,13 @@ jobs:
                       interval: 10s
                       timeout: 5s
             DYNAMIC
+            fi
 
+            # ── Docker Compose ─────────────────────────────────────────────────
             echo "→ Writing docker-compose.prod.yml…"
-            cat > docker-compose.prod.yml << COMPOSE
+            if ${TRAEFIK_ENABLED}; then
+              # --- Full stack: traefik + postgres + backend ---
+              cat > docker-compose.prod.yml << COMPOSE
             services:
 
               traefik:
@@ -271,15 +293,91 @@ jobs:
               keevo_net:
                 driver: bridge
             COMPOSE
+            else
+              # --- Light stack: postgres + backend only (external Traefik) ---
+              cat > docker-compose.prod.yml << COMPOSE
+            services:
 
+              postgres:
+                image: postgres:16-alpine
+                container_name: keevo_postgres
+                restart: unless-stopped
+                mem_limit: 384m
+                mem_reservation: 256m
+                command:
+                  - postgres
+                  - -c
+                  - shared_buffers=64MB
+                  - -c
+                  - work_mem=4MB
+                  - -c
+                  - maintenance_work_mem=32MB
+                  - -c
+                  - max_connections=30
+                  - -c
+                  - effective_cache_size=256MB
+                environment:
+                  POSTGRES_DB:       \${POSTGRES_DB}
+                  POSTGRES_USER:     \${POSTGRES_USER}
+                  POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
+                volumes:
+                  - postgres_data:/var/lib/postgresql/data
+                healthcheck:
+                  test: ["CMD-SHELL", "pg_isready -U \$\$POSTGRES_USER -d \$\$POSTGRES_DB"]
+                  interval: 10s
+                  timeout: 5s
+                  retries: 10
+                networks:
+                  - keevo_net
+
+              backend:
+                image: \${BACKEND_IMAGE}
+                container_name: keevo_backend
+                restart: unless-stopped
+                mem_limit: 768m
+                mem_reservation: 512m
+                depends_on:
+                  postgres:
+                    condition: service_healthy
+                env_file: .env
+                environment:
+                  POSTGRES_HOST: postgres
+                  POSTGRES_PORT: "5432"
+                  SPRING_PROFILES_ACTIVE: prod
+                  GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase
+                  KEEVO_JWT_PRIVATE_KEY_PATH: file:/run/secrets/jwt/private_key.pem
+                  KEEVO_JWT_PUBLIC_KEY_PATH: file:/run/secrets/jwt/public_key.pem
+                volumes:
+                  - ./firebase-credentials.json:/run/secrets/firebase:ro
+                  - ./keys:/run/secrets/jwt:ro
+                networks:
+                  - keevo_net
+
+            volumes:
+              postgres_data:
+
+            networks:
+              keevo_net:
+                driver: bridge
+            COMPOSE
+            fi
+
+            # ── Deploy ─────────────────────────────────────────────────────────
             echo "→ Stopping old stack…"
             BACKEND_IMAGE="${IMAGE_REF}" docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
-            docker rm -f keevo_backend keevo_traefik keevo_postgres 2>/dev/null || true
+            docker rm -f keevo_backend keevo_postgres 2>/dev/null || true
+            if ${TRAEFIK_ENABLED}; then
+              docker rm -f keevo_traefik 2>/dev/null || true
+            fi
 
             echo "→ Pulling new backend image…"
-            BACKEND_IMAGE="${IMAGE_REF}" docker compose -f docker-compose.prod.yml pull backend traefik
+            if ${TRAEFIK_ENABLED}; then
+              BACKEND_IMAGE="${IMAGE_REF}" docker compose -f docker-compose.prod.yml pull backend traefik
+            else
+              BACKEND_IMAGE="${IMAGE_REF}" docker compose -f docker-compose.prod.yml pull backend
+            fi
 
-            echo "→ Starting / updating stack (backend + postgres + traefik)…"
+            echo "→ Starting / updating stack…"
             BACKEND_IMAGE="${IMAGE_REF}" docker compose -f docker-compose.prod.yml up -d --remove-orphans
 
             echo "→ Pruning dangling images…"
