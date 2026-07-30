@@ -31,6 +31,12 @@ public class OpenApiConfig {
     @Bean
     public OpenAPI keevoOpenAPI() {
         return new OpenAPI()
+            .servers(List.of(                                    // ← AJOUTER
+                new Server().url("http://localhost:4500")        // ← AJOUTER
+                    .description("Local dev"),                   // ← AJOUTER
+                new Server().url("https://keevo.ad2s.cm")        // ← AJOUTER
+                    .description("Production")                   // ← AJOUTER
+            )) 
             .info(new Info()
                 .title("Keevo API")
                 .description("""

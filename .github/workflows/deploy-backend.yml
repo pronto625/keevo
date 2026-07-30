@@ -291,6 +291,8 @@ jobs:
                   GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase
                   KEEVO_JWT_PRIVATE_KEY_PATH: file:/run/secrets/jwt/private_key.pem
                   KEEVO_JWT_PUBLIC_KEY_PATH: file:/run/secrets/jwt/public_key.pem
+                  LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB: DEBUG
+                  SERVER_TOMCAT_ACCESSLOG_ENABLED: "true"
                 volumes:
                   - ./firebase-credentials.json:/run/secrets/firebase:ro
                   - ./keys:/run/secrets/jwt:ro
@@ -359,6 +361,8 @@ jobs:
                   GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase
                   KEEVO_JWT_PRIVATE_KEY_PATH: file:/run/secrets/jwt/private_key.pem
                   KEEVO_JWT_PUBLIC_KEY_PATH: file:/run/secrets/jwt/public_key.pem
+                  LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB: DEBUG
+                  SERVER_TOMCAT_ACCESSLOG_ENABLED: "true"
                 labels:
                   - "traefik.enable=true"
                   - "traefik.http.routers.keevo-backend.rule=Host(\`${APP_DOMAIN}\`)"
