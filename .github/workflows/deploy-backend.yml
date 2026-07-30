@@ -152,6 +152,18 @@ jobs:
               }
             echo "✓ private_key.pem mode 640, group=keevo-jwt(2001), container-readable OK"
 
+            # ── Firebase credentials — container UID 2001 must be able to read ──
+            if [ -f firebase-credentials.json ]; then
+              chgrp 2001 firebase-credentials.json 2>/dev/null || true
+              chmod 640 firebase-credentials.json
+              test "$(stat -c %a firebase-credentials.json)" = "640" || {
+                echo "❌ firebase-credentials.json must be mode 640 (got $(stat -c %a firebase-credentials.json))" >&2; exit 1
+              }
+              echo "✓ firebase-credentials.json mode 640, group=keevo-jwt(2001)"
+            else
+              echo "⚠ firebase-credentials.json not found — FCM push will be disabled"
+            fi
+
             echo "→ Authenticating with GHCR…"
             echo "${GHCR_PAT}" | docker login ghcr.io -u "${GH_ACTOR}" --password-stdin
 
@@ -352,7 +364,7 @@ jobs:
                   - "traefik.http.routers.keevo-backend.rule=Host(\`${APP_DOMAIN}\`)"
                   - "traefik.http.routers.keevo-backend.entrypoints=websecure"
                   - "traefik.http.routers.keevo-backend.tls=true"
-                  - "traefik.http.routers.keevo-backend.tls.certresolver=letsencrypt"
+                  - "traefik.http.routers.keevo-backend.tls.certresolver=mytlschallenge"
                   - "traefik.http.services.keevo-backend.loadbalancer.server.port=4500"
                 volumes:
                   - ./firebase-credentials.json:/run/secrets/firebase:ro

@@ -204,10 +204,11 @@ scp keevo/keevo-1d289-firebase-adminsdk-fbsvc-4094494885.json deploy@<IP_DU_SERV
 ```bash
 # Sur le serveur
 chmod 600 ~/keevo/.env
-chmod 600 ~/keevo/firebase-credentials.json
+chgrp 2001 ~/keevo/firebase-credentials.json
+chmod 640 ~/keevo/firebase-credentials.json
 ls -la ~/keevo/
 # .env doit être -rw------- (600)
-# firebase-credentials.json doit être -rw------- (600)
+# firebase-credentials.json doit être -rw-r----- (640), groupe keevo-jwt
 ```
 
 ---
