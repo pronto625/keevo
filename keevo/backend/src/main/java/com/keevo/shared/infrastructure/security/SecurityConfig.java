@@ -105,31 +105,21 @@ public class SecurityConfig {
     }
 
     /**
-     * CORS configuration — allows the Next.js dashboard (dev: localhost:3000,
-     * prod: configurable via DASHBOARD_ORIGIN env var) to call the API.
+     * CORS configuration — allows all origins for the mobile-backend API.
+     * Flutter app, Swagger UI, Next.js dashboard, and any other client
+     * may connect from various origins.
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        // Dev origin + configurable prod origin
-        String dashboardOrigin = System.getenv("DASHBOARD_ORIGIN");
-        if (dashboardOrigin != null && !dashboardOrigin.isBlank()) {
-            config.addAllowedOrigin(dashboardOrigin);
-        }
-        config.addAllowedOrigin("http://localhost:3000");  // Next.js dev server
-        config.addAllowedMethod("GET");
-        config.addAllowedMethod("POST");
-        config.addAllowedMethod("PUT");
-        config.addAllowedMethod("PATCH");
-        config.addAllowedMethod("DELETE");
-        config.addAllowedMethod("OPTIONS");
-        config.addAllowedHeader("Authorization");
-        config.addAllowedHeader("Content-Type");
-        config.addAllowedHeader("Accept");
-        config.setAllowCredentials(false);
+        config.setAllowedOriginPatterns(java.util.List.of("*"));
+        config.setAllowedMethods(java.util.List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(java.util.List.of("*"));
+        config.setAllowCredentials(true);
+        config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/api/**", config);
+        source.registerCorsConfiguration("/**", config);
         return source;
     }
 
