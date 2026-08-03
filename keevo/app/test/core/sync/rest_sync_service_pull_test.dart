@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 
@@ -87,6 +88,41 @@ void main() {
           serverTimestamp: serverTimestamp,
           entities: entities,
         ));
+  }
+
+  // Inserts a pending (unsynced) sync_queue row so pull-merge protection can
+  // be exercised without going through the real repository write path.
+  var opSeq = 0;
+  Future<void> insertPendingSyncOp({
+    required String operation,
+    Map<String, dynamic> payload = const {},
+    String? entityId,
+  }) async {
+    await db.customStatement(
+      'INSERT INTO sync_queue (id, operation, payload, entity_id, synced, '
+      'retry_count, created_at) VALUES (?, ?, ?, ?, 0, 0, ?)',
+      [
+        'sq-${opSeq++}',
+        operation,
+        jsonEncode(payload),
+        entityId,
+        DateTime.now().toIso8601String(),
+      ],
+    );
+  }
+
+  Future<void> insertLocalStockLevel({
+    required String id,
+    required String productId,
+    required String storeId,
+    required int quantity,
+  }) async {
+    await db.customStatement(
+      'INSERT INTO stock_levels (id, product_id, variant_id, store_id, '
+      'quantity, minimum_threshold, updated_at) '
+      'VALUES (?, ?, NULL, ?, ?, 0, ?)',
+      [id, productId, storeId, quantity, '2026-03-19T10:00:00.000Z'],
+    );
   }
 
   group('RestSyncService.pull()', () {
@@ -216,6 +252,186 @@ void main() {
       expect(levels.first.quantity, 25);
     });
 
+    test('pull_pendingStockAdjust_doesNotOverwriteStockLevel', () async {
+      await insertLocalStockLevel(
+        id: 'sl-1', productId: 'prod-1', storeId: 'store-1', quantity: 42);
+      await insertPendingSyncOp(
+        operation: 'STOCK_ADJUST',
+        payload: {'productId': 'prod-1', 'storeId': 'store-1', 'quantity': 42},
+        entityId: 'mov-1',
+      );
+
+      stubPull(entities: {
+        'stockLevels': [
+          {
+            'id': 'sl-1',
+            'productId': 'prod-1',
+            'variantId': null,
+            'storeId': 'store-1',
+            'quantity': 999,
+            'minimumThreshold': 5,
+            'updatedAt': '2026-03-21T10:00:00.000Z',
+          }
+        ]
+      });
+
+      await syncService.pull();
+
+      final level = (await db.select(db.stockLevels).get()).first;
+      expect(level.quantity, 42);
+    });
+
+    test('pull_pendingRecordStockEntry_doesNotOverwriteStockLevel', () async {
+      await insertLocalStockLevel(
+        id: 'sl-1', productId: 'prod-1', storeId: 'store-1', quantity: 7);
+      await insertPendingSyncOp(
+        operation: 'RECORD_STOCK_ENTRY',
+        payload: {'productId': 'prod-1', 'storeId': 'store-1', 'quantity': 7},
+        entityId: 'sl-1',
+      );
+
+      stubPull(entities: {
+        'stockLevels': [
+          {
+            'id': 'sl-1',
+            'productId': 'prod-1',
+            'variantId': null,
+            'storeId': 'store-1',
+            'quantity': 999,
+            'minimumThreshold': 5,
+            'updatedAt': '2026-03-21T10:00:00.000Z',
+          }
+        ]
+      });
+
+      await syncService.pull();
+
+      final level = (await db.select(db.stockLevels).get()).first;
+      expect(level.quantity, 7);
+    });
+
+    test('pull_pendingCreateSale_doesNotOverwriteAnyItemStockLevel', () async {
+      await insertLocalStockLevel(
+        id: 'sl-1', productId: 'prod-1', storeId: 'store-1', quantity: 10);
+      await insertLocalStockLevel(
+        id: 'sl-2', productId: 'prod-2', storeId: 'store-1', quantity: 20);
+      await insertPendingSyncOp(
+        operation: 'CREATE_SALE',
+        payload: {
+          'storeId': 'store-1',
+          'items': [
+            {'productId': 'prod-1'},
+            {'productId': 'prod-2'},
+          ],
+        },
+        entityId: 'sale-1',
+      );
+
+      stubPull(entities: {
+        'stockLevels': [
+          {
+            'id': 'sl-1',
+            'productId': 'prod-1',
+            'variantId': null,
+            'storeId': 'store-1',
+            'quantity': 999,
+            'minimumThreshold': 5,
+            'updatedAt': '2026-03-21T10:00:00.000Z',
+          },
+          {
+            'id': 'sl-2',
+            'productId': 'prod-2',
+            'variantId': null,
+            'storeId': 'store-1',
+            'quantity': 888,
+            'minimumThreshold': 5,
+            'updatedAt': '2026-03-21T10:00:00.000Z',
+          },
+        ]
+      });
+
+      await syncService.pull();
+
+      final levels = await db.select(db.stockLevels).get();
+      final byProduct = {for (final l in levels) l.productId: l.quantity};
+      expect(byProduct['prod-1'], 10);
+      expect(byProduct['prod-2'], 20);
+    });
+
+    test('pull_pendingStockTransfer_doesNotOverwriteSourceOrDestination',
+        () async {
+      await insertLocalStockLevel(
+        id: 'sl-1', productId: 'prod-1', storeId: 'store-1', quantity: 5);
+      await insertLocalStockLevel(
+        id: 'sl-2', productId: 'prod-1', storeId: 'store-2', quantity: 15);
+      await insertPendingSyncOp(
+        operation: 'STOCK_TRANSFER',
+        payload: {
+          'sourceStoreId': 'store-1',
+          'destinationStoreId': 'store-2',
+          'productId': 'prod-1',
+          'quantity': 3,
+        },
+        entityId: 'tr-1',
+      );
+
+      stubPull(entities: {
+        'stockLevels': [
+          {
+            'id': 'sl-1',
+            'productId': 'prod-1',
+            'variantId': null,
+            'storeId': 'store-1',
+            'quantity': 999,
+            'minimumThreshold': 5,
+            'updatedAt': '2026-03-21T10:00:00.000Z',
+          },
+          {
+            'id': 'sl-2',
+            'productId': 'prod-1',
+            'variantId': null,
+            'storeId': 'store-2',
+            'quantity': 888,
+            'minimumThreshold': 5,
+            'updatedAt': '2026-03-21T10:00:00.000Z',
+          },
+        ]
+      });
+
+      await syncService.pull();
+
+      final levels = await db.select(db.stockLevels).get();
+      final byStore = {for (final l in levels) l.storeId: l.quantity};
+      expect(byStore['store-1'], 5);
+      expect(byStore['store-2'], 15);
+    });
+
+    test('pull_noPendingOps_stockLevelUpsertsNormally', () async {
+      // Regression of pull_upsertsStockLevels — no sync_queue entry for
+      // (prod-1, store-1), so the pull must still update the row normally.
+      await insertLocalStockLevel(
+        id: 'sl-1', productId: 'prod-1', storeId: 'store-1', quantity: 5);
+
+      stubPull(entities: {
+        'stockLevels': [
+          {
+            'id': 'sl-1',
+            'productId': 'prod-1',
+            'variantId': null,
+            'storeId': 'store-1',
+            'quantity': 30,
+            'minimumThreshold': 5,
+            'updatedAt': '2026-03-21T10:00:00.000Z',
+          }
+        ]
+      });
+
+      await syncService.pull();
+
+      final level = (await db.select(db.stockLevels).get()).first;
+      expect(level.quantity, 30);
+    });
+
     test('pull_upsertsSalesWithItems', () async {
       stubPull(entities: {
         'sales': [
@@ -306,6 +522,44 @@ void main() {
       final transfers = await db.select(db.stockTransfers).get();
       expect(transfers, hasLength(1));
       expect(transfers.first.quantity, 10);
+    });
+
+    test('pull_confirmedTransfer_upsertsNormally', () async {
+      // Transfer already confirmed by the server: it was removed from
+      // sync_queue (no pending op), so pull must still upsert it normally.
+      await db.customStatement(
+        'INSERT INTO stock_transfers (id, source_store_id, '
+        'destination_store_id, product_id, variant_id, quantity, actor_id, '
+        'occurred_at, status, notes) '
+        'VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)',
+        [
+          'tr-1', 'store-1', 'store-2', 'prod-1', 10, 'actor-1',
+          '2026-03-20T10:00:00.000Z', 'PENDING_SYNC', null,
+        ],
+      );
+
+      stubPull(entities: {
+        'stockTransfers': [
+          {
+            'id': 'tr-1',
+            'sourceStoreId': 'store-1',
+            'destinationStoreId': 'store-2',
+            'productId': 'prod-1',
+            'variantId': null,
+            'quantity': 10,
+            'actorId': 'actor-1',
+            'occurredAt': '2026-03-21T10:00:00.000Z',
+            'status': 'COMPLETED',
+            'notes': 'done',
+          }
+        ]
+      });
+
+      await syncService.pull();
+
+      final transfer = (await db.select(db.stockTransfers).get()).first;
+      expect(transfer.status, 'COMPLETED');
+      expect(transfer.notes, 'done');
     });
 
     test('pull_upsertsAuditEntries_insertOnly', () async {

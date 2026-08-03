@@ -202,13 +202,19 @@ class RestSyncService implements SyncService {
 
       // 3. Load pending entity IDs once for AC7 protection
       final pendingIds = await _getPendingEntityIds();
+      // Load pending (productId, storeId) keys affected by unsynced
+      // stock-mutating operations — stock_levels is a pre-existing server
+      // resource (not keyed by entityId like the tables above), so it needs
+      // its own composite-key protection against pull overwrite.
+      final pendingStockKeys = await _getPendingStockKeys();
 
       // 4. Upsert all entities in a single transaction
       await _database.transaction(() async {
         await _upsertProducts(
             entities['products'] as List<dynamic>? ?? [], pendingIds);
         await _upsertStockLevels(
-            entities['stockLevels'] as List<dynamic>? ?? []);
+            entities['stockLevels'] as List<dynamic>? ?? [],
+            pendingStockKeys);
         await _upsertCategories(
             entities['categories'] as List<dynamic>? ?? [], pendingIds);
         await _upsertClients(
@@ -225,7 +231,7 @@ class RestSyncService implements SyncService {
         await _upsertStockMovements(
             entities['stockMovements'] as List<dynamic>? ?? []);
         await _upsertStockTransfers(
-            entities['stockTransfers'] as List<dynamic>? ?? []);
+            entities['stockTransfers'] as List<dynamic>? ?? [], pendingIds);
         await _upsertAuditEntries(
             entities['auditEntries'] as List<dynamic>? ?? []);
         await _upsertInventorySessions(
@@ -273,6 +279,75 @@ class RestSyncService implements SyncService {
         .map((o) => o.entityId)
         .whereType<String>()
         .toSet();
+  }
+
+  /// Bug fix — pull-merge protection for `stock_levels`.
+  ///
+  /// Unlike products/categories/etc. (protected via `_getPendingEntityIds`,
+  /// keyed by `entityId`), `stock_levels` rows are a pre-existing server
+  /// resource keyed by the composite business key `(productId, storeId)` —
+  /// the pull always finds a server row for them, so entityId-based
+  /// protection doesn't apply. This computes the set of `(productId,
+  /// storeId)` pairs affected by unsynced offline operations that mutate
+  /// stock (STOCK_ADJUST, RECORD_STOCK_ENTRY, CREATE_SALE, STOCK_TRANSFER),
+  /// so `_upsertStockLevels` can skip overwriting those rows with stale
+  /// server data while the operation is still pending in `sync_queue`.
+  Future<Set<String>> _getPendingStockKeys() async {
+    const stockMutatingOps = {
+      'STOCK_ADJUST',
+      'RECORD_STOCK_ENTRY',
+      'CREATE_SALE',
+      'STOCK_TRANSFER',
+    };
+    final pendingOps = await (_database.select(_database.syncQueue)
+          ..where((t) =>
+              t.synced.equals(false) & t.operation.isIn(stockMutatingOps)))
+        .get();
+
+    final keys = <String>{};
+    for (final op in pendingOps) {
+      Map<String, dynamic> payload;
+      try {
+        payload = jsonDecode(op.payload) as Map<String, dynamic>;
+      } catch (_) {
+        // Malformed payload — ignore defensively rather than fail the pull.
+        continue;
+      }
+
+      switch (op.operation) {
+        case 'STOCK_ADJUST':
+        case 'RECORD_STOCK_ENTRY':
+          final key = _stockKey(payload['productId'], payload['storeId']);
+          if (key != null) keys.add(key);
+          break;
+        case 'CREATE_SALE':
+          final storeId = payload['storeId'];
+          final items = payload['items'] as List<dynamic>? ?? [];
+          for (final item in items) {
+            if (item is! Map<String, dynamic>) continue;
+            final key = _stockKey(item['productId'], storeId);
+            if (key != null) keys.add(key);
+          }
+          break;
+        case 'STOCK_TRANSFER':
+          final productId = payload['productId'];
+          final srcKey = _stockKey(productId, payload['sourceStoreId']);
+          if (srcKey != null) keys.add(srcKey);
+          final dstKey = _stockKey(productId, payload['destinationStoreId']);
+          if (dstKey != null) keys.add(dstKey);
+          break;
+      }
+    }
+    return keys;
+  }
+
+  /// Builds the `"productId|storeId"` composite key used by
+  /// `_getPendingStockKeys`/`_upsertStockLevels`. Returns null (rather than
+  /// throwing) when either field is missing or not a String, so a malformed
+  /// payload is silently ignored instead of crashing the pull.
+  static String? _stockKey(dynamic productId, dynamic storeId) {
+    if (productId is! String || storeId is! String) return null;
+    return '$productId|$storeId';
   }
 
   Future<void> _upsertProducts(
@@ -329,10 +404,19 @@ class RestSyncService implements SyncService {
     }
   }
 
-  Future<void> _upsertStockLevels(List<dynamic> levels) async {
+  Future<void> _upsertStockLevels(
+      List<dynamic> levels, Set<String> pendingStockKeys) async {
     if (levels.isEmpty) return;
     for (final l in levels) {
       final map = l as Map<String, dynamic>;
+
+      // Bug fix: skip rows with a pending (unsynced) offline stock-mutating
+      // operation for this (productId, storeId) — otherwise the pull would
+      // silently overwrite the local quantity with stale server data while
+      // the operation is still queued for push (see _getPendingStockKeys).
+      final key = _stockKey(map['productId'], map['storeId']);
+      if (key != null && pendingStockKeys.contains(key)) continue;
+
       // Conflict target is (product_id, store_id) — the natural business key.
       // The server may assign a different UUID than the locally-generated one,
       // so conflicting on id alone would miss existing rows and hit the
@@ -635,10 +719,16 @@ class RestSyncService implements SyncService {
     }
   }
 
-  Future<void> _upsertStockTransfers(List<dynamic> transfers) async {
+  Future<void> _upsertStockTransfers(
+      List<dynamic> transfers, Set<String> pendingIds) async {
     if (transfers.isEmpty) return;
     for (final t in transfers) {
       final map = t as Map<String, dynamic>;
+      final id = map['id'] as String;
+      // Defense in depth, mirrors the AC7 pattern used by other tables:
+      // skip if this transfer still has a pending (unsynced) STOCK_TRANSFER
+      // in sync_queue (entityId == transfer id).
+      if (pendingIds.contains(id)) continue;
       await _database.customStatement(
         'INSERT INTO stock_transfers (id, source_store_id, '
         'destination_store_id, product_id, variant_id, quantity, actor_id, '
