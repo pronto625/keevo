@@ -55,7 +55,13 @@ class CreateProductUseCaseTest {
     private CreateProductUseCase.CreateProductDto dto(String name) {
         return new CreateProductUseCase.CreateProductDto(
                 name, null, null, categoryId, 5000, 0, 0, 10,
-                actorId, 0, null, null, null, null);
+                actorId, 0, null, null, null, null, null);
+    }
+
+    private CreateProductUseCase.CreateProductDto dtoWithClientId(String name, UUID clientId) {
+        return new CreateProductUseCase.CreateProductDto(
+                name, null, null, categoryId, 5000, 0, 0, 10,
+                actorId, 0, null, null, null, null, clientId);
     }
 
     private void stubPlanUnderLimit() {
@@ -103,5 +109,39 @@ class CreateProductUseCaseTest {
             verify(productRepository).save(any());
             verify(planLimitGuard).checkProductLimit(eq(PlanType.FREE), eq(0));
         }
+    }
+
+    // ── Offline-first fix: client-generated id (sync push) ─────────────────────
+
+    @Test
+    @DisplayName("clientId fourni → le produit est sauvegardé avec cet id, pas un UUID aléatoire")
+    void withClientId_savesProductUnderThatId() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            UUID clientId = UUID.randomUUID();
+            when(productRepository.findById(clientId)).thenReturn(Optional.empty());
+            stubPlanUnderLimit();
+            when(productRepository.existsByName("Produit Offline")).thenReturn(false);
+            when(productRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+            Product result = useCase.execute(dtoWithClientId("Produit Offline", clientId));
+
+            assertEquals(clientId, result.getId());
+        }
+    }
+
+    @Test
+    @DisplayName("clientId déjà existant → retourne le produit existant, ne sauvegarde pas un doublon")
+    void withClientId_alreadyExists_returnsExisting_neverSavesDuplicate() {
+        UUID clientId = UUID.randomUUID();
+        Product existing = new Product(clientId, "Déjà créé", null, "KEV-000001", categoryId,
+                5000, 0, 0, 10, false, ProductStatus.ACTIVE, 0, Instant.now(), Instant.now());
+        when(productRepository.findById(clientId)).thenReturn(Optional.of(existing));
+
+        Product result = useCase.execute(dtoWithClientId("Déjà créé", clientId));
+
+        assertEquals(existing, result);
+        verify(productRepository, never()).save(any());
+        verify(productRepository, never()).existsByName(any());
     }
 }

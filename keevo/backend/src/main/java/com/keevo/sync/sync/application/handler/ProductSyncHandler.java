@@ -55,6 +55,10 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
         Map<String, Object> p = operation.payload();
         return switch (operation.operationType()) {
             case "CREATE_PRODUCT" -> {
+                // Preserve the client-generated id (local_product_datasource.dart sends "id")
+                // so subsequent offline ops (RECORD_STOCK_ENTRY, CREATE_SALE, ...) that
+                // reference this product by its local id keep resolving after push.
+                UUID clientId = p.get("id") != null ? UUID.fromString((String) p.get("id")) : null;
                 var product = createProduct.execute(new CreateProductDto(
                         (String) p.get("name"),
                         (String) p.get("description"),
@@ -64,7 +68,7 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                         p.get("buyPrice") != null ? ((Number) p.get("buyPrice")).intValue() : null,
                         p.get("transportCost") != null ? ((Number) p.get("transportCost")).intValue() : null,
                         p.get("stockQuantity") != null ? ((Number) p.get("stockQuantity")).intValue() : null,
-                        actorId));
+                        actorId, 0, null, null, null, null, clientId));
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         product.getId().toString(), null);
             }

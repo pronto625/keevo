@@ -92,7 +92,8 @@ public class ProductController {
                 request.status(),
                 actorRole,
                 actorName,
-                storeName
+                storeName,
+                null  // clientId — online direct creation always generates the id server-side
         );
         
         Product product = createProductUseCase.execute(dto);

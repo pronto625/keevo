@@ -65,7 +65,12 @@ public class CreateProductUseCase {
         String status,  // Story 4.3: POS draft creation — "DRAFT" or null (defaults to ACTIVE)
         String actorRole,  // Story 14.10: "OWNER" or "EMPLOYEE" — for notification dispatch
         String actorName,  // Story 14.10: display name for notifications
-        String storeName   // Story 14.10: employee's assigned store name (nullable for OWNER)
+        String storeName,  // Story 14.10: employee's assigned store name (nullable for OWNER)
+        UUID clientId  // Offline-first fix: client-generated id (sync push) — null → server generates.
+                       // Without this, a product created offline gets a DIFFERENT id on the server
+                       // than the one kept on the device, so any operation created in the same
+                       // offline session that references the product by its local id (stock entry,
+                       // sale, inventory count) fails with PRODUCT_NOT_FOUND once pushed.
     ) {
         /** Backward-compatible constructor without minimumThreshold + status. */
         public CreateProductDto(
@@ -73,7 +78,7 @@ public class CreateProductUseCase {
                 Integer price, Integer buyPrice, Integer transportCost,
                 Integer stockQuantity, UUID actorId) {
             this(name, description, sku, categoryId, price, buyPrice, transportCost,
-                 stockQuantity, actorId, 0, null, null, null, null);
+                 stockQuantity, actorId, 0, null, null, null, null, null);
         }
         /** Backward-compatible constructor without status. */
         public CreateProductDto(
@@ -81,7 +86,7 @@ public class CreateProductUseCase {
                 Integer price, Integer buyPrice, Integer transportCost,
                 Integer stockQuantity, UUID actorId, Integer minimumThreshold) {
             this(name, description, sku, categoryId, price, buyPrice, transportCost,
-                 stockQuantity, actorId, minimumThreshold, null, null, null, null);
+                 stockQuantity, actorId, minimumThreshold, null, null, null, null, null);
         }
     }
 
@@ -93,6 +98,16 @@ public class CreateProductUseCase {
      * @throws IllegalArgumentException if validation fails
      */
     public Product execute(CreateProductDto dto) {
+        // Idempotency: if the client-specified id already exists, return the existing
+        // product instead of erroring or minting a duplicate (mirrors CreateDraftProductUseCase).
+        // Also covers a sync retry replaying the same CREATE_PRODUCT operation.
+        if (dto.clientId() != null) {
+            var existing = productRepository.findById(dto.clientId());
+            if (existing.isPresent()) {
+                return existing.get();
+            }
+        }
+
         // Validate input
         validateInput(dto);
 
@@ -109,7 +124,7 @@ public class CreateProductUseCase {
         // Create product with defaults
         var now = Instant.now();
         var product = new Product(
-            UUID.randomUUID(),
+            dto.clientId() != null ? dto.clientId() : UUID.randomUUID(),
             dto.name().trim(),
             dto.description(),
             sku,

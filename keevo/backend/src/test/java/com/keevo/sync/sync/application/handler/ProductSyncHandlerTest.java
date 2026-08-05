@@ -64,6 +64,25 @@ class ProductSyncHandlerTest {
     }
 
     @Test
+    void handle_createProduct_withLocalId_passesItAsClientId() {
+        // Regression: an offline-created product must keep the id the device already
+        // uses locally, otherwise RECORD_STOCK_ENTRY/CREATE_SALE pushed in the same
+        // offline session reference an id the server never assigned.
+        var localId = UUID.randomUUID();
+        var op = new SyncOperation("op-1", "CREATE_PRODUCT", localId.toString(),
+                Map.of("id", localId.toString(), "name", "Test Product", "price", 5000), Instant.now());
+
+        when(createProduct.execute(any())).thenReturn(dummyProduct(localId, "Test Product"));
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        var captor = org.mockito.ArgumentCaptor.forClass(CreateProductUseCase.CreateProductDto.class);
+        verify(createProduct).execute(captor.capture());
+        assertThat(captor.getValue().clientId()).isEqualTo(localId);
+    }
+
+    @Test
     void handle_updateProduct_delegatesToUpdateProductUseCase() {
         var productId = UUID.randomUUID();
         var op = new SyncOperation("op-1", "UPDATE_PRODUCT", productId.toString(),
