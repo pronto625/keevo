@@ -1,6 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
 import com.keevo.catalog.stock.domain.model.StockTransfer;
+import com.keevo.catalog.stock.domain.port.in.TransferStockCommand;
 import com.keevo.catalog.stock.domain.port.in.TransferStockUseCase;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -113,5 +115,23 @@ class TransferSyncHandlerTest {
     @Test
     void supportedTypes_containsStockTransfer() {
         assertThat(handler.supportedTypes()).containsExactly("STOCK_TRANSFER");
+    }
+
+    @Test
+    void apply_propagates_entityId_as_clientId() {
+        // Offline-first fix: operation.entityId() (the client-generated local id) must be
+        // forwarded as TransferStockCommand.clientId() so ExecuteTransferService preserves it
+        // instead of minting a new server-side UUID — prevents a phantom duplicate on pull.
+        authenticateAsOwner();
+        var op = buildOp();
+        var mockTransfer = mock(StockTransfer.class);
+        when(mockTransfer.getId()).thenReturn(UUID.randomUUID());
+        when(transferStockUseCase.execute(any())).thenReturn(mockTransfer);
+
+        handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        ArgumentCaptor<TransferStockCommand> captor = ArgumentCaptor.forClass(TransferStockCommand.class);
+        verify(transferStockUseCase).execute(captor.capture());
+        assertThat(captor.getValue().clientId()).isEqualTo(UUID.fromString(op.entityId()));
     }
 }

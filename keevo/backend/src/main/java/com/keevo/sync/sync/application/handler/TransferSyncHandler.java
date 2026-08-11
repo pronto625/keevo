@@ -44,6 +44,11 @@ public class TransferSyncHandler extends AbstractSyncOperationHandler {
         }
 
         Map<String, Object> p = operation.payload();
+        // Offline-first fix: propagate the client-generated entity id as clientId so the
+        // use case preserves it instead of minting a new server-side UUID (mirrors
+        // CREATE_PRODUCT). Without this, the pull-merge INSERT ... ON CONFLICT(id) inserts a
+        // duplicate row instead of updating the original offline record.
+        UUID clientId = operation.entityId() != null ? UUID.fromString(operation.entityId()) : null;
         var transfer = transferStockUseCase.execute(new TransferStockCommand(
                 UUID.fromString((String) p.get("sourceStoreId")),
                 UUID.fromString((String) p.get("destinationStoreId")),
@@ -51,7 +56,8 @@ public class TransferSyncHandler extends AbstractSyncOperationHandler {
                 p.get("variantId") != null ? UUID.fromString((String) p.get("variantId")) : null,
                 ((Number) p.get("quantity")).intValue(),
                 actorId,
-                (String) p.get("notes")));
+                (String) p.get("notes"),
+                clientId));
 
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                 transfer.getId().toString(), null);

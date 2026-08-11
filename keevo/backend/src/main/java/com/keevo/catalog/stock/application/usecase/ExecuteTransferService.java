@@ -67,6 +67,17 @@ public class ExecuteTransferService implements TransferStockUseCase {
     @Override
     @Transactional
     public StockTransfer execute(TransferStockCommand command) {
+        // Idempotency: if the client-specified id already exists, return the existing
+        // transfer instead of decrementing stock a second time (mirrors CreateProductUseCase).
+        // Covers both an offline-created transfer's push and a sync retry replaying the
+        // same STOCK_TRANSFER operation after a network failure.
+        if (command.clientId() != null) {
+            var existing = transferRepository.findById(command.clientId());
+            if (existing.isPresent()) {
+                return existing.get();
+            }
+        }
+
         // 1. Assert source store exists
         storeRepository.findById(command.sourceStoreId())
             .orElseThrow(() -> new DomainException(ErrorCode.STORE_NOT_FOUND,
@@ -106,7 +117,7 @@ public class ExecuteTransferService implements TransferStockUseCase {
         //    Destination stock will be credited when the transfer is received (Step 2).
         var now      = Instant.now();
         var transfer = new StockTransfer(
-            UUID.randomUUID(),
+            command.clientId() != null ? command.clientId() : UUID.randomUUID(),
             command.sourceStoreId(),
             command.destinationStoreId(),
             command.productId(),

@@ -223,4 +223,43 @@ class ExecuteTransferServiceTest {
             .extracting("domainCode")
             .isEqualTo("SAME_SOURCE_DESTINATION");
     }
+
+    @Test
+    void execute_withClientId_shouldPreserveId_insteadOfRandomUUID() {
+        var clientId = UUID.randomUUID();
+        var cmd = new TransferStockCommand(SRC_STORE_ID, DEST_STORE_ID, PRODUCT_ID, null, 5, ACTOR_ID, null, clientId);
+        when(storeRepository.findById(SRC_STORE_ID)).thenReturn(Optional.of(activeStore(SRC_STORE_ID)));
+        when(storeRepository.findById(DEST_STORE_ID)).thenReturn(Optional.of(activeStore(DEST_STORE_ID)));
+        when(transferRepository.findById(clientId)).thenReturn(Optional.empty());
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, SRC_STORE_ID))
+            .thenReturn(Optional.of(level(PRODUCT_ID, SRC_STORE_ID, 20)));
+        when(stockOperationService.recordOperation(any(), any(), any(), any(), anyInt(), any(), any()))
+            .thenReturn(movement(MovementType.TRANSFER_OUT));
+
+        ArgumentCaptor<StockTransfer> captor = ArgumentCaptor.forClass(StockTransfer.class);
+        when(transferRepository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.execute(cmd);
+
+        assertThat(captor.getValue().getId()).isEqualTo(clientId);
+    }
+
+    @Test
+    void execute_withClientId_secondCall_returnsExistingTransfer_withoutDecrementingStockAgain() {
+        // Retry-safety: same STOCK_TRANSFER operation replayed twice (e.g. sync push retry
+        // after a network timeout) must not decrement the source stock twice.
+        var clientId = UUID.randomUUID();
+        var cmd = new TransferStockCommand(SRC_STORE_ID, DEST_STORE_ID, PRODUCT_ID, null, 5, ACTOR_ID, null, clientId);
+        var existing = new StockTransfer(clientId, SRC_STORE_ID, DEST_STORE_ID, PRODUCT_ID, null, 5,
+            ACTOR_ID, Instant.now(), TransferStatus.IN_TRANSIT, null);
+        when(transferRepository.findById(clientId)).thenReturn(Optional.of(existing));
+
+        var result = service.execute(cmd);
+
+        assertThat(result).isEqualTo(existing);
+        verify(storeRepository, never()).findById(any());
+        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
+        verify(transferRepository, never()).save(any());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
 }

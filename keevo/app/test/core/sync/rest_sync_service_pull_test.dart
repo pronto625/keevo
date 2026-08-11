@@ -557,7 +557,17 @@ void main() {
 
       await syncService.pull();
 
-      final transfer = (await db.select(db.stockTransfers).get()).first;
+      // Guards the pull-merge's own logic: given a local row and a pulled row that
+      // share the same id, `_upsertStockTransfers` must UPDATE in place, never INSERT
+      // a duplicate. Server-side id preservation across the offline push (the actual
+      // root cause of the phantom-duplicate bug, same class as CREATE_PRODUCT fixed in
+      // commit 95eaa19) is a backend concern covered separately by
+      // ExecuteTransferServiceTest / TransferSyncHandlerTest — this test cannot exercise
+      // that boundary since both ids are supplied by the test itself.
+      final transfers = await db.select(db.stockTransfers).get();
+      expect(transfers, hasLength(1));
+      final transfer = transfers.first;
+      expect(transfer.id, 'tr-1');
       expect(transfer.status, 'COMPLETED');
       expect(transfer.notes, 'done');
     });
