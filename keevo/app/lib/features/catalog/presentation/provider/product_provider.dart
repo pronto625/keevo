@@ -144,12 +144,19 @@ Future<List<ProductModel>> productList(ProductListRef ref) async {
 
 /// Sync-first product list — for pickers shown before the catalog page is visited.
 ///
-/// Always pulls from remote before returning local data, ensuring the picker
-/// is populated even if the catalog page has never been opened.
+/// Best-effort pulls from remote before returning local data, ensuring the
+/// picker is populated even if the catalog page has never been opened.
+/// The remote sync is opportunistic (mirrors the `.ignore()` pattern used by
+/// `catalog_page.dart`'s background sync): offline or a flaky connection must
+/// never break the picker, which always has local Drift data to fall back to.
 @riverpod
 Future<List<ProductModel>> productListForPicker(ProductListForPickerRef ref) async {
   final repo = ref.watch(productRepositoryProvider);
-  await repo.syncFromRemote();
+  try {
+    await repo.syncFromRemote();
+  } catch (_) {
+    // Best-effort — local data below is still valid and usable offline.
+  }
   final useCase = ref.watch(getProductsUseCaseProvider);
   return useCase.execute();
 }
