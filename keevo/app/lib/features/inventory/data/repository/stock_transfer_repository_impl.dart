@@ -132,35 +132,35 @@ class StockTransferRepositoryImpl implements StockTransferRepository {
     int page = 0,
     int pageSize = 20,
   }) async {
-    if (!await _connectivity.isOnline()) {
-      return _local.getHistory(
-        sourceStoreId: sourceStoreId,
-        destinationStoreId: destinationStoreId,
-        page: page,
-        pageSize: pageSize,
-      );
-    }
-    try {
-      final transfers = await _remote.getHistory(
-        sourceStoreId: sourceStoreId,
-        destinationStoreId: destinationStoreId,
-        page: page,
-        pageSize: pageSize,
-      );
-      for (final t in transfers) {
-        await _local.saveTransfer(t);
+    // Offline-first (mirrors ProductRepositoryImpl.syncFromRemote()): remote
+    // is only used to refresh the local cache, the list is always read back
+    // from local storage. Returning the remote list directly here used to
+    // silently drop any locally-created PENDING_SYNC transfer not yet known
+    // to the server (still queued, or its background push simply hasn't
+    // completed yet) — it would vanish from the sender's own history until
+    // the next successful sync, even though the local write had succeeded.
+    if (await _connectivity.isOnline()) {
+      try {
+        final transfers = await _remote.getHistory(
+          sourceStoreId: sourceStoreId,
+          destinationStoreId: destinationStoreId,
+          page: page,
+          pageSize: pageSize,
+        );
+        for (final t in transfers) {
+          await _local.saveTransfer(t);
+        }
+      } catch (e) {
+        dev.log('[StockTransfer] Remote getHistory failed — using local only: $e',
+            name: 'StockTransferRepository');
       }
-      return transfers;
-    } catch (e) {
-      dev.log('[StockTransfer] Remote getHistory failed — using local: $e',
-          name: 'StockTransferRepository');
-      return _local.getHistory(
-        sourceStoreId: sourceStoreId,
-        destinationStoreId: destinationStoreId,
-        page: page,
-        pageSize: pageSize,
-      );
     }
+    return _local.getHistory(
+      sourceStoreId: sourceStoreId,
+      destinationStoreId: destinationStoreId,
+      page: page,
+      pageSize: pageSize,
+    );
   }
 
   @override

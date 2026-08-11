@@ -176,7 +176,8 @@ void main() {
       expect(result.status, 'PENDING_SYNC');
     });
 
-    test('getHistory online — fetches remote, caches locally, returns list',
+    test(
+        'getHistory online — caches remote locally then reads the final list back from local',
         () async {
       when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
       repository = StockTransferRepositoryImpl(
@@ -188,12 +189,45 @@ void main() {
       );
       when(() => mockRemote.getHistory()).thenAnswer((_) async => [fakeTransfer]);
       when(() => mockLocal.saveTransfer(any())).thenAnswer((_) async {});
+      when(() => mockLocal.getHistory()).thenAnswer((_) async => [fakeTransfer]);
 
       final result = await repository.getHistory();
 
       verify(() => mockRemote.getHistory()).called(1);
       verify(() => mockLocal.saveTransfer(fakeTransfer)).called(1);
+      verify(() => mockLocal.getHistory()).called(1);
       expect(result, hasLength(1));
+    });
+
+    test(
+        'getHistory online — a locally-pending transfer not yet known to the '
+        'server is never dropped from the list (regression: used to return the '
+        'remote list verbatim, hiding any not-yet-synced PENDING_SYNC row)',
+        () async {
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
+      repository = StockTransferRepositoryImpl(
+        local: mockLocal,
+        remote: mockRemote,
+        connectivity: mockConnectivity,
+        syncService: mockSyncService,
+        syncTriggerDispatcher: mockSyncTriggerDispatcher,
+      );
+      // Server doesn't know about the offline-created transfer yet — its
+      // background push hasn't completed.
+      when(() => mockRemote.getHistory()).thenAnswer((_) async => []);
+      when(() => mockLocal.saveTransfer(any())).thenAnswer((_) async {});
+      final pendingTransfer = fakeTransfer.copyWith(
+        id: 'tf-pending-001',
+        status: 'PENDING_SYNC',
+      );
+      when(() => mockLocal.getHistory())
+          .thenAnswer((_) async => [pendingTransfer]);
+
+      final result = await repository.getHistory();
+
+      expect(result, hasLength(1));
+      expect(result.first.id, 'tf-pending-001');
+      expect(result.first.status, 'PENDING_SYNC');
     });
 
     test('getHistory offline — falls back to local cache', () async {
