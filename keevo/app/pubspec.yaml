@@ -1,7 +1,7 @@
 name: keevo
 description: Keevo — Gestion d'inventaire et de ventes pour commerçants au Cameroun.
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.1.5+2
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -98,6 +98,19 @@ dev_dependencies:
 
   # sqlite3 is now a main dependency — kept here only for the record.
   # sqlite3: ^2.4.7  # moved to dependencies
+
+  # App icon generation (run: dart run flutter_launcher_icons)
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: "ic_launcher"
+  min_sdk_android: 21
+  image_path: "assets/icon/icon_light.png"
+  web:
+    generate: true
+    image_path: "assets/icon/icon_light.png"
+    background_color: "#0B1E3C"
+    theme_color: "#0B1E3C"
 
 flutter:
   uses-material-design: true
