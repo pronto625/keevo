@@ -3,6 +3,8 @@ package com.keevo.sync.sync.adapter.out.persistence.impl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.sync.sync.domain.model.SyncErrorLogEntry;
 import com.keevo.sync.sync.domain.port.out.SyncErrorLogRepository;
 import org.slf4j.Logger;
@@ -23,9 +25,14 @@ import java.util.UUID;
 /**
  * SyncErrorLogRepositoryAdapter — JdbcTemplate implementation of {@link SyncErrorLogRepository}.
  *
- * <p>Operates within the TENANT schema (NOT public). TenantContext must be set
- * by JwtAuthFilter before any call. The JdbcTemplate resolves against the
- * current {@code search_path} set by TenantConnectionProvider.
+ * <p>Operates within the TENANT schema (NOT public). Unlike JPA repositories, a raw
+ * {@link JdbcTemplate} does NOT go through Hibernate's {@code MultiTenantConnectionProvider}
+ * SPI, so its pooled connections have no guaranteed {@code search_path} — a connection
+ * previously released by a Hibernate session is reset to {@code public} before returning
+ * to HikariCP. Every query here is therefore fully schema-qualified from
+ * {@link TenantContext#getCurrentTenant()} (ARCH18, same pattern as
+ * {@code JdbcTokenRevocationAdapter} / {@code SyncErrorLogCleanupJob}) instead of relying
+ * on an implicit {@code search_path}.
  *
  * <p>Story 5.5 — AC5.
  */
@@ -34,23 +41,18 @@ public class SyncErrorLogRepositoryAdapter implements SyncErrorLogRepository {
 
     private static final Logger log = LoggerFactory.getLogger(SyncErrorLogRepositoryAdapter.class);
 
-    private static final String INSERT_SQL =
-            "INSERT INTO sync_error_log (id, operation_id, operation_type, entity_id, payload, error_reason, client_timestamp, created_at) "
-                    + "VALUES (?, ?, ?, ?, ?::jsonb, ?, ?, NOW())";
-
-    private static final String FIND_BY_OP_ID_SQL =
-            "SELECT id, operation_id, operation_type, entity_id, payload, error_reason, client_timestamp, created_at "
-                    + "FROM sync_error_log WHERE operation_id = ?";
-
-    private static final String DELETE_OLDER_SQL =
-            "DELETE FROM sync_error_log WHERE created_at < ?";
-
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
 
     public SyncErrorLogRepositoryAdapter(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
+    }
+
+    /** Fully-qualified, injection-safe reference to the current tenant's sync_error_log table. */
+    private String qualifiedTable() {
+        String schema = TenantSchema.validate(TenantContext.getCurrentTenant());
+        return "\"" + schema + "\".sync_error_log";
     }
 
     @Override
@@ -62,7 +64,10 @@ public class SyncErrorLogRepositoryAdapter implements SyncErrorLogRepository {
             log.error("Failed to serialize payload for operation {}: {}", entry.operationId(), e.getMessage());
             payloadJson = "{}";
         }
-        jdbcTemplate.update(INSERT_SQL,
+        String sql = "INSERT INTO " + qualifiedTable()
+                + " (id, operation_id, operation_type, entity_id, payload, error_reason, client_timestamp, created_at) "
+                + "VALUES (?, ?, ?, ?, ?::jsonb, ?, ?, NOW())";
+        jdbcTemplate.update(sql,
                 entry.id(),
                 entry.operationId(),
                 entry.operationType(),
@@ -74,13 +79,16 @@ public class SyncErrorLogRepositoryAdapter implements SyncErrorLogRepository {
 
     @Override
     public Optional<SyncErrorLogEntry> findByOperationId(String operationId) {
-        List<SyncErrorLogEntry> results = jdbcTemplate.query(FIND_BY_OP_ID_SQL, rowMapper(), operationId);
+        String sql = "SELECT id, operation_id, operation_type, entity_id, payload, error_reason, client_timestamp, created_at "
+                + "FROM " + qualifiedTable() + " WHERE operation_id = ?";
+        List<SyncErrorLogEntry> results = jdbcTemplate.query(sql, rowMapper(), operationId);
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
     @Override
     public int deleteOlderThan(Instant cutoff) {
-        return jdbcTemplate.update(DELETE_OLDER_SQL, Timestamp.from(cutoff));
+        String sql = "DELETE FROM " + qualifiedTable() + " WHERE created_at < ?";
+        return jdbcTemplate.update(sql, Timestamp.from(cutoff));
     }
 
     private RowMapper<SyncErrorLogEntry> rowMapper() {

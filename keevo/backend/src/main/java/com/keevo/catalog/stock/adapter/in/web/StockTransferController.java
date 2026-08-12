@@ -63,17 +63,13 @@ public class StockTransferController {
     /**
      * Step 1 — Initiate an inter-store stock transfer.
      * Deducts stock from source. Returns 201 Created with status IN_TRANSIT.
-     * Story 12.6 — OWNER-only (governance).
+     *
+     * <p>OWNER and EMPLOYEE (any store, not scoped to their assigned store —
+     * product decision superseding Story 12.6's original OWNER-only governance).
      */
     @PostMapping
-    @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponseWrapper<StockTransferResponseDto>> transfer(
             @Valid @RequestBody TransferStockRequestDto request) {
-
-        // Defense-in-depth: explicit role check (testable with standaloneSetup)
-        if (!isOwnerRole()) {
-            throw new DomainException(ErrorCode.FORBIDDEN, "Only OWNER can initiate stock transfers");
-        }
 
         UUID actorId = extractActorId();
 
@@ -174,11 +170,5 @@ public class StockTransferController {
             throw new DomainException(ErrorCode.FORBIDDEN, "EMPLOYEE token missing assigned store");
         }
         return null;
-    }
-
-    private boolean isOwnerRole() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        return auth != null && auth.getAuthorities().stream()
-                .anyMatch(a -> "ROLE_OWNER".equals(a.getAuthority()));
     }
 }

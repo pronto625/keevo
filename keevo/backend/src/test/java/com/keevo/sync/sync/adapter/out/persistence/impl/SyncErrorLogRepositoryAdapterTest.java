@@ -2,7 +2,9 @@ package com.keevo.sync.sync.adapter.out.persistence.impl;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.sync.sync.domain.model.SyncErrorLogEntry;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,6 +28,8 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class SyncErrorLogRepositoryAdapterTest {
 
+    private static final String TENANT_SCHEMA = "kv_abc123";
+
     @Mock
     private JdbcTemplate jdbcTemplate;
 
@@ -35,6 +39,14 @@ class SyncErrorLogRepositoryAdapterTest {
     @BeforeEach
     void setUp() {
         adapter = new SyncErrorLogRepositoryAdapter(jdbcTemplate, objectMapper);
+        // qualifiedTable() resolves the schema from TenantContext (ARCH18 — raw
+        // JdbcTemplate connections have no guaranteed search_path).
+        TenantContext.setCurrentTenant(TENANT_SCHEMA);
+    }
+
+    @AfterEach
+    void tearDown() {
+        TenantContext.clear();
     }
 
     // ── save ─────────────────────────────────────────────────────────────────
@@ -49,7 +61,7 @@ class SyncErrorLogRepositoryAdapterTest {
         adapter.save(entry);
 
         verify(jdbcTemplate).update(
-                contains("INSERT INTO sync_error_log"),
+                contains("INSERT INTO \"" + TENANT_SCHEMA + "\".sync_error_log"),
                 eq(entry.id()),
                 eq(entry.operationId()),
                 eq(entry.operationType()),
@@ -91,7 +103,9 @@ class SyncErrorLogRepositoryAdapterTest {
     @Test
     void deleteOlderThan_purgesExpired() {
         Instant cutoff = Instant.now().minusSeconds(86400 * 30);
-        when(jdbcTemplate.update(contains("DELETE FROM sync_error_log"), any(Timestamp.class)))
+        when(jdbcTemplate.update(
+                contains("DELETE FROM \"" + TENANT_SCHEMA + "\".sync_error_log"),
+                any(Timestamp.class)))
                 .thenReturn(5);
 
         int deleted = adapter.deleteOlderThan(cutoff);
@@ -100,5 +114,25 @@ class SyncErrorLogRepositoryAdapterTest {
         verify(jdbcTemplate).update(
                 contains("WHERE created_at <"),
                 any(Timestamp.class));
+    }
+
+    // ── tenant context guard (regression — bug fixed 2026-08-12) ───────────────
+
+    @Test
+    void save_withoutTenantContext_throwsInsteadOfHittingPublicSchema() {
+        // Regression: the previous unqualified "INSERT INTO sync_error_log" resolved
+        // against whatever search_path the pooled connection happened to have — public
+        // for a connection last used by Hibernate — causing a silent, intermittent
+        // "relation sync_error_log does not exist" in production. Now it fails loudly
+        // and immediately if TenantContext isn't set, instead of guessing a schema.
+        TenantContext.clear();
+        var entry = new SyncErrorLogEntry(
+                UUID.randomUUID(), "op-1", "CREATE_SALE", "entity-1",
+                Map.of("amount", 5000), "UNKNOWN_OPERATION_TYPE",
+                Instant.now(), Instant.now());
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.save(entry))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(jdbcTemplate);
     }
 }

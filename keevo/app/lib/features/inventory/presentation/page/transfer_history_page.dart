@@ -196,17 +196,18 @@ class _TransferHistoryPageState extends ConsumerState<TransferHistoryPage> {
         ],
       ),
 
-      // AC1 — FAB opens transfer form (Story 12.6: OWNER-only)
-      floatingActionButton: ref.watch(currentUserRoleProvider) != 'EMPLOYEE'
-          ? FloatingActionButton.extended(
-              key: const Key('new_transfer_fab_bottom'),
-              onPressed: _openNewTransfer,
-              icon: const Icon(Icons.swap_horiz_rounded),
-              label: const Text('Nouveau transfert'),
-              backgroundColor: theme.colorScheme.primary,
-              foregroundColor: Colors.white,
-            )
-          : null,
+      // AC1 — FAB opens transfer form. OWNER and EMPLOYEE (any store) can
+      // initiate a transfer — matches the header icon button above, which was
+      // never role-gated, and the backend (StockTransferController.transfer(),
+      // TransferSyncHandler), which now accepts both roles.
+      floatingActionButton: FloatingActionButton.extended(
+        key: const Key('new_transfer_fab_bottom'),
+        onPressed: _openNewTransfer,
+        icon: const Icon(Icons.swap_horiz_rounded),
+        label: const Text('Nouveau transfert'),
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: Colors.white,
+      ),
     );
   }
 }

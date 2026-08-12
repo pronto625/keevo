@@ -166,11 +166,14 @@ class StockTransferControllerTest {
             .andExpect(status().isOk());
     }
 
-    // ── Story 12.6 — POST /transfers OWNER-only ──────────────────────
+    // ── POST /transfers — OWNER and EMPLOYEE (any store) can initiate ──────
+    // Story 12.6's original OWNER-only governance was superseded: employees
+    // are the ones performing this action in practice.
 
     @Test
-    void POST_stock_transfers_employeeForbidden_shouldReturn403() throws Exception {
+    void POST_stock_transfers_employeeAllowed_shouldReturn201() throws Exception {
         authenticateAs("EMPLOYEE");
+        when(executeTransferService.execute(any())).thenReturn(completedTransfer());
 
         mockMvc.perform(post("/api/v1/stock/transfers")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -180,9 +183,9 @@ class StockTransferControllerTest {
                     "productId", prodId,
                     "quantity", 5
                 ))))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isCreated());
 
-        verify(executeTransferService, never()).execute(any());
+        verify(executeTransferService).execute(any());
     }
 
     @Test

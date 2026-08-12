@@ -88,14 +88,19 @@ class TransferSyncHandlerTest {
     }
 
     @Test
-    void handle_validTransfer_employee_rejectedForbidden() {
+    void handle_validTransfer_employee_delegates() {
+        // Story 12.6's original OWNER-only governance was superseded: employees
+        // are the ones performing this action in practice (any store).
         authenticateAsEmployee();
+        var transferId = UUID.randomUUID();
+        var mockTransfer = mock(StockTransfer.class);
+        when(mockTransfer.getId()).thenReturn(transferId);
+        when(transferStockUseCase.execute(any())).thenReturn(mockTransfer);
 
         var result = handler.handle(buildOp(), ACTOR_ID, TENANT_ID);
 
-        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
-        assertThat(result.reason()).isEqualTo("FORBIDDEN");
-        verify(transferStockUseCase, never()).execute(any());
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        verify(transferStockUseCase).execute(any());
     }
 
     @Test

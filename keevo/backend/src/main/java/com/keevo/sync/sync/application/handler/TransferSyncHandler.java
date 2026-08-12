@@ -2,8 +2,6 @@ package com.keevo.sync.sync.application.handler;
 
 import com.keevo.catalog.stock.domain.port.in.TransferStockCommand;
 import com.keevo.catalog.stock.domain.port.in.TransferStockUseCase;
-import com.keevo.shared.domain.exception.DomainException;
-import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
@@ -38,11 +36,9 @@ public class TransferSyncHandler extends AbstractSyncOperationHandler {
 
     @Override
     protected SyncOperationResult apply(SyncOperation operation, UUID actorId, String tenantId) {
-        // Story v1s-12-8 AC4: mirror StockTransferController OWNER-only guard (Story 12.6 AC7)
-        if (!isOwnerRole()) {
-            throw new DomainException(ErrorCode.FORBIDDEN, "Only OWNER can initiate stock transfers");
-        }
-
+        // OWNER and EMPLOYEE (any store) can initiate transfers — mirrors
+        // StockTransferController.transfer(), superseding the OWNER-only guard
+        // from Story v1s-12-8 AC4 / Story 12.6 AC7.
         Map<String, Object> p = operation.payload();
         // Offline-first fix: propagate the client-generated entity id as clientId so the
         // use case preserves it instead of minting a new server-side UUID (mirrors
