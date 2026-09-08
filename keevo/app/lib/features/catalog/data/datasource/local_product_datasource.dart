@@ -67,29 +67,20 @@ class LocalProductDataSource {
     return rows.map(_toModel).toList();
   }
 
-  /// Returns the set of product IDs that have a stock level entry for [storeId].
-  /// Used to filter the catalogue when an active store is selected.
-  Future<Set<String>> getProductIdsInStore(String storeId) async {
-    const sql =
-        'SELECT DISTINCT product_id FROM stock_levels WHERE store_id = ?';
-    final rows = await _db
-        .customSelect(sql, variables: [Variable.withString(storeId)]).get();
-    return rows.map((r) => r.read<String>('product_id')).toSet();
-  }
-
-  /// Returns all product IDs that have at least one stock_levels entry (any store).
-  /// Used to distinguish brand-new products (no stock yet) from products with stock.
-  Future<Set<String>> getProductIdsWithStock() async {
-    const sql = 'SELECT DISTINCT product_id FROM stock_levels';
-    final rows = await _db.customSelect(sql).get();
-    return rows.map((r) => r.read<String>('product_id')).toSet();
-  }
-
   /// Returns product IDs where stock is at or below the minimum threshold.
-  Future<Set<String>> getLowStockProductIds() async {
-    const sql = 'SELECT DISTINCT product_id FROM stock_levels '
-        'WHERE quantity <= COALESCE(NULLIF(minimum_threshold, 0), 5)';
-    final rows = await _db.customSelect(sql).get();
+  /// When [storeId] is given, only that store's stock_levels row counts —
+  /// a product that's critically low in another store must not show as
+  /// low-stock in a store where it has plenty (or no) stock of its own.
+  Future<Set<String>> getLowStockProductIds({String? storeId}) async {
+    final sql = storeId != null
+        ? 'SELECT DISTINCT product_id FROM stock_levels '
+            'WHERE store_id = ? AND quantity <= COALESCE(NULLIF(minimum_threshold, 0), 5)'
+        : 'SELECT DISTINCT product_id FROM stock_levels '
+            'WHERE quantity <= COALESCE(NULLIF(minimum_threshold, 0), 5)';
+    final rows = await _db.customSelect(
+      sql,
+      variables: storeId != null ? [Variable.withString(storeId)] : const [],
+    ).get();
     return rows.map((r) => r.read<String>('product_id')).toSet();
   }
 

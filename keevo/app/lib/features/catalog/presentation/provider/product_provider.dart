@@ -99,25 +99,16 @@ Future<List<ProductModel>> productList(ProductListRef ref) async {
   final useCase = ref.watch(getProductsUseCaseProvider);
   final local = ref.watch(localProductDataSourceProvider);
   var products = await useCase.execute(query: query.isEmpty ? null : query);
-  if (activeStoreId != null) {
-    final storeProductIds = await local.getProductIdsInStore(activeStoreId);
-    final productsWithStock = await local.getProductIdsWithStock();
-    // Include: products with stock in this store, DRAFTs (never have stock),
-    // and brand-new ACTIVE products with no stock anywhere (just promoted).
-    products = products
-        .where((p) =>
-            storeProductIds.contains(p.id) ||
-            p.status == ProductStatus.draft ||
-            !productsWithStock.contains(p.id))
-        .toList();
-  }
+  // No per-store visibility filter: the catalog lists every active/draft
+  // product tenant-wide, same as POS — a store with no stock_levels row for a
+  // product still needs to see it here to perform its first stock movement.
   final draftsOnly = ref.watch(showDraftsOnlyProvider);
   if (draftsOnly) {
     products = products.where((p) => p.status == ProductStatus.draft).toList();
   }
   final lowStockOnly = ref.watch(showLowStockOnlyProvider);
   if (lowStockOnly) {
-    final lowStockIds = await local.getLowStockProductIds();
+    final lowStockIds = await local.getLowStockProductIds(storeId: activeStoreId);
     products = products.where((p) => lowStockIds.contains(p.id)).toList();
   }
 
@@ -182,7 +173,11 @@ Future<List<ProductModel>> archivedProductList(ArchivedProductListRef ref) async
 }
 
 /// Products with zero stock (active only, excludes drafts).
-/// Applies the same active-store filter as [productListProvider].
+///
+/// Tenant-wide: no per-store visibility filter (see [productList]). A
+/// product with no stock_levels row for the active store has 0 stock there —
+/// same as POS's LEFT JOIN + COALESCE(quantity, 0) — so it counts as
+/// out-of-stock for that store, not hidden.
 @riverpod
 Future<List<ProductModel>> outOfStockProductList(OutOfStockProductListRef ref) async {
   final useCase = ref.watch(getProductsUseCaseProvider);
@@ -195,17 +190,8 @@ Future<List<ProductModel>> outOfStockProductList(OutOfStockProductListRef ref) a
       .toList();
 
   if (activeStoreId != null) {
-    final storeProductIds = await local.getProductIdsInStore(activeStoreId);
-    final productsWithStock = await local.getProductIdsWithStock();
     final storeStock = await local.getStockByStore(activeStoreId);
-    // Same inclusion rule as productList, then keep only those with zero stock
-    // in the active store (using real stock_levels, not the stale product field).
-    products = products
-        .where((p) =>
-            storeProductIds.contains(p.id) ||
-            !productsWithStock.contains(p.id))
-        .where((p) => (storeStock[p.id] ?? 0) == 0)
-        .toList();
+    products = products.where((p) => (storeStock[p.id] ?? 0) == 0).toList();
   } else {
     final totalStock = await local.getTotalStock();
     products = products.where((p) => (totalStock[p.id] ?? 0) == 0).toList();
@@ -215,7 +201,11 @@ Future<List<ProductModel>> outOfStockProductList(OutOfStockProductListRef ref) a
 }
 
 /// Products with low stock (at or below threshold, active only).
-/// Applies the same active-store filter as [productListProvider].
+///
+/// Tenant-wide: no per-store visibility filter (see [productList]). Low-stock
+/// membership itself stays scoped to the active store (via [storeId] on
+/// [LocalProductDataSource.getLowStockProductIds]) so a product that's
+/// critically low elsewhere doesn't falsely flag as low here.
 @riverpod
 Future<List<ProductModel>> lowStockProductList(LowStockProductListRef ref) async {
   final local = ref.watch(localProductDataSourceProvider);
@@ -225,17 +215,7 @@ Future<List<ProductModel>> lowStockProductList(LowStockProductListRef ref) async
   var products = await useCase.execute(query: query.isEmpty ? null : query);
   products = products.where((p) => !p.archived && p.status != ProductStatus.draft).toList();
 
-  if (activeStoreId != null) {
-    final storeProductIds = await local.getProductIdsInStore(activeStoreId);
-    final productsWithStock = await local.getProductIdsWithStock();
-    products = products
-        .where((p) =>
-            storeProductIds.contains(p.id) ||
-            !productsWithStock.contains(p.id))
-        .toList();
-  }
-
-  final lowStockIds = await local.getLowStockProductIds();
+  final lowStockIds = await local.getLowStockProductIds(storeId: activeStoreId);
   final stockMap = activeStoreId != null
       ? await local.getStockByStore(activeStoreId)
       : await local.getTotalStock();

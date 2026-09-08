@@ -173,4 +173,56 @@ void main() {
       expect(results, isEmpty);
     });
   });
+
+  group('LocalProductDataSource.getLowStockProductIds() — per-store scoping', () {
+    setUp(() async {
+      final now = DateTime.now();
+      // prod-1: critically low in store-a, plenty in store-b.
+      await db.into(db.stockLevels).insert(StockLevelsCompanion.insert(
+        id: 'sl-1',
+        productId: 'prod-1',
+        storeId: 'store-a',
+        quantity: 1,
+        minimumThreshold: const Value(5),
+        updatedAt: now,
+      ));
+      await db.into(db.stockLevels).insert(StockLevelsCompanion.insert(
+        id: 'sl-2',
+        productId: 'prod-1',
+        storeId: 'store-b',
+        quantity: 50,
+        minimumThreshold: const Value(5),
+        updatedAt: now,
+      ));
+      // prod-2: healthy stock in store-a only.
+      await db.into(db.stockLevels).insert(StockLevelsCompanion.insert(
+        id: 'sl-3',
+        productId: 'prod-2',
+        storeId: 'store-a',
+        quantity: 20,
+        minimumThreshold: const Value(5),
+        updatedAt: now,
+      ));
+    });
+
+    test('storeId scopes to that store\'s own row', () async {
+      final storeA = await sut.getLowStockProductIds(storeId: 'store-a');
+      expect(storeA, contains('prod-1'));
+      expect(storeA, isNot(contains('prod-2')));
+
+      final storeB = await sut.getLowStockProductIds(storeId: 'store-b');
+      expect(storeB, isNot(contains('prod-1')));
+    });
+
+    test('omitting storeId falls back to tenant-wide (any store) membership', () async {
+      final tenantWide = await sut.getLowStockProductIds();
+      expect(tenantWide, contains('prod-1'));
+      expect(tenantWide, isNot(contains('prod-2')));
+    });
+
+    test('a store with no stock_levels row for the product is never low-stock there', () async {
+      final storeC = await sut.getLowStockProductIds(storeId: 'store-c');
+      expect(storeC, isEmpty);
+    });
+  });
 }
