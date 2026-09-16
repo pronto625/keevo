@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/sync/sync_gate_provider.dart';
 import '../../../../core/sync/sync_gate_state.dart';
+import '../../../../core/sync/sync_rejection_messages.dart';
 import 'sync_detail_bottom_sheet.dart';
 import 'sync_required_modal.dart';
 import '../../../../core/sync/sync_status.dart';
@@ -49,6 +50,34 @@ class SyncIndicator extends ConsumerWidget {
         );
       }
       ref.read(pendingConflictNotificationsProvider.notifier).state = [];
+    });
+
+    // Notify when a queued offline operation is rejected by the server
+    // (duplicate name, plan limit, etc.) — previously silent, retried forever.
+    ref.listen<List<Map<String, dynamic>>>(pendingRejectionNotificationsProvider,
+        (prev, rejections) {
+      if (rejections.isEmpty) return;
+      for (final r in rejections) {
+        final operation = friendlySyncOperationLabel(
+            r['operation'] as String? ?? '');
+        final reason = friendlySyncRejectionReason(r['reason'] as String?);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppTheme.errorColor,
+            duration: const Duration(seconds: 6),
+            content: Text(
+              '⚠ Non synchronisé ($operation) : $reason',
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+            ),
+            action: SnackBarAction(
+              label: 'Voir',
+              textColor: Theme.of(context).colorScheme.onSurface,
+              onPressed: () => context.push('/settings/sync'),
+            ),
+          ),
+        );
+      }
+      ref.read(pendingRejectionNotificationsProvider.notifier).state = [];
     });
 
     final asyncStatus = ref.watch(syncStatusProvider);

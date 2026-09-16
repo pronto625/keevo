@@ -166,29 +166,16 @@ class _CsvImportPageState extends ConsumerState<CsvImportPage> {
   }
 
   Future<void> _downloadTemplate(BuildContext context) async {
-    final path = await ref
+    final success = await ref
         .read(csvImportNotifierProvider.notifier)
         .downloadTemplate();
-    if (!mounted) return;
-    if (path != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Modèle enregistré dans Téléchargements'),
-          behavior: SnackBarBehavior.floating,
-          action: SnackBarAction(
-            label: 'OK',
-            onPressed: () {},
-          ),
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Impossible de télécharger le modèle — connexion requise'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
+    if (!mounted || success) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Impossible de télécharger le modèle — connexion requise'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 }
 

@@ -2,11 +2,12 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:share_plus/share_plus.dart';
 
+import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../domain/model/csv_import_result.dart';
 import '../../domain/repository/product_repository.dart';
 import 'product_provider.dart';
@@ -104,6 +105,7 @@ class CsvImportNotifier extends _$CsvImportNotifier {
         csvBytes: current.bytes,
         fileName: current.fileName,
         columnMapping: mapping,
+        storeId: ref.read(activeStoreIdProvider),
       );
       state = CsvImportSuccess(result);
     } catch (e) {
@@ -111,26 +113,32 @@ class CsvImportNotifier extends _$CsvImportNotifier {
     }
   }
 
-  /// Download CSV template and save it to the Downloads folder (or Documents on
-  /// platforms where Downloads is unavailable). Returns the saved file path on
-  /// success, or null on failure.
-  Future<String?> downloadTemplate() async {
+  /// Download the CSV template and open the native share sheet so the user
+  /// can save it wherever they like (Downloads, Drive, WhatsApp, etc.).
+  ///
+  /// Writing directly to the public Downloads folder is blocked by Android's
+  /// scoped storage (API 29+) without extra permissions the app doesn't
+  /// request — a direct write silently lands in the app's private cache
+  /// instead, which looks like a success but leaves no file the user can
+  /// find. Delegating to [Share.shareXFiles] hands the save location to the
+  /// OS, which works on every platform without any storage permission.
+  ///
+  /// Returns true once the template was fetched and the share sheet opened,
+  /// false on failure (e.g. no connectivity).
+  Future<bool> downloadTemplate() async {
     try {
       final bytes = await _repo.downloadCsvTemplate();
       const fileName = 'keevo_import_template.csv';
-      Directory dir;
-      if (!kIsWeb && Platform.isAndroid) {
-        // Public Downloads folder — accessible without extra permission on API 29+
-        dir = Directory('/storage/emulated/0/Download');
-        if (!dir.existsSync()) dir = await getTemporaryDirectory();
-      } else {
-        dir = (await getDownloadsDirectory()) ?? await getApplicationDocumentsDirectory();
-      }
+      final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/$fileName');
       await file.writeAsBytes(bytes);
-      return file.path;
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'text/csv')],
+        subject: fileName,
+      );
+      return true;
     } catch (e) {
-      return null;
+      return false;
     }
   }
 

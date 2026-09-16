@@ -54,6 +54,41 @@ void main() {
       expect(find.text('test-device'), findsOneWidget);
     });
 
+    testWidgets(
+        'many active devices stay scrollable and never overflow or hide the tabs',
+        (tester) async {
+      _setPhoneSize(tester);
+      final manyDevices = List.generate(
+          10,
+          (i) => {
+                'deviceId': 'device-$i-aaaaaaaaaaaaaaaa',
+                'lastPushAt': '2024-01-01T00:00:00Z',
+              });
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          activeDevicesProvider.overrideWith((ref) => Future.value(manyDevices)),
+          syncHistoryProvider.overrideWith((ref) => Future.value([])),
+          pendingSyncQueueProvider.overrideWith((ref) => Future.value([])),
+          pendingSyncCountProvider.overrideWith((ref) => Future.value(0)),
+          syncConflictsProvider.overrideWith((ref) => Future.value([])),
+          syncStatusProvider.overrideWith(
+              (ref) => Stream.value(SyncStatus.online)),
+        ],
+        child: const MaterialApp(home: SyncSettingsPage()),
+      ));
+      await tester.pumpAndSettle();
+
+      // No RenderFlex/overflow errors were thrown during layout.
+      expect(tester.takeException(), isNull);
+      // The count header reflects all devices even though only a few fit on screen.
+      expect(find.textContaining('Appareils actifs (10)'), findsOneWidget);
+      // Tabs below the device list remain visible and reachable.
+      expect(find.text('File d\'attente'), findsOneWidget);
+      await tester.tap(find.text('File d\'attente'));
+      await tester.pumpAndSettle();
+      expect(find.text('Aucune opération en attente'), findsOneWidget);
+    });
+
     testWidgets('shows FAB for force sync', (tester) async {
       _setPhoneSize(tester);
       await tester.pumpWidget(_buildPage());

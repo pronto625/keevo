@@ -105,11 +105,25 @@ class RestSyncService implements SyncService {
           }
         } else if (status == 'REJECTED') {
           final currentOp = ops.firstWhere((o) => o.id == opId);
+          final reason = result['reason'] as String?;
+          // Surface the rejection only the first time this reason is seen for
+          // this operation — otherwise every retry (every 30s-5min) would
+          // re-notify the user for a rejection that isn't going to change.
+          if (currentOp.lastError != reason) {
+            // Enrich with operation/entity info — the server result only
+            // carries operationId/status/reason, not what was rejected.
+            conflicts.add({
+              ...result,
+              'operation': currentOp.operation,
+              'entityId': currentOp.entityId,
+            });
+          }
           await (_database.update(_database.syncQueue)
                 ..where((t) => t.id.equals(opId)))
               .write(SyncQueueCompanion(
             retryCount: Value(currentOp.retryCount + 1),
             lastAttemptAt: Value(DateTime.now()),
+            lastError: Value(reason),
           ));
         } else if (status == 'CONFLICT') {
           conflicts.add(result);

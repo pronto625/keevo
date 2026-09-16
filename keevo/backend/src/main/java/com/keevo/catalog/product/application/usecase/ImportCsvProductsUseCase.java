@@ -16,6 +16,7 @@ import com.keevo.catalog.stock.domain.service.StockOperationService;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.store.store.domain.port.out.StoreRepository;
 import com.keevo.subscription.plan.application.service.PlanLimitGuard;
 import com.keevo.subscription.plan.domain.port.out.ProductCountPort;
 import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
@@ -63,6 +64,7 @@ public class ImportCsvProductsUseCase {
     private final ProductRepository       productRepository;
     private final StockOperationService   stockOperationService;
     private final DefaultStorePort        defaultStorePort;
+    private final StoreRepository         storeRepository;
     private final ProductCountPort        productCountPort;
     private final SubscriptionRepository  subscriptionRepository;
     private final PlanLimitGuard          planLimitGuard;
@@ -76,6 +78,7 @@ public class ImportCsvProductsUseCase {
             ProductRepository productRepository,
             StockOperationService stockOperationService,
             DefaultStorePort defaultStorePort,
+            StoreRepository storeRepository,
             ProductCountPort productCountPort,
             SubscriptionRepository subscriptionRepository,
             PlanLimitGuard planLimitGuard,
@@ -87,6 +90,7 @@ public class ImportCsvProductsUseCase {
         this.productRepository     = productRepository;
         this.stockOperationService = stockOperationService;
         this.defaultStorePort      = defaultStorePort;
+        this.storeRepository       = storeRepository;
         this.productCountPort      = productCountPort;
         this.subscriptionRepository = subscriptionRepository;
         this.planLimitGuard        = planLimitGuard;
@@ -102,13 +106,16 @@ public class ImportCsvProductsUseCase {
      * @param actorId     authenticated user UUID
      * @param actorRole   "OWNER" or "EMPLOYEE" — must be "OWNER"
      * @param actorName   display name for notifications
+     * @param storeId     store to record initial stock movements against; nullable —
+     *                    falls back to {@link DefaultStorePort#getDefaultStoreId()} when absent
      */
     public record ImportCsvCommand(
             InputStream    csvStream,
             CsvColumnMapping mapping,
             UUID           actorId,
             String         actorRole,
-            String         actorName
+            String         actorName,
+            UUID           storeId
     ) {}
 
     /**
@@ -150,8 +157,10 @@ public class ImportCsvProductsUseCase {
                         (a, b) -> a   // keep first on duplicate names
                 ));
 
-        // ── 5. Resolve default store (for stock movement) ─────────────────────
-        UUID storeId = defaultStorePort.getDefaultStoreId();
+        // ── 5. Resolve target store for stock movements ───────────────────────
+        // Prefer the client's active store; fall back to the tenant's default store
+        // for older clients that don't send storeId yet.
+        UUID storeId = resolveStoreId(command.storeId());
 
         // ── 6. Import loop ────────────────────────────────────────────────────
         var builder  = new ImportResult.Builder();
@@ -242,5 +251,19 @@ public class ImportCsvProductsUseCase {
                 result.getImported(), result.getSkipped(), result.isLimitReached());
 
         return result;
+    }
+
+    private UUID resolveStoreId(UUID requestedStoreId) {
+        if (requestedStoreId == null) {
+            return defaultStorePort.getDefaultStoreId();
+        }
+        var store = storeRepository.findById(requestedStoreId)
+                .orElseThrow(() -> new DomainException(ErrorCode.STORE_NOT_FOUND,
+                        "Boutique introuvable: " + requestedStoreId));
+        if (!store.isActive()) {
+            throw new DomainException(ErrorCode.STORE_NOT_ACTIVE,
+                    "La boutique sélectionnée est désactivée: " + requestedStoreId);
+        }
+        return store.id();
     }
 }

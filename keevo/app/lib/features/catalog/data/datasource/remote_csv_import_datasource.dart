@@ -19,10 +19,15 @@ class RemoteCsvImportDataSource {
   const RemoteCsvImportDataSource({required Dio dio}) : _dio = dio;
 
   /// POST /api/v1/products/import — multipart CSV upload + column mapping.
+  ///
+  /// [storeId] is the caller's active store — used to record initial stock
+  /// movements. Omitted when the user has no store selected ("all stores"
+  /// mode), in which case the backend falls back to the tenant's default store.
   Future<CsvImportResult> importCsv({
     required Uint8List csvBytes,
     required String fileName,
     required Map<String, String> columnMapping,
+    String? storeId,
   }) async {
     try {
       final formData = FormData.fromMap({
@@ -39,6 +44,7 @@ class RemoteCsvImportDataSource {
             Headers.contentTypeHeader: ['application/json'],
           },
         ),
+        if (storeId != null) 'storeId': storeId,
       });
       final response = await _dio.post<Map<String, dynamic>>(
         '/api/v1/products/import',

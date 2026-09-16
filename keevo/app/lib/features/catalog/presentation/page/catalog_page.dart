@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/di/providers.dart';
 import '../provider/product_provider.dart';
 import '../provider/category_provider.dart';
+import '../provider/csv_import_provider.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../../stores/presentation/provider/store_provider.dart';
 import '../../domain/model/category_model.dart';
@@ -200,6 +201,8 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
                                   onSelected: (value) {
                                     if (value == 'import') {
                                       context.push('/products/import');
+                                    } else if (value == 'template') {
+                                      _downloadCsvTemplate(context);
                                     } else if (value == 'categories') {
                                       _showCategoriesBottomSheet(context);
                                     }
@@ -210,6 +213,14 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
                                       child: ListTile(
                                         leading: Icon(Icons.upload_file),
                                         title: Text('Importer CSV'),
+                                        contentPadding: EdgeInsets.zero,
+                                      ),
+                                    ),
+                                    const PopupMenuItem(
+                                      value: 'template',
+                                      child: ListTile(
+                                        leading: Icon(Icons.download_rounded),
+                                        title: Text('Télécharger le modèle CSV'),
                                         contentPadding: EdgeInsets.zero,
                                       ),
                                     ),
@@ -402,6 +413,20 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  // ── CSV template quick download ─────────────────────────────────────────────
+
+  Future<void> _downloadCsvTemplate(BuildContext context) async {
+    final success =
+        await ref.read(csvImportNotifierProvider.notifier).downloadTemplate();
+    if (!mounted || success) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Impossible de télécharger le modèle — connexion requise'),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }

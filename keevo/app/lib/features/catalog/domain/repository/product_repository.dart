@@ -61,10 +61,14 @@ abstract interface class ProductRepository {
   Future<void> syncFromRemote();
 
   /// Upload CSV bytes to backend for bulk import (AC2 — requires connectivity).
+  ///
+  /// [storeId] identifies the caller's active store — initial stock movements
+  /// are recorded against it. Null falls back to the tenant's default store.
   Future<CsvImportResult> importCsv({
     required Uint8List csvBytes,
     required String fileName,
     required Map<String, String> columnMapping,
+    String? storeId,
   });
 
   /// Download the CSV import template from backend (AC5).

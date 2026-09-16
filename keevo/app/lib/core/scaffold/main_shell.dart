@@ -112,28 +112,52 @@ class _MainShellState extends ConsumerState<MainShell> {
     return 'LINUX';
   }
 
-  Future<void> _checkAutoClosureNotifications() async {
-    if (!mounted) return;
-    final db = ref.read(appDatabaseProvider);
-    final prefs = ref.read(sharedPreferencesProvider);
-    final checker = AutoClosureNotificationChecker(db: db, prefs: prefs);
-    final unnotified = await checker.getUnnotified();
-    if (!mounted || unnotified.isEmpty) return;
+  // MainShell sits under a plain ShellRoute and can be disposed/recreated
+  // mid-session (e.g. the global auth redirect bouncing through /splash).
+  // This guard is process-lifetime (static, not per-instance) so a second
+  // concurrent run never races the first one's read of "already notified"
+  // IDs before it has had a chance to persist them.
+  static bool _autoClosureCheckInFlight = false;
 
-    final dateFormat = DateFormat('d MMMM yyyy', 'fr_FR');
-    final messenger = ScaffoldMessenger.of(context);
-    for (final closure in unnotified) {
-      messenger.showSnackBar(SnackBar(
-        content: Text(
-          'Clôture automatique\u202f: ${closure.storeName} — ${dateFormat.format(closure.closedAt)}',
-        ),
-        duration: const Duration(seconds: 5),
-        behavior: SnackBarBehavior.floating,
-      ));
-      // Slight delay between multiple SnackBars to avoid overlap.
-      await Future.delayed(const Duration(milliseconds: 300));
+  Future<void> _checkAutoClosureNotifications() async {
+    if (_autoClosureCheckInFlight) return;
+    _autoClosureCheckInFlight = true;
+    try {
+      if (!mounted) return;
+      final db = ref.read(appDatabaseProvider);
+      final prefs = ref.read(sharedPreferencesProvider);
+      final checker = AutoClosureNotificationChecker(db: db, prefs: prefs);
+      final unnotified = await checker.getUnnotified();
+      if (unnotified.isEmpty) return;
+
+      final dateFormat = DateFormat('d MMMM yyyy', 'fr_FR');
+      for (final closure in unnotified) {
+        // Persist "seen" BEFORE showing: if the widget is disposed or an
+        // error interrupts this loop, the closure must never come back on
+        // the next check instead of being shown once and then looping forever.
+        await checker.markNotified([closure.id]);
+        if (!mounted) continue;
+        // MaterialBanner (top, under the AppBar) instead of a SnackBar: the
+        // SnackBar sat near the bottom nav bar and got in the way of work.
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.showMaterialBanner(MaterialBanner(
+          leading: const Icon(Icons.event_available_outlined),
+          content: Text(
+            'Clôture automatique\u202f: ${closure.storeName} — ${dateFormat.format(closure.closedAt)}',
+          ),
+          actions: [
+            TextButton(
+              onPressed: messenger.hideCurrentMaterialBanner,
+              child: const Text('OK'),
+            ),
+          ],
+        ));
+        await Future.delayed(const Duration(seconds: 5));
+        if (mounted) messenger.hideCurrentMaterialBanner();
+      }
+    } finally {
+      _autoClosureCheckInFlight = false;
     }
-    await checker.markNotified(unnotified.map((c) => c.id).toList());
   }
 
   /// Checks on app startup whether a day closure was missed (e.g., backend

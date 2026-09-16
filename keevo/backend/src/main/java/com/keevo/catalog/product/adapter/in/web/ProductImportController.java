@@ -88,18 +88,24 @@ public class ProductImportController {
      * POST /api/v1/products/import
      * Multipart: {@code file} (CSV) + {@code mapping} (JSON string of CsvColumnMappingRequestDto).
      *
+     * <p>{@code storeId} is optional — it identifies the caller's active store, used to
+     * record initial stock movements. Omitted (or from an older client) falls back to the
+     * tenant's default store.
+     *
      * <p>Example curl (see keevo/scripts/curl-tests-story-2-4.sh):
      * <pre>{@code
      *   curl -X POST .../import \
      *     -H "Authorization: Bearer <token>" \
      *     -F "file=@products.csv" \
-     *     -F 'mapping={"nameColumn":"nom","priceColumn":"prix_vente"}'
+     *     -F 'mapping={"nameColumn":"nom","priceColumn":"prix_vente"}' \
+     *     -F "storeId=<uuid>"
      * }</pre>
      */
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponseWrapper<ImportResultResponseDto>> importCsv(
             @RequestPart("file") MultipartFile file,
-            @RequestPart("mapping") String mappingJson) throws IOException {
+            @RequestPart("mapping") String mappingJson,
+            @RequestPart(value = "storeId", required = false) String storeIdRaw) throws IOException {
 
         // Parse mapping JSON
         CsvColumnMappingRequestDto mappingRequest = parseMappingJson(mappingJson);
@@ -120,6 +126,7 @@ public class ProductImportController {
 
         UUID actorId   = extractActorId();
         String actorRole = extractRole();
+        UUID storeId   = parseStoreId(storeIdRaw);
 
         var mapping = new CsvColumnMapping(
                 mappingRequest.nameColumn(),
@@ -137,7 +144,8 @@ public class ProductImportController {
                 mapping,
                 actorId,
                 actorRole,
-                actorId.toString()   // actorName — fallback to UUID until user-profile API exists
+                actorId.toString(),  // actorName — fallback to UUID until user-profile API exists
+                storeId
         );
 
         var result = importUseCase.execute(command);
@@ -202,6 +210,18 @@ public class ProductImportController {
                 .map(a -> a.startsWith("ROLE_") ? a.substring(5) : a)
                 .orElseThrow(() -> new DomainException(ErrorCode.FORBIDDEN,
                         "Rôle introuvable dans le jeton d'authentification"));
+    }
+
+    private UUID parseStoreId(String storeIdRaw) {
+        if (storeIdRaw == null || storeIdRaw.isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(storeIdRaw.trim());
+        } catch (IllegalArgumentException e) {
+            throw new DomainException(ErrorCode.VALIDATION_ERROR,
+                    "Le champ 'storeId' n'est pas un UUID valide: " + storeIdRaw);
+        }
     }
 
     private CsvColumnMappingRequestDto parseMappingJson(String json) {

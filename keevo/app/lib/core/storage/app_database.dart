@@ -90,7 +90,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 26;
+  int get schemaVersion => 27;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -267,6 +267,11 @@ class AppDatabase extends _$AppDatabase {
         // (traceability for offline inventory adjustments).
         await migrator.addColumn(stockMovements, stockMovements.source);
         await migrator.addColumn(stockMovements, stockMovements.inventorySessionId);
+      }
+      if (from < 27) {
+        // sync_queue: add lastError to surface REJECTED sync operations to
+        // the user instead of retrying them silently forever.
+        await migrator.addColumn(syncQueue, syncQueue.lastError);
       }
     },
   );

@@ -31,6 +31,14 @@ part 'sync_trigger_notifier.g.dart';
 final pendingConflictNotificationsProvider =
     StateProvider<List<Map<String, dynamic>>>((ref) => []);
 
+/// Provider for pending sync-rejection notifications.
+///
+/// Populated with newly-REJECTED operations (business validation failures —
+/// duplicate name, plan limit, etc.) that haven't already been surfaced for
+/// their current reason. SyncIndicator listens and shows SnackBars.
+final pendingRejectionNotificationsProvider =
+    StateProvider<List<Map<String, dynamic>>>((ref) => []);
+
 // ── State ─────────────────────────────────────────────────────────────────────
 
 sealed class SyncTriggerState {
@@ -164,20 +172,7 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
         // Non-423 push failure: proceed with pull (pull is NOT gated)
       }
 
-      // Notify UI about STOCK_NEGATIVE conflicts via provider (AC8)
-      final stockConflicts = conflicts
-          .where((c) => c['status'] == 'CONFLICT')
-          .toList();
-      if (stockConflicts.isNotEmpty) {
-        ref.read(pendingConflictNotificationsProvider.notifier).state =
-            stockConflicts;
-      }
-      // Log LWW conflicts silently (LAST_WRITE_WINS — no user notification)
-      for (final c in conflicts) {
-        if (c['status'] == 'APPLIED' && c['conflictData'] != null) {
-          dev.log('LWW overwrite detected', name: 'SyncTrigger');
-        }
-      }
+      _handlePushResults(conflicts);
 
       // Step 2: Pull server delta
       try {
@@ -211,7 +206,8 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
     state = const SyncTriggerState.syncing();
     try {
       final syncService = ref.read(syncServiceProvider);
-      await syncService.push();
+      final results = await syncService.push();
+      _handlePushResults(results);
       _consecutiveFailures = 0;
       _firstFailureAt = null;
       _invalidateAllProviders();
@@ -220,6 +216,32 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
       _consecutiveFailures++;
       _firstFailureAt ??= DateTime.now();
       _scheduleRetry();
+    }
+  }
+
+  /// Dispatches push() results to the right notification channel:
+  /// CONFLICT → stock conflict banner (AC8), newly-REJECTED → rejection
+  /// banner, APPLIED-with-LWW → silent log only.
+  void _handlePushResults(List<Map<String, dynamic>> results) {
+    final stockConflicts =
+        results.where((c) => c['status'] == 'CONFLICT').toList();
+    if (stockConflicts.isNotEmpty) {
+      ref.read(pendingConflictNotificationsProvider.notifier).state =
+          stockConflicts;
+    }
+
+    final rejections =
+        results.where((c) => c['status'] == 'REJECTED').toList();
+    if (rejections.isNotEmpty) {
+      ref.read(pendingRejectionNotificationsProvider.notifier).state =
+          rejections;
+    }
+
+    // Log LWW conflicts silently (LAST_WRITE_WINS — no user notification)
+    for (final c in results) {
+      if (c['status'] == 'APPLIED' && c['conflictData'] != null) {
+        dev.log('LWW overwrite detected', name: 'SyncTrigger');
+      }
     }
   }
 

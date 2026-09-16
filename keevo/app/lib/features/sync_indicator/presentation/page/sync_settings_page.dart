@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/sync/domain/sync_conflict.dart';
 import '../../../../core/sync/domain/sync_conflict_provider.dart';
 import '../../../../core/sync/sync_monitoring_providers.dart';
+import '../../../../core/sync/sync_rejection_messages.dart';
 import '../../../../core/sync/sync_status.dart';
 import '../../../../core/sync/sync_status_provider.dart';
 import '../../../../core/sync/sync_trigger_notifier.dart';
@@ -76,9 +77,15 @@ class SyncSettingsPage extends ConsumerWidget {
 
 // ── Active Devices Section ──────────────────────────────────────────
 
+// Above this count, the device list gets a bounded height + internal scroll
+// instead of growing forever and squeezing the tabs below off-screen.
+const _kMaxVisibleDevicesBeforeScroll = 3;
+const _kDeviceListMaxHeight = 220.0;
+
 class _ActiveDevicesSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
     final asyncDevices = ref.watch(activeDevicesProvider);
 
     return Padding(
@@ -87,22 +94,47 @@ class _ActiveDevicesSection extends ConsumerWidget {
         data: (devices) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Appareils actifs (${devices.length})',
-              style: Theme.of(context).textTheme.titleSmall,
+            Row(
+              children: [
+                Icon(Icons.devices_rounded,
+                    size: 16, color: theme.colorScheme.onSurfaceVariant),
+                const SizedBox(width: 6),
+                Text(
+                  'Appareils actifs (${devices.length})',
+                  style: theme.textTheme.titleSmall,
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             if (devices.isEmpty)
               Text('Aucun appareil synchronisé',
-                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))
+                  style: TextStyle(color: theme.colorScheme.onSurfaceVariant))
             else
-              ...devices.map((d) => _DeviceTile(device: d)),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: devices.length > _kMaxVisibleDevicesBeforeScroll
+                      ? _kDeviceListMaxHeight
+                      : double.infinity,
+                ),
+                child: Scrollbar(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    padding: EdgeInsets.zero,
+                    physics: devices.length > _kMaxVisibleDevicesBeforeScroll
+                        ? const ClampingScrollPhysics()
+                        : const NeverScrollableScrollPhysics(),
+                    itemCount: devices.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 6),
+                    itemBuilder: (_, i) => _DeviceTile(device: devices[i]),
+                  ),
+                ),
+              ),
           ],
         ),
         loading: () =>
             const Center(child: CircularProgressIndicator.adaptive()),
         error: (_, __) => Text('Impossible de charger les appareils',
-            style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
       ),
     );
   }
@@ -114,34 +146,76 @@ class _DeviceTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final deviceId = device['deviceId'] ?? '-';
-    final lastPush = device['lastPushAt'] ?? '';
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+    final theme = Theme.of(context);
+    final deviceId = (device['deviceId'] as String?) ?? '-';
+    final lastPushRaw = device['lastPushAt'] as String?;
+    final lastPush = (lastPushRaw != null && lastPushRaw.isNotEmpty)
+        ? DateTime.tryParse(lastPushRaw)
+        : null;
+    final freshness = _freshnessColor(lastPush);
+    final shortId = deviceId.length > 13
+        ? '${deviceId.substring(0, 13)}…'
+        : deviceId;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(10),
+      ),
       child: Row(
         children: [
-          Icon(Icons.phone_android, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(deviceId,
-                style: const TextStyle(fontSize: 13),
-                overflow: TextOverflow.ellipsis),
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: freshness.withOpacity(0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.phone_android_rounded, size: 15, color: freshness),
           ),
-          Text(
-            lastPush.isNotEmpty ? _formatDate(lastPush) : '-',
-            style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  shortId,
+                  style: const TextStyle(
+                      fontSize: 12,
+                      fontFamily: 'monospace',
+                      fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  lastPush != null
+                      ? 'Vu ${_humanizeDuration(DateTime.now().difference(lastPush))}'
+                      : 'Jamais synchronisé',
+                  style: TextStyle(
+                      fontSize: 11, color: theme.colorScheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: freshness, shape: BoxShape.circle),
           ),
         ],
       ),
     );
   }
 
-  String _formatDate(String iso) {
-    try {
-      return DateFormat('dd/MM HH:mm').format(DateTime.parse(iso));
-    } catch (_) {
-      return iso;
-    }
+  Color _freshnessColor(DateTime? lastPush) {
+    if (lastPush == null) return Colors.grey;
+    final diff = DateTime.now().difference(lastPush);
+    if (diff.inHours < 1) return AppTheme.success;
+    if (diff.inHours < 24) return AppTheme.warning;
+    return AppTheme.errorColor;
   }
 }
 
@@ -370,21 +444,43 @@ class _QueueTile extends StatelessWidget {
             ? op.entityId!.substring(0, 8)
             : op.entityId!
         : '-';
+    final isRejected = op.lastError != null;
     return ListTile(
       dense: true,
-      leading: const Icon(Icons.pending_actions, size: 20, color: AppTheme.warning),
-      title: Text(op.operation, style: const TextStyle(fontSize: 13)),
-      subtitle: Text(
-        '$entityLabel — $timeInQueue — ${op.retryCount} tentative${op.retryCount != 1 ? 's' : ''}',
-        style: const TextStyle(fontSize: 11),
+      leading: Icon(
+        isRejected ? Icons.error_outline : Icons.pending_actions,
+        size: 20,
+        color: isRejected ? AppTheme.errorColor : AppTheme.warning,
+      ),
+      title: Text(friendlySyncOperationLabel(op.operation),
+          style: const TextStyle(fontSize: 13)),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$entityLabel — $timeInQueue — ${op.retryCount} tentative${op.retryCount != 1 ? 's' : ''}',
+            style: const TextStyle(fontSize: 11),
+          ),
+          if (isRejected)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                friendlySyncRejectionReason(op.lastError),
+                style: const TextStyle(
+                    fontSize: 11,
+                    color: AppTheme.errorColor,
+                    fontWeight: FontWeight.w500),
+              ),
+            ),
+        ],
       ),
     );
   }
+}
 
-  String _humanizeDuration(Duration d) {
-    if (d.inMinutes < 1) return 'à l\'instant';
-    if (d.inMinutes < 60) return 'il y a ${d.inMinutes} min';
-    if (d.inHours < 24) return 'il y a ${d.inHours} h';
-    return 'il y a ${d.inDays} j';
-  }
+String _humanizeDuration(Duration d) {
+  if (d.inMinutes < 1) return 'à l\'instant';
+  if (d.inMinutes < 60) return 'il y a ${d.inMinutes} min';
+  if (d.inHours < 24) return 'il y a ${d.inHours} h';
+  return 'il y a ${d.inDays} j';
 }

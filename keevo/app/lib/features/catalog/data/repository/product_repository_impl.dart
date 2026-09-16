@@ -270,12 +270,14 @@ class ProductRepositoryImpl implements ProductRepository {
     required Uint8List csvBytes,
     required String fileName,
     required Map<String, String> columnMapping,
+    String? storeId,
   }) async {
     // Import requires connectivity — no offline fallback for bulk import.
     final result = await _remoteCsv.importCsv(
       csvBytes: csvBytes,
       fileName: fileName,
       columnMapping: columnMapping,
+      storeId: storeId,
     );
     // Pull newly imported products into local cache.
     await syncFromRemote();

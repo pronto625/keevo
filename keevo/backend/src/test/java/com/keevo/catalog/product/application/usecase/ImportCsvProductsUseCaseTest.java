@@ -14,6 +14,9 @@ import com.keevo.catalog.stock.domain.service.StockOperationService;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.store.store.domain.model.Store;
+import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.store.domain.port.out.StoreRepository;
 import com.keevo.subscription.plan.application.service.PlanLimitGuard;
 import com.keevo.identity.auth.domain.model.PlanType;
 import com.keevo.subscription.plan.domain.port.out.ProductCountPort;
@@ -55,6 +58,7 @@ class ImportCsvProductsUseCaseTest {
     @Mock private ProductRepository       productRepository;
     @Mock private StockOperationService   stockOperationService;
     @Mock private DefaultStorePort        defaultStorePort;
+    @Mock private StoreRepository         storeRepository;
     @Mock private ProductCountPort        productCountPort;
     @Mock private SubscriptionRepository  subscriptionRepository;
     @Mock private PlanLimitGuard          planLimitGuard;
@@ -69,7 +73,7 @@ class ImportCsvProductsUseCaseTest {
     void setUp() {
         useCase = new ImportCsvProductsUseCase(
                 csvParser, rowFactory, createProductUseCase, productRepository,
-                stockOperationService, defaultStorePort, productCountPort,
+                stockOperationService, defaultStorePort, storeRepository, productCountPort,
                 subscriptionRepository, planLimitGuard, categoryRepository, eventPublisher);
     }
 
@@ -79,8 +83,21 @@ class ImportCsvProductsUseCaseTest {
         return new ImportCsvProductsUseCase.ImportCsvCommand(
                 new ByteArrayInputStream(new byte[0]),
                 new CsvColumnMapping("nom", "prix_vente", null, null, null, null, null, null),
-                actorId, "OWNER", "Simon"
+                actorId, "OWNER", "Simon", null
         );
+    }
+
+    private ImportCsvProductsUseCase.ImportCsvCommand ownerCommandForStore(UUID requestedStoreId) {
+        return new ImportCsvProductsUseCase.ImportCsvCommand(
+                new ByteArrayInputStream(new byte[0]),
+                new CsvColumnMapping("nom", "prix_vente", null, null, null, null, null, null),
+                actorId, "OWNER", "Simon", requestedStoreId
+        );
+    }
+
+    private Store stubStore(UUID id, boolean isActive) {
+        return new Store(id, "Boutique", StoreType.STORE, null, null, isActive,
+                Instant.now(), Instant.now());
     }
 
     private Product stubProduct(String name) {
@@ -105,7 +122,7 @@ class ImportCsvProductsUseCaseTest {
         var cmd = new ImportCsvProductsUseCase.ImportCsvCommand(
                 new ByteArrayInputStream(new byte[0]),
                 new CsvColumnMapping("nom", "prix_vente", null, null, null, null, null, null),
-                actorId, "EMPLOYEE", "Loïc"
+                actorId, "EMPLOYEE", "Loïc", null
         );
 
         var ex = assertThrows(DomainException.class, () -> useCase.execute(cmd));
@@ -247,6 +264,67 @@ class ImportCsvProductsUseCaseTest {
             boolean csvEventPublished = eventCaptor.getAllValues().stream()
                     .anyMatch(e -> e instanceof CsvImportCompletedEvent);
             assertTrue(csvEventPublished, "CsvImportCompletedEvent doit être émis après la boucle");
+        }
+    }
+
+    @Test
+    @DisplayName("shouldRecordStockAgainstRequestedActiveStoreWhenProvided")
+    void shouldRecordStockAgainstRequestedActiveStoreWhenProvided() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            stubPlan(500, 0);
+            UUID activeStoreId = UUID.randomUUID();
+            when(storeRepository.findById(activeStoreId)).thenReturn(Optional.of(stubStore(activeStoreId, true)));
+            when(categoryRepository.findAllActive()).thenReturn(List.of());
+
+            var row = Map.of("nom", "Produit", "prix_vente", "1000");
+            when(csvParser.parse(any())).thenReturn(List.of(row));
+            var dto = new CreateProductUseCase.CreateProductDto("Produit", null, null, null, 1000, 0, 0, 5, actorId);
+            when(rowFactory.fromRow(any(), any(), anyInt(), any(), any())).thenReturn(dto);
+            when(productRepository.existsByName("Produit")).thenReturn(false);
+            when(createProductUseCase.execute(dto)).thenReturn(stubProduct("Produit"));
+
+            useCase.execute(ownerCommandForStore(activeStoreId));
+
+            verify(stockOperationService).recordOperation(
+                    any(), isNull(), eq(activeStoreId), any(), eq(5), eq(actorId), anyString());
+            verifyNoInteractions(defaultStorePort);
+        }
+    }
+
+    @Test
+    @DisplayName("shouldThrowStoreNotFoundWhenRequestedStoreDoesNotExist")
+    void shouldThrowStoreNotFoundWhenRequestedStoreDoesNotExist() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            stubPlan(500, 0);
+            UUID missingStoreId = UUID.randomUUID();
+            when(storeRepository.findById(missingStoreId)).thenReturn(Optional.empty());
+            when(categoryRepository.findAllActive()).thenReturn(List.of());
+            when(csvParser.parse(any())).thenReturn(List.of(Map.of("nom", "Produit", "prix_vente", "1000")));
+
+            var cmd = ownerCommandForStore(missingStoreId);
+            var ex = assertThrows(DomainException.class, () -> useCase.execute(cmd));
+            assertEquals(ErrorCode.STORE_NOT_FOUND.name(), ex.getDomainCode());
+            verifyNoInteractions(createProductUseCase);
+        }
+    }
+
+    @Test
+    @DisplayName("shouldThrowStoreNotActiveWhenRequestedStoreIsDisabled")
+    void shouldThrowStoreNotActiveWhenRequestedStoreIsDisabled() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            stubPlan(500, 0);
+            UUID inactiveStoreId = UUID.randomUUID();
+            when(storeRepository.findById(inactiveStoreId)).thenReturn(Optional.of(stubStore(inactiveStoreId, false)));
+            when(categoryRepository.findAllActive()).thenReturn(List.of());
+            when(csvParser.parse(any())).thenReturn(List.of(Map.of("nom", "Produit", "prix_vente", "1000")));
+
+            var cmd = ownerCommandForStore(inactiveStoreId);
+            var ex = assertThrows(DomainException.class, () -> useCase.execute(cmd));
+            assertEquals(ErrorCode.STORE_NOT_ACTIVE.name(), ex.getDomainCode());
+            verifyNoInteractions(createProductUseCase);
         }
     }
 }

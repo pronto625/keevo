@@ -12,6 +12,10 @@ import 'package:drift/drift.dart';
 ///   retryCount    — Number of push attempts (Story 5.1)
 ///   lastAttemptAt — Timestamp of last push attempt (Story 5.1)
 ///   entityId      — Identifier of the entity being synced (Story 5.1)
+///   lastError     — Server rejection reason (domain error code), if the most
+///                   recent push attempt was REJECTED. Null while pending or
+///                   after a successful push. Used to notify the user once
+///                   per distinct reason instead of retrying silently forever.
 class SyncQueue extends Table {
   TextColumn get id => text()();
   TextColumn get operation => text()();
@@ -21,6 +25,7 @@ class SyncQueue extends Table {
   IntColumn get retryCount => integer().withDefault(const Constant(0))();
   DateTimeColumn get lastAttemptAt => dateTime().nullable()();
   TextColumn get entityId => text().nullable()();
+  TextColumn get lastError => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
