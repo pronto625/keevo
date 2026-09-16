@@ -4,8 +4,10 @@
 _bmad/                  # BMAD framework engine (agents, workflows, configs) — local only
 # _bmad-output/ is intentionally tracked — it contains project documentation (PRD, architecture, epics, stories)
 .agent/
+.agents/
 .claude/
 .cursor/
+.opencode/
 .vscode/
 .github/agents/
 .github/prompts/
