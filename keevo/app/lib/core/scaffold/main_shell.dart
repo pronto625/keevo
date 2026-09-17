@@ -137,27 +137,63 @@ class _MainShellState extends ConsumerState<MainShell> {
         // the next check instead of being shown once and then looping forever.
         await checker.markNotified([closure.id]);
         if (!mounted) continue;
-        // MaterialBanner (top, under the AppBar) instead of a SnackBar: the
-        // SnackBar sat near the bottom nav bar and got in the way of work.
-        final messenger = ScaffoldMessenger.of(context);
-        messenger.showMaterialBanner(MaterialBanner(
-          leading: const Icon(Icons.event_available_outlined),
-          content: Text(
-            'Clôture automatique\u202f: ${closure.storeName} — ${dateFormat.format(closure.closedAt)}',
-          ),
-          actions: [
-            TextButton(
-              onPressed: messenger.hideCurrentMaterialBanner,
-              child: const Text('OK'),
-            ),
-          ],
-        ));
-        await Future.delayed(const Duration(seconds: 5));
-        if (mounted) messenger.hideCurrentMaterialBanner();
+        await _showTopClosureNotice(
+          'Clôture automatique\u202f: ${closure.storeName} — ${dateFormat.format(closure.closedAt)}',
+        );
       }
     } finally {
       _autoClosureCheckInFlight = false;
     }
+  }
+
+  /// Shows [message] as a small floating card pinned near the top of the
+  /// screen, using the Overlay directly (not MaterialBanner/SnackBar) so it
+  /// never resizes the Scaffold body underneath it — a MaterialBanner is part
+  /// of the layout and visibly shifts the page down/up as it appears/hides.
+  Future<void> _showTopClosureNotice(String message) async {
+    final overlayState = Overlay.of(context);
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (overlayContext) {
+        final theme = Theme.of(overlayContext);
+        return Positioned(
+          top: MediaQuery.of(overlayContext).padding.top + 8,
+          left: 12,
+          right: 12,
+          child: Material(
+            elevation: 4,
+            borderRadius: BorderRadius.circular(12),
+            color: theme.colorScheme.inverseSurface,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(Icons.event_available_outlined,
+                      color: theme.colorScheme.onInverseSurface),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      message,
+                      style: TextStyle(color: theme.colorScheme.onInverseSurface),
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close,
+                        size: 18, color: theme.colorScheme.onInverseSurface),
+                    onPressed: () {
+                      if (entry.mounted) entry.remove();
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    overlayState.insert(entry);
+    await Future.delayed(const Duration(seconds: 5));
+    if (entry.mounted) entry.remove();
   }
 
   /// Checks on app startup whether a day closure was missed (e.g., backend
