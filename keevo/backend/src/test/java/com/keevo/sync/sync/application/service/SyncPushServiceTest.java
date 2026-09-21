@@ -259,4 +259,26 @@ class SyncPushServiceTest {
         assertThat(captor.getValue().payload()).containsEntry("productId", "existing-id")
                 .containsEntry("quantity", 5);
     }
+
+    @Test
+    void pushBatch_rollbackOnlyAfterHandlerRejection_keepsTheRealReason() {
+        var op = new SyncOperation("op-1", "STOCK_ADJUST", "e1", Map.of(), Instant.now());
+        SyncOperationHandler stockHandler = mock(SyncOperationHandler.class);
+
+        when(logRepository.existsById(any())).thenReturn(false);
+        when(handlerRegistry.resolve("STOCK_ADJUST")).thenReturn(Optional.of(stockHandler));
+        when(stockHandler.handle(any(), eq(ACTOR_ID), eq(TENANT_ID)))
+                .thenReturn(new SyncOperationResult("op-1", SyncOperationStatus.REJECTED, null, "PRODUCT_NOT_FOUND"));
+        // The @Transactional use case already flagged the shared tx rollback-only, so the commit
+        // (here: the first log save) fails; the second save is the fresh-transaction fallback.
+        doThrow(new org.springframework.transaction.UnexpectedRollbackException("marked as rollback-only"))
+                .doNothing()
+                .when(logRepository).save(any());
+
+        SyncBatchResult result = service.pushBatch(new com.keevo.sync.sync.domain.port.in.SyncUseCase.PushBatchCommand(
+                ACTOR_ID, TENANT_ID, "device-1", List.of(op)));
+
+        assertThat(result.results().get(0).status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.results().get(0).reason()).isEqualTo("PRODUCT_NOT_FOUND");
+    }
 }

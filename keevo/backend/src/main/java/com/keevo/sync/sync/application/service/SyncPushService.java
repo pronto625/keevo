@@ -140,9 +140,13 @@ public class SyncPushService implements SyncUseCase {
         for (SyncOperation operation : sorted) {
             // Each operation runs in its own transaction — one failure does NOT roll back others (AC3)
             SyncOperationResult result;
+            // Keeps what the handler decided even if the commit later fails, so the real
+            // rejection reason (e.g. PRODUCT_NOT_FOUND) is not lost behind a generic one.
+            var handlerOutcome = new java.util.concurrent.atomic.AtomicReference<SyncOperationResult>();
             try {
                 result = transactionTemplate.execute(status -> {
                     SyncOperationResult opResult = processOperation(operation, command);
+                    handlerOutcome.set(opResult);
 
                     // Skip saving the log entry for DUPLICATE operations — the entry already exists
                     // and attempting to save it again would cause a primary key constraint violation.
@@ -166,7 +170,13 @@ public class SyncPushService implements SyncUseCase {
                 // The data operation was rolled back — record REJECTED in a fresh transaction.
                 log.warn("[Sync] TX rolled back for operation {} ({}): {}",
                         operation.operationId(), operation.operationType(), e.getMessage());
-                result = rejectAfterRollback(operation, "TRANSACTION_ROLLED_BACK");
+                // A @Transactional use case that throws a DomainException (PRODUCT_NOT_FOUND, ...)
+                // marks the shared transaction rollback-only even though the handler already mapped
+                // it to REJECTED with the precise reason — keep that reason.
+                var decided = handlerOutcome.get();
+                String reason = decided != null && decided.status() == SyncOperationStatus.REJECTED
+                        && decided.reason() != null ? decided.reason() : "TRANSACTION_ROLLED_BACK";
+                result = rejectAfterRollback(operation, reason);
             } catch (DataIntegrityViolationException e) {
                 // A DB constraint (e.g. uq_products_name) fires at flush/commit time, i.e. AFTER the
                 // handler returned, so AbstractSyncOperationHandler never sees it. Without this catch
