@@ -62,6 +62,12 @@ public class ProductRepositoryAdapter implements ProductRepository {
     }
 
     @Override
+    public Optional<Product> findByName(String name) {
+        return springRepository.findByNameIgnoreCase(name == null ? "" : name.trim())
+                .map(this::toDomain);
+    }
+
+    @Override
     public boolean existsByName(String name) {
         return springRepository.existsByNameIgnoreCase(name == null ? "" : name.trim());
     }

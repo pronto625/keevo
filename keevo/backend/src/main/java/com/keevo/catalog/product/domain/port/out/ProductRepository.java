@@ -68,6 +68,9 @@ public interface ProductRepository {
      */
     boolean existsByName(String name);
 
+    /** Case-insensitive, trimmed lookup by name — same key as {@link #existsByName}. */
+    Optional<Product> findByName(String name);
+
     /**
      * Archives a product (soft delete)
      * Sets archived=true without physically removing the data.

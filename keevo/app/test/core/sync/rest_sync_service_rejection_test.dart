@@ -77,7 +77,8 @@ void main() {
         ));
   }
 
-  void stubPushResponse(String opId, String status, {String? reason}) {
+  void stubPushResponse(String opId, String status,
+      {String? reason, String? serverEntityId}) {
     when(() => mockDio.post<dynamic>(any(), data: any(named: 'data')))
         .thenAnswer((_) async => Response(
               requestOptions: RequestOptions(path: '/api/v1/sync/push'),
@@ -88,7 +89,7 @@ void main() {
                     {
                       'operationId': opId,
                       'status': status,
-                      'serverEntityId': null,
+                      'serverEntityId': serverEntityId,
                       'reason': reason,
                       'conflictData': null,
                     }
@@ -156,5 +157,38 @@ void main() {
 
     final remaining = await db.select(db.syncQueue).get();
     expect(remaining, hasLength(1));
+  });
+
+  test(
+      'CREATE_PRODUCT merged server-side into an existing product drops the '
+      'local duplicate product and its local stock rows', () async {
+    final now = DateTime.now();
+    await db.into(db.products).insert(ProductsCompanion.insert(
+        id: 'local-1', name: 'Pantalon', createdAt: now, updatedAt: now));
+    await db.into(db.products).insert(ProductsCompanion.insert(
+        id: 'other', name: 'Autre', createdAt: now, updatedAt: now));
+    await insertPendingOp(
+        id: 'op-1', operation: 'CREATE_PRODUCT', entityId: 'local-1');
+    stubPushResponse('op-1', 'APPLIED', serverEntityId: 'server-9');
+
+    await syncService.push();
+
+    final ids = (await db.select(db.products).get()).map((p) => p.id).toList();
+    expect(ids, ['other'], reason: 'only the merged local duplicate is removed');
+    expect(await db.select(db.syncQueue).get(), isEmpty);
+  });
+
+  test('CREATE_PRODUCT applied under its own id keeps the local product',
+      () async {
+    final now = DateTime.now();
+    await db.into(db.products).insert(ProductsCompanion.insert(
+        id: 'local-1', name: 'Pantalon', createdAt: now, updatedAt: now));
+    await insertPendingOp(
+        id: 'op-1', operation: 'CREATE_PRODUCT', entityId: 'local-1');
+    stubPushResponse('op-1', 'APPLIED', serverEntityId: 'local-1');
+
+    await syncService.push();
+
+    expect(await db.select(db.products).get(), hasLength(1));
   });
 }

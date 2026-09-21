@@ -57,6 +57,15 @@ class RestSyncService implements SyncService {
     return allConflicts;
   }
 
+  Future<void> _dropMergedLocalProduct(String localProductId) async {
+    for (final table in const ['stock_levels', 'stock_movements']) {
+      await _database.customStatement(
+          'DELETE FROM $table WHERE product_id = ?', [localProductId]);
+    }
+    await _database
+        .customStatement('DELETE FROM products WHERE id = ?', [localProductId]);
+  }
+
   Future<List<Map<String, dynamic>>> _pushBatch(List<SyncQueueData> ops) async {
     final payload = {
       'deviceId': await _getDeviceId(),
@@ -92,6 +101,19 @@ class RestSyncService implements SyncService {
           // (entityId, operation) — pre-existing duplicates from before
           // the dedup guard was in place would otherwise stay REJECTED forever.
           final confirmedOp = ops.firstWhere((o) => o.id == opId);
+          // The server merged this product creation into an already-existing
+          // product of the same name (serverEntityId != our local id) and
+          // will redirect our queued stock entries / sales to it. Drop the
+          // local duplicate so the catalogue doesn't show the name twice —
+          // the real product arrives through the next pull.
+          final serverEntityId = result['serverEntityId'] as String?;
+          if ((confirmedOp.operation == 'CREATE_PRODUCT' ||
+                  confirmedOp.operation == 'CREATE_DRAFT_PRODUCT') &&
+              serverEntityId != null &&
+              confirmedOp.entityId != null &&
+              serverEntityId != confirmedOp.entityId) {
+            await _dropMergedLocalProduct(confirmedOp.entityId!);
+          }
           if (confirmedOp.entityId != null) {
             await (_database.delete(_database.syncQueue)
                   ..where((t) =>

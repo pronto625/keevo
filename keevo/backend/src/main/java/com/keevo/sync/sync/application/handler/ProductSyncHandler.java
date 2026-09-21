@@ -10,6 +10,7 @@ import com.keevo.catalog.product.application.usecase.UnarchiveProductUseCase;
 import com.keevo.catalog.product.application.usecase.UnarchiveProductUseCase.UnarchiveProductDto;
 import com.keevo.catalog.product.application.usecase.UpdateProductUseCase;
 import com.keevo.catalog.product.application.usecase.UpdateProductUseCase.UpdateProductDto;
+import com.keevo.catalog.product.domain.port.out.ProductRepository;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
@@ -22,22 +23,27 @@ import java.util.UUID;
 @Component
 public class ProductSyncHandler extends AbstractSyncOperationHandler {
 
+    public static final String MERGED_INTO_PREFIX = "MERGED_INTO:";
+
     private final CreateProductUseCase createProduct;
     private final CreateDraftProductUseCase createDraftProduct;
     private final UpdateProductUseCase updateProduct;
     private final ArchiveProductUseCase archiveProduct;
     private final UnarchiveProductUseCase unarchiveProduct;
+    private final ProductRepository productRepository;
 
     public ProductSyncHandler(CreateProductUseCase createProduct,
                               CreateDraftProductUseCase createDraftProduct,
                               UpdateProductUseCase updateProduct,
                               ArchiveProductUseCase archiveProduct,
-                              UnarchiveProductUseCase unarchiveProduct) {
+                              UnarchiveProductUseCase unarchiveProduct,
+                              ProductRepository productRepository) {
         this.createProduct = createProduct;
         this.createDraftProduct = createDraftProduct;
         this.updateProduct = updateProduct;
         this.archiveProduct = archiveProduct;
         this.unarchiveProduct = unarchiveProduct;
+        this.productRepository = productRepository;
     }
 
     @Override
@@ -59,6 +65,8 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                 // so subsequent offline ops (RECORD_STOCK_ENTRY, CREATE_SALE, ...) that
                 // reference this product by its local id keep resolving after push.
                 UUID clientId = p.get("id") != null ? UUID.fromString((String) p.get("id")) : null;
+                var merged = mergeIntoExistingByName(operation, (String) p.get("name"), clientId);
+                if (merged != null) yield merged;
                 var product = createProduct.execute(new CreateProductDto(
                         (String) p.get("name"),
                         (String) p.get("description"),
@@ -104,6 +112,8 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                 // Create draft with the client-specified UUID so subsequent ops (CREATE_SALE,
                 // VALIDATE_SALE) can reference the same ID without remapping.
                 UUID clientId = p.get("id") != null ? UUID.fromString((String) p.get("id")) : null;
+                var merged = mergeIntoExistingByName(operation, (String) p.get("name"), clientId);
+                if (merged != null) yield merged;
                 var draft = createDraftProduct.execute(new CreateDraftCommand(
                         clientId,
                         (String) p.get("name"),
@@ -139,5 +149,22 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
             default -> new SyncOperationResult(operation.operationId(), SyncOperationStatus.REJECTED,
                     null, "UNKNOWN_OPERATION_TYPE");
         };
+    }
+
+    /**
+     * A product with this name already exists (same case-insensitive name, different id): skip the
+     * creation and answer APPLIED against the existing product instead of failing on uq_products_name.
+     * The client-generated id is recorded as an alias via the {@code MERGED_INTO:<serverId>} reason
+     * (see {@code SyncPushService}) so the stock entries / sales queued against that local id land
+     * on the existing product. Checked BEFORE calling the @Transactional use cases: letting them throw
+     * PRODUCT_NAME_ALREADY_EXISTS would mark the surrounding sync transaction rollback-only.
+     */
+    private SyncOperationResult mergeIntoExistingByName(SyncOperation operation, String name, UUID clientId) {
+        if (name == null || name.isBlank()) return null;
+        var existing = productRepository.findByName(name);
+        if (existing.isEmpty() || existing.get().getId().equals(clientId)) return null;
+        String targetId = existing.get().getId().toString();
+        return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
+                targetId, MERGED_INTO_PREFIX + targetId);
     }
 }

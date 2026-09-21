@@ -7,6 +7,7 @@ import com.keevo.catalog.product.application.usecase.UnarchiveProductUseCase;
 import com.keevo.catalog.product.application.usecase.UpdateProductUseCase;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
+import com.keevo.catalog.product.domain.port.out.ProductRepository;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,6 +22,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -32,6 +34,7 @@ class ProductSyncHandlerTest {
     @Mock private UpdateProductUseCase updateProduct;
     @Mock private ArchiveProductUseCase archiveProduct;
     @Mock private UnarchiveProductUseCase unarchiveProduct;
+    @Mock private ProductRepository productRepository;
 
     private ProductSyncHandler handler;
 
@@ -40,7 +43,7 @@ class ProductSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new ProductSyncHandler(createProduct, createDraftProduct, updateProduct, archiveProduct, unarchiveProduct);
+        handler = new ProductSyncHandler(createProduct, createDraftProduct, updateProduct, archiveProduct, unarchiveProduct, productRepository);
     }
 
     private Product dummyProduct(UUID id, String name) {
@@ -140,5 +143,40 @@ class ProductSyncHandlerTest {
         assertThat(handler.supportedTypes()).containsExactlyInAnyOrder(
                 "CREATE_PRODUCT", "CREATE_DRAFT_PRODUCT", "UPDATE_PRODUCT",
                 "ARCHIVE_PRODUCT", "UNARCHIVE_PRODUCT", "PROMOTE_PRODUCT");
+    }
+
+    @Test
+    void handle_createProduct_nameAlreadyExists_mergesIntoExistingProductInsteadOfFailing() {
+        var localId = UUID.randomUUID();
+        var existingId = UUID.randomUUID();
+        var op = new SyncOperation("op-1", "CREATE_PRODUCT", localId.toString(),
+                Map.of("id", localId.toString(), "name", "Pantalon jean PP T75", "price", 5000), Instant.now());
+
+        when(productRepository.findByName("Pantalon jean PP T75"))
+                .thenReturn(java.util.Optional.of(dummyProduct(existingId, "pantalon jean pp t75")));
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        assertThat(result.serverEntityId()).isEqualTo(existingId.toString());
+        assertThat(result.reason()).isEqualTo("MERGED_INTO:" + existingId);
+        verify(createProduct, never()).execute(any());
+    }
+
+    @Test
+    void handle_createProduct_replayOfSameId_isNotTreatedAsMerge() {
+        var productId = UUID.randomUUID();
+        var op = new SyncOperation("op-1", "CREATE_PRODUCT", productId.toString(),
+                Map.of("id", productId.toString(), "name", "Test Product"), Instant.now());
+
+        when(productRepository.findByName("Test Product"))
+                .thenReturn(java.util.Optional.of(dummyProduct(productId, "Test Product")));
+        when(createProduct.execute(any())).thenReturn(dummyProduct(productId, "Test Product"));
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        assertThat(result.reason()).isNull();
+        verify(createProduct).execute(any());
     }
 }

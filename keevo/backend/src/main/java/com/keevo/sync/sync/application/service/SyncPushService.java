@@ -12,6 +12,7 @@ import com.keevo.sync.sync.domain.port.out.SyncOperationsLogRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.UnexpectedRollbackException;
 import org.springframework.transaction.annotation.Transactional;
@@ -165,26 +166,17 @@ public class SyncPushService implements SyncUseCase {
                 // The data operation was rolled back — record REJECTED in a fresh transaction.
                 log.warn("[Sync] TX rolled back for operation {} ({}): {}",
                         operation.operationId(), operation.operationType(), e.getMessage());
-                result = new SyncOperationResult(
-                        operation.operationId(), SyncOperationStatus.REJECTED, null, "TRANSACTION_ROLLED_BACK");
-                try {
-                    transactionTemplate.execute(status -> {
-                        if (!logRepository.existsById(operation.operationId())) {
-                            logRepository.save(new SyncOperationsLogEntry(
-                                    operation.operationId(),
-                                    operation.operationType(),
-                                    operation.entityId(),
-                                    SyncOperationStatus.REJECTED,
-                                    "TRANSACTION_ROLLED_BACK",
-                                    Instant.now(),
-                                    operation.clientTimestamp()));
-                        }
-                        return null;
-                    });
-                } catch (Exception logEx) {
-                    log.error("[Sync] Failed to save REJECTED log for operation {}: {}",
-                            operation.operationId(), logEx.getMessage());
-                }
+                result = rejectAfterRollback(operation, "TRANSACTION_ROLLED_BACK");
+            } catch (DataIntegrityViolationException e) {
+                // A DB constraint (e.g. uq_products_name) fires at flush/commit time, i.e. AFTER the
+                // handler returned, so AbstractSyncOperationHandler never sees it. Without this catch
+                // it escapes pushBatch → HTTP 500 for the WHOLE batch, the op is never logged, and
+                // the device replays the same poisoned batch forever. Reject only this operation.
+                String reason = isProductNameViolation(e)
+                        ? "PRODUCT_NAME_ALREADY_EXISTS" : "DATA_INTEGRITY_VIOLATION";
+                log.warn("[Sync] Constraint violation for operation {} ({}): {}",
+                        operation.operationId(), operation.operationType(), reason);
+                result = rejectAfterRollback(operation, reason);
             }
 
             results.add(result);
@@ -221,11 +213,88 @@ public class SyncPushService implements SyncUseCase {
         return new SyncBatchResult(Instant.now(), results);
     }
 
-    private SyncOperationResult processOperation(SyncOperation operation, PushBatchCommand command) {
-        if (logRepository.existsById(operation.operationId())) {
-            return new SyncOperationResult(
-                    operation.operationId(), SyncOperationStatus.DUPLICATE, null, null);
+    /**
+     * A CREATE_PRODUCT whose name already existed was merged into the existing product (see
+     * ProductSyncHandler). Operations queued offline against the device's local product id
+     * (stock entries, sales, counts...) must target that existing product: rewrite every
+     * {@code productId} in the payload whose id was merged.
+     */
+    private SyncOperation redirectMergedProductIds(SyncOperation operation) {
+        Set<String> candidates = new HashSet<>();
+        collectProductIds(operation.payload(), candidates);
+        if (candidates.isEmpty()) return operation;
+        Map<String, String> targets = logRepository.findMergedProductTargets(candidates);
+        if (targets.isEmpty()) return operation;
+        @SuppressWarnings("unchecked")
+        Map<String, Object> rewritten = (Map<String, Object>) rewriteProductIds(operation.payload(), targets);
+        return new SyncOperation(operation.operationId(), operation.operationType(),
+                operation.entityId(), rewritten, operation.clientTimestamp());
+    }
+
+    private void collectProductIds(Object node, Set<String> out) {
+        if (node instanceof Map<?, ?> map) {
+            map.forEach((k, v) -> {
+                if ("productId".equals(k) && v instanceof String s) out.add(s);
+                else collectProductIds(v, out);
+            });
+        } else if (node instanceof List<?> list) {
+            list.forEach(v -> collectProductIds(v, out));
         }
+    }
+
+    private Object rewriteProductIds(Object node, Map<String, String> targets) {
+        if (node instanceof Map<?, ?> map) {
+            Map<String, Object> copy = new LinkedHashMap<>();
+            map.forEach((k, v) -> {
+                String key = String.valueOf(k);
+                if ("productId".equals(key) && v instanceof String s && targets.containsKey(s)) {
+                    copy.put(key, targets.get(s));
+                } else {
+                    copy.put(key, rewriteProductIds(v, targets));
+                }
+            });
+            return copy;
+        }
+        if (node instanceof List<?> list) {
+            return list.stream().map(v -> rewriteProductIds(v, targets)).toList();
+        }
+        return node;
+    }
+
+    private static boolean isProductNameViolation(DataIntegrityViolationException e) {
+        String msg = e.getMostSpecificCause().getMessage();
+        return msg != null && msg.contains("uq_products_name");
+    }
+
+    /** Builds a REJECTED result and records it in a fresh transaction (the original one rolled back). */
+    private SyncOperationResult rejectAfterRollback(SyncOperation operation, String reason) {
+        try {
+            transactionTemplate.execute(status -> {
+                if (!logRepository.existsById(operation.operationId())) {
+                    logRepository.save(new SyncOperationsLogEntry(
+                            operation.operationId(),
+                            operation.operationType(),
+                            operation.entityId(),
+                            SyncOperationStatus.REJECTED,
+                            reason,
+                            Instant.now(),
+                            operation.clientTimestamp()));
+                }
+                return null;
+            });
+        } catch (Exception logEx) {
+            log.error("[Sync] Failed to save REJECTED log for operation {}: {}",
+                    operation.operationId(), logEx.getMessage());
+        }
+        return new SyncOperationResult(operation.operationId(), SyncOperationStatus.REJECTED, null, reason);
+    }
+
+    private SyncOperationResult processOperation(SyncOperation originalOperation, PushBatchCommand command) {
+        if (logRepository.existsById(originalOperation.operationId())) {
+            return new SyncOperationResult(
+                    originalOperation.operationId(), SyncOperationStatus.DUPLICATE, null, null);
+        }
+        SyncOperation operation = redirectMergedProductIds(originalOperation);
 
         SyncOperationResult handlerResult = handlerRegistry.resolve(operation.operationType())
                 .map(handler -> {

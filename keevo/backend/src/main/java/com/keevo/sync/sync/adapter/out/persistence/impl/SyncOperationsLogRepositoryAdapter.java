@@ -7,6 +7,9 @@ import com.keevo.sync.sync.domain.model.SyncOperationsLogEntry;
 import com.keevo.sync.sync.domain.port.out.SyncOperationsLogRepository;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 @Component
@@ -33,6 +36,16 @@ public class SyncOperationsLogRepositoryAdapter implements SyncOperationsLogRepo
                 entry.errorReason(),
                 entry.processedAt(),
                 entry.clientTimestamp()));
+    }
+
+    @Override
+    public Map<String, String> findMergedProductTargets(Collection<String> clientIds) {
+        Map<String, String> targets = new HashMap<>();
+        if (clientIds.isEmpty()) return targets;
+        for (var e : jpa.findMergedInto(clientIds)) {
+            targets.put(e.getEntityId(), e.getErrorReason().substring("MERGED_INTO:".length()));
+        }
+        return targets;
     }
 
     @Override

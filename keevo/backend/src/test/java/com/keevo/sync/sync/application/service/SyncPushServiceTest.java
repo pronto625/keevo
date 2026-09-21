@@ -206,4 +206,57 @@ class SyncPushServiceTest {
         assertThat(result.results().get(0).status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.results().get(0).reason()).isEqualTo("UNKNOWN_OPERATION_TYPE");
     }
+
+    @Test
+    void pushBatch_constraintViolationAtCommit_rejectsOnlyThatOperationAndContinues() {
+        var op1 = new SyncOperation("op-1", "UPDATE_PRODUCT", "p1", Map.of(), Instant.parse("2026-03-20T10:00:00Z"));
+        var op2 = new SyncOperation("op-2", "CREATE_SALE", "e2", Map.of(), Instant.parse("2026-03-20T10:01:00Z"));
+        SyncOperationHandler productHandler = mock(SyncOperationHandler.class);
+
+        when(logRepository.existsById(any())).thenReturn(false);
+        when(handlerRegistry.resolve("UPDATE_PRODUCT")).thenReturn(Optional.of(productHandler));
+        when(handlerRegistry.resolve("CREATE_SALE")).thenReturn(Optional.of(saleHandler));
+        when(productHandler.handle(eq(op1), eq(ACTOR_ID), eq(TENANT_ID)))
+                .thenReturn(new SyncOperationResult("op-1", SyncOperationStatus.APPLIED, "p1", null));
+        when(saleHandler.handle(eq(op2), eq(ACTOR_ID), eq(TENANT_ID)))
+                .thenReturn(new SyncOperationResult("op-2", SyncOperationStatus.APPLIED, null, null));
+        // The unique-constraint violation surfaces at flush/commit, i.e. inside the tx callback
+        // (here: when the first log entry is saved), not inside the handler.
+        doThrow(new org.springframework.dao.DataIntegrityViolationException(
+                        "could not execute statement",
+                        new RuntimeException("ERROR: duplicate key value violates unique constraint \"uq_products_name\"")))
+                .doNothing()
+                .when(logRepository).save(any());
+
+        var command = new com.keevo.sync.sync.domain.port.in.SyncUseCase.PushBatchCommand(
+                ACTOR_ID, TENANT_ID, "device-1", List.of(op1, op2));
+
+        SyncBatchResult result = service.pushBatch(command);
+
+        assertThat(result.results()).hasSize(2);
+        assertThat(result.results().get(0).status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.results().get(0).reason()).isEqualTo("PRODUCT_NAME_ALREADY_EXISTS");
+        assertThat(result.results().get(1).status()).isEqualTo(SyncOperationStatus.APPLIED);
+    }
+
+    @Test
+    void pushBatch_stockEntryOnMergedLocalProductId_isRedirectedToExistingProduct() {
+        var op = new SyncOperation("op-1", "RECORD_STOCK_ENTRY", "e1",
+                Map.of("productId", "local-id", "quantity", 5), Instant.now());
+        SyncOperationHandler stockHandler = mock(SyncOperationHandler.class);
+
+        when(logRepository.existsById(any())).thenReturn(false);
+        when(logRepository.findMergedProductTargets(any())).thenReturn(Map.of("local-id", "existing-id"));
+        when(handlerRegistry.resolve("RECORD_STOCK_ENTRY")).thenReturn(Optional.of(stockHandler));
+        when(stockHandler.handle(any(), eq(ACTOR_ID), eq(TENANT_ID)))
+                .thenReturn(new SyncOperationResult("op-1", SyncOperationStatus.APPLIED, null, null));
+
+        service.pushBatch(new com.keevo.sync.sync.domain.port.in.SyncUseCase.PushBatchCommand(
+                ACTOR_ID, TENANT_ID, "device-1", List.of(op)));
+
+        var captor = ArgumentCaptor.forClass(SyncOperation.class);
+        verify(stockHandler).handle(captor.capture(), eq(ACTOR_ID), eq(TENANT_ID));
+        assertThat(captor.getValue().payload()).containsEntry("productId", "existing-id")
+                .containsEntry("quantity", 5);
+    }
 }
