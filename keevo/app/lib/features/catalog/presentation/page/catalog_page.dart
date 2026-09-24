@@ -81,194 +81,180 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
       backgroundColor: theme.colorScheme.surface,
       body: CustomScrollView(
         slivers: [
-          // AppBar moderne avec gradient
+          // AppBar épuré — fond neutre, plus de bandeau dégradé saturé.
           SliverAppBar(
-            expandedHeight: 160,
+            expandedHeight: 96,
             floating: false,
             pinned: true,
             elevation: 0,
-            backgroundColor: Colors.transparent,
+            scrolledUnderElevation: 0,
+            backgroundColor: theme.colorScheme.surface,
             // Show back button when navigated from a notification deep-link.
             leading: context.canPop()
                 ? IconButton(
-                    icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                        color: Colors.white),
+                    icon: Icon(Icons.arrow_back_ios_new_rounded,
+                        color: theme.colorScheme.onSurface),
                     onPressed: () => context.pop(),
                   )
                 : null,
             automaticallyImplyLeading: false,
             flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      theme.colorScheme.primary,
-                      theme.colorScheme.primary.withOpacity(0.8),
-                    ],
-                  ),
-                ),
-                child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
+              background: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 8, 16, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Catalogue',
+                                  style: theme.textTheme.headlineMedium?.copyWith(
+                                    color: theme.colorScheme.onSurface,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: -0.3,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                if (activeStoreName != null)
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.storefront_outlined,
+                                          size: 14,
+                                          color: theme.colorScheme.onSurfaceVariant),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        activeStoreName,
+                                        style: theme.textTheme.bodyMedium?.copyWith(
+                                          color: theme.colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                else
                                   Text(
-                                    '📦 Catalogue',
-                                    style: theme.textTheme.headlineMedium?.copyWith(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
+                                    'Gérez vos produits facilement',
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
                                     ),
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    activeStoreName != null
-                                        ? '🏪 $activeStoreName'
-                                        : 'Gérez vos produits facilement',
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: Colors.white.withOpacity(0.9),
+                              ],
+                            ),
+                          ),
+                          // Vue Stock multi-boutiques (Story 3.2)
+                          _SoftIconButton(
+                            icon: Icons.warehouse_outlined,
+                            tooltip: 'Vue stock multi-boutiques',
+                            onPressed: () => context.push('/stock/overview'),
+                          ),
+                          const SizedBox(width: 6),
+                          // Bouton de synchronisation
+                          _SoftIconButton(
+                            icon: Icons.sync_rounded,
+                            tooltip: 'Synchroniser',
+                            onPressed: () async {
+                              await ref.read(productActionsProvider).syncFromRemote();
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Row(
+                                      children: [
+                                        const Icon(Icons.check_circle, color: Colors.white),
+                                        const SizedBox(width: 8),
+                                        const Text('Catalogue synchronisé'),
+                                      ],
+                                    ),
+                                    backgroundColor: AppTheme.success,
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                          const SizedBox(width: 6),
+                          // Menu "..." — CSV import + catégories (OWNER only)
+                          if (!isEmployee)
+                            Container(
+                              decoration: BoxDecoration(
+                                color: AppTheme.primarySoftTint,
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: PopupMenuButton<String>(
+                                icon: Icon(Icons.more_vert, color: theme.colorScheme.primary),
+                                onSelected: (value) {
+                                  if (value == 'import') {
+                                    context.push('/products/import');
+                                  } else if (value == 'template') {
+                                    _downloadCsvTemplate(context);
+                                  } else if (value == 'categories') {
+                                    _showCategoriesBottomSheet(context);
+                                  }
+                                },
+                                itemBuilder: (_) => [
+                                  const PopupMenuItem(
+                                    value: 'import',
+                                    child: ListTile(
+                                      leading: Icon(Icons.upload_file),
+                                      title: Text('Importer CSV'),
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'template',
+                                    child: ListTile(
+                                      leading: Icon(Icons.download_rounded),
+                                      title: Text('Télécharger le modèle CSV'),
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'categories',
+                                    child: ListTile(
+                                      leading: Icon(Icons.category_rounded),
+                                      title: Text('Gérer les catégories'),
+                                      contentPadding: EdgeInsets.zero,
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                            // Vue Stock multi-boutiques (Story 3.2)
-                            Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: IconButton(
-                                icon: const Icon(Icons.warehouse_outlined,
-                                    color: Colors.white),
-                                tooltip: 'Vue stock multi-boutiques',
-                                onPressed: () =>
-                                    context.push('/stock/overview'),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            // Bouton de synchronisation moderne
-                            Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: IconButton(
-                                onPressed: () async {
-                                  await ref.read(productActionsProvider).syncFromRemote();
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Row(
-                                          children: [
-                                            Icon(Icons.check_circle, color: Colors.white),
-                                            const SizedBox(width: 8),
-                                            const Text('Catalogue synchronisé'),
-                                          ],
-                                        ),
-                                        backgroundColor: AppTheme.success,
-                                        behavior: SnackBarBehavior.floating,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                },
-                                icon: const Icon(Icons.sync_rounded, color: Colors.white),
-                                tooltip: 'Synchroniser',
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            // Menu "..." — CSV import + catégories (OWNER only)
-                            if (!isEmployee)
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: PopupMenuButton<String>(
-                                  icon: const Icon(Icons.more_vert, color: Colors.white),
-                                  onSelected: (value) {
-                                    if (value == 'import') {
-                                      context.push('/products/import');
-                                    } else if (value == 'template') {
-                                      _downloadCsvTemplate(context);
-                                    } else if (value == 'categories') {
-                                      _showCategoriesBottomSheet(context);
-                                    }
-                                  },
-                                  itemBuilder: (_) => [
-                                    const PopupMenuItem(
-                                      value: 'import',
-                                      child: ListTile(
-                                        leading: Icon(Icons.upload_file),
-                                        title: Text('Importer CSV'),
-                                        contentPadding: EdgeInsets.zero,
-                                      ),
-                                    ),
-                                    const PopupMenuItem(
-                                      value: 'template',
-                                      child: ListTile(
-                                        leading: Icon(Icons.download_rounded),
-                                        title: Text('Télécharger le modèle CSV'),
-                                        contentPadding: EdgeInsets.zero,
-                                      ),
-                                    ),
-                                    const PopupMenuItem(
-                                      value: 'categories',
-                                      child: ListTile(
-                                        leading: Icon(Icons.category_rounded),
-                                        title: Text('Gérer les catégories'),
-                                        contentPadding: EdgeInsets.zero,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
           ),
-          // Barre de recherche moderne
+          // Barre de recherche — bordure fine plutôt qu'ombre portée.
           SliverToBoxAdapter(
             child: Container(
               margin: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: theme.colorScheme.surface,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: theme.colorScheme.shadow.withOpacity(0.1),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: theme.colorScheme.outlineVariant),
               ),
               child: TextField(
                 controller: _searchController,
                 decoration: InputDecoration(
-                  hintText: '🔍 Rechercher par nom, SKU…',
+                  hintText: 'Rechercher par nom, SKU…',
                   hintStyle: TextStyle(
                     color: theme.colorScheme.onSurfaceVariant.withOpacity(0.7),
                   ),
                   prefixIcon: Icon(
                     Icons.search_rounded,
-                    color: theme.colorScheme.primary,
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
                   suffixIcon: _searchController.text.isNotEmpty
                       ? IconButton(
@@ -283,14 +269,13 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
                         )
                       : null,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(16),
                     borderSide: BorderSide.none,
                   ),
-                  filled: true,
-                  fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                  filled: false,
                   contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 16,
+                    horizontal: 16,
+                    vertical: 14,
                   ),
                 ),
                 onChanged: _onSearchChanged,
@@ -381,22 +366,16 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
         ],
       ),
       // FAB "Ajouter un produit" — OWNER + EMPLOYEE
+      // Couleur pleine + ombre douce plutôt qu'un dégradé + ombre marquée.
       floatingActionButton: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              theme.colorScheme.primary,
-              theme.colorScheme.primary.withOpacity(0.8),
-            ],
-          ),
+          color: theme.colorScheme.primary,
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: theme.colorScheme.primary.withOpacity(0.4),
-              blurRadius: 16,
-              offset: const Offset(0, 8),
+              color: theme.colorScheme.primary.withOpacity(0.25),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
@@ -446,6 +425,36 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
   }
 }
 
+// Bouton d'action de l'AppBar — pastille pastel plutôt que "verre" blanc
+// translucide (qui supposait un fond coloré derrière, disparu avec le
+// bandeau dégradé). Cohérent avec le reste du rebrand soft/moderne.
+class _SoftIconButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  const _SoftIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppTheme.primarySoftTint,
+        borderRadius: BorderRadius.all(Radius.circular(14)),
+      ),
+      child: IconButton(
+        icon: Icon(icon, color: Theme.of(context).colorScheme.primary),
+        tooltip: tooltip,
+        onPressed: onPressed,
+      ),
+    );
+  }
+}
+
 // Delegate pour TabBar moderne et collant
 class _ModernTabDelegate extends SliverPersistentHeaderDelegate {
   final TabController tabController;
@@ -470,7 +479,7 @@ class _ModernTabDelegate extends SliverPersistentHeaderDelegate {
         boxShadow: [
           if (overlapsContent)
             BoxShadow(
-              color: theme.colorScheme.shadow.withOpacity(0.1),
+              color: theme.colorScheme.shadow.withOpacity(0.06),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -479,20 +488,17 @@ class _ModernTabDelegate extends SliverPersistentHeaderDelegate {
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+          color: theme.colorScheme.surfaceVariant.withOpacity(0.4),
           borderRadius: BorderRadius.circular(16),
         ),
         child: TabBar(
           controller: tabController,
           isScrollable: true,
           tabAlignment: TabAlignment.start,
+          // Couleur pleine plutôt qu'un dégradé — plus sobre, cohérent avec
+          // le reste du rebrand (plus de dégradés saturés sur les contrôles).
           indicator: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                theme.colorScheme.primary,
-                theme.colorScheme.primary.withOpacity(0.8),
-              ],
-            ),
+            color: theme.colorScheme.primary,
             borderRadius: BorderRadius.circular(12),
           ),
           indicatorSize: TabBarIndicatorSize.tab,

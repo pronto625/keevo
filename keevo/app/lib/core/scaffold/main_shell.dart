@@ -343,6 +343,8 @@ class _MainShellState extends ConsumerState<MainShell> {
       ),
     ];
 
+    final cs = Theme.of(context).colorScheme;
+
     return Scaffold(
       body: Column(
         children: [
@@ -352,10 +354,34 @@ class _MainShellState extends ConsumerState<MainShell> {
           Expanded(child: widget.child),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: index,
-        onDestinationSelected: (i) => context.go(routes[i]),
-        destinations: destinations,
+      // Soft/modern rebrand (2026-09-16) : coins hauts arrondis + ombre
+      // douce (au lieu de l'élévation Material par défaut, plus dure) pour
+      // que la barre lise comme une "sheet" posée sur le contenu plutôt
+      // qu'un bandeau plat collé au bord de l'écran.
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(AppTheme.radiusXL),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: cs.shadow.withAlpha(20),
+              blurRadius: 20,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(AppTheme.radiusXL),
+          ),
+          child: NavigationBar(
+            selectedIndex: index,
+            onDestinationSelected: (i) => context.go(routes[i]),
+            destinations: destinations,
+          ),
+        ),
       ),
     );
   }

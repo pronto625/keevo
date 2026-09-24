@@ -933,3 +933,57 @@ Règles : Succès = haptique légère. Erreurs jamais auto-dismiss. Messages en 
 - Listes : `ListView.builder` (jamais `children`)
 - Animations : `repaintBoundary` sur composants animés
 - Stockage : app < 100 Mo (hors données)
+
+---
+
+## Addendum : Rebrand Onboarding — Direction "Soft/Modern" (2026-09-12)
+
+### Contexte
+
+Première itération d'un rebrand progressif de l'app, démarrée par le flow de
+premier lancement (le plus visible, le premier contact utilisateur). Objectif :
+direction visuelle plus moderne, douce ("soft") et épurée, en **conservant**
+l'indigo `#3B5BDB` comme couleur d'ancrage de marque (continuité, pas rupture).
+Périmètre de cette itération : les 4 écrans du flow onboarding uniquement —
+`OnboardingPage` (Welcome), `TermsPage`, `SectorSelectionPage`, `ShopNamePage`.
+Le reste de l'app (POS, dashboard, etc.) garde le thème Indigo Sky existant
+tel que documenté ci-dessus ; le rebrand se poursuivra écran par écran.
+
+### Principes "Soft/Modern/Épuré" appliqués
+
+1. **Moins de décoration, plus d'espace négatif** — suppression des cards
+   bordées + ombres portées (`boxShadow`) de l'écran Welcome et de la zone
+   d'acceptation des CGU ; fond en dégradé très doux plutôt que card blanche
+   sur fond neutre.
+2. **Couleurs moins saturées** — les blocs de couleur pleine (icônes,
+   illustrations) passent à des teintes très diluées (`primarySoftTint`)
+   plutôt qu'à des opacités ad-hoc (`primary.withOpacity(0.06/0.08/0.12)`)
+   dispersées dans le code.
+3. **Typographie plus légère** — titres en `w600`/`w400` au lieu de `bold`,
+   plus d'interlignage (`height`).
+4. **Formes plus rondes** — nouveau token `radiusXXL` (32dp) pour les grands
+   éléments circulaires/illustratifs, boutons toujours en pilule pleine
+   (pas de style bicolore/bordé "swipe").
+5. **Continuité de flow** — nouvel indicateur de progression partagé
+   (`OnboardingProgressDots`, 4 étapes) affiché sur les 4 écrans, absent de
+   la version précédente — cohérence visuelle du wizard complet.
+
+### Nouveaux tokens (extension d'"Indigo Sky", non rétro-appliqués au thème global)
+
+| Token | Valeur (light) | Valeur (dark) | Usage |
+|---|---|---|---|
+| `AppTheme.radiusXXL` | `32dp` | — | Grands éléments circulaires/illustratifs |
+| `AppTheme.primarySoftTint` | `#EEF1FE` | `#16223A` | Fond des badges/icônes (remplace les `withOpacity` ad-hoc) |
+| `AppTheme.softBackgroundGradient` | `#F7F8FF → #FFFFFF` | `#0D1B2A → #13233A` | Fond plein écran Welcome (remplace `scaffoldBackgroundColor` uni) |
+
+Ces tokens sont additifs : `ThemeData` global (`AppTheme.light()`/`dark()`,
+`_cardTheme`, `_inputDecoration`, etc.) n'a **pas** été modifié pour ne pas
+impacter les écrans hors périmètre (POS, dashboard, catalogue...). Ils seront
+promus dans le thème global au fur et à mesure que le rebrand s'étend à
+d'autres écrans.
+
+### Détail par écran
+
+Voir la story d'implémentation `_bmad-output/implementation-artifacts/UI-2-onboarding-soft-modern-rebrand.md`
+pour le détail fichier par fichier, les décisions de design et les critères
+d'acceptation vérifiés.

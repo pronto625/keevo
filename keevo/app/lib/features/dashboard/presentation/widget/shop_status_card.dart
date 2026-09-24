@@ -28,20 +28,34 @@ class ShopStatusCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final status = computeStoreStatus(store.todayCA, store.yesterdayCA);
     final accentColor = _accentColorFor(status);
+    final cs = Theme.of(context).colorScheme;
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    // Container + ombre douce plutôt que le `Card` Material par défaut —
+    // cohérent avec les autres cartes du dashboard (Révision 2026-09-16).
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        boxShadow: [
+          BoxShadow(
+            color: cs.shadow.withValues(alpha: 0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: IntrinsicHeight(
-          child: Row(
-            children: [
-              Container(width: 4, color: accentColor),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          child: IntrinsicHeight(
+            child: Row(
+              children: [
+                Container(width: 4, color: accentColor),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -103,6 +117,7 @@ class ShopStatusCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
       ),
     );
   }

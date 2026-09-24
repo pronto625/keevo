@@ -5,6 +5,8 @@ import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:intl_phone_field/phone_number.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/lang_toggle.dart';
 import '../../domain/exception/auth_exception.dart';
 import '../../domain/model/login_result.dart';
 import '../provider/auth_provider.dart';
@@ -33,6 +35,7 @@ class _AuthPageState extends ConsumerState<AuthPage> {
   final _formKey = GlobalKey<FormState>();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _isFrench = true;
 
   /// Full phone number with country code (e.g. +237600000000).
   String? _completePhone;
@@ -94,22 +97,31 @@ class _AuthPageState extends ConsumerState<AuthPage> {
     }
   }
 
-  /// Maps provider error to a user-facing French message.
+  /// Maps provider error to a user-facing message (FR/EN per [_isFrench]).
   String? _computeErrorMessage(AsyncValue<dynamic> asyncState) {
     if (!asyncState.hasError) return null;
     final error = asyncState.error;
     if (error is AuthException) {
+      if (_isFrench) {
+        return switch (error.domainCode) {
+          'USER_ALREADY_EXISTS' => 'Un compte avec ce numéro existe déjà',
+          'VALIDATION_ERROR' => 'Données invalides, vérifiez vos informations',
+          'INVALID_CREDENTIALS' => 'Numéro ou mot de passe incorrect',
+          'ACCOUNT_LOCKED' =>
+            'Compte verrouillé temporairement. Réessayez dans 15 minutes.',
+          _ => 'Erreur inattendue, réessayez',
+        };
+      }
       return switch (error.domainCode) {
-        'USER_ALREADY_EXISTS' => 'Un compte avec ce numéro existe déjà',
-        'VALIDATION_ERROR' => 'Données invalides, vérifiez vos informations',
-        'INVALID_CREDENTIALS' => 'Numéro ou mot de passe incorrect',
-        'ACCOUNT_LOCKED' =>
-          'Compte verrouillé temporairement. Réessayez dans 15 minutes.',
-        _ => 'Erreur inattendue, réessayez',
+        'USER_ALREADY_EXISTS' => 'An account with this number already exists',
+        'VALIDATION_ERROR' => 'Invalid data, please check your information',
+        'INVALID_CREDENTIALS' => 'Incorrect number or password',
+        'ACCOUNT_LOCKED' => 'Account temporarily locked. Try again in 15 minutes.',
+        _ => 'Unexpected error, please try again',
       };
     }
     if (error is ArgumentError) return error.message.toString();
-    return 'Erreur de connexion inattendue';
+    return _isFrench ? 'Erreur de connexion inattendue' : 'Unexpected connection error';
   }
 
   @override
@@ -160,15 +172,23 @@ class _AuthPageState extends ConsumerState<AuthPage> {
       });
     });
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: SafeArea(
+      body: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: isDark
+              ? AppTheme.softBackgroundGradientDark
+              : AppTheme.softBackgroundGradient,
+        ),
+        child: SafeArea(
         child: Column(
           children: [
-            // ── Header ─────────────────────────────────────────────────
+            // ── Header : retour + changement de langue ──────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   IconButton(
                     icon: Container(
@@ -184,58 +204,73 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                         color: cs.onSurface,
                       ),
                     ),
-                    onPressed: () {
-                      if (context.canPop()) {
-                        context.pop();
-                      } else if (_mode == AuthMode.login) {
-                        context.go('/auth/register');
-                      } else {
-                        context.go('/onboarding');
-                      }
-                    },
+                    // Toujours vers /onboarding, peu importe le mode ou
+                    // l'état de la pile — évite le comportement incohérent
+                    // précédent (canPop()/pop() renvoyait parfois vers une
+                    // route inattendue selon le chemin d'arrivée sur la page).
+                    onPressed: () => context.go('/onboarding'),
+                  ),
+                  LangToggle(
+                    isFrench: _isFrench,
+                    onChanged: (fr) => setState(() => _isFrench = fr),
                   ),
                 ],
               ),
             ),
 
-            // ── Corps ──────────────────────────────────────────────────
+            // ── Corps : contenu poussé vers le bas, scrollable si besoin ──
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-                child: Form(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                      child: IntrinsicHeight(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                Form(
                   key: _formKey,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _mode == AuthMode.register ? 'Inscription' : 'Connexion',
-                        style: Theme.of(context)
-                            .textTheme
-                            .labelLarge
-                            ?.copyWith(color: cs.primary),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
                         _mode == AuthMode.register
-                            ? 'Continuez vers\nvotre boutique'
-                            : 'Connectez-vous à\nvotre boutique',
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineMedium
-                            ?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              height: 1.2,
+                            ? (_isFrench ? 'Inscription' : 'Sign up')
+                            : (_isFrench ? 'Connexion' : 'Log in'),
+                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: cs.onSurface,
+                              letterSpacing: -0.3,
                             ),
                       ),
-                      const SizedBox(height: 36),
+                      const SizedBox(height: 28),
 
                       // ── Champ numéro WhatsApp ───────────────────────
+                      Text(
+                        _isFrench ? 'Numéro WhatsApp' : 'WhatsApp number',
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: cs.onSurface,
+                            ),
+                      ),
+                      const SizedBox(height: 6),
                       IntlPhoneField(
                         key: const Key('phoneField'),
                         decoration: InputDecoration(
-                          labelText: 'Numéro WhatsApp',
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: cs.outlineVariant),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: cs.outlineVariant),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: cs.primary, width: 1.5),
                           ),
                         ),
                         initialCountryCode: 'CM',
@@ -250,7 +285,11 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                           _completePhone = null;
                         },
                         validator: (_) {
-                          if (!_phoneValid) return 'Numéro invalide pour ce pays';
+                          if (!_phoneValid) {
+                            return _isFrench
+                                ? 'Numéro invalide pour ce pays'
+                                : 'Invalid number for this country';
+                          }
                           return null;
                         },
                       ),
@@ -258,20 +297,40 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                       const SizedBox(height: 16),
 
                       // ── Champ mot de passe ──────────────────────────
+                      Text(
+                        _isFrench ? 'Mot de passe' : 'Password',
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: cs.onSurface,
+                            ),
+                      ),
+                      const SizedBox(height: 6),
                       TextFormField(
                         key: const Key('passwordField'),
                         controller: _passwordController,
                         obscureText: _obscurePassword,
                         decoration: InputDecoration(
-                          labelText: 'Mot de passe',
+                          hintText: _isFrench
+                              ? 'Entrez votre mot de passe'
+                              : 'Enter your password',
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: cs.outlineVariant),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: cs.outlineVariant),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: cs.primary, width: 1.5),
                           ),
                           suffixIcon: IconButton(
                             icon: Icon(
                               _obscurePassword
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              color: cs.onSurfaceVariant,
                             ),
                             onPressed: () => setState(
                               () => _obscurePassword = !_obscurePassword,
@@ -280,18 +339,85 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                         ),
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {
-                            return 'Le mot de passe est requis';
+                            return _isFrench
+                                ? 'Le mot de passe est requis'
+                                : 'Password is required';
                           }
                           if (_mode == AuthMode.register &&
                               value.trim().length < 8) {
-                            return 'Le mot de passe doit contenir au moins 8 caractères';
+                            return _isFrench
+                                ? 'Le mot de passe doit contenir au moins 8 caractères'
+                                : 'Password must be at least 8 characters';
                           }
                           return null;
                         },
                         textInputAction: TextInputAction.done,
                       ),
 
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 20),
+
+                      // ── Note CGU (register mode) ────────────────────
+                      // Purement informative : l'acceptation effective des
+                      // CGU a déjà été bloquée en amont sur TermsPage
+                      // (scroll-to-unlock + double checkbox RGPD). Pas de
+                      // case à cocher ici pour éviter une double demande
+                      // de consentement redondante.
+                      if (_mode == AuthMode.register) ...[
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.check_circle_rounded, size: 18, color: cs.primary),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: RichText(
+                                text: TextSpan(
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                        color: cs.onSurfaceVariant,
+                                      ),
+                                  children: _isFrench
+                                      ? [
+                                          const TextSpan(text: 'Vous avez accepté nos '),
+                                          TextSpan(
+                                            text: "Conditions d'utilisation",
+                                            style: TextStyle(
+                                              color: cs.primary,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const TextSpan(text: ' et notre '),
+                                          TextSpan(
+                                            text: 'Politique de confidentialité',
+                                            style: TextStyle(
+                                              color: cs.primary,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ]
+                                      : [
+                                          const TextSpan(text: 'You have accepted our '),
+                                          TextSpan(
+                                            text: 'Terms of Use',
+                                            style: TextStyle(
+                                              color: cs.primary,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const TextSpan(text: ' and our '),
+                                          TextSpan(
+                                            text: 'Privacy Policy',
+                                            style: TextStyle(
+                                              color: cs.primary,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                      ],
 
                       if (errorMessage != null) ...[
                         _ErrorBanner(message: errorMessage),
@@ -319,9 +445,11 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                                     color: Colors.white,
                                   ),
                                 )
-                              : const Text(
-                                  'Continuer',
-                                  style: TextStyle(
+                              : Text(
+                                  _mode == AuthMode.register
+                                      ? (_isFrench ? 'Créer mon compte' : 'Create my account')
+                                      : (_isFrench ? 'Se connecter' : 'Log in'),
+                                  style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -336,58 +464,54 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                         Center(
                           child: TextButton(
                             onPressed: () => context.push('/auth/forgot-password'),
-                            child: const Text('Mot de passe oublié ?'),
+                            child: Text(
+                              _isFrench ? 'Mot de passe oublié ?' : 'Forgot password?',
+                            ),
                           ),
                         ),
 
                       Center(
-                        child: TextButton(
-                          onPressed: _toggleMode,
-                          child: Text(
-                            _mode == AuthMode.register
-                                ? 'Déjà un compte ? Se connecter'
-                                : "Pas encore de compte ? S'inscrire",
+                        child: GestureDetector(
+                          onTap: _toggleMode,
+                          child: RichText(
+                            text: TextSpan(
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                              children: [
+                                TextSpan(
+                                  text: _mode == AuthMode.register
+                                      ? (_isFrench ? 'Déjà un compte ? ' : 'Already have an account? ')
+                                      : (_isFrench ? 'Pas encore de compte ? ' : "Don't have an account? "),
+                                ),
+                                TextSpan(
+                                  text: _mode == AuthMode.register
+                                      ? (_isFrench ? 'Se connecter' : 'Log in')
+                                      : (_isFrench ? "S'inscrire" : 'Sign up'),
+                                  style: TextStyle(
+                                    color: cs.onSurface,
+                                    fontWeight: FontWeight.w700,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ],
                   ),
                 ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
-
-            // ── Footer CGU (register mode only) ───────────────────────
-            if (_mode == AuthMode.register)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
-                child: RichText(
-                  textAlign: TextAlign.center,
-                  text: TextSpan(
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: cs.onSurfaceVariant,
-                        ),
-                    children: [
-                      const TextSpan(text: 'En continuant, vous acceptez nos '),
-                      TextSpan(
-                        text: "Conditions d'utilisation",
-                        style: TextStyle(
-                          color: cs.primary,
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                      const TextSpan(text: ' et notre '),
-                      TextSpan(
-                        text: 'Politique de confidentialité',
-                        style: TextStyle(
-                          color: cs.primary,
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
           ],
+        ),
         ),
       ),
     );

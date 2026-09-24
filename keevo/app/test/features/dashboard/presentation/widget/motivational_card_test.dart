@@ -18,13 +18,13 @@ void main() {
       expect(find.textContaining('Bonne journée Amadou'), findsOneWidget);
     });
 
-    testWidgets('displays lightbulb emoji', (tester) async {
+    testWidgets('displays lightbulb icon', (tester) async {
       await tester.pumpWidget(_wrap(MotivationalCard(
         message: 'Test message',
         onDismiss: () {},
       )));
 
-      expect(find.text('💡'), findsOneWidget);
+      expect(find.byIcon(Icons.lightbulb_outline_rounded), findsOneWidget);
     });
 
     testWidgets('close button triggers onDismiss', (tester) async {

@@ -83,6 +83,39 @@ class AppTheme {
   static const double radiusM = 12;
   static const double radiusL = 16;
   static const double radiusXL = 24;
+  static const double radiusXXL = 32;
+
+  // ── Soft/Modern tokens ───────────────────────────────────────────────
+  // Extension of "Indigo Sky" for the soft/modern/épuré rebrand
+  // (Onboarding, 2026-09-12 — see _bmad-output/planning-artifacts/
+  // ux-design-specification.md §Onboarding Rebrand). Same brand hue,
+  // lower-saturation surfaces, more negative space. Rolled out
+  // screen-by-screen; not yet wired into the global ThemeData.
+  static const Color primarySoftTint = Color(0xFFEEF1FE);
+  static const Color primarySoftTintDark = Color(0xFF16223A);
+
+  /// Soft "mesh" wash — visible at the top, resolved to solid white by
+  /// ~55% so list/form content underneath reads on a clean surface.
+  /// Revised 2026-09-15: v1 was nearly imperceptible (`#F7F8FF`→white);
+  /// this version keeps the same brand hues but with enough presence to
+  /// read as an intentional gradient, matching the reference direction.
+  static LinearGradient get softBackgroundGradient => const LinearGradient(
+        colors: [
+          Color(0xFFC9D6FA), // indigo tint
+          Color(0xFFDCEAFB), // sky tint
+          Colors.white,
+        ],
+        stops: [0.0, 0.32, 0.62],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      );
+
+  static LinearGradient get softBackgroundGradientDark => const LinearGradient(
+        colors: [Color(0xFF16223A), Color(0xFF0F1D30), Color(0xFF0D1B2A)],
+        stops: [0.0, 0.32, 0.62],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      );
 
   // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -150,10 +183,17 @@ class AppTheme {
         ),
       );
 
+  // Soft/modern rebrand (2026-09-16) — elevation moved from the bar itself
+  // to a soft shadow drawn by MainShell's wrapping Container (flatter,
+  // less harsh than Material's default drop shadow); indicator uses the
+  // pale brand tint instead of the more saturated seed-generated
+  // `primaryContainer`, matching the rest of the rebranded flow.
   static NavigationBarThemeData _navBarTheme(ColorScheme cs) =>
       NavigationBarThemeData(
-        elevation: 2,
-        indicatorColor: cs.primaryContainer,
+        elevation: 0,
+        indicatorColor: cs.brightness == Brightness.dark
+            ? primarySoftTintDark
+            : primarySoftTint,
         backgroundColor: cs.surface,
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);

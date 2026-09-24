@@ -1,15 +1,17 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../domain/model/dashboard_snapshot.dart';
 
-/// MorningSummaryHeroCard — glassmorphism hero card with today's CA,
-/// trend badge, and 7-day sparkline.
+/// MorningSummaryHeroCard — hero card with today's CA, trend badge, and
+/// 7-day sparkline.
 ///
-/// Story 7.1 — AC2, UX26.
+/// Story 7.1 — AC2, UX26. Révision 2026-09-16 (v2) : carte blanche + ombre
+/// douce, badge icône rond — **même langage exact que [MetricBadgeCard]**
+/// (v1 utilisait un fond pastel plein, jugé fade et sans rapport avec les
+/// références fournies — corrigé pour que la hero card appartienne
+/// visuellement à la même famille que les cartes métriques en dessous).
 class MorningSummaryHeroCard extends StatelessWidget {
   final int todayCA;
   final double trendPercent;
@@ -26,7 +28,7 @@ class MorningSummaryHeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
     final currencyFormat = NumberFormat.currency(
       locale: 'fr_FR',
       symbol: 'XAF',
@@ -35,76 +37,80 @@ class MorningSummaryHeroCard extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isDark
-              ? [AppTheme.darkSurface, const Color(0xFF1A365D)]
-              : [AppTheme.primary, AppTheme.primaryGradientEnd],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        boxShadow: [
+          BoxShadow(
+            color: cs.shadow.withValues(alpha: 0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-          child: Container(
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppTheme.primarySoftTint,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.payments_rounded,
+                  size: 18,
+                  color: cs.primary,
+                ),
               ),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
                   "CA D'AUJOURD'HUI",
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.8),
-                        letterSpacing: 1.2,
+                        color: cs.onSurfaceVariant,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.8,
                       ),
                 ),
-                const SizedBox(height: 4),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        currencyFormat.format(todayCA),
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                    _TrendBadge(trendPercent: trendPercent),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  height: 40,
-                  child: CustomPaint(
-                    size: const Size(double.infinity, 40),
-                    painter: _SparklinePainter(
-                      data: last7Days.map((d) => d.amount.toDouble()).toList(),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _relativeTimestamp(lastUpdated),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.7),
-                      ),
-                ),
-              ],
+              ),
+              _TrendBadge(trendPercent: trendPercent),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            currencyFormat.format(todayCA),
+            style: TextStyle(
+              fontSize: 34,
+              fontWeight: FontWeight.w700,
+              color: cs.onSurface,
+              letterSpacing: -0.5,
             ),
           ),
-        ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 40,
+            child: CustomPaint(
+              size: const Size(double.infinity, 40),
+              painter: _SparklinePainter(
+                barColor: cs.primary,
+                data: last7Days.map((d) => d.amount.toDouble()).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _relativeTimestamp(lastUpdated),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+          ),
+        ],
       ),
     );
   }
@@ -144,10 +150,12 @@ class _TrendBadge extends StatelessWidget {
   }
 }
 
-/// Simple bar sparkline painter — 7 bars, white on semi-transparent background.
+/// Simple bar sparkline painter — 7 bars in [barColor] on the pastel card
+/// background (fond plein clair, plus de "blanc sur transparent").
 class _SparklinePainter extends CustomPainter {
   final List<double> data;
-  _SparklinePainter({required this.data});
+  final Color barColor;
+  _SparklinePainter({required this.data, required this.barColor});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -159,7 +167,7 @@ class _SparklinePainter extends CustomPainter {
     const gap = 4.0;
     final barWidth = (size.width - (barCount - 1) * gap) / barCount;
     final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.6)
+      ..color = barColor.withValues(alpha: 0.75)
       ..style = PaintingStyle.fill;
 
     for (int i = 0; i < barCount; i++) {
@@ -176,5 +184,5 @@ class _SparklinePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _SparklinePainter oldDelegate) =>
-      oldDelegate.data != data;
+      oldDelegate.data != data || oldDelegate.barColor != barColor;
 }

@@ -159,33 +159,24 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
               ),
               const SizedBox(height: 24),
               
-              // Camera option
+              // Camera option — couleurs de marque (plus de violet hors
+              // charte), couleur pleine plutôt qu'un dégradé.
               _PhotoOptionTile(
-                icon: Icons.camera_alt_rounded,
+                icon: Icons.camera_alt_outlined,
                 title: 'Prendre une photo',
                 subtitle: 'Utiliser l\'appareil photo',
-                gradient: LinearGradient(
-                  colors: [
-                    const Color(0xFF7048E8).withOpacity(0.7),
-                    const Color(0xFF7048E8),
-                  ],
-                ),
+                color: theme.colorScheme.secondary,
                 onTap: () => _pickImage(ImageSource.camera),
               ),
-              
+
               const SizedBox(height: 16),
-              
+
               // Gallery option
               _PhotoOptionTile(
-                icon: Icons.photo_library_rounded,
+                icon: Icons.photo_library_outlined,
                 title: 'Choisir depuis la galerie',
                 subtitle: 'Sélectionner une image existante',
-                gradient: LinearGradient(
-                  colors: [
-                    theme.colorScheme.primary.withOpacity(0.7),
-                    theme.colorScheme.primary,
-                  ],
-                ),
+                color: theme.colorScheme.primary,
                 onTap: () => _pickImage(ImageSource.gallery),
               ),
               
@@ -369,93 +360,36 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
       backgroundColor: theme.colorScheme.surface,
       body: CustomScrollView(
         slivers: [
-          // Modern App Bar with hero effect
+          // AppBar épuré — fond neutre, sans bandeau dégradé ni cercles
+          // décoratifs (cf. rebrand CatalogPage, même logique appliquée ici).
           SliverAppBar(
-            expandedHeight: 160,
+            expandedHeight: 96,
             pinned: true,
             elevation: 0,
-            backgroundColor: theme.colorScheme.primary,
+            scrolledUnderElevation: 0,
+            backgroundColor: theme.colorScheme.surface,
             flexibleSpace: FlexibleSpaceBar(
+              titlePadding: const EdgeInsets.fromLTRB(56, 0, 16, 16),
+              centerTitle: false,
               title: Text(
-                widget.isEditing ? 'Modifier' : 'Nouveau produit',
-                style: const TextStyle(
-                  color: Colors.white,
+                widget.isEditing ? 'Modifier le produit' : 'Nouveau produit',
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface,
                   fontWeight: FontWeight.w700,
-                  letterSpacing: 0.5,
+                  letterSpacing: -0.2,
                 ),
               ),
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      theme.colorScheme.primary,
-                      theme.colorScheme.primary.withOpacity(0.8),
-                      theme.colorScheme.secondary.withOpacity(0.6),
-                    ],
-                  ),
-                ),
-                child: Stack(
-                  children: [
-                    // Decorative circles
-                    Positioned(
-                      top: -50,
-                      right: -30,
-                      child: Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withOpacity(0.1),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      top: 20,
-                      left: -20,
-                      child: Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withOpacity(0.05),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              background: ColoredBox(color: theme.colorScheme.surface),
             ),
             leading: IconButton(
-              icon: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.arrow_back_ios_new_rounded, 
-                  color: Colors.white,
-                  size: 18,
-                ),
-              ),
+              icon: Icon(Icons.arrow_back_ios_new_rounded,
+                  color: theme.colorScheme.onSurface, size: 20),
               onPressed: () => context.pop(),
             ),
             actions: [
-              IconButton(
-                icon: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.info_outline_rounded,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
+              _SoftAppBarIconButton(
+                icon: Icons.lightbulb_outline_rounded,
+                tooltip: 'Conseils',
                 onPressed: () {
                   showDialog(
                     context: context,
@@ -463,7 +397,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      title: const Text('💡 Conseils'),
+                      title: const Text('Conseils'),
                       content: const Text(
                         'Remplissez au minimum le nom du produit. '
                         'Les autres champs sont optionnels mais recommandés '
@@ -479,7 +413,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
                   );
                 },
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
             ],
           ),
           
@@ -511,7 +445,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
                         children: [
                           // Section: Basic Information
                           _SectionHeader(
-                            icon: Icons.edit_rounded,
+                            icon: Icons.info_outline_rounded,
                             title: 'Informations de base',
                             color: theme.colorScheme.primary,
                           ),
@@ -730,6 +664,35 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
   }
 }
 
+// AppBar action button — pastille pastel plutôt que "verre" blanc (qui
+// supposait un fond coloré derrière, disparu avec le bandeau dégradé).
+class _SoftAppBarIconButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  const _SoftAppBarIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppTheme.primarySoftTint,
+        borderRadius: BorderRadius.all(Radius.circular(14)),
+      ),
+      child: IconButton(
+        icon: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 20),
+        tooltip: tooltip,
+        onPressed: onPressed,
+      ),
+    );
+  }
+}
+
 // Component widgets
 class _SectionHeader extends StatelessWidget {
   final IconData icon;
@@ -799,67 +762,28 @@ class _ModernTextField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
+    // Hérite du style de champ global de l'app (fond doux, bordure arrondie
+    // — déjà défini une seule fois dans AppTheme._inputDecoration) plutôt
+    // que de redéfinir sa propre bordure/remplissage en local : cohérence
+    // garantie avec le reste de l'app, moins de code à maintenir ici.
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       validator: validator,
       inputFormatters: inputFormatters,
       maxLines: maxLines ?? 1,
-      style: const TextStyle(
-        fontSize: 16, 
-        fontWeight: FontWeight.w500,
-        letterSpacing: 0.2,
-      ),
+      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
       decoration: InputDecoration(
         labelText: required ? '$label *' : label,
         hintText: hint,
         suffixText: suffix,
-        prefixIcon: icon != null 
-            ? Padding(
-                padding: const EdgeInsets.all(12),
-                child: Icon(icon, size: 22),
-              ) 
-            : null,
-        filled: true,
-        fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(
-            color: theme.colorScheme.outline.withOpacity(0.2),
-          ),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(
-            color: theme.colorScheme.primary,
-            width: 2,
-          ),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: theme.colorScheme.error),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(
-            color: theme.colorScheme.error,
-            width: 2,
-          ),
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+        prefixIcon: icon != null ? Icon(icon, size: 20) : null,
         labelStyle: TextStyle(
-          color: required 
-              ? theme.colorScheme.primary 
+          color: required
+              ? theme.colorScheme.primary
               : theme.colorScheme.onSurfaceVariant,
           fontWeight: required ? FontWeight.w600 : FontWeight.w500,
-        ),
-        hintStyle: TextStyle(
-          color: theme.colorScheme.onSurfaceVariant.withOpacity(0.6),
         ),
       ),
     );
@@ -881,35 +805,13 @@ class _CategoryDropdown extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     
+    // Même logique que _ModernTextField : hérite du style de champ global.
     return DropdownButtonFormField<String>(
       value: selectedId,
       isExpanded: true,
-      decoration: InputDecoration(
+      decoration: const InputDecoration(
         labelText: 'Catégorie',
-        prefixIcon: const Padding(
-          padding: EdgeInsets.all(8),
-          child: Icon(Icons.category_rounded, size: 20),
-        ),
-        filled: true,
-        fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(
-            color: theme.colorScheme.outline.withOpacity(0.2),
-          ),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(
-            color: theme.colorScheme.primary,
-            width: 2,
-          ),
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+        prefixIcon: Icon(Icons.category_outlined, size: 20),
       ),
       hint: Text(
         'Choisir...',
@@ -968,7 +870,7 @@ class _LoadingDropdown extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.category_rounded, size: 22),
+          const Icon(Icons.category_outlined, size: 22),
           const SizedBox(width: 16),
           Expanded(
             child: Text(
@@ -1078,23 +980,18 @@ class _PhotoSection extends StatelessWidget {
             contentPadding: const EdgeInsets.all(20),
             leading: Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppTheme.warning,
-                    AppTheme.warning,
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(12),
+              decoration: const BoxDecoration(
+                color: AppTheme.primarySoftTint,
+                borderRadius: BorderRadius.all(Radius.circular(12)),
               ),
-              child: const Icon(
-                Icons.photo_camera_rounded,
-                color: Colors.white,
+              child: Icon(
+                Icons.photo_camera_outlined,
+                color: theme.colorScheme.primary,
                 size: 24,
               ),
             ),
             title: Text(
-              _hasPhoto ? 'Photo sélectionnée ✓' : 'Ajouter une photo',
+              _hasPhoto ? 'Photo sélectionnée' : 'Ajouter une photo',
               style: const TextStyle(
                 fontWeight: FontWeight.w600,
                 fontSize: 16,
@@ -1157,14 +1054,14 @@ class _PhotoOptionTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  final Gradient gradient;
+  final Color color;
   final VoidCallback onTap;
 
   const _PhotoOptionTile({
     required this.icon,
     required this.title,
     required this.subtitle,
-    required this.gradient,
+    required this.color,
     required this.onTap,
   });
 
@@ -1180,11 +1077,11 @@ class _PhotoOptionTile extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              gradient: gradient,
+              color: color,
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: gradient.colors.first.withOpacity(0.3),
+                  color: color.withOpacity(0.25),
                   blurRadius: 8,
                   offset: const Offset(0, 4),
                 ),
@@ -1257,23 +1154,18 @@ class _SaveButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     
+    // Couleur pleine + ombre douce plutôt qu'un dégradé — cohérent avec le
+    // reste du rebrand (CTA de l'onboarding, FAB du catalogue, etc.).
     return Container(
       height: 56,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isSaving 
-              ? [theme.colorScheme.outline, theme.colorScheme.onSurfaceVariant]
-              : [
-                  theme.colorScheme.primary,
-                  theme.colorScheme.primary.withOpacity(0.8),
-                ],
-        ),
+        color: isSaving ? theme.colorScheme.outline : theme.colorScheme.primary,
         borderRadius: BorderRadius.circular(16),
         boxShadow: isSaving ? [] : [
           BoxShadow(
-            color: theme.colorScheme.primary.withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
+            color: theme.colorScheme.primary.withOpacity(0.25),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -1322,9 +1214,9 @@ class _SaveButton extends StatelessWidget {
                       const SizedBox(width: 12),
                       Flexible(
                         child: Text(
-                          isEditing 
+                          isEditing
                               ? 'Enregistrer les modifications'
-                              : '🚀 Créer le produit',
+                              : 'Créer le produit',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 16,
@@ -1468,14 +1360,12 @@ class _SupplierCard extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [AppTheme.warning, AppTheme.warning],
-                ),
-                borderRadius: BorderRadius.circular(10),
+              decoration: const BoxDecoration(
+                color: AppTheme.warning,
+                borderRadius: BorderRadius.all(Radius.circular(10)),
               ),
               child: const Icon(
-                Icons.local_shipping_rounded,
+                Icons.local_shipping_outlined,
                 color: Colors.white,
                 size: 20,
               ),

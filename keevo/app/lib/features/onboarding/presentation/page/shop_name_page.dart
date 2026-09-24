@@ -5,8 +5,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/di/providers.dart';
 import '../../../../core/storage/app_constants.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../domain/model/sector_type.dart';
 import '../provider/onboarding_provider.dart';
+import '../widget/onboarding_progress_dots.dart';
 
 /// ShopNamePage — Step 2 of the onboarding wizard.
 ///
@@ -127,23 +129,46 @@ class _ShopNamePageState extends ConsumerState<ShopNamePage> {
       }
     });
 
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Nom de votre commerce'),
+        title: const Center(child: OnboardingProgressDots(step: 4, total: 4)),
       ),
-      body: SafeArea(
+      extendBodyBehindAppBar: true,
+      body: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: isDark
+              ? AppTheme.softBackgroundGradientDark
+              : AppTheme.softBackgroundGradient,
+        ),
+        child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
           child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'Comment s\'appelle votre commerce ?',
-                  style: Theme.of(context).textTheme.titleMedium,
+                  'Comment s\'appelle\nvotre commerce ?',
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        height: 1.15,
+                        letterSpacing: -0.3,
+                      ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 8),
+                Text(
+                  'Ce nom apparaîtra sur vos reçus et rapports',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                ),
+                const SizedBox(height: 28),
+                // Décoration héritée du thème global (fill + radius doux) —
+                // pas de `border` explicite ici, contrairement à l'ancienne
+                // version qui écrasait le style thémé par un défaut carré.
                 TextFormField(
                   key: const Key('shopNameField'),
                   controller: _nameController,
@@ -154,24 +179,35 @@ class _ShopNamePageState extends ConsumerState<ShopNamePage> {
                   decoration: const InputDecoration(
                     labelText: 'Nom du commerce',
                     hintText: 'Ex: Boutique Élégance',
-                    border: OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 32),
-                FilledButton(
-                  key: const Key('submitButton'),
-                  onPressed: isLoading ? null : _onSubmit,
-                  child: isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Terminer'),
+                SizedBox(
+                  height: 56,
+                  child: FilledButton(
+                    key: const Key('submitButton'),
+                    onPressed: isLoading ? null : _onSubmit,
+                    style: FilledButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                    ),
+                    child: isLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('Terminer'),
+                  ),
                 ),
               ],
             ),
           ),
+        ),
         ),
       ),
     );

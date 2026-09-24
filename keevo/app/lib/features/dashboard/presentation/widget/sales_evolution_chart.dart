@@ -190,45 +190,71 @@ class _SalesEvolutionChartState extends State<SalesEvolutionChart> {
 
         const SizedBox(height: 6),
 
-        // Touch tooltip
-        if (_selectedIndex != null && _selectedIndex! < widget.data.length)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-            child: Text(
-              _formatTooltip(widget.data[_selectedIndex!]),
-              style: textTheme.bodySmall?.copyWith(
-                color: _barColor,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-
-        // Bar chart (taller to fit axes)
+        // Bar chart (taller to fit axes) — bulle de tooltip flottante
+        // au-dessus de la barre sélectionnée (cf. références fournies)
+        // plutôt qu'une ligne de texte statique sous le titre.
         SizedBox(
-          height: 150,
-          child: GestureDetector(
-            onTapDown: (d) => _onTouch(d.localPosition),
-            onPanUpdate: (d) => _onTouch(d.localPosition),
-            onPanEnd: (_) => setState(() => _selectedIndex = null),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: CustomPaint(
-                size: const Size(double.infinity, 150),
-                painter: _BarChartPainter(
-                  data: widget.data,
-                  selectedIndex: _selectedIndex,
-                  barColor: _barColor,
-                  selectedColor: _selectedBarColor,
-                  xLabels: xLabels,
-                  labelColor: colorScheme.onSurfaceVariant,
-                  gridColor: colorScheme.outline.withValues(alpha: 0.18),
+          height: 176,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return GestureDetector(
+                onTapDown: (d) => _onTouch(d.localPosition),
+                onPanUpdate: (d) => _onTouch(d.localPosition),
+                onPanEnd: (_) => setState(() => _selectedIndex = null),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned(
+                        top: 26,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: CustomPaint(
+                          size: const Size(double.infinity, 150),
+                          painter: _BarChartPainter(
+                            data: widget.data,
+                            selectedIndex: _selectedIndex,
+                            barColor: _barColor,
+                            selectedColor: _selectedBarColor,
+                            xLabels: xLabels,
+                            labelColor: colorScheme.onSurfaceVariant,
+                            gridColor: colorScheme.outline.withValues(alpha: 0.18),
+                          ),
+                        ),
+                      ),
+                      if (_selectedIndex != null &&
+                          _selectedIndex! < widget.data.length)
+                        _TooltipBubble(
+                          text: _formatTooltip(widget.data[_selectedIndex!]),
+                          barCenterX: _barCenterX(
+                            _selectedIndex!,
+                            constraints.maxWidth - 32,
+                          ),
+                          color: _selectedBarColor,
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ),
       ],
     );
+  }
+
+  /// Center x-offset of bar [index] within the chart's drawable width
+  /// (i.e. after the left axis-label gutter) — mirrors [_BarChartPainter]'s
+  /// own layout math so the floating tooltip lines up with its bar.
+  double _barCenterX(int index, double availableWidth) {
+    const gap = 2.0;
+    final chartW = availableWidth - _BarChartPainter.kLeftPad;
+    final n = widget.data.length;
+    if (n == 0) return 0;
+    final barWidth = (chartW - (n - 1) * gap) / n;
+    return _BarChartPainter.kLeftPad + index * (barWidth + gap) + barWidth / 2;
   }
 
   void _onTouch(Offset localPosition) {
@@ -258,6 +284,58 @@ class _SalesEvolutionChartState extends State<SalesEvolutionChart> {
       case ChartPeriod.yearly:
         return 'Année';
     }
+  }
+}
+
+/// Floating tooltip bubble above the selected bar — matches the reference
+/// "on-bar tooltip" pattern instead of a static text line under the title.
+class _TooltipBubble extends StatelessWidget {
+  final String text;
+  final double barCenterX;
+  final Color color;
+
+  const _TooltipBubble({
+    required this.text,
+    required this.barCenterX,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      top: 0,
+      left: 0,
+      child: Transform.translate(
+        offset: Offset(barCenterX, 0),
+        child: FractionalTranslation(
+          translation: const Offset(-0.5, 0),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 11,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -347,11 +425,15 @@ class _BarChartPainter extends CustomPainter {
               ? barColor.withValues(alpha: 0.15)
               : barColor.withValues(alpha: 0.65);
 
+      // Coins arrondis seulement en haut des barres — look "pilule" des
+      // références (au lieu d'un rectangle à coins uniformément arrondis).
+      final topRadius = Radius.circular((barWidth / 2).clamp(0.0, 6.0));
       canvas.drawRRect(
-        RRect.fromRectAndRadius(
+        RRect.fromRectAndCorners(
           Rect.fromLTWH(
               x, originY - barH, barWidth.clamp(1.0, double.infinity), barH),
-          const Radius.circular(2),
+          topLeft: topRadius,
+          topRight: topRadius,
         ),
         paint,
       );

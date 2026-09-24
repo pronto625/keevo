@@ -69,26 +69,32 @@ class _TopProductRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final total = product.revenue;
+    final isTop3 = rank <= 3;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Row(
         children: [
-          SizedBox(
-            width: 24,
+          Container(
+            width: 26,
+            height: 26,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: isTop3
+                  ? AppTheme.primarySoftTint
+                  : Theme.of(context).colorScheme.surfaceContainerHighest,
+              shape: BoxShape.circle,
+            ),
             child: Text(
               '#$rank',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     fontWeight: FontWeight.w700,
-                    color: rank <= 3
+                    color: isTop3
                         ? AppTheme.primary
-                        : Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withValues(alpha: 0.5),
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               product.name,

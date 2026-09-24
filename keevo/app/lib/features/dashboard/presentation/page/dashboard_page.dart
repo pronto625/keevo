@@ -229,9 +229,9 @@ class _DashboardContent extends ConsumerWidget {
 
   String _buildGreeting(String name) {
     final hour = DateTime.now().hour;
-    if (hour < 12) return 'Bonjour $name 👋';
-    if (hour < 18) return 'Bon après-midi $name 👋';
-    return 'Bonsoir $name 👋';
+    if (hour < 12) return 'Bonjour $name';
+    if (hour < 18) return 'Bon après-midi $name';
+    return 'Bonsoir $name';
   }
 }
 
@@ -242,8 +242,11 @@ class _MetricGrid extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Alignée sur la même marge que la hero card / les autres sections
+    // (16dp, pas 12) + espacement généreux entre cartes (12dp, pas 4) —
+    // les cartes étaient collées les unes aux autres.
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final crossAxisCount = constraints.maxWidth > 600 ? 4 : 2;
@@ -251,9 +254,9 @@ class _MetricGrid extends ConsumerWidget {
             crossAxisCount: crossAxisCount,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            childAspectRatio: 1.4,
-            mainAxisSpacing: 4,
-            crossAxisSpacing: 4,
+            childAspectRatio: 1.25,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
             children: [
               MetricBadgeCard.yesterdayCA(amount: snapshot.yesterdayCA),
               MetricBadgeCard.lowStock(

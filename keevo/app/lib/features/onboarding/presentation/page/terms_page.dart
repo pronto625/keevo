@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/storage/app_constants.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../widget/onboarding_progress_dots.dart';
 
 /// Page de validation des Conditions Générales d'Utilisation.
 ///
@@ -64,6 +66,7 @@ class _TermsPageState extends State<TermsPage> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -71,14 +74,33 @@ class _TermsPageState extends State<TermsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // ── Header ──────────────────────────────────────────────
-            _Header(onBack: () {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/onboarding');
-              }
-            }),
+            // ── Header (fond dégradé doux, zone non-scrollable) ───────
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: isDark
+                    ? AppTheme.softBackgroundGradientDark
+                    : AppTheme.softBackgroundGradient,
+              ),
+              child: Column(
+                children: [
+                  _Header(
+                    onBack: () {
+                      if (context.canPop()) {
+                        context.pop();
+                      } else {
+                        context.go('/onboarding');
+                      }
+                    },
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: Center(
+                      child: OnboardingProgressDots(step: 2, total: 4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
             // ── Contenu scrollable ───────────────────────────────────
             Expanded(
@@ -94,7 +116,11 @@ class _TermsPageState extends State<TermsPage> {
                       style: Theme.of(context)
                           .textTheme
                           .headlineMedium
-                          ?.copyWith(fontWeight: FontWeight.bold, height: 1.2),
+                          ?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            height: 1.15,
+                            letterSpacing: -0.3,
+                          ),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -244,16 +270,9 @@ class _TermsPageState extends State<TermsPage> {
                 color: Theme.of(context).scaffoldBackgroundColor,
                 border: Border(
                   top: BorderSide(
-                    color: cs.outlineVariant.withAlpha(80),
+                    color: cs.outlineVariant.withAlpha(60),
                   ),
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: cs.shadow.withAlpha(10),
-                    blurRadius: 8,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
               ),
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
               child: Column(
