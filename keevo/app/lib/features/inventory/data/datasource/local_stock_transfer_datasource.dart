@@ -11,6 +11,11 @@ class LocalStockTransferDataSource {
 
   const LocalStockTransferDataSource(this._db);
 
+  /// Runs [action] in one Drift transaction. Writes made through the same
+  /// database inside it (sync_queue included) commit or roll back together.
+  Future<T> transaction<T>(Future<T> Function() action) =>
+      _db.transaction(action);
+
   /// Returns current local stock quantity for a product/store pair.
   /// Returns 0 if no stock_levels row exists.
   Future<int> getLocalStock({

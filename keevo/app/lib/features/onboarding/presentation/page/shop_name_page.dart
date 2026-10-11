@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/storage/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../auth/presentation/provider/auth_provider.dart';
 import '../../domain/model/sector_type.dart';
 import '../provider/onboarding_provider.dart';
 import '../widget/onboarding_progress_dots.dart';
@@ -14,7 +15,8 @@ import '../widget/onboarding_progress_dots.dart';
 ///
 /// The user enters the store name (2–100 chars).
 /// On submit the [Onboarding] notifier calls the backend.
-/// On success: writes [kOnboardingWizardSeenKey]=true then navigates to /pos.
+/// On success: marks the wizard completed, renews the session (the token then
+/// says onboardingCompleted=true) and navigates to /dashboard or /pos.
 /// On error: shows a SnackBar with the error message.
 class ShopNamePage extends ConsumerStatefulWidget {
   final SectorType sectorType;
@@ -50,13 +52,28 @@ class _ShopNamePageState extends ConsumerState<ShopNamePage> {
         );
   }
 
-  /// Called when ONBOARDING_ALREADY_COMPLETED is received from the backend.
-  /// Marks the wizard locally as complete and navigates to /pos silently.
-  Future<void> _completeLocallyAndNavigate() async {
+  /// Called when ONBOARDING_ALREADY_COMPLETED is received from the backend:
+  /// the tenant is already set up, so the wizard is done.
+  Future<void> _completeLocallyAndNavigate() => _finishWizard();
+
+  /// Marks the wizard done and leaves it. The session is renewed so the
+  /// access token carries onboardingCompleted=true (the registration token
+  /// says false); the local flag covers the case where the server cannot be
+  /// reached.
+  Future<void> _finishWizard() async {
+    // Capture router before async gaps (use_build_context_synchronously)
     final router = GoRouter.of(context);
+    final refresher = ref.read(sessionRefresherProvider);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(kOnboardingWizardSeenKey, true);
+    await prefs.setBool(kOnboardingWizardCompletedKey, true);
+    // Selected sector for the POS empty state (AC6)
     await prefs.setString(kSectorTypeKey, widget.sectorType.apiCode);
+    try {
+      await refresher.refresh();
+    } catch (_) {
+      // Best effort: the local flag already keeps the wizard closed.
+    }
     if (!mounted) return;
     // AC2 (HF-1): Route OWNER to /dashboard; EMPLOYEE stays on /pos.
     final role = prefs.getString(kUserRoleKey);
@@ -95,18 +112,7 @@ class _ShopNamePageState extends ConsumerState<ShopNamePage> {
 
     ref.listen(onboardingProvider, (previous, next) {
       next.whenData((result) async {
-        if (result != null) {
-          // Capture router before async gaps (use_build_context_synchronously)
-          final router = GoRouter.of(context);
-          // Persist onboarding completion state + selected sector for POS empty state (AC6)
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setBool(kOnboardingWizardSeenKey, true);
-          await prefs.setString(kSectorTypeKey, widget.sectorType.apiCode);
-          if (!mounted) return;
-          // AC2 (HF-1): Route OWNER to /dashboard; EMPLOYEE stays on /pos.
-          final role = prefs.getString(kUserRoleKey);
-          router.go(role == 'OWNER' ? '/dashboard' : '/pos');
-        }
+        if (result != null) await _finishWizard();
       });
       if (next.hasError) {
         final errMsg = next.error?.toString() ?? '';

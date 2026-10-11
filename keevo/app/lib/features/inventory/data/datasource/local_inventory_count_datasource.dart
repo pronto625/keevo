@@ -12,6 +12,11 @@ class LocalInventoryCountDataSource {
 
   const LocalInventoryCountDataSource(this._db);
 
+  /// Runs [action] in one Drift transaction. Writes made through the same
+  /// database inside it (sync_queue included) commit or roll back together.
+  Future<T> transaction<T>(Future<T> Function() action) =>
+      _db.transaction(action);
+
   /// Upsert a count row — conflict by primary key (id).
   /// Also handles logical upsert by sessionId+productId+variantId.
   Future<void> upsert(InventoryCountModel count) async {

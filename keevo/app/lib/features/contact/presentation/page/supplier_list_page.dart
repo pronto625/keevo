@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/soft_icon_button.dart';
 import '../../domain/model/supplier_model.dart';
 import '../provider/contact_provider.dart';
 
@@ -32,7 +34,11 @@ class _SupplierListPageState extends ConsumerState<SupplierListPage> {
   }
 
   Future<void> _syncSilently() async {
-    await ref.read(supplierListNotifierProvider.notifier).syncFromRemote();
+    try {
+      await ref.read(supplierListNotifierProvider.notifier).syncFromRemote();
+    } catch (_) {
+      // Hors ligne : la liste locale reste affichée, sans message.
+    }
   }
 
   Future<void> _syncWithFeedback() async {
@@ -54,6 +60,17 @@ class _SupplierListPageState extends ConsumerState<SupplierListPage> {
           ),
         );
       }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Synchronisation impossible : ${appErrorMessage(e)}'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isSyncing = false);
     }
@@ -62,158 +79,108 @@ class _SupplierListPageState extends ConsumerState<SupplierListPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final primary = theme.colorScheme.primary;
     final suppliersAsync = ref.watch(supplierListNotifierProvider);
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
       body: CustomScrollView(
         slivers: [
-          // ── Gradient AppBar ──────────────────────────────────────────
+          // En-tête épuré — fond neutre, sans bandeau dégradé ni cercles
+          // décoratifs ; la hauteur reste suffisante pour ne pas passer sous
+          // la flèche retour.
           SliverAppBar(
-            expandedHeight: 160,
+            expandedHeight: 140,
             pinned: true,
             elevation: 0,
-            backgroundColor: Colors.transparent,
+            scrolledUnderElevation: 0,
+            backgroundColor: theme.colorScheme.surface,
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+              icon: Icon(Icons.arrow_back_ios_new_rounded,
+                  color: theme.colorScheme.onSurface, size: 20),
               onPressed: () => Navigator.of(context).pop(),
             ),
             flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      primary,
-                      primary.withOpacity(0.8),
-                      theme.colorScheme.secondary.withOpacity(0.6),
-                    ],
-                  ),
-                ),
-                child: Stack(
-                  children: [
-                    Positioned(
-                      top: -40, right: -20,
-                      child: Container(
-                        width: 140, height: 140,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withOpacity(0.08),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 10, left: -30,
-                      child: Container(
-                        width: 100, height: 100,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withOpacity(0.06),
-                        ),
-                      ),
-                    ),
-                    SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 0, 16, 20),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
+              background: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 16, 16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '🚚 Fournisseurs',
-                                        style: theme.textTheme.headlineMedium?.copyWith(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Gérez vos approvisionnements',
-                                        style: theme.textTheme.bodyMedium?.copyWith(
-                                          color: Colors.white.withOpacity(0.9),
-                                        ),
-                                      ),
-                                    ],
+                                Text(
+                                  'Fournisseurs',
+                                  style: theme.textTheme.headlineMedium?.copyWith(
+                                    color: theme.colorScheme.onSurface,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: -0.3,
                                   ),
                                 ),
-                                _AppBarButton(
-                                  icon: _includeArchived
-                                      ? Icons.visibility_off_rounded
-                                      : Icons.visibility_rounded,
-                                  tooltip: _includeArchived
-                                      ? 'Masquer les archivés'
-                                      : 'Voir les archivés',
-                                  onPressed: () {
-                                    setState(() => _includeArchived = !_includeArchived);
-                                    ref
-                                        .read(supplierListNotifierProvider.notifier)
-                                        .refresh(includeArchived: _includeArchived);
-                                  },
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Gérez vos approvisionnements',
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
                                 ),
-                                const SizedBox(width: 8),
-                                _isSyncing
-                                    ? Container(
-                                        width: 44, height: 44,
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.2),
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: const Padding(
-                                          padding: EdgeInsets.all(12),
-                                          child: CircularProgressIndicator(
-                                            color: Colors.white, strokeWidth: 2,
-                                          ),
-                                        ),
-                                      )
-                                    : _AppBarButton(
-                                        icon: Icons.sync_rounded,
-                                        tooltip: 'Synchroniser',
-                                        onPressed: _syncWithFeedback,
-                                      ),
                               ],
                             ),
-                          ],
-                        ),
+                          ),
+                          SoftIconButton(
+                            icon: _includeArchived
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                            tooltip: _includeArchived
+                                ? 'Masquer les archivés'
+                                : 'Voir les archivés',
+                            onPressed: () {
+                              setState(() => _includeArchived = !_includeArchived);
+                              ref
+                                  .read(supplierListNotifierProvider.notifier)
+                                  .refresh(includeArchived: _includeArchived);
+                            },
+                          ),
+                          const SizedBox(width: 6),
+                          SoftIconButton(
+                icon: Icons.sync_rounded,
+                tooltip: 'Synchroniser',
+                loading: _isSyncing,
+                onPressed: _syncWithFeedback,
+              ),
+                        ],
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
 
-          // ── Search bar ───────────────────────────────────────────────
+          // ── Search bar — bordure fine plutôt qu'ombre portée ───────────
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: Container(
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surface,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: theme.colorScheme.shadow.withOpacity(0.08),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+                  borderRadius: BorderRadius.circular(AppTheme.radiusL),
+                  border: Border.all(color: theme.colorScheme.outlineVariant),
                 ),
                 child: TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
-                    hintText: '🔍 Rechercher un fournisseur…',
+                    hintText: 'Rechercher un fournisseur…',
                     hintStyle: TextStyle(
-                      color: theme.colorScheme.onSurfaceVariant.withOpacity(0.7),
+                      color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
                     ),
-                    prefixIcon: Icon(Icons.search_rounded, color: primary),
+                    prefixIcon: Icon(Icons.search_rounded,
+                        color: theme.colorScheme.onSurfaceVariant),
                     suffixIcon: _searchController.text.isNotEmpty
                         ? IconButton(
                             icon: const Icon(Icons.clear_rounded),
@@ -227,12 +194,13 @@ class _SupplierListPageState extends ConsumerState<SupplierListPage> {
                           )
                         : null,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusL),
                       borderSide: BorderSide.none,
                     ),
-                    filled: true,
-                    fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    filled: false,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   ),
                   onChanged: (q) {
                     setState(() {});
@@ -280,30 +248,6 @@ class _SupplierListPageState extends ConsumerState<SupplierListPage> {
   }
 }
 
-// ── AppBar icon button ─────────────────────────────────────────────────────────
-
-class _AppBarButton extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onPressed;
-  const _AppBarButton({required this.icon, required this.tooltip, required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: IconButton(
-        icon: Icon(icon, color: Colors.white),
-        tooltip: tooltip,
-        onPressed: onPressed,
-      ),
-    );
-  }
-}
-
 // ── Empty state ────────────────────────────────────────────────────────────────
 
 class _EmptyState extends StatelessWidget {
@@ -322,7 +266,7 @@ class _EmptyState extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(28),
               decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withOpacity(0.1),
+                color: AppTheme.softTint(theme.brightness),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -334,7 +278,7 @@ class _EmptyState extends StatelessWidget {
             const SizedBox(height: 24),
             Text(
               'Aucun fournisseur pour l\'instant',
-              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
@@ -382,7 +326,13 @@ class _ErrorState extends StatelessWidget {
             const SizedBox(height: 16),
             Text('Erreur de chargement', style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
-            Text(error, style: theme.textTheme.bodySmall, textAlign: TextAlign.center),
+            Text(
+              error,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 24),
             OutlinedButton.icon(
               onPressed: onRetry,
@@ -412,42 +362,38 @@ class _SupplierCard extends ConsumerWidget {
       child: InkWell(
         onTap: () => context.push('/suppliers/${supplier.id}', extra: supplier),
         onLongPress: supplier.archived ? null : () => _confirmArchive(context, ref),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        // Rangée de liste : bordure fine plutôt qu'une ombre portée.
         child: Ink(
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: theme.colorScheme.outline.withOpacity(0.1)),
-            boxShadow: [
-              BoxShadow(
-                color: theme.colorScheme.shadow.withOpacity(0.06),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
+            borderRadius: BorderRadius.circular(AppTheme.radiusL),
+            border: Border.all(
+              color: theme.colorScheme.outlineVariant.withAlpha(90),
+            ),
           ),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                // Gradient avatar
+                // Avatar initiale — pastille pâle plutôt qu'un dégradé saturé.
                 Container(
                   width: 52, height: 52,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: supplier.archived
-                          ? [theme.colorScheme.outlineVariant, theme.colorScheme.onSurfaceVariant]
-                          : [primary.withOpacity(0.7), primary],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
+                    color: supplier.archived
+                        ? theme.colorScheme.surfaceContainerHighest
+                        : AppTheme.softTint(theme.brightness),
+                    shape: BoxShape.circle,
                   ),
                   child: Center(
                     child: Text(
                       supplier.name.isNotEmpty ? supplier.name[0].toUpperCase() : '?',
-                      style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20,
+                      style: TextStyle(
+                        color: supplier.archived
+                            ? theme.colorScheme.onSurfaceVariant
+                            : primary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 20,
                       ),
                     ),
                   ),
@@ -475,8 +421,8 @@ class _SupplierCard extends ConsumerWidget {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: theme.colorScheme.surfaceVariant,
-                                borderRadius: BorderRadius.circular(8),
+                                color: theme.colorScheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(20),
                               ),
                               child: Text(
                                 'Archivé',
@@ -489,8 +435,8 @@ class _SupplierCard extends ConsumerWidget {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: primary.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(8),
+                                color: AppTheme.softTint(theme.brightness),
+                                borderRadius: BorderRadius.circular(20),
                               ),
                               child: Text(
                                 '${supplier.productIds.length} produit${supplier.productIds.length > 1 ? 's' : ''}',
@@ -505,7 +451,8 @@ class _SupplierCard extends ConsumerWidget {
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          Icon(Icons.phone_rounded, size: 14, color: primary),
+                          Icon(Icons.phone_outlined, size: 14,
+                              color: theme.colorScheme.onSurfaceVariant),
                           const SizedBox(width: 4),
                           Text(
                             supplier.phone,
@@ -519,7 +466,8 @@ class _SupplierCard extends ConsumerWidget {
                         const SizedBox(height: 2),
                         Row(
                           children: [
-                            Icon(Icons.email_outlined, size: 14, color: primary),
+                            Icon(Icons.email_outlined, size: 14,
+                                color: theme.colorScheme.onSurfaceVariant),
                             const SizedBox(width: 4),
                             Expanded(
                               child: Text(
@@ -538,7 +486,7 @@ class _SupplierCard extends ConsumerWidget {
                 ),
                 Icon(
                   Icons.chevron_right_rounded,
-                  color: theme.colorScheme.onSurfaceVariant.withOpacity(0.4),
+                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
                 ),
               ],
             ),

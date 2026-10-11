@@ -49,7 +49,17 @@ class _InventoryCountingPageState
     final search = ref.watch(inventoryCountSearchProvider);
 
     return Scaffold(
+      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
+        backgroundColor: theme.colorScheme.surface,
+        leading: Navigator.of(context).canPop()
+            ? IconButton(
+                icon: Icon(Icons.arrow_back_ios_new_rounded,
+                    color: theme.colorScheme.onSurface, size: 20),
+                tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+                onPressed: () => Navigator.maybePop(context),
+              )
+            : null,
         title: _isSearching
             ? TextField(
                 controller: _searchController,
@@ -61,7 +71,13 @@ class _InventoryCountingPageState
                 onChanged: (v) =>
                     ref.read(inventoryCountSearchProvider.notifier).state = v,
               )
-            : const Text('Comptage'),
+            : const Text(
+                'Comptage',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.2,
+                ),
+              ),
         actions: [
           IconButton(
             icon: Icon(_isSearching ? Icons.close : Icons.search),
@@ -333,10 +349,12 @@ class _ProgressSection extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                '$counted / $total produits comptés',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
+              Flexible(
+                child: Text(
+                  '$counted / $total produits comptés',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               Text(
@@ -383,18 +401,21 @@ class _SummaryBanner extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.success.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
+        color: AppTheme.success.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppTheme.radiusM),
       ),
       child: Row(
         children: [
-          const Icon(Icons.check_circle, color: AppTheme.success),
+          const Icon(Icons.check_circle_outline_rounded,
+              color: AppTheme.success),
           const SizedBox(width: 8),
-          Text(
-            'Inventaire terminé — $matches concordants, $discrepancies écarts',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+          Expanded(
+            child: Text(
+              'Inventaire terminé — $matches concordants, $discrepancies écarts',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
           ),
         ],
       ),
@@ -429,7 +450,7 @@ class _BottomActionBar extends StatelessWidget {
         color: theme.colorScheme.surface,
         boxShadow: [
           BoxShadow(
-            color: theme.colorScheme.shadow.withValues(alpha: 0.08),
+            color: theme.colorScheme.shadow.withValues(alpha: 0.06),
             blurRadius: 8,
             offset: const Offset(0, -2),
           ),
@@ -472,9 +493,13 @@ class _BottomActionBar extends StatelessWidget {
                 onPressed: onQuickAdd,
                 icon: const Icon(Icons.add),
                 tooltip: 'Ajouter un produit',
+                // Pastille pâle de marque, comme les actions SoftIconButton.
                 style: IconButton.styleFrom(
-                  backgroundColor: theme.colorScheme.secondaryContainer,
-                  foregroundColor: theme.colorScheme.onSecondaryContainer,
+                  backgroundColor: AppTheme.softTint(theme.brightness),
+                  foregroundColor: theme.colorScheme.primary,
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(14)),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/inventory/domain/model/inventory_gap_report_model.dart';
@@ -80,12 +82,14 @@ InventoryGapReportModel _makeReport({
 Widget _buildPage({
   String role = 'OWNER',
   InventoryGapReportModel? report,
+  List<Override> extraOverrides = const [],
 }) {
   final r = report ?? _makeReport();
   return ProviderScope(
     overrides: [
       gapReportProvider('s1').overrideWith((_) async => r),
       currentUserRoleProvider.overrideWithValue(role),
+      ...extraOverrides,
     ],
     child: const MaterialApp(
       home: InventoryGapReportPage(sessionId: 's1'),
@@ -94,6 +98,49 @@ Widget _buildPage({
 }
 
 void main() {
+  group('WhatsApp share', () {
+    const channel = MethodChannel('plugins.flutter.io/url_launcher');
+    final launched = <String>[];
+
+    setUp(() {
+      launched.clear();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'launch') {
+          launched.add((call.arguments as Map)['url'] as String);
+          return false; // WhatsApp not installed / no browser
+        }
+        return false;
+      });
+    });
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    testWidgets('signs with the user name, never the phone number, and '
+        'tells the user when WhatsApp cannot open', (tester) async {
+      SharedPreferences.setMockInitialValues({'user_first_name': 'Awa'});
+      final prefs = await SharedPreferences.getInstance();
+
+      await tester.pumpWidget(_buildPage(extraOverrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        currentUserPhoneProvider.overrideWithValue('+237690000000'),
+      ]));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.share));
+      await tester.pumpAndSettle();
+
+      expect(launched, hasLength(1));
+      final text = Uri.parse(launched.single).queryParameters['text']!;
+      expect(text, contains('Awa'));
+      expect(text, isNot(contains('690000000')));
+      expect(find.byType(SnackBar), findsOneWidget);
+    });
+  });
+
   testWidgets('renders summary + sections when data loaded', (tester) async {
     await tester.pumpWidget(_buildPage());
     await tester.pumpAndSettle();

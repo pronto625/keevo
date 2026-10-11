@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/sync/riverpod_sync_trigger_dispatcher.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
+import '../../../contact/presentation/provider/contact_provider.dart';
 import '../../../inventory/presentation/provider/global_stock_provider.dart';
 import '../../data/datasource/local_sale_datasource.dart';
 import '../../data/datasource/remote_sale_datasource.dart';
@@ -61,6 +62,16 @@ final saleByIdProvider =
     FutureProvider.autoDispose.family<Sale?, String>((ref, saleId) async {
   final repo = ref.watch(saleRepositoryProvider);
   return repo.getSaleById(saleId);
+});
+
+/// Display name of a sale's client, from the local contacts cache.
+/// Null when unknown (not synced yet / deleted) — callers show a generic label
+/// rather than the raw id.
+final saleClientNameProvider =
+    FutureProvider.autoDispose.family<String?, String>((ref, clientId) async {
+  final client =
+      await ref.watch(localClientDataSourceProvider).getById(clientId);
+  return client?.name;
 });
 
 /// Active employee/user ID — read from FlutterSecureStorage.

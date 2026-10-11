@@ -1,4 +1,5 @@
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -66,8 +67,10 @@ class _StockThresholdBottomSheetState
     if (mounted) {
       setState(() => _loading = false);
       if (success) {
+        // Grab the messenger before popping: the sheet's context goes away.
+        final messenger = ScaffoldMessenger.of(context);
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: Text(
               threshold == 0
@@ -100,17 +103,25 @@ class _StockThresholdBottomSheetState
           children: [
             Row(
               children: [
-                const Icon(Icons.notifications_outlined, color: AppTheme.warning),
-                const SizedBox(width: 8),
+                const SoftIconBadge(
+                  icon: Icons.notifications_outlined,
+                  color: AppTheme.warning,
+                  size: 36,
+                ),
+                const SizedBox(width: 10),
                 Text('Seuil d\'alerte stock',
-                    style: Theme.of(context).textTheme.titleLarge),
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w700)),
               ],
             ),
             const SizedBox(height: 8),
             Text(
               'Recevez une alerte quand le stock atteint ce seuil. '
               'Entrez 0 pour désactiver.',
-              style: Theme.of(context).textTheme.bodySmall,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: 16),
             TextFormField(
@@ -119,7 +130,6 @@ class _StockThresholdBottomSheetState
               decoration: const InputDecoration(
                 labelText: 'Seuil minimum (unités)',
                 hintText: 'ex: 10',
-                border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.warning_amber_outlined),
                 helperText: '0 = pas d\'alerte',
               ),
@@ -133,7 +143,13 @@ class _StockThresholdBottomSheetState
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton(
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(56),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusL),
+                  ),
+                ),
                 onPressed: _loading ? null : _submit,
                 child: _loading
                     ? const SizedBox(

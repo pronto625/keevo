@@ -60,15 +60,22 @@ final supplierRepositoryProvider = Provider<SupplierRepository>((ref) {
 
 @riverpod
 class ClientListNotifier extends _$ClientListNotifier {
+  // Mémorise le choix « Voir les archivés » pour que sync et recherche vide
+  // ne le réinitialisent pas.
+  bool _includeArchived = false;
+
   @override
   Future<List<ClientModel>> build() async {
-    return ref.watch(clientRepositoryProvider).getAll();
+    return ref
+        .watch(clientRepositoryProvider)
+        .getAll(includeArchived: _includeArchived);
   }
 
-  Future<void> refresh({bool includeArchived = false}) async {
+  Future<void> refresh({bool? includeArchived}) async {
+    if (includeArchived != null) _includeArchived = includeArchived;
     state = const AsyncLoading();
     state = await AsyncValue.guard(
-        () => ref.read(clientRepositoryProvider).getAll(includeArchived: includeArchived));
+        () => ref.read(clientRepositoryProvider).getAll(includeArchived: _includeArchived));
   }
 
   Future<void> search(String query) async {
@@ -121,8 +128,11 @@ class ClientListNotifier extends _$ClientListNotifier {
   }
 
   Future<void> syncFromRemote() async {
-    await ref.read(clientRepositoryProvider).syncFromRemote();
-    await refresh();
+    try {
+      await ref.read(clientRepositoryProvider).syncFromRemote();
+    } finally {
+      await refresh();
+    }
   }
 }
 
@@ -130,15 +140,22 @@ class ClientListNotifier extends _$ClientListNotifier {
 
 @riverpod
 class SupplierListNotifier extends _$SupplierListNotifier {
+  // Mémorise le choix « Voir les archivés » pour que sync et recherche vide
+  // ne le réinitialisent pas.
+  bool _includeArchived = false;
+
   @override
   Future<List<SupplierModel>> build() async {
-    return ref.watch(supplierRepositoryProvider).getAll();
+    return ref
+        .watch(supplierRepositoryProvider)
+        .getAll(includeArchived: _includeArchived);
   }
 
-  Future<void> refresh({bool includeArchived = false}) async {
+  Future<void> refresh({bool? includeArchived}) async {
+    if (includeArchived != null) _includeArchived = includeArchived;
     state = const AsyncLoading();
     state = await AsyncValue.guard(
-        () => ref.read(supplierRepositoryProvider).getAll(includeArchived: includeArchived));
+        () => ref.read(supplierRepositoryProvider).getAll(includeArchived: _includeArchived));
   }
 
   Future<void> search(String query) async {
@@ -191,8 +208,11 @@ class SupplierListNotifier extends _$SupplierListNotifier {
   }
 
   Future<void> syncFromRemote() async {
-    await ref.read(supplierRepositoryProvider).syncFromRemote();
-    await refresh();
+    try {
+      await ref.read(supplierRepositoryProvider).syncFromRemote();
+    } finally {
+      await refresh();
+    }
   }
 }
 

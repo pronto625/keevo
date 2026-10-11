@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
+
 /// Shows the one-time temporary password bottom sheet (Story 3.5, AC1).
 ///
 /// Non-dismissible — user must tap "Continuer" to close.
@@ -47,6 +50,11 @@ class _TempPasswordSheetState extends State<_TempPasswordSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isDark = cs.brightness == Brightness.dark;
+    // Teintes foncées en clair (lisibles sur fond pâle), claires en sombre.
+    final successColor = isDark ? cs.success : const Color(0xFF2B8A3E);
+    final warningColor = isDark ? cs.warning : const Color(0xFFE65100);
 
     return PopScope(
       canPop: false,
@@ -57,18 +65,10 @@ class _TempPasswordSheetState extends State<_TempPasswordSheet> {
             mainAxisSize: MainAxisSize.min,
             children: [
               // ── Success icon ──────────────────────────────────────
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD3F9D8),
-                  borderRadius: BorderRadius.circular(28),
-                ),
-                child: const Icon(
-                  Icons.check_circle_rounded,
-                  color: Color(0xFF2B8A3E),
-                  size: 32,
-                ),
+              SoftIconBadge(
+                icon: Icons.check_circle_outline_rounded,
+                color: successColor,
+                size: 56,
               ),
               const SizedBox(height: 16),
 
@@ -76,7 +76,7 @@ class _TempPasswordSheetState extends State<_TempPasswordSheet> {
               Text(
                 'Employé créé avec succès',
                 style: theme.textTheme.titleLarge
-                    ?.copyWith(fontWeight: FontWeight.bold),
+                    ?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 8),
 
@@ -84,7 +84,7 @@ class _TempPasswordSheetState extends State<_TempPasswordSheet> {
               Text(
                 '${widget.employeeName} — ${widget.storeName}',
                 style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: const Color(0xFF868E96)),
+                    ?.copyWith(color: cs.onSurfaceVariant),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
@@ -94,29 +94,29 @@ class _TempPasswordSheetState extends State<_TempPasswordSheet> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerLowest,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFDEE2E6)),
+                  color: cs.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusM),
+                  border: Border.all(color: cs.outlineVariant),
                 ),
                 child: Column(
                   children: [
-                    const Text(
+                    Text(
                       'Mot de passe temporaire',
                       style: TextStyle(
                         fontSize: 12,
-                        color: Color(0xFF868E96),
+                        color: cs.onSurfaceVariant,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                     const SizedBox(height: 8),
                     SelectableText(
                       widget.temporaryPassword,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 2,
                         fontFamily: 'monospace',
-                        color: Color(0xFF212529),
+                        color: cs.onSurface,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -152,22 +152,22 @@ class _TempPasswordSheetState extends State<_TempPasswordSheet> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFF3E0),
-                  borderRadius: BorderRadius.circular(12),
+                  color: warningColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusM),
                 ),
-                child: const Row(
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Icon(Icons.warning_amber_rounded,
-                        color: Color(0xFFE65100), size: 20),
-                    SizedBox(width: 8),
+                        color: warningColor, size: 20),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'Ce mot de passe ne sera plus affiché. '
                         'Communiquez-le à l\'employé par vos propres moyens.',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Color(0xFFE65100),
+                          color: warningColor,
                           height: 1.4,
                         ),
                       ),
@@ -183,9 +183,9 @@ class _TempPasswordSheetState extends State<_TempPasswordSheet> {
                 child: FilledButton(
                   onPressed: () => Navigator.pop(context),
                   style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    minimumSize: const Size.fromHeight(56),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusL),
                     ),
                   ),
                   child: const Text('Continuer'),

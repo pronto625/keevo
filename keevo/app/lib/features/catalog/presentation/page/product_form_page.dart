@@ -1,5 +1,6 @@
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/soft_icon_button.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -113,6 +114,9 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
+      // La feuille dessine sa propre poignée ; sans ceci celle du thème
+      // flotterait au-dessus, sur le fond transparent.
+      showDragHandle: false,
       builder: (context) => Container(
         margin: const EdgeInsets.all(20),
         decoration: BoxDecoration(
@@ -387,8 +391,9 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
               onPressed: () => context.pop(),
             ),
             actions: [
-              _SoftAppBarIconButton(
+              SoftIconButton(
                 icon: Icons.lightbulb_outline_rounded,
+                iconSize: 20,
                 tooltip: 'Conseils',
                 onPressed: () {
                   showDialog(
@@ -659,35 +664,6 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// AppBar action button — pastille pastel plutôt que "verre" blanc (qui
-// supposait un fond coloré derrière, disparu avec le bandeau dégradé).
-class _SoftAppBarIconButton extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onPressed;
-
-  const _SoftAppBarIconButton({
-    required this.icon,
-    required this.tooltip,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppTheme.primarySoftTint,
-        borderRadius: BorderRadius.all(Radius.circular(14)),
-      ),
-      child: IconButton(
-        icon: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 20),
-        tooltip: tooltip,
-        onPressed: onPressed,
       ),
     );
   }
@@ -980,9 +956,9 @@ class _PhotoSection extends StatelessWidget {
             contentPadding: const EdgeInsets.all(20),
             leading: Container(
               padding: const EdgeInsets.all(12),
-              decoration: const BoxDecoration(
-                color: AppTheme.primarySoftTint,
-                borderRadius: BorderRadius.all(Radius.circular(12)),
+              decoration: BoxDecoration(
+                color: AppTheme.softTint(Theme.of(context).brightness),
+                borderRadius: const BorderRadius.all(Radius.circular(12)),
               ),
               child: Icon(
                 Icons.photo_camera_outlined,

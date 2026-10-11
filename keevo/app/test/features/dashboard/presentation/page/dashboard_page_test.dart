@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -100,6 +102,102 @@ void main() {
       // Metric badges
       expect(find.text("CA d'Hier"), findsOneWidget);
       expect(find.text('Top Produits — toutes boutiques (7j)'), findsOneWidget);
+    });
+      DashboardSnapshot copyOf(DashboardSnapshot s,
+            {int? todayCA,
+            int? yesterdayCA,
+            int? tx,
+            int? prevTx,
+            List<StoreOverview>? stores,
+            DateTime? asOf}) =>
+        DashboardSnapshot(
+          todayCA: todayCA ?? s.todayCA,
+          yesterdayCA: yesterdayCA ?? s.yesterdayCA,
+          dayBeforeYesterdayCA: s.dayBeforeYesterdayCA,
+          trendPercent: s.trendPercent,
+          totalTransactionsMonth: tx ?? s.totalTransactionsMonth,
+          averageBasketMonth: s.averageBasketMonth,
+          prevMonthTransactions: prevTx ?? s.prevMonthTransactions,
+          prevMonthAverageBasket: s.prevMonthAverageBasket,
+          lowStockCount: s.lowStockCount,
+          weeklyTopProducts: s.weeklyTopProducts,
+          weeklyWorstProducts: s.weeklyWorstProducts,
+          dailyCALast30: s.dailyCALast30,
+          storeOverviews: stores ?? s.storeOverviews,
+          todaySalesCount: s.todaySalesCount,
+          asOf: asOf,
+        );
+
+    Future<void> pumpWith(WidgetTester tester,
+        Future<DashboardSnapshot> Function() load) async {
+      SharedPreferences.setMockInitialValues({kUserFirstNameKey: 'Simon'});
+      final prefs = await SharedPreferences.getInstance();
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          dashboardSnapshotProvider.overrideWith((_) => load()),
+          storeOverviewsProvider
+              .overrideWith((_) => Future.value(const <StoreOverview>[])),
+          chartDataProvider
+              .overrideWith((_) => Future.value(snapshot.dailyCALast30)),
+          sharedPreferencesProvider.overrideWithValue(prefs),
+        ],
+        child: const MaterialApp(home: DashboardPage()),
+      ));
+    }
+
+    testWidgets('"Mis à jour" reflects when the data was fetched',
+        (tester) async {
+      final old = copyOf(snapshot,
+          asOf: DateTime.now().subtract(const Duration(hours: 2)));
+      await pumpWith(tester, () async => old);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Mis à jour il y a 2h'), findsOneWidget);
+    });
+
+    testWidgets('no sale yet but stores exist: dashboard (bell, stores) shown',
+        (tester) async {
+      final noSales = copyOf(snapshot,
+          todayCA: 0,
+          yesterdayCA: 0,
+          tx: 0,
+          prevTx: 0,
+          stores: const [
+            StoreOverview(
+              storeId: 's1',
+              storeName: 'Boutique Centre',
+              todayCA: 0,
+              yesterdayCA: 0,
+              employeeCount: 1,
+              statusLevel: StoreStatusLevel.stable,
+            ),
+          ]);
+      await pumpWith(tester, () async => noSales);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining("CA D'AUJOURD'HUI"), findsOneWidget);
+    });
+
+    testWidgets('pull-to-refresh waits for the new data', (tester) async {
+      var calls = 0;
+      final second = Completer<DashboardSnapshot>();
+      await pumpWith(tester, () {
+        calls++;
+        return calls == 1 ? Future.value(snapshot) : second.future;
+      });
+      await tester.pumpAndSettle();
+
+      var done = false;
+      tester
+          .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+          .onRefresh()
+          .then((_) => done = true);
+      await tester.pump();
+      expect(done, isFalse);
+
+      second.complete(snapshot);
+      await tester.pumpAndSettle();
+      expect(done, isTrue);
     });
   });
 }

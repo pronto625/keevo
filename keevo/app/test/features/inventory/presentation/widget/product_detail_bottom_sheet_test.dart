@@ -4,6 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/inventory/domain/model/inventory_gap_row_model.dart';
 import 'package:keevo/features/inventory/presentation/widget/product_detail_bottom_sheet.dart';
 
+bool _isSelfDrawnHandle(Widget w) =>
+    w is Container &&
+    (w.constraints?.maxHeight == 4) &&
+    (w.constraints?.maxWidth == 36 || w.constraints?.maxWidth == 40);
+
 void main() {
   final shortageRow = InventoryGapRowModel(
     productId: 'p1',
@@ -24,6 +29,13 @@ void main() {
       ),
     );
   }
+
+  testWidgets('relies on the theme drag handle (no second one)',
+      (tester) async {
+    await tester.pumpWidget(buildSheet());
+
+    expect(find.byWidgetPredicate(_isSelfDrawnHandle), findsNothing);
+  });
 
   testWidgets('renders product info, theoretical/physical/écart',
       (tester) async {

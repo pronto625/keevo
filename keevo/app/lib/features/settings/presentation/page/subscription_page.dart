@@ -3,12 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import '../../domain/model/subscription_info.dart';
 import '../provider/subscription_info_provider.dart';
 
 /// SubscriptionPage — Paramètres > Abonnement.
 ///
-/// Gradient header, plan hero card, linear progress bars for usage,
+/// Neutral header, plan hero card, linear progress bars for usage,
 /// premium CTA when on FREE plan. UX spec: Indigo Sky palette.
 class SubscriptionPage extends ConsumerWidget {
   const SubscriptionPage({super.key});
@@ -39,8 +40,9 @@ class SubscriptionPage extends ConsumerWidget {
                 const SizedBox(height: 6),
                 Text(
                   '$err',
-                  style:
-                      const TextStyle(color: Color(0xFF868E96), fontSize: 13),
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 13),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -62,35 +64,31 @@ class _SubscriptionBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isFree = info.planType == 'FREE';
+    final cs = Theme.of(context).colorScheme;
 
     return CustomScrollView(
       slivers: [
-        // ── Gradient header ───────────────────────────────────────────────
+        // ── Header ────────────────────────────────────────────────────────
         SliverAppBar(
-          expandedHeight: 140,
+          expandedHeight: 96,
           pinned: true,
           elevation: 0,
-          backgroundColor: Colors.transparent,
+          scrolledUnderElevation: 0,
+          backgroundColor: cs.surface,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+            icon: Icon(Icons.arrow_back_ios_new_rounded, color: cs.onSurface),
             onPressed: () => context.pop(),
           ),
           flexibleSpace: FlexibleSpaceBar(
-            background: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [AppTheme.primary, AppTheme.primary.withAlpha(180)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-            ),
-            title: const Text(
+            background: ColoredBox(color: cs.surface),
+            centerTitle: false,
+            title: Text(
               'Abonnement',
               style: TextStyle(
-                  color: Colors.white,
+                  color: cs.onSurface,
                   fontSize: 18,
-                  fontWeight: FontWeight.bold),
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.2),
             ),
             titlePadding: const EdgeInsets.only(left: 56, bottom: 16),
           ),
@@ -109,28 +107,25 @@ class _SubscriptionBody extends StatelessWidget {
               const _SectionTitle('Utilisation'),
               const SizedBox(height: 10),
               _UsageCard(
-                icon: Icons.storefront_rounded,
+                icon: Icons.storefront_outlined,
                 label: 'Boutiques',
-                iconColor: AppTheme.primary,
-                iconBg: const Color(0xFFD0EBFF),
+                iconColor: cs.primary,
                 current: info.currentStores,
                 max: info.maxStores,
               ),
               const SizedBox(height: 12),
               _UsageCard(
-                icon: Icons.inventory_2_rounded,
+                icon: Icons.inventory_2_outlined,
                 label: 'Produits',
-                iconColor: const Color(0xFF9B59B6),
-                iconBg: const Color(0xFFF3E5F5),
+                iconColor: AppTheme.iconPurple,
                 current: info.currentProducts,
                 max: info.maxProducts,
               ),
               const SizedBox(height: 12),
               _UsageCard(
-                icon: Icons.people_rounded,
+                icon: Icons.people_outline_rounded,
                 label: 'Employés',
-                iconColor: AppTheme.success,
-                iconBg: const Color(0xFFE8F8EC),
+                iconColor: cs.success,
                 current: info.currentEmployees,
                 max: info.maxEmployees,
               ),
@@ -156,28 +151,31 @@ class _PlanCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (planLabel, planGradient, planIcon) = switch (info.planType) {
+    final cs = Theme.of(context).colorScheme;
+    // Carte neutre ; la couleur du plan ne vit plus que dans le badge
+    // (plus de fond dégradé saturé).
+    final (planLabel, planColor, planIcon) = switch (info.planType) {
       'PREMIUM' => (
           'Premium',
-          const [Color(0xFFF9A825), Color(0xFFFFCA28)],
-          Icons.workspace_premium_rounded
+          const Color(0xFFF9A825),
+          Icons.workspace_premium_outlined
         ),
       'PREMIUM_TRIAL' => (
           'Premium Trial',
-          const [AppTheme.primary, Color(0xFF9B59B6)],
-          Icons.auto_awesome_rounded
+          cs.primary,
+          Icons.auto_awesome_outlined
         ),
       _ => (
           'Gratuit',
-          const [Color(0xFF868E96), Color(0xFFADB5BD)],
-          Icons.lock_open_rounded
+          AppTheme.iconGrey,
+          Icons.lock_open_outlined
         ),
     };
 
     final statusColor = switch (info.status) {
-      'ACTIVE' => AppTheme.success,
-      'SUSPENDED' => AppTheme.warning,
-      _ => AppTheme.errorColor,
+      'ACTIVE' => cs.success,
+      'SUSPENDED' => cs.warning,
+      _ => cs.error,
     };
     final statusLabel = switch (info.status) {
       'ACTIVE' => 'Actif',
@@ -187,19 +185,9 @@ class _PlanCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: LinearGradient(
-          colors: planGradient,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: planGradient.last.withAlpha(100),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        color: cs.cardBg,
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        boxShadow: AppTheme.softShadow(cs),
       ),
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -207,26 +195,19 @@ class _PlanCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(40),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(planIcon, color: Colors.white, size: 24),
-              ),
+              SoftIconBadge(icon: planIcon, color: planColor, size: 44),
               const Spacer(),
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: statusColor,
+                  color: statusColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   statusLabel,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: statusColor,
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                   ),
@@ -237,10 +218,11 @@ class _PlanCard extends StatelessWidget {
           const SizedBox(height: 14),
           Text(
             planLabel,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: cs.onSurface,
               fontSize: 22,
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.3,
             ),
           ),
           if (info.expiresAt != null) ...[
@@ -248,7 +230,7 @@ class _PlanCard extends StatelessWidget {
             Text(
               'Expire le ${_formatDate(info.expiresAt!)}',
               style: TextStyle(
-                color: Colors.white.withAlpha(210),
+                color: cs.onSurfaceVariant,
                 fontSize: 13,
               ),
             ),
@@ -259,7 +241,7 @@ class _PlanCard extends StatelessWidget {
                   ? 'Passez au Premium pour lever les limites'
                   : 'Aucune date d\'expiration',
               style: TextStyle(
-                color: Colors.white.withAlpha(210),
+                color: cs.onSurfaceVariant,
                 fontSize: 13,
               ),
             ),
@@ -286,7 +268,6 @@ class _PlanCard extends StatelessWidget {
 class _UsageCard extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
-  final Color iconBg;
   final String label;
   final int current;
   final int? max;
@@ -294,7 +275,6 @@ class _UsageCard extends StatelessWidget {
   const _UsageCard({
     required this.icon,
     required this.iconColor,
-    required this.iconBg,
     required this.label,
     required this.current,
     this.max,
@@ -302,40 +282,27 @@ class _UsageCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final isUnlimited = max == null;
     final ratio = isUnlimited ? 0.0 : current / max!;
     final barColor = isUnlimited
-        ? AppTheme.primary
+        ? cs.primary
         : ratio >= 1.0
-            ? AppTheme.errorColor
+            ? cs.error
             : ratio >= 0.8
-                ? AppTheme.warning
-                : AppTheme.primary;
+                ? cs.warning
+                : cs.primary;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).colorScheme.shadow.withAlpha(10),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        color: cs.cardBg,
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        boxShadow: AppTheme.softShadow(cs),
       ),
       child: Row(
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: iconBg,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: iconColor, size: 20),
-          ),
+          SoftIconBadge(icon: icon, color: iconColor),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -346,10 +313,10 @@ class _UsageCard extends StatelessWidget {
                   children: [
                     Text(
                       label,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF343A40),
+                        color: cs.onSurface,
                       ),
                     ),
                     Text(
@@ -368,9 +335,9 @@ class _UsageCard extends StatelessWidget {
                   child: LinearProgressIndicator(
                     value: isUnlimited ? 1.0 : ratio.clamp(0.0, 1.0),
                     minHeight: 4,
-                    backgroundColor: const Color(0xFFE9ECEF),
+                    backgroundColor: cs.surfaceContainerHighest,
                     valueColor: AlwaysStoppedAnimation<Color>(
-                      isUnlimited ? AppTheme.success : barColor,
+                      isUnlimited ? cs.success : barColor,
                     ),
                   ),
                 ),
@@ -390,45 +357,41 @@ class _PremiumCta extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    // Carte neutre + accent corail (badge et bouton pleins) plutôt qu'un
+    // fond dégradé saturé.
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: const LinearGradient(
-          colors: [AppTheme.secondary, Color(0xFFFF8E53)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.secondary.withAlpha(80),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        color: cs.cardBg,
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        boxShadow: AppTheme.softShadow(cs),
       ),
       padding: const EdgeInsets.all(20),
       child: Row(
         children: [
-          const Icon(Icons.rocket_launch_rounded,
-              color: Colors.white, size: 32),
+          SoftIconBadge(
+            icon: Icons.rocket_launch_outlined,
+            color: cs.secondary,
+            size: 48,
+          ),
           const SizedBox(width: 16),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Passez au Premium',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: cs.onSurface,
                     fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-                SizedBox(height: 2),
+                const SizedBox(height: 2),
                 Text(
                   'Boutiques, produits et employés illimités',
                   style: TextStyle(
-                    color: Colors.white70,
+                    color: cs.onSurfaceVariant,
                     fontSize: 12,
                   ),
                 ),
@@ -447,14 +410,14 @@ class _PremiumCta extends StatelessWidget {
               padding:
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: cs.secondary,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Text(
+              child: Text(
                 'Voir',
                 style: TextStyle(
-                  color: AppTheme.secondary,
-                  fontWeight: FontWeight.bold,
+                  color: cs.onSecondary,
+                  fontWeight: FontWeight.w700,
                   fontSize: 13,
                 ),
               ),
@@ -478,11 +441,11 @@ class _SectionTitle extends StatelessWidget {
       padding: const EdgeInsets.only(left: 4),
       child: Text(
         text.toUpperCase(),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.8,
-          color: Color(0xFF868E96),
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       ),
     );

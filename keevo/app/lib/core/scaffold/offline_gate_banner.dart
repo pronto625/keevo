@@ -62,12 +62,19 @@ class _OfflineGateBannerState extends ConsumerState<OfflineGateBanner> {
     if (!isCritical && _dismissedToday) return const SizedBox.shrink();
 
     final cs = Theme.of(context).colorScheme;
+    final isDark = cs.brightness == Brightness.dark;
     final backgroundColor =
         isCritical ? cs.errorContainer_ : cs.warningContainer;
-    final textColor = isCritical ? AppTheme.errorColor : cs.onSurface;
+    // Rouge sur le rouge foncé de `errorContainer_` est illisible en mode
+    // sombre : l'urgence y reste portée par le fond et l'icône.
+    final textColor =
+        isCritical && !isDark ? AppTheme.errorColor : cs.onSurface;
+    final iconColor = isCritical
+        ? AppTheme.errorColor
+        : (isDark ? cs.warning : AppTheme.iconAmber);
     final message = isCritical
-        ? '🔴 Dernière chance : synchronisez demain ou l\'accès sera limité (Jour $days/7)'
-        : '⚠ Synchronisation requise dans ${7 - days} jour${(7 - days) > 1 ? 's' : ''} (Jour $days/7)';
+        ? 'Dernière chance : synchronisez demain ou l\'accès sera limité (Jour $days/7)'
+        : 'Synchronisation requise dans ${7 - days} jour${(7 - days) > 1 ? 's' : ''} (Jour $days/7)';
 
     return Material(
       color: Colors.transparent,
@@ -77,6 +84,14 @@ class _OfflineGateBannerState extends ConsumerState<OfflineGateBanner> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
+            Icon(
+              isCritical
+                  ? Icons.error_outline_rounded
+                  : Icons.warning_amber_rounded,
+              size: 18,
+              color: iconColor,
+            ),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 message,

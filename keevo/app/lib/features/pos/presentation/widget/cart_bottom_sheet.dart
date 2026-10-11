@@ -21,6 +21,8 @@ class CartBottomSheet extends ConsumerStatefulWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      // The sheet draws its own handle inside the draggable area.
+      showDragHandle: false,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -139,13 +141,13 @@ class _CartBottomSheetState extends ConsumerState<CartBottomSheet> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: AppTheme.primary.withValues(alpha: 0.1),
+                            color: AppTheme.softTint(theme.brightness),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
                             '${cart.length}',
-                            style: const TextStyle(
-                              color: AppTheme.primary,
+                            style: TextStyle(
+                              color: cs.primary,
                               fontWeight: FontWeight.w700,
                               fontSize: 13,
                             ),
@@ -242,7 +244,7 @@ class _CartBottomSheetState extends ConsumerState<CartBottomSheet> {
                         _currencyFormat.format(finalTotal),
                         style: theme.textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.w800,
-                          color: AppTheme.primary,
+                          color: cs.primary,
                         ),
                       ),
                     ],
@@ -256,18 +258,15 @@ class _CartBottomSheetState extends ConsumerState<CartBottomSheet> {
                 width: double.infinity,
                 height: 52,
                 child: DecoratedBox(
+                  // Couleur pleine plutôt qu'un dégradé ; indigo de marque
+                  // dans les deux thèmes pour garder le contraste du libellé.
                   decoration: BoxDecoration(
-                    gradient: cart.isNotEmpty
-                        ? const LinearGradient(
-                            colors: [AppTheme.primary, AppTheme.primaryGradientEnd],
-                          )
-                        : null,
-                    color: cart.isEmpty ? cs.outlineVariant : null,
+                    color: cart.isNotEmpty ? AppTheme.primary : cs.outlineVariant,
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: cart.isNotEmpty
                         ? [
                             BoxShadow(
-                              color: AppTheme.primary.withValues(alpha: 0.3),
+                              color: AppTheme.primary.withValues(alpha: 0.25),
                               blurRadius: 12,
                               offset: const Offset(0, 4),
                             ),
@@ -460,16 +459,13 @@ class _CartItemTileState extends State<_CartItemTile> {
                           ],
                           autofocus: true,
                           style: theme.textTheme.bodyMedium?.copyWith(
-                            color: AppTheme.primary,
+                            color: cs.primary,
                             fontWeight: FontWeight.w600,
                           ),
                           decoration: InputDecoration(
                             isDense: true,
                             contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 6),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
                             suffix: const Text('FCFA',
                                 style: TextStyle(fontSize: 11)),
                           ),
@@ -488,7 +484,7 @@ class _CartItemTileState extends State<_CartItemTile> {
                             Text(
                               _currencyFormat.format(item.appliedUnitPrice),
                               style: theme.textTheme.bodyMedium?.copyWith(
-                                color: AppTheme.primary,
+                                color: cs.primary,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -555,7 +551,7 @@ class _CartItemTileState extends State<_CartItemTile> {
                                 textAlign: TextAlign.center,
                                 style: theme.textTheme.bodyLarge?.copyWith(
                                   fontWeight: FontWeight.w700,
-                                  color: AppTheme.primary,
+                                  color: cs.primary,
                                 ),
                                 decoration: const InputDecoration(
                                   isDense: true,
@@ -583,7 +579,7 @@ class _CartItemTileState extends State<_CartItemTile> {
                                     textAlign: TextAlign.center,
                                     style: theme.textTheme.bodyLarge?.copyWith(
                                       fontWeight: FontWeight.w700,
-                                      color: AppTheme.primary,
+                                      color: cs.primary,
                                     ),
                                   ),
                                 ),
@@ -593,11 +589,11 @@ class _CartItemTileState extends State<_CartItemTile> {
                         onTap: widget.onIncrement,
                         borderRadius: const BorderRadius.horizontal(
                             right: Radius.circular(12)),
-                        child: const Padding(
-                          padding: EdgeInsets.symmetric(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 10),
                           child: Icon(Icons.add_rounded,
-                              size: 18, color: AppTheme.primary),
+                              size: 18, color: cs.primary),
                         ),
                       ),
                     ],
@@ -660,7 +656,6 @@ class _InitialStockDialogState extends State<_InitialStockDialog> {
             autofocus: true,
             decoration: const InputDecoration(
               labelText: 'Quantité en stock',
-              border: OutlineInputBorder(),
             ),
           ),
         ],

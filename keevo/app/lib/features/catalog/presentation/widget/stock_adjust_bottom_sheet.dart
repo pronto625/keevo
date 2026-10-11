@@ -81,8 +81,10 @@ class _StockAdjustBottomSheetState
     if (mounted) {
       setState(() => _loading = false);
       if (success) {
+        // Grab the messenger before popping: the sheet's context goes away.
+        final messenger = ScaffoldMessenger.of(context);
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(content: Text('Stock ajusté avec succès')),
         );
       } else {
@@ -113,11 +115,15 @@ class _StockAdjustBottomSheetState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Ajustement de stock',
-                style: Theme.of(context).textTheme.titleLarge),
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             Text(
               'Définissez la quantité réelle en stock (après comptage physique).',
-              style: Theme.of(context).textTheme.bodySmall,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: 16),
             TextFormField(
@@ -126,7 +132,6 @@ class _StockAdjustBottomSheetState
               decoration: const InputDecoration(
                 labelText: 'Nouvelle quantité *',
                 hintText: 'ex: 42',
-                border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.inventory_2_outlined),
               ),
               validator: (v) {
@@ -142,7 +147,6 @@ class _StockAdjustBottomSheetState
               decoration: const InputDecoration(
                 labelText: 'Raison * (audit)',
                 hintText: 'ex: Comptage physique du 09/03/2026',
-                border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.description_outlined),
               ),
               validator: (v) {
@@ -155,7 +159,13 @@ class _StockAdjustBottomSheetState
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton(
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(56),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusL),
+                  ),
+                ),
                 onPressed: _loading ? null : _submit,
                 child: _loading
                     ? const SizedBox(

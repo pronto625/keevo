@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/sync/riverpod_sync_trigger_dispatcher.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
 import '../../data/datasource/local_inventory_count_datasource.dart';
 import '../../data/datasource/remote_inventory_count_datasource.dart';
@@ -36,6 +37,7 @@ final inventoryCountRepositoryProvider =
     remote: ref.watch(remoteInventoryCountDsProvider),
     connectivity: ref.watch(connectivityServiceProvider),
     syncService: ref.watch(syncServiceProvider),
+    syncTriggerDispatcher: ref.watch(syncTriggerDispatcherProvider),
   );
 });
 
@@ -64,10 +66,12 @@ enum InventoryCountFilter { all, uncounted, discrepancies }
 
 /// Filter state — defaults to uncounted (AC4).
 final inventoryCountFilterProvider =
-    StateProvider<InventoryCountFilter>((ref) => InventoryCountFilter.uncounted);
+    StateProvider.autoDispose<InventoryCountFilter>(
+        (ref) => InventoryCountFilter.uncounted);
 
 /// Search query for product name filtering.
-final inventoryCountSearchProvider = StateProvider<String>((ref) => '');
+final inventoryCountSearchProvider =
+    StateProvider.autoDispose<String>((ref) => '');
 
 // ── Action notifier — saves individual count ─────────────────────────────
 

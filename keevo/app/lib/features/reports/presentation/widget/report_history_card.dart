@@ -37,13 +37,20 @@ class ReportHistoryCard extends StatelessWidget {
         : _dateFormat.format(report.reportDate);
     final typeLabelColor = _typeLabelColor(report.reportType, theme.colorScheme);
 
-    return Card(
+    final cs = theme.colorScheme;
+    return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
+      decoration: BoxDecoration(
+        color: cs.cardBg,
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        boxShadow: AppTheme.softShadow(cs),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Row(
@@ -77,8 +84,8 @@ class ReportHistoryCard extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: typeLabelColor.withAlpha(30),
-                            borderRadius: BorderRadius.circular(4),
+                            color: typeLabelColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
                             _typeLabel(report.reportType),
@@ -105,7 +112,7 @@ class ReportHistoryCard extends StatelessWidget {
                           _currencyFormat.format(report.totalRevenue),
                           style: theme.textTheme.bodyMedium?.copyWith(
                             fontWeight: FontWeight.w700,
-                            color: AppTheme.success,
+                            color: cs.success,
                           ),
                         ),
                         Text(
@@ -125,6 +132,7 @@ class ReportHistoryCard extends StatelessWidget {
           ),
         ),
       ),
+      ),
     );
   }
 
@@ -143,7 +151,7 @@ class ReportHistoryCard extends StatelessWidget {
 
   Color _titleColor(BuildContext context) {
     if (report.actorId == currentUserId && currentUserId != null) {
-      return AppTheme.primary;
+      return Theme.of(context).colorScheme.primary;
     }
     return Theme.of(context).colorScheme.onSurface;
   }
@@ -151,9 +159,9 @@ class ReportHistoryCard extends StatelessWidget {
   Color _statusColor(String status, ColorScheme cs) {
     switch (status) {
       case 'SENT':
-        return AppTheme.success;
+        return cs.success;
       case 'FAILED':
-        return AppTheme.warning;
+        return cs.warning;
       case 'IN_APP_ONLY':
         return cs.onSurfaceVariant;
       default:
@@ -164,20 +172,20 @@ class ReportHistoryCard extends StatelessWidget {
   IconData _statusIcon(String status) {
     switch (status) {
       case 'SENT':
-        return Icons.check_circle_outline;
+        return Icons.check_circle_outline_rounded;
       case 'FAILED':
-        return Icons.error_outline;
+        return Icons.error_outline_rounded;
       case 'IN_APP_ONLY':
-        return Icons.phone_android;
+        return Icons.phone_android_rounded;
       default:
-        return Icons.schedule;
+        return Icons.schedule_rounded;
     }
   }
 
   String _typeLabel(String type) {
     switch (type) {
       case 'WEEKLY':
-        return '📅 HEBDO';
+        return 'HEBDO';
       case 'DAILY_COMBINED':
         return 'Multi-boutiques';
       default:
@@ -188,7 +196,7 @@ class ReportHistoryCard extends StatelessWidget {
   Color _typeLabelColor(String type, ColorScheme cs) {
     switch (type) {
       case 'WEEKLY':
-        return AppTheme.warning;
+        return cs.warning;
       case 'DAILY_COMBINED':
         return const Color(0xFF7048E8);
       default:

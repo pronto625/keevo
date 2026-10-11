@@ -24,7 +24,9 @@ class MarginSparkline extends StatelessWidget {
         child: Center(
           child: Text(
             'Pas de données',
-            style: TextStyle(color: Theme.of(context).colorScheme.outline, fontSize: 12),
+            style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 12),
           ),
         ),
       );
@@ -37,7 +39,7 @@ class MarginSparkline extends StatelessWidget {
         child: CustomPaint(
           painter: _SparklinePainter(
             entries: entries,
-            positiveColor: AppTheme.success,
+            positiveColor: cs.success,
             negativeColor: cs.error,
             zeroLineColor: cs.outlineVariant,
           ),

@@ -1,12 +1,5 @@
-import 'dart:convert';
-import 'dart:io';
-
-import 'package:dio/dio.dart';
-import 'package:dio/io.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -17,6 +10,7 @@ import '../../features/auth/presentation/page/tenant_picker_page.dart';
 import '../../features/auth/presentation/page/forgot_password_page.dart';
 import '../../features/auth/presentation/page/reset_password_page.dart';
 import '../../features/auth/presentation/provider/auth_provider.dart';
+import '../../features/auth/presentation/provider/session_claims_applier.dart';
 import '../../features/catalog/domain/model/product_model.dart';
 import '../../features/catalog/presentation/page/catalog_page.dart';
 import '../../features/catalog/presentation/page/categories_page.dart';
@@ -69,115 +63,13 @@ import '../../features/dashboard/presentation/page/store_dashboard_page.dart';
 import '../../features/team/presentation/page/create_employee_page.dart';
 import '../di/providers.dart';
 import '../scaffold/main_shell.dart';
-import '../../features/stores/presentation/provider/active_store_provider.dart';
 import '../storage/app_constants.dart';
-
-// Mirrors the API_BASE_URL from auth_provider.dart so the splash can perform
-// a proactive token refresh without importing auth_provider.
-const _kApiBaseUrl = String.fromEnvironment(
-  'API_BASE_URL',
-  defaultValue: 'http://localhost:4500',
-);
+import 'startup_route.dart';
 
 /// Global ScaffoldMessenger key — used by AuthInterceptor.onAccountSuspended
 /// to show a SnackBar regardless of which page the user is on when their
 /// session is revoked or account deactivated (Story 12.7 AC4).
 final rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
-
-/// Returns true only if [token] is a structurally valid JWT **and** its `exp`
-/// claim is in the future. Expired or malformed tokens return false.
-bool _isValidJwt(String token) {
-  final parts = token.split('.');
-  if (parts.length != 3 || !token.startsWith('eyJ')) return false;
-  try {
-    final payload = parts[1];
-    final decoded = utf8.decode(
-      base64Url.decode(base64Url.normalize(payload)),
-    );
-    final data = jsonDecode(decoded) as Map<String, dynamic>;
-    final exp = data['exp'] as int?;
-    if (exp == null) return false;
-    return DateTime.now().isBefore(
-      DateTime.fromMillisecondsSinceEpoch(exp * 1000),
-    );
-  } catch (_) {
-    return false;
-  }
-}
-
-/// Decodes the JWT payload without checking expiry. Returns null for
-/// malformed tokens. Used to distinguish "expired but valid structure"
-/// from garbage, enabling proactive silent refresh on splash.
-Map<String, dynamic>? _decodeJwtPayload(String token) {
-  final parts = token.split('.');
-  if (parts.length != 3 || !token.startsWith('eyJ')) return null;
-  try {
-    final payload = parts[1];
-    final decoded = utf8.decode(
-      base64Url.decode(base64Url.normalize(payload)),
-    );
-    return jsonDecode(decoded) as Map<String, dynamic>;
-  } catch (_) {
-    return null;
-  }
-}
-
-/// Attempts a silent token refresh using the stored refresh token.
-/// Returns the new access token on success, null on any failure.
-/// Persists new tokens to secure storage on success.
-Future<String?> _tryProactiveRefresh(FlutterSecureStorage storage) async {
-  final refreshToken = await storage.read(key: 'refresh_token');
-  if (refreshToken == null) return null;
-  try {
-    final dio = Dio(BaseOptions(
-      baseUrl: _kApiBaseUrl,
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
-    ));
-    // Match the badCertificateCallback from dioProvider/_refreshDioProvider
-    // so silent refresh works on debug localhost with self-signed certs (AC3).
-    dio.httpClientAdapter = IOHttpClientAdapter(
-      createHttpClient: () {
-        final client = HttpClient();
-        client.badCertificateCallback =
-            (cert, host, port) => kDebugMode && host == 'localhost';
-        return client;
-      },
-    );
-    final response = await dio.post(
-      '/api/v1/auth/refresh',
-      data: {'refreshToken': refreshToken},
-    );
-    final body = response.data as Map<String, dynamic>;
-    final newAccess = body['accessToken'] as String?;
-    final newRefresh = body['refreshToken'] as String?;
-    if (newAccess == null) return null;
-    await storage.write(key: 'jwt_token', value: newAccess);
-    if (newRefresh != null) {
-      await storage.write(key: 'refresh_token', value: newRefresh);
-    }
-    return newAccess;
-  } catch (_) {
-    return null;
-  }
-}
-
-/// Returns true if the JWT payload contains `tenantStatus == "ACTIVE"`,
-/// meaning the onboarding wizard has already been completed on the backend.
-bool _isTenantActive(String token) {
-  final parts = token.split('.');
-  if (parts.length != 3) return false;
-  try {
-    final payload = parts[1];
-    final decoded = utf8.decode(
-      base64Url.decode(base64Url.normalize(payload)),
-    );
-    final data = jsonDecode(decoded) as Map<String, dynamic>;
-    return data['tenantStatus'] == 'ACTIVE';
-  } catch (_) {
-    return false;
-  }
-}
 
 /// Écran de démarrage invisible — redirige vers l'onboarding au premier
 /// lancement ou directement vers l'inscription si déjà vu.
@@ -200,95 +92,32 @@ class _SplashRedirectPageState extends ConsumerState<_SplashRedirectPage> {
   }
 
   Future<void> _redirect() async {
-    final storage = ref.read(flutterSecureStorageProvider);
-    final token = await storage.read(key: 'jwt_token');
-
-    // Resolve the effective access token — use the stored one if still valid,
-    // otherwise attempt a silent refresh before falling back to login.
-    String? effectiveToken;
-    if (token != null) {
-      if (_isValidJwt(token)) {
-        effectiveToken = token;
-      } else if (_decodeJwtPayload(token) != null) {
-        // Expired but structurally valid — try silent refresh (Story 8.6 AC8:
-        // refresh token TTL is 180 days, so this covers the common 2-day gap).
-        effectiveToken = await _tryProactiveRefresh(storage);
-        if (effectiveToken == null) {
-          await storage.delete(key: 'jwt_token');
-          await storage.delete(key: 'refresh_token');
-        }
-      } else {
-        await storage.delete(key: 'jwt_token');
-      }
+    String route;
+    try {
+      route = await resolveStartupRoute(
+        storage: ref.read(flutterSecureStorageProvider),
+        prefs: await SharedPreferences.getInstance(),
+        refresher: ref.read(sessionRefresherProvider),
+        applyClaims: (token) =>
+            ref.read(sessionClaimsApplierProvider).apply(token),
+      );
+    } catch (_) {
+      // Storage or local DB failure: never leave the user on the spinner.
+      route = '/auth/login';
     }
-
-    if (effectiveToken != null) {
-      if (!mounted) return;
-
-      // Story 16.8 AC1: pull latest server state after JWT validation at
-      // cold start — fire-and-forget, do NOT block navigation.
-      ref.read(syncTriggerNotifierProvider.notifier).onAppStartup();
-
-      // Ensure EMPLOYEE activeStoreId is set from JWT on cold start.
-      // OWNER gets null (all stores).
-      String? role;
-      try {
-        final claims = _decodeJwtPayload(effectiveToken)!;
-        role = claims['role'] as String?;
-        final jwtStoreId = claims['storeId'] as String?;
-        ref.read(activeStoreIdProvider.notifier).setActiveStore(
-          role == 'EMPLOYEE' ? jwtStoreId : null,
-        );
-
-        // Story 7.1 AC2: persist firstName from JWT for dashboard greeting.
-        // Always overwrite (even with null) so a previous user's name is never shown.
-        final firstName = claims['firstName'] as String?;
-        final prefs0 = await SharedPreferences.getInstance();
-        if (firstName != null && firstName.isNotEmpty) {
-          await prefs0.setString('user_first_name', firstName);
-        } else {
-          await prefs0.remove('user_first_name');
-        }
-      } catch (_) {}
-
-      final prefs = await SharedPreferences.getInstance();
-      var wizardSeen = prefs.getBool(kOnboardingWizardSeenKey) ?? false;
-
-      // If the flag is missing locally, fall back to the JWT payload:
-      // tenantStatus == "ACTIVE" means onboarding was already completed on
-      // a previous install / after a data-clear. Mark it locally and skip
-      // the wizard so the user is never stuck in the onboarding loop.
-      if (!wizardSeen) {
-        wizardSeen = _isTenantActive(effectiveToken);
-        if (wizardSeen) {
-          await prefs.setBool(kOnboardingWizardSeenKey, true);
-        }
-      }
-
-      if (!mounted) return;
-
-      // Story 3.5 AC4: password change guard — redirect employee to
-      // change-password page before any other screen is accessible.
-      if (wizardSeen) {
-        final pwdChangeRequired =
-            prefs.getBool(kPasswordChangeRequiredKey) ?? false;
-        if (pwdChangeRequired) {
-          context.go('/auth/change-password');
-          return;
-        }
-      }
-
-      // Story 7.1: OWNER lands on /dashboard, EMPLOYEE on /pos.
-      final landingRoute = (role == 'OWNER') ? '/dashboard' : '/pos';
-      context.go(wizardSeen ? landingRoute : '/onboarding/sector');
-      return;
-    }
-
-    // No valid session — go to login or first-run onboarding.
-    final prefs = await SharedPreferences.getInstance();
-    final onboardingSeen = prefs.getBool(kOnboardingSeenKey) ?? false;
     if (!mounted) return;
-    context.go(onboardingSeen ? '/auth/login' : '/onboarding');
+
+    // Story 16.8 AC1: pull latest server state at cold start once signed in —
+    // fire-and-forget, do NOT block navigation.
+    try {
+      if (await hasSession(ref.read(flutterSecureStorageProvider))) {
+        ref.read(syncTriggerNotifierProvider.notifier).onAppStartup();
+      }
+    } catch (_) {
+      // Storage unreadable: the startup pull simply does not run.
+    }
+    if (!mounted) return;
+    context.go(route);
   }
 
   @override
@@ -320,6 +149,48 @@ const _ownerOnlyPrefixes = [
   '/settings/reports',
 ];
 
+/// S12 (Story 12.7 AC5): Global auth guard — any deep link to a non-public route
+/// without a session is sent to /splash, which decides where to go. EMPLOYEE
+/// users are kept out of OWNER-only routes (AC5).
+///
+/// Public routes are reachable signed out. /terms must be: the splash sends a
+/// signed-out user there before registration, so guarding it would loop
+/// /splash → /terms → /splash. /tenant-picker too: a multi-membership user
+/// reaches it before any JWT exists (the login token only lives in the route
+/// extra), and without that extra the route falls back to the login page.
+/// /auth/change-password requires a session and is not public.
+@visibleForTesting
+Future<String?> globalAuthRedirect(
+  String path, {
+  required Future<bool> Function() hasSession,
+  required Future<String?> Function() readRole,
+}) async {
+  const publicPaths = {
+    '/splash',
+    '/terms',
+    '/auth/login',
+    '/auth/register',
+    '/auth/forgot-password',
+    '/auth/reset-password',
+    '/tenant-picker',
+  };
+  const publicPathPrefixes = ['/onboarding'];
+  final isPublicPath = publicPaths.contains(path) ||
+      publicPathPrefixes.any((p) => path.startsWith(p));
+  try {
+    if (!isPublicPath && !await hasSession()) return '/splash';
+
+    final isOwnerOnlyPath =
+        _ownerOnlyPrefixes.any((prefix) => path.startsWith(prefix));
+    if (!isOwnerOnlyPath) return null;
+    if (await readRole() == 'EMPLOYEE') return '/pos';
+    return null;
+  } catch (_) {
+    // Storage unreadable: let the splash decide (it falls back to login).
+    return path == '/splash' ? null : '/splash';
+  }
+}
+
 /// Application router — all feature routes registered here.
 /// Each route points to a placeholder until the feature story is implemented.
 ///
@@ -329,8 +200,7 @@ const _ownerOnlyPrefixes = [
 /// 3. Settings tiles hiding in SettingsPage (Gestion section hidden for EMPLOYEE)
 /// 4. Backend enforcement via JwtAuthFilter (403 for EMPLOYEE on OWNER-only endpoints)
 ///
-/// S12 (Story 12.7 AC5): Global auth guard — any deep link to a non-public route
-/// without a valid JWT is redirected to /splash for session validation.
+/// S12 (Story 12.7 AC5): Global auth guard — see [globalAuthRedirect].
 final GoRouter appRouter = GoRouter(
   initialLocation: '/splash',
   errorBuilder: (context, state) {
@@ -344,38 +214,14 @@ final GoRouter appRouter = GoRouter(
     );
   },
   redirect: (context, state) async {
-    final path = state.uri.path;
-
-    // ── S12 (Story 12.7 AC5): Global auth guard ─────────────────────────
-    // Any deep link to a non-public route without a valid JWT → /splash
-    // Note: /auth/change-password and /tenant-picker require authentication
-    // and must NOT be in this list.
-    const _publicPaths = {
-      '/splash',
-      '/auth/login',
-      '/auth/register',
-      '/auth/forgot-password',
-      '/auth/reset-password',
-    };
-    const _publicPathPrefixes = ['/onboarding'];
-    final isPublicPath = _publicPaths.contains(path) ||
-        _publicPathPrefixes.any((p) => path.startsWith(p));
-    if (!isPublicPath) {
-      final storage = ProviderScope.containerOf(context, listen: false)
-          .read(flutterSecureStorageProvider);
-      final token = await storage.read(key: 'jwt_token');
-      if (token == null || !_isValidJwt(token)) return '/splash';
-    }
-
-    final isOwnerOnlyPath =
-        _ownerOnlyPrefixes.any((prefix) => path.startsWith(prefix));
-    if (!isOwnerOnlyPath) {
-      return null;
-    }
-    final prefs = await SharedPreferences.getInstance();
-    final role = prefs.getString(kUserRoleKey);
-    if (role == 'EMPLOYEE') return '/pos';
-    return null;
+    final storage = ProviderScope.containerOf(context, listen: false)
+        .read(flutterSecureStorageProvider);
+    return globalAuthRedirect(
+      state.uri.path,
+      hasSession: () => hasSession(storage),
+      readRole: () async =>
+          (await SharedPreferences.getInstance()).getString(kUserRoleKey),
+    );
   },
   routes: [
     // ── Splash / redirect logique premier lancement ──────────
@@ -388,11 +234,11 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/auth/login',
       redirect: (context, state) async {
-        // AC3: skip login only when a valid, non-expired JWT is present
+        // AC3: skip login while the device holds a session (renewable through
+        // the refresh token even when the access token has expired).
         final storage = ProviderScope.containerOf(context, listen: false)
             .read(flutterSecureStorageProvider);
-        final token = await storage.read(key: 'jwt_token');
-        if (token != null && _isValidJwt(token)) {
+        if (await hasSession(storage)) {
           // Story 7.1: OWNER → /dashboard, EMPLOYEE → /pos
           final prefs = await SharedPreferences.getInstance();
           final role = prefs.getString(kUserRoleKey);
@@ -404,6 +250,12 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: '/auth/register',
+      // Account creation requires the CGU (UI-1 flow); enforced here so a
+      // deep link cannot skip them.
+      redirect: (_, __) async {
+        final prefs = await SharedPreferences.getInstance();
+        return (prefs.getBool(kTermsAcceptedKey) ?? false) ? null : '/terms';
+      },
       builder: (_, __) => const AuthPage(initialMode: AuthMode.register),
     ),
 
@@ -414,7 +266,10 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: '/auth/reset-password',
-      builder: (_, __) => const ResetPasswordPage(),
+      builder: (_, state) => ResetPasswordPage(
+        phoneNumber:
+            (state.extra as Map<String, dynamic>?)?['phoneNumber'] as String?,
+      ),
     ),
 
     // ── Password change (Story 3.5 — full-screen, no bottom nav) ─────────

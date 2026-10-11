@@ -108,10 +108,10 @@ class _PosSpeedDialState extends State<PosSpeedDial>
                                   DayCloseButtonState.closed;
                               return _SpeedDialOption(
                                 icon: isClosed
-                                    ? Icons.check_circle
+                                    ? Icons.check_circle_rounded
                                     : Icons.nightlight_round,
                                 label: isClosed
-                                    ? 'Clôturée ✅'
+                                    ? 'Clôturée'
                                     : 'Clôturer',
                                 backgroundColor: isClosed
                                     ? Theme.of(context).colorScheme.onSurfaceVariant
@@ -164,9 +164,13 @@ class _PosSpeedDialState extends State<PosSpeedDial>
             builder: (context, child) {
               return Transform.rotate(
                 angle: _rotationAnimation.value * 3.14159 * 2,
+                // Ouvert, le fond passe en onSurface (clair en mode sombre) :
+                // l'icône prend la couleur de surface pour rester visible.
                 child: Icon(
                   _isOpen ? Icons.close_rounded : Icons.more_vert_rounded,
-                  color: Colors.white,
+                  color: _isOpen
+                      ? Theme.of(context).colorScheme.surface
+                      : Colors.white,
                 ),
               );
             },
@@ -214,6 +218,7 @@ class _SpeedDialOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -227,40 +232,28 @@ class _SpeedDialOption extends StatelessWidget {
               padding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: [
-                  BoxShadow(
-                    color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.15),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+                color: cs.surface,
+                borderRadius: BorderRadius.circular(AppTheme.radiusS),
+                boxShadow: AppTheme.softShadow(cs),
               ),
               child: Text(
                 label,
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.onSurface,
+                  color: cs.onSurface,
                 ),
               ),
             ),
             const SizedBox(width: 12),
-            // Circular icon button
+            // Circular icon button — ombre neutre douce, pas d'ombre colorée.
             Container(
               width: 48,
               height: 48,
               decoration: BoxDecoration(
                 color: backgroundColor,
                 shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: backgroundColor.withValues(alpha: 0.4),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                boxShadow: AppTheme.softShadow(cs),
               ),
               child: Icon(
                 icon,

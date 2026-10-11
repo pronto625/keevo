@@ -68,6 +68,26 @@ class StockTransferRepositoryImpl implements StockTransferRepository {
     String? variantId,
     required int quantity,
     String? notes,
+  }) {
+    // One transaction: a crash between the stock write and the queue insert
+    // would otherwise keep the decrement without ever pushing the transfer.
+    return _local.transaction(() => _offlineTransferSteps(
+          sourceStoreId: sourceStoreId,
+          destinationStoreId: destinationStoreId,
+          productId: productId,
+          variantId: variantId,
+          quantity: quantity,
+          notes: notes,
+        ));
+  }
+
+  Future<StockTransferModel> _offlineTransferSteps({
+    required String sourceStoreId,
+    required String destinationStoreId,
+    required String productId,
+    String? variantId,
+    required int quantity,
+    String? notes,
   }) async {
     // 1. Validate against local stock_levels
     final available = await _local.getLocalStock(

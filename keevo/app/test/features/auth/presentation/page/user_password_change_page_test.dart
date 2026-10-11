@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:keevo/features/auth/domain/exception/auth_exception.dart';
+import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/auth/domain/model/auth_tokens.dart';
 import 'package:keevo/features/auth/domain/usecase/change_password_usecase.dart';
 import 'package:keevo/features/auth/presentation/page/user_password_change_page.dart';
@@ -16,6 +18,7 @@ Widget _buildPage(_MockChangePasswordUseCase useCase) {
   return ProviderScope(
     overrides: [
       changePasswordUseCaseProvider.overrideWithValue(useCase),
+      sharedPreferencesProvider.overrideWithValue(_prefs),
     ],
     child: MaterialApp.router(
       routerConfig: GoRouter(
@@ -39,7 +42,14 @@ Widget _buildPage(_MockChangePasswordUseCase useCase) {
   );
 }
 
+late SharedPreferences _prefs;
+
 void main() {
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    _prefs = await SharedPreferences.getInstance();
+  });
+
   late _MockChangePasswordUseCase mockUseCase;
 
   setUp(() {

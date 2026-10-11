@@ -347,6 +347,9 @@ class LocalProductDataSource {
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
+  /// [payload]'s `id` doubles as the entityId: the server resolves a product
+  /// merged on a name conflict through it, and redirects the stock entries and
+  /// sales queued with the local id to the surviving product.
   Future<void> _enqueueSync(
     String operation,
     Map<String, dynamic> payload,
@@ -355,6 +358,7 @@ class LocalProductDataSource {
     await _syncService.queueOperation(
       operation: operation,
       payload: payload,
+      entityId: payload['id'] as String?,
     );
   }
 

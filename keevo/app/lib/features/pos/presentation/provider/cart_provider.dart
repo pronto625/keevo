@@ -9,6 +9,16 @@ class CartNotifier extends Notifier<List<CartItem>> {
   @override
   List<CartItem> build() => [];
 
+  // Every cart edit goes through here, so the discount is re-bounded before
+  // listeners rebuild: a discount above the cart total would record a sale
+  // with a negative total, which the backend rejects on every sync.
+  @override
+  set state(List<CartItem> value) {
+    final total = value.fold(0, (sum, c) => sum + c.subtotal);
+    if (_discountAmount > total) _discountAmount = total;
+    super.state = value;
+  }
+
   void addItem(CartItem item) {
     final idx = state.indexWhere((c) => c.id == item.id);
     if (idx >= 0) {

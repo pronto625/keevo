@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 
 /// DayCloseSuccessOverlay — Full-screen success overlay after day closure.
 ///
-/// Displays "Bonne soirée [nom] ! 🌙" message with fade-in animation.
+/// Displays a "Bonne soirée !" message with fade-in animation.
 /// Auto-dismisses after 1.5 seconds.
 ///
 /// Story 4.4 — Clôture Journalière & Historique des Ventes.
@@ -76,16 +76,8 @@ class _DayCloseSuccessOverlayState extends State<DayCloseSuccessOverlay>
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF4C6EF5),
-              AppTheme.primary,
-            ],
-          ),
-        ),
+        // Aplat de marque plein plutôt qu'un dégradé.
+        color: AppTheme.primary,
         child: SafeArea(
           child: Center(
             child: AnimatedBuilder(
@@ -109,7 +101,7 @@ class _DayCloseSuccessOverlayState extends State<DayCloseSuccessOverlay>
                   ),
                   SizedBox(height: 24),
                   Text(
-                    'Bonne soirée ! 🌙',
+                    'Bonne soirée !',
                     style: TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.bold,

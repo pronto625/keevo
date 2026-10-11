@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
+import '../../../../core/di/providers.dart';
 import '../../../../core/sync/sync_gate_guard.dart';
 import '../../../catalog/presentation/provider/product_provider.dart';
 import '../../../catalog/presentation/provider/stock_provider.dart';
@@ -66,28 +68,17 @@ class RecordSaleNotifier extends Notifier<RecordSaleState> {
       final initialStockEntries =
           Map<String, int>.from(ref.read(draftInitialStocksProvider));
 
-      // For draft products: apply initial stock locally + activate locally.
-      if (draftItems.isNotEmpty) {
-        final localSaleDs = ref.read(localSaleDataSourceProvider);
-        final localProductDs = ref.read(localProductDataSourceProvider);
-
-        await localSaleDs.applyInitialStockEntries(
-            initialStockEntries, storeId, employeeId);
-
-        for (final item in draftItems) {
-          await localProductDs.promoteToActive(item.productId);
-        }
-
-        // Clear the collected initial stocks.
-        ref.read(draftInitialStocksProvider.notifier).state = {};
-      }
-
-      // Local stock check for ALL items (draft products now have stock applied).
+      // Local stock check for ALL items BEFORE any local mutation: a draft
+      // product's initial stock entry counts toward what is available, so a
+      // refused sale leaves stock, product status and the entered initial
+      // stocks untouched (a retry would otherwise credit the entry twice).
       final localDs = ref.read(localSaleDataSourceProvider);
       for (final item in cart) {
         final available =
             await localDs.getAvailableStock(item.productId, storeId);
-        if (available < item.quantity) {
+        final initialEntry =
+            item.isDraft ? (initialStockEntries[item.productId] ?? 0) : 0;
+        if (available + initialEntry < item.quantity) {
           state = const RecordSaleError('INSUFFICIENT_STOCK');
           return;
         }
@@ -97,18 +88,43 @@ class RecordSaleNotifier extends Notifier<RecordSaleState> {
           draftItems.map((c) => c.productId).toList();
       final useCase = ref.read(recordSaleUseCaseProvider);
       final discountAmount = cartNotifier.discountAmount;
-      final sale = await useCase.execute(
-        cart: cart,
-        mode: mode,
-        storeId: storeId,
-        employeeId: employeeId,
-        clientId: clientId,
-        mobileRef: mobileRef,
-        discountAmount: discountAmount,
-        status: 'COMPLETED',
-        originalDraftProductIds: originalDraftProductIds,
-        initialStockEntries: initialStockEntries,
-      );
+      final movementIds = {
+        for (final productId in initialStockEntries.keys)
+          productId: const Uuid().v4(),
+      };
+
+      Future<Sale> record() => useCase.execute(
+            cart: cart,
+            mode: mode,
+            storeId: storeId,
+            employeeId: employeeId,
+            clientId: clientId,
+            mobileRef: mobileRef,
+            discountAmount: discountAmount,
+            status: 'COMPLETED',
+            originalDraftProductIds: originalDraftProductIds,
+            initialStockEntries: initialStockEntries,
+            initialStockMovementIds: movementIds,
+          );
+
+      final Sale sale;
+      if (draftItems.isEmpty) {
+        sale = await record();
+      } else {
+        // Initial stock + promotion + sale (and its queued sync ops) commit
+        // together: if the sale fails, the entries are not credited locally.
+        final localProductDs = ref.read(localProductDataSourceProvider);
+        sale = await ref.read(appDatabaseProvider).transaction(() async {
+          await localDs.applyInitialStockEntries(
+              initialStockEntries, storeId, employeeId,
+              movementIds: movementIds);
+          for (final item in draftItems) {
+            await localProductDs.promoteToActive(item.productId);
+          }
+          return record();
+        });
+        ref.read(draftInitialStocksProvider.notifier).state = {};
+      }
 
       ref.read(cartProvider.notifier).clearCart();
       ref.invalidate(frequentProductsProvider);

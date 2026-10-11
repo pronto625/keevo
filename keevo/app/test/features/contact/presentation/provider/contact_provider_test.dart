@@ -1,0 +1,112 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo/features/contact/domain/repository/client_repository.dart';
+import 'package:keevo/features/contact/domain/repository/supplier_repository.dart';
+import 'package:keevo/features/contact/presentation/provider/contact_provider.dart';
+import 'package:mocktail/mocktail.dart';
+
+class MockClientRepository extends Mock implements ClientRepository {}
+
+class MockSupplierRepository extends Mock implements SupplierRepository {}
+
+void main() {
+  group('ClientListNotifier keeps the archived toggle', () {
+    late MockClientRepository repo;
+    late ProviderContainer container;
+
+    setUp(() {
+      repo = MockClientRepository();
+      when(() => repo.getAll(includeArchived: any(named: 'includeArchived')))
+          .thenAnswer((_) async => []);
+      when(() => repo.syncFromRemote()).thenAnswer((_) async {});
+      container = ProviderContainer(
+          overrides: [clientRepositoryProvider.overrideWithValue(repo)]);
+      container.listen(clientListNotifierProvider, (_, __) {});
+    });
+
+    tearDown(() => container.dispose());
+
+    test('syncFromRemote after showing archived keeps includeArchived', () async {
+      await container.read(clientListNotifierProvider.future);
+      final notifier = container.read(clientListNotifierProvider.notifier);
+      await notifier.refresh(includeArchived: true);
+      clearInteractions(repo);
+
+      await notifier.syncFromRemote();
+
+      verify(() => repo.getAll(includeArchived: true)).called(1);
+    });
+
+    test('empty search after showing archived keeps includeArchived', () async {
+      await container.read(clientListNotifierProvider.future);
+      final notifier = container.read(clientListNotifierProvider.notifier);
+      await notifier.refresh(includeArchived: true);
+      clearInteractions(repo);
+
+      await notifier.search('');
+
+      verify(() => repo.getAll(includeArchived: true)).called(1);
+    });
+  });
+
+  group('ClientListNotifier.syncFromRemote failure', () {
+    test('rethrows the sync error but still reloads the local list', () async {
+      final repo = MockClientRepository();
+      when(() => repo.getAll(includeArchived: any(named: 'includeArchived')))
+          .thenAnswer((_) async => []);
+      when(() => repo.syncFromRemote()).thenThrow(Exception('network'));
+      final container = ProviderContainer(
+          overrides: [clientRepositoryProvider.overrideWithValue(repo)]);
+      addTearDown(container.dispose);
+      container.listen(clientListNotifierProvider, (_, __) {});
+      await container.read(clientListNotifierProvider.future);
+      clearInteractions(repo);
+
+      await expectLater(
+          container.read(clientListNotifierProvider.notifier).syncFromRemote(),
+          throwsA(isA<Exception>()));
+
+      verify(() => repo.getAll(includeArchived: false)).called(1);
+      expect(container.read(clientListNotifierProvider).hasValue, isTrue);
+    });
+  });
+
+  group('SupplierListNotifier keeps the archived toggle', () {
+    late MockSupplierRepository repo;
+    late ProviderContainer container;
+
+    setUp(() {
+      repo = MockSupplierRepository();
+      when(() => repo.getAll(includeArchived: any(named: 'includeArchived')))
+          .thenAnswer((_) async => []);
+      when(() => repo.syncFromRemote()).thenAnswer((_) async {});
+      container = ProviderContainer(
+          overrides: [supplierRepositoryProvider.overrideWithValue(repo)]);
+      container.listen(supplierListNotifierProvider, (_, __) {});
+    });
+
+    tearDown(() => container.dispose());
+
+    test('syncFromRemote after showing archived keeps includeArchived', () async {
+      await container.read(supplierListNotifierProvider.future);
+      final notifier = container.read(supplierListNotifierProvider.notifier);
+      await notifier.refresh(includeArchived: true);
+      clearInteractions(repo);
+
+      await notifier.syncFromRemote();
+
+      verify(() => repo.getAll(includeArchived: true)).called(1);
+    });
+
+    test('empty search after showing archived keeps includeArchived', () async {
+      await container.read(supplierListNotifierProvider.future);
+      final notifier = container.read(supplierListNotifierProvider.notifier);
+      await notifier.refresh(includeArchived: true);
+      clearInteractions(repo);
+
+      await notifier.search('');
+
+      verify(() => repo.getAll(includeArchived: true)).called(1);
+    });
+  });
+}

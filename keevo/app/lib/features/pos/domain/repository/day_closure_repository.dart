@@ -15,8 +15,11 @@ abstract interface class DayClosureRepository {
 
   /// Save a closure record locally.
   ///
-  /// Also enqueues for sync to backend.
-  Future<void> saveClosureLocally(DayClosure closure);
+  /// Pushed to the backend when online, else enqueued for sync. Returns the
+  /// summary stored with the closure: the server's when it answered.
+  /// Throws [DayAlreadyClosedException] when the server says the day was
+  /// already closed (by another device).
+  Future<DayClosureSummary> saveClosureLocally(DayClosure closure);
 
   /// Check if a closure already exists for today.
   ///
@@ -33,8 +36,4 @@ abstract interface class DayClosureRepository {
   /// [storeId] — Store to count sales for.
   Future<int> getTodaySalesCount(String storeId);
 
-  /// Count completed sales that occurred strictly after [after].
-  ///
-  /// Used to detect new sales after a day closure.
-  Future<int> getSalesCountAfter(String storeId, DateTime after);
 }

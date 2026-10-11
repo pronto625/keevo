@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_theme.dart';
 import '../../domain/model/inventory_session_model.dart';
 
 /// ActiveSessionBanner — shows the current active inventory session.
@@ -19,9 +20,15 @@ class ActiveSessionBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      color: theme.colorScheme.primaryContainer,
+    final cs = theme.colorScheme;
+    // Teinte de marque pâle plutôt que primaryContainer (plus saturé),
+    // cohérent avec les encarts mis en avant du rebrand.
+    return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.softTint(theme.brightness),
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -29,22 +36,23 @@ class ActiveSessionBanner extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.inventory_2,
-                    color: theme.colorScheme.onPrimaryContainer),
+                Icon(Icons.inventory_2_outlined, color: cs.primary),
                 const SizedBox(width: 8),
                 Text(
                   'Session en cours',
                   style: theme.textTheme.titleMedium?.copyWith(
-                    color: theme.colorScheme.onPrimaryContainer,
-                    fontWeight: FontWeight.bold,
+                    color: cs.onSurface,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 const Spacer(),
                 Chip(
                   label: Text(session.scope),
-                  backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.15),
+                  backgroundColor: cs.primary.withValues(alpha: 0.12),
+                  side: BorderSide.none,
+                  shape: const StadiumBorder(),
                   labelStyle: TextStyle(
-                    color: theme.colorScheme.primary,
+                    color: cs.primary,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -54,7 +62,7 @@ class ActiveSessionBanner extends StatelessWidget {
             Text(
               'Démarrée le ${_formatDate(session.startedAt)}',
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.8),
+                color: cs.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 12),

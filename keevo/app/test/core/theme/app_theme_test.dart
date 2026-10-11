@@ -38,5 +38,10 @@ void main() {
       final theme = AppTheme.light();
       expect(theme.colorScheme.error, const Color(0xFFFA5252));
     });
+
+    test('softTint follows brightness', () {
+      expect(AppTheme.softTint(Brightness.light), AppTheme.primarySoftTint);
+      expect(AppTheme.softTint(Brightness.dark), AppTheme.primarySoftTintDark);
+    });
   });
 }

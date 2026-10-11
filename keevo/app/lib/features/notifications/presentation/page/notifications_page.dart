@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 
 import '../../domain/model/notification_model.dart';
 import '../provider/notification_provider.dart';
@@ -32,13 +33,24 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     final notificationsAsync = ref.watch(notificationsListProvider);
     final unreadAsync = ref.watch(unreadNotificationCountProvider);
     final unread = unreadAsync.valueOrNull ?? 0;
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
+      backgroundColor: cs.surface,
       appBar: AppBar(
-        title: const Text('Notifications'),
+        backgroundColor: cs.surface,
+        title: Text(
+          'Notifications',
+          style: TextStyle(
+            color: cs.onSurface,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.2,
+          ),
+        ),
         leading: context.canPop()
             ? IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                icon: Icon(Icons.arrow_back_ios_new_rounded,
+                    color: cs.onSurface),
                 onPressed: () => context.pop(),
               )
             : null,
@@ -65,10 +77,9 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.notifications_off_outlined,
-            size: 64,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          const SoftIconBadge(
+            icon: Icons.notifications_off_outlined,
+            size: 88,
           ),
           const SizedBox(height: 16),
           Text(
@@ -85,7 +96,10 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   Widget _buildList(List<NotificationModel> notifications) {
     return ListView.separated(
       itemCount: notifications.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
+      separatorBuilder: (_, __) => Divider(
+        height: 1,
+        color: Theme.of(context).colorScheme.outlineVariant.withAlpha(90),
+      ),
       itemBuilder: (context, index) {
         final notification = notifications[index];
         return NotificationCard(

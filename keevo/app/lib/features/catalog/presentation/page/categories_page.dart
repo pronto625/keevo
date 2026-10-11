@@ -49,7 +49,7 @@ class _CategoriesPageState extends ConsumerState<CategoriesPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e.toString()),
+            content: Text(appErrorMessage(e)),
             backgroundColor: AppTheme.errorColor,
           ),
         );
@@ -91,7 +91,7 @@ class _CategoriesPageState extends ConsumerState<CategoriesPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(e.toString()),
+              content: Text(appErrorMessage(e)),
               backgroundColor: AppTheme.errorColor,
             ),
           );
@@ -131,7 +131,7 @@ class _CategoriesPageState extends ConsumerState<CategoriesPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(e.toString()),
+              content: Text(appErrorMessage(e)),
               backgroundColor: AppTheme.errorColor,
             ),
           );
@@ -148,19 +148,23 @@ class _CategoriesPageState extends ConsumerState<CategoriesPage> {
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
-        backgroundColor: AppTheme.primary,
-        title: const Text(
+        backgroundColor: theme.colorScheme.surface,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: Text(
           'Catégories',
           style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
+            color: theme.colorScheme.onSurface,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.2,
           ),
         ),
-        leading: BackButton(
-          color: Colors.white,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_ios_new_rounded,
+              color: theme.colorScheme.onSurface, size: 20),
+          tooltip: MaterialLocalizations.of(context).backButtonTooltip,
           onPressed: () => context.pop(),
         ),
-        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Column(
         children: [
@@ -172,15 +176,8 @@ class _CategoriesPageState extends ConsumerState<CategoriesPage> {
                 Expanded(
                   child: TextField(
                     controller: _nameController,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       hintText: 'Nom de la nouvelle catégorie',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
                     ),
                     onSubmitted: (_) => _createCategory(),
                   ),
@@ -233,17 +230,21 @@ class _CategoriesPageState extends ConsumerState<CategoriesPage> {
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundColor:
-                            theme.colorScheme.primaryContainer,
+                            AppTheme.softTint(theme.brightness),
                         child: Text(
                           cat.name.isNotEmpty
                               ? cat.name[0].toUpperCase()
                               : '?',
                           style: TextStyle(
-                            color: theme.colorScheme.onPrimaryContainer,
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
-                      title: Text(cat.name),
+                      title: Text(
+                        cat.name,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                       subtitle: cat.isCustom
                           ? null
                           : Text(
@@ -259,7 +260,7 @@ class _CategoriesPageState extends ConsumerState<CategoriesPage> {
                               children: [
                                 IconButton(
                                   icon: const Icon(
-                                    Icons.edit_rounded,
+                                    Icons.edit_outlined,
                                     size: 20,
                                   ),
                                   color: theme.colorScheme.primary,
@@ -269,7 +270,7 @@ class _CategoriesPageState extends ConsumerState<CategoriesPage> {
                                 ),
                                 IconButton(
                                   icon: const Icon(
-                                    Icons.delete_outline,
+                                    Icons.delete_outline_rounded,
                                     size: 20,
                                   ),
                                   color: AppTheme.errorColor,
@@ -281,7 +282,7 @@ class _CategoriesPageState extends ConsumerState<CategoriesPage> {
                             )
                           : IconButton(
                               icon: const Icon(
-                                Icons.edit_rounded,
+                                Icons.edit_outlined,
                                 size: 20,
                               ),
                               color: theme.colorScheme.primary,

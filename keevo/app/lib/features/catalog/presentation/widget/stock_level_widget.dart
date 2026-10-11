@@ -1,4 +1,5 @@
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/soft_icon_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -41,7 +42,7 @@ class StockLevelWidget extends ConsumerWidget {
     // Helper: resolve store name from id, fallback to truncated id.
     String storeName(String id) {
       return stores.where((s) => s.id == id).firstOrNull?.name
-          ?? '${id.substring(0, 8)}…';
+          ?? (id.length > 8 ? '${id.substring(0, 8)}…' : id);
     }
 
     // Resolve the effective storeId:
@@ -66,13 +67,14 @@ class StockLevelWidget extends ConsumerWidget {
               style: Theme.of(context)
                   .textTheme
                   .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.bold),
+                  ?.copyWith(fontWeight: FontWeight.w700),
             ),
             Row(
               children: [
                 // Stock entry button
-                IconButton(
-                  icon: const Icon(Icons.add_box_outlined),
+                SoftIconButton(
+                  icon: Icons.add_box_outlined,
+                  iconSize: 20,
                   tooltip: 'Entrée de stock',
                   onPressed: () => StockEntryBottomSheet.show(
                     context,
@@ -81,9 +83,11 @@ class StockLevelWidget extends ConsumerWidget {
                     storeId: effectiveStoreId,
                   ),
                 ),
+                const SizedBox(width: 6),
                 // Adjust button
-                IconButton(
-                  icon: const Icon(Icons.edit_note),
+                SoftIconButton(
+                  icon: Icons.edit_note_rounded,
+                  iconSize: 20,
                   tooltip: 'Ajuster le stock',
                   onPressed: () => StockAdjustBottomSheet.show(
                     context,
@@ -92,9 +96,11 @@ class StockLevelWidget extends ConsumerWidget {
                     storeId: effectiveStoreId,
                   ),
                 ),
+                const SizedBox(width: 6),
                 // Threshold config
-                IconButton(
-                  icon: const Icon(Icons.notifications_outlined),
+                SoftIconButton(
+                  icon: Icons.notifications_outlined,
+                  iconSize: 20,
                   tooltip: 'Seuil d\'alerte',
                   onPressed: () => StockThresholdBottomSheet.show(
                     context,
@@ -103,12 +109,15 @@ class StockLevelWidget extends ConsumerWidget {
                   ),
                 ),
                 // History
-                if (onViewHistory != null)
-                  IconButton(
-                    icon: const Icon(Icons.history),
+                if (onViewHistory != null) ...[
+                  const SizedBox(width: 6),
+                  SoftIconButton(
+                    icon: Icons.history_rounded,
+                    iconSize: 20,
                     tooltip: 'Historique des mouvements',
                     onPressed: onViewHistory,
                   ),
+                ],
               ],
             ),
           ],
@@ -161,25 +170,34 @@ class _StockLevelTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isLow = level.isLow;
+    final cs = Theme.of(context).colorScheme;
+    final accent = isLow ? AppTheme.errorColor : cs.success;
+    // Le vert lime manque de contraste en texte sur fond clair : on garde la
+    // pastille diluée mais un vert foncé pour le chiffre en mode clair.
+    final qtyColor = isLow
+        ? AppTheme.errorColor
+        : cs.brightness == Brightness.dark
+            ? cs.success
+            : AppTheme.onSuccess;
 
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
       leading: CircleAvatar(
         radius: 20,
-        backgroundColor: isLow ? AppTheme.errorColor : AppTheme.success,
+        backgroundColor: accent.withValues(alpha: 0.15),
         child: Text(
           '${level.quantity}',
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            color: isLow ? AppTheme.onError : AppTheme.onSuccess,
+            color: qtyColor,
             fontSize: 13,
           ),
         ),
       ),
       title: Text(
         storeName,
-        style: const TextStyle(fontSize: 13),
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
       ),
       subtitle: level.minimumThreshold > 0
           ? Text(
@@ -189,14 +207,18 @@ class _StockLevelTile extends StatelessWidget {
           : null,
       trailing: isLow
           ? Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: AppTheme.errorColor,
-                borderRadius: BorderRadius.circular(10),
+                color: AppTheme.errorColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
               ),
               child: const Text(
                 'Stock bas',
-                style: TextStyle(color: Colors.white, fontSize: 10),
+                style: TextStyle(
+                  color: AppTheme.errorColor,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             )
           : null,

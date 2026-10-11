@@ -17,6 +17,28 @@ FlutterSecureStorage buildSecureStorage() {
   );
 }
 
+/// Secure-storage keys tied to the signed-in session.
+///
+/// `db_encryption_key` and `keevo_device_id` are deliberately absent: they
+/// belong to the device. Deleting the DB key makes the next cold start
+/// discard the encrypted DB, including every sale still in `sync_queue`.
+const _sessionSecureKeys = <String>[
+  'jwt_token',
+  'refresh_token',
+  'user_id',
+  'tenant_id',
+  'store_id',
+  'last_sync_timestamp_ms',
+];
+
+/// Signs the session out of secure storage without touching device secrets.
+/// Use this instead of `deleteAll()` for logout and session expiry.
+Future<void> clearSessionSecrets(FlutterSecureStorage storage) async {
+  for (final key in _sessionSecureKeys) {
+    await storage.delete(key: key);
+  }
+}
+
 /// SharedPreferences key flagging that the one-shot migration from the legacy
 /// (unencrypted) backing store to [buildSecureStorage] has completed.
 const _kMigrationDoneFlag = 'secure_storage_migrated_v1';

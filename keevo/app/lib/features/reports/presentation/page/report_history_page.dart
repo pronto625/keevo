@@ -1,5 +1,6 @@
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -48,13 +49,24 @@ class _ReportHistoryPageState extends ConsumerState<ReportHistoryPage> {
     ));
     final currentUserId = ref.watch(currentUserIdProvider).valueOrNull;
 
+    final cs = theme.colorScheme;
     return Scaffold(
+      backgroundColor: cs.surface,
       appBar: AppBar(
         title: Text(widget.adminMode
             ? 'Rapports de la boutique'
             : 'Historique des rapports'),
+        titleTextStyle: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.2,
+          color: cs.onSurface,
+        ),
+        backgroundColor: cs.surface,
+        elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: cs.onSurface),
           onPressed: () {
             if (context.canPop()) {
               context.pop();
@@ -85,13 +97,14 @@ class _ReportHistoryPageState extends ConsumerState<ReportHistoryPage> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.bar_chart_outlined,
-                            size: 64, color: theme.colorScheme.outlineVariant),
+                        const SoftIconBadge(
+                            icon: Icons.bar_chart_outlined, size: 80),
                         const SizedBox(height: 16),
                         Text(
                           'Aucun rapport disponible.',
                           style: theme.textTheme.titleMedium?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
+                            color: theme.colorScheme.onSurface,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -134,20 +147,32 @@ class _ReportHistoryPageState extends ConsumerState<ReportHistoryPage> {
     final tabs = [
       (label: 'Tous', value: null),
       (label: 'Journalier', value: 'DAILY'),
-      (label: '📅 Hebdo', value: 'WEEKLY'),
+      (label: 'Hebdo', value: 'WEEKLY'),
     ];
+    final cs = Theme.of(context).colorScheme;
     return Container(
-      color: Colors.white,
+      color: cs.surface,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: tabs.map((tab) {
           final isSelected = _typeFilter == tab.value;
           return Padding(
             padding: const EdgeInsets.only(right: 8),
+            // Sélection en couleur pleine, comme les onglets du catalogue.
             child: ChoiceChip(
               label: Text(tab.label),
               selected: isSelected,
               onSelected: (_) => setState(() => _typeFilter = tab.value),
+              showCheckmark: false,
+              selectedColor: cs.primary,
+              backgroundColor: cs.surface,
+              side: BorderSide(
+                  color: isSelected ? cs.primary : cs.outlineVariant),
+              shape: const StadiumBorder(),
+              labelStyle: TextStyle(
+                color: isSelected ? cs.onPrimary : cs.onSurfaceVariant,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+              ),
             ),
           );
         }).toList(),
@@ -165,26 +190,21 @@ class _ReportHistoryPageState extends ConsumerState<ReportHistoryPage> {
         return Container(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
           decoration: BoxDecoration(
-            color: Colors.white,
-            boxShadow: [
-              BoxShadow(
-                color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.04),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            color: Theme.of(context).colorScheme.surface,
+            border: Border(
+              bottom: BorderSide(
+                  color: Theme.of(context).colorScheme.outlineVariant),
+            ),
           ),
           child: Row(
             children: [
-              Icon(Icons.person_outline, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              Icon(Icons.person_outline_rounded, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
               const SizedBox(width: 8),
               Expanded(
                 child: DropdownButton<String?>(
                   value: _selectedEmployeeId,
                   isExpanded: true,
                   underline: const SizedBox.shrink(),
-                  hint: const Text('Tous les employés',
-                      style: TextStyle(fontSize: 14)),
                   items: [
                     const DropdownMenuItem<String?>(
                       value: null,
@@ -236,7 +256,7 @@ class _SkeletonCard extends StatelessWidget {
       height: 88,
       decoration: BoxDecoration(
         color: base,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
       ),
       child: Row(
         children: [

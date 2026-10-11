@@ -71,10 +71,24 @@ void main() {
       final container = buildContainer();
       addTearDown(container.dispose);
 
+      container.listen(stockSearchQueryProvider, (_, __) {});
       container.read(stockSearchQueryProvider.notifier).state = 'ch';
       final result =
           await container.read(stockSearchResultsProvider.future);
       expect(result, products);
+    });
+
+    test('the search query resets once the overview stops listening',
+        () async {
+      final container = buildContainer();
+      addTearDown(container.dispose);
+
+      final sub = container.listen(stockSearchQueryProvider, (_, __) {});
+      container.read(stockSearchQueryProvider.notifier).state = 'ch';
+      sub.close();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(container.read(stockSearchQueryProvider), '');
     });
   });
 }

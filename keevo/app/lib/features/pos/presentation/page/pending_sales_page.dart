@@ -1,5 +1,6 @@
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +9,7 @@ import 'package:intl/intl.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../domain/model/sale_model.dart';
 import '../provider/pos_providers.dart';
+import '../widget/pos_app_bar.dart';
 
 /// PendingSalesPage — OWNER-only list of PENDING_VALIDATION sales.
 /// Story 4.3 AC6.
@@ -25,10 +27,7 @@ class PendingSalesPage extends ConsumerWidget {
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Ventes en attente'),
-        centerTitle: true,
-      ),
+      appBar: const PosAppBar(title: 'Ventes en attente'),
       body: pendingSalesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => AppErrorWidget(error: e),
@@ -84,28 +83,30 @@ class _PendingSaleTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    // Rangée neutre avec liseré ambre ; l'état « en attente » est porté par
+    // le badge ambre plutôt que par un aplat saturé.
     return Card(
       elevation: 0,
+      clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: AppTheme.onWarning.withOpacity(0.2)),
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        side: BorderSide(color: AppTheme.warning.withValues(alpha: 0.5)),
       ),
-      color: AppTheme.warning,
+      color: cs.surface,
+      surfaceTintColor: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppTheme.onWarning.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.pending_actions,
-                    color: AppTheme.onWarning, size: 24),
+              SoftIconBadge(
+                icon: Icons.pending_actions_rounded,
+                color: cs.brightness == Brightness.dark
+                    ? cs.warning
+                    : const Color(0xFFE67700),
+                size: 44,
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -114,8 +115,8 @@ class _PendingSaleTile extends StatelessWidget {
                   children: [
                     Text(
                       _currencyFormat.format(sale.totalAmount),
-                      style: const TextStyle(
-                        color: AppTheme.onWarning,
+                      style: TextStyle(
+                        color: cs.onSurface,
                         fontWeight: FontWeight.w700,
                         fontSize: 16,
                       ),
@@ -124,14 +125,14 @@ class _PendingSaleTile extends StatelessWidget {
                     Text(
                       '${sale.items.length} article${sale.items.length > 1 ? 's' : ''} · ${_dateFormat.format(sale.createdAt)}',
                       style: TextStyle(
-                        color: AppTheme.onWarning.withOpacity(0.65),
+                        color: cs.onSurfaceVariant,
                         fontSize: 13,
                       ),
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: AppTheme.onWarning),
+              Icon(Icons.chevron_right, color: cs.outline),
             ],
           ),
         ),

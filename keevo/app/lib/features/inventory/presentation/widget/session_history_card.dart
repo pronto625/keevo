@@ -25,8 +25,15 @@ class SessionHistoryCard extends StatelessWidget {
     final statusColor = _statusColor(theme);
     final statusLabel = _statusLabel();
 
+    // Bordure fine plutôt qu'une carte sans contour, invisible sur le fond
+    // `surface` de la page.
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        side: BorderSide(color: theme.colorScheme.outlineVariant.withAlpha(90)),
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -72,8 +79,9 @@ class SessionHistoryCard extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              backgroundColor: statusColor.withValues(alpha: 0.1),
+              backgroundColor: statusColor.withValues(alpha: 0.12),
               side: BorderSide.none,
+              shape: const StadiumBorder(),
               padding: EdgeInsets.zero,
               visualDensity: VisualDensity.compact,
             ),
@@ -85,7 +93,7 @@ class SessionHistoryCard extends StatelessWidget {
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
                   onPressed: onViewReport,
-                  icon: const Icon(Icons.assessment, size: 18),
+                  icon: const Icon(Icons.assessment_outlined, size: 18),
                   label: const Text('Voir rapport'),
                 ),
               ),
@@ -124,13 +132,13 @@ class SessionHistoryCard extends StatelessWidget {
   IconData _statusIcon() {
     switch (session.status) {
       case 'IN_PROGRESS':
-        return Icons.hourglass_top;
+        return Icons.hourglass_top_rounded;
       case 'VALIDATED':
-        return Icons.check_circle;
+        return Icons.check_circle_outline_rounded;
       case 'CANCELLED':
-        return Icons.cancel;
+        return Icons.cancel_outlined;
       default:
-        return Icons.info;
+        return Icons.info_outline_rounded;
     }
   }
 

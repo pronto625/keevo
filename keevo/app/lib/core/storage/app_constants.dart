@@ -14,6 +14,20 @@ const String kTermsAcceptedKey = 'terms_accepted';
 // a newly registered user through the wizard before reaching the POS.
 const String kOnboardingWizardSeenKey = 'onboarding_wizard_seen';
 
+// Written only by the wizard itself when it completes. Wins over an
+// onboardingCompleted=false claim: the registration token says false and lives
+// until it is renewed, which may not have happened yet (offline).
+const String kOnboardingWizardCompletedKey = 'onboarding_wizard_completed';
+
+// One-shot flag: the pull cursor was reset once so rows pulled before dates
+// were stored with their local offset get re-pulled in the new format.
+const String kPullTzFixDoneKey = 'pull_tz_fix_v1';
+
+// "<userId>@<tenantId>" of the account whose data fills the local DB. A
+// different account signing in on the same device starts from a cleared DB,
+// so it never sees nor pushes the previous account's data.
+const String kLocalDataOwnerKey = 'local_data_owner';
+
 // Set to `true` after the POS tutorial SnackBar has been shown once.
 const String kPosTutorialShownKey = 'pos_tutorial_shown';
 
@@ -42,15 +56,12 @@ const String kLastSyncTimestampKey = 'last_sync_timestamp_ms';
 /// Distinct from kLastSyncTimestampKey (pull cursor, in SecureStorage).
 const String kLastSyncAtKey = 'last_sync_at_ms';
 
-// Date (YYYY-MM-DD) of the last day closure.
-// Used to detect automatic closures for snackbar notification.
-const String kLastClosureDate = 'last_closure_date';
-
-// Date (YYYY-MM-DD) when auto-closure notification was last shown.
-// Ensures the snackbar is shown only once per day.
-const String kAutoClosureNotifiedDate = 'auto_closure_notified_date';
-
 // Set of closure IDs for which an auto-closure SnackBar has been shown.
 // Stored via prefs.getStringList / setStringList.
 // Capped at 200 entries to avoid unbounded growth.
 const String kAutoClosureNotifiedIds = 'auto_closure_notified_ids';
+
+// SharedPreferences key for the signed-in user's first name (JWT firstName
+// claim). Read by the dashboard greeting and the inventory gap report
+// signature.
+const String kUserFirstNameKey = 'user_first_name';

@@ -1,5 +1,6 @@
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,6 +13,8 @@ import '../../domain/model/payment_mode_enum.dart';
 import '../../domain/model/sale_model.dart';
 import '../../domain/model/sales_history_filter.dart';
 import '../provider/day_closure_providers.dart';
+import '../provider/pos_providers.dart';
+import '../widget/pos_app_bar.dart';
 
 /// SalesHistoryPage — Displays sales history filtered by date.
 ///
@@ -50,21 +53,31 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final activeStoreId = ref.watch(activeStoreIdProvider) ?? 'default';
-    final effectiveStoreId = widget.storeId ?? activeStoreId;
+    // null = "all stores": the history endpoint is per store, so ask for one
+    // rather than querying a non-existent store and showing an empty list.
+    final effectiveStoreId = widget.storeId ?? ref.watch(activeStoreIdProvider);
     final userIdAsync = ref.watch(currentUserIdProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.adminMode ? 'Ventes de la boutique' : 'Mes Ventes'),
-        backgroundColor: AppTheme.primary,
-        foregroundColor: Colors.white,
-        elevation: 0,
+      appBar: PosAppBar(
+        title: widget.adminMode ? 'Ventes de la boutique' : 'Mes Ventes',
       ),
       body: userIdAsync.when(
         data: (userId) {
           if (userId == null) {
             return const Center(child: Text('Utilisateur non connecté'));
+          }
+          if (effectiveStoreId == null) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: Text(
+                  'Sélectionnez une boutique dans les paramètres pour voir '
+                  'son historique de ventes.',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
           }
           return _buildContent(effectiveStoreId, userId);
         },
@@ -116,7 +129,7 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
         if (storeEmployees.isEmpty) return const SizedBox.shrink();
         return Container(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.surface,
           child: Row(
             children: [
               const Icon(Icons.person_outline, size: 18),
@@ -157,7 +170,7 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cs.surface,
         boxShadow: [
           BoxShadow(
             color: cs.shadow.withValues(alpha: 0.05),
@@ -196,10 +209,10 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
         });
       },
       backgroundColor: cs.surfaceContainerHighest,
-      selectedColor: AppTheme.primary.withValues(alpha: 0.2),
-      checkmarkColor: AppTheme.primary,
+      selectedColor: AppTheme.softTint(cs.brightness),
+      checkmarkColor: cs.primary,
       labelStyle: TextStyle(
-        color: isSelected ? AppTheme.primary : cs.onSurface,
+        color: isSelected ? cs.primary : cs.onSurface,
         fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
       ),
     );
@@ -224,10 +237,10 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
       selected: isSelected,
       onSelected: (_) => _selectCustomRange(),
       backgroundColor: cs.surfaceContainerHighest,
-      selectedColor: AppTheme.primary.withValues(alpha: 0.2),
-      checkmarkColor: AppTheme.primary,
+      selectedColor: AppTheme.softTint(cs.brightness),
+      checkmarkColor: cs.primary,
       labelStyle: TextStyle(
-        color: isSelected ? AppTheme.primary : cs.onSurface,
+        color: isSelected ? cs.primary : cs.onSurface,
         fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
       ),
     );
@@ -247,8 +260,10 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
       locale: const Locale('fr', 'FR'),
       builder: (context, child) {
         return Theme(
+          // Garde le schéma courant (mode sombre compris) et n'impose que
+          // la couleur de marque.
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
               primary: AppTheme.primary,
               onPrimary: Colors.white,
             ),
@@ -258,7 +273,7 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
       },
     );
 
-    if (range != null) {
+    if (range != null && mounted) {
       setState(() {
         _selectedFilter = DateFilterType.custom;
         _customRange = range;
@@ -372,30 +387,28 @@ class _SaleHistoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    // Rangée de liste : surface + liseré fin plutôt que l'élévation Material.
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 0,
+      color: cs.surface,
+      surfaceTintColor: Colors.transparent,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        side: BorderSide(color: cs.outlineVariant.withAlpha(90)),
+      ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
               // Payment mode icon
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: _paymentModeColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  _paymentModeIcon,
-                  color: _paymentModeColor,
-                  size: 24,
-                ),
+              SoftIconBadge(
+                icon: _paymentModeIcon,
+                color: _paymentModeColor,
+                size: 48,
               ),
               const SizedBox(width: 16),
               // Sale details
@@ -426,14 +439,16 @@ class _SaleHistoryCard extends StatelessWidget {
                     ),
                     if (sale.clientId != null) ...[
                       const SizedBox(height: 2),
-                      Text(
-                        'Client: ${sale.clientId}', // TODO: resolve client name
-                        style: TextStyle(
-                          color: cs.onSurfaceVariant,
-                          fontSize: 12,
+                      Consumer(
+                        builder: (context, ref, _) => Text(
+                          'Client: ${ref.watch(saleClientNameProvider(sale.clientId!)).valueOrNull ?? 'enregistré'}',
+                          style: TextStyle(
+                            color: cs.onSurfaceVariant,
+                            fontSize: 12,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ],
@@ -445,10 +460,10 @@ class _SaleHistoryCard extends StatelessWidget {
                 children: [
                   Text(
                     currencyFormat.format(sale.totalAmount),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 16,
-                      color: AppTheme.primary,
+                      color: cs.primary,
                     ),
                   ),
                   if (sale.discountAmount > 0) ...[
@@ -513,7 +528,7 @@ class _SaleHistoryCard extends StatelessWidget {
   IconData get _paymentModeIcon {
     switch (sale.paymentMode) {
       case PaymentModeEnum.mobileMoney:
-        return Icons.phone_android;
+        return Icons.phone_android_rounded;
       case PaymentModeEnum.cash:
         return Icons.payments_outlined;
     }

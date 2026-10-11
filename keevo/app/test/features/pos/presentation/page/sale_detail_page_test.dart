@@ -8,6 +8,7 @@ import 'package:keevo/features/pos/domain/model/payment_mode_enum.dart';
 import 'package:keevo/features/pos/domain/model/sale_model.dart';
 import 'package:keevo/features/pos/domain/repository/sale_repository.dart';
 import 'package:keevo/features/pos/presentation/page/sale_detail_page.dart';
+import 'package:keevo/features/pos/presentation/provider/day_closure_providers.dart';
 import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -224,10 +225,13 @@ void main() {
     });
 
     Future<void> pump(WidgetTester tester,
-        {required String role, required String status}) async {
+        {required String role,
+        required String status,
+        List<Override> extra = const []}) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            ...extra,
             saleByIdProvider('sale-999').overrideWith(
               (ref) => Future.value(saleWithStatus(status)),
             ),
@@ -341,6 +345,125 @@ void main() {
 
       verify(() => mockRepo.correctSale('sale-999',
           'Erreur de quantité scannée au comptoir', {'item-1': 3})).called(1);
+    });
+
+    // The server refuses a quantity under 1: the sheet must not send one.
+    testWidgets('correction: negative or zero quantity keeps confirm disabled',
+        (tester) async {
+      await pump(tester, role: 'OWNER', status: 'COMPLETED');
+
+      await tester.tap(find.text('Corriger un article'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(1),
+          'Erreur de quantité scannée au comptoir');
+
+      // '-3' is filtered to digits only ('3' would be a valid change).
+      await tester.enterText(find.byType(TextField).first, '-3');
+      await tester.pumpAndSettle();
+      expect(
+          tester
+              .widget<TextField>(find.byType(TextField).first)
+              .controller!
+              .text,
+          '3');
+
+      await tester.enterText(find.byType(TextField).first, '0');
+      await tester.pumpAndSettle();
+      expect(
+          tester
+              .widget<FilledButton>(find.widgetWithText(
+                  FilledButton, 'Enregistrer la correction'))
+              .onPressed,
+          isNull);
+
+      await tester.enterText(find.byType(TextField).first, '');
+      await tester.pumpAndSettle();
+      expect(
+          tester
+              .widget<FilledButton>(find.widgetWithText(
+                  FilledButton, 'Enregistrer la correction'))
+              .onPressed,
+          isNull);
+    });
+
+    testWidgets('after a successful cancel the page shows CANCELLED, no buttons',
+        (tester) async {
+      when(() => mockRepo.cancelSale(any(), any())).thenAnswer((_) async {});
+      var closureStateBuilds = 0;
+      await pump(tester, role: 'OWNER', status: 'COMPLETED', extra: [
+        dayClosureStateProvider.overrideWith((ref, storeId) async {
+          closureStateBuilds++;
+          return DayCloseButtonState.available;
+        }),
+      ]);
+      final container = ProviderScope.containerOf(
+          tester.element(find.byType(SaleDetailPage)));
+      container.listen(dayClosureStateProvider('store-1'), (_, __) {});
+      await tester.pumpAndSettle();
+      expect(closureStateBuilds, 1);
+
+      await tester.tap(find.text('Annuler entièrement'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byType(TextField).first, 'Erreur de scan article vendu');
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Confirmer annulation'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Annulée'), findsOneWidget);
+      expect(find.text('Annuler entièrement'), findsNothing);
+      expect(find.text('Corriger un article'), findsNothing);
+      expect(closureStateBuilds, 2,
+          reason: 'day closure state must be refreshed after a cancel');
+    });
+
+    testWidgets('after a correction the page shows the corrected quantities',
+        (tester) async {
+      when(() => mockRepo.correctSale(any(), any(), any()))
+          .thenAnswer((_) async {});
+      await pump(tester, role: 'OWNER', status: 'COMPLETED');
+
+      await tester.tap(find.text('Corriger un article'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, '3');
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(1),
+          'Erreur de quantité scannée au comptoir');
+      await tester.pumpAndSettle();
+      await tester.tap(
+          find.widgetWithText(FilledButton, 'Enregistrer la correction'));
+      await tester.pumpAndSettle();
+
+      // Item avatar shows the quantity; nothing shows the old 5 × 1 000 any more.
+      expect(find.text('3'), findsOneWidget);
+      expect(find.text('5'), findsNothing);
+      expect(find.textContaining(RegExp(r'^5\D000')), findsNothing);
+    });
+
+    testWidgets('shows the client name, not its id', (tester) async {
+      final sale = Sale(
+        id: 'sale-999',
+        storeId: 'store-1',
+        employeeId: 'emp-1',
+        clientId: '3f2b9c1e-0000-4000-8000-000000000001',
+        occurredAt: DateTime(2026, 3, 19, 14, 30),
+        totalAmount: 1000,
+        paymentMode: PaymentModeEnum.cash,
+        items: const [],
+        createdAt: DateTime(2026, 3, 19, 14, 30),
+      );
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          currentUserRoleProvider.overrideWithValue('EMPLOYEE'),
+          saleClientNameProvider('3f2b9c1e-0000-4000-8000-000000000001')
+              .overrideWith((ref) async => 'Awa Ndiaye'),
+        ],
+        child: MaterialApp(home: SaleDetailPage(saleId: sale.id, sale: sale)),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Awa Ndiaye'), findsOneWidget);
+      expect(find.textContaining('3f2b9c1e'), findsNothing);
     });
   });
 }

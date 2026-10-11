@@ -127,6 +127,34 @@ class AppTheme {
         _ => grey600,
       };
 
+  /// Pale brand tint for soft pastilles/cards. Widgets must resolve it
+  /// through here rather than using [primarySoftTint] directly: the light
+  /// value is opaque, so it stays pale in dark mode and makes the dark
+  /// theme's light text unreadable on top of it.
+  static Color softTint(Brightness brightness) =>
+      brightness == Brightness.dark ? primarySoftTintDark : primarySoftTint;
+
+  /// Single diffuse shadow shared by every soft card, so elevation reads
+  /// the same across screens.
+  static List<BoxShadow> softShadow(ColorScheme cs) => [
+        BoxShadow(
+          color: cs.shadow.withValues(alpha: 0.06),
+          blurRadius: 16,
+          offset: const Offset(0, 4),
+        ),
+      ];
+
+  /// Soft card surface: plain surface color, large radius, diffuse shadow.
+  static BoxDecoration softCardDecoration(
+    ColorScheme cs, {
+    double radius = radiusL,
+  }) =>
+      BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(radius),
+        boxShadow: softShadow(cs),
+      );
+
   static TextTheme _interTextTheme(TextTheme base) =>
       GoogleFonts.interTextTheme(base);
 
@@ -191,9 +219,7 @@ class AppTheme {
   static NavigationBarThemeData _navBarTheme(ColorScheme cs) =>
       NavigationBarThemeData(
         elevation: 0,
-        indicatorColor: cs.brightness == Brightness.dark
-            ? primarySoftTintDark
-            : primarySoftTint,
+        indicatorColor: softTint(cs.brightness),
         backgroundColor: cs.surface,
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);

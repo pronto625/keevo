@@ -39,7 +39,8 @@ class StorePerformanceRow extends StatelessWidget {
     final theme = Theme.of(context);
     final delta = entry.deltaPercent;
     final isPositive = delta >= 0;
-    final deltaColor = isPositive ? AppTheme.success : AppTheme.errorColor;
+    final deltaColor =
+        isPositive ? theme.colorScheme.success : theme.colorScheme.error;
     final deltaText =
         '${isPositive ? '+' : ''}${delta.toStringAsFixed(1)}%';
 
@@ -54,14 +55,16 @@ class StorePerformanceRow extends StatelessWidget {
             height: 38,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: _rankColor(entry.rank, theme.colorScheme).withAlpha(40),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: _rankColor(entry.rank, theme.colorScheme), width: 1.5),
+              color: _rankColor(entry.rank, theme.colorScheme)
+                  .withValues(alpha: 0.16),
+              shape: BoxShape.circle,
+              border: Border.all(
+                  color: _rankColor(entry.rank, theme.colorScheme), width: 1.5),
             ),
             child: Text(
               '#${entry.rank}',
               style: TextStyle(
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w700,
                 color: entry.rank <= 3
                     ? _rankColor(entry.rank, theme.colorScheme)
                     : theme.colorScheme.onSurface,
@@ -78,8 +81,10 @@ class StorePerformanceRow extends StatelessWidget {
               children: [
                 Text(
                   entry.storeName,
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(fontWeight: FontWeight.w600),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface,
+                  ),
                 ),
                 Text(
                   _currencyFmt.format(entry.totalRevenue),
@@ -90,7 +95,7 @@ class StorePerformanceRow extends StatelessWidget {
                     entry.topProductName!,
                     style: theme.textTheme.bodySmall?.copyWith(
                       fontStyle: FontStyle.italic,
-                      color: theme.colorScheme.onSurface.withAlpha(150),
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
               ],
@@ -110,16 +115,15 @@ class StorePerformanceRow extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: deltaColor.withAlpha(25),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: deltaColor, width: 1),
+                  color: deltaColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   deltaText,
                   style: TextStyle(
                     fontSize: 11,
                     color: deltaColor,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),

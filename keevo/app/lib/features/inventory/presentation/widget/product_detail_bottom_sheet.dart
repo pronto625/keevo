@@ -53,17 +53,7 @@ class ProductDetailBottomSheet extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Drag handle
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 16),
-
+            // Drag handle: provided by the bottom sheet theme.
             // Avatar / photo
             _buildAvatar(),
             const SizedBox(height: 16),
@@ -72,7 +62,7 @@ class ProductDetailBottomSheet extends StatelessWidget {
             Text(
               row.productName,
               style: theme.textTheme.headlineSmall
-                  ?.copyWith(fontWeight: FontWeight.w600),
+                  ?.copyWith(fontWeight: FontWeight.w700),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
@@ -163,15 +153,18 @@ class ProductDetailBottomSheet extends StatelessWidget {
     }
     final colorIndex =
         row.productId.hashCode.abs() % Colors.primaries.length;
-    final bgColor = Colors.primaries[colorIndex];
+    final accent = Colors.primaries[colorIndex];
     final initials = _initials(row.productName);
+    // Même teinte que la ligne du rapport, diluée plutôt qu'en aplat saturé.
     return CircleAvatar(
       radius: 40,
-      backgroundColor: bgColor,
+      backgroundColor: accent.withValues(alpha: 0.15),
       child: Text(
         initials,
-        style: const TextStyle(
-            color: Colors.white, fontWeight: FontWeight.bold, fontSize: 24),
+        style: TextStyle(
+            color: accent.shade700,
+            fontWeight: FontWeight.bold,
+            fontSize: 24),
       ),
     );
   }

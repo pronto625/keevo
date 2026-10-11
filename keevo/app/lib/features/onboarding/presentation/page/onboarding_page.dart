@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/storage/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widgets/lang_toggle.dart';
+import '../../../../core/widget/lang_toggle.dart';
 
 /// Onboarding welcome screen — affiché uniquement au premier lancement.
 ///
@@ -212,8 +212,8 @@ class _FeatureCard extends StatelessWidget {
           Container(
             width: 44,
             height: 44,
-            decoration: const BoxDecoration(
-              color: AppTheme.primarySoftTint,
+            decoration: BoxDecoration(
+              color: AppTheme.softTint(Theme.of(context).brightness),
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,

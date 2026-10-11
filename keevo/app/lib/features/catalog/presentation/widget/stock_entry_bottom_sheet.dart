@@ -1,4 +1,5 @@
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -31,9 +32,8 @@ class StockEntryBottomSheet extends ConsumerStatefulWidget {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      // La feuille dessine sa propre poignée ; évite la double poignée du thème.
+      showDragHandle: false,
       builder: (_) => StockEntryBottomSheet(
         productId: productId,
         storeId: storeId,
@@ -144,7 +144,7 @@ class _StockEntryBottomSheetState extends ConsumerState<StockEntryBottomSheet> {
             height: 4,
             width: 44,
             decoration: BoxDecoration(
-              color: cs.onSurfaceVariant.withOpacity(0.35),
+              color: cs.outlineVariant,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -155,14 +155,9 @@ class _StockEntryBottomSheetState extends ConsumerState<StockEntryBottomSheet> {
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(9),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE8F5E9),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child:
-                      const Icon(Icons.add_circle_rounded, color: AppTheme.success, size: 22),
+                const SoftIconBadge(
+                  icon: Icons.add_rounded,
+                  color: AppTheme.success,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -171,19 +166,19 @@ class _StockEntryBottomSheetState extends ConsumerState<StockEntryBottomSheet> {
                     children: [
                       Text('Entrée de stock',
                           style: theme.textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w600)),
+                              ?.copyWith(fontWeight: FontWeight.w700)),
                       if (widget.productName != null)
                         Text(
                           widget.productName!,
                           style: theme.textTheme.bodySmall
-                              ?.copyWith(color: AppTheme.success),
+                              ?.copyWith(color: cs.onSurfaceVariant),
                           overflow: TextOverflow.ellipsis,
                         ),
                     ],
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.close),
+                  icon: Icon(Icons.close_rounded, color: cs.onSurfaceVariant),
                   onPressed: () => Navigator.of(context).pop(),
                   visualDensity: VisualDensity.compact,
                 ),
@@ -207,7 +202,7 @@ class _StockEntryBottomSheetState extends ConsumerState<StockEntryBottomSheet> {
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      _StepperBtn(icon: Icons.remove, onTap: _decrement),
+                      _StepperBtn(icon: Icons.remove_rounded, onTap: _decrement),
                       const SizedBox(width: 10),
                       Expanded(
                         child: TextFormField(
@@ -217,10 +212,7 @@ class _StockEntryBottomSheetState extends ConsumerState<StockEntryBottomSheet> {
                           style: theme.textTheme.headlineSmall
                               ?.copyWith(fontWeight: FontWeight.w700),
                           decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
                             hintText: '0',
-                            contentPadding:
-                                EdgeInsets.symmetric(vertical: 14),
                           ),
                           validator: (v) {
                             if (v == null || v.trim().isEmpty) {
@@ -235,7 +227,7 @@ class _StockEntryBottomSheetState extends ConsumerState<StockEntryBottomSheet> {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      _StepperBtn(icon: Icons.add, onTap: _increment),
+                      _StepperBtn(icon: Icons.add_rounded, onTap: _increment),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -246,10 +238,7 @@ class _StockEntryBottomSheetState extends ConsumerState<StockEntryBottomSheet> {
                     decoration: const InputDecoration(
                       labelText: 'Référence / Notes (optionnel)',
                       hintText: 'ex: BL-2025-001',
-                      border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.note_outlined),
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -259,6 +248,10 @@ class _StockEntryBottomSheetState extends ConsumerState<StockEntryBottomSheet> {
                     style: FilledButton.styleFrom(
                       backgroundColor: AppTheme.success,
                       foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(56),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+                      ),
                     ),
                     onPressed: _loading ? null : _submit,
                     icon: _loading
@@ -291,18 +284,18 @@ class _StepperBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        width: 50,
-        height: 50,
-        decoration: BoxDecoration(
-          border: Border.all(color: cs.outline),
-          borderRadius: BorderRadius.circular(8),
+    final theme = Theme.of(context);
+    return Material(
+      color: AppTheme.softTint(theme.brightness),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: SizedBox(
+          width: 50,
+          height: 50,
+          child: Icon(icon, size: 22, color: theme.colorScheme.primary),
         ),
-        child: Icon(icon, size: 22),
       ),
     );
   }

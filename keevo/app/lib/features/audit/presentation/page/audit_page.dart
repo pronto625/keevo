@@ -11,10 +11,29 @@ class AuditPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
+      backgroundColor: cs.surface,
       appBar: AppBar(
-        title: const Text('Journal d\'audit'),
+        backgroundColor: cs.surface,
         elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: Navigator.of(context).canPop()
+            ? IconButton(
+                icon: Icon(Icons.arrow_back_ios_new_rounded,
+                    color: cs.onSurface, size: 20),
+                tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+                onPressed: () => Navigator.maybePop(context),
+              )
+            : null,
+        title: Text(
+          'Journal d\'audit',
+          style: TextStyle(
+            color: cs.onSurface,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.2,
+          ),
+        ),
       ),
       body: const StockHistoryWidget(),
     );

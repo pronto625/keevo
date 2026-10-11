@@ -1,8 +1,11 @@
+export '../../../../core/storage/app_constants.dart' show kUserFirstNameKey;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/storage/app_constants.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
 import '../../data/datasource/local_dashboard_datasource.dart';
 import '../../data/datasource/remote_dashboard_datasource.dart';
@@ -14,8 +17,6 @@ import '../../domain/repository/dashboard_repository.dart';
 /// SharedPreferences key for motivational message dismissal date.
 const kMotivationalDismissedDate = 'motivational_dismissed_date';
 
-/// SharedPreferences key for user first name.
-const kUserFirstNameKey = 'user_first_name';
 
 /// SharedPreferences key for tenant name.
 const kTenantNameKey = 'tenant_name';
@@ -40,8 +41,11 @@ final dashboardRepositoryProvider = Provider<DashboardRepository>((ref) {
 });
 
 /// Dashboard snapshot — full aggregated data, auto-refresh.
-final dashboardSnapshotProvider = FutureProvider<DashboardSnapshot>((ref) {
-  return ref.watch(dashboardRepositoryProvider).getDashboardSnapshot();
+final dashboardSnapshotProvider = FutureProvider<DashboardSnapshot>((ref) async {
+  final snapshot =
+      await ref.watch(dashboardRepositoryProvider).getDashboardSnapshot();
+  // The value stays cached until invalidated: remember when it was fetched.
+  return snapshot.asOf != null ? snapshot : snapshot.withAsOf(DateTime.now());
 });
 
 /// Store overviews — derived from the dashboard snapshot (online-first).

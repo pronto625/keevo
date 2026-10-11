@@ -3,6 +3,15 @@ import 'package:drift/drift.dart';
 import '../../../../core/storage/app_database.dart';
 import '../../domain/model/dashboard_snapshot.dart';
 
+/// SQL expression giving the shop's local day (`YYYY-MM-DD`) of a Drift
+/// DateTime column. Drift stores local times as `…T00:30:00.000 +01:00`, and
+/// SQLite's date()/strftime() would convert that to UTC (previous day); the
+/// written wall-clock date is the local one. Rows stored in UTC (`…Z`) are
+/// converted with 'localtime'. Rows without offset are already local.
+String _localDay(String column) =>
+    "(CASE WHEN $column LIKE '%Z' THEN date($column, 'localtime') "
+    "ELSE substr($column, 1, 10) END)";
+
 /// LocalDashboardDatasource — Drift SQL aggregation queries for dashboard.
 ///
 /// GoF Builder: getDashboardSnapshot() orchestrates multiple async queries
@@ -65,9 +74,9 @@ class LocalDashboardDatasource {
     final now = DateTime.now();
     final start = DateTime(now.year, now.month, now.day - 29);
     final rows = await _db.customSelect(
-      'SELECT date(occurred_at) AS day, COALESCE(SUM(total_amount), 0) AS total '
+      'SELECT ${_localDay('occurred_at')} AS day, COALESCE(SUM(total_amount), 0) AS total '
       'FROM sales WHERE status = ? AND occurred_at >= ? '
-      'GROUP BY date(occurred_at) ORDER BY day ASC',
+      'GROUP BY ${_localDay('occurred_at')} ORDER BY day ASC',
       variables: [
         Variable.withString('COMPLETED'),
         Variable.withDateTime(start),
@@ -337,11 +346,11 @@ class LocalDashboardDatasource {
     final now = DateTime.now();
     final start = now.subtract(const Duration(days: 84));
     final rows = await _db.customSelect(
-      "SELECT strftime('%Y-%W', occurred_at) AS period, "
-      'MIN(date(occurred_at)) AS period_start, '
+      "SELECT strftime('%Y-%W', ${_localDay('occurred_at')}) AS period, "
+      'MIN(${_localDay('occurred_at')}) AS period_start, '
       'COALESCE(SUM(total_amount), 0) AS total '
       "FROM sales WHERE status = 'COMPLETED' AND occurred_at >= ? "
-      "GROUP BY strftime('%Y-%W', occurred_at) ORDER BY period ASC",
+      "GROUP BY strftime('%Y-%W', ${_localDay('occurred_at')}) ORDER BY period ASC",
       variables: [Variable.withDateTime(start)],
     ).get();
     final dataMap = <String, int>{};
@@ -373,10 +382,10 @@ class LocalDashboardDatasource {
     final now = DateTime.now();
     final start = DateTime(now.year - 1, now.month, 1);
     final rows = await _db.customSelect(
-      "SELECT strftime('%Y-%m', occurred_at) AS period, "
+      "SELECT substr(${_localDay('occurred_at')}, 1, 7) AS period, "
       'COALESCE(SUM(total_amount), 0) AS total '
       "FROM sales WHERE status = 'COMPLETED' AND occurred_at >= ? "
-      "GROUP BY strftime('%Y-%m', occurred_at) ORDER BY period ASC",
+      "GROUP BY substr(${_localDay('occurred_at')}, 1, 7) ORDER BY period ASC",
       variables: [Variable.withDateTime(start)],
     ).get();
     final dataMap = <String, int>{};
@@ -396,10 +405,10 @@ class LocalDashboardDatasource {
     final now = DateTime.now();
     final start = DateTime(now.year - 4, 1, 1);
     final rows = await _db.customSelect(
-      "SELECT strftime('%Y', occurred_at) AS period, "
+      "SELECT substr(${_localDay('occurred_at')}, 1, 4) AS period, "
       'COALESCE(SUM(total_amount), 0) AS total '
       "FROM sales WHERE status = 'COMPLETED' AND occurred_at >= ? "
-      "GROUP BY strftime('%Y', occurred_at) ORDER BY period ASC",
+      "GROUP BY substr(${_localDay('occurred_at')}, 1, 4) ORDER BY period ASC",
       variables: [Variable.withDateTime(start)],
     ).get();
     final dataMap = <String, int>{};
@@ -420,9 +429,9 @@ class LocalDashboardDatasource {
     final now = DateTime.now();
     final start = DateTime(now.year, now.month, now.day - 29);
     final rows = await _db.customSelect(
-      'SELECT date(occurred_at) AS day, COALESCE(SUM(total_amount), 0) AS total '
+      'SELECT ${_localDay('occurred_at')} AS day, COALESCE(SUM(total_amount), 0) AS total '
       "FROM sales WHERE status = 'COMPLETED' AND store_id = ? AND occurred_at >= ? "
-      'GROUP BY date(occurred_at) ORDER BY day ASC',
+      'GROUP BY ${_localDay('occurred_at')} ORDER BY day ASC',
       variables: [Variable.withString(storeId), Variable.withDateTime(start)],
     ).get();
     final dataMap = <String, int>{};
@@ -442,11 +451,11 @@ class LocalDashboardDatasource {
     final now = DateTime.now();
     final start = now.subtract(const Duration(days: 84));
     final rows = await _db.customSelect(
-      "SELECT strftime('%Y-%W', occurred_at) AS period, "
-      'MIN(date(occurred_at)) AS period_start, '
+      "SELECT strftime('%Y-%W', ${_localDay('occurred_at')}) AS period, "
+      'MIN(${_localDay('occurred_at')}) AS period_start, '
       'COALESCE(SUM(total_amount), 0) AS total '
       "FROM sales WHERE status = 'COMPLETED' AND store_id = ? AND occurred_at >= ? "
-      "GROUP BY strftime('%Y-%W', occurred_at) ORDER BY period ASC",
+      "GROUP BY strftime('%Y-%W', ${_localDay('occurred_at')}) ORDER BY period ASC",
       variables: [Variable.withString(storeId), Variable.withDateTime(start)],
     ).get();
     final dataMap = <String, int>{};
@@ -469,10 +478,10 @@ class LocalDashboardDatasource {
     final now = DateTime.now();
     final start = DateTime(now.year - 1, now.month, 1);
     final rows = await _db.customSelect(
-      "SELECT strftime('%Y-%m', occurred_at) AS period, "
+      "SELECT substr(${_localDay('occurred_at')}, 1, 7) AS period, "
       'COALESCE(SUM(total_amount), 0) AS total '
       "FROM sales WHERE status = 'COMPLETED' AND store_id = ? AND occurred_at >= ? "
-      "GROUP BY strftime('%Y-%m', occurred_at) ORDER BY period ASC",
+      "GROUP BY substr(${_localDay('occurred_at')}, 1, 7) ORDER BY period ASC",
       variables: [Variable.withString(storeId), Variable.withDateTime(start)],
     ).get();
     final dataMap = <String, int>{};
@@ -492,10 +501,10 @@ class LocalDashboardDatasource {
     final now = DateTime.now();
     final start = DateTime(now.year - 4, 1, 1);
     final rows = await _db.customSelect(
-      "SELECT strftime('%Y', occurred_at) AS period, "
+      "SELECT substr(${_localDay('occurred_at')}, 1, 4) AS period, "
       'COALESCE(SUM(total_amount), 0) AS total '
       "FROM sales WHERE status = 'COMPLETED' AND store_id = ? AND occurred_at >= ? "
-      "GROUP BY strftime('%Y', occurred_at) ORDER BY period ASC",
+      "GROUP BY substr(${_localDay('occurred_at')}, 1, 4) ORDER BY period ASC",
       variables: [Variable.withString(storeId), Variable.withDateTime(start)],
     ).get();
     final dataMap = <String, int>{};

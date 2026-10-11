@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/soft_icon_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -149,14 +150,14 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
                             ),
                           ),
                           // Vue Stock multi-boutiques (Story 3.2)
-                          _SoftIconButton(
+                          SoftIconButton(
                             icon: Icons.warehouse_outlined,
                             tooltip: 'Vue stock multi-boutiques',
                             onPressed: () => context.push('/stock/overview'),
                           ),
                           const SizedBox(width: 6),
                           // Bouton de synchronisation
-                          _SoftIconButton(
+                          SoftIconButton(
                             icon: Icons.sync_rounded,
                             tooltip: 'Synchroniser',
                             onPressed: () async {
@@ -186,7 +187,7 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
                           if (!isEmployee)
                             Container(
                               decoration: BoxDecoration(
-                                color: AppTheme.primarySoftTint,
+                                color: AppTheme.softTint(Theme.of(context).brightness),
                                 borderRadius: BorderRadius.circular(14),
                               ),
                               child: PopupMenuButton<String>(
@@ -416,41 +417,13 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      // La feuille dessine sa propre poignée ; évite la double poignée du thème.
+      showDragHandle: false,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) => _CategoryManagerSheet(parentRef: ref),
-    );
-  }
-}
-
-// Bouton d'action de l'AppBar — pastille pastel plutôt que "verre" blanc
-// translucide (qui supposait un fond coloré derrière, disparu avec le
-// bandeau dégradé). Cohérent avec le reste du rebrand soft/moderne.
-class _SoftIconButton extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onPressed;
-
-  const _SoftIconButton({
-    required this.icon,
-    required this.tooltip,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppTheme.primarySoftTint,
-        borderRadius: BorderRadius.all(Radius.circular(14)),
-      ),
-      child: IconButton(
-        icon: Icon(icon, color: Theme.of(context).colorScheme.primary),
-        tooltip: tooltip,
-        onPressed: onPressed,
-      ),
     );
   }
 }

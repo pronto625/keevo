@@ -3,6 +3,15 @@ import 'package:drift/drift.dart';
 import '../../../../core/storage/app_database.dart';
 import '../../domain/model/product_profitability_model.dart';
 
+/// SQL expression giving the shop's local day (`YYYY-MM-DD`) of a Drift
+/// DateTime column. Drift stores local times as `…T00:30:00.000 +01:00`, and
+/// SQLite's date()/strftime() would convert that to UTC (previous day); the
+/// written wall-clock date is the local one. Rows stored in UTC (`…Z`) are
+/// converted with 'localtime'. Rows without offset are already local.
+String _localDay(String column) =>
+    "(CASE WHEN $column LIKE '%Z' THEN date($column, 'localtime') "
+    "ELSE substr($column, 1, 10) END)";
+
 /// LocalProfitabilityDatasource — Drift SQL aggregation queries for profitability.
 ///
 /// Mirrors the SQL logic of JdbcProfitabilityRepository (backend) but runs
@@ -93,8 +102,10 @@ class LocalProfitabilityDatasource {
     required String productId,
     required DateTime from,
     required DateTime to,
+    String? storeId,
   }) async {
     final toExclusive = DateTime(to.year, to.month, to.day + 1);
+    final storeFilter = storeId != null ? 'AND s.store_id = ? ' : '';
 
     // Aggregate row
     final aggRows = await _db.customSelect(
@@ -112,12 +123,14 @@ class LocalProfitabilityDatasource {
       'LEFT JOIN categories c ON c.id = p.category_id '
       'WHERE s.status = ? AND si.product_id = ? '
       '  AND s.occurred_at >= ? AND s.occurred_at < ? '
+      '$storeFilter'
       'GROUP BY si.product_id, p.name, c.name, p.price, p.buy_price, p.transport_cost',
       variables: [
         Variable.withString('COMPLETED'),
         Variable.withString(productId),
         Variable.withDateTime(from),
         Variable.withDateTime(toExclusive),
+        if (storeId != null) Variable.withString(storeId),
       ],
     ).get();
 
@@ -132,7 +145,8 @@ class LocalProfitabilityDatasource {
     final isLoss = grossMarginXaf < 0;
 
     // Sparkline: last 7 days
-    final sparklineRows = await _getDailyMarginLast7(productId, to);
+    final sparklineRows =
+        await _getDailyMarginLast7(productId, to, storeId: storeId);
 
     // Top store by units
     final topStoreRows = await _db.customSelect(
@@ -143,6 +157,7 @@ class LocalProfitabilityDatasource {
       'JOIN stores st ON st.id = s.store_id '
       'WHERE s.status = ? AND si.product_id = ? '
       '  AND s.occurred_at >= ? AND s.occurred_at < ? '
+      '$storeFilter'
       'GROUP BY s.store_id, st.name '
       'ORDER BY units_sold DESC LIMIT 1',
       variables: [
@@ -150,6 +165,7 @@ class LocalProfitabilityDatasource {
         Variable.withString(productId),
         Variable.withDateTime(from),
         Variable.withDateTime(toExclusive),
+        if (storeId != null) Variable.withString(storeId),
       ],
     ).get();
 
@@ -183,7 +199,7 @@ class LocalProfitabilityDatasource {
       grossMarginXaf: grossMarginXaf,
       marginPercent: marginPercent,
       isLoss: isLoss,
-      storeId: null,
+      storeId: storeId,
       marginLevel: marginLevel,
       currentCataloguePrice: row.read<int>('catalogue_price'),
       currentBuyPrice: row.read<int>('buy_price'),
@@ -199,26 +215,28 @@ class LocalProfitabilityDatasource {
   }
 
   Future<List<DailyMarginEntry>> _getDailyMarginLast7(
-      String productId, DateTime endDate) async {
+      String productId, DateTime endDate, {String? storeId}) async {
     final startDate = DateTime(
         endDate.year, endDate.month, endDate.day - 6);
     final toExclusive =
         DateTime(endDate.year, endDate.month, endDate.day + 1);
 
     final rows = await _db.customSelect(
-      'SELECT date(s.occurred_at) AS day, '
+      'SELECT ${_localDay('s.occurred_at')} AS day, '
       '  COALESCE(CAST(SUM((si.unit_price - p.buy_price - p.transport_cost) * si.quantity) AS INTEGER), 0) AS daily_margin '
       'FROM sale_items si '
       'JOIN sales s ON s.id = si.sale_id '
       'JOIN products p ON p.id = si.product_id '
       'WHERE s.status = ? AND si.product_id = ? '
       '  AND s.occurred_at >= ? AND s.occurred_at < ? '
-      'GROUP BY date(s.occurred_at) ORDER BY day ASC',
+      '${storeId != null ? 'AND s.store_id = ? ' : ''}'
+      'GROUP BY ${_localDay('s.occurred_at')} ORDER BY day ASC',
       variables: [
         Variable.withString('COMPLETED'),
         Variable.withString(productId),
         Variable.withDateTime(startDate),
         Variable.withDateTime(toExclusive),
+        if (storeId != null) Variable.withString(storeId),
       ],
     ).get();
 
@@ -290,9 +308,10 @@ class LocalProfitabilityDatasource {
 
     // Preceding period for delta
     final periodLength = toExclusive.difference(from).inDays;
-    final prevTo = from;
+    // Previous window = the [periodLength] days just before [from]; its end
+    // is exclusive at [from] so the two periods never share a day.
     final prevFrom = from.subtract(Duration(days: periodLength));
-    final prevToExclusive = DateTime(prevTo.year, prevTo.month, prevTo.day + 1);
+    final prevToExclusive = from;
 
     final prevRows = await _db.customSelect(
       'SELECT s.store_id, COALESCE(CAST(SUM(s.total_amount) AS INTEGER), 0) AS total_revenue '

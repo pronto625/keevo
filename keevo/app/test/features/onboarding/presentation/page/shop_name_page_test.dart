@@ -6,7 +6,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:keevo/core/auth/session_refresher.dart';
 import 'package:keevo/core/storage/app_constants.dart';
+import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 import 'package:keevo/features/onboarding/domain/exception/onboarding_exception.dart';
 import 'package:keevo/features/onboarding/domain/model/onboarding_result.dart';
 import 'package:keevo/features/onboarding/domain/model/sector_type.dart';
@@ -18,6 +20,8 @@ import 'package:keevo/features/onboarding/presentation/provider/onboarding_provi
 
 class MockCompleteOnboardingUseCase extends Mock
     implements CompleteOnboardingUseCase {}
+
+class MockSessionRefresher extends Mock implements SessionRefresher {}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -37,12 +41,17 @@ GoRouter _testRouter(SectorType sector) {
   );
 }
 
+late MockSessionRefresher _refresher;
+
 Widget _buildPage(
   SectorType sector,
   List<Override> overrides,
 ) {
   return ProviderScope(
-    overrides: overrides,
+    overrides: [
+      sessionRefresherProvider.overrideWithValue(_refresher),
+      ...overrides,
+    ],
     child: MaterialApp.router(
       routerConfig: _testRouter(sector),
     ),
@@ -62,6 +71,8 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     mockUseCase = MockCompleteOnboardingUseCase();
+    _refresher = MockSessionRefresher();
+    when(() => _refresher.refresh()).thenAnswer((_) async => RefreshOutcome.renewed);
   });
 
   group('ShopNamePage', () {
@@ -209,6 +220,40 @@ void main() {
             sectorType: SectorType.electronics,
             storeName: 'Tech World',
           )).called(1);
+    });
+
+    // The registration token says onboardingCompleted=false until renewed:
+    // finishing the wizard renews it, and the local flag keeps the wizard
+    // closed if the server cannot be reached.
+    testWidgets('success: renews the session and marks the wizard completed',
+        (tester) async {
+      when(() => _refresher.refresh())
+          .thenAnswer((_) async => RefreshOutcome.unreachable);
+      when(() => mockUseCase.execute(
+                sectorType: any(named: 'sectorType'),
+                storeName: any(named: 'storeName'),
+              ))
+          .thenAnswer((_) async => const OnboardingResult(
+                tenantId: 'tid',
+                sectorType: 'ELECTRONICS',
+                storeName: 'Tech World',
+                categoriesCreated: 14,
+              ));
+
+      await tester.pumpWidget(
+        _buildPage(SectorType.electronics, [
+          completeOnboardingUseCaseProvider.overrideWithValue(mockUseCase),
+        ]),
+      );
+      await tester.pump();
+      await tester.enterText(find.byKey(const Key('shopNameField')), 'Tech World');
+      await tester.tap(find.byKey(const Key('submitButton')));
+      await tester.pumpAndSettle();
+
+      verify(() => _refresher.refresh()).called(1);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool(kOnboardingWizardCompletedKey), isTrue);
+      expect(find.text('POS'), findsOneWidget);
     });
   });
 }

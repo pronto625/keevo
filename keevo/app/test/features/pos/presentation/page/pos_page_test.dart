@@ -23,6 +23,14 @@ class _FakeFrequentProductsNotifier extends FrequentProductsNotifier {
   }
 }
 
+class _CountingFrequentProductsNotifier extends _FakeFrequentProductsNotifier {
+  static int loadMoreCalls = 0;
+  _CountingFrequentProductsNotifier(super.products);
+
+  @override
+  Future<void> loadMore() async => loadMoreCalls++;
+}
+
 GoRouter _testRouter(Widget page) => GoRouter(
       routes: [GoRoute(path: '/', builder: (_, __) => page)],
     );
@@ -140,6 +148,28 @@ void main() {
 
       // Clear the 150ms flash timer from ProductCard
       await tester.pump(const Duration(milliseconds: 200));
+    });
+    testWidgets('all-stores mode still loads the next product page',
+        (tester) async {
+      _CountingFrequentProductsNotifier.loadMoreCalls = 0;
+      await tester.pumpWidget(buildApp(
+        overrides: [
+          frequentProductsProvider.overrideWith(
+            () => _CountingFrequentProductsNotifier([
+              for (var i = 0; i < 60; i++)
+                PosProductResult(
+                    id: 'p$i', name: 'Produit $i', price: 500, stock: 10),
+            ]),
+          ),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.drag(
+          find.byType(CustomScrollView).first, const Offset(0, -20000));
+      await tester.pumpAndSettle();
+
+      expect(_CountingFrequentProductsNotifier.loadMoreCalls, greaterThan(0));
     });
   });
 }

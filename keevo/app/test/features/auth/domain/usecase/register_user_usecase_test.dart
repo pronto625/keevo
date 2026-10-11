@@ -30,6 +30,7 @@ void main() {
       token: 'STUB:user-id:tenant-id',
       userId: 'user-id',
       tenantId: 'tenant-id',
+      refreshToken: 'refresh-token',
     );
 
     test('execute() returns RegistrationResult on valid inputs', () async {
@@ -40,6 +41,7 @@ void main() {
       when(() => mockTokenStorage.saveToken(any())).thenAnswer((_) async {});
       when(() => mockTokenStorage.saveUserId(any())).thenAnswer((_) async {});
       when(() => mockTokenStorage.saveTenantId(any())).thenAnswer((_) async {});
+      when(() => mockTokenStorage.saveRefreshToken(any())).thenAnswer((_) async {});
 
       final actual = await useCase.execute(
         phoneNumber: validPhone,
@@ -52,6 +54,9 @@ void main() {
       verify(() => mockTokenStorage.saveToken('STUB:user-id:tenant-id')).called(1);
       verify(() => mockTokenStorage.saveUserId('user-id')).called(1);
       verify(() => mockTokenStorage.saveTenantId('tenant-id')).called(1);
+      // Without it the session cannot be renewed and the new owner is logged
+      // out when the access token expires.
+      verify(() => mockTokenStorage.saveRefreshToken('refresh-token')).called(1);
     });
 
     test('execute() throws ArgumentError when phone is empty', () async {

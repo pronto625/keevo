@@ -231,6 +231,9 @@ class QuickAddProductNotifier extends _$QuickAddProductNotifier {
     await syncService.queueOperation(
       operation: 'CREATE_PRODUCT',
       payload: {
+        // The server keeps the client id only from the payload; the stock
+        // entry and the count queued below reference this id.
+        'id': productId,
         'name': name.trim(),
         'sku': sku,
         'categoryId': categoryId,

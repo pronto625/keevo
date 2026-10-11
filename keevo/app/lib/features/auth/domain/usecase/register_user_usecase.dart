@@ -44,6 +44,10 @@ class RegisterUserUseCase {
     await _tokenStorage.saveToken(result.token);
     await _tokenStorage.saveUserId(result.userId);
     await _tokenStorage.saveTenantId(result.tenantId);
+    final refreshToken = result.refreshToken;
+    if (refreshToken != null) {
+      await _tokenStorage.saveRefreshToken(refreshToken);
+    }
 
     return result;
   }

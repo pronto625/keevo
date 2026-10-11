@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import '../../domain/model/dashboard_snapshot.dart';
 import '../provider/dashboard_providers.dart';
 import '../widget/sales_evolution_chart.dart';
@@ -25,10 +26,19 @@ class StoreDashboardPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final storesAsync = ref.watch(storeOverviewsProvider);
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Détails Boutique'),
+        backgroundColor: cs.surface,
+        title: Text(
+          'Détails Boutique',
+          style: TextStyle(
+            color: cs.onSurface,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.2,
+          ),
+        ),
       ),
       body: storesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -83,7 +93,7 @@ class _StoreDetail extends ConsumerWidget {
           style: Theme.of(context)
               .textTheme
               .headlineSmall
-              ?.copyWith(fontWeight: FontWeight.bold),
+              ?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -0.3),
         ),
         const SizedBox(height: 8),
         Align(
@@ -106,21 +116,31 @@ class _StoreDetail extends ConsumerWidget {
         ),
         const SizedBox(height: 24),
 
-        // Metrics row
-        _MetricRow(
-          label: "CA Aujourd'hui",
-          value: StoreDashboardPage._currencyFormat.format(store.todayCA),
-          icon: Icons.trending_up,
-        ),
-        _MetricRow(
-          label: 'CA Hier',
-          value: StoreDashboardPage._currencyFormat.format(store.yesterdayCA),
-          icon: Icons.history,
-        ),
-        _MetricRow(
-          label: 'Employés',
-          value: '${store.employeeCount}',
-          icon: Icons.people_outline,
+        // Metrics row — regroupées dans une carte douce, comme les cartes
+        // du dashboard principal.
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: AppTheme.softCardDecoration(Theme.of(context).colorScheme),
+          child: Column(
+            children: [
+              _MetricRow(
+                label: "CA Aujourd'hui",
+                value: StoreDashboardPage._currencyFormat.format(store.todayCA),
+                icon: Icons.trending_up_rounded,
+              ),
+              _MetricRow(
+                label: 'CA Hier',
+                value:
+                    StoreDashboardPage._currencyFormat.format(store.yesterdayCA),
+                icon: Icons.history_rounded,
+              ),
+              _MetricRow(
+                label: 'Employés',
+                value: '${store.employeeCount}',
+                icon: Icons.people_outline_rounded,
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 24),
 
@@ -226,7 +246,7 @@ class _LowStockSection extends StatelessWidget {
                 style: Theme.of(context)
                     .textTheme
                     .titleSmall
-                    ?.copyWith(fontWeight: FontWeight.w600),
+                    ?.copyWith(fontWeight: FontWeight.w700),
               ),
             ],
           ),
@@ -287,29 +307,22 @@ class _AdminSectionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final radius = BorderRadius.circular(AppTheme.radiusL);
     return Material(
-      color: cs.cardBg,
-      borderRadius: BorderRadius.circular(14),
+      color: cs.surface,
+      borderRadius: radius,
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: radius,
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: cs.outlineVariant),
+            borderRadius: radius,
+            border: Border.all(color: cs.outlineVariant.withAlpha(90)),
           ),
           child: Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: cs.primary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon,
-                    color: cs.primary, size: 22),
-              ),
+              SoftIconBadge(icon: icon, size: 44),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -321,11 +334,11 @@ class _AdminSectionButton extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(subtitle,
                         style: theme.textTheme.bodySmall?.copyWith(
-                            color: cs.muted)),
+                            color: cs.onSurfaceVariant)),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, color: cs.muted),
+              Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant),
             ],
           ),
         ),
@@ -351,14 +364,7 @@ class _MetricRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
-          Icon(
-            icon,
-            size: 20,
-            color: Theme.of(context)
-                .colorScheme
-                .onSurface
-                .withValues(alpha: 0.5),
-          ),
+          SoftIconBadge(icon: icon, size: 36),
           const SizedBox(width: 12),
           Expanded(
             child: Text(

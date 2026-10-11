@@ -1,4 +1,5 @@
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -136,9 +137,9 @@ class _CreateDraftProductBottomSheetState
         );
       }
     } on ProductException catch (e) {
-      setState(() => _errorMessage = e.message);
+      if (mounted) setState(() => _errorMessage = e.message);
     } catch (e) {
-      setState(() => _errorMessage = 'Erreur inattendue : $e');
+      if (mounted) setState(() => _errorMessage = 'Erreur inattendue : $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -147,7 +148,12 @@ class _CreateDraftProductBottomSheetState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final categoriesAsync = ref.watch(categoriesProvider);
+    // Ambre lisible en texte : le jaune pur manque de contraste sur fond clair.
+    final warningText = theme.brightness == Brightness.dark
+        ? cs.warning
+        : AppTheme.onWarning;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -164,16 +170,24 @@ class _CreateDraftProductBottomSheetState
             children: [
               // Header
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    '🔶 Créer un brouillon',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
+                  const SoftIconBadge(
+                    icon: Icons.edit_note_rounded,
+                    color: AppTheme.warning,
+                    size: 36,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Créer un brouillon',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.2,
+                      ),
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close),
+                    icon: Icon(Icons.close_rounded, color: cs.onSurfaceVariant),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
@@ -194,14 +208,11 @@ class _CreateDraftProductBottomSheetState
                 autofocus: _isNameEditable,
                 decoration: InputDecoration(
                   labelText: 'Nom du produit',
-                  filled: !_isNameEditable,
+                  // Nom figé (pré-rempli depuis la recherche POS) : fond plus
+                  // marqué pour le distinguer d'un champ éditable.
                   fillColor: _isNameEditable
                       ? null
-                      : theme.colorScheme.surfaceVariant.withOpacity(0.5),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: _isNameEditable ? const BorderSide() : BorderSide.none,
-                  ),
+                      : cs.surfaceContainerHighest,
                   suffixIcon: _isNameEditable
                       ? null
                       : const Icon(Icons.lock_outline, size: 16),
@@ -219,9 +230,10 @@ class _CreateDraftProductBottomSheetState
                 const SizedBox(height: 8),
                 Container(
                   decoration: BoxDecoration(
-                    color: AppTheme.warning,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppTheme.warning),
+                    color: AppTheme.warning.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusM),
+                    border: Border.all(
+                        color: AppTheme.warning.withValues(alpha: 0.3)),
                   ),
                   padding: const EdgeInsets.all(8),
                   child: Column(
@@ -230,21 +242,21 @@ class _CreateDraftProductBottomSheetState
                       Text(
                         'Produit(s) existant(s) :',
                         style: theme.textTheme.labelSmall?.copyWith(
-                          color: AppTheme.warning,
+                          color: warningText,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: 4),
                       ..._nameSuggestions.map((p) => InkWell(
                             onTap: () => _selectExistingProduct(p),
-                            borderRadius: BorderRadius.circular(6),
+                            borderRadius: BorderRadius.circular(AppTheme.radiusS),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
                                   vertical: 6, horizontal: 4),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.check_circle_outline,
-                                      size: 18, color: AppTheme.success),
+                                  Icon(Icons.check_circle_outline_rounded,
+                                      size: 18, color: cs.success),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
@@ -272,11 +284,8 @@ class _CreateDraftProductBottomSheetState
                 controller: _priceController,
                 keyboardType: TextInputType.number,
                 autofocus: !_isNameEditable,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Prix de vente (XAF) *',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
                 ),
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) {
@@ -295,11 +304,8 @@ class _CreateDraftProductBottomSheetState
               categoriesAsync.when(
                 data: (cats) => DropdownButtonFormField<String>(
                   value: _selectedCategoryId,
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     labelText: 'Catégorie *',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
                   ),
                   items: cats.map((c) {
                     return DropdownMenuItem(
@@ -322,16 +328,15 @@ class _CreateDraftProductBottomSheetState
               TextFormField(
                 controller: _quantityController,
                 keyboardType: TextInputType.number,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Quantité pour cette vente',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
                 ),
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) return null;
                   final n = int.tryParse(v.trim());
-                  if (n == null || n < 0) return 'Entrez une quantité valide';
+                  if (n == null || n < 1) {
+                    return 'Entrez une quantité valide (au moins 1)';
+                  }
                   return null;
                 },
               ),
@@ -342,7 +347,7 @@ class _CreateDraftProductBottomSheetState
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.errorContainer,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusM),
                   ),
                   child: Row(
                     children: [
@@ -366,6 +371,12 @@ class _CreateDraftProductBottomSheetState
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(56),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusL),
+                    ),
+                  ),
                   onPressed: _isLoading ? null : _submit,
                   icon: _isLoading
                       ? const SizedBox(

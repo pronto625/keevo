@@ -77,51 +77,6 @@ class CreateEmployee extends _$CreateEmployee {
   }
 }
 
-// ── Reassign store ─────────────────────────────────────────────────────────
-
-@riverpod
-class ReassignStore extends _$ReassignStore {
-  @override
-  FutureOr<EmployeeModel?> build() => null;
-
-  Future<void> reassign(String employeeId, String newStoreId) async {
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(
-      () => ref.read(employeeRepositoryProvider).reassignStore(employeeId, newStoreId),
-    );
-  }
-}
-
-// ── Deactivate employee ────────────────────────────────────────────────────
-
-@riverpod
-class DeactivateEmployee extends _$DeactivateEmployee {
-  @override
-  FutureOr<void> build() => null;
-
-  Future<void> deactivate(String employeeId) async {
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(
-      () => ref.read(employeeRepositoryProvider).deactivateEmployee(employeeId),
-    );
-  }
-}
-
-// ── Reactivate employee ────────────────────────────────────────────────────
-
-@riverpod
-class ReactivateEmployee extends _$ReactivateEmployee {
-  @override
-  FutureOr<void> build() => null;
-
-  Future<void> reactivate(String employeeId) async {
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(
-      () => ref.read(employeeRepositoryProvider).reactivateEmployee(employeeId),
-    );
-  }
-}
-
 // ── Regenerate password ────────────────────────────────────────────────────
 
 @riverpod

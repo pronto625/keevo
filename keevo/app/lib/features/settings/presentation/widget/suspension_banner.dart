@@ -19,14 +19,14 @@ class SuspensionBanner extends ConsumerWidget {
     final status = ref.watch(accountStatusProvider);
 
     return switch (status) {
-      AccountStatus.suspended => _Banner(
-          color: AppTheme.errorColor,
+      AccountStatus.suspended => const _Banner(
+          tone: _BannerTone.error,
           icon: Icons.block_outlined,
           message:
               'Votre compte est suspendu. Contactez le support pour plus d\'informations.',
         ),
-      AccountStatus.trialExpired => _Banner(
-          color: AppTheme.warning,
+      AccountStatus.trialExpired => const _Banner(
+          tone: _BannerTone.warning,
           icon: Icons.access_time_outlined,
           message:
               'Vous êtes sur le plan Gratuit. Passez au plan Premium pour continuer.',
@@ -36,31 +36,44 @@ class SuspensionBanner extends ConsumerWidget {
   }
 }
 
+enum _BannerTone { error, warning }
+
 class _Banner extends StatelessWidget {
-  final Color color;
+  final _BannerTone tone;
   final IconData icon;
   final String message;
 
   const _Banner({
-    required this.color,
+    required this.tone,
     required this.icon,
     required this.message,
   });
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = cs.brightness == Brightness.dark;
+    // Fond sémantique dilué + icône colorée : le texte blanc sur ambre
+    // plein était peu lisible, et la teinte reste rouge/ambre.
+    final (background, accent) = switch (tone) {
+      _BannerTone.error => (cs.errorContainer_, cs.error),
+      _BannerTone.warning => (
+          cs.warningContainer,
+          isDark ? cs.warning : AppTheme.onWarning,
+        ),
+    };
     return Container(
       width: double.infinity,
-      color: color,
+      color: background,
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
       child: Row(
         children: [
-          Icon(icon, color: Colors.white, size: 20),
+          Icon(icon, color: accent, size: 20),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
+              style: TextStyle(color: cs.onSurface, fontSize: 13),
             ),
           ),
         ],

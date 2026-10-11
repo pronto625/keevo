@@ -37,6 +37,7 @@ class RemoteAuthDataSource {
         token: body['token'] as String,
         userId: body['userId'] as String,
         tenantId: body['tenantId'] as String,
+        refreshToken: body['refreshToken'] as String?,
       );
     } on DioException catch (e) {
       throw _mapRegisterError(e);
@@ -155,6 +156,14 @@ class RemoteAuthDataSource {
     } on DioException catch (e) {
       throw _mapAuthError(e);
     }
+  }
+
+  /// POST /api/v1/auth/logout — revokes the refresh token server-side.
+  Future<void> logout(String refreshToken) async {
+    await _dio.post<void>(
+      '/api/v1/auth/logout',
+      data: {'refreshToken': refreshToken},
+    );
   }
 
   /// POST /api/v1/auth/reset-password (Story 14.12)

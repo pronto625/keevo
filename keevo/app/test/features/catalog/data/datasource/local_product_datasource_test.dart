@@ -45,6 +45,22 @@ class _NoOpSyncService implements SyncService {
   }) async {}
 }
 
+/// Records queued operations so tests can assert what reaches the sync queue.
+class _RecordingSyncService extends _NoOpSyncService {
+  _RecordingSyncService(super.db);
+
+  final queued = <({String operation, String? entityId})>[];
+
+  @override
+  Future<void> queueOperation({
+    required String operation,
+    required Map<String, dynamic> payload,
+    String? entityId,
+  }) async {
+    queued.add((operation: operation, entityId: entityId));
+  }
+}
+
 void main() {
   setUpAll(() {
     _overrideSqlite3ForLinuxTesting();
@@ -223,6 +239,35 @@ void main() {
     test('a store with no stock_levels row for the product is never low-stock there', () async {
       final storeC = await sut.getLowStockProductIds(storeId: 'store-c');
       expect(storeC, isEmpty);
+    });
+  });
+  // The server resolves a product merged on name conflict through the
+  // entityId of its CREATE op; without it, stock entries and sales queued
+  // with the local id are rejected as PRODUCT_NOT_FOUND.
+  group('product creations carry their id as entityId', () {
+    late _RecordingSyncService sync;
+
+    setUp(() {
+      sync = _RecordingSyncService(db);
+      sut = LocalProductDataSource(db, sync);
+    });
+
+    test('CREATE_PRODUCT', () async {
+      final product = await sut.insert(name: 'Sac à main');
+
+      expect(sync.queued.single.operation, 'CREATE_PRODUCT');
+      expect(sync.queued.single.entityId, product.id);
+    });
+
+    test('CREATE_DRAFT_PRODUCT', () async {
+      final product = await sut.insertDraft(
+        name: 'Ceinture',
+        priceVente: 1500,
+        categoryId: 'cat-1',
+      );
+
+      expect(sync.queued.single.operation, 'CREATE_DRAFT_PRODUCT');
+      expect(sync.queued.single.entityId, product.id);
     });
   });
 }

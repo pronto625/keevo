@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 
 import '../../../catalog/presentation/provider/category_provider.dart';
 import '../../data/datasource/remote_quick_add_datasource.dart';
@@ -87,34 +88,14 @@ class _QuickAddProductSheetState
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // ── Drag handle ──────────────────────────────────────
-          Container(
-            margin: const EdgeInsets.only(top: 12, bottom: 4),
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(
-              color: theme.colorScheme.outlineVariant,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
+          // Drag handle: provided by the bottom sheet theme.
 
           // ── Header ───────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 12, 0),
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    Icons.add_shopping_cart_rounded,
-                    size: 20,
-                    color: theme.colorScheme.onPrimaryContainer,
-                  ),
-                ),
+                const SoftIconBadge(icon: Icons.add_shopping_cart_rounded),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -163,16 +144,10 @@ class _QuickAddProductSheetState
                     controller: _nameController,
                     focusNode: _nameFocus,
                     textCapitalization: TextCapitalization.sentences,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Nom du produit',
                       hintText: 'Ex : Robe Wax L',
-                      prefixIcon: const Icon(Icons.inventory_2_outlined),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      filled: true,
-                      fillColor:
-                          theme.colorScheme.surfaceContainerLowest,
+                      prefixIcon: Icon(Icons.inventory_2_outlined),
                     ),
                     maxLength: 200,
                     validator: (v) {
@@ -192,16 +167,9 @@ class _QuickAddProductSheetState
                     data: (categories) {
                       return DropdownButtonFormField<String>(
                         initialValue: _selectedCategoryId,
-                        decoration: InputDecoration(
+                        decoration: const InputDecoration(
                           labelText: 'Catégorie',
-                          prefixIcon:
-                              const Icon(Icons.category_outlined),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          filled: true,
-                          fillColor:
-                              theme.colorScheme.surfaceContainerLowest,
+                          prefixIcon: Icon(Icons.category_outlined),
                         ),
                         hint: const Text('Choisir une catégorie…'),
                         items: categories
@@ -226,15 +194,9 @@ class _QuickAddProductSheetState
                   // 3. Physical quantity
                   TextFormField(
                     controller: _qtyController,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Quantité physique',
-                      prefixIcon: const Icon(Icons.numbers),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      filled: true,
-                      fillColor:
-                          theme.colorScheme.surfaceContainerLowest,
+                      prefixIcon: Icon(Icons.numbers),
                     ),
                     keyboardType: TextInputType.number,
                     inputFormatters: [
@@ -256,17 +218,11 @@ class _QuickAddProductSheetState
                   // 4. Selling price (optional)
                   TextFormField(
                     controller: _priceController,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Prix de vente (optionnel)',
                       hintText: 'Ex : 5000',
-                      prefixIcon: const Icon(Icons.payments_outlined),
+                      prefixIcon: Icon(Icons.payments_outlined),
                       suffixText: 'XAF',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      filled: true,
-                      fillColor:
-                          theme.colorScheme.surfaceContainerLowest,
                     ),
                     keyboardType: TextInputType.number,
                     inputFormatters: [

@@ -65,9 +65,30 @@ class _StockHistoryWidgetState extends ConsumerState<StockHistoryWidget> {
     );
     if (!notifier.hasMore) return;
     setState(() => _isLoadingMore = true);
-    await notifier.loadMore();
-    if (mounted) setState(() => _isLoadingMore = false);
+    try {
+      await notifier.loadMore();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          const SnackBar(
+              content: Text('Impossible de charger la suite de l\'historique')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoadingMore = false);
+    }
   }
+
+  // The error state is rendered by the widget itself: a failed reload must
+  // not escape from RefreshIndicator as an unhandled error.
+  Future<void> _refresh() => ref
+      .refresh(
+        auditHistoryNotifierProvider(
+          entityType: widget.entityType,
+          entityId: widget.entityId,
+        ).future,
+      )
+      .then((_) {}, onError: (_) {});
 
   @override
   Widget build(BuildContext context) {
@@ -112,8 +133,18 @@ class _StockHistoryWidgetState extends ConsumerState<StockHistoryWidget> {
     bool hasMore,
   ) {
     if (entries.isEmpty) {
-      return const Center(
-        child: _EmptyStateWidget(),
+      // Scrollable so pull-to-refresh still works on an empty history.
+      return RefreshIndicator(
+        onRefresh: _refresh,
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: SizedBox(
+              height: constraints.maxHeight,
+              child: const Center(child: _EmptyStateWidget()),
+            ),
+          ),
+        ),
       );
     }
 
@@ -121,12 +152,7 @@ class _StockHistoryWidgetState extends ConsumerState<StockHistoryWidget> {
     final itemCount = entries.length + (showFooter ? 1 : 0);
 
     return RefreshIndicator(
-      onRefresh: () async => ref.invalidate(
-        auditHistoryNotifierProvider(
-          entityType: widget.entityType,
-          entityId: widget.entityId,
-        ),
-      ),
+      onRefresh: _refresh,
       child: ListView.separated(
         controller: _scrollController,
         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -161,7 +187,7 @@ class _EmptyStateWidget extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Icon(
-          Icons.history,
+          Icons.history_rounded,
           size: 64,
           color: Theme.of(context).colorScheme.outlineVariant,
         ),
@@ -200,8 +226,9 @@ class _AuditEntryTile extends StatelessWidget {
       return phone != null ? 'Vous ($phone)' : 'Vous';
     }
     // actorPhone is resolved by the backend via LEFT JOIN public.users
+    final id = entry.userId;
     return entry.actorPhone ??
-        entry.userId.substring(entry.userId.length - 8);
+        (id.length > 8 ? id.substring(id.length - 8) : id);
   }
 
   /// Maps backend action codes to French section titles.
@@ -376,7 +403,9 @@ class _AuditEntryTile extends StatelessWidget {
       ),
       trailing: Text(
         formattedDate,
-        style: theme.textTheme.bodySmall,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
       ),
     );
   }

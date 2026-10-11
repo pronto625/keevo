@@ -1,4 +1,3 @@
-import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -49,26 +48,34 @@ class _OwnerReportsPageState extends ConsumerState<OwnerReportsPage>
   @override
   Widget build(BuildContext context) {
     final activeStoreId = ref.watch(activeStoreIdProvider);
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
         leading: context.canPop()
             ? IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                    color: Colors.white),
+                icon: Icon(Icons.arrow_back_ios_new_rounded,
+                    color: cs.onSurface),
                 onPressed: () => context.pop(),
               )
             : null,
-        backgroundColor: AppTheme.primary,
-        title: const Text(
+        backgroundColor: cs.surface,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: Text(
           'Rapports',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: cs.onSurface,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.2,
+          ),
         ),
         bottom: TabBar(
           controller: _tabController,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white60,
-          indicatorColor: Colors.white,
+          labelColor: cs.primary,
+          unselectedLabelColor: cs.onSurfaceVariant,
+          indicatorColor: cs.primary,
+          dividerColor: cs.outlineVariant.withAlpha(80),
           tabs: const [
             Tab(icon: Icon(Icons.today_outlined), text: 'Jour'),
             Tab(icon: Icon(Icons.history_outlined), text: 'Historique'),
@@ -154,26 +161,34 @@ class _EmployeeReportsPageState extends ConsumerState<EmployeeReportsPage>
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
         leading: context.canPop()
             ? IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                    color: Colors.white),
+                icon: Icon(Icons.arrow_back_ios_new_rounded,
+                    color: cs.onSurface),
                 onPressed: () => context.pop(),
               )
             : null,
-        backgroundColor: AppTheme.primary,
-        title: const Text(
+        backgroundColor: cs.surface,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: Text(
           'Rapports',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: cs.onSurface,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.2,
+          ),
         ),
         bottom: TabBar(
           controller: _tabController,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white60,
-          indicatorColor: Colors.white,
+          labelColor: cs.primary,
+          unselectedLabelColor: cs.onSurfaceVariant,
+          indicatorColor: cs.primary,
+          dividerColor: cs.outlineVariant.withAlpha(80),
           tabs: const [
             Tab(icon: Icon(Icons.today_outlined), text: 'Jour'),
           ],

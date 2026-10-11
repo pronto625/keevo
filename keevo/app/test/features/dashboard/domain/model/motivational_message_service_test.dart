@@ -71,5 +71,21 @@ void main() {
       );
       expect(msg, contains('1\u202f500\u202f000'));
     });
+  
+    // Rebrand: no decorative emoji in the app's own texts.
+    test('messages carry no decorative emoji', () {
+      final emoji = RegExp(r'[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]',
+          unicode: true);
+      for (var day = 0; day < 30; day++) {
+        for (final ca in [0, 12000]) {
+          final msg = MotivationalMessageService.getMessage(
+            firstName: 'Awa',
+            yesterdayCA: ca,
+            now: DateTime(2025, 1, 1).add(Duration(days: day)),
+          );
+          expect(emoji.hasMatch(msg), isFalse, reason: msg);
+        }
+      }
+    });
   });
 }

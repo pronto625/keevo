@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/providers.dart';
-import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
+import '../../../../core/widget/soft_icon_button.dart';
 
 import '../../../../features/notifications/presentation/widget/notification_bell_widget.dart';
 import '../../domain/model/dashboard_snapshot.dart';
@@ -34,10 +35,14 @@ class DashboardPage extends ConsumerWidget {
           onRetry: () => ref.invalidate(dashboardSnapshotProvider),
         ),
         data: (snapshot) {
+          // Empty state only when there is truly nothing to show: once a
+          // store exists, its card, stock alerts and the bell stay reachable.
           final isEmpty = snapshot.todayCA == 0 &&
               snapshot.yesterdayCA == 0 &&
               snapshot.totalTransactionsMonth == 0 &&
-              snapshot.prevMonthTransactions == 0;
+              snapshot.prevMonthTransactions == 0 &&
+              snapshot.storeOverviews.isEmpty &&
+              snapshot.lowStockCount == 0;
           if (isEmpty) {
             return _EmptyState(
               firstName: firstName,
@@ -52,8 +57,14 @@ class DashboardPage extends ConsumerWidget {
             firstName: firstName,
             motivationalMessage: motivationalMessage,
             onRefresh: () async {
-              ref.invalidate(dashboardSnapshotProvider);
               ref.invalidate(storeOverviewsProvider);
+              // Keep the refresh spinner until the new data is in.
+              try {
+                ref.invalidate(dashboardSnapshotProvider);
+                await ref.read(dashboardSnapshotProvider.future);
+              } catch (_) {
+                // The error state is rendered by the provider listener.
+              }
             },
           );
         },
@@ -84,6 +95,7 @@ class _DashboardContent extends ConsumerWidget {
         ?? snapshot.weeklyTopProducts;
     final worstProducts = ref.watch(worstProductsProvider).valueOrNull
         ?? snapshot.weeklyWorstProducts;
+    final cs = Theme.of(context).colorScheme;
 
     return RefreshIndicator(
       onRefresh: onRefresh,
@@ -93,36 +105,41 @@ class _DashboardContent extends ConsumerWidget {
             expandedHeight: tenantName != null && tenantName.isNotEmpty ? 72 : 56,
             floating: true,
             snap: true,
+            // Fond neutre opaque : le thème rend l'AppBar transparente, ce
+            // qui laisserait le contenu défiler visiblement sous l'en-tête.
+            backgroundColor: cs.surface,
+            surfaceTintColor: Colors.transparent,
+            scrolledUnderElevation: 0,
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   greeting,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w600),
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.3,
+                        color: cs.onSurface,
+                      ),
                 ),
                 if (tenantName != null && tenantName.isNotEmpty)
                   Text(
                     'Prêt pour une journée productive au $tenantName ?',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withValues(alpha: 0.6),
+                          color: cs.onSurfaceVariant,
                         ),
                   ),
               ],
             ),
             actions: [
               const NotificationBellWidget(),
-              IconButton(
-                icon: const Icon(Icons.refresh_rounded),
+              const SizedBox(width: 6),
+              SoftIconButton(
+                icon: Icons.refresh_rounded,
                 onPressed: onRefresh,
                 tooltip: 'Actualiser',
               ),
+              const SizedBox(width: 12),
             ],
           ),
           SliverToBoxAdapter(
@@ -134,7 +151,7 @@ class _DashboardContent extends ConsumerWidget {
                   todayCA: snapshot.todayCA,
                   trendPercent: snapshot.heroTrendPercent,
                   last7Days: snapshot.last7DaysCA,
-                  lastUpdated: DateTime.now(),
+                  lastUpdated: snapshot.asOf ?? DateTime.now(),
                 ),
                 const SizedBox(height: 8),
 
@@ -168,7 +185,7 @@ class _DashboardContent extends ConsumerWidget {
                           style: Theme.of(context)
                               .textTheme
                               .titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w600),
+                              ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                         GestureDetector(
                           onTap: () => context.go('/settings'),
@@ -330,9 +347,12 @@ class _SkeletonDashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomScrollView(
       slivers: [
-        const SliverAppBar(
+        SliverAppBar(
           floating: true,
-          title: _SkeletonBox(width: 200, height: 24),
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          surfaceTintColor: Colors.transparent,
+          scrolledUnderElevation: 0,
+          title: const _SkeletonBox(width: 200, height: 24),
         ),
         SliverToBoxAdapter(
           child: Padding(
@@ -404,9 +424,15 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.storefront_outlined, size: 64, color: AppTheme.primaryGradientEnd),
+            const SoftIconBadge(icon: Icons.storefront_outlined, size: 88),
             const SizedBox(height: 16),
-            Text(greeting, style: Theme.of(context).textTheme.headlineSmall),
+            Text(
+              greeting,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
+                  ),
+            ),
             const SizedBox(height: 8),
             Text(
               'Aucune vente enregistrée pour le moment.\nCommencez à vendre pour voir vos statistiques ici !',
@@ -418,7 +444,7 @@ class _EmptyState extends StatelessWidget {
             const SizedBox(height: 24),
             FilledButton.icon(
               onPressed: onRefresh,
-              icon: const Icon(Icons.refresh),
+              icon: const Icon(Icons.refresh_rounded),
               label: const Text('Actualiser'),
             ),
           ],
@@ -438,17 +464,17 @@ class _ErrorState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.error_outline,
-            size: 48,
+          SoftIconBadge(
+            icon: Icons.error_outline_rounded,
             color: Theme.of(context).colorScheme.error,
+            size: 72,
           ),
           const SizedBox(height: 12),
           const Text('Impossible de charger le tableau de bord'),
           const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: onRetry,
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh_rounded),
             label: const Text('Réessayer'),
           ),
         ],

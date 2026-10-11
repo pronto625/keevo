@@ -21,7 +21,7 @@ class MotivationalCard extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
       decoration: BoxDecoration(
-        color: AppTheme.primarySoftTint,
+        color: AppTheme.softTint(Theme.of(context).brightness),
         borderRadius: BorderRadius.circular(AppTheme.radiusM),
       ),
       child: Row(

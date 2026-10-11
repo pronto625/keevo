@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/catalog/domain/model/product_model.dart';
 import 'package:keevo/features/catalog/presentation/page/catalog_page.dart';
+import 'package:keevo/features/catalog/presentation/provider/category_provider.dart';
 import 'package:keevo/features/catalog/presentation/provider/product_provider.dart';
 
 /// Builds CatalogPage wrapped with ProviderScope + GoRouter.
@@ -201,7 +202,9 @@ void main() {
       expect(find.text('Créer un produit'), findsOneWidget);
     });
 
-    testWidgets('hides "Créer un produit" button for EMPLOYEE on empty search',
+    // Employees may create products (FAB and empty-state button alike); only
+    // the "..." menu (CSV import, categories) stays OWNER-only.
+    testWidgets('shows "Créer un produit" button for EMPLOYEE on empty search',
         (tester) async {
       final prefs = await _setupPrefs(role: 'EMPLOYEE');
       await tester.pumpWidget(_buildPage(
@@ -216,11 +219,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 350));
       await tester.pumpAndSettle();
 
-      expect(find.text('Créer un produit'), findsNothing);
+      expect(find.text('Créer un produit'), findsOneWidget);
     });
 
     testWidgets(
-        'does not show the "tap + to add a product" hint for EMPLOYEE on empty search',
+        'does not show the "tap + to add a product" hint on empty search',
         (tester) async {
       final prefs = await _setupPrefs(role: 'EMPLOYEE');
       await tester.pumpWidget(_buildPage(
@@ -239,9 +242,8 @@ void main() {
       expect(
         find.text('Appuyez sur + pour ajouter votre premier produit'),
         findsNothing,
-        reason:
-            'EMPLOYEE has no FAB access — the search-empty state must not '
-            'point at a create affordance the user cannot use',
+        reason: 'the search-empty state offers its own "Créer un produit" '
+            'button; the first-product hint belongs to an empty catalogue',
       );
     });
 
@@ -333,5 +335,46 @@ void main() {
 
       expect(find.text('Aucun produit en stock bas'), findsOneWidget);
     });
+  });
+
+  testWidgets('category sheet shows a single drag handle', (tester) async {
+    final prefs = await _setupPrefs(role: 'OWNER');
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        currentUserRoleProvider.overrideWith((ref) => 'OWNER'),
+        productListProvider.overrideWith((ref) async => const []),
+        archivedProductListProvider.overrideWith((ref) async => const []),
+        outOfStockProductListProvider.overrideWith((ref) async => const []),
+        lowStockProductListProvider.overrideWith((ref) async => const []),
+        categoriesProvider.overrideWith((ref) async => const []),
+      ],
+      child: MaterialApp.router(
+        // Same sheet theme as the app: the theme draws a handle by default.
+        theme: ThemeData(
+          bottomSheetTheme:
+              const BottomSheetThemeData(showDragHandle: true),
+        ),
+        routerConfig: GoRouter(
+          initialLocation: '/catalog',
+          routes: [
+            GoRoute(path: '/catalog', builder: (_, __) => const CatalogPage()),
+          ],
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Gérer les catégories'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byWidgetPredicate(
+          (w) => w.runtimeType.toString() == '_DragHandle'),
+      findsNothing,
+      reason: 'the sheet draws its own handle',
+    );
   });
 }

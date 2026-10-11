@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import '../../../auth/domain/model/account_profile.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
 
@@ -23,13 +24,20 @@ class AccountPage extends ConsumerWidget {
       backgroundColor: cs.scaffoldBg,
       appBar: AppBar(
         title: const Text('Mon Compte'),
+        titleTextStyle: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.2,
+          color: cs.onSurface,
+        ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: cs.onSurface),
           onPressed: () => context.pop(),
         ),
         elevation: 0,
-        backgroundColor: AppTheme.primary,
-        foregroundColor: Colors.white,
+        scrolledUnderElevation: 0,
+        backgroundColor: cs.surface,
+        foregroundColor: cs.onSurface,
       ),
       body: profileAsync.when(
         loading: () => const _ProfileSkeleton(),
@@ -94,7 +102,7 @@ class _ProfileBody extends StatelessWidget {
           _ProfileCard(
             children: [
               _SecurityTile(
-                icon: Icons.lock_reset_rounded,
+                icon: Icons.lock_reset_outlined,
                 title: 'Changer mon mot de passe',
                 onTap: () => context.push('/settings/change-password'),
               ),
@@ -126,20 +134,21 @@ class _Avatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       width: 72,
       height: 72,
       decoration: BoxDecoration(
-        color: AppTheme.primary.withAlpha(77), // 30% alpha
+        color: AppTheme.softTint(theme.brightness),
         shape: BoxShape.circle,
       ),
       child: Center(
         child: Text(
           _initials(),
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: theme.colorScheme.primary,
             fontSize: 26,
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ),
@@ -159,14 +168,8 @@ class _ProfileCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: cs.cardBg,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: cs.shadow.withAlpha(13),
-            blurRadius: 12,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        boxShadow: AppTheme.softShadow(cs),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(children: children),
@@ -223,9 +226,10 @@ class _ProfileInfoRow extends StatelessWidget {
             flex: 3,
             child: Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
+                color: cs.onSurface,
               ),
               textAlign: TextAlign.end,
             ),
@@ -246,8 +250,15 @@ class _RoleBadgeRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isOwner = role == 'OWNER';
-    final badgeColor = isOwner ? const Color(0xFFFFE066) : const Color(0xFFD0EBFF);
-    final textColor = isOwner ? const Color(0xFF664D03) : const Color(0xFF1864AB);
+    final isDark = cs.brightness == Brightness.dark;
+    // Mêmes teintes (ambre = propriétaire, bleu = employé) mais résolues
+    // selon le thème : les pastels opaques d'origine étaient illisibles en
+    // mode sombre.
+    final badgeColor =
+        isOwner ? cs.warningContainer : AppTheme.softTint(cs.brightness);
+    final textColor = isOwner
+        ? (isDark ? cs.warning : const Color(0xFF664D03))
+        : cs.primary;
     final label = isOwner ? 'Propriétaire' : 'Employé';
 
     return Padding(
@@ -262,7 +273,7 @@ class _RoleBadgeRow extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
               color: badgeColor,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
               label,
@@ -302,26 +313,19 @@ class _SecurityTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppTheme.iconBlueBg,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: AppTheme.iconBlue, size: 20),
-              ),
+              SoftIconBadge(icon: icon, color: AppTheme.iconBlue),
               const SizedBox(width: 14),
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
+                    color: cs.onSurface,
                   ),
                 ),
               ),
-              Icon(Icons.chevron_right, color: cs.muted, size: 20),
+              Icon(Icons.chevron_right_rounded, color: cs.muted, size: 20),
             ],
           ),
         ),
@@ -373,7 +377,7 @@ class _ProfileSkeleton extends StatelessWidget {
             height: 160,
             decoration: BoxDecoration(
               color: shimmerColor,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(AppTheme.radiusL),
             ),
           ),
           const SizedBox(height: 20),

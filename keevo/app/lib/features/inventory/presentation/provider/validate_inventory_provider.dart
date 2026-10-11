@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'dart:developer' as dev;
+import 'dart:math';
 
 import 'package:drift/drift.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -38,7 +40,23 @@ class ValidateInventoryNotifier extends _$ValidateInventoryNotifier {
       int adjustmentsApplied;
 
       if (await connectivity.isOnline()) {
-        adjustmentsApplied = await _validateOnline(sessionId);
+        // Counts saved offline (or after a failed POST) are still in the
+        // queue: validating on the server first would close the session
+        // without them. Push them, and if some remain, validate locally —
+        // VALIDATE_INVENTORY is then queued behind the counts.
+        // A direct push (single-flight) re-reads the queue once a running
+        // cycle ends, unlike triggerPush which hands back the running cycle.
+        if (await _hasPendingCounts(sessionId)) {
+          try {
+            await ref.read(syncServiceProvider).push();
+          } catch (e) {
+            dev.log('Push before validation failed: $e',
+                name: 'ValidateInventory');
+          }
+        }
+        adjustmentsApplied = await _hasPendingCounts(sessionId)
+            ? await _validateOffline(sessionId)
+            : await _validateOnline(sessionId);
       } else {
         adjustmentsApplied = await _validateOffline(sessionId);
       }
@@ -51,6 +69,26 @@ class ValidateInventoryNotifier extends _$ValidateInventoryNotifier {
     } finally {
       link.close();
     }
+  }
+
+  /// Counts of this session still waiting to be pushed. A count the server
+  /// rejected (lastError set) will never be applied: it must not hold the
+  /// session in offline validation forever.
+  Future<bool> _hasPendingCounts(String sessionId) async {
+    final db = ref.read(appDatabaseProvider);
+    final ops = await (db.select(db.syncQueue)
+          ..where((t) =>
+              t.synced.equals(false) &
+              t.lastError.isNull() &
+              t.operation.equals('SAVE_INVENTORY_COUNT')))
+        .get();
+    return ops.any((op) {
+      try {
+        return (jsonDecode(op.payload) as Map)['sessionId'] == sessionId;
+      } catch (_) {
+        return false;
+      }
+    });
   }
 
   Future<int> _validateOnline(String sessionId) async {
@@ -80,6 +118,10 @@ class ValidateInventoryNotifier extends _$ValidateInventoryNotifier {
         .get();
 
     int adjustmentsApplied = 0;
+    final syncService = ref.read(syncServiceProvider);
+    // Local ADJUSTMENT movement ids, sent with VALIDATE_INVENTORY so the
+    // server reuses them (otherwise the pull adds a second copy of each).
+    final movementIds = <String, String>{};
 
     await db.transaction(() async {
       for (final count in counts) {
@@ -102,10 +144,14 @@ class ValidateInventoryNotifier extends _$ValidateInventoryNotifier {
         final slRows = await slQuery.get();
         final stockLevel = slRows.isEmpty ? null : slRows.first;
 
-        // AC2: delta live (mirror backend ValidateInventoryService.loadCurrentStockQuantity).
+        // Same rule as the backend (ValidateInventoryService): the gap
+        // measured at count time is applied on top of the current stock, so
+        // sales and entries made since the count stay counted. Never below 0.
         final quantityBefore = stockLevel?.quantity ?? 0;
-        final quantityDelta = count.physical! - quantityBefore;
-        if (quantityDelta == 0) continue; // skip, do NOT count in adjustmentsApplied (AC2)
+        final quantityDelta =
+            max(ecart, -max(quantityBefore, 0)); // ecart < 0 floors at 0
+        if (quantityDelta == 0) continue; // not counted in adjustmentsApplied
+        final quantityAfter = quantityBefore + quantityDelta;
 
         final DateTime now = DateTime.now();
         final minimumThresh = stockLevel?.minimumThreshold ?? 0;
@@ -115,7 +161,7 @@ class ValidateInventoryNotifier extends _$ValidateInventoryNotifier {
           await (db.update(db.stockLevels)
                 ..where((t) => t.id.equals(stockLevel.id)))
               .write(StockLevelsCompanion(
-            quantity: Value(count.physical!),
+            quantity: Value(quantityAfter),
             updatedAt: Value(now),
           ));
         } else {
@@ -125,22 +171,25 @@ class ValidateInventoryNotifier extends _$ValidateInventoryNotifier {
             productId: count.productId,
             variantId: Value(count.variantId),
             storeId: session.storeId,
-            quantity: count.physical!,
+            quantity: quantityAfter,
             minimumThreshold: const Value(0),
             updatedAt: now,
           ));
         }
 
         // AC1: insert StockMovement audit trail (within same transaction).
+        final movementId = const Uuid().v4();
+        movementIds[_movementKey(count.productId, count.variantId)] =
+            movementId;
         await db.into(db.stockMovements).insert(StockMovementsCompanion.insert(
-          id: const Uuid().v4(),
+          id: movementId,
           productId: count.productId,
           variantId: Value(count.variantId),
           storeId: session.storeId,
           type: 'ADJUSTMENT',
           quantityBefore: Value(quantityBefore),
           quantityDelta: quantityDelta,
-          quantityAfter: Value(count.physical!),
+          quantityAfter: Value(quantityAfter),
           actorId: actorId,
           reason: Value('INVENTORY:$sessionId'),
           source: const Value('INVENTORY'),
@@ -149,10 +198,10 @@ class ValidateInventoryNotifier extends _$ValidateInventoryNotifier {
         ));
 
         // AC6: threshold breach detection — local best-effort log only.
-        if (minimumThresh > 0 && count.physical! <= minimumThresh) {
+        if (minimumThresh > 0 && quantityAfter <= minimumThresh) {
           dev.log(
             'Threshold breach: product=${count.productId} '
-            'variant=${count.variantId} qty=${count.physical} '
+            'variant=${count.variantId} qty=$quantityAfter '
             'threshold=$minimumThresh',
             name: 'ValidateInventory',
             level: 900,
@@ -170,21 +219,25 @@ class ValidateInventoryNotifier extends _$ValidateInventoryNotifier {
         completedAt: Value(DateTime.now()),
         updatedAt: Value(DateTime.now()),
       ));
-    });
 
-    // Queue for sync
-    final syncService = ref.read(syncServiceProvider);
-    await syncService.queueOperation(
-      operation: 'VALIDATE_INVENTORY',
-      payload: {'sessionId': sessionId},
-      entityId: sessionId,
-    );
+      // Queued inside the transaction: if it fails, the local adjustments
+      // roll back instead of staying applied without ever reaching the server.
+      await syncService.queueOperation(
+        operation: 'VALIDATE_INVENTORY',
+        payload: {'sessionId': sessionId, 'movementIds': movementIds},
+        entityId: sessionId,
+      );
+    });
 
     dev.log('Offline validation: $adjustmentsApplied adjustments queued',
         name: 'ValidateInventory');
 
     return adjustmentsApplied;
   }
+
+  /// Key matching the backend's ValidateInventoryCommand.movementKey.
+  static String _movementKey(String productId, String? variantId) =>
+      '$productId|${variantId ?? ''}';
 
   void invalidateAll() {
     _invalidateProviders();

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/sync/sync_status.dart';
 import '../../../../core/sync/sync_status_provider.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import '../../domain/model/product_profitability_model.dart';
 import '../provider/profitability_providers.dart';
 import '../widget/period_filter_chips.dart';
@@ -30,7 +31,8 @@ class ProductProfitabilityListPage extends ConsumerWidget {
       }
     });
 
-    final period = ref.watch(selectedProfitabilityPeriodProvider);
+    final selection = ref.watch(selectedProfitabilityPeriodProvider);
+    final period = selection.range();
     final sort = ref.watch(selectedSortProvider);
     final syncStatus = ref.watch(syncStatusProvider);
     final isOffline = switch (syncStatus.valueOrNull) {
@@ -54,29 +56,35 @@ class ProductProfitabilityListPage extends ConsumerWidget {
           // ── Header ────────────────────────────────────────────────────────
           SliverAppBar(
             pinned: true,
-            backgroundColor: AppTheme.primary,
-            title: const Text(
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            title: Text(
               'Rentabilité Produits',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.2,
+              ),
             ),
-            iconTheme: const IconThemeData(color: Colors.white),
+            iconTheme:
+                IconThemeData(color: Theme.of(context).colorScheme.onSurface),
           ),
 
           // ── Filters ───────────────────────────────────────────────────────
           SliverToBoxAdapter(
             child: ColoredBox(
-              color: Colors.white,
+              color: Theme.of(context).colorScheme.surface,
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     PeriodFilterChips(
-                      selectedFrom: period.from,
-                      selectedTo: period.to,
-                      onPeriodChanged: (from, to) => ref
+                      selected: selection,
+                      onChanged: (s) => ref
                           .read(selectedProfitabilityPeriodProvider.notifier)
-                          .state = (from: from, to: to),
+                          .state = s,
                     ),
                     const SizedBox(height: 4),
                     SortChips(
@@ -105,8 +113,7 @@ class ProductProfitabilityListPage extends ConsumerWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.cloud_off_outlined,
-                        size: 48, color: Theme.of(context).colorScheme.outlineVariant),
+                    const SoftIconBadge(icon: Icons.cloud_off_outlined, size: 72),
                     const SizedBox(height: 12),
                     Text(
                       'Impossible de charger les données',
@@ -129,8 +136,7 @@ class ProductProfitabilityListPage extends ConsumerWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.bar_chart_outlined,
-                            size: 48, color: Theme.of(context).colorScheme.outlineVariant),
+                        const SoftIconBadge(icon: Icons.bar_chart_outlined, size: 72),
                         const SizedBox(height: 12),
                         Text(
                           'Aucune vente sur cette période',
@@ -148,9 +154,12 @@ class ProductProfitabilityListPage extends ConsumerWidget {
                   final entry = entries[i];
                   return ProductProfitabilityRow(
                     entry: entry,
-                    onTap: () =>
-                        context.push('/reports/rentabilite/${entry.productId}',
-                            extra: entry),
+                    onTap: () {
+                      ref.read(profitabilityStoreFilterProvider.notifier).state =
+                          storeId;
+                      context.push('/reports/rentabilite/${entry.productId}',
+                          extra: entry);
+                    },
                   );
                 },
                 separatorBuilder: (_, __) => const Divider(height: 1),
@@ -170,20 +179,24 @@ class _OfflineBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    // Fond ambre dilué : sur l'ancien fond ambre plein, l'icône et le texte
+    // (eux aussi ambre) étaient invisibles.
+    final accent =
+        cs.brightness == Brightness.dark ? cs.warning : AppTheme.onWarning;
     return ColoredBox(
-      color: AppTheme.warning,
+      color: cs.warningContainer,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
-            Icon(Icons.cloud_off_outlined,
-                size: 16, color: AppTheme.warning),
+            Icon(Icons.cloud_off_outlined, size: 16, color: accent),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 'Mode hors ligne — données du dernier sync affiché',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppTheme.warning,
+                      color: accent,
                     ),
               ),
             ),

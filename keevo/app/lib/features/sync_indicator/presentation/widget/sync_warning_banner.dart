@@ -25,14 +25,19 @@ class SyncWarningBanner extends ConsumerWidget {
         ? '${(hours / 24).floor()} jour(s)'
         : '$hours heure(s)';
 
+    // Fond ambre fixe quel que soit le thème : texte/icône en `onWarning`
+    // pour rester lisibles en mode sombre.
     return MaterialBanner(
       backgroundColor: AppTheme.warning,
+      leading: const Icon(Icons.warning_amber_rounded, color: AppTheme.onWarning),
       content: Text(
-        '⚠ Synchronisation en échec depuis $durationLabel. '
+        'Synchronisation en échec depuis $durationLabel. '
         'Vérifiez votre connexion.',
+        style: const TextStyle(color: AppTheme.onWarning),
       ),
       actions: [
         TextButton(
+          style: TextButton.styleFrom(foregroundColor: AppTheme.onWarning),
           onPressed: () {
             ref.read(syncTriggerNotifierProvider.notifier).triggerPush();
           },

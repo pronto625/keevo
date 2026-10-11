@@ -221,7 +221,7 @@ void main() {
           reason: 'Modal must auto-dismiss when gate reopens');
       // SnackBar shown
       expect(
-          find.text('\u2705 Synchronisation r\u00e9ussie \u2014 acc\u00e8s complet restaur\u00e9'),
+          find.text('Synchronisation r\u00e9ussie \u2014 acc\u00e8s complet restaur\u00e9'),
           findsOneWidget,
           reason: 'Success SnackBar must appear after gate lifts');
     });

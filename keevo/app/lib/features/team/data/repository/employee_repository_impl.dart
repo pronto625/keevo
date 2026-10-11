@@ -1,5 +1,7 @@
 import 'dart:developer' as dev;
 
+import 'package:dio/dio.dart';
+
 import '../../../../core/sync/connectivity_service.dart';
 import '../../../../core/sync/sync_service.dart';
 import '../../domain/model/create_employee_result.dart';
@@ -68,8 +70,11 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
         final result = await _remote.reassignStore(employeeId, newStoreId);
         await _local.upsert(result);
         return result;
-      } catch (e) {
-        dev.log('EmployeeRepository.reassignStore: backend failed — local + queue: $e');
+      } on DioException catch (e) {
+        // Seul un serveur injoignable bascule en file hors ligne : un refus
+        // (403/404/409…) doit remonter à l'utilisateur, pas être mis en file.
+        if (_isRefusal(e)) rethrow;
+        dev.log('EmployeeRepository.reassignStore: backend unreachable — local + queue: $e');
         await _local.updateStoreAssignment(employeeId, newStoreId);
         await _syncService.queueOperation(
           operation: 'REASSIGN_EMPLOYEE',
@@ -97,8 +102,11 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
       try {
         await _remote.deactivateEmployee(employeeId);
         await _local.updateStatus(employeeId, 'DEACTIVATED');
-      } catch (e) {
-        dev.log('EmployeeRepository.deactivate: backend failed — local + queue: $e');
+      } on DioException catch (e) {
+        // Seul un serveur injoignable bascule en file hors ligne : un refus
+        // (403/404/409…) doit remonter à l'utilisateur, pas être mis en file.
+        if (_isRefusal(e)) rethrow;
+        dev.log('EmployeeRepository.deactivate: backend unreachable — local + queue: $e');
         await _local.updateStatus(employeeId, 'DEACTIVATED');
         await _syncService.queueOperation(
           operation: 'DEACTIVATE_EMPLOYEE',
@@ -122,8 +130,11 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
       try {
         await _remote.reactivateEmployee(employeeId);
         await _local.updateStatus(employeeId, 'ACTIVE');
-      } catch (e) {
-        dev.log('EmployeeRepository.reactivate: backend failed — local + queue: $e');
+      } on DioException catch (e) {
+        // Seul un serveur injoignable bascule en file hors ligne : un refus
+        // (403/404/409…) doit remonter à l'utilisateur, pas être mis en file.
+        if (_isRefusal(e)) rethrow;
+        dev.log('EmployeeRepository.reactivate: backend unreachable — local + queue: $e');
         await _local.updateStatus(employeeId, 'ACTIVE');
         await _syncService.queueOperation(
           operation: 'REACTIVATE_EMPLOYEE',
@@ -172,4 +183,11 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
   @override
   Future<void> setPassword(String employeeId, String newPassword) =>
       _remote.setPassword(employeeId, newPassword);
+
+  /// A 4xx answer is a refusal to show the user. No answer, or a 5xx
+  /// (server or gateway down), means the server is unreachable: queue it.
+  static bool _isRefusal(DioException e) {
+    final status = e.response?.statusCode;
+    return status != null && status < 500;
+  }
 }

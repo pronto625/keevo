@@ -136,6 +136,8 @@ class ClientRepositoryImpl implements ClientRepository {
       }
     } catch (e) {
       dev.log('ClientRepository.syncFromRemote: $e');
+      // Remonté pour que la synchro manuelle puisse signaler l'échec.
+      rethrow;
     }
   }
 }

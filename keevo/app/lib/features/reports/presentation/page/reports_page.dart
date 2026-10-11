@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import '../../../pos/domain/model/day_closure_model.dart';
 import '../../../pos/presentation/provider/day_closure_providers.dart';
 import '../../../pos/presentation/widget/day_close_success_overlay.dart';
@@ -31,11 +32,24 @@ class ReportsPage extends ConsumerWidget {
     final storeId = ref.watch(activeStoreIdProvider) ?? 'default';
     final isEmployee = ref.watch(currentUserRoleProvider) == 'EMPLOYEE';
     final userIdAsync = ref.watch(currentUserIdProvider);
-    // OWNER: employeeId=null → all store sales. EMPLOYEE: scoped to own sales.
-    final summaryAsync = ref.watch(todaySummaryProvider((
-      storeId: storeId,
-      employeeId: isEmployee ? userIdAsync.valueOrNull : null,
-    )));
+    // OWNER: employeeId=null → all store sales. EMPLOYEE: scoped to own sales —
+    // never query with a null id while it loads (that means the whole store).
+    final employeeId = userIdAsync.valueOrNull;
+    final AsyncValue<DayClosureSummary> summaryAsync = !isEmployee
+        ? ref.watch(todaySummaryProvider((storeId: storeId, employeeId: null)))
+        : userIdAsync.isLoading
+            ? const AsyncValue.loading()
+            // An employee whose id cannot be read gets an error with retry,
+            // not an endless spinner (and never the store-wide figures).
+            : employeeId == null
+                ? AsyncValue.error(
+                    userIdAsync.error ??
+                        StateError('Identifiant utilisateur introuvable'),
+                    userIdAsync.stackTrace ?? StackTrace.current)
+                : ref.watch(todaySummaryProvider((
+                    storeId: storeId,
+                    employeeId: employeeId,
+                  )));
     final closureStateAsync = ref.watch(dayClosureStateProvider(storeId));
     final lastClosureAsync = ref.watch(lastClosureProvider(storeId));
 
@@ -43,35 +57,31 @@ class ReportsPage extends ConsumerWidget {
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
       body: CustomScrollView(
         slivers: [
-          // ── Blue gradient header ──
+          // ── Header ──
           SliverAppBar(
-            expandedHeight: 100,
+            expandedHeight: 96,
             pinned: true,
             automaticallyImplyLeading: false,
             elevation: 0,
-            backgroundColor: AppTheme.primary,
+            scrolledUnderElevation: 0,
+            backgroundColor: theme.colorScheme.surface,
             flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [AppTheme.primary, AppTheme.primary.withAlpha(180)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
+              background: ColoredBox(
+                color: theme.colorScheme.surface,
                 child: SafeArea(
+                  bottom: false,
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
                     child: Row(
                       children: [
-                        Icon(Icons.bar_chart_rounded,
-                            color: Colors.white.withAlpha(230), size: 28),
+                        const SoftIconBadge(icon: Icons.bar_chart_rounded),
                         const SizedBox(width: 12),
                         Text(
                           'Rapports',
                           style: theme.textTheme.titleLarge?.copyWith(
-                            color: Colors.white,
+                            color: theme.colorScheme.onSurface,
                             fontWeight: FontWeight.w700,
+                            letterSpacing: -0.3,
                           ),
                         ),
                       ],
@@ -89,7 +99,13 @@ class ReportsPage extends ConsumerWidget {
                 padding: EdgeInsets.all(64),
                 child: Center(child: CircularProgressIndicator()),
               ),
-              error: (e, _) => AppErrorWidget(error: e),
+              error: (e, _) => AppErrorWidget(
+                error: e,
+                onRetry: () {
+                  ref.invalidate(currentUserIdProvider);
+                  ref.invalidate(todaySummaryProvider);
+                },
+              ),
               data: (summary) => _buildContent(
                 context,
                 ref,
@@ -167,36 +183,26 @@ class ReportsPage extends ConsumerWidget {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [AppTheme.primary, AppTheme.primary.withAlpha(200)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: AppTheme.primary.withValues(alpha: 0.3),
-                  blurRadius: 16,
-                  offset: const Offset(0, 6),
-                ),
-              ],
+              color: theme.colorScheme.cardBg,
+              borderRadius: BorderRadius.circular(AppTheme.radiusXL),
+              boxShadow: AppTheme.softShadow(theme.colorScheme),
             ),
             child: Column(
               children: [
                 Text(
                   'VENTES TOTAL',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.8),
+                    color: theme.colorScheme.onSurfaceVariant,
                     fontSize: 11,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                     letterSpacing: 1.2,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   _currencyFormat.format(summary.totalRevenue),
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface,
                     fontSize: 32,
                     fontWeight: FontWeight.w800,
                   ),
@@ -207,15 +213,15 @@ class ReportsPage extends ConsumerWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(12),
+                      color: AppTheme.softTint(theme.brightness),
+                      borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
                       '${summary.totalSales} vente${summary.totalSales > 1 ? 's' : ''} enregistrée${summary.totalSales > 1 ? 's' : ''}',
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.9),
+                        color: theme.colorScheme.primary,
                         fontSize: 12,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -230,16 +236,16 @@ class ReportsPage extends ConsumerWidget {
             children: [
               Expanded(
                 child: _PaymentCard(
-                  icon: Icons.payments_rounded,
+                  icon: Icons.payments_outlined,
                   label: 'ESPÈCES',
                   amount: summary.cashAmount,
-                  color: AppTheme.success,
+                  color: theme.colorScheme.success,
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: _PaymentCard(
-                  icon: Icons.phone_android_rounded,
+                  icon: Icons.phone_android_outlined,
                   label: 'MOBILE MONEY',
                   amount: summary.momoAmount,
                   color: theme.colorScheme.primary,
@@ -273,15 +279,20 @@ class ReportsPage extends ConsumerWidget {
               width: double.infinity,
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(14),
+              // Fond ambre dilué (lisible en sombre), l'icône porte l'accent.
               decoration: BoxDecoration(
-                color: AppTheme.warning,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.onWarning.withOpacity(0.2)),
+                color: theme.colorScheme.warningContainer,
+                borderRadius: BorderRadius.circular(AppTheme.radiusM),
+                border: Border.all(
+                    color: theme.colorScheme.warning.withValues(alpha: 0.4)),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.warning_rounded,
-                      color: AppTheme.onWarning, size: 20),
+                  Icon(Icons.warning_amber_rounded,
+                      color: theme.brightness == Brightness.dark
+                          ? theme.colorScheme.warning
+                          : AppTheme.onWarning,
+                      size: 20),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -289,8 +300,8 @@ class ReportsPage extends ConsumerWidget {
                           ? '${summary.pendingSalesCount} vente(s) en attente de validation'
                           : '${summary.pendingSalesCount} vente(s) en attente — '
                               '${_currencyFormat.format(summary.pendingSalesTotal)}',
-                      style: const TextStyle(
-                        color: AppTheme.onWarning,
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface,
                         fontWeight: FontWeight.w500,
                         fontSize: 13,
                       ),
@@ -308,17 +319,17 @@ class ReportsPage extends ConsumerWidget {
               onPressed: () => context.push('/reports/history'),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                side: BorderSide(color: AppTheme.primary.withValues(alpha: 0.4)),
+                side: BorderSide(color: theme.colorScheme.outlineVariant),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusL),
                 ),
               ),
               icon: Icon(Icons.assessment_outlined,
-                  color: AppTheme.primary, size: 20),
+                  color: theme.colorScheme.primary, size: 20),
               label: Text(
                 'Historique des rapports',
                 style: TextStyle(
-                  color: AppTheme.primary,
+                  color: theme.colorScheme.primary,
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
                 ),
@@ -334,17 +345,17 @@ class ReportsPage extends ConsumerWidget {
               onPressed: () => context.push('/pos/sales-history'),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                side: BorderSide(color: AppTheme.primary.withValues(alpha: 0.4)),
+                side: BorderSide(color: theme.colorScheme.outlineVariant),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusL),
                 ),
               ),
               icon: Icon(Icons.history_rounded,
-                  color: AppTheme.primary, size: 20),
+                  color: theme.colorScheme.primary, size: 20),
               label: Text(
                 'Voir l\'historique des ventes',
                 style: TextStyle(
-                  color: AppTheme.primary,
+                  color: theme.colorScheme.primary,
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
                 ),
@@ -397,29 +408,17 @@ class _PaymentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        color: cs.cardBg,
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        boxShadow: AppTheme.softShadow(cs),
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: color, size: 20),
-          ),
+          SoftIconBadge(icon: icon, color: color, size: 36),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -471,31 +470,17 @@ class _TopProductTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        color: cs.cardBg,
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        boxShadow: AppTheme.softShadow(cs),
       ),
       child: Row(
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(Icons.inventory_2_rounded,
-                color: Theme.of(context).colorScheme.outline, size: 22),
-          ),
+          const SoftIconBadge(icon: Icons.inventory_2_outlined, size: 44),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -503,9 +488,10 @@ class _TopProductTile extends StatelessWidget {
               children: [
                 Text(
                   name,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
+                    color: cs.onSurface,
                   ),
                 ),
                 Text(
@@ -523,7 +509,7 @@ class _TopProductTile extends StatelessWidget {
             style: TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 14,
-              color: AppTheme.primary,
+              color: cs.primary,
             ),
           ),
         ],
@@ -545,26 +531,27 @@ class _ClosureButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
     return SizedBox(
       width: double.infinity,
+      height: 56,
       child: ElevatedButton.icon(
         onPressed: isClosed
             ? null
             : () => _showDayCloseSummary(context, ref),
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppTheme.primary,
-          disabledBackgroundColor: Theme.of(context).colorScheme.outlineVariant,
-          foregroundColor: Colors.white,
-          disabledForegroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+          backgroundColor: cs.primary,
+          disabledBackgroundColor: cs.outlineVariant,
+          foregroundColor: cs.onPrimary,
+          disabledForegroundColor: cs.onSurfaceVariant,
           padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(AppTheme.radiusL),
           ),
-          elevation: isClosed ? 0 : 4,
-          shadowColor: AppTheme.primary.withValues(alpha: 0.4),
+          elevation: 0,
         ),
         icon: Icon(
-          isClosed ? Icons.check_circle_rounded : Icons.lock_rounded,
+          isClosed ? Icons.check_circle_outline_rounded : Icons.lock_outline_rounded,
           size: 20,
         ),
         label: Text(

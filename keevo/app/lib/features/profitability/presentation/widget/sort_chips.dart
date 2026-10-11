@@ -4,7 +4,7 @@ import '../../domain/model/product_profitability_model.dart';
 
 /// SortChips — row of FilterChips for profitability sort selection.
 ///
-/// Active chip: filled with primary color, white text.
+/// Active chip: filled with primary color, onPrimary text.
 /// Inactive chip: outlined.
 ///
 /// Story 7.4 — Task 17.3.
@@ -43,13 +43,16 @@ class SortChips extends StatelessWidget {
               onSelected: (_) => onChanged(option),
               selectedColor: theme.colorScheme.primary,
               backgroundColor: Colors.transparent,
+              shape: const StadiumBorder(),
               side: BorderSide(
                 color: isSelected
                     ? theme.colorScheme.primary
-                    : theme.colorScheme.outline,
+                    : theme.colorScheme.outlineVariant,
               ),
               labelStyle: TextStyle(
-                color: isSelected ? Colors.white : null,
+                color: isSelected
+                    ? theme.colorScheme.onPrimary
+                    : theme.colorScheme.onSurfaceVariant,
                 fontWeight:
                     isSelected ? FontWeight.w600 : FontWeight.normal,
               ),

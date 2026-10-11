@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo/core/theme/app_theme.dart';
 import 'package:keevo/features/pos/domain/model/cart_item.dart';
 import 'package:keevo/features/pos/presentation/provider/cart_provider.dart';
 import 'package:keevo/features/pos/presentation/widget/cart_bottom_sheet.dart';
@@ -26,11 +27,13 @@ Future<void> pumpSheet(
   WidgetTester tester, {
   List<Override> overrides = const [],
   required VoidCallback onEncaisser,
+  ThemeData? theme,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: overrides,
       child: MaterialApp(
+        theme: theme,
         home: Scaffold(
           body: Builder(builder: (context) {
             return ElevatedButton(
@@ -176,6 +179,13 @@ void main() {
             matching: find.byType(InkWell),
           ));
       expect(inkWell.onTap, isNull);
+    });
+      testWidgets('only the sheet\'s own drag handle (theme handle off)',
+        (tester) async {
+      // The app theme turns drag handles on globally.
+      await pumpSheet(tester, onEncaisser: () {}, theme: AppTheme.light());
+      final sheet = tester.widget<BottomSheet>(find.byType(BottomSheet));
+      expect(sheet.showDragHandle, isFalse);
     });
   });
 }

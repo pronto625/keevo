@@ -73,6 +73,28 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
   int _consecutiveFailures = 0;
   DateTime? _firstFailureAt;
 
+  // Single-flight: connectivity restore, timers and local writes can all ask
+  // for a sync while one runs. They join the running cycle instead of
+  // starting a concurrent one (which would push the same queue twice).
+  Future<void>? _cycle;
+  bool _cycleIsFullSync = false;
+  bool _pushRequestedDuringCycle = false;
+
+  Future<void> _runCycle(Future<void> Function() body,
+      {required bool fullSync}) {
+    _cycleIsFullSync = fullSync;
+    final cycle = body().whenComplete(() {
+      _cycle = null;
+      // An operation queued mid-cycle may have missed the running push.
+      if (_pushRequestedDuringCycle) {
+        _pushRequestedDuringCycle = false;
+        if (state is SyncTriggerIdle) triggerPush();
+      }
+    });
+    _cycle = cycle;
+    return cycle;
+  }
+
   @override
   SyncTriggerState build() {
     ref.listen(connectivityStreamProvider, (prev, next) {
@@ -139,7 +161,17 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
     }
   }
 
-  Future<void> triggerSync() async {
+  Future<void> triggerSync() {
+    final running = _cycle;
+    if (running != null) {
+      if (_cycleIsFullSync) return running;
+      // A push-only cycle is running: the pull it lacks follows right after.
+      return running.then((_) => triggerSync());
+    }
+    return _runCycle(_syncCycle, fullSync: true);
+  }
+
+  Future<void> _syncCycle() async {
     state = const SyncTriggerState.syncing();
     try {
       final syncService = ref.read(syncServiceProvider);
@@ -147,25 +179,35 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
 
       // Step 1: Push pending offline ops
       List<Map<String, dynamic>> conflicts = [];
+      var pulled = false;
       try {
         conflicts = await syncService.push();
         await eventLogger.logPushSuccess(conflicts.length);
       } on SyncRequiredException catch (e) {
-        // Server 423: device is stale server-side.
-        // ABORT pull — pull would write kLastSyncAtKey=now and falsely reopen the gate.
+        // Server 423: device is stale server-side. The server lifts that gate
+        // on a successful pull (v1s-13-2), so pull first and push the queue
+        // again — skipping the pull would keep the queued sales stuck forever.
         dev.log(
           'Push blocked by server 423 gate: ${e.daysSinceLastSync} days stale',
           name: 'SyncTrigger',
         );
         await eventLogger.logPushFailed('423 gate: ${e.daysSinceLastSync} days stale');
-        // Force client gate to stay blocked (align with server reality)
-        final prefs = ref.read(sharedPreferencesProvider);
-        final staleMs = DateTime.now()
-            .subtract(const Duration(days: 7))
-            .millisecondsSinceEpoch;
-        await prefs.setInt(kLastSyncAtKey, staleMs);
-        ref.invalidate(daysSinceLastSyncProvider);
-        rethrow; // outer catch handles _scheduleRetry
+        await syncService.pull();
+        pulled = true;
+        await eventLogger.logPullSuccess(0);
+        try {
+          conflicts = await syncService.push();
+          await eventLogger.logPushSuccess(conflicts.length);
+        } on SyncRequiredException {
+          // Still gated after a fresh pull: keep the client gate closed too.
+          final prefs = ref.read(sharedPreferencesProvider);
+          final staleMs = DateTime.now()
+              .subtract(const Duration(days: 7))
+              .millisecondsSinceEpoch;
+          await prefs.setInt(kLastSyncAtKey, staleMs);
+          ref.invalidate(daysSinceLastSyncProvider);
+          rethrow; // outer catch handles _scheduleRetry
+        }
       } catch (e) {
         dev.log('Push failed during sync cycle: $e', name: 'SyncTrigger');
         await eventLogger.logPushFailed(e.toString());
@@ -175,12 +217,14 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
       _handlePushResults(conflicts);
 
       // Step 2: Pull server delta
-      try {
-        await syncService.pull();
-        await eventLogger.logPullSuccess(0);
-      } catch (e) {
-        await eventLogger.logPullFailed(e.toString());
-        rethrow;
+      if (!pulled) {
+        try {
+          await syncService.pull();
+          await eventLogger.logPullSuccess(0);
+        } catch (e) {
+          await eventLogger.logPullFailed(e.toString());
+          rethrow;
+        }
       }
 
       _consecutiveFailures = 0;
@@ -202,7 +246,16 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
   }
 
   /// Push-only trigger — backward compatibility for connectivity restore.
-  Future<void> triggerPush() async {
+  Future<void> triggerPush() {
+    final running = _cycle;
+    if (running != null) {
+      _pushRequestedDuringCycle = true;
+      return running;
+    }
+    return _runCycle(_pushCycle, fullSync: false);
+  }
+
+  Future<void> _pushCycle() async {
     state = const SyncTriggerState.syncing();
     try {
       final syncService = ref.read(syncServiceProvider);
@@ -285,7 +338,9 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
     );
     // Add ±20% jitter
     final jitter = (delayMs * 0.2 * (Random().nextDouble() * 2 - 1)).toInt();
-    _retryTimer = Timer(Duration(milliseconds: delayMs + jitter), triggerPush);
+    // Full cycle, not push-only: a push stuck behind the 423 gate only
+    // recovers through the pull in triggerSync.
+    _retryTimer = Timer(Duration(milliseconds: delayMs + jitter), triggerSync);
 
     // Check critical failure threshold
     if (_consecutiveFailures >= 10 && _firstFailureAt != null) {

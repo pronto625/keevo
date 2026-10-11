@@ -1,0 +1,121 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:mocktail/mocktail.dart';
+
+import 'package:keevo/features/catalog/presentation/provider/product_provider.dart';
+import 'package:keevo/features/inventory/domain/model/stock_transfer_model.dart';
+import 'package:keevo/features/inventory/domain/repository/stock_transfer_repository.dart';
+import 'package:keevo/features/inventory/presentation/page/transfer_history_page.dart';
+import 'package:keevo/features/inventory/presentation/provider/stock_transfer_provider.dart';
+import 'package:keevo/features/stores/domain/model/store_model.dart';
+import 'package:keevo/features/stores/presentation/provider/active_store_provider.dart';
+import 'package:keevo/features/stores/presentation/provider/store_provider.dart';
+
+class _MockTransferRepo extends Mock implements StockTransferRepository {}
+
+class _FixedActiveStore extends ActiveStoreNotifier {
+  @override
+  String? build() => 'store-1';
+}
+
+/// Store list still loading (never completes during the test).
+class _LoadingStoreList extends StoreListNotifier {
+  @override
+  Future<List<StoreModel>> build() => Completer<List<StoreModel>>().future;
+}
+
+class _LoadedStoreList extends StoreListNotifier {
+  @override
+  Future<List<StoreModel>> build() async => [
+        StoreModel(
+          id: 'store-1',
+          name: 'Centre',
+          createdAt: DateTime(2026),
+          updatedAt: DateTime(2026),
+        ),
+      ];
+}
+
+StockTransferModel _transfer(String id) => StockTransferModel(
+      id: id,
+      sourceStoreId: 'store-1',
+      destinationStoreId: 'store-2',
+      productId: 'p1',
+      quantity: 2,
+      actorId: 'u1',
+      occurredAt: DateTime(2026, 1, 1),
+      status: 'COMPLETED',
+      productName: 'Riz',
+    );
+
+void main() {
+  setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+
+  late _MockTransferRepo repo;
+
+  setUp(() {
+    repo = _MockTransferRepo();
+    when(() => repo.getHistory(
+          sourceStoreId: any(named: 'sourceStoreId'),
+          destinationStoreId: any(named: 'destinationStoreId'),
+          page: any(named: 'page'),
+          pageSize: any(named: 'pageSize'),
+        )).thenAnswer((_) async => [_transfer('t1')]);
+  });
+
+  Widget buildPage({bool storesLoaded = false}) => ProviderScope(
+        overrides: [
+          stockTransferRepositoryProvider.overrideWithValue(repo),
+          activeStoreIdProvider.overrideWith(_FixedActiveStore.new),
+          storeListNotifierProvider.overrideWith(
+              storesLoaded ? _LoadedStoreList.new : _LoadingStoreList.new),
+          productListForPickerProvider.overrideWith((_) async => []),
+        ],
+        child: const MaterialApp(home: TransferHistoryPage()),
+      );
+
+  testWidgets('renders while the store list is still loading',
+      (tester) async {
+    await tester.pumpWidget(buildPage());
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('pull-to-refresh reloads the history', (tester) async {
+    await tester.pumpWidget(buildPage(storesLoaded: true));
+    await tester.pumpAndSettle();
+    expect(find.text('Centre'), findsWidgets);
+
+    await tester.fling(find.byType(CustomScrollView), const Offset(0, 400), 1000);
+    await tester.pumpAndSettle();
+
+    verify(() => repo.getHistory(
+          sourceStoreId: any(named: 'sourceStoreId'),
+          destinationStoreId: any(named: 'destinationStoreId'),
+          page: any(named: 'page'),
+          pageSize: any(named: 'pageSize'),
+        )).called(2);
+  });
+
+  testWidgets('soft header: no decorative emoji, actions keep their keys',
+      (tester) async {
+    await tester.pumpWidget(buildPage(storesLoaded: true));
+    await tester.pumpAndSettle();
+
+    const emoji = ['🔄', '📍', '🚚', '✅', '⏳', '❌'];
+    final texts = tester
+        .widgetList<Text>(find.byType(Text))
+        .map((t) => t.data ?? t.textSpan?.toPlainText() ?? '');
+    for (final e in emoji) {
+      expect(texts.where((t) => t.contains(e)), isEmpty, reason: e);
+    }
+    expect(find.byKey(const Key('new_transfer_fab')), findsOneWidget);
+    expect(find.byKey(const Key('new_transfer_fab_bottom')), findsOneWidget);
+    expect(find.text('Effectué'), findsOneWidget);
+  });
+}

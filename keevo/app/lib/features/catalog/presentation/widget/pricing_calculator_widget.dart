@@ -52,13 +52,12 @@ class PricingCalculatorWidget extends StatelessWidget {
     final pct = _marginPercentage;
     final isLoss = _grossMarginXaf < 0;
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: color.withOpacity(0.5)),
+    return Container(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
-      color: color.withOpacity(0.06),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Column(
@@ -66,7 +65,7 @@ class PricingCalculatorWidget extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.analytics_rounded, color: color, size: 18),
+                Icon(Icons.analytics_outlined, color: color, size: 18),
                 const SizedBox(width: 8),
                 Text(
                   'Calcul de marge',
@@ -98,45 +97,14 @@ class PricingCalculatorWidget extends StatelessWidget {
               valueColor: color,
               bold: true,
             ),
-            if (isLoss) ...
-              [
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.errorColor,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppTheme.errorColor),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.warning_amber_rounded,
-                          color: AppTheme.errorColor, size: 16),
-                      SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          '\u26a0 Prix de vente inférieur au coût — vous vendez à perte',
-                          style: TextStyle(
-                            color: AppTheme.errorColor,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
             if (isLoss) ...[
               const SizedBox(height: 10),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: AppTheme.errorColor,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.errorColor),
+                  color: AppTheme.errorColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusS),
                 ),
                 child: Row(
                   children: [
@@ -145,7 +113,7 @@ class PricingCalculatorWidget extends StatelessWidget {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        '⚠ Prix de vente inférieur au coût — vous vendez à perte',
+                        'Prix de vente inférieur au coût — vous vendez à perte',
                         style: TextStyle(
                           color: AppTheme.errorColor,
                           fontSize: 12,
@@ -184,9 +152,8 @@ class _Badge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.4)),
       ),
       child: Text(
         label,

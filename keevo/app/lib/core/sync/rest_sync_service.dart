@@ -26,6 +26,33 @@ class RestSyncService implements SyncService {
   final FlutterSecureStorage _secureStorage;
   final SharedPreferences _prefs;
 
+  /// Operations each carrying a distinct change (new field values, absolute
+  /// state, stock quantity): never deduplicated on (entityId, operation).
+  static const _appendOnlyOperations = {
+    'UPDATE_PRODUCT',
+    'UPDATE_CLIENT',
+    'UPDATE_SUPPLIER',
+    'UPDATE_STORE',
+    'RENAME_CATEGORY',
+    'TOGGLE_CATEGORY',
+    'REASSIGN_EMPLOYEE',
+    'SAVE_INVENTORY_COUNT',
+    'RECORD_STOCK_ENTRY',
+    'STOCK_ADJUST',
+    'STOCK_TRANSFER',
+  };
+
+  /// Operations applied at most once per entity: once one is APPLIED, other
+  /// queued copies for the same entity are redundant.
+  static bool _isOneShot(String operation) =>
+      operation.startsWith('CREATE_') ||
+      const {
+        'VALIDATE_SALE',
+        'VALIDATE_INVENTORY',
+        'CANCEL_SALE',
+        'PROMOTE_PRODUCT',
+      }.contains(operation);
+
   RestSyncService({
     required AppDatabase database,
     required RemoteProductDataSource remoteProducts,
@@ -37,8 +64,20 @@ class RestSyncService implements SyncService {
         _secureStorage = secureStorage,
         _prefs = prefs;
 
+  // Single-flight: two pushes of the same queue at once would replay the same
+  // operations twice. A caller arriving mid-push joins the running one.
+  Future<List<Map<String, dynamic>>>? _pushInFlight;
+
   @override
-  Future<List<Map<String, dynamic>>> push() async {
+  Future<List<Map<String, dynamic>>> push() {
+    final running = _pushInFlight;
+    if (running != null) return running;
+    final push = _push().whenComplete(() => _pushInFlight = null);
+    _pushInFlight = push;
+    return push;
+  }
+
+  Future<List<Map<String, dynamic>>> _push() async {
     final pendingOps = await (_database.select(_database.syncQueue)
           ..where((t) => t.synced.equals(false))
           ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
@@ -57,7 +96,21 @@ class RestSyncService implements SyncService {
     return allConflicts;
   }
 
-  Future<void> _dropMergedLocalProduct(String localProductId) async {
+  Future<void> _dropMergedLocalProduct(
+      String localProductId, String serverProductId) async {
+    // Counts entered offline (quick-add) move to the server product: the
+    // server redirects the queued count to it, and the counting screen must
+    // not show a count for a product that no longer exists locally. A count
+    // the server product already has in the same session wins.
+    await _database.customStatement(
+      'DELETE FROM inventory_counts WHERE product_id = ? AND session_id IN '
+      '(SELECT session_id FROM inventory_counts WHERE product_id = ?)',
+      [localProductId, serverProductId],
+    );
+    await _database.customStatement(
+      'UPDATE inventory_counts SET product_id = ? WHERE product_id = ?',
+      [serverProductId, localProductId],
+    );
     for (final table in const ['stock_levels', 'stock_movements']) {
       await _database.customStatement(
           'DELETE FROM $table WHERE product_id = ?', [localProductId]);
@@ -97,9 +150,11 @@ class RestSyncService implements SyncService {
           if (result['conflictData'] != null) {
             conflicts.add(result);
           }
-          // Delete the confirmed op AND any duplicates for the same
-          // (entityId, operation) — pre-existing duplicates from before
-          // the dedup guard was in place would otherwise stay REJECTED forever.
+          // Delete the confirmed op — and, for one-shot operations, any
+          // duplicates for the same (entityId, operation): pre-existing
+          // duplicates from before the dedup guard was in place would
+          // otherwise stay REJECTED forever. Other operations are deleted by
+          // id only: a later edit of the same entity is still to be sent.
           final confirmedOp = ops.firstWhere((o) => o.id == opId);
           // The server merged this product creation into an already-existing
           // product of the same name (serverEntityId != our local id) and
@@ -112,9 +167,25 @@ class RestSyncService implements SyncService {
               serverEntityId != null &&
               confirmedOp.entityId != null &&
               serverEntityId != confirmedOp.entityId) {
-            await _dropMergedLocalProduct(confirmedOp.entityId!);
+            await _dropMergedLocalProduct(
+                confirmedOp.entityId!, serverEntityId);
           }
-          if (confirmedOp.entityId != null) {
+          if (confirmedOp.operation == 'CREATE_DAY_CLOSURE' &&
+              confirmedOp.entityId != null) {
+            if (status == 'APPLIED') {
+              await _database.customStatement(
+                  'UPDATE day_closures SET synced = 1 WHERE id = ?',
+                  [confirmedOp.entityId]);
+            } else {
+              // DUPLICATE: the day was already closed on the server (e.g.
+              // by the auto-closure); that closure arrives through pull.
+              await _database.customStatement(
+                  'DELETE FROM day_closures WHERE id = ? AND synced = 0',
+                  [confirmedOp.entityId]);
+            }
+          }
+          if (confirmedOp.entityId != null &&
+              _isOneShot(confirmedOp.operation)) {
             await (_database.delete(_database.syncQueue)
                   ..where((t) =>
                       t.entityId.equals(confirmedOp.entityId!) &
@@ -198,8 +269,24 @@ class RestSyncService implements SyncService {
     return deviceId;
   }
 
+  // Single-flight: a pull already running is joined, not duplicated (two
+  // concurrent pulls would race on the cursor they save).
+  Future<void>? _pullInFlight;
+
+  /// Upper bound on pages per pull — a guard against a server that never
+  /// reports the end of the delta.
+  static const _maxPullPages = 500;
+
   @override
-  Future<void> pull() async {
+  Future<void> pull() {
+    final running = _pullInFlight;
+    if (running != null) return running;
+    final pull = _pull().whenComplete(() => _pullInFlight = null);
+    _pullInFlight = pull;
+    return pull;
+  }
+
+  Future<void> _pull() async {
     try {
       // 1. Read last pull timestamp
       var lastSyncMs = await _secureStorage.read(key: kLastSyncTimestampKey);
@@ -217,6 +304,18 @@ class RestSyncService implements SyncService {
         lastSyncMs = null;
       }
 
+      // Rows pulled before dates were stored with their local offset are read
+      // as UTC (one hour off), and a delta pull never sends them again: one
+      // full pull rewrites them in the current format.
+      if (!(_prefs.getBool(kPullTzFixDoneKey) ?? false)) {
+        if (lastSyncMs != null) {
+          dev.log('Date format upgrade — forcing one full sync', name: 'RestSync');
+          await _secureStorage.delete(key: kLastSyncTimestampKey);
+          lastSyncMs = null;
+        }
+        await _prefs.setBool(kPullTzFixDoneKey, true);
+      }
+
       String? since;
       if (lastSyncMs != null) {
         final lastSync =
@@ -224,59 +323,33 @@ class RestSyncService implements SyncService {
         since = lastSync.toUtc().toIso8601String();
       }
 
-      // 2. Call pull endpoint (include deviceId header for device registration)
+      // 2. Call pull endpoint (include deviceId header for device registration).
+      // The server pages a large delta (hasMore + nextCursor): fetch every
+      // page with the same `since` before saving the new cursor, otherwise the
+      // rows of the remaining pages would be skipped for good.
       final deviceId = await _getDeviceId();
-      final response = await _dio.get<Map<String, dynamic>>(
-        '/api/v1/sync/pull',
-        queryParameters: since != null ? {'since': since} : null,
-        options: Options(headers: {'X-Device-Id': deviceId}),
-      );
+      String? cursor;
+      late String serverTimestamp;
+      var pages = 0;
+      do {
+        if (++pages > _maxPullPages) {
+          throw StateError('Pull did not finish after $_maxPullPages pages');
+        }
+        final params = <String, dynamic>{
+          if (since != null) 'since': since,
+          if (cursor != null) 'cursor': cursor,
+        };
+        final response = await _dio.get<Map<String, dynamic>>(
+          '/api/v1/sync/pull',
+          queryParameters: params.isEmpty ? null : params,
+          options: Options(headers: {'X-Device-Id': deviceId}),
+        );
 
-      final data = response.data!['data'] as Map<String, dynamic>;
-      final serverTimestamp = data['serverTimestamp'] as String;
-      final entities = data['entities'] as Map<String, dynamic>;
-
-      // 3. Load pending entity IDs once for AC7 protection
-      final pendingIds = await _getPendingEntityIds();
-      // Load pending (productId, storeId) keys affected by unsynced
-      // stock-mutating operations — stock_levels is a pre-existing server
-      // resource (not keyed by entityId like the tables above), so it needs
-      // its own composite-key protection against pull overwrite.
-      final pendingStockKeys = await _getPendingStockKeys();
-
-      // 4. Upsert all entities in a single transaction
-      await _database.transaction(() async {
-        await _upsertProducts(
-            entities['products'] as List<dynamic>? ?? [], pendingIds);
-        await _upsertStockLevels(
-            entities['stockLevels'] as List<dynamic>? ?? [],
-            pendingStockKeys);
-        await _upsertCategories(
-            entities['categories'] as List<dynamic>? ?? [], pendingIds);
-        await _upsertClients(
-            entities['clients'] as List<dynamic>? ?? [], pendingIds);
-        await _upsertSuppliers(
-            entities['suppliers'] as List<dynamic>? ?? [], pendingIds);
-        await _upsertStores(
-            entities['stores'] as List<dynamic>? ?? [], pendingIds);
-        await _upsertEmployees(
-            entities['employees'] as List<dynamic>? ?? [], pendingIds);
-        await _upsertSales(entities['sales'] as List<dynamic>? ?? []);
-        await _upsertDayClosures(
-            entities['dayClosures'] as List<dynamic>? ?? []);
-        await _upsertStockMovements(
-            entities['stockMovements'] as List<dynamic>? ?? []);
-        await _upsertStockTransfers(
-            entities['stockTransfers'] as List<dynamic>? ?? [], pendingIds);
-        await _upsertAuditEntries(
-            entities['auditEntries'] as List<dynamic>? ?? []);
-        await _upsertInventorySessions(
-            entities['inventorySessions'] as List<dynamic>? ?? []);
-        await _upsertInventoryCounts(
-            entities['inventoryCounts'] as List<dynamic>? ?? []);
-        await _upsertReports(
-            entities['reports'] as List<dynamic>? ?? []);
-      });
+        final data = response.data!['data'] as Map<String, dynamic>;
+        serverTimestamp = data['serverTimestamp'] as String;
+        await _mergePulledEntities(data['entities'] as Map<String, dynamic>);
+        cursor = data['hasMore'] == true ? data['nextCursor'] as String? : null;
+      } while (cursor != null);
 
       // 4. Store serverTimestamp as new lastPullTimestamp
       final serverInstant = DateTime.parse(serverTimestamp);
@@ -293,16 +366,62 @@ class RestSyncService implements SyncService {
     }
   }
 
+  Future<void> _mergePulledEntities(Map<String, dynamic> entities) async {
+    // 3. Load pending entity IDs once for AC7 protection
+    final pendingIds = await _getPendingEntityIds();
+    // Load pending (productId, storeId) keys affected by unsynced
+    // stock-mutating operations — stock_levels is a pre-existing server
+    // resource (not keyed by entityId like the tables above), so it needs
+    // its own composite-key protection against pull overwrite.
+    final pendingStockKeys = await _getPendingStockKeys();
+
+    // 4. Upsert all entities in a single transaction
+    await _database.transaction(() async {
+      await _upsertProducts(
+          entities['products'] as List<dynamic>? ?? [], pendingIds);
+      await _upsertStockLevels(
+          entities['stockLevels'] as List<dynamic>? ?? [],
+          pendingStockKeys);
+      await _upsertCategories(
+          entities['categories'] as List<dynamic>? ?? [], pendingIds);
+      await _upsertClients(
+          entities['clients'] as List<dynamic>? ?? [], pendingIds);
+      await _upsertSuppliers(
+          entities['suppliers'] as List<dynamic>? ?? [], pendingIds);
+      await _upsertStores(
+          entities['stores'] as List<dynamic>? ?? [], pendingIds);
+      await _upsertEmployees(
+          entities['employees'] as List<dynamic>? ?? [], pendingIds);
+      await _upsertSales(
+          entities['sales'] as List<dynamic>? ?? [], pendingIds);
+      await _upsertDayClosures(
+          entities['dayClosures'] as List<dynamic>? ?? []);
+      await _upsertStockMovements(
+          entities['stockMovements'] as List<dynamic>? ?? []);
+      await _upsertStockTransfers(
+          entities['stockTransfers'] as List<dynamic>? ?? [], pendingIds);
+      await _upsertAuditEntries(
+          entities['auditEntries'] as List<dynamic>? ?? []);
+      await _upsertInventorySessions(
+          entities['inventorySessions'] as List<dynamic>? ?? []);
+      await _upsertInventoryCounts(
+          entities['inventoryCounts'] as List<dynamic>? ?? []);
+      await _upsertReports(
+          entities['reports'] as List<dynamic>? ?? []);
+    });
+  }
+
   // ── Upsert helpers ────────────────────────────────────────────────────────
 
-  /// Converts a server UTC ISO-8601 timestamp to local-time ISO-8601 string.
-  /// Drift with storeDateTimeAsText compares dates as plain strings in SQL.
-  /// Locally-created records use DateTime.now() (local, no Z suffix), so
-  /// server-synced records must also be stored in local time for consistent
-  /// string comparison in time-range queries.
-  static String? _toLocalIso(dynamic utcIso) {
+  /// Converts a server UTC ISO-8601 timestamp to the text Drift itself writes
+  /// for a local DateTime (storeDateTimeAsText: local time plus its offset,
+  /// e.g. `2026-03-22T00:30:00.000 +01:00`). Pulled rows then sort and compare
+  /// like locally-created ones, and read back through Drift as the same
+  /// instant — local time without the offset would be read as UTC.
+  String? _toLocalIso(dynamic utcIso) {
     if (utcIso == null) return null;
-    return DateTime.parse(utcIso as String).toLocal().toIso8601String();
+    return _database.typeMapping
+        .mapToSqlVariable(DateTime.parse(utcIso as String).toLocal()) as String;
   }
 
   /// AC7 — Get entity IDs that have pending (unsynced) operations in sync_queue.
@@ -326,6 +445,8 @@ class RestSyncService implements SyncService {
   /// protection doesn't apply. This computes the set of `(productId,
   /// storeId)` pairs affected by unsynced offline operations that mutate
   /// stock (STOCK_ADJUST, RECORD_STOCK_ENTRY, CREATE_SALE, STOCK_TRANSFER),
+  /// plus the stock touched locally by a pending VALIDATE_SALE /
+  /// VALIDATE_INVENTORY,
   /// so `_upsertStockLevels` can skip overwriting those rows with stale
   /// server data while the operation is still pending in `sync_queue`.
   Future<Set<String>> _getPendingStockKeys() async {
@@ -334,6 +455,8 @@ class RestSyncService implements SyncService {
       'RECORD_STOCK_ENTRY',
       'CREATE_SALE',
       'STOCK_TRANSFER',
+      'VALIDATE_SALE',
+      'VALIDATE_INVENTORY',
     };
     final pendingOps = await (_database.select(_database.syncQueue)
           ..where((t) =>
@@ -371,6 +494,57 @@ class RestSyncService implements SyncService {
           if (srcKey != null) keys.add(srcKey);
           final dstKey = _stockKey(productId, payload['destinationStoreId']);
           if (dstKey != null) keys.add(dstKey);
+          break;
+        // Their payloads carry no product/store: the stock they changed
+        // locally is read back from the local sale / inventory session.
+        case 'VALIDATE_SALE':
+          final saleId = payload['saleId'];
+          if (saleId is! String) break;
+          final rows = await _database.customSelect(
+            'SELECT si.product_id, s.store_id FROM sale_items si '
+            'JOIN sales s ON s.id = si.sale_id WHERE si.sale_id = ?',
+            variables: [Variable<String>(saleId)],
+          ).get();
+          String? storeId;
+          for (final row in rows) {
+            storeId = row.read<String>('store_id');
+            final key = _stockKey(row.read<String>('product_id'), storeId);
+            if (key != null) keys.add(key);
+          }
+          storeId ??= (await _database.customSelect(
+            'SELECT store_id FROM sales WHERE id = ?',
+            variables: [Variable<String>(saleId)],
+          ).getSingleOrNull())
+              ?.read<String>('store_id');
+          final entries = payload['initialStockEntries'];
+          if (entries is Map) {
+            for (final productId in entries.keys) {
+              final key = _stockKey(productId, storeId);
+              if (key != null) keys.add(key);
+            }
+          }
+          final remappings = payload['productIdRemappings'];
+          if (remappings is Map) {
+            for (final productId in remappings.values) {
+              final key = _stockKey(productId, storeId);
+              if (key != null) keys.add(key);
+            }
+          }
+          break;
+        case 'VALIDATE_INVENTORY':
+          final sessionId = payload['sessionId'];
+          if (sessionId is! String) break;
+          final rows = await _database.customSelect(
+            'SELECT c.product_id, s.store_id FROM inventory_counts c '
+            'JOIN inventory_sessions s ON s.id = c.session_id '
+            'WHERE c.session_id = ?',
+            variables: [Variable<String>(sessionId)],
+          ).get();
+          for (final row in rows) {
+            final key = _stockKey(
+                row.read<String>('product_id'), row.read<String>('store_id'));
+            if (key != null) keys.add(key);
+          }
           break;
       }
     }
@@ -634,21 +808,29 @@ class RestSyncService implements SyncService {
     }
   }
 
-  Future<void> _upsertSales(List<dynamic> sales) async {
+  Future<void> _upsertSales(
+      List<dynamic> sales, Set<String> pendingIds) async {
     if (sales.isEmpty) return;
     for (final s in sales) {
       final map = s as Map<String, dynamic>;
+      // AC7: a local validation/cancellation not pushed yet wins.
+      if (pendingIds.contains(map['id'])) continue;
       await _database.customStatement(
         'INSERT INTO sales (id, store_id, employee_id, total_amount, '
         'discount_amount, payment_mode, client_id, status, occurred_at, '
         'synced, created_at) '
         'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?) '
         'ON CONFLICT(id) DO UPDATE SET '
-        // Never downgrade a locally-completed/cancelled sale with stale
-        // server state (e.g. server still shows PENDING_VALIDATION because
-        // the VALIDATE_SALE sync operation hasn't been applied yet).
-        'status = CASE WHEN sales.status = ? OR sales.status = ? '
+        // Never downgrade a locally-completed/cancelled sale back to
+        // PENDING_VALIDATION with stale server state. Any other server status
+        // (a cancellation, a validation) and corrected amounts do apply.
+        'status = CASE WHEN excluded.status = ? '
+        'AND sales.status IN (?, ?) '
         'THEN sales.status ELSE excluded.status END, '
+        'total_amount = excluded.total_amount, '
+        'discount_amount = excluded.discount_amount, '
+        'payment_mode = excluded.payment_mode, '
+        'client_id = excluded.client_id, '
         'synced = 1, '
         'occurred_at = excluded.occurred_at, created_at = excluded.created_at',
         [
@@ -663,6 +845,7 @@ class RestSyncService implements SyncService {
           _toLocalIso(map['occurredAt']),
           _toLocalIso(map['createdAt']),
           // Parameters for the CASE guard in ON CONFLICT DO UPDATE:
+          'PENDING_VALIDATION',
           'COMPLETED',
           'CANCELLED',
         ],
@@ -711,7 +894,16 @@ class RestSyncService implements SyncService {
         'pending_sales_count, pending_sales_total, is_automatic, '
         'synced, created_at) '
         'VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 1, ?) '
-        'ON CONFLICT(id) DO UPDATE SET is_automatic = excluded.is_automatic',
+        // The server keeps the client's closure id: a closure pushed from
+        // here comes back with it and is now confirmed.
+        // Its totals are the server's: late offline sales synced after the
+        // previous closure belong to this one, which the device cannot know.
+        'ON CONFLICT(id) DO UPDATE SET is_automatic = excluded.is_automatic, '
+        'total_sales = excluded.total_sales, '
+        'total_revenue = excluded.total_revenue, '
+        'cash_amount = excluded.cash_amount, '
+        'momo_amount = excluded.momo_amount, '
+        'synced = 1',
         [
           map['id'],
           map['storeId'],
@@ -942,16 +1134,27 @@ class RestSyncService implements SyncService {
   }) async {
     const uuid = Uuid();
 
-    // Deduplicate: if the same (entityId, operation) already exists in the queue
-    // (e.g. user taps Validate twice while offline), skip the insert.
-    // Use get() instead of getSingleOrNull() to be safe against pre-existing
-    // duplicates (which would make getSingleOrNull throw StateError).
-    if (entityId != null) {
-      final existing = await (_database.select(_database.syncQueue)
-            ..where((t) =>
-                t.entityId.equals(entityId) & t.operation.equals(operation)))
-          .get();
-      if (existing.isNotEmpty) {
+    // Deduplicate: a one-shot operation already queued for this entity (e.g.
+    // user taps Validate twice while offline) is skipped; a state change
+    // (archive, deactivate...) is skipped only when it repeats the latest
+    // queued operation of the entity, so ARCHIVE → UNARCHIVE → ARCHIVE keeps
+    // all three. Edits and stock movements are never skipped — each carries a
+    // newer value or a distinct quantity, and all must reach the server in
+    // order.
+    if (entityId != null && !_appendOnlyOperations.contains(operation)) {
+      final query = _database.select(_database.syncQueue)
+        ..where((t) => t.entityId.equals(entityId));
+      final bool duplicate;
+      if (_isOneShot(operation)) {
+        query.where((t) => t.operation.equals(operation));
+        duplicate = (await query.get()).isNotEmpty;
+      } else {
+        query
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+          ..limit(1);
+        duplicate = (await query.getSingleOrNull())?.operation == operation;
+      }
+      if (duplicate) {
         dev.log(
           '⏭️ Skipping duplicate $operation for entity $entityId',
           name: 'RestSync',

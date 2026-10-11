@@ -55,7 +55,9 @@ Future<List<StoreProductStockModel>> storeStockDetail(
 
 // ── Search (local-only, debounced in UI) ─────────────────────────────────────
 
-final stockSearchQueryProvider = StateProvider<String>((ref) => '');
+// autoDispose: leaving the stock overview resets the query, like its other
+// filters (the page's search field starts empty again).
+final stockSearchQueryProvider = StateProvider.autoDispose<String>((ref) => '');
 
 @riverpod
 Future<List<StoreProductStockModel>> stockSearchResults(
@@ -76,7 +78,7 @@ final highlightedStoreIdProvider = StateProvider<String?>((ref) => null);
 
 /// Set to true when navigating from the dashboard low-stock badge.
 /// [GlobalStockOverviewPage] writes this in initState; [_ProductList] reads it
-/// when loading stock data; reset to false on page dispose.
-final showLowStockOnlyProvider = StateProvider<bool>((ref) => false);
+/// when loading stock data; autoDispose resets it once the page is left.
+final showLowStockOnlyProvider = StateProvider.autoDispose<bool>((ref) => false);
 
 

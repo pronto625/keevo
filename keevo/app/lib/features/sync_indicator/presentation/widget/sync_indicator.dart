@@ -37,13 +37,24 @@ class SyncIndicator extends ConsumerWidget {
           SnackBar(
             backgroundColor: AppTheme.warning,
             duration: const Duration(seconds: 5),
-            content: Text(
-              '\u26a0 Conflit de stock : $productName \u2014 stock n\u00e9gatif ($resultingStock). V\u00e9rifiez l\u2019inventaire.',
-              style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+            // Texte foncé fixe : le fond ambre ne change pas avec le thème,
+            // `onSurface` devenait illisible en mode sombre.
+            content: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded,
+                    color: AppTheme.onWarning, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Conflit de stock : $productName \u2014 stock n\u00e9gatif ($resultingStock). V\u00e9rifiez l\u2019inventaire.',
+                    style: const TextStyle(color: AppTheme.onWarning),
+                  ),
+                ),
+              ],
             ),
             action: SnackBarAction(
               label: 'Voir',
-              textColor: Theme.of(context).colorScheme.onSurface,
+              textColor: AppTheme.onWarning,
               onPressed: () => context.push('/settings/sync/conflicts'),
             ),
           ),
@@ -65,13 +76,22 @@ class SyncIndicator extends ConsumerWidget {
           SnackBar(
             backgroundColor: AppTheme.errorColor,
             duration: const Duration(seconds: 6),
-            content: Text(
-              '⚠ Non synchronisé ($operation) : $reason',
-              style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded,
+                    color: AppTheme.onError, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Non synchronisé ($operation) : $reason',
+                    style: const TextStyle(color: AppTheme.onError),
+                  ),
+                ),
+              ],
             ),
             action: SnackBarAction(
               label: 'Voir',
-              textColor: Theme.of(context).colorScheme.onSurface,
+              textColor: AppTheme.onError,
               onPressed: () => context.push('/settings/sync'),
             ),
           ),
@@ -105,7 +125,7 @@ class SyncIndicator extends ConsumerWidget {
               ),
               const SizedBox(width: 6),
               const Text(
-                '🔴 Accès limité — Sync requise',
+                'Accès limité — Sync requise',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
               ),
             ],
@@ -156,7 +176,7 @@ class SyncIndicator extends ConsumerWidget {
         const SizedBox(width: 6),
         Text(
           isOnlineStaleCritical
-              ? '⚠ Sync urgente'
+              ? 'Sync urgente'
               : isOnlineStaleWarning
                   ? 'En ligne (sync J-$daysSinceLastSync)'
                   : _label(status, days),

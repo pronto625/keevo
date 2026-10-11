@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
+
 /// Returns a localised label for [entity] with [limit].
 ///
 /// [entity] is one of: 'stores', 'products', 'employees'.
@@ -30,7 +33,8 @@ Future<void> showPlanLimitBottomSheet({
   return showModalBottomSheet<void>(
     context: context,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      borderRadius:
+          BorderRadius.vertical(top: Radius.circular(AppTheme.radiusXL)),
     ),
     builder: (ctx) => Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
@@ -47,7 +51,7 @@ Future<void> showPlanLimitBottomSheet({
             ),
           ),
           const SizedBox(height: 20),
-          const Icon(Icons.lock_outline, size: 48),
+          const SoftIconBadge(icon: Icons.lock_outline_rounded, size: 72),
           const SizedBox(height: 16),
           Text(
             'Vous avez atteint la limite de ${_entityLabel(entity, limit)} '
@@ -58,7 +62,7 @@ Future<void> showPlanLimitBottomSheet({
           const SizedBox(height: 24),
           FilledButton.icon(
             key: const Key('plan_upgrade_cta'),
-            icon: const Icon(Icons.star),
+            icon: const Icon(Icons.star_rounded),
             label: const Text('Passer au plan Premium'),
             onPressed: () {
               Navigator.of(ctx).pop();

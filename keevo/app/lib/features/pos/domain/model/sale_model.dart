@@ -43,6 +43,10 @@ class Sale {
   /// Initial stock entries for originally-draft products (productId → qty).
   /// Queued as RECORD_STOCK_ENTRY ops before the CREATE_SALE op.
   final Map<String, int> initialStockEntries;
+  /// Ids of the local STOCK_ENTRY movements created for [initialStockEntries]
+  /// (productId → movement id), reused as the sync entityId so the server
+  /// movement carries the same id as the local one.
+  final Map<String, String> initialStockMovementIds;
 
   const Sale({
     required this.id,
@@ -59,5 +63,6 @@ class Sale {
     required this.createdAt,
     this.originalDraftProductIds = const [],
     this.initialStockEntries = const {},
+    this.initialStockMovementIds = const {},
   });
 }

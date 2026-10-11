@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/di/providers.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import '../../../stores/domain/model/store_model.dart';
 import '../../../stores/presentation/provider/store_provider.dart';
 import '../../domain/model/cross_store_availability_model.dart';
@@ -24,6 +25,9 @@ Future<void> showCrossStoreAvailabilitySheet({
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: Colors.transparent,
+    // La feuille dessine sa propre poignée ; sans ceci celle du thème
+    // flotterait au-dessus, sur le fond transparent.
+    showDragHandle: false,
     builder: (_) => _CrossStoreAvailabilitySheet(
       productId: productId,
       productName: productName,
@@ -54,14 +58,8 @@ class _CrossStoreAvailabilitySheet extends ConsumerWidget {
       ),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.shadow.withOpacity(0.12),
-            blurRadius: 20,
-            offset: const Offset(0, -4),
-          ),
-        ],
+        borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(AppTheme.radiusXL)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -72,7 +70,7 @@ class _CrossStoreAvailabilitySheet extends ConsumerWidget {
             height: 4,
             margin: const EdgeInsets.only(top: 12, bottom: 8),
             decoration: BoxDecoration(
-              color: theme.colorScheme.outline.withOpacity(0.3),
+              color: theme.colorScheme.outlineVariant,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -81,18 +79,7 @@ class _CrossStoreAvailabilitySheet extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    Icons.store_outlined,
-                    color: theme.colorScheme.onPrimaryContainer,
-                    size: 22,
-                  ),
-                ),
+                const SoftIconBadge(icon: Icons.store_outlined, size: 44),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -236,15 +223,15 @@ class _StoreTile extends StatelessWidget {
             : AppTheme.success;
 
     final Color tileColor = isOutOfStock
-        ? theme.colorScheme.surfaceVariant.withOpacity(0.3)
+        ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4)
         : theme.colorScheme.surface;
 
     return Container(
       decoration: BoxDecoration(
         color: tileColor,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppTheme.radiusM),
         border: Border.all(
-          color: theme.colorScheme.outline.withOpacity(0.1),
+          color: theme.colorScheme.outlineVariant.withAlpha(90),
         ),
       ),
       child: Padding(
@@ -281,9 +268,8 @@ class _StoreTile extends StatelessWidget {
               padding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: qtyColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: qtyColor.withOpacity(0.3)),
+                color: qtyColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
                 isOutOfStock ? '-' : '${entry.quantity}',
@@ -408,28 +394,53 @@ class _OwnerCta extends ConsumerWidget {
     // AC4: disable when all stores have qty=0
     final hasStock = model.entries.any((e) => e.quantity > 0);
 
-    return SizedBox(
-      width: double.infinity,
-      child: Tooltip(
-        message: hasStock ? '' : 'Aucun stock disponible dans le réseau',
-        child: FilledButton.icon(
-          onPressed: hasStock && destinations.isNotEmpty
-              ? () {
-                  Navigator.of(context).pop();
-                  showTransferFormBottomSheet(
-                    context: context,
-                    sourceStoreId: sourceStoreId,
-                    sourceStoreName: sourceStoreName,
-                    productId: productId,
-                    productName: productName,
-                    destinationStores: destinations,
-                  );
-                }
-              : null,
-          icon: const Icon(Icons.swap_horiz_rounded),
-          label: const Text('Initier un transfert'),
+    // Why the button is disabled — a tooltip alone is invisible on mobile.
+    final disabledReason = !hasStock
+        ? 'Aucun stock disponible dans le réseau'
+        : destinations.isEmpty
+            ? 'Aucune autre boutique active vers laquelle transférer'
+            : null;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(52),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radiusL),
+              ),
+            ),
+            onPressed: disabledReason == null
+                ? () {
+                    Navigator.of(context).pop();
+                    showTransferFormBottomSheet(
+                      context: context,
+                      sourceStoreId: sourceStoreId,
+                      sourceStoreName: sourceStoreName,
+                      productId: productId,
+                      productName: productName,
+                      destinationStores: destinations,
+                    );
+                  }
+                : null,
+            icon: const Icon(Icons.swap_horiz_rounded),
+            label: const Text('Initier un transfert'),
+          ),
         ),
-      ),
+        if (disabledReason != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            disabledReason,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ],
     );
   }
 }
@@ -467,7 +478,13 @@ class _EmployeeCta extends ConsumerWidget {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () => _openWhatsApp(ownerPhone),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusL),
+                ),
+              ),
+              onPressed: () => _openWhatsApp(context, ownerPhone),
               icon: const Icon(Icons.chat_outlined, size: 18),
               label: const Text('Contacter via WhatsApp'),
             ),
@@ -477,12 +494,24 @@ class _EmployeeCta extends ConsumerWidget {
     );
   }
 
-  Future<void> _openWhatsApp(String phone) async {
+  Future<void> _openWhatsApp(BuildContext context, String phone) async {
+    final messenger = ScaffoldMessenger.of(context);
     // AC3: deeplink to https://wa.me/{phone} — strip '+' prefix
     final cleanPhone = phone.replaceAll('+', '');
     final uri = Uri.parse('https://wa.me/$cleanPhone');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    var opened = false;
+    try {
+      opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      opened = false;
+    }
+    if (!opened) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Impossible d\'ouvrir WhatsApp sur cet appareil'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 }

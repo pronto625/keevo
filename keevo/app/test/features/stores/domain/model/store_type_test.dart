@@ -25,11 +25,6 @@ void main() {
       expect(StoreType.warehouse.displayName, 'Warehouse');
     });
 
-    test('icon returns correct emoji', () {
-      expect(StoreType.store.icon, '🏪');
-      expect(StoreType.warehouse.icon, '🏭');
-    });
-
     test('values has exactly STORE and WAREHOUSE', () {
       expect(StoreType.values.length, 2);
     });

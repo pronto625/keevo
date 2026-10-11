@@ -35,7 +35,10 @@ class SyncDetailBottomSheet extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Synchronisation',
-                style: Theme.of(context).textTheme.titleMedium),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2,
+                    )),
             const SizedBox(height: 16),
             const _LastSyncRow(),
             const SizedBox(height: 8),
@@ -90,7 +93,16 @@ class SyncDetailBottomSheet extends ConsumerWidget {
             // Sync now button
             SizedBox(
               width: double.infinity,
+              height: 56,
               child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                ),
                 onPressed: isOnline
                     ? () async {
                         Navigator.of(context).pop();

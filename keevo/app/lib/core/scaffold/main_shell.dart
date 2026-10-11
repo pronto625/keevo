@@ -10,7 +10,6 @@ import '../../features/inventory/presentation/provider/global_stock_provider.dar
 import '../../features/notifications/presentation/provider/notification_provider.dart';
 import '../../features/pos/data/datasource/local_day_closure_datasource.dart';
 import '../../features/pos/presentation/provider/day_closure_providers.dart';
-import '../../features/pos/presentation/provider/pos_providers.dart';
 import '../../features/reports/presentation/provider/report_history_providers.dart';
 import '../../features/settings/presentation/widget/suspension_banner.dart';
 import '../../features/stores/presentation/provider/active_store_provider.dart';
@@ -94,7 +93,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         debugPrint('[FCM] getToken() returned null — skipping registration (no GMS or permission denied)');
         return;
       }
-      debugPrint('[FCM] Token obtained: ${token.substring(0, 20)}...');
+      debugPrint('[FCM] Token obtained (${token.length} chars)');
       await ref.read(remoteDeviceTokenDataSourceProvider).registerToken(
         token: token,
         platform: _fcmPlatform(),
@@ -160,31 +159,37 @@ class _MainShellState extends ConsumerState<MainShell> {
           top: MediaQuery.of(overlayContext).padding.top + 8,
           left: 12,
           right: 12,
-          child: Material(
-            elevation: 4,
-            borderRadius: BorderRadius.circular(12),
-            color: theme.colorScheme.inverseSurface,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  Icon(Icons.event_available_outlined,
-                      color: theme.colorScheme.onInverseSurface),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      message,
-                      style: TextStyle(color: theme.colorScheme.onInverseSurface),
+          // Ombre douce partagée plutôt que l'élévation Material par défaut.
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppTheme.radiusL),
+              boxShadow: AppTheme.softShadow(theme.colorScheme),
+            ),
+            child: Material(
+              borderRadius: BorderRadius.circular(AppTheme.radiusL),
+              color: theme.colorScheme.inverseSurface,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.event_available_outlined,
+                        color: theme.colorScheme.onInverseSurface),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        message,
+                        style: TextStyle(color: theme.colorScheme.onInverseSurface),
+                      ),
                     ),
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.close,
-                        size: 18, color: theme.colorScheme.onInverseSurface),
-                    onPressed: () {
-                      if (entry.mounted) entry.remove();
-                    },
-                  ),
-                ],
+                    IconButton(
+                      icon: Icon(Icons.close_rounded,
+                          size: 18, color: theme.colorScheme.onInverseSurface),
+                      onPressed: () {
+                        if (entry.mounted) entry.remove();
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

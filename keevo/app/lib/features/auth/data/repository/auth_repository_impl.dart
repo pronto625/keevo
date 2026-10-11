@@ -75,6 +75,10 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<void> logout(String refreshToken) =>
+      _remoteDataSource.logout(refreshToken);
+
+  @override
   Future<void> resetPassword({
     required String phoneNumber,
     required String code,

@@ -109,5 +109,41 @@ void main() {
       expect(ok, isFalse);
       expect(notifier().discountAmount, 0); // unchanged
     });
+      // A discount larger than the cart makes the sale's total negative; the
+    // backend rejects such a sale on every sync attempt.
+    group('discount never exceeds the cart total', () {
+      test('removing a line shrinks the discount', () {
+        notifier().addItem(_item(id: 'a', price: 2000));
+        notifier().addItem(_item(id: 'b', price: 8000));
+        notifier().setDiscount(5000);
+
+        notifier().removeItem('b');
+
+        expect(notifier().discountAmount, 2000);
+        expect(notifier().finalTotal, 0);
+      });
+
+      test('lowering a price or a quantity shrinks the discount', () {
+        notifier().addItem(_item(price: 1000, qty: 5));
+        notifier().setDiscount(4000);
+
+        notifier().updateQuantity('p1', 2);
+        expect(notifier().discountAmount, 2000);
+
+        notifier().updatePrice('p1', 500);
+        expect(notifier().discountAmount, 1000);
+      });
+
+      test('emptying the cart line by line resets the discount', () {
+        notifier().addItem(_item(price: 3000));
+        notifier().setDiscount(1000);
+
+        notifier().removeItem('p1');
+        notifier().addItem(_item(id: 'next', price: 500));
+
+        expect(notifier().discountAmount, 0);
+        expect(notifier().finalTotal, 500);
+      });
+    });
   });
 }

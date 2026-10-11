@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import '../provider/employee_provider.dart';
 import '../widget/employee_card.dart';
 
@@ -24,50 +24,48 @@ class _TeamPageState extends ConsumerState<TeamPage> {
     final employeesAsync = ref.watch(employeeListProvider);
 
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
+      backgroundColor: theme.colorScheme.surface,
       body: CustomScrollView(
         slivers: [
-          // ── Gradient header ─────────────────────────────────────────
+          // ── Header — fond neutre, sans dégradé ──────────────────────
           SliverAppBar(
             expandedHeight: 140,
             pinned: true,
             elevation: 0,
-            backgroundColor: Colors.transparent,
+            scrolledUnderElevation: 0,
+            backgroundColor: theme.colorScheme.surface,
+            foregroundColor: theme.colorScheme.onSurface,
             flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [AppTheme.primary, AppTheme.primary.withAlpha(180)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: const SafeArea(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(20, 16, 20, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Paramètres',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 0.5,
-                          ),
+              // Titre calé en bas : poussée depuis Paramètres, la page a
+              // une flèche retour en haut à gauche qu'il ne doit pas couvrir.
+              background: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Paramètres',
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.5,
                         ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Équipe',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
-                          ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Équipe',
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.3,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -106,15 +104,18 @@ class _TeamPageState extends ConsumerState<TeamPage> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text('👥', style: TextStyle(fontSize: 48)),
+                        const SoftIconBadge(
+                          icon: Icons.group_outlined,
+                          size: 72,
+                        ),
                         const SizedBox(height: 12),
                         Text('Aucun employé',
                             style: theme.textTheme.titleMedium),
                         const SizedBox(height: 8),
                         Text(
-                          'Appuyez sur + pour ajouter un employé.',
+                          'Appuyez sur « Ajouter » pour créer un employé.',
                           style: theme.textTheme.bodyMedium
-                              ?.copyWith(color: theme.colorScheme.outline),
+                              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                         ),
                       ],
                     ),
@@ -145,8 +146,8 @@ class _TeamPageState extends ConsumerState<TeamPage> {
         onPressed: () => context.push('/settings/team/new'),
         icon: const Icon(Icons.person_add_rounded),
         label: const Text('Ajouter'),
-        backgroundColor: AppTheme.primary,
-        foregroundColor: Colors.white,
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
       ),
     );
   }

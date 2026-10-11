@@ -1,22 +1,22 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/providers.dart';
-import '../../../../core/storage/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../auth/presentation/provider/auth_provider.dart';
-import '../../../notifications/presentation/provider/notification_provider.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
+import '../../../auth/presentation/provider/sign_out_service.dart';
 import '../../../stores/domain/model/store_model.dart';
 import '../../../stores/domain/model/store_type.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../../stores/presentation/provider/store_provider.dart';
-import '../provider/account_status_provider.dart';
 
 /// SettingsPage — "Plus" tab → Paramètres.
 ///
 /// UX spec: Plus > Paramètres → Boutiques, Abonnement, Notifications, Aide.
-/// Gradient header Indigo Sky, cards 16dp radius, Material 3.
+/// Neutral header, soft cards 16dp radius, Material 3.
 /// AC5: EMPLOYEE sees only Aide & Support section. OWNER-only tiles hidden.
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -33,47 +33,34 @@ class SettingsPage extends ConsumerWidget {
       backgroundColor: cs.scaffoldBg,
       body: CustomScrollView(
         slivers: [
-          // ── Gradient header ─────────────────────────────────────────────
+          // ── Header ──────────────────────────────────────────────────────
+          // Fond neutre plutôt que bandeau dégradé ; même contenu (avatar,
+          // téléphone, rôle).
           SliverAppBar(
             expandedHeight: 140,
             pinned: true,
             automaticallyImplyLeading: false,
             leading: context.canPop()
                 ? IconButton(
-                    icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                        color: Colors.white),
+                    icon: Icon(Icons.arrow_back_ios_new_rounded,
+                        color: cs.onSurface),
                     onPressed: () => context.pop(),
                   )
                 : null,
             elevation: 0,
-            backgroundColor: Colors.transparent,
+            scrolledUnderElevation: 0,
+            backgroundColor: cs.surface,
             flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [AppTheme.primary, AppTheme.primary.withAlpha(180)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
+              background: ColoredBox(
+                color: cs.surface,
                 child: SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
                     child: Row(
                       children: [
-                        // Avatar circle
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withAlpha(51),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.person_rounded,
-                            color: Colors.white,
-                            size: 28,
-                          ),
+                        const SoftIconBadge(
+                          icon: Icons.person_outline_rounded,
+                          size: 48,
                         ),
                         const SizedBox(width: 14),
                         Expanded(
@@ -83,10 +70,11 @@ class SettingsPage extends ConsumerWidget {
                             children: [
                               Text(
                                 phone ?? 'Chargement...',
-                                style: const TextStyle(
-                                  color: Colors.white,
+                                style: TextStyle(
+                                  color: cs.onSurface,
                                   fontSize: 16,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.2,
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -95,9 +83,9 @@ class SettingsPage extends ConsumerWidget {
                                     horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: isOwner
-                                      ? const Color(0xFFFFE066)
-                                      : Colors.white.withAlpha(51),
-                                  borderRadius: BorderRadius.circular(12),
+                                      ? cs.warningContainer
+                                      : cs.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
                                   isOwner ? 'Propriétaire' : 'Employé',
@@ -105,8 +93,10 @@ class SettingsPage extends ConsumerWidget {
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700,
                                     color: isOwner
-                                        ? const Color(0xFF664D03)
-                                        : Colors.white,
+                                        ? (theme.brightness == Brightness.dark
+                                            ? cs.warning
+                                            : const Color(0xFF664D03))
+                                        : cs.onSurfaceVariant,
                                   ),
                                 ),
                               ),
@@ -132,9 +122,8 @@ class SettingsPage extends ConsumerWidget {
                 _SettingsCard(
                   children: [
                     _SettingsTile(
-                      icon: Icons.manage_accounts_rounded,
+                      icon: Icons.manage_accounts_outlined,
                       iconColor: AppTheme.iconBlue,
-                      iconBg: AppTheme.iconBlueBg,
                       title: 'Mon Compte',
                       subtitle: phone ?? 'Chargement...',
                       onTap: () => context.push('/settings/account'),
@@ -150,9 +139,8 @@ class SettingsPage extends ConsumerWidget {
                 _SettingsCard(
                   children: [
                     _SettingsTile(
-                      icon: Icons.storefront_rounded,
+                      icon: Icons.storefront_outlined,
                       iconColor: AppTheme.primary,
-                      iconBg: AppTheme.iconBlueBg,
                       title: 'Mes boutiques',
                       subtitle: 'Boutiques, entrepôts et types',
                       onTap: () => context.push('/stores'),
@@ -161,9 +149,8 @@ class SettingsPage extends ConsumerWidget {
                     const _ActiveStoreTile(),
                     const _Divider(),
                     _SettingsTile(
-                      icon: Icons.inventory_2_rounded,
+                      icon: Icons.inventory_2_outlined,
                       iconColor: AppTheme.iconTeal,
-                      iconBg: AppTheme.iconTealBg,
                       title: 'Stock multi-boutiques',
                       subtitle: 'Vue centralisée des stocks par boutique',
                       onTap: () => context.push('/stock/overview'),
@@ -172,25 +159,22 @@ class SettingsPage extends ConsumerWidget {
                     _SettingsTile(
                       icon: Icons.assignment_outlined,
                       iconColor: AppTheme.iconAmber,
-                      iconBg: AppTheme.iconAmberBg,
                       title: 'Inventaire',
                       subtitle: 'Lancer et suivre les sessions d\'inventaire',
                       onTap: () => context.push('/inventory'),
                     ),
                     const _Divider(),
                     _SettingsTile(
-                      icon: Icons.card_membership_rounded,
+                      icon: Icons.card_membership_outlined,
                       iconColor: AppTheme.iconPurple,
-                      iconBg: AppTheme.iconPurpleBg,
                       title: 'Abonnement',
                       subtitle: 'Plan actif, limites et mise à niveau',
                       onTap: () => context.push('/settings/subscription'),
                     ),
                     const _Divider(),
                     _SettingsTile(
-                      icon: Icons.group_rounded,
+                      icon: Icons.group_outlined,
                       iconColor: AppTheme.iconBlue,
-                      iconBg: AppTheme.iconBlueBg,
                       title: 'Équipe',
                       subtitle: 'Employés, rôles et accès',
                       onTap: () => context.push('/settings/team'),
@@ -199,7 +183,6 @@ class SettingsPage extends ConsumerWidget {
                     _SettingsTile(
                       icon: Icons.history_rounded,
                       iconColor: AppTheme.iconIndigo,
-                      iconBg: AppTheme.iconIndigoBg,
                       title: 'Journal d\'audit',
                       subtitle: 'Historique complet des opérations',
                       onTap: () => context.push('/audit'),
@@ -208,34 +191,30 @@ class SettingsPage extends ConsumerWidget {
                     _SettingsTile(
                       icon: Icons.sync_rounded,
                       iconColor: AppTheme.iconBlue,
-                      iconBg: AppTheme.iconBlueBg,
                       title: 'Synchronisation',
                       subtitle: 'Historique, appareils et file d\'attente',
                       onTap: () => context.push('/settings/sync'),
                     ),
                     const _Divider(),
                     _SettingsTile(
-                      icon: Icons.people_rounded,
+                      icon: Icons.people_outline_rounded,
                       iconColor: AppTheme.iconCyan,
-                      iconBg: AppTheme.iconCyanBg,
                       title: 'Clients',
                       subtitle: 'Gérez votre carnet de clients',
                       onTap: () => context.push('/clients'),
                     ),
                     const _Divider(),
                     _SettingsTile(
-                      icon: Icons.local_shipping_rounded,
+                      icon: Icons.local_shipping_outlined,
                       iconColor: AppTheme.iconOrange,
-                      iconBg: AppTheme.iconOrangeBg,
                       title: 'Fournisseurs',
                       subtitle: 'Contacts et approvisionnement',
                       onTap: () => context.push('/suppliers'),
                     ),
                     const _Divider(),
                     _SettingsTile(
-                      icon: Icons.category_rounded,
+                      icon: Icons.category_outlined,
                       iconColor: AppTheme.iconPurple,
-                      iconBg: AppTheme.iconPurpleBg,
                       title: 'Catégories',
                       subtitle: 'Gérez les catégories de produits',
                       onTap: () => context.push('/settings/categories'),
@@ -244,7 +223,6 @@ class SettingsPage extends ConsumerWidget {
                     _SettingsTile(
                       icon: Icons.swap_horiz_rounded,
                       iconColor: AppTheme.iconTeal,
-                      iconBg: AppTheme.iconTealBg,
                       title: 'Transferts',
                       subtitle: 'Historique des transferts de stock',
                       onTap: () => context.push('/stock/transfers'),
@@ -261,9 +239,8 @@ class SettingsPage extends ConsumerWidget {
                   _SettingsCard(
                     children: [
                       _SettingsTile(
-                        icon: Icons.inventory_2_rounded,
+                        icon: Icons.inventory_2_outlined,
                         iconColor: AppTheme.iconTeal,
-                        iconBg: AppTheme.iconTealBg,
                         title: 'Stock multi-boutiques',
                         subtitle: 'Vue centralisée des stocks par boutique',
                         onTap: () => context.push('/stock/overview'),
@@ -272,7 +249,6 @@ class SettingsPage extends ConsumerWidget {
                       _SettingsTile(
                         icon: Icons.assignment_outlined,
                         iconColor: AppTheme.iconAmber,
-                        iconBg: AppTheme.iconAmberBg,
                         title: 'Inventaire',
                         subtitle: 'Lancer et suivre les sessions d\'inventaire',
                         onTap: () => context.push('/inventory'),
@@ -281,7 +257,6 @@ class SettingsPage extends ConsumerWidget {
                       _SettingsTile(
                         icon: Icons.swap_horiz_rounded,
                         iconColor: AppTheme.iconTeal,
-                        iconBg: AppTheme.iconTealBg,
                         title: 'Transferts',
                         subtitle: 'Historique des transferts de stock',
                         onTap: () => context.push('/stock/transfers'),
@@ -299,7 +274,6 @@ class SettingsPage extends ConsumerWidget {
                     _SettingsTile(
                       icon: Icons.notifications_outlined,
                       iconColor: AppTheme.iconOrange,
-                      iconBg: AppTheme.iconOrangeBg,
                       title: 'Notifications',
                       subtitle: 'Heure du rapport, alertes stock',
                       onTap: () {},
@@ -309,8 +283,7 @@ class SettingsPage extends ConsumerWidget {
                     if (isOwner)
                     _SettingsTile(
                       icon: Icons.bar_chart_rounded,
-                      iconColor: AppTheme.success,
-                      iconBg: const Color(0xFFE8F5E9),
+                      iconColor: cs.success,
                       title: 'Rapports & WhatsApp',
                       subtitle: 'Configurer les rapports automatiques',
                       onTap: () => context.push('/settings/reports'),
@@ -328,7 +301,6 @@ class SettingsPage extends ConsumerWidget {
                     _SettingsTile(
                       icon: Icons.help_outline_rounded,
                       iconColor: AppTheme.iconGrey,
-                      iconBg: AppTheme.iconGreyBg,
                       title: 'Aide & Tutoriels',
                       subtitle: 'Guides et questions fréquentes',
                       onTap: () {},
@@ -338,7 +310,6 @@ class SettingsPage extends ConsumerWidget {
                     _SettingsTile(
                       icon: Icons.bug_report_outlined,
                       iconColor: AppTheme.iconGrey,
-                      iconBg: AppTheme.iconGreyBg,
                       title: 'Signaler un problème',
                       subtitle: 'Envoyer un retour à l\'équipe Keevo',
                       onTap: () {},
@@ -361,7 +332,7 @@ class SettingsPage extends ConsumerWidget {
                   child: Text(
                     'Keevo — Augmenter, ne pas Remplacer',
                     style: TextStyle(
-                      color: cs.onSurface.withAlpha(100),
+                      color: cs.onSurfaceVariant,
                       fontSize: 12,
                     ),
                   ),
@@ -375,6 +346,19 @@ class SettingsPage extends ConsumerWidget {
   }
 
   Future<void> _logout(BuildContext context, WidgetRef ref) async {
+    // One sign-out at a time: a second tap while the queue is being sent
+    // would start a second push and a second sign-out.
+    final inProgress = ref.read(_signOutInProgressProvider.notifier);
+    if (inProgress.state) return;
+    inProgress.state = true;
+    try {
+      await _runLogout(context, ref);
+    } finally {
+      inProgress.state = false;
+    }
+  }
+
+  Future<void> _runLogout(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -396,38 +380,93 @@ class SettingsPage extends ConsumerWidget {
         ],
       ),
     );
-    if (confirmed != true) return;
+    if (confirmed != true || !context.mounted) return;
 
-    // FCM token cleanup — best-effort (mirrors main_shell.dart _initFcm pattern).
-    // Must run BEFORE flutterSecureStorageProvider.deleteAll() so the auth
-    // token is still attached to the Dio interceptor for the backend call.
-    final token = await ref.read(fcmServiceProvider).getToken();
-    if (token != null) {
-      try {
-        await ref.read(remoteDeviceTokenDataSourceProvider).deleteToken(token);
-      } catch (e) {
-        debugPrint('[FCM] Remote token deletion on logout failed: $e');
-      }
+    final signOut = ref.read(signOutServiceProvider);
+    // Unsynced sales stay on this device and are sent at the next sign-in of
+    // the same account, but another account signing in here would clear them.
+    // The push can take several seconds on a slow network: show it.
+    final allSent = await _withProgress(
+      context,
+      'Envoi des opérations…',
+      () async {
+        try {
+          return await signOut.flushPendingOperations();
+        } catch (_) {
+          return false;
+        }
+      },
+    );
+    if (!allSent) {
+      if (!context.mounted) return;
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Opérations non synchronisées'),
+          content: const Text(
+            "Certaines opérations n'ont pas encore été envoyées au serveur. "
+            'Elles seront envoyées à votre prochaine connexion sur ce téléphone '
+            'avec ce compte, mais seront perdues si un autre compte s’y connecte.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Rester connecté'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: TextButton.styleFrom(
+                foregroundColor: AppTheme.errorColor,
+              ),
+              child: const Text('Déconnecter quand même'),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true || !context.mounted) return;
     }
-    // Unconditional: local unsubscribe must happen regardless of whether the
-    // remote delete above succeeded or failed (AC3).
-    await ref.read(fcmServiceProvider).deleteToken();
 
-    await ref.read(flutterSecureStorageProvider).deleteAll();
+    try {
+      await _withProgress(context, 'Déconnexion…', signOut.signOut);
+    } finally {
+      // Even if a cleanup step fails, the user asked to leave.
+      if (context.mounted) context.go('/auth/login');
+    }
+  }
 
-    final prefs = ref.read(sharedPreferencesProvider);
-    await prefs.remove(kUserRoleKey);
-    await prefs.remove(kUserPhoneKey);
-    await prefs.remove(kPasswordChangeRequiredKey);
-    await prefs.remove(kOnboardingWizardSeenKey);
-
-    ref.invalidate(currentUserRoleProvider);
-    ref.invalidate(currentUserPhoneProvider);
-    ref.invalidate(tenantStatusClaimProvider);
-
-    if (context.mounted) context.go('/auth/login');
+  /// Runs [task] behind a non-dismissible progress dialog.
+  Future<T> _withProgress<T>(
+      BuildContext context, String label, Future<T> Function() task) async {
+    final navigator = Navigator.of(context, rootNavigator: true);
+    unawaited(showDialog<void>(
+      context: context,
+      useRootNavigator: true,
+      barrierDismissible: false,
+      builder: (_) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          content: Row(children: [
+            const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 16),
+            Expanded(child: Text(label)),
+          ]),
+        ),
+      ),
+    ));
+    try {
+      return await task();
+    } finally {
+      navigator.pop();
+    }
   }
 }
+
+/// True while a sign-out runs (re-entry guard for the logout tile).
+final _signOutInProgressProvider = StateProvider<bool>((_) => false);
 
 // ── Private widgets ─────────────────────────────────────────────────────────
 
@@ -446,19 +485,7 @@ class _LogoutTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: cs.errorContainer_,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  Icons.logout_rounded,
-                  color: cs.error,
-                  size: 20,
-                ),
-              ),
+              SoftIconBadge(icon: Icons.logout_rounded, color: cs.error),
               const SizedBox(width: 14),
               Expanded(
                 child: Text(
@@ -508,16 +535,12 @@ class _SettingsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Container(
+      // cardBg plutôt que surface : en sombre, surface == fond de page et
+      // la carte disparaîtrait.
       decoration: BoxDecoration(
         color: cs.cardBg,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: cs.shadow.withAlpha(13),
-            blurRadius: 12,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        boxShadow: AppTheme.softShadow(cs),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(children: children),
@@ -528,7 +551,6 @@ class _SettingsCard extends StatelessWidget {
 class _SettingsTile extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
-  final Color iconBg;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
@@ -537,7 +559,6 @@ class _SettingsTile extends StatelessWidget {
   const _SettingsTile({
     required this.icon,
     required this.iconColor,
-    required this.iconBg,
     required this.title,
     required this.subtitle,
     required this.onTap,
@@ -555,15 +576,9 @@ class _SettingsTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: iconBg,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: iconColor, size: 20),
-              ),
+              // Teinte par ligne conservée (repère visuel), diluée par le
+              // badge pour rester lisible en mode sombre.
+              SoftIconBadge(icon: icon, color: iconColor),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -606,7 +621,7 @@ class _SettingsTile extends StatelessWidget {
                   ),
                 )
               else
-                Icon(Icons.chevron_right,
+                Icon(Icons.chevron_right_rounded,
                     color: cs.muted, size: 20),
             ],
           ),
@@ -645,9 +660,8 @@ class _ActiveStoreTile extends ConsumerWidget {
     );
 
     return _SettingsTile(
-      icon: Icons.store_rounded,
+      icon: Icons.store_outlined,
       iconColor: AppTheme.iconTeal,
-      iconBg: AppTheme.iconTealBg,
       title: 'Boutique active',
       subtitle: subtitle,
       onTap: () => _showStorePicker(
@@ -718,23 +732,19 @@ class _StorePickerSheet extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: Text(
                 'Boutique active',
-                style: theme.textTheme.titleLarge
-                    ?.copyWith(fontWeight: FontWeight.bold),
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.2,
+                ),
               ),
             ),
           ),
           const Divider(height: 1),
           // "Toutes les boutiques" option
           ListTile(
-            leading: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: const Color(0xFFD0EBFF),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.all_inclusive,
-                  color: AppTheme.iconBlue, size: 20),
+            leading: const SoftIconBadge(
+              icon: Icons.all_inclusive_rounded,
+              color: AppTheme.iconBlue,
             ),
             title: const Text('Toutes les boutiques'),
             subtitle: const Text('Afficher tous les produits'),
@@ -747,24 +757,13 @@ class _StorePickerSheet extends StatelessWidget {
           // Active store rows
           ...stores.map(
             (store) => ListTile(
-              leading: Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: store.type == StoreType.warehouse
-                      ? AppTheme.iconAmberBg
-                      : AppTheme.iconTealBg,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  store.type == StoreType.warehouse
-                      ? Icons.warehouse_rounded
-                      : Icons.storefront_rounded,
-                  color: store.type == StoreType.warehouse
-                      ? AppTheme.iconAmber
-                      : AppTheme.iconTeal,
-                  size: 20,
-                ),
+              leading: SoftIconBadge(
+                icon: store.type == StoreType.warehouse
+                    ? Icons.warehouse_outlined
+                    : Icons.storefront_outlined,
+                color: store.type == StoreType.warehouse
+                    ? AppTheme.iconAmber
+                    : AppTheme.iconTeal,
               ),
               title: Text(store.name),
               subtitle: Text(store.type.displayName),

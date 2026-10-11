@@ -40,10 +40,15 @@ class RemoteProfitabilityDatasource {
     required String productId,
     required String from,
     required String to,
+    String? storeId,
   }) async {
     final response = await _dio.get<Map<String, dynamic>>(
       '$_basePath/products/$productId',
-      queryParameters: {'from': from, 'to': to},
+      queryParameters: {
+        'from': from,
+        'to': to,
+        if (storeId != null) 'storeId': storeId,
+      },
     );
     return ProductProfitabilityDetail.fromJson(
         response.data!['data'] as Map<String, dynamic>);

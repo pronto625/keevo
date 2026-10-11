@@ -22,7 +22,9 @@ class GapReportSummaryHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Card(
+    // Surface pleine + ombre douce partagée plutôt que la Card Material.
+    return Container(
+      decoration: AppTheme.softCardDecoration(theme.colorScheme),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -36,7 +38,7 @@ class GapReportSummaryHeader extends StatelessWidget {
                 Text(
                   'Résumé',
                   style: theme.textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w600),
+                      ?.copyWith(fontWeight: FontWeight.w700),
                 ),
               ],
             ),
@@ -126,7 +128,7 @@ class _StatBadge extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppTheme.radiusM),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

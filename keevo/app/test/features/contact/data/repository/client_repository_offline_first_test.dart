@@ -122,4 +122,43 @@ void main() {
           )).called(1);
     });
   });
+
+  group('archive() offline-first', () {
+    test('archive_writesLocalFirst_queuesArchive_evenWhenOnline', () async {
+      final callOrder = <String>[];
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
+      when(() => mockLocal.archive(any())).thenAnswer((_) async {
+        callOrder.add('local');
+      });
+      when(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).thenAnswer((_) async {
+        callOrder.add('queue');
+      });
+      when(() => mockDispatcher.triggerPushIfIdle()).thenReturn(null);
+
+      await repo.archive('client-uuid-1');
+
+      expect(callOrder, ['local', 'queue']);
+      verifyNever(() => mockRemote.archive(any()));
+      verify(() => mockSyncService.queueOperation(
+            operation: 'ARCHIVE_CLIENT',
+            payload: {'clientId': 'client-uuid-1'},
+            entityId: 'client-uuid-1',
+          )).called(1);
+      verify(() => mockDispatcher.triggerPushIfIdle()).called(1);
+    });
+  });
+
+  group('syncFromRemote()', () {
+    test('syncFromRemote_rethrowsWhenRemoteFails', () async {
+      when(() => mockRemote.getAll(includeArchived: true))
+          .thenThrow(Exception('network'));
+
+      await expectLater(repo.syncFromRemote(), throwsA(isA<Exception>()));
+      verifyNever(() => mockLocal.upsert(any()));
+    });
+  });
 }

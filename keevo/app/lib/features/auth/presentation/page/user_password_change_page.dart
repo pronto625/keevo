@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import '../../domain/exception/auth_exception.dart';
 import '../provider/auth_provider.dart';
 
@@ -102,158 +103,176 @@ class _UserPasswordChangePageState
       });
     });
 
+    final isDark = theme.brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Changer mon mot de passe'),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: cs.onSurface),
           onPressed: () => context.pop(),
         ),
-        backgroundColor: AppTheme.primary,
-        foregroundColor: Colors.white,
-        elevation: 0,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 32, 24, 40),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // ── Icon header ───────────────────────────────────────────
-              Center(
-                child: Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: AppTheme.iconBlueBg,
-                    borderRadius: BorderRadius.circular(28),
+      extendBodyBehindAppBar: true,
+      body: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: isDark
+              ? AppTheme.softBackgroundGradientDark
+              : AppTheme.softBackgroundGradient,
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // ── Icon header ───────────────────────────────────────────
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child:
+                        SoftIconBadge(icon: Icons.lock_reset_rounded, size: 48),
                   ),
-                  child: const Icon(
-                    Icons.lock_reset_rounded,
-                    color: AppTheme.iconBlue,
-                    size: 32,
+                  const SizedBox(height: 16),
+                  Text(
+                    'Changer mon mot de passe',
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface,
+                      letterSpacing: -0.3,
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 28),
+                  const SizedBox(height: 24),
 
-              // ── Field 1: current password ─────────────────────────────
-              TextFormField(
-                controller: _currentPwdController,
-                obscureText: _obscureCurrent,
-                decoration: InputDecoration(
-                  labelText: 'Mot de passe actuel',
-                  prefixIcon: const Icon(Icons.key_rounded),
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscureCurrent
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined),
-                    onPressed: () =>
-                        setState(() => _obscureCurrent = !_obscureCurrent),
+                  // ── Field 1: current password ─────────────────────────────
+                  const _FieldLabel('Mot de passe actuel'),
+                  const SizedBox(height: 6),
+                  TextFormField(
+                    controller: _currentPwdController,
+                    obscureText: _obscureCurrent,
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.key_rounded),
+                      suffixIcon: IconButton(
+                        icon: Icon(_obscureCurrent
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined),
+                        onPressed: () =>
+                            setState(() => _obscureCurrent = !_obscureCurrent),
+                      ),
+                      border: _outlinedBorder(cs.outlineVariant),
+                      enabledBorder: _outlinedBorder(cs.outlineVariant),
+                      focusedBorder: _outlinedBorder(cs.primary, width: 1.5),
+                    ),
+                    validator: (v) => (v == null || v.isEmpty)
+                        ? 'Mot de passe actuel requis'
+                        : null,
                   ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                validator: (v) =>
-                    (v == null || v.isEmpty) ? 'Mot de passe actuel requis' : null,
-              ),
-              const SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
-              // ── Field 2: new password ─────────────────────────────────
-              TextFormField(
-                controller: _newPwdController,
-                obscureText: _obscureNew,
-                decoration: InputDecoration(
-                  labelText: 'Nouveau mot de passe',
-                  prefixIcon: const Icon(Icons.lock_outline),
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscureNew
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined),
-                    onPressed: () =>
-                        setState(() => _obscureNew = !_obscureNew),
+                  // ── Field 2: new password ─────────────────────────────────
+                  const _FieldLabel('Nouveau mot de passe'),
+                  const SizedBox(height: 6),
+                  TextFormField(
+                    controller: _newPwdController,
+                    obscureText: _obscureNew,
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(_obscureNew
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined),
+                        onPressed: () =>
+                            setState(() => _obscureNew = !_obscureNew),
+                      ),
+                      border: _outlinedBorder(cs.outlineVariant),
+                      enabledBorder: _outlinedBorder(cs.outlineVariant),
+                      focusedBorder: _outlinedBorder(cs.primary, width: 1.5),
+                      helperText: 'Min. 8 caractères, dont au moins un chiffre',
+                    ),
+                    validator: _validateNewPassword,
                   ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  helperText: 'Min. 8 caractères, dont au moins un chiffre',
-                ),
-                validator: _validateNewPassword,
-              ),
-              const SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
-              // ── Field 3: confirm password ─────────────────────────────
-              TextFormField(
-                controller: _confirmPwdController,
-                obscureText: _obscureConfirm,
-                decoration: InputDecoration(
-                  labelText: 'Confirmer le nouveau mot de passe',
-                  prefixIcon: const Icon(Icons.lock_rounded),
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscureConfirm
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined),
-                    onPressed: () =>
-                        setState(() => _obscureConfirm = !_obscureConfirm),
+                  // ── Field 3: confirm password ─────────────────────────────
+                  const _FieldLabel('Confirmer le nouveau mot de passe'),
+                  const SizedBox(height: 6),
+                  TextFormField(
+                    controller: _confirmPwdController,
+                    obscureText: _obscureConfirm,
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.lock_rounded),
+                      suffixIcon: IconButton(
+                        icon: Icon(_obscureConfirm
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined),
+                        onPressed: () =>
+                            setState(() => _obscureConfirm = !_obscureConfirm),
+                      ),
+                      border: _outlinedBorder(cs.outlineVariant),
+                      enabledBorder: _outlinedBorder(cs.outlineVariant),
+                      focusedBorder: _outlinedBorder(cs.primary, width: 1.5),
+                    ),
+                    validator: _validateConfirmPassword,
                   ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                validator: _validateConfirmPassword,
-              ),
-              const SizedBox(height: 24),
+                  const SizedBox(height: 24),
 
-              // ── Error banner (INVALID_CREDENTIALS) ────────────────────
-              if (changeState.hasError) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: cs.errorContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.error_outline,
-                          color: cs.onErrorContainer, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _errorMessage(changeState.error),
-                          style: TextStyle(color: cs.onErrorContainer),
+                  // ── Error banner (INVALID_CREDENTIALS) ────────────────────
+                  if (changeState.hasError) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: cs.errorContainer,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.error_outline,
+                              color: cs.onErrorContainer, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _errorMessage(changeState.error),
+                              style: TextStyle(color: cs.onErrorContainer),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // ── Submit button ─────────────────────────────────────────
+                  SizedBox(
+                    height: 56,
+                    child: FilledButton(
+                      onPressed: changeState.isLoading ? null : _submit,
+                      style: FilledButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28),
                         ),
                       ),
-                    ],
+                      child: changeState.isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Modifier le mot de passe',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
-              ],
-
-              // ── Submit button ─────────────────────────────────────────
-              FilledButton(
-                onPressed: changeState.isLoading ? null : _submit,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppTheme.primary,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: changeState.isLoading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text('Modifier le mot de passe'),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -270,5 +289,28 @@ class _UserPasswordChangePageState
       };
     }
     return 'Erreur de connexion, réessayez';
+  }
+}
+
+// Même bordure fine que les champs d'AuthPage (label au-dessus du champ).
+OutlineInputBorder _outlinedBorder(Color color, {double width = 1}) =>
+    OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: BorderSide(color: color, width: width),
+    );
+
+class _FieldLabel extends StatelessWidget {
+  final String text;
+  const _FieldLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+    );
   }
 }

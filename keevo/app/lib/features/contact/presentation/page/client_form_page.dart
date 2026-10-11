@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import '../../domain/model/client_model.dart';
 import '../provider/contact_provider.dart';
 
@@ -101,6 +103,20 @@ class _ClientFormPageState extends ConsumerState<ClientFormPage>
         ));
         context.pop();
       }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Row(children: [
+            const Icon(Icons.error_rounded, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Expanded(child: Text(appErrorMessage(e))),
+          ]),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+        ));
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -117,65 +133,43 @@ class _ClientFormPageState extends ConsumerState<ClientFormPage>
         opacity: _fadeAnim,
         child: CustomScrollView(
           slivers: [
-            // ── Gradient AppBar ──────────────────────────────────────
+            // En-tête épuré — fond neutre, sans dégradé ni cercle décoratif.
             SliverAppBar(
               expandedHeight: 140,
               pinned: true,
               elevation: 0,
-              backgroundColor: primary,
-              iconTheme: const IconThemeData(color: Colors.white),
+              scrolledUnderElevation: 0,
+              backgroundColor: theme.colorScheme.surface,
+              iconTheme: IconThemeData(color: theme.colorScheme.onSurface),
               flexibleSpace: FlexibleSpaceBar(
-                background: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        primary,
-                        primary.withOpacity(0.8),
-                        theme.colorScheme.secondary.withOpacity(0.6),
+                background: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(72, 0, 20, 20),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _isEdit ? 'Modifier le client' : 'Nouveau client',
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            color: theme.colorScheme.onSurface,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _isEdit
+                            ? 'Mettez à jour les informations'
+                            : 'Renseignez les coordonnées',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  child: Stack(children: [
-                    Positioned(
-                      top: -30, right: -20,
-                      child: Container(
-                        width: 120, height: 120,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withOpacity(0.08),
-                        ),
-                      ),
-                    ),
-                    SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(72, 0, 20, 20),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _isEdit ? '✏️ Modifier le client' : '👤 Nouveau client',
-                              style: theme.textTheme.headlineSmall?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _isEdit
-                                ? 'Mettez à jour les informations'
-                                : 'Renseignez les coordonnées',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: Colors.white.withOpacity(0.9),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ]),
                 ),
               ),
             ),
@@ -188,26 +182,24 @@ class _ClientFormPageState extends ConsumerState<ClientFormPage>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     // Identité
-                    _SectionHeader(icon: Icons.person_rounded, label: 'Identité', color: primary),
+                    _SectionHeader(icon: Icons.person_outline_rounded, label: 'Identité', color: primary),
                     const SizedBox(height: 12),
                     _ModernField(
                       controller: _name,
                       label: 'Nom complet *',
                       icon: Icons.badge_outlined,
                       textCapitalization: TextCapitalization.words,
-                      color: primary,
                     ),
                     const SizedBox(height: 14),
 
                     // Contact
-                    _SectionHeader(icon: Icons.contact_phone_rounded, label: 'Contact', color: primary),
+                    _SectionHeader(icon: Icons.contact_phone_outlined, label: 'Contact', color: primary),
                     const SizedBox(height: 12),
                     _ModernField(
                       controller: _phone,
                       label: 'Téléphone *',
-                      icon: Icons.phone_rounded,
+                      icon: Icons.phone_outlined,
                       keyboardType: TextInputType.phone,
-                      color: primary,
                     ),
                     const SizedBox(height: 12),
                     _ModernField(
@@ -215,7 +207,6 @@ class _ClientFormPageState extends ConsumerState<ClientFormPage>
                       label: 'Email (optionnel)',
                       icon: Icons.email_outlined,
                       keyboardType: TextInputType.emailAddress,
-                      color: primary,
                     ),
                     const SizedBox(height: 12),
                     const SizedBox(height: 14),
@@ -228,7 +219,6 @@ class _ClientFormPageState extends ConsumerState<ClientFormPage>
                       label: 'Notes internes (optionnel)',
                       icon: Icons.sticky_note_2_outlined,
                       maxLines: 4,
-                      color: primary,
                     ),
                     const SizedBox(height: 28),
 
@@ -258,14 +248,7 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Row(children: [
-      Container(
-        padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(icon, size: 16, color: color),
-      ),
+      SoftIconBadge(icon: icon, size: 28),
       const SizedBox(width: 10),
       Text(
         label,
@@ -277,7 +260,7 @@ class _SectionHeader extends StatelessWidget {
       ),
       const SizedBox(width: 12),
       Expanded(
-        child: Divider(color: color.withOpacity(0.2)),
+        child: Divider(color: theme.colorScheme.outlineVariant),
       ),
     ]);
   }
@@ -292,13 +275,11 @@ class _ModernField extends StatelessWidget {
   final TextInputType? keyboardType;
   final TextCapitalization textCapitalization;
   final int maxLines;
-  final Color color;
 
   const _ModernField({
     required this.controller,
     required this.label,
     required this.icon,
-    required this.color,
     this.keyboardType,
     this.textCapitalization = TextCapitalization.none,
     this.maxLines = 1,
@@ -307,43 +288,17 @@ class _ModernField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.shadow.withOpacity(0.06),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: TextFormField(
-        controller: controller,
-        keyboardType: keyboardType,
-        textCapitalization: textCapitalization,
-        maxLines: maxLines,
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: TextStyle(color: theme.colorScheme.onSurfaceVariant),
-          prefixIcon: Icon(icon, color: color.withOpacity(0.7)),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide(color: theme.colorScheme.outline.withOpacity(0.3)),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide(color: theme.colorScheme.outline.withOpacity(0.2)),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide(color: color, width: 2),
-          ),
-          filled: true,
-          fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.15),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        ),
+    // Hérite du style de champ global (AppTheme) : plus d'ombre ni de
+    // bordures redéfinies localement.
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      textCapitalization: textCapitalization,
+      maxLines: maxLines,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+        prefixIcon: Icon(icon, size: 20),
       ),
     );
   }
@@ -362,29 +317,27 @@ class _SaveButton extends StatelessWidget {
     final theme = Theme.of(context);
     final primary = theme.colorScheme.primary;
 
+    // Couleur pleine + ombre douce plutôt qu'un dégradé.
     return Container(
+      height: 56,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [primary, primary.withOpacity(0.8)],
-        ),
-        borderRadius: BorderRadius.circular(18),
+        color: primary,
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: primary.withOpacity(0.4),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
+            color: primary.withValues(alpha: 0.25),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(16),
           onTap: saving ? null : onPressed,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 18),
-            child: Center(
-              child: saving
+          child: Center(
+            child: saving
                   ? const SizedBox(
                       width: 24, height: 24,
                       child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
@@ -392,7 +345,7 @@ class _SaveButton extends StatelessWidget {
                   : Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.save_rounded, color: Colors.white),
+                        const Icon(Icons.save_outlined, color: Colors.white),
                         const SizedBox(width: 10),
                         Text(
                           isEdit ? 'Enregistrer les modifications' : 'Ajouter le client',
@@ -404,7 +357,6 @@ class _SaveButton extends StatelessWidget {
                         ),
                       ],
                     ),
-            ),
           ),
         ),
       ),

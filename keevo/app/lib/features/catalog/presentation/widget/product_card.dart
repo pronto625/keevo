@@ -1,4 +1,6 @@
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -30,48 +32,33 @@ class ProductCard extends ConsumerWidget {
     final actions = ref.read(productActionsProvider);
     final stockState = ref.watch(stockNotifierProvider(product.id));
     final activeStoreId = ref.watch(activeStoreIdProvider);
-    final isLowStock = stockState.levels.any((l) => l.isLow);
-
     // Compute visible stock: for active store only, or total across all stores.
     final visibleLevels = activeStoreId == null
         ? stockState.levels
         : stockState.levels.where((l) => l.storeId == activeStoreId).toList();
+    // Same scope as the displayed quantity.
+    final isLowStock = visibleLevels.any((l) => l.isLow);
     final totalStock = visibleLevels.fold<int>(0, (sum, l) => sum + l.quantity);
     final hasStockData = stockState.levels.isNotEmpty;
 
+    final cs = theme.colorScheme;
+    final stockColor = totalStock == 0
+        ? AppTheme.errorColor
+        : isLowStock
+            ? AppTheme.warning
+            : Colors.teal;
+
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: AppTheme.softCardDecoration(cs),
       child: Material(
-        elevation: 0,
-        borderRadius: BorderRadius.circular(20),
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
         child: InkWell(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(AppTheme.radiusL),
           onTap: () => context.push('/products/${product.id}/edit', extra: product),
           onLongPress: () => _showContextMenu(context, ref, actions),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  theme.colorScheme.surface,
-                  theme.colorScheme.surfaceVariant.withOpacity(0.3),
-                ],
-              ),
-              border: Border.all(
-                color: theme.colorScheme.outline.withOpacity(0.1),
-                width: 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: theme.colorScheme.shadow.withOpacity(0.08),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Padding(
+          child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
@@ -99,29 +86,6 @@ class ProductCard extends ConsumerWidget {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            // Badge de variantes moderne
-                            if (product.name.toLowerCase().contains('robe') || 
-                                product.name.toLowerCase().contains('shirt') ||
-                                product.name.toLowerCase().contains('pantalon'))
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      theme.colorScheme.primaryContainer,
-                                      theme.colorScheme.secondaryContainer,
-                                    ],
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  '3 variantes',
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: theme.colorScheme.onPrimaryContainer,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
                           ],
                         ),
                         const SizedBox(height: 4),
@@ -133,15 +97,20 @@ class ProductCard extends ConsumerWidget {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        // Ligne prix et statut
-                        Row(
+                        // Ligne prix et statut — Wrap : brouillon + stock bas
+                        // ne tiennent pas sur une ligne à 360dp.
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            Flexible(
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 160),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                 decoration: BoxDecoration(
-                                  color: theme.colorScheme.primary.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(16),
+                                  color: AppTheme.softTint(theme.brightness),
+                                  borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
                                   '${product.price} XAF',
@@ -153,18 +122,13 @@ class ProductCard extends ConsumerWidget {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 8),
                             // Stock badge
                             if (hasStockData)
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                 decoration: BoxDecoration(
-                                  color: totalStock == 0
-                                      ? AppTheme.errorColor.withOpacity(0.1)
-                                      : isLowStock
-                                          ? AppTheme.warning.withOpacity(0.1)
-                                          : Colors.teal.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(16),
+                                  color: stockColor.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -172,36 +136,27 @@ class ProductCard extends ConsumerWidget {
                                     Icon(
                                       Icons.inventory_2_outlined,
                                       size: 12,
-                                      color: totalStock == 0
-                                          ? AppTheme.errorColor
-                                          : isLowStock
-                                              ? AppTheme.warning
-                                              : Colors.teal,
+                                      color: stockColor,
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
                                       '$totalStock',
                                       style: theme.textTheme.labelSmall?.copyWith(
-                                        color: totalStock == 0
-                                            ? AppTheme.errorColor
-                                            : isLowStock
-                                                ? AppTheme.warning
-                                                : Colors.teal,
+                                        color: stockColor,
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                            const Spacer(),
                             // Indicateur d'état
                             // Badge Archivé
                             if (product.archived)
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: AppTheme.warning.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12),
+                                  color: AppTheme.warning.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -222,21 +177,21 @@ class ProductCard extends ConsumerWidget {
                                   ],
                                 ),
                               ),
-                            // Badge 🔶 Brouillon (AC6 — DRAFT status)
+                            // Badge Brouillon (AC6 — DRAFT status)
                             if (product.status == ProductStatus.draft) ...[
-                              const SizedBox(width: 6),
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
                                   color: AppTheme.warning
-                                      .withOpacity(0.18),
-                                  borderRadius: BorderRadius.circular(12),
+                                      .withValues(alpha: 0.18),
+                                  borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Text('🔶', style: TextStyle(fontSize: 10)),
+                                    const Icon(Icons.edit_note_rounded,
+                                        size: 12, color: Color(0xFFF08C00)),
                                     const SizedBox(width: 4),
                                     Text(
                                       'Brouillon',
@@ -252,12 +207,11 @@ class ProductCard extends ConsumerWidget {
                             ],
                             if (isLowStock) ...
                               [
-                                const SizedBox(width: 6),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   decoration: BoxDecoration(
-                                    color: AppTheme.errorColor.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(12),
+                                    color: AppTheme.errorColor.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -284,23 +238,12 @@ class ProductCard extends ConsumerWidget {
                       ],
                     ),
                   ),
-                  // Indicateur d'interaction moderne
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primaryContainer.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.touch_app_rounded,
-                      size: 20,
-                      color: theme.colorScheme.primary,
-                    ),
-                  ),
+                  // Indicateur d'interaction
+                  const SizedBox(width: 8),
+                  const SoftIconBadge(icon: Icons.touch_app_outlined, size: 36),
                 ],
               ),
             ),
-          ),
         ),
       ),
     );
@@ -308,61 +251,17 @@ class ProductCard extends ConsumerWidget {
 
   Widget _buildModernAvatar(ThemeData theme) {
     if (product.photoUrl != null && product.photoUrl!.isNotEmpty) {
-      return Container(
+      return SizedBox(
         width: 60,
         height: 60,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: theme.colorScheme.primary.withOpacity(0.2),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppTheme.radiusL),
           child: _buildProductImage(product.photoUrl!, theme),
         ),
       );
     }
-    
-    final initials = product.name.isNotEmpty
-        ? product.name.characters.first.toUpperCase()
-        : '?';
-    
-    return Container(
-      width: 60,
-      height: 60,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            theme.colorScheme.primary,
-            theme.colorScheme.primary.withOpacity(0.7),
-          ],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.primary.withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Center(
-        child: Text(
-          initials,
-          style: theme.textTheme.headlineSmall?.copyWith(
-            color: theme.colorScheme.onPrimary,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-    );
+
+    return _buildInitials(theme);
   }
 
   void _showContextMenu(
@@ -373,17 +272,14 @@ class ProductCard extends ConsumerWidget {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
+      // La feuille dessine sa propre poignée ; sans ceci celle du thème
+      // flotterait au-dessus, sur le fond transparent.
+      showDragHandle: false,
       builder: (_) => Container(
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          boxShadow: [
-            BoxShadow(
-              color: Theme.of(context).colorScheme.shadow.withOpacity(0.1),
-              blurRadius: 20,
-              offset: const Offset(0, -4),
-            ),
-          ],
+          borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(AppTheme.radiusXL)),
         ),
         child: SafeArea(
           bottom: false,
@@ -396,7 +292,7 @@ class ProductCard extends ConsumerWidget {
                 height: 4,
                 margin: const EdgeInsets.only(top: 12, bottom: 20),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                  color: Theme.of(context).colorScheme.outlineVariant,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -414,7 +310,8 @@ class ProductCard extends ConsumerWidget {
                           Text(
                             product.name,
                             style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.2,
                             ),
                           ),
                           Text(
@@ -436,7 +333,7 @@ class ProductCard extends ConsumerWidget {
                   ref.read(currentUserRoleProvider) == 'OWNER')
                 _buildMenuOption(
                   context,
-                  icon: Icons.check_circle_rounded,
+                  icon: Icons.check_circle_outline_rounded,
                   title: 'Valider ce produit',
                   subtitle: 'Promouvoir de Brouillon → Actif',
                   color: AppTheme.success,
@@ -448,7 +345,7 @@ class ProductCard extends ConsumerWidget {
               // Options
               _buildMenuOption(
                 context,
-                icon: Icons.edit_rounded,
+                icon: Icons.edit_outlined,
                 title: 'Modifier',
                 subtitle: 'Éditer les informations',
                 color: Theme.of(context).colorScheme.primary,
@@ -475,7 +372,7 @@ class ProductCard extends ConsumerWidget {
               if (!product.archived)
                 _buildMenuOption(
                   context,
-                  icon: Icons.archive_rounded,
+                  icon: Icons.archive_outlined,
                   title: 'Archiver',
                   subtitle: 'Masquer du catalogue',
                   color: AppTheme.warning,
@@ -487,7 +384,7 @@ class ProductCard extends ConsumerWidget {
               else
                 _buildMenuOption(
                   context,
-                  icon: Icons.unarchive_rounded,
+                  icon: Icons.unarchive_outlined,
                   title: 'Désarchiver',
                   subtitle: 'Remettre dans le catalogue',
                   color: AppTheme.success,
@@ -518,18 +415,7 @@ class ProductCard extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         child: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                icon,
-                color: color,
-                size: 24,
-              ),
-            ),
+            SoftIconBadge(icon: icon, color: color, size: 44),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
@@ -538,7 +424,7 @@ class ProductCard extends ConsumerWidget {
                   Text(
                     title,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                   Text(
@@ -559,7 +445,9 @@ class ProductCard extends ConsumerWidget {
   void _confirmPromote(BuildContext context, WidgetRef ref) {
     final actions = ref.read(productActionsProvider);
     final storeId = ref.read(activeStoreIdProvider);
-    final stockController = TextEditingController();
+    // Plain value instead of a controller: the dialog still renders its
+    // TextField during the exit animation, after showDialog has completed.
+    var stockText = '';
     showDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -569,7 +457,7 @@ class ProductCard extends ConsumerWidget {
           ),
           title: const Row(
             children: [
-              Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 28),
+              Icon(Icons.check_circle_outline_rounded, color: AppTheme.success, size: 28),
               SizedBox(width: 12),
               Expanded(child: Text('Valider ce produit ?')),
             ],
@@ -585,7 +473,7 @@ class ProductCard extends ConsumerWidget {
               if (storeId != null) ...[
                 const SizedBox(height: 16),
                 TextField(
-                  controller: stockController,
+                  onChanged: (v) => stockText = v,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
                     labelText: 'Stock initial',
@@ -593,7 +481,6 @@ class ProductCard extends ConsumerWidget {
                     suffixText: 'unités',
                     helperText:
                         'Entrez la quantité disponible (doit couvrir les ventes en attente)',
-                    border: OutlineInputBorder(),
                   ),
                 ),
               ],
@@ -611,7 +498,7 @@ class ProductCard extends ConsumerWidget {
             ),
             FilledButton(
               onPressed: () async {
-                final initialStock = int.tryParse(stockController.text) ?? 0;
+                final initialStock = int.tryParse(stockText.trim()) ?? 0;
                 // Capture all provider reads BEFORE async gap —
                 // the ProductCard will be disposed once productListProvider
                 // is invalidated (draft removed from list).
@@ -619,6 +506,9 @@ class ProductCard extends ConsumerWidget {
                 final localSaleDs = ref.read(localSaleDataSourceProvider);
                 final actorIdFuture = ref.read(currentUserIdProvider.future);
                 final container = ProviderScope.containerOf(context);
+                // The card is disposed once the draft leaves the list:
+                // feedback must not depend on its context.
+                final messenger = ScaffoldMessenger.of(context);
                 Navigator.pop(ctx);
                 try {
                   final originalId = product.id;
@@ -647,43 +537,43 @@ class ProductCard extends ConsumerWidget {
                     }
                   }
                   container.read(showDraftsOnlyProvider.notifier).state = false;
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: const Row(
-                          children: [
-                            Icon(Icons.check_circle, color: Colors.white),
-                            SizedBox(width: 8),
-                            Text('Produit validé avec succès'),
-                          ],
-                        ),
-                        backgroundColor: AppTheme.success,
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: const Row(
+                        children: [
+                          Icon(Icons.check_circle, color: Colors.white),
+                          SizedBox(width: 8),
+                          Text('Produit validé avec succès'),
+                        ],
                       ),
-                    );
-                  }
-                } on ProductException catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Row(
-                          children: [
-                            const Icon(Icons.error, color: Colors.white),
-                            const SizedBox(width: 8),
-                            Expanded(child: Text(e.message)),
-                          ],
-                        ),
-                        backgroundColor: AppTheme.errorColor,
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                      backgroundColor: AppTheme.success,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    );
-                  }
+                    ),
+                  );
+                } catch (e) {
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Row(
+                        children: [
+                          const Icon(Icons.error, color: Colors.white),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(e is ProductException
+                                ? e.message
+                                : appErrorMessage(e)),
+                          ),
+                        ],
+                      ),
+                      backgroundColor: AppTheme.errorColor,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  );
                 }
               },
               style: FilledButton.styleFrom(
@@ -697,7 +587,7 @@ class ProductCard extends ConsumerWidget {
           ],
         ),
       ),
-    ).whenComplete(() => stockController.dispose());
+    );
   }
 
   void _confirmArchive(BuildContext context, ProductActions actions) {
@@ -710,7 +600,7 @@ class ProductCard extends ConsumerWidget {
         title: Row(
           children: [
             Icon(
-              Icons.archive_rounded,
+              Icons.archive_outlined,
               color: AppTheme.warning,
               size: 28,
             ),
@@ -734,46 +624,49 @@ class ProductCard extends ConsumerWidget {
           ),
           FilledButton(
             onPressed: () async {
+              // Captured before the await: the card may leave the list once
+              // the product lists are invalidated.
+              final messenger = ScaffoldMessenger.of(context);
               Navigator.pop(ctx);
               try {
                 await actions.archive(product.id);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Row(
-                        children: [
-                          Icon(Icons.check_circle, color: Colors.white),
-                          const SizedBox(width: 8),
-                          const Text('Produit archivé avec succès'),
-                        ],
-                      ),
-                      backgroundColor: AppTheme.success,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.white),
+                        const SizedBox(width: 8),
+                        const Text('Produit archivé avec succès'),
+                      ],
                     ),
-                  );
-                }
-              } on ProductException catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Row(
-                        children: [
-                          Icon(Icons.error, color: Colors.white),
-                          const SizedBox(width: 8),
-                          Expanded(child: Text(e.message)),
-                        ],
-                      ),
-                      backgroundColor: AppTheme.errorColor,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                    backgroundColor: AppTheme.success,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                  );
-                }
+                  ),
+                );
+              } catch (e) {
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Row(
+                      children: [
+                        Icon(Icons.error, color: Colors.white),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(e is ProductException
+                              ? e.message
+                              : appErrorMessage(e)),
+                        ),
+                      ],
+                    ),
+                    backgroundColor: AppTheme.errorColor,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                );
               }
             },
             style: FilledButton.styleFrom(
@@ -799,7 +692,7 @@ class ProductCard extends ConsumerWidget {
         title: Row(
           children: [
             Icon(
-              Icons.unarchive_rounded,
+              Icons.unarchive_outlined,
               color: AppTheme.success,
               size: 28,
             ),
@@ -823,46 +716,49 @@ class ProductCard extends ConsumerWidget {
           ),
           FilledButton(
             onPressed: () async {
+              // Captured before the await: the card may leave the list once
+              // the product lists are invalidated.
+              final messenger = ScaffoldMessenger.of(context);
               Navigator.pop(ctx);
               try {
                 await actions.unarchive(product.id);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Row(
-                        children: [
-                          Icon(Icons.check_circle, color: Colors.white),
-                          const SizedBox(width: 8),
-                          const Text('Produit désarchivé avec succès'),
-                        ],
-                      ),
-                      backgroundColor: AppTheme.success,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.white),
+                        const SizedBox(width: 8),
+                        const Text('Produit désarchivé avec succès'),
+                      ],
                     ),
-                  );
-                }
-              } on ProductException catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Row(
-                        children: [
-                          Icon(Icons.error, color: Colors.white),
-                          const SizedBox(width: 8),
-                          Expanded(child: Text(e.message)),
-                        ],
-                      ),
-                      backgroundColor: AppTheme.errorColor,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                    backgroundColor: AppTheme.success,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                  );
-                }
+                  ),
+                );
+              } catch (e) {
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Row(
+                      children: [
+                        Icon(Icons.error, color: Colors.white),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(e is ProductException
+                              ? e.message
+                              : appErrorMessage(e)),
+                        ),
+                      ],
+                    ),
+                    backgroundColor: AppTheme.errorColor,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                );
               }
             },
             style: FilledButton.styleFrom(
@@ -894,26 +790,21 @@ class ProductCard extends ConsumerWidget {
     final initials = product.name.isNotEmpty
         ? product.name.characters.first.toUpperCase()
         : '?';
+    // Pastille teintée plutôt qu'un dégradé saturé — même rendu que les
+    // badges d'icône des écrans déjà repensés.
     return Container(
       width: 60,
       height: 60,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            theme.colorScheme.primary,
-            theme.colorScheme.primary.withOpacity(0.7),
-          ],
-        ),
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        color: AppTheme.softTint(theme.brightness),
       ),
       child: Center(
         child: Text(
           initials,
           style: theme.textTheme.headlineSmall?.copyWith(
-            color: theme.colorScheme.onPrimary,
-            fontWeight: FontWeight.bold,
+            color: theme.colorScheme.primary,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ),

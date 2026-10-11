@@ -3,7 +3,36 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/pos/domain/model/cart_item.dart';
 import 'package:keevo/features/pos/presentation/page/checkout_page.dart';
+import 'package:keevo/features/pos/domain/model/payment_mode_enum.dart';
 import 'package:keevo/features/pos/presentation/provider/cart_provider.dart';
+import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
+import 'package:keevo/features/pos/presentation/provider/record_sale_notifier.dart';
+import 'package:keevo/features/stores/presentation/provider/active_store_provider.dart';
+
+class _FixedStore extends ActiveStoreNotifier {
+  @override
+  String? build() => 'store-1';
+}
+
+class _CapturingRecordSale extends RecordSaleNotifier {
+  static PaymentModeEnum? mode;
+  static String? mobileRef;
+  static bool called = false;
+
+  @override
+  Future<void> submit({
+    required List<CartItem> cart,
+    required PaymentModeEnum mode,
+    required String storeId,
+    required String employeeId,
+    String? clientId,
+    String? mobileRef,
+  }) async {
+    called = true;
+    _CapturingRecordSale.mode = mode;
+    _CapturingRecordSale.mobileRef = mobileRef;
+  }
+}
 
 CartItem _item({
   String id = 'p1',
@@ -26,8 +55,10 @@ CartItem _item({
 Widget _buildApp({
   required List<CartItem> items,
   int discount = 0,
+  List<Override> overrides = const [],
 }) {
   return ProviderScope(
+    overrides: overrides,
     child: MaterialApp(
       home: Consumer(builder: (context, ref, _) {
         // Populate cart on first build
@@ -125,7 +156,7 @@ void main() {
       expect(inkWell.onTap, isNotNull);
     });
 
-    // ── AC1: Draft cart → "🔶 Vente brouillon" button label ────────────────
+    // ── AC1: Draft cart → "Vente brouillon" button label ────────────────
 
     testWidgets('shows Vente brouillon label when cart has a draft item',
         (tester) async {
@@ -134,7 +165,7 @@ void main() {
       ]));
       await tester.pumpAndSettle();
 
-      expect(find.text('🔶 Vente brouillon'), findsOneWidget);
+      expect(find.text('Vente brouillon'), findsOneWidget);
       expect(find.text('Valider la vente'), findsNothing);
     });
 
@@ -146,7 +177,33 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Valider la vente'), findsOneWidget);
-      expect(find.text('🔶 Vente brouillon'), findsNothing);
+      expect(find.text('Vente brouillon'), findsNothing);
+    });
+      testWidgets('Mobile Money ref typed then Espèces chosen: no ref is sent',
+        (tester) async {
+      _CapturingRecordSale.called = false;
+      await tester.pumpWidget(_buildApp(
+        items: [_item(price: 10000, qty: 1)],
+        overrides: [
+          activeStoreIdProvider.overrideWith(_FixedStore.new),
+          activeEmployeeIdProvider.overrideWith((ref) async => 'emp-1'),
+          recordSaleNotifierProvider.overrideWith(_CapturingRecordSale.new),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Mobile Money'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.widgetWithText(TextField, 'Référence Mobile Money'), 'REF-123');
+      await tester.tap(find.text('Espèces'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Valider la vente'));
+      await tester.pumpAndSettle();
+
+      expect(_CapturingRecordSale.called, isTrue);
+      expect(_CapturingRecordSale.mode, PaymentModeEnum.cash);
+      expect(_CapturingRecordSale.mobileRef, isNull);
     });
   });
 }

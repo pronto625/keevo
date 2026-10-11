@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:keevo/features/profitability/domain/model/product_profitability_model.dart';
@@ -54,6 +55,39 @@ void main() {
   }
 
   group('ProductProfitabilityListPage', () {
+    // The detail page reads the store filter from the list: tapping a row
+    // must carry the list's store, or the detail silently covers every store.
+    testWidgets('row tap carries the list store filter to the detail',
+        (tester) async {
+      final mockRepo = MockProfitabilityRepository();
+      when(() => mockRepo.getProductProfitability(params: any(named: 'params')))
+          .thenAnswer((_) async => [makeEntry()]);
+      final container = ProviderContainer(overrides: [
+        profitabilityRepositoryProvider.overrideWithValue(mockRepo),
+      ]);
+      addTearDown(container.dispose);
+      final router = GoRouter(routes: [
+        GoRoute(
+            path: '/',
+            builder: (_, __) =>
+                const ProductProfitabilityListPage(storeId: 's1')),
+        GoRoute(
+            path: '/reports/rentabilite/:id',
+            builder: (_, __) => const Scaffold(body: Text('detail'))),
+      ]);
+
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(routerConfig: router),
+      ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Café Arabica'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('detail'), findsOneWidget);
+      expect(container.read(profitabilityStoreFilterProvider), 's1');
+    });
+
     testWidgets('rendersProductRows_withMarginColorBadge', (tester) async {
       final mockRepo = MockProfitabilityRepository();
       when(() => mockRepo.getProductProfitability(params: any(named: 'params')))

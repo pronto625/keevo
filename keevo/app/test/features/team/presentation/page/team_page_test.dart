@@ -128,5 +128,42 @@ void main() {
       expect(find.text('Ajouter'), findsOneWidget);
       expect(find.byIcon(Icons.person_add_rounded), findsOneWidget);
     });
+  
+    testWidgets('empty state copy matches the "Ajouter" button',
+        (tester) async {
+      await tester.pumpWidget(buildPage(employees: []));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Appuyez sur +'), findsNothing);
+      expect(find.textContaining('Ajouter'), findsNWidgets(2));
+    });
+
+    testWidgets('pushed from Settings: header does not sit under back button',
+        (tester) async {
+      when(() => mockEmpRepo.listEmployees()).thenAnswer((_) async => []);
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          employeeRepositoryProvider.overrideWithValue(mockEmpRepo),
+          storeRepositoryProvider.overrideWithValue(mockStoreRepo),
+        ],
+        child: MaterialApp.router(
+          routerConfig: GoRouter(routes: [
+            GoRoute(
+                path: '/',
+                builder: (_, __) => const Scaffold(),
+                routes: [
+                  GoRoute(path: 'team', builder: (_, __) => const TeamPage()),
+                ]),
+          ], initialLocation: '/team'),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      final back = tester.getRect(find.byType(BackButton));
+      for (final label in ['Paramètres', 'Équipe']) {
+        final text = tester.getRect(find.text(label));
+        expect(back.overlaps(text), isFalse, reason: '$label overlaps back');
+      }
+    });
   });
 }

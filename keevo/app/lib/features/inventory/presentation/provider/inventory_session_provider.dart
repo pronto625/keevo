@@ -87,9 +87,16 @@ class CreateSessionNotifier extends _$CreateSessionNotifier {
     List<String>? categoryIds,
   }) async {
     state = const AsyncLoading();
-    final session = await ref
-        .read(createInventorySessionUseCaseProvider)
-        .execute(storeId: storeId, scope: scope, categoryIds: categoryIds);
+    final InventorySessionModel session;
+    try {
+      session = await ref
+          .read(createInventorySessionUseCaseProvider)
+          .execute(storeId: storeId, scope: scope, categoryIds: categoryIds);
+    } catch (e, st) {
+      // Leaving AsyncLoading would keep the start button disabled.
+      state = AsyncError(e, st);
+      rethrow;
+    }
     state = AsyncData(session);
     // Invalidate active session and history
     ref.invalidate(activeSessionProvider);
@@ -103,13 +110,18 @@ class CancelSessionNotifier extends _$CancelSessionNotifier {
   @override
   FutureOr<void> build() => null;
 
+  /// Rethrows on failure so the caller can tell the user.
   Future<void> cancel(String sessionId) async {
+    // Only read from a dialog callback: keep alive across the await.
+    final link = ref.keepAlive();
     state = const AsyncLoading();
     try {
       await ref.read(cancelInventorySessionUseCaseProvider).execute(sessionId);
     } catch (e, st) {
       state = AsyncError(e, st);
-      return;
+      rethrow;
+    } finally {
+      link.close();
     }
     state = const AsyncData(null);
     Future.microtask(() {

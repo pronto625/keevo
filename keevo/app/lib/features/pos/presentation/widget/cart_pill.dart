@@ -23,6 +23,7 @@ class CartPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 250),
       transitionBuilder: (child, animation) => SlideTransition(
@@ -40,14 +41,21 @@ class CartPill extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Container(
                   width: double.infinity,
+                  // Barre sombre conservée (contraste maximal au-dessus de la
+                  // grille) ; ombre adoucie. En mode sombre la barre a la
+                  // couleur du fond : un liseré fin garde ses bords visibles.
                   decoration: BoxDecoration(
                     color: AppTheme.darkSurface,
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusL),
+                    border: isDark
+                        ? Border.all(
+                            color: Colors.white.withValues(alpha: 0.12))
+                        : null,
                     boxShadow: [
                       BoxShadow(
-                        color: AppTheme.darkSurface.withValues(alpha: 0.3),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
+                        color: AppTheme.darkSurface.withValues(alpha: 0.25),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
                       ),
                     ],
                   ),
@@ -55,7 +63,7 @@ class CartPill extends StatelessWidget {
                     color: Colors.transparent,
                     child: InkWell(
                       onTap: onEncaisser,
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusL),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                             vertical: 12, horizontal: 14),

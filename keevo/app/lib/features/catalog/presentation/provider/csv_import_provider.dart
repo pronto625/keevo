@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -37,7 +38,9 @@ class CsvImportFilePicked extends CsvImportState {
 }
 
 class CsvImportLoading extends CsvImportState {
-  const CsvImportLoading();
+  /// File being imported — keeps the mapping step on screen.
+  final CsvImportFilePicked? picked;
+  const CsvImportLoading({this.picked});
 }
 
 class CsvImportSuccess extends CsvImportState {
@@ -47,7 +50,96 @@ class CsvImportSuccess extends CsvImportState {
 
 class CsvImportError extends CsvImportState {
   final String message;
-  const CsvImportError(this.message);
+
+  /// Set when the import itself failed: the user can fix and retry.
+  final CsvImportFilePicked? picked;
+  const CsvImportError(this.message, {this.picked});
+}
+
+// ── CSV parsing (header detection + preview) ─────────────────────────────────
+//
+// Mirrors the backend parser (Commons CSV DEFAULT: UTF-8, comma, RFC 4180
+// quotes) so the headers offered in the mapping match the ones it reads.
+
+String _decodeCsv(List<int> bytes, int maxBytes) {
+  var start = 0;
+  if (bytes.length >= 3 &&
+      bytes[0] == 0xEF &&
+      bytes[1] == 0xBB &&
+      bytes[2] == 0xBF) {
+    start = 3;
+  }
+  final end = bytes.length.clamp(start, start + maxBytes);
+  // allowMalformed: the slice may cut a multi-byte character in half.
+  return utf8.decode(bytes.sublist(start, end), allowMalformed: true);
+}
+
+/// Splits one CSV record, honouring double quotes and escaped `""`.
+List<String> splitCsvLine(String line) {
+  final fields = <String>[];
+  final buf = StringBuffer();
+  var inQuotes = false;
+  for (var i = 0; i < line.length; i++) {
+    final c = line[i];
+    if (inQuotes) {
+      if (c == '"') {
+        if (i + 1 < line.length && line[i + 1] == '"') {
+          buf.write('"');
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        buf.write(c);
+      }
+    } else if (c == '"') {
+      inQuotes = true;
+    } else if (c == ',') {
+      fields.add(buf.toString().trim());
+      buf.clear();
+    } else {
+      buf.write(c);
+    }
+  }
+  fields.add(buf.toString().trim());
+  return fields;
+}
+
+List<String> _csvLines(List<int> bytes, int maxBytes) => _decodeCsv(
+        bytes, maxBytes)
+    .split(RegExp(r'\r?\n'))
+    .where((l) => l.trim().isNotEmpty)
+    .toList();
+
+/// Indexes of the header columns offered in the mapping: blank names are
+/// dropped and a repeated name keeps its first column only (the mapping
+/// dropdown needs unique values).
+List<int> _keptColumns(List<String> headerFields) {
+  final seen = <String>{};
+  return [
+    for (var i = 0; i < headerFields.length; i++)
+      if (headerFields[i].isNotEmpty && seen.add(headerFields[i])) i,
+  ];
+}
+
+/// Column headers from the first CSV line.
+List<String> csvHeadersFromBytes(List<int> bytes) {
+  final lines = _csvLines(bytes, 4096);
+  if (lines.isEmpty) return const [];
+  final fields = splitCsvLine(lines.first);
+  return [for (final i in _keptColumns(fields)) fields[i]];
+}
+
+/// Up to [maxRows] data rows following the header line, with the same
+/// columns as [csvHeadersFromBytes] so each cell sits under its header.
+List<List<String>> csvPreviewRows(List<int> bytes, {int maxRows = 5}) {
+  final lines = _csvLines(bytes, 8192);
+  if (lines.isEmpty) return const [];
+  final kept = _keptColumns(splitCsvLine(lines.first));
+  return lines.skip(1).take(maxRows).map((line) {
+    final cells = splitCsvLine(line);
+    return [for (final i in kept) i < cells.length ? cells[i] : ''];
+  }).toList();
 }
 
 // ── Notifier ──────────────────────────────────────────────────────────────────
@@ -96,10 +188,14 @@ class CsvImportNotifier extends _$CsvImportNotifier {
 
   /// Submit CSV bytes + column mapping to backend.
   Future<void> runImport({required Map<String, String> mapping}) async {
-    final current = state;
-    if (current is! CsvImportFilePicked) return;
+    final current = switch (state) {
+      final CsvImportFilePicked picked => picked,
+      CsvImportError(:final picked?) => picked,
+      _ => null,
+    };
+    if (current == null) return;
 
-    state = const CsvImportLoading();
+    state = CsvImportLoading(picked: current);
     try {
       final result = await _repo.importCsv(
         csvBytes: current.bytes,
@@ -109,7 +205,7 @@ class CsvImportNotifier extends _$CsvImportNotifier {
       );
       state = CsvImportSuccess(result);
     } catch (e) {
-      state = CsvImportError(_friendlyError(e));
+      state = CsvImportError(_friendlyError(e), picked: current);
     }
   }
 
@@ -147,30 +243,7 @@ class CsvImportNotifier extends _$CsvImportNotifier {
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
-  /// Extract column headers from first line of CSV bytes.
-  ///
-  /// Strips UTF-8 BOM if present, then splits on the first newline.
-  List<String> _extractHeaders(Uint8List bytes) {
-    // Strip UTF-8 BOM (EF BB BF)
-    int start = 0;
-    if (bytes.length >= 3 &&
-        bytes[0] == 0xEF &&
-        bytes[1] == 0xBB &&
-        bytes[2] == 0xBF) {
-      start = 3;
-    }
-
-    // Decode up to first 4 KB
-    final slice = bytes.sublist(start, bytes.length.clamp(start, start + 4096));
-    final text = String.fromCharCodes(slice);
-
-    final firstLine = text.split(RegExp(r'\r?\n')).first;
-    return firstLine
-        .split(',')
-        .map((h) => h.trim().replaceAll('"', ''))
-        .where((h) => h.isNotEmpty)
-        .toList();
-  }
+  List<String> _extractHeaders(Uint8List bytes) => csvHeadersFromBytes(bytes);
 
   String _friendlyError(Object e) {
     final msg = e.toString();

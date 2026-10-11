@@ -15,7 +15,11 @@ import 'package:keevo/features/catalog/domain/model/stock_level_model.dart';
 import 'package:keevo/features/catalog/domain/model/stock_movement_model.dart';
 import 'package:mocktail/mocktail.dart';
 
-class MockLocalStockDataSource extends Mock implements LocalStockDataSource {}
+class MockLocalStockDataSource extends Mock implements LocalStockDataSource {
+  // Runs the transactional block directly (no database behind the mock).
+  @override
+  Future<T> transaction<T>(Future<T> Function() action) => action();
+}
 class MockRemoteStockDataSource extends Mock implements RemoteStockDataSource {}
 class MockConnectivityService extends Mock implements ConnectivityService {}
 class MockSyncService extends Mock implements SyncService {}

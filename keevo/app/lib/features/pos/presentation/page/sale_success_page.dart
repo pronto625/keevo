@@ -63,17 +63,13 @@ class _SaleSuccessPageState extends State<SaleSuccessPage>
   @override
   Widget build(BuildContext context) {
     final isPending = widget.saleStatus == 'PENDING_VALIDATION';
+    // Aplat sémantique plein (plus de dégradé) ; le vert est la teinte la
+    // plus foncée de l'ancien dégradé pour garder le contraste du blanc. Sur
+    // l'ambre, le blanc est illisible : texte et icône passent en onWarning.
+    final fg = isPending ? AppTheme.onWarning : Colors.white;
     return Scaffold(
       body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: isPending
-                ? [AppTheme.warning, AppTheme.warning]
-                : const [AppTheme.success, Color(0xFF37B24D)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
+        color: isPending ? AppTheme.warning : const Color(0xFF37B24D),
         child: FadeTransition(
           opacity: _fadeIn,
           child: Center(
@@ -86,21 +82,21 @@ class _SaleSuccessPageState extends State<SaleSuccessPage>
                     width: 96,
                     height: 96,
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
+                      color: fg.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.check_rounded,
                       size: 56,
-                      color: Colors.white,
+                      color: fg,
                     ),
                   ),
                 ),
                 const SizedBox(height: 28),
                 Text(
-                  isPending ? '🔶 Vente en attente' : 'Vente enregistrée !',
+                  isPending ? 'Vente en attente' : 'Vente enregistrée !',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        color: Colors.white,
+                        color: fg,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.5,
                       ),
@@ -109,13 +105,13 @@ class _SaleSuccessPageState extends State<SaleSuccessPage>
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
+                    color: fg.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(24),
                   ),
                   child: Text(
                     _currencyFormat.format(widget.totalAmount),
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          color: Colors.white,
+                          color: fg,
                           fontWeight: FontWeight.w700,
                         ),
                   ),

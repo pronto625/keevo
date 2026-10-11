@@ -46,7 +46,19 @@ class _SyncRequiredModalState extends ConsumerState<SyncRequiredModal> {
           Navigator.of(context, rootNavigator: true).pop();
           messenger.showSnackBar(
             const SnackBar(
-              content: Text('✅ Synchronisation réussie — accès complet restauré'),
+              content: Row(
+                children: [
+                  Icon(Icons.check_circle_rounded,
+                      color: AppTheme.onSuccess, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Synchronisation réussie — accès complet restauré',
+                      style: TextStyle(color: AppTheme.onSuccess),
+                    ),
+                  ),
+                ],
+              ),
               backgroundColor: AppTheme.success,
               duration: Duration(seconds: 4),
             ),
@@ -94,9 +106,9 @@ class _SyncRequiredModalState extends ConsumerState<SyncRequiredModal> {
     return AlertDialog(
       title: const Row(
         children: [
-          Icon(Icons.sync_problem, color: AppTheme.errorColor),
+          Icon(Icons.sync_problem_rounded, color: AppTheme.errorColor),
           SizedBox(width: 8),
-          Text('Synchronisation requise'),
+          Expanded(child: Text('Synchronisation requise')),
         ],
       ),
       content: Column(

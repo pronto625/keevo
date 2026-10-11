@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/widget/app_error_widget.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
+import '../../../../core/widget/soft_icon_button.dart';
 import '../../../../features/settings/presentation/widget/plan_limit_bottom_sheet.dart';
 import '../../domain/exception/store_exception.dart';
 import '../../domain/model/store_model.dart';
@@ -27,6 +29,10 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
   bool _includeInactive = false;
   bool _isSyncing = false;
 
+  /// Set when a creation hit the plan limit: the form closes, then the
+  /// plan-limit sheet explains it (instead of both at once).
+  bool _planLimitHit = false;
+
   @override
   void initState() {
     super.initState();
@@ -34,7 +40,11 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
   }
 
   Future<void> _syncSilently() async {
-    await ref.read(storeListNotifierProvider.notifier).syncFromRemote();
+    try {
+      await ref.read(storeListNotifierProvider.notifier).syncFromRemote();
+    } catch (_) {
+      // Hors ligne : la liste locale reste affichée, sans message.
+    }
   }
 
   Future<void> _syncWithFeedback() async {
@@ -57,12 +67,24 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
           ),
         );
       }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Synchronisation impossible : ${appErrorMessage(e)}'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isSyncing = false);
     }
   }
 
   Future<void> _openCreateForm() async {
+    _planLimitHit = false;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -74,6 +96,11 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
             _createStore(name, type, address, phone),
       ),
     );
+    if (_planLimitHit && mounted) {
+      _planLimitHit = false;
+      await showPlanLimitBottomSheet(
+          context: context, entity: 'stores', limit: 3);
+    }
   }
 
   Future<void> _openEditForm(StoreModel store) async {
@@ -91,6 +118,10 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
     );
   }
 
+  // Les erreurs sont relancées : le formulaire reste ouvert et affiche le
+  // message, au lieu de se fermer comme si la création avait réussi.
+  // Exception : la limite du forfait ferme le formulaire, puis la feuille
+  // « limite atteinte » s'affiche seule (voir [_openCreateForm]).
   Future<void> _createStore(
       String name, StoreType type, String? address, String? phone) async {
     try {
@@ -98,37 +129,19 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
           .read(storeListNotifierProvider.notifier)
           .createStore(name: name, type: type, address: address, phone: phone);
     } on StoreException catch (e) {
-      if (!mounted) return;
-      if (e.domainCode == 'PLAN_LIMIT_EXCEEDED') {
-        await showPlanLimitBottomSheet(
-            context: context, entity: 'stores', limit: 3);
-      } else if (e.domainCode == 'WAREHOUSE_ALREADY_EXISTS') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.message),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.all(16),
-          ),
-        );
-      } else {
-        _showErrorSnackBar(e.message);
-      }
+      if (e.domainCode != 'PLAN_LIMIT_EXCEEDED') rethrow;
+      _planLimitHit = true;
     }
   }
 
   Future<void> _updateStore(
       String storeId, String name, String? address, String? phone) async {
-    try {
-      await ref.read(storeListNotifierProvider.notifier).updateStore(
-            storeId: storeId,
-            name: name,
-            address: address,
-            phone: phone,
-          );
-    } on StoreException catch (e) {
-      if (mounted) _showErrorSnackBar(e.message);
-    }
+    await ref.read(storeListNotifierProvider.notifier).updateStore(
+          storeId: storeId,
+          name: name,
+          address: address,
+          phone: phone,
+        );
   }
 
   Future<void> _deactivateStore(String storeId) async {
@@ -155,46 +168,42 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final storesAsync = ref.watch(storeListNotifierProvider);
+    final storesAsync = ref.watch(managedStoresProvider(_includeInactive));
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
       body: CustomScrollView(
         slivers: [
-          // ── AppBar ──────────────────────────────────────────────────
+          // ── AppBar — fond neutre, sans bandeau dégradé ──────────────
           SliverAppBar(
-            expandedHeight: 140,
+            expandedHeight: 96,
             pinned: true,
             elevation: 0,
-            backgroundColor: Colors.transparent,
+            scrolledUnderElevation: 0,
+            backgroundColor: theme.colorScheme.surface,
+            foregroundColor: theme.colorScheme.onSurface,
             flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [AppTheme.primary, AppTheme.primary.withAlpha(180)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+              background: ColoredBox(color: theme.colorScheme.surface),
+              centerTitle: false,
+              title: Text(
+                'Mes boutiques',
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.2,
                 ),
               ),
-              title: const Text(
-                'Mes boutiques',
-                style: TextStyle(color: Colors.white, fontSize: 18),
-              ),
-              titlePadding: const EdgeInsets.only(left: 16, bottom: 16),
+              titlePadding: const EdgeInsets.fromLTRB(56, 0, 16, 16),
             ),
             actions: [
-              IconButton(
-                icon: _isSyncing
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.sync_rounded, color: Colors.white),
-                onPressed: _isSyncing ? null : _syncWithFeedback,
+              SoftIconButton(
+                icon: Icons.sync_rounded,
                 tooltip: 'Synchroniser',
+                loading: _isSyncing,
+                onPressed: _syncWithFeedback,
               ),
+              const SizedBox(width: 12),
             ],
           ),
 
@@ -209,12 +218,7 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
                   const Spacer(),
                   Switch(
                     value: _includeInactive,
-                    onChanged: (v) {
-                      setState(() => _includeInactive = v);
-                      ref
-                          .read(storeListNotifierProvider.notifier)
-                          .refresh(includeInactive: v);
-                    },
+                    onChanged: (v) => setState(() => _includeInactive = v),
                   ),
                 ],
               ),
@@ -236,8 +240,10 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text('🏪',
-                            style: TextStyle(fontSize: 48)),
+                        const SoftIconBadge(
+                          icon: Icons.storefront_outlined,
+                          size: 72,
+                        ),
                         const SizedBox(height: 12),
                         Text(
                           'Aucune boutique',
@@ -245,9 +251,9 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Appuyez sur + pour en créer une.',
+                          'Appuyez sur « Ajouter une boutique » pour en créer une.',
                           style: theme.textTheme.bodyMedium
-                              ?.copyWith(color: theme.colorScheme.outline),
+                              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                         ),
                       ],
                     ),
@@ -278,9 +284,10 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
         onPressed: _openCreateForm,
         icon: const Icon(Icons.add_rounded),
         label: const Text('Ajouter une boutique'),
-        backgroundColor: AppTheme.primary,
-        foregroundColor: Colors.white,
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
       ),
     );
   }
 }
+

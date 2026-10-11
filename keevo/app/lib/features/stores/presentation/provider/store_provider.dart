@@ -33,6 +33,18 @@ final storeRepositoryProvider = Provider<StoreRepository>((ref) {
   );
 });
 
+// ── Stores page list ────────────────────────────────────────────────────────
+
+/// Stores shown on the stores management page, deactivated ones included when
+/// "Voir les désactivées" is on. Disposed with the page, so the choice never
+/// leaks into the other store pickers ([storeListNotifierProvider]).
+final managedStoresProvider = FutureProvider.autoDispose
+    .family<List<StoreModel>, bool>((ref, includeInactive) {
+  return ref
+      .watch(storeRepositoryProvider)
+      .getStores(includeInactive: includeInactive);
+});
+
 // ── State notifier ──────────────────────────────────────────────────────────
 
 @riverpod
@@ -47,10 +59,15 @@ class StoreListNotifier extends _$StoreListNotifier {
     return repo.getStores();
   }
 
-  Future<void> refresh({bool includeInactive = false}) async {
+  /// Active stores only: this list feeds every store picker of the app
+  /// (active store, transfers, employees…), which must never offer a
+  /// deactivated store. The stores page lists inactive ones through
+  /// [managedStoresProvider].
+  Future<void> refresh() async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(
-        () => ref.read(storeRepositoryProvider).getStores(includeInactive: includeInactive));
+        () => ref.read(storeRepositoryProvider).getStores());
+    ref.invalidate(managedStoresProvider);
   }
 
   Future<StoreModel> createStore({
@@ -91,7 +108,10 @@ class StoreListNotifier extends _$StoreListNotifier {
   }
 
   Future<void> syncFromRemote() async {
-    await ref.read(storeRepositoryProvider).syncFromRemote();
-    await refresh();
+    try {
+      await ref.read(storeRepositoryProvider).syncFromRemote();
+    } finally {
+      await refresh();
+    }
   }
 }

@@ -23,6 +23,19 @@ class _StubStoreListNotifier extends StoreListNotifier {
   Future<List<StoreModel>> build() async => [];
 }
 
+class _PhoneStoreListNotifier extends StoreListNotifier {
+  @override
+  Future<List<StoreModel>> build() async => [
+        StoreModel(
+          id: 's1',
+          name: 'Boutique Centre',
+          phone: '+237600000000',
+          createdAt: DateTime(2024),
+          updatedAt: DateTime(2024),
+        ),
+      ];
+}
+
 /// Widget tests for CrossStoreAvailabilityBottomSheet (Story 3.4 — Task 10).
 void main() {
   setUpAll(() {
@@ -72,6 +85,7 @@ void main() {
   Widget _buildSheet({
     String role = 'OWNER',
     CrossStoreAvailabilityModel? modelOverride,
+    StoreListNotifier Function() stores = _StubStoreListNotifier.new,
   }) {
     prefs.setString('user_role', role);
     final modelToUse = modelOverride ?? tModel;
@@ -83,8 +97,7 @@ void main() {
         crossStoreAvailabilityProvider('p1')
             .overrideWith((_) => Future.value(modelToUse)),
         // Prevent real store infra from being initialised
-        storeListNotifierProvider
-            .overrideWith(_StubStoreListNotifier.new),
+        storeListNotifierProvider.overrideWith(stores),
       ],
       child: MaterialApp(
         home: Scaffold(
@@ -182,6 +195,39 @@ void main() {
       // Button should be rendered but disabled (onPressed == null)
       final button = tester.widget<FilledButton>(find.byType(FilledButton));
       expect(button.onPressed, isNull);
+      expect(find.text('Aucun stock disponible dans le réseau'), findsOneWidget);
+    });
+
+    testWidgets('disabled transfer button explains missing destination',
+        (tester) async {
+      _setPhoneSize(tester);
+      // Stock available but no other active store to transfer to.
+      await tester.pumpWidget(_buildSheet());
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      final button = tester.widget<FilledButton>(find.byType(FilledButton));
+      expect(button.onPressed, isNull);
+      expect(find.textContaining('Aucune autre boutique active'), findsOneWidget);
+    });
+
+    testWidgets('EMPLOYEE is told when WhatsApp cannot be opened',
+        (tester) async {
+      _setPhoneSize(tester);
+      await tester.pumpWidget(
+          _buildSheet(role: 'EMPLOYEE', stores: _PhoneStoreListNotifier.new));
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      // No url_launcher implementation in tests → the launch fails.
+      await tester.tap(find.text('Contacter via WhatsApp'));
+      // The platform-channel reply is delivered outside the fake clock.
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining('Impossible d\'ouvrir WhatsApp'), findsOneWidget);
     });
   });
 }

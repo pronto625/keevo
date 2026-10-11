@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import '../../domain/exception/auth_exception.dart';
 import '../provider/auth_provider.dart';
 
@@ -59,154 +60,171 @@ class _PasswordChangePageState extends ConsumerState<PasswordChangePage> {
     final cs = theme.colorScheme;
     final changeState = ref.watch(changePasswordProvider);
 
-    // Navigate to /pos on success
+    // The splash decides the destination (an owner lands on the dashboard).
     ref.listen(changePasswordProvider, (prev, next) {
       next.whenData((tokens) {
-        if (tokens != null) {
-          context.go('/pos');
-        }
+        if (tokens != null) context.go('/splash');
       });
     });
+
+    final isDark = theme.brightness == Brightness.dark;
 
     return PopScope(
       canPop: false,
       child: Scaffold(
-        backgroundColor: theme.scaffoldBackgroundColor,
-        appBar: AppBar(
-          automaticallyImplyLeading: false,
-          title: const Text('Créer votre mot de passe'),
-          backgroundColor: AppTheme.primary,
-          foregroundColor: Colors.white,
-          elevation: 0,
-        ),
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 32, 24, 40),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // ── Info icon ─────────────────────────────────────────
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFDBEAFE),
-                    borderRadius: BorderRadius.circular(28),
-                  ),
-                  child: const Icon(
-                    Icons.lock_reset_rounded,
-                    color: Color(0xFF3B82F6),
-                    size: 32,
-                  ),
-                ),
-                const SizedBox(height: 20),
+        body: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: isDark
+                ? AppTheme.softBackgroundGradientDark
+                : AppTheme.softBackgroundGradient,
+          ),
+          child: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // ── Info icon ─────────────────────────────────────
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: SoftIconBadge(
+                        icon: Icons.lock_reset_rounded,
+                        size: 56,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
 
-                // ── Subtitle ──────────────────────────────────────────
-                Text(
-                  'Votre employeur a créé ce compte. Pour votre sécurité, '
-                  'définissez votre propre mot de passe.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: const Color(0xFF868E96),
-                    height: 1.5,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 32),
+                    // ── Title ─────────────────────────────────────────
+                    Text(
+                      'Créer votre mot de passe',
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: cs.onSurface,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
 
-                // ── Current password ──────────────────────────────────
-                TextFormField(
-                  controller: _currentPwdController,
-                  obscureText: _obscureCurrent,
-                  decoration: InputDecoration(
-                    labelText: 'Mot de passe temporaire',
-                    prefixIcon: const Icon(Icons.key_rounded),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscureCurrent
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined),
-                      onPressed: () =>
-                          setState(() => _obscureCurrent = !_obscureCurrent),
+                    // ── Subtitle ──────────────────────────────────────
+                    Text(
+                      'Votre employeur a créé ce compte. Pour votre sécurité, '
+                      'définissez votre propre mot de passe.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                        height: 1.5,
+                      ),
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  validator: (v) =>
-                      (v == null || v.isEmpty) ? 'Mot de passe requis' : null,
-                ),
-                const SizedBox(height: 16),
+                    const SizedBox(height: 28),
 
-                // ── New password ──────────────────────────────────────
-                TextFormField(
-                  controller: _newPwdController,
-                  obscureText: _obscureNew,
-                  decoration: InputDecoration(
-                    labelText: 'Nouveau mot de passe',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscureNew
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined),
-                      onPressed: () =>
-                          setState(() => _obscureNew = !_obscureNew),
+                    // ── Current password ──────────────────────────────
+                    const _FieldLabel('Mot de passe temporaire'),
+                    const SizedBox(height: 6),
+                    TextFormField(
+                      controller: _currentPwdController,
+                      obscureText: _obscureCurrent,
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.key_rounded),
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscureCurrent
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined),
+                          onPressed: () => setState(
+                              () => _obscureCurrent = !_obscureCurrent),
+                        ),
+                        border: _outlinedBorder(cs.outlineVariant),
+                        enabledBorder: _outlinedBorder(cs.outlineVariant),
+                        focusedBorder: _outlinedBorder(cs.primary, width: 1.5),
+                      ),
+                      validator: (v) => (v == null || v.isEmpty)
+                          ? 'Mot de passe requis'
+                          : null,
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    helperText: 'Min. 8 caractères, dont au moins un chiffre',
-                  ),
-                  validator: _validateNewPassword,
-                ),
-                const SizedBox(height: 24),
+                    const SizedBox(height: 16),
 
-                // ── Error ─────────────────────────────────────────────
-                if (changeState.hasError) ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: cs.errorContainer,
-                      borderRadius: BorderRadius.circular(12),
+                    // ── New password ──────────────────────────────────
+                    const _FieldLabel('Nouveau mot de passe'),
+                    const SizedBox(height: 6),
+                    TextFormField(
+                      controller: _newPwdController,
+                      obscureText: _obscureNew,
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscureNew
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined),
+                          onPressed: () =>
+                              setState(() => _obscureNew = !_obscureNew),
+                        ),
+                        border: _outlinedBorder(cs.outlineVariant),
+                        enabledBorder: _outlinedBorder(cs.outlineVariant),
+                        focusedBorder: _outlinedBorder(cs.primary, width: 1.5),
+                        helperText:
+                            'Min. 8 caractères, dont au moins un chiffre',
+                      ),
+                      validator: _validateNewPassword,
                     ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.error_outline,
-                            color: cs.onErrorContainer, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _errorMessage(changeState.error),
-                            style: TextStyle(color: cs.onErrorContainer),
+                    const SizedBox(height: 24),
+
+                    // ── Error ─────────────────────────────────────────
+                    if (changeState.hasError) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: cs.errorContainer,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.error_outline,
+                                color: cs.onErrorContainer, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _errorMessage(changeState.error),
+                                style: TextStyle(color: cs.onErrorContainer),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // ── Submit button ─────────────────────────────────
+                    SizedBox(
+                      height: 56,
+                      child: FilledButton(
+                        onPressed: changeState.isLoading ? null : _submit,
+                        style: FilledButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(28),
                           ),
                         ),
-                      ],
+                        child: changeState.isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                'Confirmer',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-
-                // ── Submit button ─────────────────────────────────────
-                FilledButton(
-                  onPressed: changeState.isLoading ? null : _submit,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: changeState.isLoading
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text('Confirmer'),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -218,11 +236,35 @@ class _PasswordChangePageState extends ConsumerState<PasswordChangePage> {
     if (error is AuthException) {
       return switch (error.domainCode) {
         'INVALID_CREDENTIALS' => 'Mot de passe temporaire incorrect',
-        'VALIDATION_FAILED' => 'Le nouveau mot de passe ne respecte pas les critères',
+        'VALIDATION_FAILED' =>
+          'Le nouveau mot de passe ne respecte pas les critères',
         _ => 'Erreur inattendue, réessayez',
       };
     }
     if (error is ArgumentError) return error.message.toString();
     return 'Erreur de connexion, réessayez';
+  }
+}
+
+// Même bordure fine que les champs d'AuthPage (label au-dessus du champ).
+OutlineInputBorder _outlinedBorder(Color color, {double width = 1}) =>
+    OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: BorderSide(color: color, width: width),
+    );
+
+class _FieldLabel extends StatelessWidget {
+  final String text;
+  const _FieldLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+    );
   }
 }

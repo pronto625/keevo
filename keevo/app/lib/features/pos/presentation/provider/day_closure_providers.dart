@@ -77,25 +77,16 @@ final getSalesHistoryUseCaseProvider = Provider<GetSalesHistoryUseCase>((ref) {
 
 /// Day close button state: available, closed, or noSales.
 ///
-/// If a closure exists today but new sales were made after it,
-/// the button becomes available again so the user can close again.
+/// The backend accepts a single closure per store and calendar day, so once
+/// today is closed the button stays closed until midnight — sales made after
+/// the closure are rolled into the next day's closure.
 final dayClosureStateProvider = FutureProvider.family<DayCloseButtonState, String>((ref, storeId) async {
   final repository = ref.watch(dayClosureRepositoryProvider);
   final now = DateTime.now();
   final startOfDay = DateTime(now.year, now.month, now.day);
 
-  // Get last closure
   final lastClosure = await repository.getLastClosure(storeId);
-  final hasClosureToday =
-      lastClosure != null && lastClosure.closedAt.isAfter(startOfDay);
-
-  if (hasClosureToday) {
-    // Check for new completed sales AFTER the closure
-    final newSalesCount =
-        await repository.getSalesCountAfter(storeId, lastClosure.closedAt);
-    if (newSalesCount > 0) {
-      return DayCloseButtonState.available;
-    }
+  if (lastClosure != null && lastClosure.closedAt.isAfter(startOfDay)) {
     return DayCloseButtonState.closed;
   }
 

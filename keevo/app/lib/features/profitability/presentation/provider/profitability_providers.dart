@@ -7,6 +7,7 @@ import '../../data/datasource/remote_profitability_datasource.dart';
 import '../../data/repository/profitability_repository_impl.dart';
 import '../../domain/model/product_profitability_model.dart';
 import '../../domain/repository/profitability_repository.dart';
+import '../widget/period_filter_chips.dart';
 
 export '../../domain/model/product_profitability_model.dart'
     show
@@ -45,13 +46,13 @@ final profitabilityRepositoryProvider =
 // ── State providers ───────────────────────────────────────────────────────────
 
 /// Selected period — shared between Rentabilité + Boutiques tabs (session-only).
+/// Read the concrete window with `.range()` at build time.
 final selectedProfitabilityPeriodProvider =
-    StateProvider<({DateTime from, DateTime to})>((ref) {
-  final now = DateTime.now();
-  final to = DateTime(now.year, now.month, now.day);
-  final from = to.subtract(const Duration(days: 29));
-  return (from: from, to: to);
-});
+    StateProvider<PeriodSelection>((ref) => PeriodSelection.last30);
+
+/// Store filter of the profitability list, carried to the product detail
+/// (the detail route only has the product id). null = all stores.
+final profitabilityStoreFilterProvider = StateProvider<String?>((_) => null);
 
 /// Selected sort option for product profitability list.
 final selectedSortProvider = StateProvider<SortOption>(

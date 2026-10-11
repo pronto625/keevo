@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/sync/connectivity_service.dart';
 import 'package:keevo/core/sync/sync_service.dart';
@@ -30,6 +31,21 @@ EmployeeModel _testEmployee({String id = 'emp-1', String status = 'ACTIVE'}) =>
       status: status,
       passwordChangeRequired: false,
       createdAt: DateTime(2026, 3, 17),
+    );
+
+DioException _networkError() => DioException(
+      requestOptions: RequestOptions(path: '/x'),
+      type: DioExceptionType.connectionError,
+    );
+
+DioException _httpError(int status) => DioException(
+      requestOptions: RequestOptions(path: '/x'),
+      type: DioExceptionType.badResponse,
+      response: Response(
+        requestOptions: RequestOptions(path: '/x'),
+        statusCode: status,
+        data: {'error': 'refusé'},
+      ),
     );
 
 void main() {
@@ -105,7 +121,7 @@ void main() {
     test('online but backend fails — updates locally + queues sync', () async {
       when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
       when(() => mockRemote.reassignStore(any(), any()))
-          .thenThrow(Exception('Network'));
+          .thenThrow(_networkError());
       when(() => mockLocal.updateStoreAssignment(any(), any()))
           .thenAnswer((_) async {});
       when(() => mockLocal.getById(any()))
@@ -261,6 +277,122 @@ void main() {
 
       expect(result.length, 1);
       verifyNever(() => mockRemote.listEmployees());
+    });
+  });
+
+  group('backend rejection is not treated as offline', () {
+    for (final status in [403, 404, 409]) {
+      test('reassignStore — HTTP $status rethrows, nothing local or queued',
+          () async {
+        when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
+        when(() => mockRemote.reassignStore(any(), any()))
+            .thenThrow(_httpError(status));
+
+        await expectLater(repo.reassignStore('emp-1', 'store-2'),
+            throwsA(isA<DioException>()));
+
+        verifyNever(() => mockLocal.updateStoreAssignment(any(), any()));
+        verifyNever(() => mockSyncService.queueOperation(
+              operation: any(named: 'operation'),
+              payload: any(named: 'payload'),
+              entityId: any(named: 'entityId'),
+            ));
+      });
+
+      test('deactivateEmployee — HTTP $status rethrows, nothing local or queued',
+          () async {
+        when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
+        when(() => mockRemote.deactivateEmployee(any()))
+            .thenThrow(_httpError(status));
+
+        await expectLater(
+            repo.deactivateEmployee('emp-1'), throwsA(isA<DioException>()));
+
+        verifyNever(() => mockLocal.updateStatus(any(), any()));
+        verifyNever(() => mockSyncService.queueOperation(
+              operation: any(named: 'operation'),
+              payload: any(named: 'payload'),
+              entityId: any(named: 'entityId'),
+            ));
+      });
+
+      test('reactivateEmployee — HTTP $status rethrows, nothing local or queued',
+          () async {
+        when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
+        when(() => mockRemote.reactivateEmployee(any()))
+            .thenThrow(_httpError(status));
+
+        await expectLater(
+            repo.reactivateEmployee('emp-1'), throwsA(isA<DioException>()));
+
+        verifyNever(() => mockLocal.updateStatus(any(), any()));
+        verifyNever(() => mockSyncService.queueOperation(
+              operation: any(named: 'operation'),
+              payload: any(named: 'payload'),
+              entityId: any(named: 'entityId'),
+            ));
+      });
+    }
+
+    test('deactivateEmployee — network error falls back to local + queue',
+        () async {
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
+      when(() => mockRemote.deactivateEmployee(any()))
+          .thenThrow(_networkError());
+      when(() => mockLocal.updateStatus(any(), any())).thenAnswer((_) async {});
+      when(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).thenAnswer((_) async {});
+
+      await repo.deactivateEmployee('emp-1');
+
+      verify(() => mockLocal.updateStatus('emp-1', 'DEACTIVATED')).called(1);
+      verify(() => mockSyncService.queueOperation(
+            operation: 'DEACTIVATE_EMPLOYEE',
+            payload: {'employeeId': 'emp-1'},
+            entityId: 'emp-1',
+          )).called(1);
+    });
+
+    test('reactivateEmployee — network error falls back to local + queue',
+        () async {
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
+      when(() => mockRemote.reactivateEmployee(any()))
+          .thenThrow(_networkError());
+      when(() => mockLocal.updateStatus(any(), any())).thenAnswer((_) async {});
+      when(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).thenAnswer((_) async {});
+
+      await repo.reactivateEmployee('emp-1');
+
+      verify(() => mockLocal.updateStatus('emp-1', 'ACTIVE')).called(1);
+    });
+
+    // A gateway 502/503/504 means the server is down, not that it refused.
+    test('deactivateEmployee — HTTP 503 falls back to local + queue', () async {
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
+      when(() => mockRemote.deactivateEmployee(any()))
+          .thenThrow(_httpError(503));
+      when(() => mockLocal.updateStatus(any(), any())).thenAnswer((_) async {});
+      when(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).thenAnswer((_) async {});
+
+      await repo.deactivateEmployee('emp-1');
+
+      verify(() => mockLocal.updateStatus('emp-1', 'DEACTIVATED')).called(1);
+      verify(() => mockSyncService.queueOperation(
+            operation: 'DEACTIVATE_EMPLOYEE',
+            payload: {'employeeId': 'emp-1'},
+            entityId: 'emp-1',
+          )).called(1);
     });
   });
 }

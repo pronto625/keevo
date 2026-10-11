@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../di/providers.dart';
@@ -18,7 +20,12 @@ class RiverpodSyncTriggerDispatcher implements SyncTriggerDispatcher {
   @override
   void triggerPushIfIdle() {
     // Fire-and-forget: NEVER await in calling code — this is purely background.
-    Future.microtask(() async {
+    // Scheduled from the root zone: a caller inside a drift transaction (draft
+    // checkout wraps the sale in one) would otherwise hand that zone to the
+    // push, which would then run on the transaction before it commits, or on
+    // a transaction already closed. From the root zone the push waits for the
+    // commit like any other query.
+    Zone.root.run(() => Future.microtask(() async {
       try {
         if (await _connectivity.isOnline()) {
           _ref.read(syncTriggerNotifierProvider.notifier).triggerPush();
@@ -27,7 +34,7 @@ class RiverpodSyncTriggerDispatcher implements SyncTriggerDispatcher {
         // Ref stale — ProviderScope rebuilt (auth change / employee creation).
         // Sync will be triggered on the next write operation. Swallow silently.
       }
-    });
+    }));
   }
 }
 

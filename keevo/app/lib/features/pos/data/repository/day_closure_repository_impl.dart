@@ -1,5 +1,10 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
+
 import '../../../../core/sync/connectivity_service.dart';
 import '../../../../core/sync/sync_service.dart';
+import '../../domain/exception/day_already_closed_exception.dart';
 import '../../domain/model/day_closure_model.dart';
 import '../../domain/model/payment_mode_enum.dart';
 import '../../domain/model/sale_model.dart';
@@ -10,8 +15,9 @@ import '../datasource/remote_day_closure_datasource.dart';
 
 /// DayClosureRepositoryImpl — Backend-first implementation of DayClosureRepository.
 ///
-/// Online: POST to backend first, then save locally (synced: true).
-/// Offline: save locally (synced: false) + enqueue in sync_queue.
+/// Online: POST to backend first, then save locally (synced: true) with the
+/// server's summary. Server unreachable or offline: save locally
+/// (synced: false) + enqueue in sync_queue. A server refusal is surfaced.
 /// Story 4.4 + 5.1.
 class DayClosureRepositoryImpl implements DayClosureRepository {
   final LocalDayClosureDataSource _localDataSource;
@@ -36,9 +42,18 @@ class DayClosureRepositoryImpl implements DayClosureRepository {
     // that sales created on other devices are included in the summary.
     if (employeeId == null && await _connectivity.isOnline()) {
       try {
-        final filter = SalesHistoryFilter.today(storeId: storeId);
-        final sales = await _remoteDataSource.fetchSalesHistory(filter);
-        return _computeSummaryFromSales(sales);
+        // Same window as the offline path: everything since the last closure
+        // (or since midnight when the store was never closed).
+        final now = DateTime.now();
+        final lastClosure = await _localDataSource.getLastClosure(storeId);
+        final effectiveStart =
+            lastClosure?.closedAt ?? DateTime(now.year, now.month, now.day);
+        final filter = SalesHistoryFilter.custom(
+            storeId: storeId, from: effectiveStart, to: now);
+        final sales = await _remoteDataSource.fetchAllSalesHistory(filter);
+        return _computeSummaryFromSales(sales
+            .where((s) => s.occurredAt.isAfter(effectiveStart))
+            .toList());
       } catch (_) {
         // Remote unreachable — fall through to local DB
       }
@@ -69,6 +84,9 @@ class DayClosureRepositoryImpl implements DayClosureRepository {
       }
     }
 
+    final pending =
+        sales.where((s) => s.status == 'PENDING_VALIDATION').toList();
+
     String? topProductId;
     String? topProductName;
     int topProductQty = 0;
@@ -91,34 +109,60 @@ class DayClosureRepositoryImpl implements DayClosureRepository {
       topProductName: topProductName,
       topProductQty: topProductQty,
       topProductRevenue: topProductRevenue,
-      pendingSalesCount: 0,
-      pendingSalesTotal: 0,
+      pendingSalesCount: pending.length,
+      pendingSalesTotal:
+          pending.fold<int>(0, (sum, s) => sum + s.totalAmount),
     );
   }
 
   @override
-  Future<void> saveClosureLocally(DayClosure closure) async {
+  Future<DayClosureSummary> saveClosureLocally(DayClosure closure) async {
     if (await _connectivity.isOnline()) {
       try {
-        await _remoteDataSource.pushClosure(closure);
-        await _localDataSource.insertClosure(closure, synced: true);
-      } catch (_) {
-        await _localDataSource.insertClosure(closure, synced: false);
-        await _syncService.queueOperation(
-          operation: 'CREATE_DAY_CLOSURE',
-          payload: {'storeId': closure.storeId, 'id': closure.id},
-          entityId: closure.id,
-        );
+        final serverSummary = await _remoteDataSource.pushClosure(closure);
+        // The server's summary is the one of record (it also counts sales
+        // made offline before the previous closure but synced after it).
+        final stored = serverSummary == null
+            ? closure
+            : DayClosure(
+                id: closure.id,
+                storeId: closure.storeId,
+                actorId: closure.actorId,
+                closedAt: closure.closedAt,
+                summary: serverSummary,
+                isAutomatic: closure.isAutomatic,
+                synced: true,
+              );
+        await _localDataSource.insertClosure(stored, synced: true);
+        return stored.summary;
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 409) {
+          // Another device already closed the day: nothing to store or queue,
+          // and the pull brings that closure to this device.
+          unawaited(_syncService.pull().catchError((_) {}));
+          throw DayAlreadyClosedException();
+        }
+        // Any other answer from the server is a refusal the user must see;
+        // only an unreachable server falls back to the offline queue.
+        if (e.response != null) rethrow;
       }
-    } else {
-      await _localDataSource.insertClosure(closure, synced: false);
-      await _syncService.queueOperation(
-        operation: 'CREATE_DAY_CLOSURE',
-        payload: {'storeId': closure.storeId, 'id': closure.id},
-        entityId: closure.id,
-      );
     }
+    await _localDataSource.insertClosure(closure, synced: false);
+    await _syncService.queueOperation(
+      operation: 'CREATE_DAY_CLOSURE',
+      payload: _closurePayload(closure),
+      entityId: closure.id,
+    );
+    return closure.summary;
   }
+
+  /// The server reuses the local id and closes the day the closure was made
+  /// (not the day the queued operation is finally pushed).
+  Map<String, dynamic> _closurePayload(DayClosure closure) => {
+        'storeId': closure.storeId,
+        'id': closure.id,
+        'closedAt': closure.closedAt.toUtc().toIso8601String(),
+      };
 
   @override
   Future<bool> hasClosureToday(String storeId) {
@@ -135,8 +179,4 @@ class DayClosureRepositoryImpl implements DayClosureRepository {
     return _localDataSource.getTodaySalesCount(storeId);
   }
 
-  @override
-  Future<int> getSalesCountAfter(String storeId, DateTime after) {
-    return _localDataSource.getSalesCountAfter(storeId, after);
-  }
 }

@@ -8,6 +8,8 @@ import '../../../../core/di/providers.dart';
 import '../../../../core/storage/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
+import '../../../../core/widget/soft_icon_button.dart';
 import '../../../../features/sync_indicator/presentation/widget/sync_indicator.dart';
 import '../../../catalog/presentation/provider/category_provider.dart';
 import '../../../catalog/presentation/widget/create_draft_product_bottom_sheet.dart';
@@ -43,7 +45,6 @@ class _PosPageState extends ConsumerState<PosPage> {
     super.initState();
     _scrollController = ScrollController()..addListener(_onScroll);
     _loadSectorType();
-    _checkAutoClosureNotification();
   }
 
   Future<void> _loadSectorType() async {
@@ -57,42 +58,6 @@ class _PosPageState extends ConsumerState<PosPage> {
         );
       });
     }
-  }
-
-  /// AC6 — Show auto-closure notification snackbar once after scheduler closes day
-  Future<void> _checkAutoClosureNotification() async {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-
-      final prefs = await SharedPreferences.getInstance();
-      final today = DateTime.now();
-      final todayStr = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
-      final notifiedDate = prefs.getString(kAutoClosureNotifiedDate);
-
-      // Check if we need to show notification (not shown today yet)
-      if (notifiedDate != todayStr) {
-        // Check for auto-closure message from provider
-        // For now, we'll use a simple approach: if day was closed automatically yesterday
-        // and user opens app today, show the notification
-        final lastClosureDate = prefs.getString(kLastClosureDate);
-        
-        if (lastClosureDate != null && lastClosureDate != todayStr && mounted) {
-          final yesterday = today.subtract(const Duration(days: 1));
-          final yesterdayStr = '${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}';
-          
-          if (lastClosureDate == yesterdayStr) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Votre journée du $lastClosureDate a été clôturée automatiquement.'),
-                backgroundColor: AppTheme.warning,
-                duration: const Duration(seconds: 5),
-              ),
-            );
-            await prefs.setString(kAutoClosureNotifiedDate, todayStr);
-          }
-        }
-      }
-    });
   }
 
   @override
@@ -111,8 +76,8 @@ class _PosPageState extends ConsumerState<PosPage> {
   }
 
   void _triggerLoadMore() {
+    // null = "all stores": the grid is keyed on null too, so it paginates.
     final activeStoreId = ref.read(activeStoreIdProvider);
-    if (activeStoreId == null) return;
     final key = (storeId: activeStoreId, categoryId: _selectedCategoryId);
     ref.read(frequentProductsProvider(key).notifier).loadMore();
   }
@@ -140,16 +105,33 @@ class _PosPageState extends ConsumerState<PosPage> {
     final cart = ref.watch(cartProvider);
     final cartNotifier = ref.read(cartProvider.notifier);
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
 
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
+      backgroundColor: cs.surfaceContainerLowest,
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: 56),
-        child: FloatingActionButton(
-          heroTag: 'pos_create_draft',
-          backgroundColor: AppTheme.primary,
-          onPressed: () => _createDraftAndAddToCart(context, ref, ''),
-          child: const Icon(Icons.add_rounded, color: Colors.white),
+        // Couleur pleine + ombre douce plutôt que l'élévation Material par
+        // défaut, comme le FAB du catalogue.
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppTheme.primary,
+            borderRadius: BorderRadius.circular(AppTheme.radiusL),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.primary.withValues(alpha: 0.25),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: FloatingActionButton(
+            heroTag: 'pos_create_draft',
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            onPressed: () => _createDraftAndAddToCart(context, ref, ''),
+            child: const Icon(Icons.add_rounded, color: Colors.white),
+          ),
         ),
       ),
       body: Stack(
@@ -157,7 +139,7 @@ class _PosPageState extends ConsumerState<PosPage> {
           CustomScrollView(
             controller: _scrollController,
             slivers: [
-              // ── Blue gradient header (consistent with other screens) ──
+              // ── Header épuré — fond neutre ──
               SliverAppBar(
                 expandedHeight: 100,
                 floating: true,
@@ -166,45 +148,37 @@ class _PosPageState extends ConsumerState<PosPage> {
                 automaticallyImplyLeading: false,
                 leading: context.canPop()
                     ? IconButton(
-                        icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                            color: Colors.white),
+                        icon: Icon(Icons.arrow_back_ios_new_rounded,
+                            color: cs.onSurface),
                         onPressed: () => context.pop(),
                       )
                     : null,
                 elevation: 0,
-                backgroundColor: AppTheme.primary,
+                scrolledUnderElevation: 0,
+                backgroundColor: cs.surface,
                 flexibleSpace: FlexibleSpaceBar(
-                  background: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [AppTheme.primary, AppTheme.primary.withAlpha(180)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                    ),
-                    child: SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 8, 12, 12),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              'Caisse',
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                              ),
+                  background: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 12, 12),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            'Caisse',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              color: cs.onSurface,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.3,
                             ),
-                            const Spacer(),
-                            IconButton(
-                              icon: const Icon(Icons.receipt_long,
-                                  color: Colors.white70),
-                              tooltip: 'Mes Ventes',
-                              onPressed: () => context.push('/pos/sales-history'),
-                            ),
-                            const SyncIndicator(),
-                          ],
-                        ),
+                          ),
+                          const Spacer(),
+                          SoftIconButton(
+                            icon: Icons.receipt_long_outlined,
+                            tooltip: 'Mes Ventes',
+                            onPressed: () => context.push('/pos/sales-history'),
+                          ),
+                          const SyncIndicator(),
+                        ],
                       ),
                     ),
                   ),
@@ -216,24 +190,24 @@ class _PosPageState extends ConsumerState<PosPage> {
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                      color: cs.surface,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusL),
+                      border: Border.all(color: cs.outlineVariant),
                     ),
                     child: TextField(
                       controller: _searchController,
                       decoration: InputDecoration(
                         hintText: 'Chercher un produit',
                         hintStyle: TextStyle(
-                          color: Theme.of(context).colorScheme.outline,
+                          color: cs.onSurfaceVariant.withValues(alpha: 0.7),
                           fontWeight: FontWeight.w400,
                         ),
                         prefixIcon: Icon(Icons.search_rounded,
-                            color: Theme.of(context).colorScheme.outline),
+                            color: cs.onSurfaceVariant),
                         suffixIcon: _searchQuery.isNotEmpty
                             ? IconButton(
                                 icon: Icon(Icons.close_rounded,
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant, size: 20),
+                                    color: cs.onSurfaceVariant, size: 20),
                                 onPressed: () {
                                   _searchController.clear();
                                   setState(() => _searchQuery = '');
@@ -243,7 +217,11 @@ class _PosPageState extends ConsumerState<PosPage> {
                                 },
                               )
                             : null,
+                        // Le conteneur porte la bordure : champ nu à l'intérieur.
                         border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        filled: false,
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 16, vertical: 14),
                       ),
@@ -420,10 +398,11 @@ class _FrequentProductsSliver extends ConsumerWidget {
                               color: AppTheme.warning,
                               borderRadius: BorderRadius.circular(8),
                             ),
+                            // onWarning : le blanc est illisible sur l'ambre.
                             child: const Text(
                               'Brouillon',
                               style: TextStyle(
-                                  color: Colors.white,
+                                  color: AppTheme.onWarning,
                                   fontSize: 9,
                                   fontWeight: FontWeight.w700),
                             ),
@@ -511,6 +490,7 @@ class _SearchResultsSliver extends ConsumerWidget {
                     label: Text("Créer '$lastQuery' à la volée"),
                     style: FilledButton.styleFrom(
                       backgroundColor: AppTheme.warning,
+                      foregroundColor: AppTheme.onWarning,
                     ),
                     onPressed: () => onCreateDraft(context, ref, lastQuery),
                   ),
@@ -554,10 +534,11 @@ class _SearchResultsSliver extends ConsumerWidget {
                               color: AppTheme.warning,
                               borderRadius: BorderRadius.circular(8),
                             ),
+                            // onWarning : le blanc est illisible sur l'ambre.
                             child: const Text(
                               'Brouillon',
                               style: TextStyle(
-                                  color: Colors.white,
+                                  color: AppTheme.onWarning,
                                   fontSize: 9,
                                   fontWeight: FontWeight.w700),
                             ),
@@ -592,20 +573,29 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final sector = sectorType;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              sectorType?.emoji ?? '📊',
-              style: const TextStyle(fontSize: 72),
-            ),
+            // L'emoji du secteur est une donnée : on le garde. Sans secteur,
+            // badge icône plutôt qu'un emoji décoratif.
+            if (sector != null)
+              Text(
+                sector.emoji,
+                style: const TextStyle(fontSize: 72),
+              )
+            else
+              const SoftIconBadge(icon: Icons.storefront_outlined, size: 96),
             const SizedBox(height: 24),
             Text(
               'Votre boutique est prête !',
-              style: Theme.of(context).textTheme.titleLarge,
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
@@ -613,7 +603,9 @@ class _EmptyState extends StatelessWidget {
               isEmployee
                   ? 'Aucun produit configuré. Contactez votre responsable.'
                   : 'Commencez par ajouter un produit',
-              style: Theme.of(context).textTheme.bodyMedium,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
               textAlign: TextAlign.center,
             ),
             if (!isEmployee) ...[
@@ -674,6 +666,7 @@ class _CategoryChipsSliver extends ConsumerWidget {
                 final isSelected = isAll
                     ? selectedCategoryId == null
                     : selectedCategoryId == cat!.id;
+                final theme = Theme.of(context);
                 return GestureDetector(
                   onTap: () => onCategorySelected(isAll ? null : cat!.id),
                   child: AnimatedContainer(
@@ -683,7 +676,7 @@ class _CategoryChipsSliver extends ConsumerWidget {
                     decoration: BoxDecoration(
                       color: isSelected
                           ? AppTheme.primary
-                          : AppTheme.primary.withAlpha(20),
+                          : AppTheme.softTint(theme.brightness),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
@@ -691,7 +684,7 @@ class _CategoryChipsSliver extends ConsumerWidget {
                       style: TextStyle(
                         color: isSelected
                             ? Colors.white
-                            : AppTheme.primary,
+                            : theme.colorScheme.primary,
                         fontWeight: FontWeight.w600,
                         fontSize: 13,
                       ),

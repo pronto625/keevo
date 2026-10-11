@@ -108,5 +108,29 @@ void main() {
 
       expect(find.textContaining('Boutique Nord'), findsOneWidget);
     });
+      testWidgets('detail keeps the store filter of the list', (tester) async {
+      final mockRepo = MockProfitabilityRepository();
+      when(() => mockRepo.getProductProfitabilityDetail(
+            productId: 'p1',
+            params: any(named: 'params'),
+          )).thenAnswer((_) async => makeDetail());
+
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          profitabilityRepositoryProvider.overrideWithValue(mockRepo),
+          profitabilityStoreFilterProvider.overrideWith((ref) => 's1'),
+        ],
+        child: const MaterialApp(
+          home: ProductProfitabilityDetailPage(productId: 'p1'),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      final params = verify(() => mockRepo.getProductProfitabilityDetail(
+            productId: 'p1',
+            params: captureAny(named: 'params'),
+          )).captured.single as ProfitabilityParams;
+      expect(params.storeId, 's1');
+    });
   });
 }

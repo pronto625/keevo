@@ -51,13 +51,16 @@ class _InventoryConfigBottomSheetState
   Future<void> _startSession() async {
     if (!_isValid) return;
     try {
-      await ref.read(createSessionNotifierProvider.notifier).create(
+      final session =
+          await ref.read(createSessionNotifierProvider.notifier).create(
             storeId: _selectedStoreId!,
             scope: _scope,
             categoryIds:
                 _scope == 'PARTIAL' ? _selectedCategoryIds.toList() : null,
           );
-      if (mounted) Navigator.of(context).pop(true);
+      // The session id is handed back directly: the autoDispose create
+      // notifier may be gone by the time the caller reads it.
+      if (mounted) Navigator.of(context).pop(session.id);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -73,6 +76,15 @@ class _InventoryConfigBottomSheetState
     final storesAsync = ref.watch(storeListNotifierProvider);
     final categoriesAsync = ref.watch(categoriesProvider);
     final createState = ref.watch(createSessionNotifierProvider);
+    // The active store may be deactivated: it is then absent from the
+    // dropdown items, and keeping it selected would trip the dropdown's
+    // value assertion (and start a session on a closed store).
+    final stores = storesAsync.valueOrNull;
+    if (_selectedStoreId != null &&
+        stores != null &&
+        !stores.any((s) => s.id == _selectedStoreId && s.isActive)) {
+      _selectedStoreId = null;
+    }
 
     return Padding(
       padding: EdgeInsets.only(
@@ -86,22 +98,12 @@ class _InventoryConfigBottomSheetState
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Header ──
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.outline.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
+            // ── Header ── (drag handle comes from the bottom sheet theme)
             Text(
               'Nouvelle session d\'inventaire',
               style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.2,
               ),
             ),
             const SizedBox(height: 24),
@@ -113,7 +115,6 @@ class _InventoryConfigBottomSheetState
               data: (stores) => DropdownButtonFormField<String>(
                 initialValue: _selectedStoreId,
                 decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
                   hintText: 'Sélectionner une boutique',
                 ),
                 items: stores
@@ -201,9 +202,9 @@ class _InventoryConfigBottomSheetState
   }
 }
 
-/// Show the inventory config bottom sheet.
-Future<bool?> showInventoryConfigBottomSheet(BuildContext context) {
-  return showModalBottomSheet<bool>(
+/// Show the inventory config bottom sheet. Returns the created session id.
+Future<String?> showInventoryConfigBottomSheet(BuildContext context) {
+  return showModalBottomSheet<String>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,

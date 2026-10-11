@@ -1,5 +1,6 @@
 import 'package:uuid/uuid.dart';
 
+import '../exception/day_already_closed_exception.dart';
 import '../model/day_closure_model.dart';
 import '../repository/day_closure_repository.dart';
 
@@ -22,7 +23,7 @@ class CloseDayUseCase {
   /// 2. Create and save the closure record
   /// 3. Enqueue for sync to backend
   ///
-  /// Throws [StateError] if the day has already been closed.
+  /// Throws [DayAlreadyClosedException] if the day has already been closed.
   Future<DayClosureSummary> execute({
     required String storeId,
     required String actorId,
@@ -31,7 +32,7 @@ class CloseDayUseCase {
     // Check if already closed today
     final alreadyClosed = await _repository.hasClosureToday(storeId);
     if (alreadyClosed) {
-      throw StateError('La journée a déjà été clôturée pour cette boutique');
+      throw DayAlreadyClosedException();
     }
 
     // Compute summary from local sales
@@ -48,9 +49,8 @@ class CloseDayUseCase {
       synced: false,
     );
 
-    // Save locally and enqueue for sync
-    await _repository.saveClosureLocally(closure);
-
-    return summary;
+    // Save (pushed or queued); the summary returned is the server's when it
+    // answered, so what the user sees matches the end-of-day report.
+    return _repository.saveClosureLocally(closure);
   }
 }

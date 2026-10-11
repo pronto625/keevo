@@ -162,11 +162,22 @@ class LocalSaleDataSource {
     Map<String, int> itemQuantities,
   ) async {
     await _db.transaction(() async {
+      final saleRow = await (_db.select(_db.sales)
+            ..where((s) => s.id.equals(saleId)))
+          .getSingleOrNull();
+      // Stock only left the shelf for a COMPLETED sale — mirror the
+      // server-side ADJUSTMENT so local stock matches without a pull.
+      final adjustStock = saleRow?.status == 'COMPLETED';
+      final now = DateTime.now();
       for (final entry in itemQuantities.entries) {
         final item = await (_db.select(_db.saleItems)
               ..where((i) => i.id.equals(entry.key)))
             .getSingleOrNull();
         if (item == null) continue;
+        if (adjustStock && item.quantity != entry.value) {
+          await _adjustStock(item.productId, saleRow!.storeId,
+              item.quantity - entry.value, 'ADJUSTMENT', saleRow.employeeId, now);
+        }
         await (_db.update(_db.saleItems)
               ..where((i) => i.id.equals(entry.key)))
             .write(SaleItemsCompanion(
@@ -190,6 +201,60 @@ class LocalSaleDataSource {
         totalAmount: Value(newSubtotal - sale.discountAmount),
       ));
     });
+  }
+
+  /// Mark a sale CANCELLED locally after the backend confirmed it, putting
+  /// back on the shelf what a COMPLETED sale had taken out (PENDING sales never
+  /// decremented stock). Idempotent: an already-cancelled sale is left alone.
+  Future<void> cancelAndRestoreStock(String saleId) async {
+    await _db.transaction(() async {
+      final sale = await (_db.select(_db.sales)
+            ..where((s) => s.id.equals(saleId)))
+          .getSingleOrNull();
+      if (sale == null || sale.status == 'CANCELLED') return;
+      if (sale.status == 'COMPLETED') {
+        final now = DateTime.now();
+        final items = await (_db.select(_db.saleItems)
+              ..where((i) => i.saleId.equals(saleId)))
+            .get();
+        for (final item in items) {
+          await _adjustStock(item.productId, sale.storeId, item.quantity,
+              'SALE_CANCELLED', sale.employeeId, now);
+        }
+      }
+      await (_db.update(_db.sales)..where((s) => s.id.equals(saleId)))
+          .write(const SalesCompanion(status: Value('CANCELLED')));
+    });
+  }
+
+  /// Add [delta] (may be negative, floored at 0) to a product's stock level
+  /// and record the matching movement.
+  Future<void> _adjustStock(String productId, String storeId, int delta,
+      String type, String actorId, DateTime now) async {
+    final rows = await (_db.select(_db.stockLevels)
+          ..where((s) => s.productId.equals(productId) & s.storeId.equals(storeId)))
+        .get();
+    if (rows.isEmpty) return;
+    final qBefore =
+        rows.fold<int>(0, (max, r) => r.quantity > max ? r.quantity : max);
+    final qAfter = (qBefore + delta) < 0 ? 0 : qBefore + delta;
+    await (_db.update(_db.stockLevels)
+          ..where((s) => s.productId.equals(productId) & s.storeId.equals(storeId)))
+        .write(StockLevelsCompanion(
+      quantity: Value(qAfter),
+      updatedAt: Value(now),
+    ));
+    await _db.into(_db.stockMovements).insert(StockMovementsCompanion.insert(
+      id: const Uuid().v4(),
+      productId: productId,
+      storeId: storeId,
+      type: type,
+      quantityDelta: delta,
+      actorId: actorId,
+      quantityBefore: Value(qBefore),
+      quantityAfter: Value(qAfter),
+      createdAt: now,
+    ));
   }
 
   /// Update sale status locally.
@@ -412,8 +477,12 @@ class LocalSaleDataSource {
   ///
   /// Called before [insertAll] when the sale contained draft products so that
   /// the stock check after this call sees positive stock for those products.
+  ///
+  /// [movementIds] (productId → id) lets the caller choose the movement ids so
+  /// the queued RECORD_STOCK_ENTRY can carry the same id to the server.
   Future<void> applyInitialStockEntries(
-      Map<String, int> entries, String storeId, String actorId) async {
+      Map<String, int> entries, String storeId, String actorId,
+      {Map<String, String> movementIds = const {}}) async {
     if (entries.isEmpty) return;
     await _db.transaction(() async {
       final now = DateTime.now();
@@ -452,7 +521,7 @@ class LocalSaleDataSource {
         }
 
         await _db.into(_db.stockMovements).insert(StockMovementsCompanion.insert(
-          id: const Uuid().v4(),
+          id: movementIds[productId] ?? const Uuid().v4(),
           productId: productId,
           storeId: storeId,
           type: 'STOCK_ENTRY',

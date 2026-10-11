@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:ffi';
 
 import 'package:dio/dio.dart';
@@ -27,6 +28,20 @@ void _overrideSqlite3ForLinuxTesting() {
 class _MockSyncService extends Mock implements SyncService {}
 
 class _MockDio extends Mock implements Dio {}
+
+Future<void> _queuePendingCount(AppDatabase db, String sessionId) async {
+  await db.into(db.syncQueue).insert(SyncQueueCompanion.insert(
+        id: 'op-count-$sessionId',
+        operation: 'SAVE_INVENTORY_COUNT',
+        payload: jsonEncode({
+          'sessionId': sessionId,
+          'productId': 'prod-1',
+          'theoretical': 10,
+          'physical': 7,
+        }),
+        createdAt: DateTime.now(),
+      ));
+}
 
 /// Seeds a session + count + stock_level into the test DB.
 ///
@@ -164,9 +179,12 @@ void main() {
       expect(sess.status, 'VALIDATED');
     });
 
-    // ── AC2: Delta live zero → skip, not counted ─────────────────────────
+    // ── AC2: the counted gap applies on top of the current stock ─────────
+    // Same rule as the backend: sales made between the count and the
+    // validation stay counted (setting stock to the counted value would
+    // erase them).
 
-    test('skips count when live stock already matches physical (AC2)',
+    test('applies the counted gap on top of current stock (sale after count)',
         () async {
       await _seedInventoryScenario(
         db: db,
@@ -174,8 +192,8 @@ void main() {
         storeId: 'store-1',
         productId: 'prod-2',
         countTheoretical: 10,
-        countPhysical: 7,
-        stockQty: 7, // live stock already matches physical
+        countPhysical: 7, // 3 missing at count time
+        stockQty: 8, // 2 sold since the count
       );
 
       final container = buildContainer();
@@ -185,9 +203,61 @@ void main() {
           container.read(validateInventoryNotifierProvider.notifier);
       final adjustments = await notifier.validate('sess-ac2');
 
+      expect(adjustments, 1);
+      final m = (await db.select(db.stockMovements).get()).single;
+      expect(m.quantityBefore, 8);
+      expect(m.quantityDelta, -3);
+      expect(m.quantityAfter, 5);
+      final sl = await (db.select(db.stockLevels)
+            ..where((t) => t.id.equals('sl-prod-2')))
+          .getSingle();
+      expect(sl.quantity, 5);
+    });
+
+    test('a gap larger than the current stock stops at zero', () async {
+      await _seedInventoryScenario(
+        db: db,
+        sessionId: 'sess-floor',
+        storeId: 'store-1',
+        productId: 'prod-floor',
+        countTheoretical: 10,
+        countPhysical: 2, // gap -8
+        stockQty: 5,
+      );
+
+      final container = buildContainer();
+      addTearDown(container.dispose);
+
+      await container
+          .read(validateInventoryNotifierProvider.notifier)
+          .validate('sess-floor');
+
+      final m = (await db.select(db.stockMovements).get()).single;
+      expect(m.quantityDelta, -5);
+      expect(m.quantityAfter, 0);
+    });
+
+    test('no adjustment when the stock is already at zero and the gap is negative',
+        () async {
+      await _seedInventoryScenario(
+        db: db,
+        sessionId: 'sess-zero',
+        storeId: 'store-1',
+        productId: 'prod-zero',
+        countTheoretical: 4,
+        countPhysical: 1,
+        stockQty: 0,
+      );
+
+      final container = buildContainer();
+      addTearDown(container.dispose);
+
+      final adjustments = await container
+          .read(validateInventoryNotifierProvider.notifier)
+          .validate('sess-zero');
+
       expect(adjustments, 0);
-      final movements = await db.select(db.stockMovements).get();
-      expect(movements.isEmpty, isTrue);
+      expect(await db.select(db.stockMovements).get(), isEmpty);
     });
 
     // ── AC3: Variant-aware lookup (defensive) ─────────────────────────────
@@ -432,11 +502,16 @@ void main() {
           container.read(validateInventoryNotifierProvider.notifier);
       await notifier.validate('sess-sync');
 
-      verify(() => mockSyncService.queueOperation(
+      // The local ADJUSTMENT movement id is sent along, so the server reuses
+      // it and the pull does not add a second copy of the adjustment.
+      final movement = (await db.select(db.stockMovements).get()).single;
+      final captured = verify(() => mockSyncService.queueOperation(
             operation: 'VALIDATE_INVENTORY',
-            payload: {'sessionId': 'sess-sync'},
+            payload: captureAny(named: 'payload'),
             entityId: 'sess-sync',
-          )).called(1);
+          )).captured.single as Map<String, dynamic>;
+      expect(captured['sessionId'], 'sess-sync');
+      expect(captured['movementIds'], {'prod-sync|': movement.id});
     });
 
     // ── Patch P1: actorId null throws before transaction ────────────────
@@ -490,6 +565,43 @@ void main() {
       expect(sess.status, 'IN_PROGRESS');
     });
 
+    test('a validation whose queueing fails leaves stock and session untouched',
+        () async {
+      await _seedInventoryScenario(
+        db: db,
+        sessionId: 'sess-atomic',
+        storeId: 'store-1',
+        productId: 'prod-atomic',
+        countTheoretical: 10,
+        countPhysical: 7,
+        stockQty: 10,
+      );
+      when(() => mockSyncService.queueOperation(
+            operation: 'VALIDATE_INVENTORY',
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).thenThrow(Exception('app killed / disk full'));
+
+      final container = buildContainer();
+      addTearDown(container.dispose);
+
+      await expectLater(
+        container
+            .read(validateInventoryNotifierProvider.notifier)
+            .validate('sess-atomic'),
+        throwsException,
+      );
+
+      final sl = await (db.select(db.stockLevels)
+            ..where((t) => t.id.equals('sl-prod-atomic')))
+          .getSingle();
+      expect(sl.quantity, 10);
+      final sess = await (db.select(db.inventorySessions)
+            ..where((t) => t.id.equals('sess-atomic')))
+          .getSingle();
+      expect(sess.status, 'IN_PROGRESS');
+    });
+
     // ── Patch P2: threshold boundary (physical == threshold) ────────────
 
     test('logs threshold breach when physical equals threshold exactly (AC6 boundary)',
@@ -523,6 +635,169 @@ void main() {
       expect(movements.first.quantityDelta, -5);
     });
   });
+
+  group('ValidateInventoryNotifier online with queued counts', () {
+    late _MockSyncService mockSyncService;
+    late _MockDio mockDio;
+    late AppDatabase db;
+
+    setUpAll(_overrideSqlite3ForLinuxTesting);
+
+    setUp(() {
+      mockSyncService = _MockSyncService();
+      mockDio = _MockDio();
+      db = AppDatabase.forTesting();
+      when(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).thenAnswer((_) async {});
+      when(() => mockDio.post<Map<String, dynamic>>(any())).thenAnswer(
+        (inv) async => Response(
+          requestOptions: RequestOptions(path: inv.positionalArguments[0]),
+          data: {
+            'data': {'adjustmentsApplied': 1}
+          },
+        ),
+      );
+    });
+
+    tearDown(() async => db.close());
+
+    /// [onPush] simulates what the push does to the queue (flush it, or
+    /// leave it when the backend is unreachable).
+    ProviderContainer buildContainer(Future<void> Function() onPush) {
+      when(() => mockSyncService.push()).thenAnswer((_) async {
+        await onPush();
+        return [];
+      });
+      return ProviderContainer(overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          syncServiceProvider.overrideWithValue(mockSyncService),
+          dioProvider.overrideWithValue(mockDio),
+          currentUserIdProvider.overrideWith((ref) async => 'actor-test-001'),
+          connectivityServiceProvider
+              .overrideWithValue(_AlwaysOnlineConnectivity()),
+        ]);
+    }
+
+    test('pushes the session queued counts before validating on the server',
+        () async {
+      await _seedInventoryScenario(
+        db: db,
+        sessionId: 'sess-on',
+        storeId: 'store-1',
+        productId: 'prod-1',
+        countTheoretical: 10,
+        countPhysical: 7,
+        stockQty: 10,
+      );
+      await _queuePendingCount(db, 'sess-on');
+      final container = buildContainer(() async {
+        // Successful push: the backend acknowledged the queued count.
+        await db.delete(db.syncQueue).go();
+      });
+      addTearDown(container.dispose);
+
+      final adjustments = await container
+          .read(validateInventoryNotifierProvider.notifier)
+          .validate('sess-on');
+
+      verify(() => mockSyncService.push()).called(1);
+      expect(adjustments, 1);
+      verify(() => mockDio.post<Map<String, dynamic>>(
+          '/api/v1/inventory/sessions/sess-on/validate')).called(1);
+    });
+
+    test('falls back to the offline path when queued counts could not be pushed',
+        () async {
+      await _seedInventoryScenario(
+        db: db,
+        sessionId: 'sess-stuck',
+        storeId: 'store-1',
+        productId: 'prod-1',
+        countTheoretical: 10,
+        countPhysical: 7,
+        stockQty: 10,
+      );
+      await _queuePendingCount(db, 'sess-stuck');
+      final container = buildContainer(() async {}); // push failed silently
+      addTearDown(container.dispose);
+
+      final adjustments = await container
+          .read(validateInventoryNotifierProvider.notifier)
+          .validate('sess-stuck');
+
+      expect(adjustments, 1);
+      verifyNever(() => mockDio.post<Map<String, dynamic>>(any()));
+      // Queued after the counts, so the backend replays them in order.
+      verify(() => mockSyncService.queueOperation(
+            operation: 'VALIDATE_INVENTORY',
+            payload: any(named: 'payload'),
+            entityId: 'sess-stuck',
+          )).called(1);
+    });
+
+    test('validates directly on the server when nothing is queued', () async {
+      await _seedInventoryScenario(
+        db: db,
+        sessionId: 'sess-clean',
+        storeId: 'store-1',
+        productId: 'prod-1',
+        countTheoretical: 10,
+        countPhysical: 7,
+        stockQty: 10,
+      );
+      // A pending count of another session must not block this one.
+      await _queuePendingCount(db, 'other-session');
+      final container = buildContainer(() async {});
+      addTearDown(container.dispose);
+
+      await container
+          .read(validateInventoryNotifierProvider.notifier)
+          .validate('sess-clean');
+
+      verifyNever(() => mockSyncService.push());
+      verify(() => mockDio.post<Map<String, dynamic>>(
+          '/api/v1/inventory/sessions/sess-clean/validate')).called(1);
+    });
+
+    // A count the server rejected stays in the queue with an error: it will
+    // never be applied, so it must not hold the session offline forever.
+    test('a rejected count op does not force the offline path', () async {
+      await _seedInventoryScenario(
+        db: db,
+        sessionId: 'sess-rej',
+        storeId: 'store-1',
+        productId: 'prod-1',
+        countTheoretical: 10,
+        countPhysical: 7,
+        stockQty: 10,
+      );
+      await _queuePendingCount(db, 'sess-rej');
+      await (db.update(db.syncQueue)
+            ..where((t) => t.id.equals('op-count-sess-rej')))
+          .write(const SyncQueueCompanion(lastError: Value('REJECTED')));
+      final container = buildContainer(() async {});
+      addTearDown(container.dispose);
+
+      await container
+          .read(validateInventoryNotifierProvider.notifier)
+          .validate('sess-rej');
+
+      verifyNever(() => mockSyncService.push());
+      verify(() => mockDio.post<Map<String, dynamic>>(
+          '/api/v1/inventory/sessions/sess-rej/validate')).called(1);
+    });
+  });
+}
+
+class _AlwaysOnlineConnectivity implements ConnectivityService {
+  @override
+  Future<bool> isOnline() async => true;
+
+  @override
+  Stream<bool> get onlineStream => Stream.value(true);
 }
 
 /// Stub connectivity that always reports offline.

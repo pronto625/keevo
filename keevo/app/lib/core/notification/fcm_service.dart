@@ -23,6 +23,12 @@ class FcmService {
   /// to invalidate stale providers without coupling [FcmService] to Riverpod.
   void Function(RemoteMessage message)? _onMessage;
 
+  /// MainShell calls [initialize] each time it is built (every sign-in).
+  /// Firebase streams are app-wide: attaching listeners again would open a
+  /// tapped notification's page once per sign-in and re-register the token
+  /// as many times. Only [_onMessage] is refreshed on later calls.
+  bool _listenersAttached = false;
+
   FcmService({
     required LocalNotificationDataSource localNotifications,
     RemoteDeviceTokenDataSource? remoteTokenDataSource,
@@ -54,11 +60,22 @@ class FcmService {
       debugPrint('[FCM] Firebase.initializeApp() done ✅');
     }
 
-    await _initLocalNotifications(router);
+    // Set before the awaits so a concurrent call does not attach the
+    // listeners twice; reset if setup fails before they are attached, so the
+    // next call retries instead of leaving notifications off for good.
+    if (_listenersAttached) return;
+    _listenersAttached = true;
 
-    final settings =
-        await FirebaseMessaging.instance.requestPermission();
-    debugPrint('[FCM] permission: ${settings.authorizationStatus}');
+    try {
+      await _initLocalNotifications(router);
+
+      final settings =
+          await FirebaseMessaging.instance.requestPermission();
+      debugPrint('[FCM] permission: ${settings.authorizationStatus}');
+    } catch (_) {
+      _listenersAttached = false;
+      rethrow;
+    }
 
     // Foreground message handler
     FirebaseMessaging.onMessage.listen((message) {

@@ -117,4 +117,52 @@ void main() {
       expect(computeStoreStatus(0, 100), StoreStatusLevel.enBaisse);
     });
   });
+
+  // withAsOf copies every field by hand; a field dropped there would silently
+  // empty a chart (the list parameters have defaults, so it still compiles).
+  test('withAsOf keeps every field and only sets asOf', () {
+    final day = DateTime(2026, 10, 1);
+    const top = TopProduct(
+        productId: 'p1', name: 'Savon', unitsSold: 3, revenue: 1500, sharePercent: 60);
+    const worst = TopProduct(
+        productId: 'p2', name: 'Riz', unitsSold: 1, revenue: 500, sharePercent: 20);
+    final s = DashboardSnapshot(
+      todayCA: 1,
+      yesterdayCA: 2,
+      dayBeforeYesterdayCA: 3,
+      trendPercent: 4.5,
+      totalTransactionsMonth: 5,
+      averageBasketMonth: 6,
+      prevMonthTransactions: 7,
+      prevMonthAverageBasket: 8,
+      lowStockCount: 9,
+      weeklyTopProducts: const [top],
+      weeklyWorstProducts: const [worst],
+      dailyCALast30: [DailyCA(date: day, amount: 10)],
+      weeklyCA: [DailyCA(date: day, amount: 11)],
+      monthlyCA: [DailyCA(date: day, amount: 12)],
+      yearlyCA: [DailyCA(date: day, amount: 13)],
+      storeOverviews: const [],
+      todaySalesCount: 14,
+    );
+    final at = DateTime(2026, 10, 11, 9);
+
+    final c = s.withAsOf(at);
+
+    expect(c.asOf, at);
+    expect([
+      c.todayCA, c.yesterdayCA, c.dayBeforeYesterdayCA,
+      c.totalTransactionsMonth, c.averageBasketMonth,
+      c.prevMonthTransactions, c.prevMonthAverageBasket,
+      c.lowStockCount, c.todaySalesCount,
+    ], [1, 2, 3, 5, 6, 7, 8, 9, 14]);
+    expect(c.trendPercent, 4.5);
+    expect(c.weeklyTopProducts, same(s.weeklyTopProducts));
+    expect(c.weeklyWorstProducts, same(s.weeklyWorstProducts));
+    expect(c.dailyCALast30, same(s.dailyCALast30));
+    expect(c.weeklyCA, same(s.weeklyCA));
+    expect(c.monthlyCA, same(s.monthlyCA));
+    expect(c.yearlyCA, same(s.yearlyCA));
+    expect(c.storeOverviews, same(s.storeOverviews));
+  });
 }

@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/app_error_widget.dart';
+import '../../domain/exception/store_exception.dart';
 import '../../domain/model/store_model.dart';
 import '../../domain/model/store_type.dart';
+import 'store_type_icon.dart';
 
 /// StoreFormBottomSheet — modal bottom sheet for create or edit store.
 ///
@@ -34,6 +38,7 @@ class _StoreFormBottomSheetState extends State<StoreFormBottomSheet> {
   late final TextEditingController _phoneController;
   late StoreType _selectedType;
   bool _loading = false;
+  String? _error;
 
   bool get _isEditMode => widget.initialStore != null;
 
@@ -59,7 +64,10 @@ class _StoreFormBottomSheetState extends State<StoreFormBottomSheet> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       await widget.onSubmit(
         _nameController.text.trim(),
@@ -72,6 +80,13 @@ class _StoreFormBottomSheetState extends State<StoreFormBottomSheet> {
             : _phoneController.text.trim(),
       );
       if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      // Échec : on garde la saisie et on affiche la raison dans la feuille
+      // (un snackbar de la page serait masqué par celle-ci).
+      if (mounted) {
+        setState(() =>
+            _error = e is StoreException ? e.message : appErrorMessage(e));
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -100,7 +115,7 @@ class _StoreFormBottomSheetState extends State<StoreFormBottomSheet> {
               Text(
                 _isEditMode ? 'Modifier la boutique' : 'Nouvelle boutique',
                 style: theme.textTheme.titleLarge
-                    ?.copyWith(fontWeight: FontWeight.bold),
+                    ?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 20),
 
@@ -110,7 +125,6 @@ class _StoreFormBottomSheetState extends State<StoreFormBottomSheet> {
                 decoration: const InputDecoration(
                   labelText: 'Nom *',
                   hintText: 'Ex: Boutique Centrale',
-                  border: OutlineInputBorder(),
                 ),
                 textCapitalization: TextCapitalization.sentences,
                 validator: (v) {
@@ -128,18 +142,25 @@ class _StoreFormBottomSheetState extends State<StoreFormBottomSheet> {
                   children: [
                     Text('Type :',
                         style: theme.textTheme.bodyMedium
-                            ?.copyWith(color: theme.colorScheme.outline)),
+                            ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
                     const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        color: theme.colorScheme.secondaryContainer,
+                        borderRadius: BorderRadius.circular(20),
+                        color: AppTheme.softTint(theme.brightness),
                       ),
-                      child: Text(
-                        '${_selectedType.icon} ${_selectedType.displayName}',
-                        style: theme.textTheme.labelMedium,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(storeTypeIcon(_selectedType), size: 16),
+                          const SizedBox(width: 6),
+                          Text(
+                            _selectedType.displayName,
+                            style: theme.textTheme.labelMedium,
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -161,7 +182,6 @@ class _StoreFormBottomSheetState extends State<StoreFormBottomSheet> {
                 decoration: const InputDecoration(
                   labelText: 'Adresse (optionnel)',
                   hintText: 'Ex: Rue des marchés, Yaoundé',
-                  border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 16),
@@ -172,24 +192,35 @@ class _StoreFormBottomSheetState extends State<StoreFormBottomSheet> {
                 decoration: const InputDecoration(
                   labelText: 'Téléphone (optionnel)',
                   hintText: '+237 6XX XXX XXX',
-                  border: OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.phone,
               ),
               const SizedBox(height: 24),
 
+              if (_error != null) ...[
+                Text(
+                  _error!,
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(color: theme.colorScheme.error),
+                ),
+                const SizedBox(height: 12),
+              ],
+
               // ── Submit ────────────────────────────────────────────
               SizedBox(
                 width: double.infinity,
-                height: 50,
+                height: 56,
                 child: FilledButton(
                   onPressed: _loading ? null : _submit,
                   child: _loading
-                      ? const SizedBox(
+                      // Bouton désactivé pendant l'envoi : un spinner blanc y
+                      // serait invisible.
+                      ? SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
+                              strokeWidth: 2,
+                              color: theme.colorScheme.onSurfaceVariant))
                       : Text(_isEditMode ? 'Enregistrer' : 'Créer'),
                 ),
               ),
@@ -218,7 +249,13 @@ class _TypeRadioGroup extends StatelessWidget {
         return Expanded(
           child: RadioListTile<StoreType>(
             contentPadding: EdgeInsets.zero,
-            title: Text('${type.icon} ${type.displayName}'),
+            title: Row(
+              children: [
+                Icon(storeTypeIcon(type), size: 18),
+                const SizedBox(width: 6),
+                Flexible(child: Text(type.displayName)),
+              ],
+            ),
             value: type,
             groupValue: selected,
             onChanged: (v) => v != null ? onChanged(v) : null,

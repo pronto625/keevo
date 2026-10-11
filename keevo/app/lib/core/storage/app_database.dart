@@ -276,6 +276,14 @@ class AppDatabase extends _$AppDatabase {
     },
   );
 
+  /// Deletes every row of every table — used when another account signs in on
+  /// this device. The file and its encryption key are kept.
+  Future<void> clearAllData() => transaction(() async {
+        for (final table in allTables) {
+          await delete(table).go();
+        }
+      });
+
   /// Purge transactional data older than 30 days.
   ///
   /// Safety invariant: ONLY rows where synced=true AND syncedAt < cutoff

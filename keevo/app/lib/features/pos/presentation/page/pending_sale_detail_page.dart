@@ -10,7 +10,10 @@ import '../../../catalog/presentation/provider/product_provider.dart';
 import '../../../catalog/presentation/provider/stock_provider.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../domain/model/sale_model.dart';
+import '../../../dashboard/presentation/provider/dashboard_providers.dart';
+import '../provider/day_closure_providers.dart';
 import '../provider/pos_providers.dart';
+import '../widget/pos_app_bar.dart';
 import '../../../../core/di/providers.dart';
 
 /// PendingSaleDetailPage — OWNER views sale details + validates/cancels.
@@ -47,19 +50,19 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
 
     final saleAsync = ref.watch(saleByIdProvider(widget.saleId));
     return saleAsync.when(
-      loading: () => Scaffold(
-        appBar: AppBar(title: const Text('Vente en attente')),
-        body: const Center(child: CircularProgressIndicator()),
+      loading: () => const Scaffold(
+        appBar: PosAppBar(title: 'Vente en attente'),
+        body: Center(child: CircularProgressIndicator()),
       ),
-      error: (_, __) => Scaffold(
-        appBar: AppBar(title: const Text('Vente en attente')),
-        body: const Center(child: Text('Erreur de chargement de la vente')),
+      error: (_, __) => const Scaffold(
+        appBar: PosAppBar(title: 'Vente en attente'),
+        body: Center(child: Text('Erreur de chargement de la vente')),
       ),
       data: (loadedSale) {
         if (loadedSale == null) {
-          return Scaffold(
-            appBar: AppBar(title: const Text('Vente en attente')),
-            body: const Center(child: Text('Vente non trouvée')),
+          return const Scaffold(
+            appBar: PosAppBar(title: 'Vente en attente'),
+            body: Center(child: Text('Vente non trouvée')),
           );
         }
         return _buildSaleScaffold(context, loadedSale, isEmployee);
@@ -68,54 +71,50 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
   }
 
   Widget _buildSaleScaffold(BuildContext context, Sale sale, bool isEmployee) {
+    final cs = Theme.of(context).colorScheme;
+    // Bandeau d'état en ambre dilué plutôt qu'en aplat saturé ; texte en
+    // ambre foncé (clair) ou ambre vif (sombre) pour rester lisible.
+    final onBand = cs.brightness == Brightness.dark
+        ? cs.warning
+        : AppTheme.onWarning;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Détail vente en attente'),
-        centerTitle: true,
-      ),
+      appBar: const PosAppBar(title: 'Détail vente en attente'),
       body: Column(
         children: [
           // — Header
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [AppTheme.warning, AppTheme.warning],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
+            color: cs.warningContainer,
             child: Column(
               children: [
-                const Icon(Icons.pending_actions,
-                    size: 40, color: AppTheme.onWarning),
+                Icon(Icons.pending_actions_rounded, size: 40, color: onBand),
                 const SizedBox(height: 8),
                 if (!isEmployee)
                   Text(
                     _currencyFormat.format(sale.totalAmount),
-                    style: const TextStyle(
-                        color: AppTheme.onWarning,
+                    style: TextStyle(
+                        color: onBand,
                         fontSize: 28,
                         fontWeight: FontWeight.w800),
                   ),
                 const SizedBox(height: 4),
                 Text(
                   _dateFormat.format(sale.createdAt),
-                  style: TextStyle(color: AppTheme.onWarning.withOpacity(0.65)),
+                  style: TextStyle(color: onBand.withValues(alpha: 0.65)),
                 ),
                 const SizedBox(height: 4),
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: AppTheme.onWarning.withOpacity(0.12),
+                    color: onBand.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Text(
+                  child: Text(
                     'EN ATTENTE DE VALIDATION',
                     style: TextStyle(
-                      color: AppTheme.onWarning,
+                      color: onBand,
                       fontWeight: FontWeight.w600,
                       fontSize: 12,
                     ),
@@ -156,7 +155,8 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
             ),
           ),
 
-          // — Actions
+          // — Actions (validation/cancellation are owner-only)
+          if (!isEmployee)
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -183,7 +183,7 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
                         Expanded(
                           flex: 2,
                           child: FilledButton.icon(
-                            onPressed: () => _showValidateDialog(sale.id),
+                            onPressed: () => _showValidateDialog(sale),
                             style: FilledButton.styleFrom(
                               backgroundColor: AppTheme.warning,
                               foregroundColor: AppTheme.onWarning,
@@ -205,7 +205,7 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
     );
   }
 
-  void _showValidateDialog(String saleId) {
+  void _showValidateDialog(Sale sale) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -217,7 +217,7 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
           FilledButton(
             onPressed: () {
               Navigator.pop(ctx);
-              _doValidate(saleId, '');
+              _doValidate(sale, '');
             },
             child: const Text('Confirmer'),
           ),
@@ -249,10 +249,10 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
     );
   }
 
-  Future<void> _doValidate(String saleId, String justification) async {
+  Future<void> _doValidate(Sale sale, String justification) async {
+    final saleId = sale.id;
     setState(() => _loading = true);
     try {
-      final sale = widget.sale!;
       final productRepo = ref.read(productRepositoryProvider);
 
       // ── Step 1: Detect DRAFT products in this sale ──
@@ -264,14 +264,17 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
         }
       }
 
-      // ── Step 2: Promote each DRAFT product (with stock entry dialog) ──
+      // ── Step 2: Ask the initial stock of every DRAFT product first, and only
+      // promote once all were confirmed — cancelling a later dialog must not
+      // leave earlier products promoted with the sale still pending.
       final remappings = <String, String>{};
       final initialStockEntries = <String, int>{};
       if (drafts.isNotEmpty) {
+        final initialStocks = <SaleItemModel, int>{};
         for (final item in drafts) {
           if (!mounted) return;
-          final result = await _showPromotionDialog(item);
-          if (result == null) {
+          final initialStock = await _showPromotionDialog(item, sale.storeId);
+          if (initialStock == null) {
             // User cancelled promotion — abort entire validation
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -280,7 +283,15 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
             }
             return;
           }
-          final (newId, initialStock) = result;
+          initialStocks[item] = initialStock;
+        }
+        final actions = ref.read(productActionsProvider);
+        for (final MapEntry(key: item, value: initialStock)
+            in initialStocks.entries) {
+          final newId = await actions.promoteToActive(item.productId);
+          // Stock entry is applied by validateSale (backend, with the sale's
+          // authoritative storeId).
+          ref.invalidate(stockNotifierProvider(newId));
           if (newId != item.productId) {
             remappings[item.productId] = newId;
           }
@@ -307,6 +318,11 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
       // Refresh catalog so promoted products show as ACTIVE
       ref.invalidate(productListProvider);
       ref.invalidate(pendingDraftsCountProvider);
+      // Validation moved stock and today's totals.
+      ref.invalidate(stockNotifierProvider);
+      ref.invalidate(todaySummaryProvider);
+      ref.invalidate(dayClosureStateProvider);
+      ref.invalidate(dashboardSnapshotProvider);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -325,19 +341,15 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
     }
   }
 
-  /// Shows a promotion dialog for a single draft product.
-  /// Returns (newProductId, initialStock) on success, or null if cancelled.
-  Future<(String, int)?> _showPromotionDialog(SaleItemModel item) async {
-    final storeId = widget.sale?.storeId;
+  /// Asks confirmation + initial stock for a single draft product.
+  /// Returns the initial stock, or null if cancelled.
+  Future<int?> _showPromotionDialog(SaleItemModel item, String? storeId) async {
     final stockController = TextEditingController();
     try {
-      return await showDialog<(String, int)?>(
+      return await showDialog<int?>(
         context: context,
         barrierDismissible: false,
         builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
           title: Row(
             children: [
               Icon(Icons.check_circle_rounded,
@@ -365,7 +377,6 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
                     hintText: '0',
                     suffixText: 'unités',
                     helperText: 'Quantité disponible (doit couvrir la vente)',
-                    border: OutlineInputBorder(),
                   ),
                 ),
               ],
@@ -377,29 +388,8 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
               child: const Text('Annuler'),
             ),
             FilledButton(
-              onPressed: () async {
-                final initialStock = int.tryParse(stockController.text) ?? 0;
-                try {
-                  // Promote the product
-                  final actions = ref.read(productActionsProvider);
-                  final newId = await actions.promoteToActive(item.productId);
-
-                  // Stock entry will be handled by the backend
-                  // during validateSale (using the sale's authoritative storeId)
-                  ref.invalidate(stockNotifierProvider(newId));
-
-                  if (ctx.mounted) Navigator.pop(ctx, (newId, initialStock));
-                } catch (e) {
-                  if (ctx.mounted) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      SnackBar(
-                        content: Text(appErrorMessage(e)),
-                        backgroundColor: AppTheme.errorColor,
-                      ),
-                    );
-                  }
-                }
-              },
+              onPressed: () => Navigator.pop(
+                  ctx, int.tryParse(stockController.text) ?? 0),
               style: FilledButton.styleFrom(
                 backgroundColor: AppTheme.success,
                 shape: RoundedRectangleBorder(

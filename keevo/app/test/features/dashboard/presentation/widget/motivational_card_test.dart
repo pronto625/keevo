@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:keevo/core/theme/app_theme.dart';
 import 'package:keevo/features/dashboard/presentation/widget/motivational_card.dart';
 
 Widget _wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
@@ -36,6 +37,27 @@ void main() {
 
       await tester.tap(find.byIcon(Icons.close));
       expect(dismissed, isTrue);
+    });
+
+    testWidgets('uses the dark tint in dark mode so the text stays readable',
+        (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        theme: ThemeData.dark(),
+        home: Scaffold(
+          body: MotivationalCard(message: 'Test message', onDismiss: () {}),
+        ),
+      ));
+
+      final card = tester.widget<Container>(find
+          .descendant(
+            of: find.byType(MotivationalCard),
+            matching: find.byType(Container),
+          )
+          .first);
+      expect(
+        (card.decoration! as BoxDecoration).color,
+        AppTheme.primarySoftTintDark,
+      );
     });
   });
 }

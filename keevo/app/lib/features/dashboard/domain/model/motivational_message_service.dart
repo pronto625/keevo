@@ -8,22 +8,22 @@ class MotivationalMessageService {
   MotivationalMessageService._();
 
   static const List<String> _templates = [
-    '💪 Bonne journée {name} ! Hier vous avez fait {amount} FCFA. Visez plus haut aujourd\'hui !',
-    '🌟 {name}, prêt(e) à dépasser les {amount} FCFA d\'hier ? C\'est parti !',
-    '🚀 Nouvelle journée, nouvelles ventes ! Hier : {amount} FCFA. Aujourd\'hui : encore mieux !',
-    '☀️ Bonjour {name} ! Le soleil brille et votre business aussi — {amount} FCFA hier !',
-    '🎯 Objectif du jour : battre les {amount} FCFA d\'hier. Vous pouvez le faire {name} !',
-    '💰 {amount} FCFA hier, combien aujourd\'hui ? À vous de jouer {name} !',
-    '📈 Votre business grandit ! {amount} FCFA hier. Continuez comme ça {name} !',
-    '⭐ Chaque vente compte ! Hier : {amount} FCFA. Aujourd\'hui sera meilleur {name} !',
-    '🏆 Champion(ne) ! {amount} FCFA hier. Le record est à portée de main !',
-    '🔥 {name}, hier c\'était {amount} FCFA. Aujourd\'hui on fait exploser le compteur !',
+    'Bonne journée {name} ! Hier vous avez fait {amount} FCFA. Visez plus haut aujourd\'hui !',
+    '{name}, prêt(e) à dépasser les {amount} FCFA d\'hier ? C\'est parti !',
+    'Nouvelle journée, nouvelles ventes ! Hier : {amount} FCFA. Aujourd\'hui : encore mieux !',
+    'Bonjour {name} ! Le soleil brille et votre business aussi — {amount} FCFA hier !',
+    'Objectif du jour : battre les {amount} FCFA d\'hier. Vous pouvez le faire {name} !',
+    '{amount} FCFA hier, combien aujourd\'hui ? À vous de jouer {name} !',
+    'Votre business grandit ! {amount} FCFA hier. Continuez comme ça {name} !',
+    'Chaque vente compte ! Hier : {amount} FCFA. Aujourd\'hui sera meilleur {name} !',
+    'Champion(ne) ! {amount} FCFA hier. Le record est à portée de main !',
+    '{name}, hier c\'était {amount} FCFA. Aujourd\'hui on fait exploser le compteur !',
   ];
 
   static const List<String> _zeroCATemplates = [
-    '🌟 Nouvelle journée, nouvelles opportunités ! C\'est parti {name} !',
-    '☀️ Bonjour {name} ! Que cette journée soit pleine de bonnes ventes !',
-    '💪 {name}, aujourd\'hui est un nouveau départ. Chaque vente compte !',
+    'Nouvelle journée, nouvelles opportunités ! C\'est parti {name} !',
+    'Bonjour {name} ! Que cette journée soit pleine de bonnes ventes !',
+    '{name}, aujourd\'hui est un nouveau départ. Chaque vente compte !',
   ];
 
   /// Returns the motivational message for today, personalized with name and amount.

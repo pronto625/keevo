@@ -1,5 +1,7 @@
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/di/providers.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
+import '../../../../core/widget/soft_icon_button.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -42,93 +44,101 @@ class _TransferHistoryPageState extends ConsumerState<TransferHistoryPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final historyAsync = ref.watch(transferHistoryProvider());
 
     // Filter by active store if one is selected
     final activeStoreId = ref.watch(activeStoreIdProvider);
     final stores = ref.watch(storeListNotifierProvider).value ?? [];
+    // Store list may still be loading (empty) — no name rather than a crash.
     final activeStoreName = activeStoreId == null
         ? null
-        : stores.firstWhere(
-            (s) => s.id == activeStoreId,
-            orElse: () => stores.first,
-          ).name;
+        : stores.where((s) => s.id == activeStoreId).firstOrNull?.name;
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      body: CustomScrollView(
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(transferHistoryProvider);
+          try {
+            await ref.read(transferHistoryProvider().future);
+          } catch (_) {
+            // The error state is shown by the list itself.
+          }
+        },
+        child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          // ── Gradient header ─────────────────────────────────────────────
+          // ── App bar — fond neutre, même style que la Vue Stock ─────────
           SliverAppBar(
-            expandedHeight: 140,
+            expandedHeight: 128,
             floating: false,
             pinned: true,
             elevation: 0,
-            backgroundColor: Colors.transparent,
+            scrolledUnderElevation: 0,
+            backgroundColor: cs.surface,
+            leading: Navigator.of(context).canPop()
+                ? IconButton(
+                    icon: Icon(Icons.arrow_back_ios_new_rounded,
+                        color: cs.onSurface, size: 20),
+                    tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+                    onPressed: () => Navigator.maybePop(context),
+                  )
+                : null,
+            actions: [
+              SoftIconButton(
+                key: const Key('new_transfer_fab'),
+                icon: Icons.add_rounded,
+                iconSize: 20,
+                tooltip: 'Nouveau transfert',
+                onPressed: _openNewTransfer,
+              ),
+              const SizedBox(width: 12),
+            ],
             flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      theme.colorScheme.primary,        // #3B5BDB indigo royal
-                      AppTheme.primaryGradientEnd,          // bleu ciel — gradient UX spec
-                    ],
-                  ),
-                ),
-                child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '🔄 Transferts',
-                                    style: theme.textTheme.headlineMedium
-                                        ?.copyWith(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    activeStoreName != null
-                                        ? '📍 $activeStoreName'
-                                        : 'Toutes les boutiques',
-                                    style: theme.textTheme.bodyMedium
-                                        ?.copyWith(
-                                      color: Colors.white.withValues(alpha: 0.9),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            // FAB-style button in header
-                            Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: IconButton(
-                                key: const Key('new_transfer_fab'),
-                                icon: const Icon(Icons.add_rounded,
-                                    color: Colors.white),
-                                tooltip: 'Nouveau transfert',
-                                onPressed: _openNewTransfer,
-                              ),
-                            ),
-                          ],
+              background: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Text(
+                        'Transferts',
+                        style: theme.textTheme.headlineMedium?.copyWith(
+                          color: cs.onSurface,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.3,
                         ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            activeStoreId != null
+                                ? Icons.place_outlined
+                                : Icons.storefront_outlined,
+                            size: 16,
+                            color: cs.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              // The list is filtered as soon as a store is
+                              // active, even while its name is loading.
+                              activeStoreId == null
+                                  ? 'Toutes les boutiques'
+                                  : activeStoreName ?? '…',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -178,35 +188,48 @@ class _TransferHistoryPageState extends ConsumerState<TransferHistoryPage> {
                         _filterStatus != null || activeStoreId != null,
                   );
                 }
-                return RefreshIndicator(
-                  onRefresh: () async =>
-                      ref.invalidate(transferHistoryProvider),
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    padding: const EdgeInsets.only(bottom: 100),
-                    itemCount: filtered.length,
-                    itemBuilder: (ctx, i) =>
-                        _TransferTile(transfer: filtered[i]),
-                  ),
+                return ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: const EdgeInsets.only(bottom: 100),
+                  itemCount: filtered.length,
+                  itemBuilder: (ctx, i) =>
+                      _TransferTile(transfer: filtered[i]),
                 );
               },
             ),
           ),
         ],
       ),
+      ),
 
       // AC1 — FAB opens transfer form. OWNER and EMPLOYEE (any store) can
       // initiate a transfer — matches the header icon button above, which was
       // never role-gated, and the backend (StockTransferController.transfer(),
       // TransferSyncHandler), which now accepts both roles.
-      floatingActionButton: FloatingActionButton.extended(
-        key: const Key('new_transfer_fab_bottom'),
-        onPressed: _openNewTransfer,
-        icon: const Icon(Icons.swap_horiz_rounded),
-        label: const Text('Nouveau transfert'),
-        backgroundColor: theme.colorScheme.primary,
-        foregroundColor: Colors.white,
+      // Couleur pleine + ombre douce, comme le FAB de la Vue Stock.
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          color: cs.primary,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: cs.primary.withValues(alpha: 0.25),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: FloatingActionButton.extended(
+          key: const Key('new_transfer_fab_bottom'),
+          onPressed: _openNewTransfer,
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          icon: const Icon(Icons.swap_horiz_rounded),
+          label: const Text('Nouveau transfert',
+              style: TextStyle(fontWeight: FontWeight.w600)),
+        ),
       ),
     );
   }
@@ -223,8 +246,7 @@ class _EmptyState extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 60, horizontal: 32),
       child: Column(
         children: [
-          Icon(Icons.swap_horiz_rounded,
-              size: 56, color: theme.colorScheme.outlineVariant),
+          const SoftIconBadge(icon: Icons.swap_horiz_rounded, size: 72),
           const SizedBox(height: 16),
           Text(
             hasFilter
@@ -298,25 +320,29 @@ class _FilterBar extends StatelessWidget {
                 onTap: () => onSelect(null)),
             const SizedBox(width: 8),
             _Chip(
-                label: '🚚 En transit',
+                label: 'En transit',
+                icon: Icons.local_shipping_outlined,
                 active: selected == 'IN_TRANSIT',
                 color: Colors.teal,
                 onTap: () => onSelect('IN_TRANSIT')),
             const SizedBox(width: 8),
             _Chip(
-                label: '✅ Effectués',
+                label: 'Effectués',
+                icon: Icons.check_circle_outline_rounded,
                 active: selected == 'COMPLETED',
                 color: AppTheme.success,
                 onTap: () => onSelect('COMPLETED')),
             const SizedBox(width: 8),
             _Chip(
-                label: '⏳ En attente',
+                label: 'En attente',
+                icon: Icons.schedule_rounded,
                 active: selected == 'PENDING_SYNC',
                 color: AppTheme.warning,
                 onTap: () => onSelect('PENDING_SYNC')),
             const SizedBox(width: 8),
             _Chip(
-                label: '❌ Conflits',
+                label: 'Conflits',
+                icon: Icons.error_outline_rounded,
                 active: selected == 'CONFLICT',
                 color: AppTheme.errorColor,
                 onTap: () => onSelect('CONFLICT')),
@@ -332,12 +358,14 @@ class _Chip extends StatelessWidget {
   final bool active;
   final VoidCallback onTap;
   final Color? color;
+  final IconData? icon;
 
   const _Chip({
     required this.label,
     required this.active,
     required this.onTap,
     this.color,
+    this.icon,
   });
 
   @override
@@ -359,12 +387,26 @@ class _Chip extends StatelessWidget {
             width: 1.5,
           ),
         ),
-        child: Text(
-          label,
-          style: theme.textTheme.labelMedium?.copyWith(
-            color: active ? activeColor : theme.colorScheme.onSurfaceVariant,
-            fontWeight: active ? FontWeight.w600 : FontWeight.normal,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon,
+                  size: 14,
+                  color: active
+                      ? activeColor
+                      : theme.colorScheme.onSurfaceVariant),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              label,
+              style: theme.textTheme.labelMedium?.copyWith(
+                color:
+                    active ? activeColor : theme.colorScheme.onSurfaceVariant,
+                fontWeight: active ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -484,9 +526,10 @@ class _TransferTileState extends ConsumerState<_TransferTile> {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       elevation: 0,
+      color: cs.surface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: cs.outlineVariant),
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        side: BorderSide(color: cs.outlineVariant, width: 0.8),
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -497,15 +540,7 @@ class _TransferTileState extends ConsumerState<_TransferTile> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(7),
-                  decoration: BoxDecoration(
-                    color: cs.primaryContainer,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(Icons.inventory_2_outlined,
-                      size: 18, color: cs.primary),
-                ),
+                const SoftIconBadge(icon: Icons.inventory_2_outlined, size: 36),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -629,11 +664,11 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (icon, label, color) = switch (status) {
-      'IN_TRANSIT'   => ('🚚', 'En transit',         Colors.teal),
-      'COMPLETED'    => ('✅', 'Effectué',           AppTheme.success),
-      'PENDING_SYNC' => ('⏳', 'En attente de sync', AppTheme.warning),
-      'CONFLICT'     => ('❌', 'Conflit',             AppTheme.errorColor),
-      _              => ('·', status,               Theme.of(context).colorScheme.onSurfaceVariant),
+      'IN_TRANSIT'   => (Icons.local_shipping_outlined,      'En transit',         Colors.teal),
+      'COMPLETED'    => (Icons.check_circle_outline_rounded, 'Effectué',           AppTheme.success),
+      'PENDING_SYNC' => (Icons.schedule_rounded,             'En attente de sync', AppTheme.warning),
+      'CONFLICT'     => (Icons.error_outline_rounded,        'Conflit',            AppTheme.errorColor),
+      _              => (Icons.circle_outlined,              status,               Theme.of(context).colorScheme.onSurfaceVariant),
     };
 
     return Container(
@@ -641,12 +676,11 @@ class _StatusBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.5)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(icon, style: const TextStyle(fontSize: 10)),
+          Icon(icon, size: 12, color: color),
           const SizedBox(width: 4),
           Text(
             label,

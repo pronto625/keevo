@@ -7,6 +7,7 @@ library;
 import 'dart:ffi';
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/storage/app_database.dart' hide Sale, SaleItem;
 import 'package:keevo/core/sync/connectivity_service.dart';
@@ -142,6 +143,29 @@ void main() {
             payload: any(named: 'payload'),
             entityId: sale.id,
           )).called(1);
+    });
+
+    // The server dates the sale with this value: an offline sale pushed the
+    // next day must still belong to the day it was made.
+    test('recordSale_payloadCarriesOccurredAtInUtc', () async {
+      final sale = _testSale();
+      when(() => mockLocal.insertAll(any(), synced: false))
+          .thenAnswer((_) async {});
+      when(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).thenAnswer((_) async {});
+      when(() => mockDispatcher.triggerPushIfIdle()).thenReturn(null);
+
+      await repo.recordSale(sale);
+
+      final payload = verify(() => mockSyncService.queueOperation(
+            operation: 'CREATE_SALE',
+            payload: captureAny(named: 'payload'),
+            entityId: sale.id,
+          )).captured.single as Map<String, dynamic>;
+      expect(payload['occurredAt'], sale.occurredAt.toUtc().toIso8601String());
     });
 
     test('recordSale_whenOnline_triggersPushInBackground', () async {
@@ -541,6 +565,219 @@ void main() {
             ..where((s) => s.id.equals('sale-correct-online')))
           .getSingle();
       expect(sale.totalAmount, 5000, reason: 'no discount on this seeded sale');
+    });
+  });
+  // ── Online cancel/correct/validate must keep the local stock in step ──────
+
+  group('online sale actions update local stock', () {
+    late AppDatabase db;
+    late LocalSaleDataSource localDs;
+    late MockRemoteSaleDataSource remote;
+    late MockConnectivityService connectivity;
+    late MockSyncService sync;
+    late SaleRepositoryImpl repo;
+
+    setUpAll(_overrideSqlite3ForLinuxTesting);
+
+    setUp(() async {
+      db = AppDatabase.forTesting();
+      localDs = LocalSaleDataSource(db);
+      remote = MockRemoteSaleDataSource();
+      connectivity = MockConnectivityService();
+      sync = MockSyncService();
+      when(() => connectivity.isOnline()).thenAnswer((_) async => true);
+      when(() => sync.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).thenAnswer((_) async {});
+      repo = SaleRepositoryImpl(
+        localDs,
+        remote,
+        db,
+        connectivity: connectivity,
+        syncService: sync,
+        syncTriggerDispatcher: MockSyncTriggerDispatcher(),
+      );
+      await db.into(db.stockLevels).insert(StockLevelsCompanion.insert(
+            id: 'sl-1',
+            productId: 'prod-1',
+            storeId: 'store-1',
+            quantity: 10,
+            updatedAt: DateTime.now(),
+          ));
+    });
+
+    tearDown(() async => db.close());
+
+    Future<void> seed(String id, String status) => localDs.insertAll(
+          Sale(
+            id: id,
+            storeId: 'store-1',
+            employeeId: 'emp-1',
+            paymentMode: PaymentModeEnum.cash,
+            totalAmount: 2000,
+            status: status,
+            items: const [
+              SaleItemModel(
+                id: 'item-1',
+                productId: 'prod-1',
+                productName: 'Savon',
+                catalogueUnitPrice: 1000,
+                appliedUnitPrice: 1000,
+                quantity: 2,
+                subtotal: 2000,
+              ),
+            ],
+            occurredAt: DateTime.now(),
+            createdAt: DateTime.now(),
+          ),
+          synced: true,
+        );
+
+    Future<int> stock() async => (await (db.select(db.stockLevels)
+              ..where((s) => s.productId.equals('prod-1')))
+            .getSingle())
+        .quantity;
+
+    Future<String?> status(String id) async =>
+        (await (db.select(db.sales)..where((s) => s.id.equals(id)))
+                .getSingle())
+            .status;
+
+    DioException httpError(int code) => DioException(
+          requestOptions: RequestOptions(path: '/x'),
+          response: Response(
+            requestOptions: RequestOptions(path: '/x'),
+            statusCode: code,
+            data: {'domainCode': 'SALE_ALREADY_CANCELLED'},
+          ),
+          type: DioExceptionType.badResponse,
+        );
+
+    test('cancel COMPLETED online restores the local stock', () async {
+      await seed('s1', 'COMPLETED');
+      expect(await stock(), 8);
+      when(() => remote.cancelSale(any(), any())).thenAnswer((_) async {});
+
+      await repo.cancelSale('s1', 'Erreur de scan article');
+
+      expect(await status('s1'), 'CANCELLED');
+      expect(await stock(), 10);
+    });
+
+    test('correct online applies the quantity delta to the local stock',
+        () async {
+      await seed('s2', 'COMPLETED');
+      when(() => remote.correctSale(any(), any(), any()))
+          .thenAnswer((_) async {});
+
+      await repo.correctSale('s2', 'Erreur de quantité', {'item-1': 1});
+
+      expect(await stock(), 9);
+    });
+
+    test('validate PENDING online decrements the local stock', () async {
+      await seed('s3', 'PENDING_VALIDATION');
+      expect(await stock(), 10);
+      when(() => remote.validateSale(any(), any(),
+              productIdRemappings: any(named: 'productIdRemappings'),
+              initialStockEntries: any(named: 'initialStockEntries')))
+          .thenAnswer((_) async {});
+
+      await repo.validateSale('s3', 'ok');
+
+      expect(await status('s3'), 'COMPLETED');
+      expect(await stock(), 8);
+      verifyNever(() => sync.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          ));
+    });
+
+    test('validate rejected by the backend (4xx) rethrows, no offline fallback',
+        () async {
+      await seed('s4', 'PENDING_VALIDATION');
+      when(() => remote.validateSale(any(), any(),
+              productIdRemappings: any(named: 'productIdRemappings'),
+              initialStockEntries: any(named: 'initialStockEntries')))
+          .thenThrow(httpError(409));
+
+      await expectLater(
+          repo.validateSale('s4', 'ok'), throwsA(isA<DioException>()));
+
+      expect(await status('s4'), 'PENDING_VALIDATION');
+      expect(await stock(), 10);
+      verifyNever(() => sync.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          ));
+    });
+
+    test('cancel PENDING rejected by the backend rethrows, no queue', () async {
+      await seed('s5', 'PENDING_VALIDATION');
+      when(() => remote.cancelSale(any(), any())).thenThrow(httpError(409));
+
+      await expectLater(repo.cancelSale('s5', 'Client parti'),
+          throwsA(isA<DioException>()));
+
+      expect(await status('s5'), 'PENDING_VALIDATION');
+    });
+
+    test('initial stock entry is queued with the local movement id', () async {
+      final sale = Sale(
+        id: 'sale-draft',
+        storeId: 'store-1',
+        employeeId: 'emp-1',
+        paymentMode: PaymentModeEnum.cash,
+        totalAmount: 1000,
+        items: const [
+          SaleItemModel(
+            id: 'item-d',
+            productId: 'prod-1',
+            productName: 'Savon',
+            catalogueUnitPrice: 1000,
+            appliedUnitPrice: 1000,
+            quantity: 1,
+            subtotal: 1000,
+          ),
+        ],
+        occurredAt: DateTime.now(),
+        createdAt: DateTime.now(),
+        originalDraftProductIds: const ['prod-1'],
+        initialStockEntries: const {'prod-1': 5},
+        initialStockMovementIds: const {'prod-1': 'mv-42'},
+      );
+
+      await repo.recordSale(sale);
+
+      verify(() => sync.queueOperation(
+            operation: 'RECORD_STOCK_ENTRY',
+            payload: any(named: 'payload'),
+            entityId: 'mv-42',
+          )).called(1);
+    });
+
+    test('validate on a network error still falls back to the offline queue',
+        () async {
+      await seed('s6', 'PENDING_VALIDATION');
+      when(() => remote.validateSale(any(), any(),
+              productIdRemappings: any(named: 'productIdRemappings'),
+              initialStockEntries: any(named: 'initialStockEntries')))
+          .thenThrow(DioException(
+              requestOptions: RequestOptions(path: '/x'),
+              type: DioExceptionType.connectionError));
+
+      await repo.validateSale('s6', 'ok');
+
+      expect(await status('s6'), 'COMPLETED');
+      verify(() => sync.queueOperation(
+            operation: 'VALIDATE_SALE',
+            payload: any(named: 'payload'),
+            entityId: 's6',
+          )).called(1);
     });
   });
 }

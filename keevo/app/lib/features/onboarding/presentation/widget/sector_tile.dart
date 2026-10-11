@@ -62,8 +62,8 @@ class SectorTile extends StatelessWidget {
                 Container(
                   width: 44,
                   height: 44,
-                  decoration: const BoxDecoration(
-                    color: AppTheme.primarySoftTint,
+                  decoration: BoxDecoration(
+                    color: AppTheme.softTint(Theme.of(context).brightness),
                     shape: BoxShape.circle,
                   ),
                   alignment: Alignment.center,

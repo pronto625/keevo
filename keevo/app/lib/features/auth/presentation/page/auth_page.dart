@@ -5,11 +5,15 @@ import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:intl_phone_field/phone_number.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/storage/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widgets/lang_toggle.dart';
+import '../../../../core/widget/lang_toggle.dart';
+import '../../../../core/widget/phone_validation.dart';
 import '../../domain/exception/auth_exception.dart';
 import '../../domain/model/login_result.dart';
 import '../provider/auth_provider.dart';
+import '../provider/session_claims_applier.dart';
+import '../widget/previous_account_data_dialog.dart';
 
 /// Controls which flow [AuthPage] runs.
 enum AuthMode { register, login }
@@ -68,16 +72,56 @@ class _AuthPageState extends ConsumerState<AuthPage> {
 
   /// Switches between register and login modes, resetting form and providers.
   void _toggleMode() {
+    final next =
+        _mode == AuthMode.register ? AuthMode.login : AuthMode.register;
+    // Creating an account requires the CGU to have been accepted; a returning
+    // user reaching login directly may never have seen them.
+    final termsAccepted =
+        ref.read(sharedPreferencesProvider).getBool(kTermsAcceptedKey) ??
+            false;
+    if (next == AuthMode.register && !termsAccepted) {
+      context.go('/terms');
+      return;
+    }
+    _switchMode(next);
+  }
+
+  void _switchMode(AuthMode next) {
     // Clear stale errors from the provider that is being deactivated.
     ref.invalidate(registrationProvider);
     ref.invalidate(loginProvider);
     setState(() {
-      _mode = _mode == AuthMode.register ? AuthMode.login : AuthMode.register;
+      _mode = next;
       _formKey.currentState?.reset();
       _passwordController.clear();
       _phoneValid = false;
       _completePhone = null;
     });
+  }
+
+  /// Login opened as the first screen (splash, logout, session expiry) has
+  /// nowhere to go back to: the welcome screen would force the CGU again.
+  bool get _hasBack =>
+      _mode != widget.initialMode || widget.initialMode == AuthMode.register;
+
+  void _onBack() {
+    if (_mode != widget.initialMode) {
+      _switchMode(widget.initialMode);
+    } else {
+      context.go('/terms');
+    }
+  }
+
+  /// Another account's unsynced operations are still on the device: the
+  /// sign-in only goes on if the user accepts losing them.
+  Future<void> _askAboutPreviousAccountData(
+    PreviousAccountDataException error, {
+    required Future<void> Function() onDiscard,
+    required Future<void> Function() onKeep,
+  }) async {
+    final discard =
+        await confirmDiscardPreviousAccountData(context, error.pendingOperations);
+    await (discard ? onDiscard() : onKeep());
   }
 
   Future<void> _submit() async {
@@ -101,6 +145,8 @@ class _AuthPageState extends ConsumerState<AuthPage> {
   String? _computeErrorMessage(AsyncValue<dynamic> asyncState) {
     if (!asyncState.hasError) return null;
     final error = asyncState.error;
+    // Handled by a dialog, not an inline error.
+    if (error is PreviousAccountDataException) return null;
     if (error is AuthException) {
       if (_isFrench) {
         return switch (error.domainCode) {
@@ -146,23 +192,33 @@ class _AuthPageState extends ConsumerState<AuthPage> {
             error.domainCode == 'USER_ALREADY_EXISTS') {
           _autoSwitchToLogin();
         }
+        if (error is PreviousAccountDataException) {
+          final notifier = ref.read(registrationProvider.notifier);
+          _askAboutPreviousAccountData(error,
+              onDiscard: notifier.discardPreviousAccountDataAndContinue,
+              onKeep: notifier.cancelPendingSignIn);
+        }
       }
     });
 
     // Navigate on successful login (guard: skip if already in register mode).
     ref.listen(loginProvider, (_, next) {
       if (_mode != AuthMode.login) return;
+      final error = next.error;
+      if (next.hasError && error is PreviousAccountDataException) {
+        final notifier = ref.read(loginProvider.notifier);
+        _askAboutPreviousAccountData(error,
+            onDiscard: notifier.discardPreviousAccountDataAndContinue,
+            onKeep: notifier.cancelPendingSignIn);
+        return;
+      }
       next.whenData((result) {
         if (result == null) return;
         switch (result) {
-          case AuthenticatedResult(:final tokens):
-            if (tokens.passwordChangeRequired) {
-              context.go('/auth/change-password');
-            } else {
-              final prefs = ref.read(sharedPreferencesProvider);
-              final role = prefs.getString(kUserRoleKey);
-              context.go(role == 'OWNER' ? '/dashboard' : '/pos');
-            }
+          case AuthenticatedResult():
+            // The splash decides where a signed-in user goes (unfinished setup
+            // wizard, forced password change, role) — one rule for every path.
+            context.go('/splash');
           case NeedsTenantSelectionResult(:final loginToken, :final memberships):
             context.go('/tenant-picker', extra: <String, dynamic>{
               'loginToken': loginToken,
@@ -190,26 +246,28 @@ class _AuthPageState extends ConsumerState<AuthPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  IconButton(
-                    icon: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: cs.surfaceContainerHighest,
+                  if (_hasBack)
+                    IconButton(
+                      icon: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: cs.surfaceContainerHighest,
+                        ),
+                        child: Icon(
+                          Icons.arrow_back,
+                          size: 20,
+                          color: cs.onSurface,
+                        ),
                       ),
-                      child: Icon(
-                        Icons.arrow_back,
-                        size: 20,
-                        color: cs.onSurface,
-                      ),
-                    ),
-                    // Toujours vers /onboarding, peu importe le mode ou
-                    // l'état de la pile — évite le comportement incohérent
-                    // précédent (canPop()/pop() renvoyait parfois vers une
-                    // route inattendue selon le chemin d'arrivée sur la page).
-                    onPressed: () => context.go('/onboarding'),
-                  ),
+                      // Déterministe (pas de canPop()/pop(), qui dépendait
+                      // du chemin d'arrivée sur la page) : voir [_onBack].
+                      onPressed: _onBack,
+                    )
+                  else
+                    // Garde le sélecteur de langue à droite.
+                    const SizedBox(width: 48, height: 48),
                   LangToggle(
                     isFrench: _isFrench,
                     onChanged: (fr) => setState(() => _isFrench = fr),
@@ -276,16 +334,22 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                         initialCountryCode: 'CM',
                         languageCode: 'fr',
                         keyboardType: TextInputType.phone,
+                        // Shown by the field's own length check, which runs
+                        // before [validator].
+                        invalidNumberMessage: _isFrench
+                            ? 'Numéro invalide pour ce pays'
+                            : 'Invalid number for this country',
                         onChanged: (PhoneNumber phone) {
                           _completePhone = phone.completeNumber;
-                          _phoneValid = true;
+                          _phoneValid = isValidPhoneNumber(phone);
                         },
                         onCountryChanged: (_) {
                           _phoneValid = false;
                           _completePhone = null;
                         },
-                        validator: (_) {
-                          if (!_phoneValid) {
+                        // Called before onChanged: judge the number received.
+                        validator: (phone) {
+                          if (!isValidPhoneNumber(phone)) {
                             return _isFrench
                                 ? 'Numéro invalide pour ce pays'
                                 : 'Invalid number for this country';

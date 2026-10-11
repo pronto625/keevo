@@ -1,14 +1,19 @@
 import '../../../../core/di/providers.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../domain/model/payment_mode_enum.dart';
 import '../../domain/model/sale_model.dart';
+import '../../../catalog/presentation/provider/stock_provider.dart';
+import '../../../dashboard/presentation/provider/dashboard_providers.dart';
 import '../provider/day_closure_providers.dart';
 import '../provider/pos_providers.dart';
+import '../widget/pos_app_bar.dart';
 
 /// SaleDetailPage — Displays details of a single sale.
 ///
@@ -24,12 +29,7 @@ class SaleDetailPage extends ConsumerWidget {
     // If sale was passed directly (from sales history), use it
     if (sale != null) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Détails de la vente'),
-          backgroundColor: AppTheme.primary,
-          foregroundColor: Colors.white,
-          elevation: 0,
-        ),
+        appBar: const PosAppBar(title: 'Détails de la vente'),
         body: _SaleDetailContent(sale: sale!),
       );
     }
@@ -38,12 +38,7 @@ class SaleDetailPage extends ConsumerWidget {
     final saleAsync = ref.watch(saleByIdProvider(saleId));
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Détails de la vente'),
-        backgroundColor: AppTheme.primary,
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
+      appBar: const PosAppBar(title: 'Détails de la vente'),
       body: saleAsync.when(
         data: (sale) {
           if (sale == null) {
@@ -58,19 +53,43 @@ class SaleDetailPage extends ConsumerWidget {
   }
 }
 
-class _SaleDetailContent extends ConsumerWidget {
+class _SaleDetailContent extends ConsumerStatefulWidget {
   final Sale sale;
 
   const _SaleDetailContent({required this.sale});
 
+  @override
+  ConsumerState<_SaleDetailContent> createState() => _SaleDetailContentState();
+}
+
+class _SaleDetailContentState extends ConsumerState<_SaleDetailContent> {
   static const _currencyFormat = _CurrencyFormat();
 
+  /// Sale as currently displayed — replaced locally after a confirmed
+  /// cancel/correction so the page never offers actions on a stale status.
+  late Sale _sale;
+  bool _locallyUpdated = false;
+  bool _busy = false;
+
+  Sale get sale => _sale;
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  void initState() {
+    super.initState();
+    _sale = widget.sale;
+  }
+
+  @override
+  void didUpdateWidget(covariant _SaleDetailContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_locallyUpdated) _sale = widget.sale;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dateFormat = DateFormat("EEEE d MMMM yyyy 'à' HH:mm", 'fr_FR');
     final isOwner = ref.watch(currentUserRoleProvider) == 'OWNER';
-
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -102,23 +121,23 @@ class _SaleDetailContent extends ConsumerWidget {
           ),
           // Client info (if any)
           if (sale.clientId != null) ...[
-            _buildSectionHeader('Client'),
+            _buildSectionHeader(context, 'Client'),
             ListTile(
-              leading: CircleAvatar(
-                backgroundColor: theme.colorScheme.outlineVariant,
-                child: Icon(Icons.person_outline, color: theme.colorScheme.onSurfaceVariant),
+              leading: const SoftIconBadge(icon: Icons.person_outline_rounded),
+              title: Text(
+                ref.watch(saleClientNameProvider(sale.clientId!)).valueOrNull ??
+                    'Client',
               ),
-              title: Text(sale.clientId!), // TODO: resolve client name
               subtitle: const Text('Client enregistré'),
             ),
             const Divider(height: 1),
           ],
           // Items section
-          _buildSectionHeader('Articles (${sale.items.length})'),
+          _buildSectionHeader(context, 'Articles (${sale.items.length})'),
           ...sale.items.map((item) => _buildItemTile(item, theme)),
           const Divider(height: 1),
           // Totals section
-          _buildSectionHeader('Résumé'),
+          _buildSectionHeader(context, 'Résumé'),
           _buildTotalRow(
             context,
             'Sous-total',
@@ -147,7 +166,7 @@ class _SaleDetailContent extends ConsumerWidget {
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: () => _showCancelDialog(context, ref),
+                      onPressed: _busy ? null : _showCancelDialog,
                       icon: const Icon(Icons.cancel_outlined),
                       label: const Text('Annuler entièrement'),
                       style: OutlinedButton.styleFrom(
@@ -159,7 +178,7 @@ class _SaleDetailContent extends ConsumerWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: FilledButton.icon(
-                      onPressed: () => _showCorrectSheet(context, ref),
+                      onPressed: _busy ? null : _showCorrectSheet,
                       icon: const Icon(Icons.edit_outlined),
                       label: const Text('Corriger un article'),
                       style: FilledButton.styleFrom(
@@ -178,206 +197,114 @@ class _SaleDetailContent extends ConsumerWidget {
     );
   }
 
-  void _refreshAfterOwnerAction(WidgetRef ref) {
+  void _refreshAfterOwnerAction() {
     ref.invalidate(saleByIdProvider(sale.id));
     ref.invalidate(salesHistoryProvider);
+    ref.invalidate(stockNotifierProvider);
+    ref.invalidate(todaySummaryProvider);
+    ref.invalidate(dayClosureStateProvider);
+    ref.invalidate(dashboardSnapshotProvider);
   }
 
-  void _showCancelDialog(BuildContext context, WidgetRef ref) {
-    final controller = TextEditingController();
-    showDialog<void>(
+  Future<void> _showCancelDialog() async {
+    final justification = await showDialog<String>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) {
-          final justification = controller.text.trim();
-          final canConfirm = justification.length >= 10;
-          return AlertDialog(
-            title: const Text('Annuler la vente'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                    'Cette action restaure le stock des articles et est irréversible. '
-                    'Une justification est requise (10 caractères minimum).'),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: controller,
-                  maxLines: 2,
-                  decoration: const InputDecoration(
-                    labelText: 'Justification',
-                    border: OutlineInputBorder(),
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Retour'),
-              ),
-              FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: AppTheme.errorColor),
-                onPressed: canConfirm
-                    ? () {
-                        Navigator.pop(ctx);
-                        _doCancel(context, ref, controller.text.trim());
-                      }
-                    : null,
-                child: const Text('Confirmer annulation'),
-              ),
-            ],
-          );
-        },
-      ),
+      builder: (_) => const _CancelSaleDialog(),
+    );
+    if (justification == null || !mounted) return;
+    await _runOwnerAction(
+      () => ref.read(saleRepositoryProvider).cancelSale(sale.id, justification),
+      updated: _copySale(sale, status: 'CANCELLED'),
+      successMessage: 'Vente annulée, stock restauré',
     );
   }
 
-  Future<void> _doCancel(
-      BuildContext context, WidgetRef ref, String justification) async {
-    try {
-      await ref.read(saleRepositoryProvider).cancelSale(sale.id, justification);
-      _refreshAfterOwnerAction(ref);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Vente annulée, stock restauré')),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(appErrorMessage(e))),
-        );
-      }
-    }
-  }
-
-  void _showCorrectSheet(BuildContext context, WidgetRef ref) {
-    final justificationController = TextEditingController();
-    final qtyControllers = <String, TextEditingController>{
-      for (final item in sale.items)
-        item.id: TextEditingController(text: '${item.quantity}'),
-    };
-
-    showModalBottomSheet<void>(
+  Future<void> _showCorrectSheet() async {
+    final result = await showModalBottomSheet<_Correction>(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) {
-          final itemQuantities = <String, int>{};
-          for (final item in sale.items) {
-            final newQty = int.tryParse(qtyControllers[item.id]!.text) ?? item.quantity;
-            if (newQty != item.quantity) {
-              itemQuantities[item.id] = newQty;
-            }
-          }
-          final justification = justificationController.text.trim();
-          final canConfirm =
-              itemQuantities.isNotEmpty && justification.length >= 10;
-
-          return Padding(
-            padding: EdgeInsets.only(
-              left: 16,
-              right: 16,
-              top: 16,
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
-            ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Corriger un article',
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-                  const SizedBox(height: 12),
-                  ...sale.items.map((item) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 2,
-                              child: Text(item.productName,
-                                  overflow: TextOverflow.ellipsis),
-                            ),
-                            SizedBox(
-                              width: 90,
-                              child: TextField(
-                                controller: qtyControllers[item.id],
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  labelText: 'Qté',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                ),
-                                onChanged: (_) => setState(() {}),
-                              ),
-                            ),
-                          ],
-                        ),
-                      )),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: justificationController,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      labelText: 'Justification (10 caractères minimum)',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: canConfirm
-                          ? () {
-                              Navigator.pop(ctx);
-                              _doCorrect(context, ref, justification, itemQuantities);
-                            }
-                          : null,
-                      child: const Text('Enregistrer la correction'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
+      builder: (_) => _CorrectSaleSheet(items: sale.items),
+    );
+    if (result == null || !mounted) return;
+    await _runOwnerAction(
+      () => ref
+          .read(saleRepositoryProvider)
+          .correctSale(sale.id, result.justification, result.itemQuantities),
+      updated: _copySale(sale, itemQuantities: result.itemQuantities),
+      successMessage: 'Vente corrigée',
     );
   }
 
-  Future<void> _doCorrect(BuildContext context, WidgetRef ref,
-      String justification, Map<String, int> itemQuantities) async {
+  Future<void> _runOwnerAction(Future<void> Function() action,
+      {required Sale updated, required String successMessage}) async {
+    setState(() => _busy = true);
     try {
-      await ref
-          .read(saleRepositoryProvider)
-          .correctSale(sale.id, justification, itemQuantities);
-      _refreshAfterOwnerAction(ref);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Vente corrigée')),
-        );
-      }
+      await action();
+      if (!mounted) return;
+      setState(() {
+        _sale = updated;
+        _locallyUpdated = true;
+      });
+      _refreshAfterOwnerAction();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(successMessage)),
+      );
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(appErrorMessage(e))),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(appErrorMessage(e))),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  Widget _buildSectionHeader(String title) {
+  /// Mirrors what the backend (and the local cache) apply: new status, or new
+  /// item quantities with subtotal = applied price × qty and total = Σ − remise.
+  static Sale _copySale(Sale s,
+      {String? status, Map<String, int> itemQuantities = const {}}) {
+    final items = s.items.map((i) {
+      final qty = itemQuantities[i.id];
+      if (qty == null) return i;
+      return SaleItemModel(
+        id: i.id,
+        productId: i.productId,
+        variantId: i.variantId,
+        productName: i.productName,
+        catalogueUnitPrice: i.catalogueUnitPrice,
+        appliedUnitPrice: i.appliedUnitPrice,
+        quantity: qty,
+        subtotal: i.appliedUnitPrice * qty,
+      );
+    }).toList();
+    final total = itemQuantities.isEmpty
+        ? s.totalAmount
+        : items.fold<int>(0, (sum, i) => sum + i.subtotal) - s.discountAmount;
+    return Sale(
+      id: s.id,
+      storeId: s.storeId,
+      employeeId: s.employeeId,
+      clientId: s.clientId,
+      paymentMode: s.paymentMode,
+      mobileMoneyRef: s.mobileMoneyRef,
+      totalAmount: total,
+      discountAmount: s.discountAmount,
+      status: status ?? s.status,
+      items: items,
+      occurredAt: s.occurredAt,
+      createdAt: s.createdAt,
+    );
+  }
+
+  Widget _buildSectionHeader(BuildContext context, String title) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Text(
         title,
-        style: const TextStyle(
+        style: TextStyle(
           fontWeight: FontWeight.w600,
           fontSize: 14,
-          color: AppTheme.primary,
+          color: Theme.of(context).colorScheme.primary,
         ),
       ),
     );
@@ -464,11 +391,11 @@ class _SaleDetailContent extends ConsumerWidget {
 
     return ListTile(
       leading: CircleAvatar(
-        backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
+        backgroundColor: AppTheme.softTint(theme.brightness),
         child: Text(
           '${item.quantity}',
-          style: const TextStyle(
-            color: AppTheme.primary,
+          style: TextStyle(
+            color: theme.colorScheme.primary,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -539,7 +466,7 @@ class _SaleDetailContent extends ConsumerWidget {
               color: isDiscount
                   ? AppTheme.warning
                   : isTotal
-                      ? AppTheme.primary
+                      ? cs.primary
                       : cs.onSurface,
             ),
           ),
@@ -571,5 +498,181 @@ class _CurrencyFormat {
       decimalDigits: 0,
     );
     return formatter.format(amount);
+  }
+}
+
+class _Correction {
+  final String justification;
+  final Map<String, int> itemQuantities;
+  const _Correction(this.justification, this.itemQuantities);
+}
+
+/// Cancel dialog — owns its controller so it is disposed with the dialog.
+class _CancelSaleDialog extends StatefulWidget {
+  const _CancelSaleDialog();
+
+  @override
+  State<_CancelSaleDialog> createState() => _CancelSaleDialogState();
+}
+
+class _CancelSaleDialogState extends State<_CancelSaleDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final justification = _controller.text.trim();
+    final canConfirm = justification.length >= 10;
+    return AlertDialog(
+      title: const Text('Annuler la vente'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+              'Cette action restaure le stock des articles et est irréversible. '
+              'Une justification est requise (10 caractères minimum).'),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _controller,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Justification',
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Retour'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: AppTheme.errorColor),
+          onPressed:
+              canConfirm ? () => Navigator.pop(context, justification) : null,
+          child: const Text('Confirmer annulation'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Correction sheet — owns its controllers so they are disposed with it.
+class _CorrectSaleSheet extends StatefulWidget {
+  final List<SaleItemModel> items;
+
+  const _CorrectSaleSheet({required this.items});
+
+  @override
+  State<_CorrectSaleSheet> createState() => _CorrectSaleSheetState();
+}
+
+class _CorrectSaleSheetState extends State<_CorrectSaleSheet> {
+  final _justificationController = TextEditingController();
+  late final Map<String, TextEditingController> _qtyControllers = {
+    for (final item in widget.items)
+      item.id: TextEditingController(text: '${item.quantity}'),
+  };
+
+  @override
+  void dispose() {
+    _justificationController.dispose();
+    for (final c in _qtyControllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final itemQuantities = <String, int>{};
+    // Every quantity must be a whole number of at least 1 (the server refuses
+    // anything else): an empty or zero field blocks the confirmation.
+    var allValid = true;
+    for (final item in widget.items) {
+      final newQty = int.tryParse(_qtyControllers[item.id]!.text);
+      if (newQty == null || newQty < 1) {
+        allValid = false;
+      } else if (newQty != item.quantity) {
+        itemQuantities[item.id] = newQty;
+      }
+    }
+    final justification = _justificationController.text.trim();
+    final canConfirm =
+        allValid && itemQuantities.isNotEmpty && justification.length >= 10;
+
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Corriger un article',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            const SizedBox(height: 12),
+            ...widget.items.map((item) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: Text(item.productName,
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                      SizedBox(
+                        width: 90,
+                        child: TextField(
+                          controller: _qtyControllers[item.id],
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          decoration: const InputDecoration(
+                            labelText: 'Qté',
+                            isDense: true,
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
+                    ],
+                  ),
+                )),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _justificationController,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Justification (10 caractères minimum)',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: canConfirm
+                    ? () => Navigator.pop(
+                        context, _Correction(justification, itemQuantities))
+                    : null,
+                child: const Text('Enregistrer la correction'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

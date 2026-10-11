@@ -6,8 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/di/providers.dart';
 import '../../../../core/storage/app_constants.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import '../../../../features/sync_indicator/presentation/widget/sync_indicator.dart';
 import '../../../onboarding/domain/model/sector_type.dart';
+import '../widget/pos_app_bar.dart';
 
 /// PosPlaceholderPage — Temporary POS landing page.
 ///
@@ -59,7 +61,7 @@ class _PosPlaceholderPageState extends ConsumerState<PosPlaceholderPage> {
           const SnackBar(
             key: Key('tutorialSnackBar'),
             content: Text(
-              '💡 Tutoriel Keevo POS disponible — '
+              'Tutoriel Keevo POS disponible — '
               'Ajouter votre premier produit pour commencer !',
             ),
             duration: Duration(seconds: 5),
@@ -75,10 +77,10 @@ class _PosPlaceholderPageState extends ConsumerState<PosPlaceholderPage> {
     final role = ref.watch(currentUserRoleProvider);
     final isEmployee = role == 'EMPLOYEE';
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Point de Vente'),
+      appBar: const PosAppBar(
+        title: 'Point de Vente',
         // Story 1.5 AC3: SyncIndicator always visible in AppBar trailing position
-        actions: const [SyncIndicator()],
+        actions: [SyncIndicator()],
       ),
       body: Center(
         // AC6: Empty state with sector emoji/illustration + CTA
@@ -87,14 +89,20 @@ class _PosPlaceholderPageState extends ConsumerState<PosPlaceholderPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                sector?.emoji ?? '📊',
-                style: const TextStyle(fontSize: 72),
-              ),
+              // L'emoji du secteur est une donnée ; sans secteur, badge icône.
+              if (sector != null)
+                Text(
+                  sector.emoji,
+                  style: const TextStyle(fontSize: 72),
+                )
+              else
+                const SoftIconBadge(icon: Icons.storefront_outlined, size: 96),
               const SizedBox(height: 24),
               Text(
                 'Votre boutique est prête !',
-                style: Theme.of(context).textTheme.titleLarge,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
@@ -102,7 +110,9 @@ class _PosPlaceholderPageState extends ConsumerState<PosPlaceholderPage> {
                 isEmployee
                     ? 'Aucun produit configuré. Contactez votre responsable.'
                     : 'Commencez par ajouter vos produits pour activer la caisse.',
-                style: Theme.of(context).textTheme.bodyMedium,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                 textAlign: TextAlign.center,
               ),
               if (!isEmployee) ...[

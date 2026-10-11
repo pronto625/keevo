@@ -7,6 +7,7 @@ import 'package:keevo/features/pos/domain/model/payment_mode_enum.dart';
 import 'package:keevo/features/pos/domain/model/sale_model.dart';
 import 'package:keevo/features/pos/presentation/page/sales_history_page.dart';
 import 'package:keevo/features/pos/presentation/provider/day_closure_providers.dart';
+import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
 import 'package:keevo/core/di/providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -19,7 +20,7 @@ void main() {
   late SharedPreferences prefs;
 
   setUp(() async {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({'active_store_id': 'store-1'});
     prefs = await SharedPreferences.getInstance();
   });
 
@@ -197,6 +198,60 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(Card), findsOneWidget);
+    });
+      testWidgets('no active store: asks to pick one instead of querying "default"',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      prefs = await SharedPreferences.getInstance();
+      final requested = <String>[];
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sharedPreferencesProvider.overrideWithValue(prefs),
+            currentUserIdProvider.overrideWith((ref) => Future.value('emp-1')),
+            salesHistoryProvider.overrideWith((ref, filter) {
+              requested.add(filter.storeId);
+              return Future.value(mockSales);
+            }),
+          ],
+          child: const MaterialApp(home: SalesHistoryPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(requested, isEmpty);
+      expect(find.textContaining('Sélectionnez une boutique'), findsOneWidget);
+    });
+
+    testWidgets('shows the client name, not its id', (tester) async {
+      final sale = Sale(
+        id: 'sale-c',
+        storeId: 'store-1',
+        employeeId: 'emp-1',
+        clientId: '3f2b9c1e-0000-4000-8000-000000000001',
+        occurredAt: DateTime.now(),
+        totalAmount: 1000,
+        paymentMode: PaymentModeEnum.cash,
+        items: const [],
+        createdAt: DateTime.now(),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sharedPreferencesProvider.overrideWithValue(prefs),
+            currentUserIdProvider.overrideWith((ref) => Future.value('emp-1')),
+            salesHistoryProvider
+                .overrideWith((ref, filter) => Future.value([sale])),
+            saleClientNameProvider('3f2b9c1e-0000-4000-8000-000000000001')
+                .overrideWith((ref) async => 'Awa Ndiaye'),
+          ],
+          child: const MaterialApp(home: SalesHistoryPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Awa Ndiaye'), findsOneWidget);
+      expect(find.textContaining('3f2b9c1e'), findsNothing);
     });
   });
 }

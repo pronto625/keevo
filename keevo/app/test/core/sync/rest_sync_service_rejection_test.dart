@@ -178,6 +178,38 @@ void main() {
     expect(await db.select(db.syncQueue).get(), isEmpty);
   });
 
+  // Quick-add creates a count with the local product id; once the server
+  // merges the product, the count must follow it instead of pointing at a
+  // product that no longer exists locally.
+  test('a merged product takes its local inventory counts along', () async {
+    final now = DateTime.now();
+    await db.into(db.products).insert(ProductsCompanion.insert(
+        id: 'local-1', name: 'Pantalon', createdAt: now, updatedAt: now));
+    Future<void> count(String id, String session, String product) =>
+        db.into(db.inventoryCounts).insert(InventoryCountsCompanion.insert(
+              id: id,
+              sessionId: session,
+              productId: product,
+              productName: 'Pantalon',
+              theoretical: 0,
+              updatedAt: now,
+            ));
+    await count('c-local', 'session-1', 'local-1');
+    // Session 2 already counts the server product: that count wins.
+    await count('c-local-2', 'session-2', 'local-1');
+    await count('c-server-2', 'session-2', 'server-9');
+    await insertPendingOp(
+        id: 'op-1', operation: 'CREATE_PRODUCT', entityId: 'local-1');
+    stubPushResponse('op-1', 'APPLIED', serverEntityId: 'server-9');
+
+    await syncService.push();
+
+    final counts = {
+      for (final c in await db.select(db.inventoryCounts).get()) c.id: c.productId
+    };
+    expect(counts, {'c-local': 'server-9', 'c-server-2': 'server-9'});
+  });
+
   test('CREATE_PRODUCT applied under its own id keeps the local product',
       () async {
     final now = DateTime.now();

@@ -24,6 +24,7 @@ class RecordSaleUseCase {
     String status = 'COMPLETED',
     List<String> originalDraftProductIds = const [],
     Map<String, int> initialStockEntries = const {},
+    Map<String, String> initialStockMovementIds = const {},
   }) async {
     final now = DateTime.now();
     final saleId = const Uuid().v4();
@@ -40,6 +41,7 @@ class RecordSaleUseCase {
     )).toList();
 
     final subtotal = items.fold(0, (sum, i) => sum + i.subtotal);
+    final discount = discountAmount.clamp(0, subtotal);
 
     final sale = Sale(
       id: saleId,
@@ -48,14 +50,15 @@ class RecordSaleUseCase {
       clientId: clientId,
       paymentMode: mode,
       mobileMoneyRef: mobileRef,
-      totalAmount: subtotal - discountAmount,
-      discountAmount: discountAmount,
+      totalAmount: subtotal - discount,
+      discountAmount: discount,
       status: status,
       items: items,
       occurredAt: now,
       createdAt: now,
       originalDraftProductIds: originalDraftProductIds,
       initialStockEntries: initialStockEntries,
+      initialStockMovementIds: initialStockMovementIds,
     );
 
     await _repository.recordSale(sale);

@@ -41,20 +41,24 @@ class ProductProfitabilityRow extends StatelessWidget {
                 children: [
                   Text(
                     entry.productName,
-                    style: theme.textTheme.bodyMedium
-                        ?.copyWith(fontWeight: FontWeight.w600),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface,
+                    ),
                   ),
                   if (entry.categoryName != null)
                     Text(
                       entry.categoryName!,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withAlpha(150),
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
                   const SizedBox(height: 4),
                   Text(
                     '${_currencyFmt.format(entry.totalRevenue)} · ${entry.unitsSold} unités',
-                    style: theme.textTheme.bodySmall,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -68,15 +72,14 @@ class ProductProfitabilityRow extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: color.withAlpha(30),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: color, width: 1),
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
                     '${entry.marginPercent.toStringAsFixed(1)}%',
                     style: theme.textTheme.labelMedium?.copyWith(
                       color: color,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
@@ -85,22 +88,24 @@ class ProductProfitabilityRow extends StatelessWidget {
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    // Pastille diluée : l'ancien fond rouge plein masquait
+                    // l'icône et le libellé, rouges eux aussi.
                     decoration: BoxDecoration(
-                      color: AppTheme.errorColor,
-                      borderRadius: BorderRadius.circular(4),
+                      color: AppTheme.errorColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Row(
+                    child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.warning_amber_rounded,
                             size: 10, color: AppTheme.errorColor),
-                        const SizedBox(width: 2),
+                        SizedBox(width: 2),
                         Text(
                           'PERTE',
                           style: TextStyle(
                               fontSize: 10,
                               color: AppTheme.errorColor,
-                              fontWeight: FontWeight.bold),
+                              fontWeight: FontWeight.w700),
                         ),
                       ],
                     ),
@@ -114,7 +119,7 @@ class ProductProfitabilityRow extends StatelessWidget {
               ],
             ),
             const SizedBox(width: 4),
-            Icon(Icons.chevron_right, size: 16, color: Theme.of(context).colorScheme.outline),
+            Icon(Icons.chevron_right_rounded, size: 16, color: Theme.of(context).colorScheme.outline),
           ],
         ),
       ),

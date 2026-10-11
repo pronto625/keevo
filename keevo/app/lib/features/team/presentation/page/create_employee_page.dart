@@ -28,6 +28,7 @@ class _CreateEmployeePageState extends ConsumerState<CreateEmployeePage> {
   final _lastNameController = TextEditingController();
 
   String? _completePhone;
+  String _typedNumber = '';
   bool _phoneValid = false;
   StoreModel? _selectedStore;
   bool _successHandled = false;
@@ -39,9 +40,26 @@ class _CreateEmployeePageState extends ConsumerState<CreateEmployeePage> {
     super.dispose();
   }
 
+  // Chiffres uniquement et longueur conforme au pays : un champ vidé ou
+  // contenant des séparateurs ne doit pas passer pour valide.
+  static bool _isValidPhone(PhoneNumber phone) {
+    if (!RegExp(r'^\d+$').hasMatch(phone.number)) return false;
+    try {
+      return phone.isValidNumber();
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    if (!_phoneValid || _completePhone == null) return;
+    if (!_phoneValid || _completePhone == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Saisissez un numéro de téléphone valide'),
+        behavior: SnackBarBehavior.floating,
+      ));
+      return;
+    }
     if (_selectedStore == null) return;
 
     await ref.read(createEmployeeProvider.notifier).create(
@@ -103,9 +121,10 @@ class _CreateEmployeePageState extends ConsumerState<CreateEmployeePage> {
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Nouvel employé'),
-        backgroundColor: AppTheme.primary,
-        foregroundColor: Colors.white,
+        backgroundColor: cs.surface,
+        foregroundColor: cs.onSurface,
         elevation: 0,
+        scrolledUnderElevation: 0,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
@@ -117,12 +136,9 @@ class _CreateEmployeePageState extends ConsumerState<CreateEmployeePage> {
               // ── Prénom ──────────────────────────────────────────────
               TextFormField(
                 controller: _firstNameController,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Prénom',
-                  prefixIcon: const Icon(Icons.person_outline),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  prefixIcon: Icon(Icons.person_outline),
                 ),
                 textCapitalization: TextCapitalization.words,
                 validator: (v) =>
@@ -133,12 +149,9 @@ class _CreateEmployeePageState extends ConsumerState<CreateEmployeePage> {
               // ── Nom ─────────────────────────────────────────────────
               TextFormField(
                 controller: _lastNameController,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Nom',
-                  prefixIcon: const Icon(Icons.person_outline),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  prefixIcon: Icon(Icons.person_outline),
                 ),
                 textCapitalization: TextCapitalization.words,
                 validator: (v) =>
@@ -148,25 +161,33 @@ class _CreateEmployeePageState extends ConsumerState<CreateEmployeePage> {
 
               // ── Numéro de téléphone ─────────────────────────────────
               IntlPhoneField(
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Numéro de téléphone',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
                 ),
                 initialCountryCode: 'CM',
                 languageCode: 'fr',
                 keyboardType: TextInputType.phone,
                 onChanged: (PhoneNumber phone) {
+                  _typedNumber = phone.number;
                   _completePhone = phone.completeNumber;
-                  _phoneValid = true;
+                  _phoneValid = _isValidPhone(phone);
                 },
-                onCountryChanged: (_) {
-                  _phoneValid = false;
-                  _completePhone = null;
+                // Changer de pays ne déclenche pas onChanged : on rejuge le
+                // numéro déjà saisi avec le nouveau pays, sinon un numéro
+                // valide serait refusé à l'envoi tant qu'il n'est pas retapé.
+                onCountryChanged: (country) {
+                  final phone = PhoneNumber(
+                    countryISOCode: country.code,
+                    countryCode: '+${country.fullCountryCode}',
+                    number: _typedNumber,
+                  );
+                  _phoneValid = _isValidPhone(phone);
+                  _completePhone = _phoneValid ? phone.completeNumber : null;
                 },
-                validator: (_) {
-                  if (!_phoneValid) {
+                // Appelé avant onChanged : on juge le numéro reçu, pas
+                // l'état de la frappe précédente.
+                validator: (phone) {
+                  if (phone == null || !_isValidPhone(phone)) {
                     return 'Numéro invalide pour ce pays';
                   }
                   return null;
@@ -181,12 +202,9 @@ class _CreateEmployeePageState extends ConsumerState<CreateEmployeePage> {
                     const Text('Impossible de charger les boutiques'),
                 data: (stores) => DropdownButtonFormField<StoreModel>(
                   initialValue: _selectedStore,
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     labelText: 'Boutique assignée',
-                    prefixIcon: const Icon(Icons.storefront_rounded),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    prefixIcon: Icon(Icons.storefront_outlined),
                   ),
                   items: stores
                       .map((s) => DropdownMenuItem(
@@ -201,15 +219,12 @@ class _CreateEmployeePageState extends ConsumerState<CreateEmployeePage> {
               const SizedBox(height: 12),
 
               // ── Rôle (readonly for now) ─────────────────────────────
-              InputDecorator(
+              const InputDecorator(
                 decoration: InputDecoration(
                   labelText: 'Rôle',
-                  prefixIcon: const Icon(Icons.badge_outlined),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  prefixIcon: Icon(Icons.badge_outlined),
                 ),
-                child: const Text('Employé'),
+                child: Text('Employé'),
               ),
               const SizedBox(height: 32),
 
@@ -242,21 +257,22 @@ class _CreateEmployeePageState extends ConsumerState<CreateEmployeePage> {
               FilledButton.icon(
                 onPressed: createState.isLoading ? null : _submit,
                 icon: createState.isLoading
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 18,
                         height: 18,
+                        // Le bouton est désactivé pendant le chargement : un
+                        // spinner blanc y serait invisible.
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: cs.onSurfaceVariant,
                         ),
                       )
                     : const Icon(Icons.person_add_rounded),
                 label: const Text('Créer l\'employé'),
                 style: FilledButton.styleFrom(
-                  backgroundColor: AppTheme.primary,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  minimumSize: const Size.fromHeight(56),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusL),
                   ),
                 ),
               ),

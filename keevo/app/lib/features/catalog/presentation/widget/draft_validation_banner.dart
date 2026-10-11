@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/theme/app_theme.dart';
 import '../provider/product_provider.dart';
 
 /// DraftValidationBanner — shown in [CatalogPage] AppBar when pending drafts exist.
 ///
-/// AC10: amber banner ("🔶 N brouillon(s) à valider") that filters the product
+/// AC10: amber banner ("N brouillon(s) à valider") that filters the product
 /// list to DRAFT-only when tapped. Styled per UX spec "Alerte attention" pattern.
 class DraftValidationBanner extends ConsumerWidget {
   /// Called when the banner is tapped — should filter the product list to DRAFT-only.
@@ -22,22 +23,22 @@ class DraftValidationBanner extends ConsumerWidget {
         if (count == 0) return const SizedBox.shrink();
 
         final theme = Theme.of(context);
-        // colorScheme.tertiary = #FCC419 per KeevoTheme (amber — stock bas, brouillons)
-        final warningColor = theme.colorScheme.tertiary;
+        // Ambre sémantique (stock bas, brouillons) : le `tertiary` du thème
+        // est dérivé du seed indigo et n'est pas ambre.
+        final warningColor = theme.colorScheme.warning;
 
         return GestureDetector(
           onTap: onTap,
           child: Container(
             width: double.infinity,
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: warningColor.withOpacity(0.15),
-              border: Border(
-                bottom: BorderSide(
-                  color: warningColor.withOpacity(0.4),
-                  width: 1,
-                ),
+              color: warningColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(AppTheme.radiusM),
+              border: Border.all(
+                color: warningColor.withValues(alpha: 0.3),
               ),
             ),
             child: Row(
@@ -47,7 +48,7 @@ class DraftValidationBanner extends ConsumerWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '🔶 $count brouillon${count > 1 ? 's' : ''} à valider',
+                    '$count brouillon${count > 1 ? 's' : ''} à valider',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurface,
                       fontWeight: FontWeight.w600,

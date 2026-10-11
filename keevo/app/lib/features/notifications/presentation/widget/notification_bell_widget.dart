@@ -17,18 +17,29 @@ class NotificationBellWidget extends ConsumerWidget {
     final countAsync = ref.watch(unreadNotificationCountProvider);
     final count = countAsync.valueOrNull ?? 0;
 
-    return IconButton(
-      icon: Badge(
-        label: Text(
-          count > 99 ? '99+' : '$count',
-          style: const TextStyle(color: Colors.white, fontSize: 10),
-        ),
-        isLabelVisible: count > 0,
-        backgroundColor: AppTheme.errorColor,
-        child: const Icon(Icons.notifications_outlined),
+    final theme = Theme.of(context);
+
+    // Même pastille que SoftIconButton, dont on ne peut pas réutiliser le
+    // widget ici : il n'accepte qu'un IconData, pas le Badge de compteur.
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.softTint(theme.brightness),
+        borderRadius: const BorderRadius.all(Radius.circular(14)),
       ),
-      onPressed: () => context.push('/notifications'),
-      tooltip: 'Notifications',
+      child: IconButton(
+        icon: Badge(
+          label: Text(
+            count > 99 ? '99+' : '$count',
+            style: const TextStyle(color: Colors.white, fontSize: 10),
+          ),
+          isLabelVisible: count > 0,
+          backgroundColor: AppTheme.errorColor,
+          child: Icon(Icons.notifications_outlined,
+              color: theme.colorScheme.primary),
+        ),
+        onPressed: () => context.push('/notifications'),
+        tooltip: 'Notifications',
+      ),
     );
   }
 }

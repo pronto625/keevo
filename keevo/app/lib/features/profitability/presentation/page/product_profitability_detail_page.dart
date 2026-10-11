@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import '../provider/profitability_providers.dart';
 import '../widget/margin_sparkline.dart';
 import '../widget/period_filter_chips.dart';
@@ -26,41 +27,50 @@ class ProductProfitabilityDetailPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final period = ref.watch(selectedProfitabilityPeriodProvider);
-    final params = ProfitabilityParams(from: period.from, to: period.to);
+    final selection = ref.watch(selectedProfitabilityPeriodProvider);
+    final period = selection.range();
+    final params = ProfitabilityParams(
+      from: period.from,
+      to: period.to,
+      storeId: ref.watch(profitabilityStoreFilterProvider),
+    );
     final args = (productId: productId, params: params);
     final dataAsync = ref.watch(productProfitabilityDetailProvider(args));
 
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
+      backgroundColor: cs.surfaceContainerLowest,
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
             pinned: true,
-            backgroundColor: AppTheme.primary,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            backgroundColor: cs.surface,
             title: dataAsync.when(
               data: (d) => Text(d.productName,
-                  style: const TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold)),
-              loading: () => const Text('Chargement…',
-                  style: TextStyle(color: Colors.white)),
+                  style: TextStyle(
+                      color: cs.onSurface,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2)),
+              loading: () => Text('Chargement…',
+                  style: TextStyle(color: cs.onSurface)),
               error: (_, __) =>
-                  const Text('Détail', style: TextStyle(color: Colors.white)),
+                  Text('Détail', style: TextStyle(color: cs.onSurface)),
             ),
-            iconTheme: const IconThemeData(color: Colors.white),
+            iconTheme: IconThemeData(color: cs.onSurface),
           ),
 
           // Period filter
           SliverToBoxAdapter(
             child: Container(
-              color: Colors.white,
+              color: cs.surface,
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: PeriodFilterChips(
-                selectedFrom: period.from,
-                selectedTo: period.to,
-                onPeriodChanged: (from, to) => ref
+                selected: selection,
+                onChanged: (s) => ref
                     .read(selectedProfitabilityPeriodProvider.notifier)
-                    .state = (from: from, to: to),
+                    .state = s,
               ),
             ),
           ),
@@ -161,14 +171,16 @@ class ProductProfitabilityDetailPage extends ConsumerWidget {
                     title: 'Meilleure boutique',
                     child: Row(
                       children: [
-                        const Icon(Icons.storefront,
-                            size: 18, color: AppTheme.primary),
-                        const SizedBox(width: 8),
+                        const SoftIconBadge(
+                            icon: Icons.storefront_outlined, size: 32),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             '${detail.topStoreName}'
                             '  —  ${detail.topStoreUnitsSold} unités',
-                            style: const TextStyle(fontWeight: FontWeight.w500),
+                            style: TextStyle(
+                                fontWeight: FontWeight.w500,
+                                color: cs.onSurface),
                           ),
                         ),
                       ],
@@ -196,12 +208,13 @@ class _SectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Card(
+    return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: cs.outlineVariant)),
+      decoration: BoxDecoration(
+        color: cs.cardBg,
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        boxShadow: AppTheme.softShadow(cs),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -210,7 +223,7 @@ class _SectionCard extends StatelessWidget {
             Text(title,
                 style: TextStyle(
                     fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                     color: cs.onSurfaceVariant)),
             const SizedBox(height: 10),
             child,
@@ -234,8 +247,10 @@ class _PriceStat extends StatelessWidget {
               style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const SizedBox(height: 2),
           Text(value,
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold, fontSize: 13)),
+              style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  color: Theme.of(context).colorScheme.onSurface)),
         ],
       );
 }
@@ -256,9 +271,10 @@ class _MetricItem extends StatelessWidget {
               style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
           Text(value,
               style: TextStyle(
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w700,
                   fontSize: 14,
-                  color: valueColor)),
+                  color: valueColor ??
+                      Theme.of(context).colorScheme.onSurface)),
         ],
       );
 }
@@ -287,7 +303,8 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline_rounded, size: 56, color: cs.error),
+            SoftIconBadge(
+                icon: Icons.error_outline_rounded, color: cs.error, size: 72),
             const SizedBox(height: 16),
             Text(
               _message(),

@@ -15,7 +15,11 @@ import 'package:keevo/features/inventory/domain/model/stock_transfer_model.dart'
 import 'package:mocktail/mocktail.dart';
 
 class MockLocalStockTransferDataSource extends Mock
-    implements LocalStockTransferDataSource {}
+    implements LocalStockTransferDataSource {
+  // Runs the transactional block directly (no database behind the mock).
+  @override
+  Future<T> transaction<T>(Future<T> Function() action) => action();
+}
 class MockRemoteStockTransferDataSource extends Mock
     implements RemoteStockTransferDataSource {}
 class MockConnectivityService extends Mock implements ConnectivityService {}

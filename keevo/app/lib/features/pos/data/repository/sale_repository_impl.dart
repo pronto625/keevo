@@ -1,5 +1,6 @@
 import 'dart:developer' as dev;
 
+import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 
 import '../../../../core/storage/app_database.dart' hide Sale, SaleItem;
@@ -56,7 +57,8 @@ class SaleRepositoryImpl implements SaleRepository {
             'quantity': entry.value,
             'notes': 'Stock initial — premier checkout',
           },
-          entityId: entry.key,
+          // Same id as the local STOCK_ENTRY movement so the server keeps it.
+          entityId: sale.initialStockMovementIds[entry.key] ?? entry.key,
         );
       }
 
@@ -255,10 +257,15 @@ class SaleRepositoryImpl implements SaleRepository {
         await _remote.validateSale(saleId, justification,
             productIdRemappings: productIdRemappings,
             initialStockEntries: initialStockEntries);
-        await _local.updateSaleStatus(saleId, 'COMPLETED');
+        // Mirror the server's stock effects locally (initial entries + sale
+        // decrement); idempotent if the sale is already COMPLETED locally.
+        await _local.validateAndDecrementStock(saleId,
+            initialStockEntries: initialStockEntries);
         return;
-      } catch (_) {
-        // Backend unreachable — fall through to offline path
+      } on DioException catch (e) {
+        // Only an unreachable backend falls back to the offline queue; a
+        // business rejection (4xx) must reach the user, not be queued.
+        if (!_isNetworkError(e)) rethrow;
       }
     }
     // Offline: validate + initial stock + decrement (matches backend ValidateSaleService)
@@ -297,17 +304,17 @@ class SaleRepositoryImpl implements SaleRepository {
         throw OfflineActionNotSupportedException();
       }
       await _remote.cancelSale(saleId, justification);
-      await _local.updateSaleStatus(saleId, 'CANCELLED');
+      await _local.cancelAndRestoreStock(saleId);
       return;
     }
 
     if (await _connectivity.isOnline()) {
       try {
         await _remote.cancelSale(saleId, justification);
-        await _local.updateSaleStatus(saleId, 'CANCELLED');
+        await _local.cancelAndRestoreStock(saleId);
         return;
-      } catch (_) {
-        // Backend unreachable — fall through to offline path
+      } on DioException catch (e) {
+        if (!_isNetworkError(e)) rethrow;
       }
     }
     // Offline: just update status (no stock to restore — never decremented)
@@ -438,6 +445,9 @@ class SaleRepositoryImpl implements SaleRepository {
     );
   }
 
+  /// True when the request never got an HTTP answer (offline, timeout…).
+  static bool _isNetworkError(DioException e) => e.response == null;
+
   Map<String, dynamic> _buildPayload(Sale sale) => {
         'saleId': sale.id,
         'storeId': sale.storeId,
@@ -446,6 +456,8 @@ class SaleRepositoryImpl implements SaleRepository {
         'clientId': sale.clientId,
         'discountAmount': sale.discountAmount,
         'requestedStatus': sale.status,
+        // Lets the server date an offline sale by when it was made, not when pushed.
+        'occurredAt': sale.occurredAt.toUtc().toIso8601String(),
         if (sale.originalDraftProductIds.isNotEmpty)
           'originalDraftProductIds': sale.originalDraftProductIds,
         'items': sale.items

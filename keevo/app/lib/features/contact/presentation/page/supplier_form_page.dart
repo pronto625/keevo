@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import '../../../catalog/domain/model/product_model.dart';
 import '../../../catalog/presentation/provider/product_provider.dart';
 import '../../domain/model/supplier_model.dart';
@@ -135,67 +136,31 @@ class _SupplierFormPageState extends ConsumerState<SupplierFormPage>
       backgroundColor: theme.colorScheme.surface,
       body: CustomScrollView(
         slivers: [
-          // ── Gradient AppBar ──────────────────────────────────────────
+          // AppBar épuré — fond neutre, sans bandeau dégradé ni cercles
+          // décoratifs (même traitement que le formulaire produit).
           SliverAppBar(
-            expandedHeight: 160,
+            expandedHeight: 96,
             pinned: true,
             elevation: 0,
-            backgroundColor: primary,
+            scrolledUnderElevation: 0,
+            backgroundColor: theme.colorScheme.surface,
             leading: IconButton(
-              icon: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18),
-              ),
+              icon: Icon(Icons.arrow_back_ios_new_rounded,
+                  color: theme.colorScheme.onSurface, size: 20),
               onPressed: () => context.pop(),
             ),
             flexibleSpace: FlexibleSpaceBar(
+              titlePadding: const EdgeInsets.fromLTRB(56, 0, 16, 16),
+              centerTitle: false,
               title: Text(
                 widget.isEditing ? 'Modifier le fournisseur' : 'Nouveau fournisseur',
-                style: const TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.w700, letterSpacing: 0.5,
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.2,
                 ),
               ),
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      primary,
-                      primary.withOpacity(0.8),
-                      theme.colorScheme.secondary.withOpacity(0.6),
-                    ],
-                  ),
-                ),
-                child: Stack(
-                  children: [
-                    Positioned(
-                      top: -50, right: -30,
-                      child: Container(
-                        width: 120, height: 120,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withOpacity(0.1),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      top: 20, left: -20,
-                      child: Container(
-                        width: 80, height: 80,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withOpacity(0.05),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              background: ColoredBox(color: theme.colorScheme.surface),
             ),
           ),
 
@@ -207,16 +172,9 @@ class _SupplierFormPageState extends ConsumerState<SupplierFormPage>
                 position: _slideAnim,
                 child: Container(
                   margin: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surface,
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: theme.shadowColor.withOpacity(0.1),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
+                  decoration: AppTheme.softCardDecoration(
+                    theme.colorScheme,
+                    radius: AppTheme.radiusXL,
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(24),
@@ -226,7 +184,7 @@ class _SupplierFormPageState extends ConsumerState<SupplierFormPage>
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           _SectionHeader(
-                            icon: Icons.local_shipping_rounded,
+                            icon: Icons.local_shipping_outlined,
                             title: 'Informations du fournisseur',
                             color: primary,
                           ),
@@ -236,7 +194,7 @@ class _SupplierFormPageState extends ConsumerState<SupplierFormPage>
                             controller: _nameCtrl,
                             label: 'Nom / Raison sociale',
                             hint: 'Ex: Import Export Sarl, Grossiste ABC…',
-                            icon: Icons.business_rounded,
+                            icon: Icons.business_outlined,
                             required: true,
                             validator: (v) =>
                                 (v == null || v.trim().isEmpty) ? 'Le nom est requis' : null,
@@ -247,7 +205,7 @@ class _SupplierFormPageState extends ConsumerState<SupplierFormPage>
                             controller: _phoneCtrl,
                             label: 'Téléphone',
                             hint: '+22670000010',
-                            icon: Icons.phone_rounded,
+                            icon: Icons.phone_outlined,
                             required: true,
                             keyboardType: TextInputType.phone,
                             inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[+\d]'))],
@@ -279,7 +237,7 @@ class _SupplierFormPageState extends ConsumerState<SupplierFormPage>
 
                           // ── Produits associés ──────────────────────
                           _SectionHeader(
-                            icon: Icons.inventory_2_rounded,
+                            icon: Icons.inventory_2_outlined,
                             title: 'Produits associés',
                             color: primary,
                           ),
@@ -324,20 +282,13 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(icon, color: color, size: 20),
-        ),
+        SoftIconBadge(icon: icon, size: 36),
         const SizedBox(width: 12),
         Flexible(
           child: Text(
             title,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w700,
               color: color,
             ),
             overflow: TextOverflow.ellipsis,
@@ -372,6 +323,8 @@ class _ModernField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Hérite du style de champ global (AppTheme) plutôt que de redéfinir
+    // bordures et remplissage en local.
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
@@ -382,28 +335,7 @@ class _ModernField extends StatelessWidget {
       decoration: InputDecoration(
         labelText: required ? '$label *' : label,
         hintText: hint,
-        prefixIcon: icon != null
-            ? Padding(padding: const EdgeInsets.all(12), child: Icon(icon, size: 22))
-            : null,
-        filled: true,
-        fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: theme.colorScheme.outline.withOpacity(0.2)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 2),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: theme.colorScheme.error),
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+        prefixIcon: icon != null ? Icon(icon, size: 20) : null,
         labelStyle: TextStyle(
           color: required ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
           fontWeight: required ? FontWeight.w600 : FontWeight.w500,
@@ -430,19 +362,15 @@ class _SaveButton extends StatelessWidget {
     return Container(
       height: 56,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isSaving
-              ? [Theme.of(context).colorScheme.outline, Theme.of(context).colorScheme.onSurfaceVariant]
-              : [color, color.withOpacity(0.8)],
-        ),
+        color: isSaving ? Theme.of(context).colorScheme.outline : color,
         borderRadius: BorderRadius.circular(16),
         boxShadow: isSaving
             ? []
             : [
                 BoxShadow(
-                  color: color.withOpacity(0.3),
-                  blurRadius: 12,
-                  offset: const Offset(0, 6),
+                  color: color.withValues(alpha: 0.25),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
                 ),
               ],
       ),
@@ -471,7 +399,7 @@ class _SaveButton extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        isEditing ? Icons.save_rounded : Icons.add_business_rounded,
+                        isEditing ? Icons.save_outlined : Icons.add_business_outlined,
                         color: Colors.white, size: 24,
                       ),
                       const SizedBox(width: 12),
@@ -518,12 +446,30 @@ class _ProductSelector extends ConsumerWidget {
       loading: () => Container(
         height: 60,
         decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
-          borderRadius: BorderRadius.circular(16),
+          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(AppTheme.radiusM),
         ),
         child: const Center(child: CircularProgressIndicator()),
       ),
-      error: (_, __) => const SizedBox.shrink(),
+      // Sans ce message, le sélecteur disparaissait sans explication.
+      error: (_, __) => Row(
+        children: [
+          Icon(Icons.error_outline_rounded,
+              size: 18, color: theme.colorScheme.error),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Impossible de charger les produits',
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(color: theme.colorScheme.error),
+            ),
+          ),
+          TextButton(
+            onPressed: () => ref.invalidate(productListForPickerProvider),
+            child: const Text('Réessayer'),
+          ),
+        ],
+      ),
       data: (products) {
         final active = products.where((p) => !p.archived).toList();
         final selected = active.where((p) => selectedIds.contains(p.id)).toList();
@@ -555,8 +501,8 @@ class _ProductSelector extends ConsumerWidget {
                       color: primary,
                     ),
                   ),
-                  backgroundColor: primary.withOpacity(0.1),
-                  side: BorderSide(color: primary.withOpacity(0.3)),
+                  backgroundColor: AppTheme.softTint(theme.brightness),
+                  side: BorderSide(color: primary.withValues(alpha: 0.3)),
                   deleteIcon: Icon(Icons.close_rounded, size: 16, color: primary),
                   onDeleted: () {
                     final updated = List<String>.from(selectedIds)..remove(p.id);
@@ -573,7 +519,7 @@ class _ProductSelector extends ConsumerWidget {
             OutlinedButton.icon(
               onPressed: () => _openPicker(context, active, takenByOthers),
               icon: Icon(
-                selected.isEmpty ? Icons.add_rounded : Icons.edit_rounded,
+                selected.isEmpty ? Icons.add_rounded : Icons.edit_outlined,
                 size: 18,
                 color: primary,
               ),
@@ -584,7 +530,7 @@ class _ProductSelector extends ConsumerWidget {
                 style: TextStyle(color: primary, fontWeight: FontWeight.w600),
               ),
               style: OutlinedButton.styleFrom(
-                side: BorderSide(color: primary.withOpacity(0.5)),
+                side: BorderSide(color: primary.withValues(alpha: 0.5)),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
               ),
@@ -677,7 +623,7 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
                     child: Text(
                       'Sélectionner les produits',
                       style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
@@ -700,14 +646,8 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
               child: TextField(
                 decoration: InputDecoration(
                   hintText: 'Rechercher un produit…',
-                  prefixIcon: Icon(Icons.search_rounded, color: primary),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide.none,
-                  ),
-                  filled: true,
-                  fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.4),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  prefixIcon: Icon(Icons.search_rounded,
+                      color: theme.colorScheme.onSurfaceVariant),
                   isDense: true,
                 ),
                 onChanged: (v) => setState(() => _search = v),
@@ -748,7 +688,7 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
                             style: TextStyle(
                               fontWeight: FontWeight.w500,
                               color: isTaken
-                                  ? theme.colorScheme.onSurface.withOpacity(0.38)
+                                  ? theme.colorScheme.onSurface.withValues(alpha: 0.38)
                                   : null,
                             ),
                           ),
@@ -757,7 +697,7 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
                                   'Déjà associé à un autre fournisseur',
                                   style: TextStyle(
                                     fontSize: 11,
-                                    color: theme.colorScheme.onSurface.withOpacity(0.38),
+                                    color: theme.colorScheme.onSurface.withValues(alpha: 0.38),
                                   ),
                                 )
                               : product.price > 0
@@ -788,7 +728,7 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
                 child: FilledButton(
                   onPressed: () => Navigator.pop(context, _selected),
                   style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(52),
+                    minimumSize: const Size.fromHeight(56),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),

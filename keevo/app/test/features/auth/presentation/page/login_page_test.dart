@@ -26,7 +26,13 @@ Widget _wrap(Widget child, {List<Override> overrides = const []}) {
     overrides: overrides,
     child: MaterialApp.router(
       routerConfig: GoRouter(
-        routes: [GoRoute(path: '/', builder: (_, __) => child)],
+        routes: [
+          GoRoute(path: '/', builder: (_, __) => child),
+          GoRoute(
+            path: '/splash',
+            builder: (_, __) => const Scaffold(body: Text('Splash')),
+          ),
+        ],
       ),
     ),
   );
@@ -123,6 +129,9 @@ void main() {
             phoneNumber: any(named: 'phoneNumber'),
             password: 'SecurePass123!',
           )).called(1);
+      // The splash picks the destination (wizard, password change, role) —
+      // an owner with an unfinished setup must not land on the dashboard.
+      expect(find.text('Splash'), findsOneWidget);
     });
 
     testWidgets('shows lockout error message on ACCOUNT_LOCKED', (tester) async {
@@ -167,6 +176,23 @@ void main() {
       await tester.pump(); // Riverpod rebuilds with AsyncLoading
 
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    });
+  
+    testWidgets('a partial phone number is refused before calling the server',
+        (tester) async {
+      await tester.pumpWidget(buildPage());
+      await tester.pumpAndSettle();
+
+      await _enterPhone(tester, '6');
+      await tester.enterText(find.byKey(const Key('passwordField')), 'SecurePass123!');
+      await tester.tap(find.byType(FilledButton));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Numéro invalide pour ce pays'), findsOneWidget);
+      verifyNever(() => mockUseCase.execute(
+            phoneNumber: any(named: 'phoneNumber'),
+            password: any(named: 'password'),
+          ));
     });
   });
 }

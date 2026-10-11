@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../core/sync/connectivity_service.dart';
 import '../../../../core/sync/sync_service.dart';
+import '../../../../core/sync/sync_trigger_dispatcher.dart';
 import '../../domain/model/inventory_count_model.dart';
 import '../../domain/model/inventory_product_row_model.dart';
 import '../../domain/repository/inventory_count_repository.dart';
@@ -23,6 +24,7 @@ class InventoryCountRepositoryImpl implements InventoryCountRepository {
   final RemoteInventoryCountDataSource _remote;
   final ConnectivityService _connectivity;
   final SyncService _syncService;
+  final SyncTriggerDispatcher? _syncTriggerDispatcher;
 
   const InventoryCountRepositoryImpl({
     required LocalInventoryCountDataSource localCount,
@@ -30,11 +32,13 @@ class InventoryCountRepositoryImpl implements InventoryCountRepository {
     required RemoteInventoryCountDataSource remote,
     required ConnectivityService connectivity,
     required SyncService syncService,
+    SyncTriggerDispatcher? syncTriggerDispatcher,
   })  : _localCount = localCount,
         _localSession = localSession,
         _remote = remote,
         _connectivity = connectivity,
-        _syncService = syncService;
+        _syncService = syncService,
+        _syncTriggerDispatcher = syncTriggerDispatcher;
 
   @override
   Future<List<InventoryProductRowModel>> getCountingProducts(
@@ -112,20 +116,28 @@ class InventoryCountRepositoryImpl implements InventoryCountRepository {
       updatedAt: now,
       synced: false,
     );
-    await _localCount.upsert(local);
-    await _syncService.queueOperation(
-      operation: 'SAVE_INVENTORY_COUNT',
-      payload: {
-        'sessionId': sessionId,
-        'productId': productId,
-        if (variantId != null) 'variantId': variantId,
-        'productName': productName,
-        if (variantLabel != null) 'variantLabel': variantLabel,
-        'theoretical': theoretical,
-        'physical': physical,
-      },
-      entityId: id,
-    );
+    // One transaction: a count saved without its queue entry would never
+    // reach the server and be skipped by the pending-count check at validation.
+    await _localCount.transaction(() async {
+      await _localCount.upsert(local);
+      await _syncService.queueOperation(
+        operation: 'SAVE_INVENTORY_COUNT',
+        payload: {
+          'sessionId': sessionId,
+          'productId': productId,
+          if (variantId != null) 'variantId': variantId,
+          'productName': productName,
+          if (variantLabel != null) 'variantLabel': variantLabel,
+          'theoretical': theoretical,
+          'physical': physical,
+        },
+        entityId: id,
+      );
+    });
+    // A failed POST while online lands here too: push right away instead of
+    // waiting for the periodic cycle, so the server sees the count before
+    // the session is validated.
+    _syncTriggerDispatcher?.triggerPushIfIdle();
     return local;
   }
 

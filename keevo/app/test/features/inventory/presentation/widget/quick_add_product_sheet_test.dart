@@ -77,6 +77,11 @@ Widget _wrap(Widget child, {List<Override> overrides = const []}) {
   );
 }
 
+bool _isSelfDrawnHandle(Widget w) =>
+    w is Container &&
+    (w.constraints?.maxHeight == 4) &&
+    (w.constraints?.maxWidth == 36 || w.constraints?.maxWidth == 40);
+
 void main() {
   setUpAll(() {
     GoogleFonts.config.allowRuntimeFetching = false;
@@ -111,6 +116,13 @@ void main() {
       await tester.tap(find.text('Ouvrir'));
       await tester.pumpAndSettle();
     }
+
+    testWidgets('relies on the theme drag handle (no second one)',
+        (tester) async {
+      await openSheet(tester);
+
+      expect(find.byWidgetPredicate(_isSelfDrawnHandle), findsNothing);
+    });
 
     testWidgets('renders title and 3 form fields', (tester) async {
       await openSheet(tester);

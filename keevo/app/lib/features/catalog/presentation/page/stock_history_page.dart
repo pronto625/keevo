@@ -1,4 +1,6 @@
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
+import '../../../../core/widget/soft_icon_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -38,6 +40,8 @@ class StockHistoryPage extends ConsumerStatefulWidget {
   ConsumerState<StockHistoryPage> createState() => _StockHistoryPageState();
 }
 
+const _kAllTypes = '__ALL__';
+
 class _StockHistoryPageState extends ConsumerState<StockHistoryPage> {
   String? _filterType;
   DateTime _filterFrom = DateTime.now().subtract(const Duration(days: 7));
@@ -65,9 +69,9 @@ class _StockHistoryPageState extends ConsumerState<StockHistoryPage> {
     super.dispose();
   }
 
-  void _loadHistory({bool reset = false}) {
+  Future<void> _loadHistory({bool reset = false}) {
     if (reset) _page = 0;
-    ref
+    return ref
         .read(stockNotifierProvider(widget.productId).notifier)
         .loadHistory(
           movementType: _filterType,
@@ -135,44 +139,69 @@ class _StockHistoryPageState extends ConsumerState<StockHistoryPage> {
   @override
   Widget build(BuildContext context) {
     final stockState = ref.watch(stockNotifierProvider(widget.productId));
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
 
     return Scaffold(
+      backgroundColor: cs.surface,
       appBar: AppBar(
+        backgroundColor: cs.surface,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_ios_new_rounded,
+              color: cs.onSurface, size: 20),
+          tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+          onPressed: () => Navigator.maybePop(context),
+        ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Historique des mouvements'),
+            Text(
+              'Historique des mouvements',
+              style: TextStyle(
+                color: cs.onSurface,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.2,
+              ),
+            ),
             Text(
               widget.productName,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: Colors.white70),
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: cs.onSurfaceVariant),
             ),
           ],
         ),
         actions: [
           // Date range picker
-          IconButton(
+          SoftIconButton(
             tooltip: 'Période',
-            icon: Icon(
-              _isDefaultDateRange()
-                  ? Icons.calendar_month_outlined
-                  : Icons.calendar_month,
-            ),
+            icon: _isDefaultDateRange()
+                ? Icons.calendar_month_outlined
+                : Icons.calendar_month,
+            iconSize: 20,
             onPressed: _pickDateRange,
           ),
+          const SizedBox(width: 6),
           // Movement type filter
-          PopupMenuButton<String?>(
+          Container(
+            decoration: BoxDecoration(
+              color: AppTheme.softTint(theme.brightness),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: PopupMenuButton<String>(
             icon: Icon(
               _filterType != null ? Icons.filter_alt : Icons.filter_alt_outlined,
+              color: cs.primary,
+              size: 20,
             ),
             onSelected: (value) {
-              setState(() => _filterType = value);
+              setState(() => _filterType = value == _kAllTypes ? null : value);
               _loadHistory(reset: true);
             },
             itemBuilder: (_) => const [
-              PopupMenuItem(value: null, child: Text('Tous')),
+              // A null value would be treated as a dismissal by the menu.
+              PopupMenuItem(value: _kAllTypes, child: Text('Tous')),
               PopupMenuItem(value: 'STOCK_ENTRY', child: Text('Entrées')),
               PopupMenuItem(value: 'SALE', child: Text('Ventes')),
               PopupMenuItem(value: 'ADJUSTMENT', child: Text('Ajustements')),
@@ -180,16 +209,27 @@ class _StockHistoryPageState extends ConsumerState<StockHistoryPage> {
               PopupMenuItem(value: 'TRANSFER_OUT', child: Text('Transferts sortants')),
               PopupMenuItem(value: 'SALE_CANCELLED', child: Text('Annulations')),
             ],
+            ),
           ),
+          const SizedBox(width: 12),
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async => _loadHistory(reset: true),
+        onRefresh: () => _loadHistory(reset: true),
         child: stockState.movements.isEmpty && stockState.isLoadingHistory
             ? const Center(child: CircularProgressIndicator())
             : stockState.movements.isEmpty
-                ? const Center(
-                    child: Text('Aucun mouvement enregistré'),
+                // Scrollable so pull-to-refresh works on an empty list.
+                ? LayoutBuilder(
+                    builder: (context, constraints) => SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      child: SizedBox(
+                        height: constraints.maxHeight,
+                        child: const Center(
+                          child: Text('Aucun mouvement enregistré'),
+                        ),
+                      ),
+                    ),
                   )
                 : ListView.separated(
                     controller: _scrollController,
@@ -226,17 +266,18 @@ class _MovementTile extends StatelessWidget {
     final dateStr = DateFormat('dd/MM/yyyy HH:mm').format(movement.occurredAt);
 
     return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: isIn ? AppTheme.success : AppTheme.errorColor,
-        child: Icon(
-          isIn ? Icons.add_circle : Icons.remove_circle,
-          color: color,
-          size: 20,
-        ),
+      leading: SoftIconBadge(
+        icon: isIn ? Icons.add_rounded : Icons.remove_rounded,
+        color: color,
       ),
       title: Row(
         children: [
-          Expanded(child: Text(_labelFor(movement.movementType))),
+          Expanded(
+            child: Text(
+              _labelFor(movement.movementType),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
           Text(
             '$sign${movement.quantityDelta}',
             style: TextStyle(
@@ -249,7 +290,10 @@ class _MovementTile extends StatelessWidget {
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(dateStr, style: const TextStyle(fontSize: 11)),
+          Text(dateStr,
+              style: TextStyle(
+                  fontSize: 11,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant)),
           if (movement.notes != null && movement.notes!.isNotEmpty)
             Text(
               movement.notes!,

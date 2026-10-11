@@ -1,5 +1,6 @@
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/soft_icon_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -19,18 +20,33 @@ class CategoryDebugPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tenantPrefsAsync = ref.watch(tenantPreferencesProvider);
     final categoriesAsync = ref.watch(categoriesProvider);
+    final cs = Theme.of(context).colorScheme;
+    final sectionTitleStyle = Theme.of(context)
+        .textTheme
+        .titleMedium
+        ?.copyWith(fontWeight: FontWeight.w700);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Debug Catégories'),
+        backgroundColor: cs.surface,
+        title: Text(
+          'Debug Catégories',
+          style: TextStyle(
+            color: cs.onSurface,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.2,
+          ),
+        ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
+          SoftIconButton(
+            icon: Icons.refresh_rounded,
+            tooltip: 'Rafraîchir',
             onPressed: () {
               ref.invalidate(tenantPreferencesProvider);
               ref.invalidate(categoriesProvider);
             },
           ),
+          const SizedBox(width: 12),
         ],
       ),
       body: SingleChildScrollView(
@@ -39,7 +55,9 @@ class CategoryDebugPage extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Section préférences tenant
-            Card(
+            Container(
+              width: double.infinity,
+              decoration: AppTheme.softCardDecoration(cs),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -47,7 +65,7 @@ class CategoryDebugPage extends ConsumerWidget {
                   children: [
                     Text(
                       'Préférences Tenant',
-                      style: Theme.of(context).textTheme.titleMedium,
+                      style: sectionTitleStyle,
                     ),
                     const SizedBox(height: 8),
                     tenantPrefsAsync.when(
@@ -79,7 +97,9 @@ class CategoryDebugPage extends ConsumerWidget {
             const SizedBox(height: 16),
             
             // Section catégories
-            Card(
+            Container(
+              width: double.infinity,
+              decoration: AppTheme.softCardDecoration(cs),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -87,7 +107,7 @@ class CategoryDebugPage extends ConsumerWidget {
                   children: [
                     Text(
                       'Catégories',
-                      style: Theme.of(context).textTheme.titleMedium,
+                      style: sectionTitleStyle,
                     ),
                     const SizedBox(height: 8),
                     categoriesAsync.when(
@@ -111,14 +131,14 @@ class CategoryDebugPage extends ConsumerWidget {
                               child: Row(
                                 children: [
                                   Icon(
-                                    cat.isCustom ? Icons.star : Icons.category,
+                                    cat.isCustom ? Icons.star_rounded : Icons.category_outlined,
                                     size: 16,
                                     color: cat.isCustom ? AppTheme.warning : Theme.of(context).colorScheme.primary,
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(child: Text(cat.name)),
                                   if (cat.parentId != null)
-                                    const Icon(Icons.subdirectory_arrow_right, size: 16),
+                                    const Icon(Icons.subdirectory_arrow_right_rounded, size: 16),
                                 ],
                               ),
                             )),
@@ -136,7 +156,9 @@ class CategoryDebugPage extends ConsumerWidget {
             const SizedBox(height: 16),
             
             // Actions de test 
-            Card(
+            Container(
+              width: double.infinity,
+              decoration: AppTheme.softCardDecoration(cs),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -144,10 +166,10 @@ class CategoryDebugPage extends ConsumerWidget {
                   children: [
                     Text(
                       'Actions de test',
-                      style: Theme.of(context).textTheme.titleMedium,
+                      style: sectionTitleStyle,
                     ),
                     const SizedBox(height: 8),
-                    ElevatedButton(
+                    FilledButton(
                       onPressed: () async {
                         try {
                           await refreshCategories(ref);

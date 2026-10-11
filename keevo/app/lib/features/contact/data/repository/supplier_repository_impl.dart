@@ -133,6 +133,8 @@ class SupplierRepositoryImpl implements SupplierRepository {
       }
     } catch (e) {
       dev.log('SupplierRepository.syncFromRemote: $e');
+      // Remonté pour que la synchro manuelle puisse signaler l'échec.
+      rethrow;
     }
   }
 }

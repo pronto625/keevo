@@ -1,5 +1,6 @@
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -30,21 +31,36 @@ class ReportDetailPage extends ConsumerWidget {
       return _DetailScaffold(reportId: reportId, report: report!);
     }
     final reportAsync = ref.watch(reportDetailProvider(reportId));
+    // _DetailScaffold has its own Scaffold + AppBar: never nest it in another.
+    final loaded = reportAsync.valueOrNull;
+    if (loaded != null) {
+      return _DetailScaffold(reportId: reportId, report: loaded);
+    }
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('Détail du rapport')),
+      backgroundColor: cs.surface,
+      appBar: AppBar(
+        title: const Text('Détail du rapport'),
+        titleTextStyle: _titleStyle(cs),
+        backgroundColor: cs.surface,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+      ),
       body: reportAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => AppErrorWidget(error: e),
-        data: (r) {
-          if (r == null) {
-            return const Center(child: Text('Rapport introuvable.'));
-          }
-          return _DetailScaffold(reportId: reportId, report: r);
-        },
+        data: (_) => const Center(child: Text('Rapport introuvable.')),
       ),
     );
   }
 }
+
+TextStyle _titleStyle(ColorScheme cs) => TextStyle(
+      fontSize: 18,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.2,
+      color: cs.onSurface,
+    );
 
 class _DetailScaffold extends ConsumerWidget {
   final String reportId;
@@ -55,6 +71,7 @@ class _DetailScaffold extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final resendState = ref.watch(resendReportNotifierProvider);
 
     ref.listen<AsyncValue<void>>(resendReportNotifierProvider, (prev, next) {
@@ -87,10 +104,15 @@ class _DetailScaffold extends ConsumerWidget {
     final timeFormat = DateFormat("HH:mm", 'fr_FR');
 
     return Scaffold(
+      backgroundColor: cs.surface,
       appBar: AppBar(
         title: const Text('Détail du rapport'),
+        titleTextStyle: _titleStyle(cs),
+        backgroundColor: cs.surface,
+        elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: cs.onSurface),
           onPressed: () => context.pop(),
         ),
       ),
@@ -110,8 +132,8 @@ class _DetailScaffold extends ConsumerWidget {
                   child: _MetricCard(
                     label: 'Chiffre du jour',
                     value: _formatCurrency(report.totalRevenue),
-                    icon: Icons.attach_money,
-                    color: AppTheme.success,
+                    icon: Icons.payments_outlined,
+                    color: cs.success,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -128,10 +150,7 @@ class _DetailScaffold extends ConsumerWidget {
             const SizedBox(height: 16),
 
             // ── Delivery info ────────────────────────────────────────────
-            Card(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+            _SoftCard(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -140,7 +159,7 @@ class _DetailScaffold extends ConsumerWidget {
                     Text(
                       'Informations d\'envoi',
                       style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -178,10 +197,7 @@ class _DetailScaffold extends ConsumerWidget {
             const SizedBox(height: 16),
 
             // ── Report content ───────────────────────────────────────────
-            Card(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+            _SoftCard(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -190,7 +206,7 @@ class _DetailScaffold extends ConsumerWidget {
                     Text(
                       'Contenu du rapport',
                       style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     const Divider(height: 24),
@@ -211,6 +227,7 @@ class _DetailScaffold extends ConsumerWidget {
             if (isOwner) ...[
               SizedBox(
                 width: double.infinity,
+                height: 56,
                 child: ElevatedButton.icon(
                   onPressed: resendState is AsyncLoading
                       ? null
@@ -221,17 +238,17 @@ class _DetailScaffold extends ConsumerWidget {
                       ? const SizedBox(
                           width: 18,
                           height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.send_outlined),
                   label: const Text('Renvoyer via WhatsApp'),
                   style: ElevatedButton.styleFrom(
+                    backgroundColor: cs.primary,
+                    foregroundColor: cs.onPrimary,
+                    elevation: 0,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusL),
                     ),
                   ),
                 ),
@@ -280,10 +297,21 @@ class _TypeBadge extends StatelessWidget {
       'WEEKLY' => 'Hebdomadaire',
       _ => reportType,
     };
-    return Chip(
-      label: Text(label, style: const TextStyle(fontSize: 12)),
-      backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-      side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppTheme.softTint(theme.brightness),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: theme.colorScheme.primary,
+        ),
+      ),
     );
   }
 }
@@ -295,8 +323,8 @@ class _DeliveryBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, color) = switch (status) {
-      'SENT' => ('Envoyé', AppTheme.success),
-      'FAILED' => ('Échec', AppTheme.errorColor),
+      'SENT' => ('Envoyé', Theme.of(context).colorScheme.success),
+      'FAILED' => ('Échec', Theme.of(context).colorScheme.error),
       'IN_APP_ONLY' => ('App uniquement', Theme.of(context).colorScheme.onSurfaceVariant),
       _ => ('En attente', Theme.of(context).colorScheme.primary),
     };
@@ -334,20 +362,19 @@ class _MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return _SoftCard(
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(height: 8),
+            SoftIconBadge(icon: icon, color: color, size: 36),
+            const SizedBox(height: 10),
             Text(
               value,
               style: TextStyle(
                 color: color,
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w700,
                 fontSize: 18,
               ),
             ),
@@ -386,11 +413,36 @@ class _InfoRow extends StatelessWidget {
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Surface de carte douce commune aux blocs de la page (remplace le `Card`
+/// Material par défaut).
+class _SoftCard extends StatelessWidget {
+  final Widget child;
+  const _SoftCard({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: cs.cardBg,
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        boxShadow: AppTheme.softShadow(cs),
+      ),
+      child: child,
     );
   }
 }

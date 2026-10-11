@@ -62,6 +62,10 @@ abstract interface class AuthRepository {
   /// Rate-limited server-side: 1/min + 5/hour per phone.
   Future<bool> forgotPassword({required String phoneNumber});
 
+  /// POST /auth/logout — revokes [refreshToken] server-side so it can never
+  /// renew a session again.
+  Future<void> logout(String refreshToken);
+
   /// POST /auth/reset-password — Story 14.12.
   ///
   /// Resets the password using an OTP code.

@@ -122,6 +122,14 @@ void main() {
       verify(() => local.upsert(sampleStore)).called(1);
     });
 
+    test('syncFromRemote() rethrows when the remote fetch fails', () async {
+      when(() => remote.getAll(includeInactive: true))
+          .thenThrow(Exception('network'));
+
+      await expectLater(repo.syncFromRemote(), throwsA(isA<Exception>()));
+      verifyNever(() => local.upsert(any()));
+    });
+
     group('Story v1s-16-6 — offline sync_queue', () {
       test('createStore() offline queues CREATE_STORE with a real UUID id', () async {
         when(() => remote.create(

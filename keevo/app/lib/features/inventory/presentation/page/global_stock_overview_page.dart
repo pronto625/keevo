@@ -10,6 +10,8 @@ import '../../../../core/sync/sync_status.dart';
 import '../../../../core/sync/sync_status_provider.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
+import '../../../../core/widget/soft_icon_button.dart';
 import '../provider/global_stock_provider.dart';
 import '../widget/store_product_stock_tile.dart';
 import '../widget/store_stock_card.dart';
@@ -53,7 +55,11 @@ class _GlobalStockOverviewPageState
   Future<void> _refresh() async {
     setState(() => _isRefreshing = true);
     ref.invalidate(globalStockOverviewProvider);
-    await Future.delayed(const Duration(milliseconds: 400));
+    try {
+      await ref.read(globalStockOverviewProvider.future);
+    } catch (_) {
+      // The overview sliver shows the error with its own retry.
+    }
     if (mounted) setState(() => _isRefreshing = false);
   }
 
@@ -62,13 +68,15 @@ class _GlobalStockOverviewPageState
     _debounce?.cancel();
     _searchCtrl.removeListener(_onSearchChanged);
     _searchCtrl.dispose();
-    ref.read(showLowStockOnlyProvider.notifier).state = false;
+    // showLowStockOnlyProvider is autoDispose: it resets on its own once this
+    // page stops listening (ref can't be used in dispose).
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
 
     // AC4: invalidate overview when device comes back online.
     ref.listen<AsyncValue<SyncStatus>>(syncStatusProvider, (prev, next) {
@@ -78,124 +86,165 @@ class _GlobalStockOverviewPageState
       }
     });
 
+    // Keeps the low-stock filter alive for as long as the page is shown.
+    ref.listen<bool>(showLowStockOnlyProvider, (_, __) {});
+
     final query = ref.watch(stockSearchQueryProvider);
     final isSearching = query.trim().length >= 2;
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/stock/transfers'),
-        backgroundColor: AppTheme.primary,
-        icon: const Icon(Icons.swap_horiz_rounded, color: Colors.white),
-        label: const Text(
-          'Transfert',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+      // Couleur pleine + ombre douce plutôt qu'un FAB Material standard —
+      // même traitement que le FAB du catalogue.
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          color: cs.primary,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: cs.primary.withValues(alpha: 0.25),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-        heroTag: 'stock_transfer_fab',
+        child: FloatingActionButton.extended(
+          onPressed: () => context.push('/stock/transfers'),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          icon: const Icon(Icons.swap_horiz_rounded, color: Colors.white),
+          label: const Text(
+            'Transfert',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          ),
+          heroTag: 'stock_transfer_fab',
+        ),
       ),
       body: CustomScrollView(
         slivers: [
-          // ── App bar — même style que CatalogPage ───────────────────────
+          // ── App bar — fond neutre, même style que CatalogPage ──────────
           SliverAppBar(
-            expandedHeight: 160,
+            expandedHeight: 128,
             floating: false,
             pinned: true,
             elevation: 0,
-            backgroundColor: Colors.transparent,
+            scrolledUnderElevation: 0,
+            backgroundColor: cs.surface,
+            leading: Navigator.of(context).canPop()
+                ? IconButton(
+                    icon: Icon(Icons.arrow_back_ios_new_rounded,
+                        color: cs.onSurface, size: 20),
+                    tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+                    onPressed: () => Navigator.maybePop(context),
+                  )
+                : null,
             actions: [
               // Story 3.3 — navigate to transfer history (OWNER only)
-              if (ref.watch(currentUserRoleProvider) != 'EMPLOYEE')
-                IconButton(
-                  icon: const Icon(Icons.swap_horiz_rounded, color: Colors.white),
+              if (ref.watch(currentUserRoleProvider) != 'EMPLOYEE') ...[
+                SoftIconButton(
+                  icon: Icons.swap_horiz_rounded,
+                  iconSize: 20,
                   onPressed: () => context.push('/stock/transfers'),
                   tooltip: 'Historique des transferts',
                 ),
-              IconButton(
-                icon: _isRefreshing
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.refresh_rounded, color: Colors.white),
-                onPressed: _isRefreshing ? null : _refresh,
-                tooltip: 'Actualiser',
+                const SizedBox(width: 6),
+              ],
+              // Pastille posée à la main : l'icône devient un spinner pendant
+              // l'actualisation, ce que SoftIconButton (IconData) ne permet pas.
+              Container(
+                decoration: BoxDecoration(
+                  color: AppTheme.softTint(theme.brightness),
+                  borderRadius: const BorderRadius.all(Radius.circular(14)),
+                ),
+                child: IconButton(
+                  icon: _isRefreshing
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: cs.primary))
+                      : Icon(Icons.refresh_rounded,
+                          color: cs.primary, size: 20),
+                  onPressed: _isRefreshing ? null : _refresh,
+                  tooltip: 'Actualiser',
+                ),
               ),
+              const SizedBox(width: 12),
             ],
             flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      theme.colorScheme.primary,
-                      theme.colorScheme.primary.withValues(alpha: 0.8),
+              background: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Text(
+                        'Vue Stock',
+                        style: theme.textTheme.headlineMedium?.copyWith(
+                          color: cs.onSurface,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Stock centralisé de toutes vos boutiques',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
                     ],
-                  ),
-                ),
-                child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Text(
-                          '🏭 Vue Stock',
-                          style: theme.textTheme.headlineMedium?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Stock centralisé de toutes vos boutiques',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: Colors.white.withValues(alpha: 0.9),
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
                 ),
               ),
             ),
           ),
 
-          // ── Search bar ─────────────────────────────────────────────────
+          // ── Search bar — bordure fine plutôt qu'ombre portée ──────────
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Material(
-                elevation: 0,
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              decoration: BoxDecoration(
+                color: cs.surface,
                 borderRadius: BorderRadius.circular(16),
-                child: TextField(
-                  controller: _searchCtrl,
-                  decoration: InputDecoration(
-                    hintText: 'Rechercher un produit…',
-                    prefixIcon: Icon(Icons.search_rounded,
-                        color: theme.colorScheme.outline),
-                    suffixIcon: query.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear_rounded),
-                            onPressed: () {
-                              _searchCtrl.clear();
-                              ref
-                                  .read(stockSearchQueryProvider.notifier)
-                                  .state = '';
-                            },
-                          )
-                        : null,
-                    filled: true,
-                    fillColor: theme.colorScheme.surfaceContainerLow,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding:
-                        const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                border: Border.all(color: cs.outlineVariant),
+              ),
+              child: TextField(
+                controller: _searchCtrl,
+                decoration: InputDecoration(
+                  hintText: 'Rechercher un produit…',
+                  prefixIcon: Icon(Icons.search_rounded,
+                      color: cs.onSurfaceVariant),
+                  suffixIcon: query.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear_rounded),
+                          onPressed: () {
+                            _searchCtrl.clear();
+                            ref
+                                .read(stockSearchQueryProvider.notifier)
+                                .state = '';
+                          },
+                        )
+                      : null,
+                  // Le conteneur porte déjà la bordure : on neutralise celles
+                  // du thème pour ne pas en afficher deux.
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
                   ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
+                  ),
+                  filled: false,
+                  contentPadding:
+                      const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                 ),
               ),
             ),
@@ -320,7 +369,10 @@ class _OverviewSliver extends ConsumerWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('🏪', style: TextStyle(fontSize: 48)),
+                  const SoftIconBadge(
+                    icon: Icons.storefront_outlined,
+                    size: 72,
+                  ),
                   const SizedBox(height: 12),
                   Text('Aucune boutique configurée.',
                       style: theme.textTheme.titleMedium),
@@ -349,7 +401,10 @@ class _OverviewSliver extends ConsumerWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('🏷️', style: TextStyle(fontSize: 48)),
+                  const SoftIconBadge(
+                    icon: Icons.sell_outlined,
+                    size: 72,
+                  ),
                   const SizedBox(height: 12),
                   Text('Aucun produit pour cette boutique.',
                       style: theme.textTheme.titleMedium),
@@ -402,22 +457,22 @@ class _OverviewSliver extends ConsumerWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(16),
+                  color: AppTheme.softTint(theme.brightness),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusL),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text('Valeur totale',
                         style: theme.textTheme.labelLarge?.copyWith(
-                            color: theme.colorScheme.onPrimaryContainer)),
+                            color: theme.colorScheme.onSurfaceVariant)),
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(
                         '${NumberFormat.compact(locale: 'fr_FR').format(totalValue)} XAF',
                         style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.onPrimaryContainer,
+                          fontWeight: FontWeight.w700,
+                          color: theme.colorScheme.primary,
                         ),
                         textAlign: TextAlign.end,
                         overflow: TextOverflow.ellipsis,

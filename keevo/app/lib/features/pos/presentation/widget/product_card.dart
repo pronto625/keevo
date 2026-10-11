@@ -75,17 +75,7 @@ class _ProductCardState extends State<ProductCard>
         child: child,
       ),
       child: Container(
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: theme.colorScheme.shadow.withValues(alpha: 0.06),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
+        decoration: AppTheme.softCardDecoration(theme.colorScheme),
         child: Material(
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(16),
@@ -105,7 +95,7 @@ class _ProductCardState extends State<ProductCard>
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        // Background: image or gradient with initials
+                        // Background: image or solid color with initials
                         if (widget.photoUrl != null &&
                             widget.photoUrl!.isNotEmpty)
                           _buildImage(widget.photoUrl!)
@@ -179,14 +169,14 @@ class _ProductCardState extends State<ProductCard>
                           _currencyFormat.format(widget.price),
                           style: theme.textTheme.bodySmall?.copyWith(
                             fontWeight: FontWeight.w800,
-                            color: AppTheme.primary,
+                            color: theme.colorScheme.primary,
                             fontSize: 11,
                             height: 1.1,
                           ),
                         ),
                         const SizedBox(height: 2),
                         // Stock badge
-                        _buildStockBadge(),
+                        _buildStockBadge(theme.colorScheme),
                       ],
                     ),
                   ),
@@ -208,17 +198,9 @@ class _ProductCardState extends State<ProductCard>
         .map((w) => w[0].toUpperCase())
         .join();
 
+    // Aplat plein (plus de dégradé) : la couleur reste un repère visuel rapide.
     return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            color,
-            color.withValues(alpha: 0.7),
-          ],
-        ),
-      ),
+      color: color,
       child: Center(
         child: Text(
           initials,
@@ -233,7 +215,8 @@ class _ProductCardState extends State<ProductCard>
     );
   }
 
-  Widget _buildStockBadge() {
+  Widget _buildStockBadge(ColorScheme cs) {
+    final isDark = cs.brightness == Brightness.dark;
     final isOutOfStock = widget.stockQuantity <= 0;
     if (isOutOfStock) {
       return Container(
@@ -264,7 +247,10 @@ class _ProductCardState extends State<ProductCard>
       child: Text(
         '${widget.stockQuantity} en stock',
         style: TextStyle(
-          color: isLow ? const Color(0xFFE67700) : const Color(0xFF2B8A3E),
+          // Teintes foncées lisibles sur fond clair ; vives en mode sombre.
+          color: isLow
+              ? (isDark ? cs.warning : const Color(0xFFE67700))
+              : (isDark ? cs.success : const Color(0xFF2B8A3E)),
           fontSize: 9,
           fontWeight: FontWeight.w600,
         ),

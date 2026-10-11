@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import '../../domain/model/notification_model.dart';
 
 /// A single notification card — Story 8.0.
@@ -19,15 +21,15 @@ class NotificationCard extends StatelessWidget {
     final theme = Theme.of(context);
     final isUnread = !notification.isRead;
 
+    final (icon, color) = _typeVisual(notification.type);
+
     return ListTile(
-      leading: Text(
-        notification.typeIcon,
-        style: const TextStyle(fontSize: 24),
-      ),
+      leading: SoftIconBadge(icon: icon, color: color),
       title: Text(
         notification.title,
         style: TextStyle(
-          fontWeight: isUnread ? FontWeight.bold : FontWeight.normal,
+          fontWeight: isUnread ? FontWeight.w700 : FontWeight.w500,
+          color: theme.colorScheme.onSurface,
         ),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
@@ -36,7 +38,9 @@ class NotificationCard extends StatelessWidget {
         notification.body,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: theme.textTheme.bodySmall,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
       ),
       trailing: Text(
         _relativeTime(notification.receivedAt),
@@ -44,12 +48,27 @@ class NotificationCard extends StatelessWidget {
           color: theme.colorScheme.onSurfaceVariant,
         ),
       ),
-      tileColor: isUnread
-          ? theme.colorScheme.primaryContainer.withValues(alpha: 0.15)
-          : null,
+      tileColor: isUnread ? AppTheme.softTint(theme.brightness) : null,
       onTap: onTap,
     );
   }
+
+  /// Icône Material équivalente à l'emoji de [NotificationModel.typeIcon]
+  /// (même regroupement de types) ; `null` = pastille teintée marque.
+  (IconData, Color?) _typeVisual(String type) => switch (type) {
+        'DRAFT_PRODUCT_PENDING_VALIDATION' => (
+            Icons.edit_note_rounded,
+            AppTheme.iconAmber
+          ),
+        'STOCK_THRESHOLD_BREACHED' || 'STOCK_ALERT' || 'STOCK_ALERT_BATCH' => (
+            Icons.warning_amber_rounded,
+            AppTheme.iconAmber
+          ),
+        'TREND_DOWN' => (Icons.trending_down_rounded, AppTheme.errorColor),
+        'TREND_UP' => (Icons.trending_up_rounded, AppTheme.success),
+        'DAILY_REPORT' || 'WEEKLY_REPORT' => (Icons.bar_chart_rounded, null),
+        _ => (Icons.notifications_outlined, null),
+      };
 
   String _relativeTime(DateTime date) {
     final now = DateTime.now();

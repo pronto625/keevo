@@ -1,5 +1,6 @@
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -226,32 +227,12 @@ class _TransferFormBottomSheetState
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // ── Gradient header bar ─────────────────────────────────────────
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  cs.primary,              // #3B5BDB indigo royal — UX spec
-                  AppTheme.primaryGradientEnd, // bleu ciel électrique — UX spec gradient
-                ],
-              ),
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(20)),
-            ),
+          // ── Header — fond neutre, badge rond plutôt que bandeau dégradé ──
+          Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.swap_horiz_rounded,
-                      color: Colors.white, size: 22),
-                ),
+                const SoftIconBadge(icon: Icons.swap_horiz_rounded),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -260,22 +241,22 @@ class _TransferFormBottomSheetState
                       Text(
                         'Nouveau transfert',
                         style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          color: cs.onSurface,
                         ),
                       ),
                       if (!_selfLoadMode && widget.productName.isNotEmpty)
                         Text(
                           widget.productName,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                              color: Colors.white.withValues(alpha: 0.85)),
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: cs.onSurfaceVariant),
                           overflow: TextOverflow.ellipsis,
                         ),
                     ],
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
+                  icon: Icon(Icons.close, color: cs.onSurfaceVariant),
                   onPressed: () => Navigator.of(context).pop(),
                   visualDensity: VisualDensity.compact,
                 ),
@@ -305,20 +286,6 @@ class _TransferFormBottomSheetState
                             labelText: 'Produit',
                             prefixIcon: Icon(Icons.inventory_2_outlined,
                                 color: cs.primary),
-                            filled: true,
-                            fillColor: cs.primaryContainer.withValues(alpha: 0.25),
-                            border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none),
-                            enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none),
-                            focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(
-                                    color: cs.primary, width: 2)),
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 16),
                           ),
                           hint: const Text('Sélectionner un produit'),
                           items: products
@@ -343,7 +310,7 @@ class _TransferFormBottomSheetState
                         icon: Icons.store_rounded,
                         label: 'De',
                         value: widget.sourceStoreName,
-                        color: cs.primaryContainer.withValues(alpha: 0.35),
+                        color: AppTheme.softTint(theme.brightness),
                         iconColor: cs.primary,
                       ),
                       const SizedBox(height: 14),
@@ -362,20 +329,6 @@ class _TransferFormBottomSheetState
                             labelText: 'Boutique source',
                             prefixIcon: Icon(Icons.store_rounded,
                                 color: cs.primary),
-                            filled: true,
-                            fillColor: cs.primaryContainer.withValues(alpha: 0.25),
-                            border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none),
-                            enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none),
-                            focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(
-                                    color: cs.primary, width: 2)),
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 16),
                           ),
                           hint: const Text('D\'où part le stock'),
                           items: allStores
@@ -403,20 +356,6 @@ class _TransferFormBottomSheetState
                         labelText: 'Boutique de destination',
                         prefixIcon: Icon(Icons.store_mall_directory_rounded,
                             color: cs.primary),
-                        filled: true,
-                        fillColor: cs.primaryContainer.withValues(alpha: 0.25),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none),
-                        enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none),
-                        focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                BorderSide(color: cs.primary, width: 2)),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 16),
                       ),
                       hint: const Text('Vers quelle boutique'),
                       items: destinationStores
@@ -450,20 +389,6 @@ class _TransferFormBottomSheetState
                             style: theme.textTheme.titleLarge
                                 ?.copyWith(fontWeight: FontWeight.w700),
                             decoration: InputDecoration(
-                              filled: true,
-                              fillColor: cs.primaryContainer.withValues(alpha: 0.25),
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide.none),
-                              enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide.none),
-                              focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide:
-                                      BorderSide(color: cs.primary, width: 2)),
-                              contentPadding:
-                                  const EdgeInsets.symmetric(vertical: 14),
                               errorText: _quantityError,
                             ),
                             validator: (v) {
@@ -491,7 +416,8 @@ class _TransferFormBottomSheetState
                             horizontal: 14, vertical: 11),
                         decoration: BoxDecoration(
                           color: cs.errorContainer,
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusM),
                         ),
                         child: Row(
                           children: [
@@ -606,16 +532,17 @@ class _StepperBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(AppTheme.radiusM),
       child: Container(
         width: 48,
         height: 48,
         decoration: BoxDecoration(
-                        color: cs.primaryContainer.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(12),
+          color: AppTheme.softTint(theme.brightness),
+          borderRadius: BorderRadius.circular(AppTheme.radiusM),
         ),
         child: Icon(icon, size: 20, color: cs.primary),
       ),

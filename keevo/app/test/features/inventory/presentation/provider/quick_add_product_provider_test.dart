@@ -189,12 +189,18 @@ void main() {
       expect(result, isNotNull);
       expect(result!.productName, 'Nouveau Produit');
 
-      // Verify 3 sync operations were queued
-      verify(() => mockSyncService.queueOperation(
+      // Verify 3 sync operations were queued. The server keeps the product
+      // id only from payload['id']; the stock entry and the count below
+      // reference that id, so it must be the one the server creates.
+      final created = verify(() => mockSyncService.queueOperation(
             operation: 'CREATE_PRODUCT',
-            payload: any(named: 'payload'),
-            entityId: any(named: 'entityId'),
-          )).called(1);
+            payload: captureAny(named: 'payload'),
+            entityId: captureAny(named: 'entityId'),
+          ))
+        ..called(1);
+      final createPayload = created.captured[0] as Map<String, dynamic>;
+      expect(createPayload['id'], created.captured[1]);
+      expect(createPayload['id'], result.productId);
       verify(() => mockSyncService.queueOperation(
             operation: 'RECORD_STOCK_ENTRY',
             payload: any(named: 'payload'),

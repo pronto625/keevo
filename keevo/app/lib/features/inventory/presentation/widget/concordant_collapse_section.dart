@@ -23,12 +23,21 @@ class ConcordantCollapseSection extends StatelessWidget {
 
     return Semantics(
       label: 'Section concordants, $count produits',
+      // Teinte verte diluée plutôt qu'un vert pâle opaque, pour rester
+      // lisible en mode sombre.
       child: Card(
-        color: const Color(0xFFE8F5E9), // green.shade50
+        color: AppTheme.success.withValues(alpha: 0.08),
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        ),
         child: ExpansionTile(
           key: const PageStorageKey('concordant-section'),
           initiallyExpanded: false,
-          leading: const Icon(Icons.check_circle, color: AppTheme.success),
+          shape: const Border(),
+          collapsedShape: const Border(),
+          leading: const Icon(Icons.check_circle_outline_rounded,
+              color: AppTheme.success),
           title: Text(
             'Concordants : $count produits',
             style: theme.textTheme.titleSmall?.copyWith(

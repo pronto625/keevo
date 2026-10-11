@@ -11,12 +11,6 @@ enum StoreType {
         StoreType.warehouse => 'Warehouse',
       };
 
-  /// Icon code point for quick visual differentiation in the UI.
-  String get icon => switch (this) {
-        StoreType.store => '🏪',
-        StoreType.warehouse => '🏭',
-      };
-
   /// Parse a backend-serialised uppercase string ('STORE' | 'WAREHOUSE').
   /// Falls back to [StoreType.store] for unknown values.
   static StoreType fromString(String value) => StoreType.values.firstWhere(

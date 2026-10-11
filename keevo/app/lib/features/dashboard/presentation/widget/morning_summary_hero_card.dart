@@ -58,7 +58,7 @@ class MorningSummaryHeroCard extends StatelessWidget {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: AppTheme.primarySoftTint,
+                  color: AppTheme.softTint(Theme.of(context).brightness),
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,

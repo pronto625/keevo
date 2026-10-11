@@ -87,7 +87,10 @@ class _DiscountSheetState extends ConsumerState<DiscountSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Réduction', style: Theme.of(context).textTheme.titleMedium),
+          Text('Réduction',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  )),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -118,7 +121,6 @@ class _DiscountSheetState extends ConsumerState<DiscountSheet> {
             decoration: InputDecoration(
               hintText: _isPercentage ? 'Ex: 10' : 'Ex: 1000',
               suffixText: _isPercentage ? '%' : 'FCFA',
-              border: const OutlineInputBorder(),
               errorText: _error,
             ),
             onChanged: (_) => setState(() => _error = null),

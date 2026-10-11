@@ -1,6 +1,17 @@
+import 'dart:ffi';
+
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:sqlite3/open.dart';
 
+import 'package:keevo/core/di/providers.dart';
+import 'package:keevo/core/storage/app_database.dart';
+import 'package:keevo/core/sync/sync_service.dart';
+import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
+import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
+import 'package:keevo/features/catalog/data/repository/category_repository_impl.dart';
 import 'package:keevo/features/catalog/domain/model/category_model.dart';
 import 'package:keevo/features/catalog/domain/repository/category_repository.dart';
 import 'package:keevo/features/catalog/presentation/provider/category_provider.dart';
@@ -101,17 +112,46 @@ class MockCategoryRepository implements CategoryRepository {
   }
 }
 
+class _MockSyncService extends Mock implements SyncService {}
+
+class _MockSyncTriggerDispatcher extends Mock
+    implements SyncTriggerDispatcher {}
+
+class _MockDio extends Mock implements Dio {}
+
+final _preferencesOverride = tenantPreferencesProvider.overrideWith((_) async =>
+    TenantPreferencesModel(
+      sectorType: null,
+      eodReportTime: '20:00:00',
+      stockAlertEnabled: false,
+      createdAt: DateTime(2025),
+    ));
+
 void main() {
+  setUpAll(() {
+    open.overrideFor(OperatingSystem.linux, () {
+      try {
+        return DynamicLibrary.open('libsqlite3.so');
+      } catch (_) {
+        return DynamicLibrary.open('libsqlite3.so.0');
+      }
+    });
+  });
+
   group('CategoryProvider Tests', () {
     late ProviderContainer container;
     late MockCategoryRepository mockRepository;
+    late _MockSyncService mockSync;
 
     setUp(() {
       mockRepository = MockCategoryRepository();
-      
+      mockSync = _MockSyncService();
+      when(() => mockSync.pull()).thenAnswer((_) async {});
+
       container = ProviderContainer(
         overrides: [
           categoryRepositoryProvider.overrideWithValue(mockRepository),
+          syncServiceProvider.overrideWithValue(mockSync),
           tenantPreferencesProvider.overrideWith((_) async =>
               TenantPreferencesModel(
                 sectorType: null,
@@ -127,36 +167,82 @@ void main() {
       container.dispose();
     });
 
-    test('categoriesProvider returns categories from API when local is empty', () async {
-      // Setup: empty local, data available from API
+    test('categoriesProvider pulls when local is empty and returns the synced categories',
+        () async {
       mockRepository.setLocalCategories([]);
       final now = DateTime.now();
-      mockRepository.setApiCategories([
-        CategoryModel(
-          id: '1',
-          name: 'Electronics',
-          isActive: true,
-          parentId: null,
-          isCustom: false,
-          createdAt: now,
-          updatedAt: now,
-        ),
-        CategoryModel(
-          id: '2',
-          name: 'Clothing',
-          isActive: true,
-          parentId: null,
-          isCustom: false,
-          createdAt: now,
-          updatedAt: now,
-        ),
-      ]);
+      when(() => mockSync.pull()).thenAnswer((_) async {
+        mockRepository.setLocalCategories([
+          CategoryModel(
+            id: '1',
+            name: 'Electronics',
+            isActive: true,
+            isCustom: false,
+            createdAt: now,
+            updatedAt: now,
+          ),
+          CategoryModel(
+            id: '2',
+            name: 'Clothing',
+            isActive: true,
+            isCustom: false,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        ]);
+      });
 
       final result = await container.read(categoriesProvider.future);
 
-      expect(result.length, equals(2));
-      expect(result[0].name, equals('Electronics'));
-      expect(result[1].name, equals('Clothing'));
+      verify(() => mockSync.pull()).called(1);
+      expect(result.map((c) => c.name), ['Electronics', 'Clothing']);
+    });
+
+    test('categoriesProvider falls back to GET /api/v1/categories when the pull brings nothing',
+        () async {
+      final db = AppDatabase.forTesting();
+      addTearDown(db.close);
+      final dio = _MockDio();
+      when(() => dio.get<Map<String, dynamic>>('/api/v1/categories'))
+          .thenAnswer((_) async => Response(
+                requestOptions: RequestOptions(path: '/api/v1/categories'),
+                data: {
+                  'data': [
+                    {
+                      'id': 'c1',
+                      'name': 'Clothing',
+                      'parentId': null,
+                      'isActive': true,
+                      'isCustom': false,
+                      'createdAt': '2025-01-01T00:00:00Z',
+                      'updatedAt': '2025-01-01T00:00:00Z',
+                    },
+                    {
+                      'id': 'c2',
+                      'name': 'Electronics',
+                      'parentId': null,
+                      'isActive': true,
+                      'isCustom': false,
+                      'createdAt': '2025-01-01T00:00:00Z',
+                      'updatedAt': '2025-01-01T00:00:00Z',
+                    },
+                  ],
+                },
+              ));
+      final apiContainer = ProviderContainer(overrides: [
+        appDatabaseProvider.overrideWithValue(db),
+        categoryRepositoryProvider.overrideWithValue(CategoryRepositoryImpl(
+            db, mockSync, _MockSyncTriggerDispatcher())),
+        syncServiceProvider.overrideWithValue(mockSync),
+        dioProvider.overrideWithValue(dio),
+        _preferencesOverride,
+      ]);
+      addTearDown(apiContainer.dispose);
+
+      final result = await apiContainer.read(categoriesProvider.future);
+
+      verify(() => mockSync.pull()).called(1);
+      expect(result.map((c) => c.name), ['Clothing', 'Electronics']);
     });
 
     test('categoriesProvider returns local categories when available', () async {

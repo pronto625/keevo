@@ -34,16 +34,30 @@ class InventoryRow extends ConsumerStatefulWidget {
 
 class _InventoryRowState extends ConsumerState<InventoryRow> {
   late final TextEditingController _controller;
+  final _focusNode = FocusNode();
   Timer? _debounce;
   int? _localPhysical;
+
+  /// Last count successfully saved. A saved count cannot be erased (the API
+  /// requires a quantity), so an emptied field falls back to it.
+  int? _savedPhysical;
 
   @override
   void initState() {
     super.initState();
     _localPhysical = widget.product.physicalQty;
+    _savedPhysical = widget.product.physicalQty;
     _controller = TextEditingController(
       text: widget.product.physicalQty?.toString() ?? '',
     );
+    _focusNode.addListener(_restoreSavedCountOnBlur);
+  }
+
+  void _restoreSavedCountOnBlur() {
+    if (_focusNode.hasFocus || _savedPhysical == null) return;
+    if (_controller.text.trim().isEmpty) {
+      _controller.text = '$_savedPhysical';
+    }
   }
 
   @override
@@ -52,6 +66,7 @@ class _InventoryRowState extends ConsumerState<InventoryRow> {
     if (oldWidget.product.physicalQty != widget.product.physicalQty &&
         widget.product.physicalQty != _localPhysical) {
       _localPhysical = widget.product.physicalQty;
+      _savedPhysical = widget.product.physicalQty;
       _controller.text = widget.product.physicalQty?.toString() ?? '';
     }
   }
@@ -59,27 +74,36 @@ class _InventoryRowState extends ConsumerState<InventoryRow> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _focusNode.dispose();
     _controller.dispose();
     super.dispose();
   }
 
   void _onChanged(String value) {
     final parsed = int.tryParse(value);
-    setState(() => _localPhysical = parsed);
+    // Empty field: nothing to save, keep showing what is recorded.
+    setState(() => _localPhysical = parsed ?? _savedPhysical);
 
     _debounce?.cancel();
     if (parsed == null) return;
 
-    _debounce = Timer(const Duration(milliseconds: 400), () {
-      ref.read(saveCountNotifierProvider.notifier).save(
-            sessionId: widget.sessionId,
-            productId: widget.product.productId,
-            variantId: widget.product.variantId,
-            productName: widget.product.productName,
-            variantLabel: widget.product.variantLabel,
-            theoretical: widget.product.theoreticalQty,
-            physical: parsed,
-          );
+    _debounce = Timer(const Duration(milliseconds: 400), () async {
+      try {
+        await ref.read(saveCountNotifierProvider.notifier).save(
+              sessionId: widget.sessionId,
+              productId: widget.product.productId,
+              variantId: widget.product.variantId,
+              productName: widget.product.productName,
+              variantLabel: widget.product.variantLabel,
+              theoretical: widget.product.theoreticalQty,
+              physical: parsed,
+            );
+        // Only a saved count becomes the fallback of an emptied field.
+        _savedPhysical = parsed;
+      } catch (_) {
+        // The save notifier holds the error state; the field keeps the
+        // previous saved count as its fallback.
+      }
     });
   }
 
@@ -89,9 +113,19 @@ class _InventoryRowState extends ConsumerState<InventoryRow> {
   Color _backgroundColor(ThemeData theme) {
     if (_localPhysical == null) return theme.colorScheme.surface;
     final diff = _localPhysical! - widget.product.theoreticalQty;
-    if (diff == 0) return const Color(0xFFE8F5E9); // green.shade50
-    if (diff > 0) return const Color(0xFFFFFDE7); // yellow.shade50
-    return const Color(0xFFFFEBEE); // red.shade50
+    // Teintes sémantiques diluées plutôt que des pastels opaques (illisibles
+    // en mode sombre). Posées sur `surface` pour que l'animation de couleur
+    // reste opaque.
+    final Color tint;
+    if (diff == 0) {
+      tint = _colorSuccess;
+    } else if (diff > 0) {
+      tint = _colorWarning;
+    } else {
+      tint = _colorError;
+    }
+    return Color.alphaBlend(
+        tint.withValues(alpha: 0.08), theme.colorScheme.surface);
   }
 
   @override
@@ -159,17 +193,15 @@ class _InventoryRowState extends ConsumerState<InventoryRow> {
                 width: 72,
                 child: TextFormField(
                   controller: _controller,
+                  focusNode: _focusNode,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: false),
                   textAlign: TextAlign.center,
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     hintText: '—',
                     isDense: true,
                     contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                        EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                   ),
                   onChanged: _onChanged,
                 ),
@@ -195,15 +227,19 @@ class _InventoryRowState extends ConsumerState<InventoryRow> {
     }
     // Deterministic color from productId
     final colorIndex = product.productId.hashCode.abs() % Colors.primaries.length;
-    final bgColor = Colors.primaries[colorIndex];
+    final accent = Colors.primaries[colorIndex];
     final initials = _initials(product.productName);
+    // Même teinte par produit, mais diluée (badge rond soft) plutôt qu'en
+    // aplat saturé.
     return CircleAvatar(
       radius: 24,
-      backgroundColor: bgColor,
+      backgroundColor: accent.withValues(alpha: 0.15),
       child: Text(
         initials,
-        style: const TextStyle(
-            color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+        style: TextStyle(
+            color: accent.shade700,
+            fontWeight: FontWeight.bold,
+            fontSize: 14),
       ),
     );
   }

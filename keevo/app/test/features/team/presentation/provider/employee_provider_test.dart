@@ -105,38 +105,4 @@ void main() {
       expect(state.value, result);
     });
   });
-
-  group('DeactivateEmployee', () {
-    test('deactivate delegates to repository', () async {
-      when(() => mockRepo.deactivateEmployee(any()))
-          .thenAnswer((_) async {});
-
-      final container = makeContainer();
-      addTearDown(container.dispose);
-
-      await container
-          .read(deactivateEmployeeProvider.notifier)
-          .deactivate('emp-1');
-
-      verify(() => mockRepo.deactivateEmployee('emp-1')).called(1);
-    });
-  });
-
-  group('ReassignStore', () {
-    test('reassign delegates to repository', () async {
-      final updated = sampleEmployee.copyWith(storeId: 'store-2');
-      when(() => mockRepo.reassignStore(any(), any()))
-          .thenAnswer((_) async => updated);
-
-      final container = makeContainer();
-      addTearDown(container.dispose);
-
-      await container
-          .read(reassignStoreProvider.notifier)
-          .reassign('emp-1', 'store-2');
-
-      final state = container.read(reassignStoreProvider);
-      expect(state.value?.storeId, 'store-2');
-    });
-  });
 }

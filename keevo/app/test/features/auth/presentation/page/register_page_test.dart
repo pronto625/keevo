@@ -33,6 +33,10 @@ GoRouter _testRouter() {
         builder: (_, __) => const Scaffold(body: Text('Onboarding')),
       ),
       GoRoute(
+        path: '/terms',
+        builder: (_, __) => const Scaffold(body: Text('Terms')),
+      ),
+      GoRoute(
         path: '/auth/login',
         builder: (_, __) => const Scaffold(body: Text('Login')),
       ),
@@ -150,6 +154,69 @@ void main() {
             phoneNumber: any(named: 'phoneNumber'),
             password: 'SecurePass123!',
           )).called(1);
+    });
+
+    testWidgets('mode link switches to login mode', (tester) async {
+      await tester.pumpWidget(_buildPage([
+        registerUserUseCaseProvider.overrideWithValue(mockUseCase),
+      ]));
+      await tester.pump();
+
+      expect(find.text('Mot de passe oublié ?'), findsNothing);
+
+      final modeLink = find.byWidgetPredicate(
+        (w) => w is RichText && w.text.toPlainText().contains('Déjà un compte'),
+      );
+      await tester.ensureVisible(modeLink);
+      await tester.tap(modeLink);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Connexion'), findsOneWidget);
+      expect(find.text('Mot de passe oublié ?'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Se connecter'), findsOneWidget);
+    });
+
+    testWidgets('language toggle switches the copy to English',
+        (tester) async {
+      await tester.pumpWidget(_buildPage([
+        registerUserUseCaseProvider.overrideWithValue(mockUseCase),
+      ]));
+      await tester.pump();
+
+      await tester.tap(find.text('EN'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sign up'), findsOneWidget);
+      expect(
+        find.widgetWithText(FilledButton, 'Create my account'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('back button returns to the terms', (tester) async {
+      await tester.pumpWidget(_buildPage([
+        registerUserUseCaseProvider.overrideWithValue(mockUseCase),
+      ]));
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Terms'), findsOneWidget);
+    });
+
+    testWidgets('lays out without overflow on a small phone', (tester) async {
+      tester.view.physicalSize = const Size(320, 568);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(_buildPage([
+        registerUserUseCaseProvider.overrideWithValue(mockUseCase),
+      ]));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('submitButton')), findsOneWidget);
     });
   });
 }

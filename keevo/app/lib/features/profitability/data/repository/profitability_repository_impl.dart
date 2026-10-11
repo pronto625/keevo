@@ -67,12 +67,14 @@ class ProfitabilityRepositoryImpl implements ProfitabilityRepository {
         productId: productId,
         from: _fmt(params.from),
         to: _fmt(params.to),
+        storeId: params.storeId,
       );
     }
     final detail = await _local.getProductProfitabilityDetail(
       productId: productId,
       from: params.from,
       to: params.to,
+      storeId: params.storeId,
     );
     if (detail == null) {
       throw Exception('Aucune donnée disponible hors ligne pour ce produit.');

@@ -80,7 +80,7 @@ class _TopProductRow extends StatelessWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: isTop3
-                  ? AppTheme.primarySoftTint
+                  ? AppTheme.softTint(Theme.of(context).brightness)
                   : Theme.of(context).colorScheme.surfaceContainerHighest,
               shape: BoxShape.circle,
             ),

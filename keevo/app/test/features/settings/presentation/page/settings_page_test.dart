@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -9,8 +11,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/core/notification/fcm_service.dart';
 import 'package:keevo/core/storage/app_constants.dart';
+import 'package:keevo/core/sync/sync_service.dart';
+import 'package:keevo/features/auth/domain/repository/auth_repository.dart';
 import 'package:keevo/features/auth/domain/repository/token_storage.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
+import 'package:keevo/features/auth/presentation/provider/sign_out_service.dart';
 import 'package:keevo/features/notifications/data/datasource/remote_device_token_datasource.dart';
 import 'package:keevo/features/notifications/presentation/provider/notification_provider.dart';
 import 'package:keevo/features/settings/presentation/page/settings_page.dart';
@@ -24,6 +29,41 @@ class MockRemoteDeviceTokenDataSource extends Mock
     implements RemoteDeviceTokenDataSource {}
 
 class MockTokenStorage extends Mock implements TokenStorage {}
+
+class _MockAuthRepository extends Mock implements AuthRepository {}
+
+/// Sign-out pushes the queue first; here the queue is always empty.
+class _EmptyQueueSyncService extends Mock implements SyncService {
+  @override
+  Future<List<Map<String, dynamic>>> push() async => [];
+
+  @override
+  Future<bool> hasPendingOperations() async => false;
+}
+
+AuthRepository _authRepository() {
+  final repo = _MockAuthRepository();
+  when(() => repo.logout(any())).thenAnswer((_) async {});
+  return repo;
+}
+
+/// Records the calls; [flush] decides when and how the queue push ends.
+class _FakeSignOutService implements SignOutService {
+  _FakeSignOutService(this.flush);
+
+  final Future<bool> Function() flush;
+  int flushCalls = 0;
+  int signOutCalls = 0;
+
+  @override
+  Future<bool> flushPendingOperations() {
+    flushCalls++;
+    return flush();
+  }
+
+  @override
+  Future<void> signOut() async => signOutCalls++;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -44,6 +84,8 @@ Widget _buildPage({
       flutterSecureStorageProvider.overrideWithValue(
         const FlutterSecureStorage(),
       ),
+      syncServiceProvider.overrideWithValue(_EmptyQueueSyncService()),
+      authRepositoryProvider.overrideWithValue(_authRepository()),
     ],
     child: MaterialApp.router(
       routerConfig: GoRouter(
@@ -236,6 +278,7 @@ void main() {
 
       final mockTokenStorage = MockTokenStorage();
       when(() => mockTokenStorage.getToken()).thenAnswer((_) async => null);
+      when(() => mockTokenStorage.getRefreshToken()).thenAnswer((_) async => null);
 
       final container = ProviderContainer(
         overrides: [
@@ -246,6 +289,8 @@ void main() {
             const FlutterSecureStorage(),
           ),
           tokenStorageProvider.overrideWithValue(mockTokenStorage),
+          syncServiceProvider.overrideWithValue(_EmptyQueueSyncService()),
+          authRepositoryProvider.overrideWithValue(_authRepository()),
         ],
       );
       addTearDown(container.dispose);
@@ -265,7 +310,7 @@ void main() {
       // AC6: navigation still lands on /auth/login
       expect(find.text('Login Page'), findsOneWidget);
 
-      // AC6: secure storage was cleared (deleteAll() called)
+      // AC6: session secrets were cleared (device secrets are kept)
       final secureStorage = const FlutterSecureStorage();
       expect(await secureStorage.read(key: 'jwt_token'), isNull);
       expect(await secureStorage.read(key: 'user_id'), isNull);
@@ -286,6 +331,104 @@ void main() {
       // recompute triggers a second TokenStorage.getToken() call.
       await container.read(tenantStatusClaimProvider.future);
       verify(() => mockTokenStorage.getToken()).called(1);
+    });
+  });
+
+  group('SettingsPage — unsynced operations at sign-out', () {
+    Widget page(_FakeSignOutService service) => ProviderScope(
+          overrides: [
+            fcmServiceProvider.overrideWithValue(mockFcm),
+            remoteDeviceTokenDataSourceProvider.overrideWithValue(mockTokenDs),
+            currentUserRoleProvider.overrideWithValue('EMPLOYEE'),
+            currentUserPhoneProvider.overrideWithValue('+237600000000'),
+            sharedPreferencesProvider.overrideWithValue(prefs),
+            flutterSecureStorageProvider
+                .overrideWithValue(const FlutterSecureStorage()),
+            syncServiceProvider.overrideWithValue(_EmptyQueueSyncService()),
+            authRepositoryProvider.overrideWithValue(_authRepository()),
+            signOutServiceProvider.overrideWithValue(service),
+          ],
+          child: MaterialApp.router(
+            routerConfig: GoRouter(routes: [
+              GoRoute(path: '/', builder: (_, __) => const SettingsPage()),
+              GoRoute(
+                path: '/auth/login',
+                builder: (_, __) =>
+                    const Scaffold(body: Center(child: Text('Login Page'))),
+              ),
+            ]),
+          ),
+        );
+
+    testWidgets('"Rester connecté" keeps the session', (tester) async {
+      final service = _FakeSignOutService(() async => false);
+      await tester.pumpWidget(page(service));
+      await tester.pumpAndSettle();
+
+      await _tapLogoutAndConfirm(tester);
+      expect(find.text('Opérations non synchronisées'), findsOneWidget);
+      await tester.tap(find.text('Rester connecté'));
+      await tester.pumpAndSettle();
+
+      expect(service.signOutCalls, 0);
+      expect(find.text('Login Page'), findsNothing);
+    });
+
+    testWidgets('"Déconnecter quand même" signs out', (tester) async {
+      final service = _FakeSignOutService(() async => false);
+      await tester.pumpWidget(page(service));
+      await tester.pumpAndSettle();
+
+      await _tapLogoutAndConfirm(tester);
+      await tester.tap(find.text('Déconnecter quand même'));
+      await tester.pumpAndSettle();
+
+      expect(service.signOutCalls, 1);
+      expect(find.text('Login Page'), findsOneWidget);
+    });
+
+    testWidgets('a push that throws still warns instead of aborting',
+        (tester) async {
+      final service =
+          _FakeSignOutService(() async => throw StateError('db closed'));
+      await tester.pumpWidget(page(service));
+      await tester.pumpAndSettle();
+
+      await _tapLogoutAndConfirm(tester);
+
+      expect(find.text('Opérations non synchronisées'), findsOneWidget);
+    });
+
+    testWidgets('progress is shown while the queue is sent, a second tap is ignored',
+        (tester) async {
+      final release = Completer<bool>();
+      final service = _FakeSignOutService(() => release.future);
+      await tester.pumpWidget(page(service));
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.text('Se déconnecter'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Se déconnecter'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Déconnecter'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('Envoi des opérations…'), findsOneWidget);
+      // The progress dialog blocks the page; even a forced tap does nothing.
+      await tester.tap(find.text('Se déconnecter'), warnIfMissed: false);
+      await tester.pump();
+      expect(service.flushCalls, 1);
+
+      release.complete(true);
+      await tester.pumpAndSettle();
+
+      expect(service.flushCalls, 1);
+      expect(service.signOutCalls, 1);
+      expect(find.text('Login Page'), findsOneWidget);
     });
   });
 }

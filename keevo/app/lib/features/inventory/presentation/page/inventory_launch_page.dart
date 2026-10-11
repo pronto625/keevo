@@ -42,8 +42,24 @@ class InventoryLaunchPage extends ConsumerWidget {
         slivers: [
           // ── Header ──
           SliverAppBar.medium(
-            title: const Text('Inventaire'),
+            title: Text(
+              'Inventaire',
+              style: TextStyle(
+                color: theme.colorScheme.onSurface,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.3,
+              ),
+            ),
             backgroundColor: theme.colorScheme.surface,
+            scrolledUnderElevation: 0,
+            leading: Navigator.of(context).canPop()
+                ? IconButton(
+                    icon: Icon(Icons.arrow_back_ios_new_rounded,
+                        color: theme.colorScheme.onSurface, size: 20),
+                    tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+                    onPressed: () => Navigator.maybePop(context),
+                  )
+                : null,
           ),
 
           // ── Active session banner ──
@@ -67,7 +83,7 @@ class InventoryLaunchPage extends ConsumerWidget {
               child: Text(
                 'Historique',
                 style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
@@ -90,7 +106,7 @@ class InventoryLaunchPage extends ConsumerWidget {
                           Text(
                             'Aucun inventaire',
                             style: theme.textTheme.bodyLarge?.copyWith(
-                              color: theme.colorScheme.outline,
+                              color: theme.colorScheme.onSurfaceVariant,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -98,8 +114,7 @@ class InventoryLaunchPage extends ConsumerWidget {
                             'Lancez votre premier inventaire\navec le bouton +',
                             textAlign: TextAlign.center,
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.outline
-                                  .withValues(alpha: 0.7),
+                              color: theme.colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ],
@@ -129,21 +144,35 @@ class InventoryLaunchPage extends ConsumerWidget {
       // FAB only when no active session
       floatingActionButton:
           (activeSessionAsync is AsyncData && activeSessionAsync.value == null)
-              ? FloatingActionButton.extended(
-                  onPressed: () async {
-                    final created =
-                        await showInventoryConfigBottomSheet(context);
-                    if (created == true && context.mounted) {
-                      // Navigate to counting page for the newly created session
-                      final session = ref.read(createSessionNotifierProvider).value;
-                      if (session != null) {
+              // Couleur pleine + ombre douce, comme le FAB du catalogue.
+              ? Container(
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: FloatingActionButton.extended(
+                    onPressed: () async {
+                      final sessionId =
+                          await showInventoryConfigBottomSheet(context);
+                      if (sessionId != null && context.mounted) {
                         GoRouter.of(context)
-                            .push('/inventory/counting/${session.id}');
+                            .push('/inventory/counting/$sessionId');
                       }
-                    }
-                  },
-                  icon: const Icon(Icons.add),
-                  label: const Text('Nouvel inventaire'),
+                    },
+                    backgroundColor: Colors.transparent,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Nouvel inventaire',
+                        style: TextStyle(fontWeight: FontWeight.w600)),
+                  ),
                 )
               : null,
     );
@@ -162,11 +191,18 @@ class InventoryLaunchPage extends ConsumerWidget {
             child: const Text('Non'),
           ),
           FilledButton(
-            onPressed: () {
+            onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
               Navigator.pop(ctx);
-              ref
-                  .read(cancelSessionNotifierProvider.notifier)
-                  .cancel(sessionId);
+              try {
+                await ref
+                    .read(cancelSessionNotifierProvider.notifier)
+                    .cancel(sessionId);
+              } catch (e) {
+                messenger.showSnackBar(
+                  SnackBar(content: Text(appErrorMessage(e))),
+                );
+              }
             },
             child: const Text('Oui, annuler'),
           ),

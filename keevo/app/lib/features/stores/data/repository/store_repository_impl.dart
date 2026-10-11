@@ -169,6 +169,8 @@ class StoreRepositoryImpl implements StoreRepository {
       }
     } catch (e) {
       dev.log('StoreRepository.syncFromRemote: $e');
+      // Remonté pour que la synchro manuelle puisse signaler l'échec.
+      rethrow;
     }
   }
 }

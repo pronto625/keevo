@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/auth/domain/model/auth_tokens.dart';
 import 'package:keevo/features/auth/domain/usecase/change_password_usecase.dart';
 import 'package:keevo/features/auth/presentation/page/password_change_page.dart';
@@ -12,7 +14,14 @@ import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 class _MockChangePasswordUseCase extends Mock
     implements ChangePasswordUseCase {}
 
+late SharedPreferences _prefs;
+
 void main() {
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    _prefs = await SharedPreferences.getInstance();
+  });
+
   late _MockChangePasswordUseCase mockUseCase;
 
   setUp(() {
@@ -23,6 +32,7 @@ void main() {
     return ProviderScope(
       overrides: [
         changePasswordUseCaseProvider.overrideWithValue(mockUseCase),
+        sharedPreferencesProvider.overrideWithValue(_prefs),
         ...overrides,
       ],
       child: MaterialApp.router(
@@ -32,6 +42,9 @@ void main() {
               builder: (_, __) => const PasswordChangePage()),
           GoRoute(
               path: '/pos', builder: (_, __) => const Scaffold()),
+          GoRoute(
+              path: '/splash',
+              builder: (_, __) => const Scaffold(body: Text('Splash'))),
         ]),
       ),
     );
@@ -106,6 +119,9 @@ void main() {
             currentPassword: 'tempPwd1',
             newPassword: 'NewPass99',
           )).called(1);
+      // An owner forced to change their password lands where the splash
+      // decides (dashboard), not always on the POS.
+      expect(find.text('Splash'), findsOneWidget);
     });
 
     testWidgets('cannot navigate back (canPop is false)', (tester) async {

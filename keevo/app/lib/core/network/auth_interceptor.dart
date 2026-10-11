@@ -1,48 +1,47 @@
 import 'package:dio/dio.dart';
 
 import '../../features/auth/domain/repository/token_storage.dart';
+import '../auth/jwt_claims.dart';
+import '../auth/session_refresher.dart';
 
-/// AuthInterceptor — Dio interceptor handling JWT token injection and refresh.
+/// AuthInterceptor — Dio interceptor handling JWT injection and session renewal.
 ///
-/// AC3: Automatically refreshes the access token when a 401 TOKEN_EXPIRED
-/// response is received, then retries the original request transparently.
+/// A session is renewed with the refresh token, never by asking the user to
+/// sign in again ([SessionRefresher]):
+/// - [onRequest]: injects `Authorization: Bearer <token>`; an access token
+///   that is already expired is renewed first.
+/// - [onError] 401 TOKEN_EXPIRED / STORE_REASSIGNED: renew, then retry once
+///   with the new token. STORE_REASSIGNED means the token's claims are stale
+///   (employee moved to another store); the renewed token carries the new store.
+/// - Only a server refusal of the refresh token ends the session. Offline or a
+///   server error keeps it, so the shopkeeper keeps working offline.
+/// - 401 SESSION_REVOKED / ACCOUNT_INACTIVE: session ended server-side →
+///   [onSessionExpired] + [onAccountSuspended].
+/// - 403 PLAN_LIMIT_EXCEEDED → [onPlanLimitExceeded].
 ///
-/// AC (Story 1.6): Intercepts 403 PLAN_LIMIT_EXCEEDED and invokes
-/// [onPlanLimitExceeded] so the caller can show [PlanLimitBottomSheet].
-///
-/// AC4 (Story 12.7): Handles 401 SESSION_REVOKED and ACCOUNT_INACTIVE by
-/// clearing tokens and invoking [onAccountSuspended].
-///
-/// Responsibilities:
-/// - [onRequest]: inject [Authorization: Bearer <token>] header if token exists
-/// - [onError]: detect 401 TOKEN_EXPIRED → refresh → retry; on refresh failure,
-///   call [onSessionExpired] (clear tokens + navigate to login)
-/// - [onError]: detect 401 SESSION_REVOKED / ACCOUNT_INACTIVE → expire session
-///   + call [onAccountSuspended] (show SnackBar)
-/// - [onError]: detect 403 PLAN_LIMIT_EXCEEDED → call [onPlanLimitExceeded]
-///
-/// Architecture note: the [Dio] instance passed to this interceptor is the
-/// SAME instance that fires the original request. To avoid the inifinite refresh
-/// loop, refresh calls use a separate [Dio] instance.
+/// The refresh call goes through a separate [Dio] without this interceptor,
+/// to avoid refresh loops.
 class AuthInterceptor extends Interceptor {
+  /// Marks a request already retried after a renewal, so a second 401 is final.
+  static const retriedKey = 'auth.retried';
+
+  /// Renew this long before expiry, so a request does not expire in flight.
+  static const _renewalMargin = Duration(minutes: 1);
+
   final TokenStorage _storage;
   final Dio _dio; // main Dio instance (for original-request retry)
-  final Dio _refreshDio; // separate Dio for refresh calls (avoids interceptor loop)
-  final void Function() onSessionExpired; // navigate to /auth/login + clear tokens
+  final SessionRefresher _refresher;
+  final void Function()
+      onSessionExpired; // navigate to /auth/login + clear tokens
 
   /// Called when 403 PLAN_LIMIT_EXCEEDED is received. Parameters:
   /// - [entity]: 'stores' | 'products' | 'employees'
   /// - [limit]: max allowed count for the current plan
   final void Function(String entity, int limit)? onPlanLimitExceeded;
 
-  /// Called when 401 SESSION_REVOKED or ACCOUNT_INACTIVE is received.
-  /// The caller should show a SnackBar or similar UX informing the user
-  /// their access has been suspended. Tokens are already cleared by this
-  /// interceptor before this callback fires.
+  /// Called when 401 SESSION_REVOKED or ACCOUNT_INACTIVE is received, after the
+  /// tokens were cleared — the caller informs the user.
   final void Function()? onAccountSuspended;
-
-  /// Guards against concurrent refresh attempts.
-  bool _isRefreshing = false;
 
   AuthInterceptor({
     required TokenStorage storage,
@@ -51,48 +50,71 @@ class AuthInterceptor extends Interceptor {
     required this.onSessionExpired,
     this.onPlanLimitExceeded,
     this.onAccountSuspended,
+    SessionRefresher? refresher,
+    Future<void> Function(String accessToken)? onSessionRenewed,
   })  : _storage = storage,
         _dio = dio,
-        _refreshDio = refreshDio;
+        _refresher = refresher ??
+            SessionRefresher(
+              storage: storage,
+              refreshDio: refreshDio,
+              onRenewed: onSessionRenewed,
+            );
 
-  // ── onRequest: inject Bearer token ──────────────────────────────────────
-
-  /// Public auth endpoints that must NOT receive a Bearer token.
+  /// Public auth endpoints that must NOT receive a Bearer token. Logout is
+  /// public on the server: signing out with an expired access token must not
+  /// renew (rotate) the session first.
   static const _publicPaths = {
     '/api/v1/auth/login',
     '/api/v1/auth/register',
     '/api/v1/auth/refresh',
+    '/api/v1/auth/logout',
   };
+
+  static const _renewableCodes = {'TOKEN_EXPIRED', 'STORE_REASSIGNED'};
+
+  // ── onRequest: inject Bearer token, renew an expired one first ───────────
 
   @override
   void onRequest(
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
-    // Skip token injection for public auth endpoints — they don't require
-    // authentication and sending a stale/stub token would pollute the request.
     final isPublic = _publicPaths.any((p) => options.path.endsWith(p));
     if (!isPublic) {
-      final token = await _storage.getToken();
-      if (token != null) {
-        options.headers['Authorization'] = 'Bearer $token';
+      try {
+        var token = await _storage.getToken();
+        final claims = JwtClaims.tryParse(token);
+        if (claims != null && claims.isExpired(margin: _renewalMargin)) {
+          final outcome = await _refresher.refresh();
+          if (outcome == RefreshOutcome.renewed) {
+            token = await _storage.getToken();
+          } else if (outcome == RefreshOutcome.rejected) {
+            await _expireSession();
+            token = null;
+          }
+          // unreachable: send as-is — offline, the request fails on the network
+          // anyway, and the session must survive until the server is reachable.
+        }
+        if (token != null) {
+          options.headers['Authorization'] = 'Bearer $token';
+        }
+      } catch (_) {
+        // Storage or session-apply failure: the request must still be sent
+        // (or fail on its own), never hang without reaching the handler.
       }
     }
     handler.next(options);
   }
 
-  // ── onError: handle 401 TOKEN_EXPIRED → refresh + retry ─────────────────
+  // ── onError ───────────────────────────────────────────────────────────────
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     final statusCode = err.response?.statusCode;
+    final domainCode = _extractDomainCode(err.response?.data);
 
-    // Only handle 401 TOKEN_EXPIRED and only once (not during refresh call itself)
-    if (statusCode == 401 && !_isRefreshing) {
-      final body = err.response?.data;
-      final domainCode = _extractDomainCode(body);
-
-      // AC4 (Story 12.7): SESSION_REVOKED / ACCOUNT_INACTIVE — expire session
+    if (statusCode == 401) {
       if (domainCode == 'SESSION_REVOKED' || domainCode == 'ACCOUNT_INACTIVE') {
         try {
           await _expireSession();
@@ -105,53 +127,16 @@ class AuthInterceptor extends Interceptor {
         return;
       }
 
-      if (domainCode == 'TOKEN_EXPIRED') {
-        _isRefreshing = true;
-        try {
-          final refreshToken = await _storage.getRefreshToken();
-          if (refreshToken == null) {
-            await _expireSession();
-            handler.next(err);
-            return;
-          }
-
-          // Call refresh endpoint on a separate Dio (no interceptor loop)
-          final refreshResponse = await _refreshDio.post<Map<String, dynamic>>(
-            '/api/v1/auth/refresh',
-            data: {'refreshToken': refreshToken},
-          );
-
-          final responseData = refreshResponse.data!;
-          final newAccessToken = responseData['accessToken'] as String;
-          final newRefreshToken = responseData['refreshToken'] as String;
-
-          // Persist new tokens
-          await Future.wait([
-            _storage.saveToken(newAccessToken),
-            _storage.saveRefreshToken(newRefreshToken),
-          ]);
-
-          // Retry the original failed request with the new token
-          final retryOptions = err.requestOptions;
-          retryOptions.headers['Authorization'] = 'Bearer $newAccessToken';
-          final retryResponse = await _dio.fetch<dynamic>(retryOptions);
-          handler.resolve(retryResponse);
-          return;
-        } on DioException catch (_) {
-          // Refresh failed → logout
-          await _expireSession();
-          handler.next(err);
-          return;
-        } finally {
-          _isRefreshing = false;
-        }
+      final alreadyRetried = err.requestOptions.extra[retriedKey] == true;
+      if (_renewableCodes.contains(domainCode) && !alreadyRetried) {
+        await _renewAndRetry(err, handler);
+        return;
       }
     }
 
     // ── 403 PLAN_LIMIT_EXCEEDED ──────────────────────────────────────────
     if (statusCode == 403) {
       final body = err.response?.data;
-      final domainCode = _extractDomainCode(body);
       if (domainCode == 'PLAN_LIMIT_EXCEEDED' && onPlanLimitExceeded != null) {
         final entity = _extractDetail(body, 'entity') ?? 'items';
         final limitStr = _extractDetail(body, 'limit') ?? '0';
@@ -163,9 +148,56 @@ class AuthInterceptor extends Interceptor {
     handler.next(err);
   }
 
+  Future<void> _renewAndRetry(
+    DioException err,
+    ErrorInterceptorHandler handler,
+  ) async {
+    final sentHeader = err.requestOptions.headers['Authorization'];
+    String? current;
+    try {
+      current = await _storage.getToken();
+
+      // Another request may already have renewed the session while this one was
+      // in flight: retry with that token instead of spending another refresh.
+      final renewedMeanwhile =
+          current != null && sentHeader != 'Bearer $current';
+      if (!renewedMeanwhile) {
+        final outcome = await _refresher.refresh();
+        if (outcome == RefreshOutcome.rejected) {
+          await _expireSession();
+          handler.next(err);
+          return;
+        }
+        if (outcome == RefreshOutcome.unreachable) {
+          handler.next(err);
+          return;
+        }
+        current = await _storage.getToken();
+      }
+    } catch (_) {
+      // Storage or session-apply failure: hand the original error back.
+      handler.next(err);
+      return;
+    }
+    if (current == null) {
+      handler.next(err);
+      return;
+    }
+
+    final retryOptions = err.requestOptions
+      ..headers['Authorization'] = 'Bearer $current'
+      ..extra[retriedKey] = true;
+    try {
+      handler.resolve(await _dio.fetch<dynamic>(retryOptions));
+    } on DioException catch (retryError) {
+      // The retry's own failure (409, 422, timeout…) belongs to the caller.
+      handler.next(retryError);
+    }
+  }
+
   // ── Helpers ──────────────────────────────────────────────────────────────
 
-  /// Clears all tokens and triggers navigation to the login screen.
+  /// Clears the session tokens and triggers navigation to the login screen.
   Future<void> _expireSession() async {
     await _storage.clearAll();
     onSessionExpired();

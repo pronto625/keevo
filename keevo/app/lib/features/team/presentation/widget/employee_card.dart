@@ -2,6 +2,7 @@ import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widget/app_error_widget.dart';
 import '../../../stores/presentation/provider/store_provider.dart';
 import '../../domain/model/employee_model.dart';
 import '../provider/employee_provider.dart';
@@ -31,15 +32,26 @@ class EmployeeCard extends ConsumerWidget {
       data: (stores) =>
           stores.where((s) => s.id == employee.storeId).firstOrNull?.name ??
           'Boutique inconnue',
+      error: (_, __) => 'Boutique inconnue',
       orElse: () => 'Chargement...',
     );
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: Colors.white,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    // Rangée de liste : surface + bordure fine plutôt qu'une Card blanche
+    // figée (illisible en mode sombre).
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        border: Border.all(color: cs.outlineVariant.withAlpha(90)),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        child: InkWell(
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
         onTap: () => _showActions(context, ref, storeName),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -49,16 +61,13 @@ class EmployeeCard extends ConsumerWidget {
               CircleAvatar(
                 radius: 22,
                 backgroundColor: isActive
-                    ? const Color(0xFFDBEAFE)
-                    : const Color(0xFFF1F3F5),
+                    ? AppTheme.softTint(theme.brightness)
+                    : cs.surfaceContainerHighest,
                 child: Text(
-                  '${employee.firstName[0]}${employee.lastName[0]}'
-                      .toUpperCase(),
+                  _initials(employee),
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
-                    color: isActive
-                        ? const Color(0xFF3B82F6)
-                        : const Color(0xFF868E96),
+                    color: isActive ? cs.primary : cs.onSurfaceVariant,
                   ),
                 ),
               ),
@@ -74,17 +83,15 @@ class EmployeeCard extends ConsumerWidget {
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: isActive
-                            ? const Color(0xFF212529)
-                            : const Color(0xFF868E96),
+                        color: isActive ? cs.onSurface : cs.onSurfaceVariant,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       storeName,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: Color(0xFF868E96),
+                        color: cs.onSurfaceVariant,
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -100,13 +107,35 @@ class EmployeeCard extends ConsumerWidget {
                 ),
               ),
 
-              const Icon(Icons.chevron_right,
-                  color: Color(0xFFADB5BD), size: 20),
+              Icon(Icons.chevron_right_rounded,
+                  color: cs.onSurfaceVariant.withAlpha(110), size: 20),
             ],
           ),
         ),
       ),
+      ),
     );
+  }
+
+  // Les noms peuvent être vides (données importées) : pas d'index direct.
+  static String _initials(EmployeeModel e) {
+    String first(String s) => s.trim().isEmpty ? '' : s.trim()[0];
+    final initials = '${first(e.firstName)}${first(e.lastName)}'.toUpperCase();
+    return initials.isEmpty ? '?' : initials;
+  }
+
+  /// Lance l'action et ne signale le succès que si elle a abouti ; en cas
+  /// d'échec (refus du serveur, réseau…) l'utilisateur voit la raison.
+  Future<void> _runAction(
+      BuildContext context, Future<void> Function() action) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await action();
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(appErrorMessage(e))));
+      return;
+    }
+    onActionComplete();
   }
 
   void _showActions(BuildContext context, WidgetRef ref, String storeName) {
@@ -140,7 +169,7 @@ class EmployeeCard extends ConsumerWidget {
                   style: Theme.of(context)
                       .textTheme
                       .titleLarge
-                      ?.copyWith(fontWeight: FontWeight.bold),
+                      ?.copyWith(fontWeight: FontWeight.w700),
                 ),
               ),
             ),
@@ -149,8 +178,8 @@ class EmployeeCard extends ConsumerWidget {
             if (isActive) ...[
               // ── Reassign store ──────────────────────────────────────
               ListTile(
-                leading: const Icon(Icons.swap_horiz_rounded,
-                    color: Color(0xFF3B82F6)),
+                leading: Icon(Icons.swap_horiz_rounded,
+                    color: Theme.of(context).colorScheme.primary),
                 title: const Text('Modifier l\'assignation'),
                 subtitle: Text('Actuellement : $storeName'),
                 onTap: () {
@@ -232,10 +261,8 @@ class EmployeeCard extends ConsumerWidget {
           title: const Text('Réassigner la boutique'),
           content: DropdownButtonFormField<String>(
             initialValue: selectedStoreId,
-            decoration: InputDecoration(
+            decoration: const InputDecoration(
               labelText: 'Boutique',
-              border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
             items: stores
                 .map((s) => DropdownMenuItem(
@@ -256,10 +283,12 @@ class EmployeeCard extends ConsumerWidget {
                       selectedStoreId != employee.storeId
                   ? () async {
                       Navigator.pop(ctx);
-                      await ref
-                          .read(reassignStoreProvider.notifier)
-                          .reassign(employee.id, selectedStoreId!);
-                      onActionComplete();
+                      await _runAction(
+                        context,
+                        () => ref
+                            .read(employeeRepositoryProvider)
+                            .reassignStore(employee.id, selectedStoreId!),
+                      );
                     }
                   : null,
               child: const Text('Confirmer'),
@@ -289,10 +318,12 @@ class EmployeeCard extends ConsumerWidget {
             ),
             onPressed: () async {
               Navigator.pop(ctx);
-              await ref
-                  .read(deactivateEmployeeProvider.notifier)
-                  .deactivate(employee.id);
-              onActionComplete();
+              await _runAction(
+                context,
+                () => ref
+                    .read(employeeRepositoryProvider)
+                    .deactivateEmployee(employee.id),
+              );
             },
             child: const Text('Désactiver'),
           ),
@@ -320,10 +351,12 @@ class EmployeeCard extends ConsumerWidget {
             ),
             onPressed: () async {
               Navigator.pop(ctx);
-              await ref
-                  .read(reactivateEmployeeProvider.notifier)
-                  .reactivate(employee.id);
-              onActionComplete();
+              await _runAction(
+                context,
+                () => ref
+                    .read(employeeRepositoryProvider)
+                    .reactivateEmployee(employee.id),
+              );
             },
             child: const Text('Réactiver'),
           ),
@@ -396,10 +429,16 @@ class _StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = cs.brightness == Brightness.dark;
+    // Vert foncé en clair (lisible sur fond pâle), vert clair en sombre.
+    final activeColor = isDark ? cs.success : const Color(0xFF2B8A3E);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: isActive ? const Color(0xFFD3F9D8) : const Color(0xFFF1F3F5),
+        color: isActive
+            ? activeColor.withValues(alpha: 0.12)
+            : cs.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
@@ -407,7 +446,7 @@ class _StatusBadge extends StatelessWidget {
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w600,
-          color: isActive ? const Color(0xFF2B8A3E) : const Color(0xFF868E96),
+          color: isActive ? activeColor : cs.onSurfaceVariant,
         ),
       ),
     );
@@ -419,18 +458,22 @@ class _PwdBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final color = cs.brightness == Brightness.dark
+        ? cs.warning
+        : const Color(0xFFE65100);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF3E0),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: const Text(
+      child: Text(
         'Mot de passe non changé',
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w600,
-          color: Color(0xFFE65100),
+          color: color,
         ),
       ),
     );

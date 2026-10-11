@@ -1,4 +1,5 @@
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -86,6 +87,14 @@ class _CsvImportPageState extends ConsumerState<CsvImportPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final importState = ref.watch(csvImportNotifierProvider);
+    // The mapping step stays built while importing and after a failed import
+    // so the user sees progress and can retry.
+    final picked = switch (importState) {
+      final CsvImportFilePicked p => p,
+      CsvImportLoading(:final picked) => picked,
+      CsvImportError(:final picked) => picked,
+      _ => null,
+    };
 
     // Listen for errors → show SnackBar
     ref.listen<CsvImportState>(csvImportNotifierProvider, (prev, next) {
@@ -105,10 +114,21 @@ class _CsvImportPageState extends ConsumerState<CsvImportPage> {
     });
 
     return Scaffold(
+      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
-        title: const Text('Importer un catalogue CSV'),
+        backgroundColor: theme.colorScheme.surface,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: Text(
+          'Importer un catalogue CSV',
+          style: TextStyle(
+            color: theme.colorScheme.onSurface,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.2,
+          ),
+        ),
         leading: IconButton(
-          icon: const Icon(Icons.close),
+          icon: Icon(Icons.close_rounded, color: theme.colorScheme.onSurface),
           onPressed: () {
             ref.read(csvImportNotifierProvider.notifier).reset();
             context.pop();
@@ -124,10 +144,10 @@ class _CsvImportPageState extends ConsumerState<CsvImportPage> {
                 ref.read(csvImportNotifierProvider.notifier).pickFile(),
             onDownloadTemplate: () => _downloadTemplate(context),
           ),
-          if (importState is CsvImportFilePicked)
+          if (picked != null)
             _StepMapColumns(
-              headers: importState.detectedHeaders,
-              bytes: importState.bytes,
+              headers: picked.detectedHeaders,
+              bytes: picked.bytes,
               mapping: _mapping,
               fieldLabels: _fieldLabels,
               requiredFields: _requiredFields,
@@ -199,16 +219,14 @@ class _StepPickFile extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.upload_file_rounded,
-            size: 80,
-            color: theme.colorScheme.primary.withOpacity(0.6),
-          ),
+          const SoftIconBadge(icon: Icons.upload_file_outlined, size: 96),
           const SizedBox(height: 24),
           Text(
             'Importez votre catalogue',
-            style: theme.textTheme.headlineSmall
-                ?.copyWith(fontWeight: FontWeight.bold),
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.3,
+            ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
@@ -223,6 +241,7 @@ class _StepPickFile extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
+              style: _ctaStyle,
               onPressed: onPickFile,
               icon: const Icon(Icons.folder_open_rounded),
               label: const Text('Choisir un fichier .csv'),
@@ -232,6 +251,12 @@ class _StepPickFile extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(56),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusL),
+                ),
+              ),
               onPressed: onDownloadTemplate,
               icon: const Icon(Icons.download_rounded),
               label: const Text('Télécharger le modèle CSV'),
@@ -241,15 +266,16 @@ class _StepPickFile extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(12),
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(AppTheme.radiusM),
+              border: Border.all(color: theme.colorScheme.outlineVariant),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Colonnes reconnues :',
                     style: theme.textTheme.labelMedium?.copyWith(
-                        fontWeight: FontWeight.bold)),
+                        fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
                 Text(
                   'nom, prix_vente, prix_achat, cout_transport,\ncategorie, sku, quantite_initiale, seuil_min',
@@ -294,22 +320,10 @@ class _StepMapColumns extends StatelessWidget {
     required this.onCancel,
   });
 
-  List<List<String>> _previewRows() {
-    final text = String.fromCharCodes(
-        bytes.sublist(0, bytes.length.clamp(0, 8192)));
-    final lines = text.split(RegExp(r'\r?\n')).where((l) => l.isNotEmpty).toList();
-    // Skip header line, take up to 5 data rows
-    return lines
-        .skip(1)
-        .take(5)
-        .map((line) => line.split(',').map((v) => v.trim().replaceAll('"', '')).toList())
-        .toList();
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final previewRows = _previewRows();
+    final previewRows = csvPreviewRows(bytes);
     final dropdownItems = [
       DropdownMenuItem<String>(
         value: null,
@@ -327,8 +341,8 @@ class _StepMapColumns extends StatelessWidget {
         children: [
           // Field mapping section
           Text('Correspondance des colonnes',
-              style: theme.textTheme.titleLarge
-                  ?.copyWith(fontWeight: FontWeight.bold)),
+              style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700, letterSpacing: -0.2)),
           const SizedBox(height: 4),
           Text(
             'Indiquez quelle colonne de votre fichier correspond à chaque champ Keevo.',
@@ -344,9 +358,6 @@ class _StepMapColumns extends StatelessWidget {
                 value: mapping[entry.key],
                 decoration: InputDecoration(
                   labelText: entry.value,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
                   suffixIcon: isRequired
                       ? Icon(Icons.star, size: 12,
                           color: theme.colorScheme.error)
@@ -363,13 +374,19 @@ class _StepMapColumns extends StatelessWidget {
             const SizedBox(height: 16),
             Text('Aperçu (5 premières lignes)',
                 style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.bold)),
+                    ?.copyWith(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
-            SingleChildScrollView(
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(AppTheme.radiusM),
+                border: Border.all(color: theme.colorScheme.outlineVariant),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
                 headingRowColor: WidgetStateProperty.all(
-                    theme.colorScheme.surfaceVariant.withOpacity(0.5)),
+                    AppTheme.softTint(theme.brightness)),
                 columns: headers
                     .map((h) => DataColumn(label: Text(h)))
                     .toList(),
@@ -384,6 +401,7 @@ class _StepMapColumns extends StatelessWidget {
                         ))
                     .toList(),
               ),
+              ),
             ),
           ],
 
@@ -395,6 +413,7 @@ class _StepMapColumns extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
+              style: _ctaStyle,
               onPressed: canLaunchImport && !isLoading ? onLaunchImport : null,
               icon: isLoading
                   ? const SizedBox(
@@ -447,11 +466,11 @@ class _StepResult extends StatelessWidget {
           Center(
             child: Column(
               children: [
-                Icon(
-                  result.imported > 0
-                      ? Icons.check_circle_rounded
-                      : Icons.info_rounded,
-                  size: 64,
+                SoftIconBadge(
+                  icon: result.imported > 0
+                      ? Icons.check_rounded
+                      : Icons.info_outline_rounded,
+                  size: 88,
                   color: result.imported > 0
                       ? AppTheme.success
                       : theme.colorScheme.tertiary,
@@ -459,10 +478,11 @@ class _StepResult extends StatelessWidget {
                 const SizedBox(height: 12),
                 Text(
                   result.imported > 0
-                      ? '🎉 ${result.imported} produit${result.imported > 1 ? 's' : ''} importé${result.imported > 1 ? 's' : ''}'
+                      ? '${result.imported} produit${result.imported > 1 ? 's' : ''} importé${result.imported > 1 ? 's' : ''}'
                       : 'Aucun produit importé',
                   style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
                     color: result.imported > 0 ? AppTheme.success : null,
                   ),
                   textAlign: TextAlign.center,
@@ -478,7 +498,7 @@ class _StepResult extends StatelessWidget {
               icon: Icons.warning_amber_rounded,
               color: theme.colorScheme.tertiary,
               label:
-                  '⚠ ${result.skipped} ligne${result.skipped > 1 ? 's ignorées' : ' ignorée'}',
+                  '${result.skipped} ligne${result.skipped > 1 ? 's ignorées' : ' ignorée'}',
             ),
 
           // Limit reached: upgrade CTA
@@ -487,18 +507,29 @@ class _StepResult extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: theme.colorScheme.errorContainer,
-                borderRadius: BorderRadius.circular(12),
+                color: theme.colorScheme.error.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(AppTheme.radiusM),
+                border: Border.all(
+                    color: theme.colorScheme.error.withValues(alpha: 0.3)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '🔒 Limite du plan gratuit atteinte',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.error,
-                    ),
+                  Row(
+                    children: [
+                      Icon(Icons.lock_outline_rounded,
+                          size: 18, color: theme.colorScheme.error),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Limite du plan gratuit atteinte',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.error,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -517,7 +548,7 @@ class _StepResult extends StatelessWidget {
             Text(
               'Lignes ignorées (${result.errors.length})',
               style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.bold),
+                  ?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
             ...result.errors.map(
@@ -537,8 +568,9 @@ class _StepResult extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
+              style: _ctaStyle,
               onPressed: onViewCatalog,
-              icon: const Icon(Icons.inventory_2_rounded),
+              icon: const Icon(Icons.inventory_2_outlined),
               label: const Text('Voir le catalogue'),
             ),
           ),
@@ -572,17 +604,26 @@ class _StatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(10),
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppTheme.radiusM),
       ),
       child: Row(
         children: [
           Icon(icon, color: color, size: 20),
           const SizedBox(width: 8),
           Text(label,
-              style: TextStyle(color: color, fontWeight: FontWeight.w500)),
+              style: TextStyle(color: color, fontWeight: FontWeight.w600)),
         ],
       ),
     );
   }
 }
+
+/// Full-width page CTA: 56dp, solid colour — same proportions as the
+/// product form's save button.
+final ButtonStyle _ctaStyle = FilledButton.styleFrom(
+  minimumSize: const Size.fromHeight(56),
+  shape: RoundedRectangleBorder(
+    borderRadius: BorderRadius.circular(AppTheme.radiusL),
+  ),
+);

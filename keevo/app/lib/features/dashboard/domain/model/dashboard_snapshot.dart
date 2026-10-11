@@ -21,6 +21,9 @@ class DashboardSnapshot {
   final List<StoreOverview> storeOverviews;
   final int todaySalesCount;
 
+  /// When this snapshot was fetched/computed (null = unknown).
+  final DateTime? asOf;
+
   const DashboardSnapshot({
     required this.todayCA,
     required this.yesterdayCA,
@@ -39,7 +42,29 @@ class DashboardSnapshot {
     this.yearlyCA = const [],
     required this.storeOverviews,
     required this.todaySalesCount,
+    this.asOf,
   });
+
+  DashboardSnapshot withAsOf(DateTime time) => DashboardSnapshot(
+        todayCA: todayCA,
+        yesterdayCA: yesterdayCA,
+        dayBeforeYesterdayCA: dayBeforeYesterdayCA,
+        trendPercent: trendPercent,
+        totalTransactionsMonth: totalTransactionsMonth,
+        averageBasketMonth: averageBasketMonth,
+        prevMonthTransactions: prevMonthTransactions,
+        prevMonthAverageBasket: prevMonthAverageBasket,
+        lowStockCount: lowStockCount,
+        weeklyTopProducts: weeklyTopProducts,
+        weeklyWorstProducts: weeklyWorstProducts,
+        dailyCALast30: dailyCALast30,
+        weeklyCA: weeklyCA,
+        monthlyCA: monthlyCA,
+        yearlyCA: yearlyCA,
+        storeOverviews: storeOverviews,
+        todaySalesCount: todaySalesCount,
+        asOf: time,
+      );
 
   /// Trend percent comparing today vs yesterday CA.
   /// Positive = up, negative = down, 0 = no data.

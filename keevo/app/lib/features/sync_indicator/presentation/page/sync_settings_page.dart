@@ -1,5 +1,6 @@
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -29,14 +30,29 @@ class SyncSettingsPage extends ConsumerWidget {
     final asyncStatus = ref.watch(syncStatusProvider);
     final isOnline = asyncStatus.valueOrNull == SyncStatus.online ||
         asyncStatus.valueOrNull == SyncStatus.syncing;
+    final cs = Theme.of(context).colorScheme;
 
     return DefaultTabController(
       length: 3,
       child: Scaffold(
+        backgroundColor: cs.surface,
         appBar: AppBar(
-          title: const Text('Synchronisation'),
-          bottom: const TabBar(
-            tabs: [
+          backgroundColor: cs.surface,
+          title: Text(
+            'Synchronisation',
+            style: TextStyle(
+              color: cs.onSurface,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.2,
+            ),
+          ),
+          bottom: TabBar(
+            indicatorColor: cs.primary,
+            labelColor: cs.primary,
+            unselectedLabelColor: cs.onSurfaceVariant,
+            labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+            dividerColor: cs.outlineVariant.withAlpha(90),
+            tabs: const [
               Tab(text: 'Historique'),
               Tab(text: 'Conflits'),
               Tab(text: 'File d\'attente'),
@@ -58,7 +74,13 @@ class SyncSettingsPage extends ConsumerWidget {
             ),
           ],
         ),
+        // Couleur pleine sans ombre marquée, comme les FAB du rebrand ; grisé
+        // hors-ligne pour que l'état désactivé se lise.
         floatingActionButton: FloatingActionButton.extended(
+          backgroundColor: isOnline ? cs.primary : cs.surfaceContainerHighest,
+          foregroundColor: isOnline ? cs.onPrimary : cs.onSurfaceVariant,
+          elevation: 2,
+          highlightElevation: 4,
           onPressed: isOnline
               ? () {
                   ref.read(syncTriggerNotifierProvider.notifier).triggerSync();
@@ -67,7 +89,7 @@ class SyncSettingsPage extends ConsumerWidget {
                   );
                 }
               : null,
-          icon: const Icon(Icons.sync),
+          icon: const Icon(Icons.sync_rounded),
           label: Text(isOnline ? 'Forcer la sync' : 'Hors-ligne'),
         ),
       ),
@@ -101,7 +123,8 @@ class _ActiveDevicesSection extends ConsumerWidget {
                 const SizedBox(width: 6),
                 Text(
                   'Appareils actifs (${devices.length})',
-                  style: theme.textTheme.titleSmall,
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -152,7 +175,7 @@ class _DeviceTile extends StatelessWidget {
     final lastPush = (lastPushRaw != null && lastPushRaw.isNotEmpty)
         ? DateTime.tryParse(lastPushRaw)
         : null;
-    final freshness = _freshnessColor(lastPush);
+    final freshness = _freshnessColor(lastPush, theme.colorScheme);
     final shortId = deviceId.length > 13
         ? '${deviceId.substring(0, 13)}…'
         : deviceId;
@@ -160,19 +183,16 @@ class _DeviceTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.4),
-        borderRadius: BorderRadius.circular(10),
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusM),
+        border: Border.all(color: theme.colorScheme.outlineVariant.withAlpha(90)),
       ),
       child: Row(
         children: [
-          Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: freshness.withOpacity(0.15),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.phone_android_rounded, size: 15, color: freshness),
+          SoftIconBadge(
+            icon: Icons.phone_android_rounded,
+            color: freshness,
+            size: 30,
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -210,8 +230,8 @@ class _DeviceTile extends StatelessWidget {
     );
   }
 
-  Color _freshnessColor(DateTime? lastPush) {
-    if (lastPush == null) return Colors.grey;
+  Color _freshnessColor(DateTime? lastPush, ColorScheme cs) {
+    if (lastPush == null) return cs.onSurfaceVariant;
     final diff = DateTime.now().difference(lastPush);
     if (diff.inHours < 1) return AppTheme.success;
     if (diff.inHours < 24) return AppTheme.warning;
@@ -299,7 +319,11 @@ class _ConflitsTab extends ConsumerWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.check_circle_outline, size: 48, color: AppTheme.success),
+                  SoftIconBadge(
+                    icon: Icons.check_circle_outline_rounded,
+                    color: AppTheme.success,
+                    size: 72,
+                  ),
                   SizedBox(height: 12),
                   Text('Aucun conflit'),
                 ],
@@ -354,7 +378,10 @@ class _ConflictTile extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           children: [
             Text('Détail du conflit',
-                style: Theme.of(ctx).textTheme.titleMedium),
+                style: Theme.of(ctx)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
             _DetailRow('Type', conflict.conflictType),
             _DetailRow('Stratégie', conflict.strategy),

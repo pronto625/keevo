@@ -160,13 +160,15 @@ class StockRepositoryImpl implements StockRepository {
     String? notes,
   }) async {
     // Offline-first (Story 5.6): always use local path, no remote call.
-    final movement = await _recordEntryLocally(
+    // One transaction: a crash between the stock write and the queue insert
+    // would otherwise keep the local change without ever pushing it.
+    final movement = await _local.transaction(() => _recordEntryLocally(
       productId: productId,
       variantId: variantId,
       storeId: storeId,
       quantity: quantity,
       notes: notes,
-    );
+    ));
     _syncTriggerDispatcher.triggerPushIfIdle();
     return movement;
   }
@@ -229,13 +231,15 @@ class StockRepositoryImpl implements StockRepository {
     required String notes,
   }) async {
     // Offline-first (Story 5.6): always use local path, no remote call.
-    final movement = await _adjustStockLocally(
+    // One transaction: a crash between the stock write and the queue insert
+    // would otherwise keep the local change without ever pushing it.
+    final movement = await _local.transaction(() => _adjustStockLocally(
       productId: productId,
       variantId: variantId,
       storeId: storeId,
       newQuantity: newQuantity,
       notes: notes,
-    );
+    ));
     _syncTriggerDispatcher.triggerPushIfIdle();
     return movement;
   }

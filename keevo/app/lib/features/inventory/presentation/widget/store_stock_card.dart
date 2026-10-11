@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/di/providers.dart';
+import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import '../../../catalog/presentation/widget/cross_store_availability_bottom_sheet.dart';
 import '../../domain/model/store_product_stock_model.dart';
 import '../../domain/model/store_stock_summary_model.dart';
@@ -46,168 +48,139 @@ class _StoreStockCardState extends ConsumerState<StoreStockCard> {
       });
     }
 
+    final cs = theme.colorScheme;
+
+    // Surface pleine + ombre douce partagée plutôt qu'un dégradé de fond.
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
+      decoration: AppTheme.softCardDecoration(cs),
       child: Material(
-        elevation: 0,
-        borderRadius: BorderRadius.circular(20),
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
         child: InkWell(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(AppTheme.radiusL),
           onTap: () => setState(() => _expanded = !_expanded),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  theme.colorScheme.surface,
-                  theme.colorScheme.surfaceContainerLow,
-                ],
-              ),
-              border: Border.all(
-                color: theme.colorScheme.outline.withValues(alpha: 0.1),
-                width: 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: theme.colorScheme.shadow.withValues(alpha: 0.06),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                // ── Header ───────────────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      // Avatar
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: isWarehouse
-                              ? const Color(0xFFE8F4FD)
-                              : const Color(0xFFD0EBFF),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Icon(
-                          isWarehouse
-                              ? Icons.warehouse_rounded
-                              : Icons.storefront_rounded,
-                          color: AppTheme.primary,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      // Name + type
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              s.storeName,
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: -0.2,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 2),
-                            Row(
-                              children: [
-                                _TypeChip(isWarehouse: isWarehouse),
-                                const SizedBox(width: 8),
-                                Flexible(
-                                  child: Text(
-                                    '${s.productCount} article${s.productCount > 1 ? 's' : ''}',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: theme.colorScheme.outline,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 1,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Right block
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
+          child: Column(
+            children: [
+              // ── Header ───────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    // Avatar
+                    SoftIconBadge(
+                      icon: isWarehouse
+                          ? Icons.warehouse_rounded
+                          : Icons.storefront_rounded,
+                      size: 48,
+                    ),
+                    const SizedBox(width: 14),
+                    // Name + type
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (ref.watch(currentUserRoleProvider) == 'OWNER') ...[  
-                            Text(
-                              NumberFormat.currency(locale: 'fr_FR', symbol: 'XAF', decimalDigits: 0).format(s.totalValueXaf),
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: theme.colorScheme.primary,
-                              ),
+                          Text(
+                            s.storeName,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -0.2,
                             ),
-                            const SizedBox(height: 4),
-                          ],
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
                           Row(
-                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (s.lowStockCount > 0) ...[
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.warning.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                        color: AppTheme.warning.withValues(alpha: 0.4)),
+                              _TypeChip(isWarehouse: isWarehouse),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  '${s.productCount} article${s.productCount > 1 ? 's' : ''}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
                                   ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.warning_amber_rounded,
-                                          size: 12, color: AppTheme.warning),
-                                      const SizedBox(width: 3),
-                                      Text(
-                                        '${s.lowStockCount}',
-                                        style: theme.textTheme.labelSmall
-                                            ?.copyWith(
-                                                color: AppTheme.warning,
-                                                fontWeight: FontWeight.bold),
-                                      ),
-                                    ],
-                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
                                 ),
-                                const SizedBox(width: 6),
-                              ],
-                              Icon(
-                                _expanded
-                                    ? Icons.keyboard_arrow_up_rounded
-                                    : Icons.keyboard_arrow_down_rounded,
-                                size: 20,
-                                color: theme.colorScheme.outline,
                               ),
                             ],
                           ),
                         ],
                       ),
-                    ],
-                  ),
+                    ),
+                    // Right block
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        if (ref.watch(currentUserRoleProvider) == 'OWNER') ...[  
+                          Text(
+                            NumberFormat.currency(locale: 'fr_FR', symbol: 'XAF', decimalDigits: 0).format(s.totalValueXaf),
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                        ],
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (s.lowStockCount > 0) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.warning.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.warning_amber_rounded,
+                                        size: 12, color: AppTheme.warning),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      '${s.lowStockCount}',
+                                      style: theme.textTheme.labelSmall
+                                          ?.copyWith(
+                                              color: AppTheme.warning,
+                                              fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                            ],
+                            Icon(
+                              _expanded
+                                  ? Icons.keyboard_arrow_up_rounded
+                                  : Icons.keyboard_arrow_down_rounded,
+                              size: 20,
+                              color: theme.colorScheme.outline,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
+              ),
 
-                // ── Expandable product list ──────────────────────────
-                AnimatedCrossFade(
-                  firstChild: const SizedBox.shrink(),
-                  secondChild: _ProductList(storeId: s.storeId),
-                  crossFadeState: _expanded
-                      ? CrossFadeState.showSecond
-                      : CrossFadeState.showFirst,
-                  duration: const Duration(milliseconds: 200),
-                ),
-              ],
-            ),
+              // ── Expandable product list ──────────────────────────
+              AnimatedCrossFade(
+                firstChild: const SizedBox.shrink(),
+                // Built only when open: a collapsed card must not load (or
+                // reload on each filter toggle) its product page.
+                secondChild: _expanded
+                    ? _ProductList(storeId: s.storeId)
+                    : const SizedBox.shrink(),
+                crossFadeState: _expanded
+                    ? CrossFadeState.showSecond
+                    : CrossFadeState.showFirst,
+                duration: const Duration(milliseconds: 200),
+              ),
+            ],
           ),
         ),
       ),
@@ -225,14 +198,14 @@ class _TypeChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: theme.colorScheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(6),
+        color: AppTheme.softTint(theme.brightness),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         isWarehouse ? 'Entrepôt' : 'Boutique',
         style: theme.textTheme.labelSmall?.copyWith(
-          color: theme.colorScheme.onSecondaryContainer,
-          fontWeight: FontWeight.w500,
+          color: theme.colorScheme.primary,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -255,6 +228,8 @@ class _ProductListState extends ConsumerState<_ProductList> {
   bool _hasMore = true;
   bool _isLoading = false;
   Object? _loadError;
+  // Bumped on reload so a page still in flight for the old filter is dropped.
+  int _generation = 0;
   static const _kPageSize = 25;
 
   @override
@@ -265,6 +240,7 @@ class _ProductListState extends ConsumerState<_ProductList> {
 
   Future<void> _loadPage() async {
     if (_isLoading || !_hasMore) return;
+    final generation = _generation;
     setState(() {
       _isLoading = true;
       _loadError = null;
@@ -275,7 +251,7 @@ class _ProductListState extends ConsumerState<_ProductList> {
           .read(multiStoreStockRepositoryProvider)
           .getStoreStockDetail(widget.storeId,
               page: _page, size: _kPageSize, sortLowFirst: true, lowOnly: lowOnly);
-      if (!mounted) return;
+      if (!mounted || generation != _generation) return;
       setState(() {
         _items.addAll(newItems);
         _hasMore = newItems.length >= _kPageSize;
@@ -283,7 +259,7 @@ class _ProductListState extends ConsumerState<_ProductList> {
         _isLoading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _generation) return;
       setState(() {
         _isLoading = false;
         _loadError = e;
@@ -291,9 +267,25 @@ class _ProductListState extends ConsumerState<_ProductList> {
     }
   }
 
+  /// Low-stock filter changed: restart from the first page.
+  void _reload() {
+    setState(() {
+      _generation++;
+      _items.clear();
+      _page = 0;
+      _hasMore = true;
+      _isLoading = false;
+      _loadError = null;
+    });
+    _loadPage();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    ref.listen<bool>(showLowStockOnlyProvider, (prev, next) {
+      if (prev != next) _reload();
+    });
 
     Widget content;
     if (_items.isEmpty && _isLoading) {
@@ -304,8 +296,12 @@ class _ProductListState extends ConsumerState<_ProductList> {
     } else if (_items.isEmpty && _loadError != null) {
       content = Padding(
         padding: const EdgeInsets.all(16),
-        child: Text('Erreur: $_loadError',
-            style: TextStyle(color: theme.colorScheme.error)),
+        child: Column(
+          children: [
+            AppErrorInline(error: _loadError!),
+            TextButton(onPressed: _loadPage, child: const Text('Réessayer')),
+          ],
+        ),
       );
     } else if (_items.isEmpty) {
       content = Padding(
@@ -313,7 +309,7 @@ class _ProductListState extends ConsumerState<_ProductList> {
         child: Text(
           'Aucun produit dans ce stock.',
           style: theme.textTheme.bodyMedium
-              ?.copyWith(color: theme.colorScheme.outline),
+              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
         ),
       );
     } else {
@@ -329,6 +325,15 @@ class _ProductListState extends ConsumerState<_ProductList> {
               ),
             ),
           ),
+          if (_loadError != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Text(
+                appErrorMessage(_loadError!),
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.error),
+              ),
+            ),
           if (_hasMore) ...[
             if (_isLoading)
               const Padding(
@@ -354,7 +359,7 @@ class _ProductListState extends ConsumerState<_ProductList> {
       children: [
         Divider(
           height: 1,
-          color: theme.colorScheme.outline.withValues(alpha: 0.1),
+          color: theme.colorScheme.outlineVariant,
           indent: 16,
           endIndent: 16,
         ),

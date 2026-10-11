@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import '../../../identity/presentation/provider/report_preferences_provider.dart';
 
 /// ReportPreferencesPage — Paramètres › Rapports & WhatsApp
@@ -63,43 +64,37 @@ class _ReportPreferencesPageState
       }
     });
 
+    final cs = Theme.of(context).colorScheme;
+
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
+      backgroundColor: cs.surfaceContainerLowest,
       body: CustomScrollView(
         slivers: [
           // ── Header ───────────────────────────────────────────────────────
           SliverAppBar(
-            expandedHeight: 110,
+            expandedHeight: 96,
             pinned: true,
             elevation: 0,
-            backgroundColor: Colors.transparent,
+            scrolledUnderElevation: 0,
+            backgroundColor: cs.surface,
             flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppTheme.primary,
-                      AppTheme.primaryGradientEnd,
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-              ),
-              title: const Text(
+              background: ColoredBox(color: cs.surface),
+              centerTitle: false,
+              title: Text(
                 'Rapports & WhatsApp',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: cs.onSurface,
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
+                  letterSpacing: -0.2,
                 ),
               ),
               titlePadding:
                   const EdgeInsets.only(left: 56, bottom: 16),
             ),
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                  color: Colors.white),
+              icon: Icon(Icons.arrow_back_ios_new_rounded,
+                  color: cs.onSurface),
               onPressed: () => Navigator.pop(context),
             ),
           ),
@@ -109,11 +104,11 @@ class _ReportPreferencesPageState
               child: Center(child: CircularProgressIndicator()),
             )
           else if (state.preferences == null)
-            const SliverFillRemaining(
+            SliverFillRemaining(
               child: Center(
                 child: Text(
                   'Impossible de charger les préférences',
-                  style: TextStyle(color: Color(0xFF868E96)),
+                  style: TextStyle(color: cs.onSurfaceVariant),
                 ),
               ),
             )
@@ -124,8 +119,8 @@ class _ReportPreferencesPageState
                 delegate: SliverChildListDelegate([
                   // ── Section 1 : Rapport Fin de Journée ─────────────────
                   _SectionHeader(
-                    icon: Icons.nightlight_round,
-                    iconColor: AppTheme.primary,
+                    icon: Icons.nightlight_outlined,
+                    iconColor: cs.primary,
                     title: 'Rapport Fin de Journée',
                   ),
                   const SizedBox(height: 8),
@@ -158,9 +153,9 @@ class _ReportPreferencesPageState
                   const SizedBox(height: 20),
 
                   // ── Section 2 : Rapport Hebdomadaire ───────────────────
-                  _SectionHeader(
-                    icon: Icons.calendar_month_rounded,
-                    iconColor: const Color(0xFF20C997),
+                  const _SectionHeader(
+                    icon: Icons.calendar_month_outlined,
+                    iconColor: Color(0xFF20C997),
                     title: 'Rapport Hebdomadaire',
                   ),
                   const SizedBox(height: 8),
@@ -226,7 +221,8 @@ class _ReportPreferencesPageState
                           foregroundColor: const Color(0xFF20C997),
                           side: const BorderSide(color: Color(0xFF20C997)),
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14)),
+                              borderRadius:
+                                  BorderRadius.circular(AppTheme.radiusL)),
                           textStyle: const TextStyle(
                               fontSize: 14, fontWeight: FontWeight.w600),
                         ),
@@ -237,9 +233,9 @@ class _ReportPreferencesPageState
                   const SizedBox(height: 20),
 
                   // ── Section 3 : Rapport Inventaire ─────────────────────
-                  _SectionHeader(
-                    icon: Icons.inventory_2_rounded,
-                    iconColor: const Color(0xFFF59F00),
+                  const _SectionHeader(
+                    icon: Icons.inventory_2_outlined,
+                    iconColor: Color(0xFFF59F00),
                     title: 'Rapport Inventaire',
                   ),
                   const SizedBox(height: 8),
@@ -265,8 +261,8 @@ class _ReportPreferencesPageState
                   const SizedBox(height: 20),
 
                   // ── Section 4 : Alertes Stock ───────────────────────────
-                  _SectionHeader(
-                    icon: Icons.notifications_active_rounded,
+                  const _SectionHeader(
+                    icon: Icons.notifications_active_outlined,
                     iconColor: AppTheme.secondary,
                     title: 'Alertes Stock Bas',
                   ),
@@ -282,9 +278,9 @@ class _ReportPreferencesPageState
                   const SizedBox(height: 20),
 
                   // ── Section 5 : Tendances de Ventes ─────────────────────
-                  _SectionHeader(
+                  const _SectionHeader(
                     icon: Icons.trending_up_rounded,
-                    iconColor: const Color(0xFF20C997),
+                    iconColor: Color(0xFF20C997),
                     title: 'Tendances de Ventes',
                   ),
                   const SizedBox(height: 8),
@@ -303,26 +299,27 @@ class _ReportPreferencesPageState
                   // ── Save button ─────────────────────────────────────────
                   SizedBox(
                     width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton.icon(
+                    height: 56,
+                    child: FilledButton.icon(
                       onPressed: state.isSaving ? null : () => notifier.save(),
+                      // Pas de couleur forcée : le bouton désactivé est gris
+                      // pâle, un spinner blanc y serait invisible.
                       icon: state.isSaving
                           ? const SizedBox(
                               width: 18,
                               height: 18,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white),
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Icon(Icons.save_rounded),
+                          : const Icon(Icons.save_outlined),
                       label: Text(state.isSaving
                           ? 'Enregistrement...'
                           : 'Enregistrer les préférences'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primary,
-                        foregroundColor: Colors.white,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: cs.primary,
+                        foregroundColor: cs.onPrimary,
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusL)),
                         textStyle: const TextStyle(
                             fontSize: 15, fontWeight: FontWeight.w600),
                       ),
@@ -334,7 +331,7 @@ class _ReportPreferencesPageState
                   // ── Test report button ──────────────────────────────────
                   SizedBox(
                     width: double.infinity,
-                    height: 52,
+                    height: 56,
                     child: OutlinedButton.icon(
                       onPressed: state.testSending
                           ? null
@@ -350,10 +347,11 @@ class _ReportPreferencesPageState
                           ? 'Envoi en cours...'
                           : 'Envoyer un rapport test'),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: AppTheme.primary,
-                        side: const BorderSide(color: AppTheme.primary),
+                        foregroundColor: cs.primary,
+                        side: BorderSide(color: cs.primary),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusL)),
                         textStyle: const TextStyle(
                             fontSize: 15, fontWeight: FontWeight.w600),
                       ),
@@ -382,15 +380,15 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 18, color: iconColor),
-        const SizedBox(width: 8),
+        SoftIconBadge(icon: icon, color: iconColor, size: 28),
+        const SizedBox(width: 10),
         Text(
           title,
           style: TextStyle(
               fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: iconColor,
-              letterSpacing: 0.4),
+              fontWeight: FontWeight.w700,
+              color: Theme.of(context).colorScheme.onSurface,
+              letterSpacing: 0.2),
         ),
       ],
     );
@@ -404,16 +402,12 @@ class _PrefsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-              color: Theme.of(context).colorScheme.shadow.withAlpha(13),
-              blurRadius: 8,
-              offset: const Offset(0, 2)),
-        ],
+        color: cs.cardBg,
+        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+        boxShadow: AppTheme.softShadow(cs),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -432,7 +426,6 @@ class _Divider extends StatelessWidget {
         thickness: 1,
         indent: 16,
         endIndent: 16,
-        color: Color(0xFFF1F3F5),
       );
 }
 
@@ -457,10 +450,12 @@ class _SwitchTile extends StatelessWidget {
         title:
             Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
         subtitle: Text(subtitle,
-            style: const TextStyle(fontSize: 12, color: Color(0xFF868E96))),
+            style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant)),
         value: value,
         onChanged: onChanged,
-        activeColor: AppTheme.primary,
+        activeColor: Theme.of(context).colorScheme.primary,
       ),
     );
   }
@@ -492,10 +487,10 @@ class _TimePickerTile extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
       trailing: Text(
         value.substring(0, 5), // HH:mm display only
-        style: const TextStyle(
+        style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,
-            color: AppTheme.primary),
+            color: Theme.of(context).colorScheme.primary),
       ),
       onTap: () async {
         final picked = await showTimePicker(
@@ -536,10 +531,10 @@ class _DayPicker extends StatelessWidget {
           (i) => DropdownMenuItem(value: i, child: Text(_days[i])),
         ),
         onChanged: (v) => v != null ? onChanged(v) : null,
-        style: const TextStyle(
+        style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: AppTheme.primary),
+            color: Theme.of(context).colorScheme.primary),
       ),
     );
   }
@@ -567,10 +562,10 @@ class _ChannelDropdown extends StatelessWidget {
           DropdownMenuItem(value: 'IN_APP_ONLY', child: Text('In-App uniquement')),
         ],
         onChanged: (v) => v != null ? onChanged(v) : null,
-        style: const TextStyle(
+        style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: AppTheme.primary),
+            color: Theme.of(context).colorScheme.primary),
       ),
     );
   }
@@ -589,8 +584,10 @@ class _StockAlertChannelDropdown extends StatelessWidget {
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       title: const Text('Canal des alertes',
           style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
-      subtitle: const Text('Comment recevoir les alertes de stock bas',
-          style: TextStyle(fontSize: 12, color: Color(0xFF868E96))),
+      subtitle: Text('Comment recevoir les alertes de stock bas',
+          style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant)),
       trailing: DropdownButton<String>(
         value: value,
         underline: const SizedBox.shrink(),
@@ -600,10 +597,10 @@ class _StockAlertChannelDropdown extends StatelessWidget {
           DropdownMenuItem(value: 'BOTH', child: Text('Les deux')),
         ],
         onChanged: (v) => v != null ? onChanged(v) : null,
-        style: const TextStyle(
+        style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: AppTheme.primary),
+            color: Theme.of(context).colorScheme.primary),
       ),
     );
   }

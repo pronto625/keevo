@@ -20,11 +20,9 @@ class GapRowTile extends StatelessWidget {
 
   const GapRowTile({super.key, required this.row, this.onTap});
 
-  Color get _backgroundColor {
-    if (row.isConcordant) return const Color(0xFFE8F5E9);
-    if (row.isSurplus) return const Color(0xFFFFFDE7);
-    return const Color(0xFFFFEBEE);
-  }
+  // Teinte sémantique diluée plutôt que des pastels opaques (illisibles en
+  // mode sombre).
+  Color get _backgroundColor => _badgeColor.withValues(alpha: 0.08);
 
   Color get _badgeColor {
     if (row.isConcordant) return _colorSuccess;
@@ -150,15 +148,19 @@ class GapRowTile extends StatelessWidget {
     }
     final colorIndex =
         row.productId.hashCode.abs() % Colors.primaries.length;
-    final bgColor = Colors.primaries[colorIndex];
+    final accent = Colors.primaries[colorIndex];
     final initials = _initials(row.productName);
+    // Même teinte par produit, mais diluée (badge rond soft) plutôt qu'en
+    // aplat saturé.
     return CircleAvatar(
       radius: 24,
-      backgroundColor: bgColor,
+      backgroundColor: accent.withValues(alpha: 0.15),
       child: Text(
         initials,
-        style: const TextStyle(
-            color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+        style: TextStyle(
+            color: accent.shade700,
+            fontWeight: FontWeight.bold,
+            fontSize: 14),
       ),
     );
   }

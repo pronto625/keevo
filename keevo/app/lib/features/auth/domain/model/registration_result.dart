@@ -13,5 +13,7 @@ class RegistrationResult with _$RegistrationResult {
     required String token,
     required String userId,
     required String tenantId,
+    // Nullable: backends older than the refresh-on-registration change omit it.
+    String? refreshToken,
   }) = _RegistrationResult;
 }

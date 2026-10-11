@@ -16,6 +16,11 @@ class LocalStockDataSource {
 
   const LocalStockDataSource(this._db);
 
+  /// Runs [action] in one Drift transaction. Writes made through the same
+  /// database inside it (sync_queue included) commit or roll back together.
+  Future<T> transaction<T>(Future<T> Function() action) =>
+      _db.transaction(action);
+
   // ── Stock Levels ─────────────────────────────────────────────────────────
 
   Future<List<StockLevelModel>> getLevels(String productId) async {
@@ -157,17 +162,19 @@ class LocalStockDataSource {
     final models = rows.map(_movementToModel).toList();
 
     // Suppress unsynced orphan duplicates caused by a previous crash during
-    // upsertLevel (each failed retry inserted a new movement with quantityBefore=0).
-    // Keep only the most-recent unsynced movement per (productId, storeId,
-    // movementType, quantityDelta) group; synced movements are preserved as-is.
+    // upsertLevel: each failed retry inserted a new movement with
+    // quantityBefore=0. Only that signature is collapsed (most recent kept);
+    // any other unsynced movement is real, even when identical to another
+    // one (sale 10→9, restock 9→10, sale 10→9). The variant is part of the
+    // key: two variants of one product are different stock levels.
     final seen = <String, bool>{};
     final deduped = <StockMovementModel>[];
     for (final m in models) {
-      if (m.synced) {
+      if (m.synced || m.quantityBefore != 0) {
         deduped.add(m);
       } else {
-        final key =
-            '${m.productId}|${m.storeId}|${m.movementType}|${m.quantityDelta}';
+        final key = '${m.productId}|${m.variantId}|${m.storeId}|'
+            '${m.movementType}|${m.quantityDelta}|${m.quantityAfter}';
         if (!seen.containsKey(key)) {
           seen[key] = true;
           deduped.add(m);

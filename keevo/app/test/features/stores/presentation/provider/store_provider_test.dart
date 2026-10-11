@@ -80,12 +80,38 @@ void main() {
       addTearDown(container.dispose);
 
       await container.read(storeListNotifierProvider.future);
-      await container
-          .read(storeListNotifierProvider.notifier)
-          .refresh(includeInactive: false);
+      clearInteractions(mockRepo);
+      await container.read(storeListNotifierProvider.notifier).refresh();
 
-      verify(() => mockRepo.getStores(includeInactive: false))
-          .called(greaterThan(0));
+      verify(() => mockRepo.getStores()).called(1);
+      verifyNever(() => mockRepo.getStores(includeInactive: true));
+    });
+  });
+
+  // The shared list feeds every store picker: the stores page's
+  // "Voir les désactivées" must never leak deactivated stores into it.
+  group('managedStoresProvider', () {
+    test('lists inactive stores without changing the shared list', () async {
+      final inactive = StoreModel(
+        id: 'store-2',
+        name: 'Fermée',
+        type: StoreType.store,
+        isActive: false,
+        createdAt: now,
+        updatedAt: now,
+      );
+      when(() => mockRepo.getStores(includeInactive: true))
+          .thenAnswer((_) async => [sampleStore, inactive]);
+      final container = makeContainer();
+      addTearDown(container.dispose);
+
+      final managed = await container.read(managedStoresProvider(true).future);
+      final shared = await container.read(storeListNotifierProvider.future);
+      await container.read(storeListNotifierProvider.notifier).refresh();
+
+      expect(managed, [sampleStore, inactive]);
+      expect(shared, [sampleStore]);
+      expect(container.read(storeListNotifierProvider).value, [sampleStore]);
     });
   });
 }

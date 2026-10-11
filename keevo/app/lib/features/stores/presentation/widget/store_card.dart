@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_theme.dart';
 import '../../domain/model/store_model.dart';
 import '../../domain/model/store_type.dart';
+import 'store_type_icon.dart';
 
 /// StoreCard — tile representing a single store or warehouse.
 ///
@@ -31,10 +33,17 @@ class StoreCard extends StatelessWidget {
       opacity: isInactive ? 0.55 : 1.0,
       child: GestureDetector(
         onLongPress: isInactive ? null : _showMenu(context),
-        child: Card(
+        // Rangée de liste : surface + bordure fine plutôt qu'une élévation
+        // Material par défaut.
+        child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          elevation: isInactive ? 0 : 1,
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(AppTheme.radiusL),
+            border: Border.all(
+              color: theme.colorScheme.outlineVariant.withAlpha(90),
+            ),
+          ),
           child: ListTile(
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -45,6 +54,7 @@ class StoreCard extends StatelessWidget {
                   child: Text(
                     store.name,
                     style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
                       color: isInactive
                           ? theme.colorScheme.onSurface.withAlpha(128)
                           : null,
@@ -56,7 +66,7 @@ class StoreCard extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(20),
                       color: theme.colorScheme.error.withAlpha(30),
                     ),
                     child: Text(
@@ -84,11 +94,14 @@ class StoreCard extends StatelessWidget {
     final isWarehouse = store.type == StoreType.warehouse;
     return CircleAvatar(
       backgroundColor: isWarehouse
-          ? theme.colorScheme.tertiaryContainer
-          : theme.colorScheme.primaryContainer,
-      child: Text(
-        store.type.icon,
-        style: const TextStyle(fontSize: 20),
+          ? theme.colorScheme.tertiary.withValues(alpha: 0.12)
+          : AppTheme.softTint(theme.brightness),
+      child: Icon(
+        storeTypeIcon(store.type),
+        size: 20,
+        color: isWarehouse
+            ? theme.colorScheme.tertiary
+            : theme.colorScheme.primary,
       ),
     );
   }
@@ -104,7 +117,7 @@ class StoreCard extends StatelessWidget {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style:
-          theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
+          theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
     );
   }
 
@@ -120,7 +133,7 @@ class StoreCard extends StatelessWidget {
               children: [
                 const SizedBox(height: 8),
                 ListTile(
-                  leading: const Icon(Icons.edit_rounded),
+                  leading: const Icon(Icons.edit_outlined),
                   title: const Text('Modifier'),
                   onTap: () {
                     Navigator.of(context).pop();

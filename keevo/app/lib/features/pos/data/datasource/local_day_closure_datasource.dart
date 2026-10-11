@@ -38,6 +38,7 @@ class LocalDayClosureDataSource {
 
   /// Check if a closure exists for today.
   Future<bool> hasClosureToday(String storeId) async {
+    await _dropSupersededLocalClosures(storeId);
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day);
     final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59, 999);
@@ -54,6 +55,7 @@ class LocalDayClosureDataSource {
 
   /// Get the most recent closure for a store.
   Future<domain.DayClosure?> getLastClosure(String storeId) async {
+    await _dropSupersededLocalClosures(storeId);
     final row = await (_db.select(_db.dayClosures)
           ..where((c) => c.storeId.equals(storeId))
           ..orderBy([(c) => OrderingTerm.desc(c.closedAt)])
@@ -81,6 +83,30 @@ class LocalDayClosureDataSource {
       isAutomatic: row.isAutomatic,
       synced: row.synced,
     );
+  }
+
+  /// The server keeps one closure per store and day. An offline closure that
+  /// is still unsynced while a synced (server) closure exists for the same
+  /// day was answered DUPLICATE on push and will never be synced: drop it so
+  /// the day isn't shown closed twice.
+  Future<void> _dropSupersededLocalClosures(String storeId) async {
+    final rows = await (_db.select(_db.dayClosures)
+          ..where((c) => c.storeId.equals(storeId)))
+        .get();
+    final unsynced = rows.where((r) => !r.synced);
+    if (unsynced.isEmpty) return;
+    bool sameDay(DateTime a, DateTime b) {
+      final la = a.toLocal(), lb = b.toLocal();
+      return la.year == lb.year && la.month == lb.month && la.day == lb.day;
+    }
+
+    final syncedDays = rows.where((r) => r.synced).map((r) => r.closedAt);
+    for (final row in unsynced) {
+      if (syncedDays.any((d) => sameDay(d, row.closedAt))) {
+        await (_db.delete(_db.dayClosures)..where((c) => c.id.equals(row.id)))
+            .go();
+      }
+    }
   }
 
   /// Compute today's summary from local sales.
@@ -200,23 +226,6 @@ class LocalDayClosureDataSource {
     final count = await (_db.selectOnly(_db.sales)
           ..where(_db.sales.storeId.equals(storeId) &
               _db.sales.occurredAt.isBetweenValues(startOfDay, endOfDay) &
-              _db.sales.status.equals('COMPLETED'))
-          ..addColumns([_db.sales.id.count()]))
-        .map((row) => row.read(_db.sales.id.count()))
-        .getSingle();
-
-    return count ?? 0;
-  }
-
-  /// Count completed sales that occurred strictly after [after] and before end of today.
-  Future<int> getSalesCountAfter(String storeId, DateTime after) async {
-    final now = DateTime.now();
-    final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59, 999);
-
-    final count = await (_db.selectOnly(_db.sales)
-          ..where(_db.sales.storeId.equals(storeId) &
-              _db.sales.occurredAt.isBiggerThanValue(after) &
-              _db.sales.occurredAt.isSmallerOrEqualValue(endOfDay) &
               _db.sales.status.equals('COMPLETED'))
           ..addColumns([_db.sales.id.count()]))
         .map((row) => row.read(_db.sales.id.count()))

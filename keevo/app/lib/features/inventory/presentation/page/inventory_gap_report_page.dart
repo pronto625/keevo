@@ -1,11 +1,13 @@
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/soft_icon_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/storage/app_constants.dart';
 import '../../domain/model/inventory_gap_report_model.dart';
 import '../../domain/service/inventory_report_text_formatter.dart';
 import '../provider/gap_report_provider.dart';
@@ -31,12 +33,30 @@ class InventoryGapReportPage extends ConsumerWidget {
     final reportAsync = ref.watch(gapReportProvider(sessionId));
     final role = ref.watch(currentUserRoleProvider);
 
+    final cs = Theme.of(context).colorScheme;
+
     return Scaffold(
+      backgroundColor: cs.surface,
       appBar: AppBar(
+        backgroundColor: cs.surface,
+        leading: Navigator.of(context).canPop()
+            ? IconButton(
+                icon: Icon(Icons.arrow_back_ios_new_rounded,
+                    color: cs.onSurface, size: 20),
+                tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+                onPressed: () => Navigator.maybePop(context),
+              )
+            : null,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Rapport d\'inventaire'),
+            const Text(
+              'Rapport d\'inventaire',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.2,
+              ),
+            ),
             if (reportAsync.valueOrNull != null)
               Text(
                 '${reportAsync.value!.storeName} — ${reportAsync.value!.scope}',
@@ -49,22 +69,27 @@ class InventoryGapReportPage extends ConsumerWidget {
         ),
         actions: [
           // WhatsApp share button (AC4 — both OWNER and EMPLOYEE)
-          IconButton(
-            icon: const Icon(Icons.share),
+          SoftIconButton(
+            icon: Icons.share,
+            iconSize: 20,
             tooltip: 'Partager sur WhatsApp',
             onPressed: reportAsync.valueOrNull != null
                 ? () => _shareWhatsApp(context, ref, reportAsync.value!)
                 : null,
           ),
           // Download button (AC3 — OWNER only)
-          if (role == 'OWNER')
-            IconButton(
-              icon: const Icon(Icons.download),
+          if (role == 'OWNER') ...[
+            const SizedBox(width: 6),
+            SoftIconButton(
+              icon: Icons.download,
+              iconSize: 20,
               tooltip: 'Télécharger le rapport',
               onPressed: reportAsync.valueOrNull != null
                   ? () => _downloadReport(context, ref, reportAsync.value!)
                   : null,
             ),
+          ],
+          const SizedBox(width: 12),
         ],
       ),
       body: reportAsync.when(
@@ -97,7 +122,7 @@ class InventoryGapReportPage extends ConsumerWidget {
         // 3. Shortage section — sorted by value desc (AC1)
         if (report.shortageRows.isNotEmpty)
           GapSectionList(
-            title: '🔴 Manquants',
+            title: 'Manquants',
             rows: report.shortageRows,
             titleColor: AppTheme.errorColor,
             onRowTap: (row) => ProductDetailBottomSheet.show(context, row),
@@ -107,7 +132,7 @@ class InventoryGapReportPage extends ConsumerWidget {
         // 4. Surplus section (AC1)
         if (report.surplusRows.isNotEmpty)
           GapSectionList(
-            title: '⚠️ Surplus',
+            title: 'Surplus',
             rows: report.surplusRows,
             titleColor: AppTheme.warning,
             onRowTap: (row) => ProductDetailBottomSheet.show(context, row),
@@ -131,12 +156,12 @@ class InventoryGapReportPage extends ConsumerWidget {
       final concordantBanner = Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: const Color(0xFF40C057).withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
+          color: AppTheme.success.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(AppTheme.radiusM),
         ),
         child: const Row(
           children: [
-            Icon(Icons.check_circle, color: Color(0xFF40C057)),
+            Icon(Icons.check_circle_outline_rounded, color: AppTheme.success),
             SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -191,13 +216,24 @@ class InventoryGapReportPage extends ConsumerWidget {
     return null;
   }
 
-  void _shareWhatsApp(
-      BuildContext context, WidgetRef ref, InventoryGapReportModel report) {
+  Future<void> _shareWhatsApp(BuildContext context, WidgetRef ref,
+      InventoryGapReportModel report) async {
+    final messenger = ScaffoldMessenger.of(context);
     final actorName = _getActorName(ref);
     final text = formatWhatsAppReport(report, actorName);
     final encoded = Uri.encodeComponent(text);
     final uri = Uri.parse('https://wa.me/?text=$encoded');
-    launchUrl(uri, mode: LaunchMode.externalApplication);
+    bool opened;
+    try {
+      opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      opened = false;
+    }
+    if (!opened) {
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Impossible d\'ouvrir WhatsApp sur cet appareil.'),
+      ));
+    }
   }
 
   void _downloadReport(
@@ -207,8 +243,18 @@ class InventoryGapReportPage extends ConsumerWidget {
     Share.share(text);
   }
 
+  /// The report travels outside the app (WhatsApp, share sheet): sign it
+  /// with the user's first name, never their phone number.
   String _getActorName(WidgetRef ref) {
-    final phone = ref.read(currentUserPhoneProvider);
-    return phone ?? 'Utilisateur';
+    try {
+      final firstName =
+          ref.read(sharedPreferencesProvider).getString(kUserFirstNameKey);
+      if (firstName != null && firstName.trim().isNotEmpty) {
+        return firstName.trim();
+      }
+    } catch (_) {
+      // Preferences unavailable — neutral label below.
+    }
+    return 'Utilisateur';
   }
 }

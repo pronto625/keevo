@@ -1,5 +1,6 @@
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/soft_icon_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -16,9 +17,21 @@ class SyncConflictLogPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncConflicts = ref.watch(syncConflictsProvider);
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Conflits de synchronisation')),
+      backgroundColor: cs.surface,
+      appBar: AppBar(
+        backgroundColor: cs.surface,
+        title: Text(
+          'Conflits de synchronisation',
+          style: TextStyle(
+            color: cs.onSurface,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.2,
+          ),
+        ),
+      ),
       body: asyncConflicts.when(
         data: (conflicts) => conflicts.isEmpty
             ? _buildEmptyState(context)
@@ -34,11 +47,18 @@ class SyncConflictLogPage extends ConsumerWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.check_circle_outline, size: 64, color: AppTheme.success),
+          const SoftIconBadge(
+            icon: Icons.check_circle_outline_rounded,
+            color: AppTheme.success,
+            size: 88,
+          ),
           const SizedBox(height: 16),
           Text(
             'Aucun conflit de synchronisation',
-            style: Theme.of(context).textTheme.titleMedium,
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -62,17 +82,21 @@ class _ConflictTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final dateStr = DateFormat('dd/MM/yyyy HH:mm').format(conflict.resolvedAt);
 
+    final isStock = conflict.conflictType == 'STOCK_NEGATIVE';
+
     return ExpansionTile(
-      leading: Icon(
-        conflict.conflictType == 'STOCK_NEGATIVE'
-            ? Icons.warning_amber_rounded
-            : Icons.info_outline,
-        color: conflict.conflictType == 'STOCK_NEGATIVE'
-            ? AppTheme.warning
-            : Theme.of(context).colorScheme.primary,
+      leading: SoftIconBadge(
+        icon: isStock ? Icons.warning_amber_rounded : Icons.info_outline_rounded,
+        // Sans couleur : pastille teintée marque (cas informatif).
+        color: isStock ? AppTheme.warning : null,
+        size: 36,
       ),
-      title: Text(conflict.displayTitle, style: const TextStyle(fontSize: 14)),
-      subtitle: Text(dateStr, style: const TextStyle(fontSize: 12)),
+      title: Text(conflict.displayTitle,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+      subtitle: Text(dateStr,
+          style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant)),
       children: [
         if (conflict.conflictData != null)
           Padding(
