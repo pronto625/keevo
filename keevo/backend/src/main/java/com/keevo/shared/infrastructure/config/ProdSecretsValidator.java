@@ -1,5 +1,6 @@
 package com.keevo.shared.infrastructure.config;
 
+import com.keevo.shared.domain.PasswordLimits;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,22 +13,35 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
+import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 /**
  * ProdSecretsValidator — Fail-fast guard for required production secrets.
  *
  * <p>Active only in {@code prod} and {@code staging} profiles.
- * Prevents boot if mandatory secrets are absent, empty, or insecure.
+ * Prevents boot if mandatory secrets are absent, empty, defaulted, placeholders or weak.
+ * Error messages name the offending environment variable and never echo the secret value.
  *
  * <p>Checks performed:
  * <ul>
- *   <li>{@code ADMIN_PASSWORD} must not be blank, null, or the known default {@code Admin@1234!}</li>
- *   <li>{@code KEEVO_JWT_PRIVATE_KEY_PATH} must be an absolute file path (not {@code classpath:})</li>
- *   <li>{@code KEEVO_JWT_PUBLIC_KEY_PATH} must be an absolute file path (not {@code classpath:})</li>
+ *   <li>{@code POSTGRES_PASSWORD} ({@code spring.datasource.password}) — not blank, not a known
+ *       dev/CI default, not a placeholder, at least {@value #MIN_SECRET_LENGTH} characters</li>
+ *   <li>{@code ADMIN_PASSWORD} — not blank, not a known default ({@code Admin@1234!}) nor a
+ *       placeholder, at least {@value #MIN_SECRET_LENGTH} characters, at least 3 of 4 character
+ *       classes (lower/upper/digit/symbol), at most 72 UTF-8 bytes (BCrypt limit)</li>
+ *   <li>{@code KEEVO_JWT_PRIVATE_KEY_PATH} / {@code KEEVO_JWT_PUBLIC_KEY_PATH} — absolute,
+ *       readable, non-empty files (not {@code classpath:}); private key not world-readable</li>
+ *   <li>{@code KEEVO_WHATSAPP_PROVIDER} — the tokens of the selected provider are present and
+ *       not placeholders ({@code wassender}: URL + token; {@code twilio}: SID + auth token;
+ *       {@code failover}: both). Twilio also requires {@code TWILIO_FROM_NUMBER}. {@code noop}/unset stays legal and only logs a WARN.</li>
  * </ul>
  *
- * <p>Story 10.3 — AC1, AC2, AC3.
+ * <p>{@link ProdSecretsValidatorOrdering} makes every {@code DataSource} depend on this bean, so
+ * the validation runs before any DB connection (Hikari/Flyway).
+ *
+ * <p>Story 10.3 — AC1, AC2, AC3. Story v1s-12-13 — DB password, provider tokens, admin policy.
  *
  * <p>Architecture: shared infrastructure config — no business logic.
  * Strategy pattern: this bean is the "strict" strategy for prod/staging;
@@ -38,35 +52,104 @@ import java.util.Set;
 public class ProdSecretsValidator {
 
     private static final Logger log = LoggerFactory.getLogger(ProdSecretsValidator.class);
-    private static final String KNOWN_DEFAULT_PASSWORD = "Admin@1234!";
+
+    /** Minimum length for the DB and admin passwords. */
+    static final int MIN_SECRET_LENGTH = 12;
+
+    /** Known dev / CI / example defaults — compared case-insensitively. */
+    private static final Set<String> KNOWN_DEFAULTS = Set.of(
+            "admin@1234!",
+            "keevo_local_pwd",
+            "change_me_in_dot_env",
+            "change_me_strong_password",
+            "ci_password",
+            "postgres",
+            "keevo",
+            "password");
+
+    /** Placeholder markers (case-insensitive substring) — a value containing one is treated as unset. */
+    private static final List<String> PLACEHOLDER_MARKERS = List.of(
+            "change_me", "changeme", "your_", "replace_with", "placeholder", "xxxxxxxx");
+
+    private static final String PROVIDER_NOOP = "noop";
+    private static final String PROVIDER_WASSENDER = "wassender";
+    private static final String PROVIDER_TWILIO = "twilio";
+    private static final String PROVIDER_FAILOVER = "failover";
 
     private final AdminProperties adminProperties;
     private final String jwtPrivateKeyPath;
     private final String jwtPublicKeyPath;
+    private final String dbPassword;
+    private final String whatsappProvider;
+    private final String wassenderApiUrl;
+    private final String wassenderApiToken;
+    private final String twilioAccountSid;
+    private final String twilioAuthToken;
+    private final String twilioFromNumber;
 
     public ProdSecretsValidator(
             AdminProperties adminProperties,
             @Value("${keevo.jwt.private-key-path}") String jwtPrivateKeyPath,
-            @Value("${keevo.jwt.public-key-path}") String jwtPublicKeyPath) {
+            @Value("${keevo.jwt.public-key-path}") String jwtPublicKeyPath,
+            @Value("${spring.datasource.password:}") String dbPassword,
+            @Value("${keevo.whatsapp.provider:noop}") String whatsappProvider,
+            @Value("${keevo.whatsapp.wassender.api-url:}") String wassenderApiUrl,
+            @Value("${keevo.whatsapp.wassender.api-token:}") String wassenderApiToken,
+            @Value("${keevo.whatsapp.twilio.account-sid:}") String twilioAccountSid,
+            @Value("${keevo.whatsapp.twilio.auth-token:}") String twilioAuthToken,
+            @Value("${keevo.whatsapp.twilio.from-number:}") String twilioFromNumber) {
         this.adminProperties = adminProperties;
         this.jwtPrivateKeyPath = jwtPrivateKeyPath;
         this.jwtPublicKeyPath = jwtPublicKeyPath;
+        this.dbPassword = dbPassword;
+        this.whatsappProvider = whatsappProvider;
+        this.wassenderApiUrl = wassenderApiUrl;
+        this.wassenderApiToken = wassenderApiToken;
+        this.twilioAccountSid = twilioAccountSid;
+        this.twilioAuthToken = twilioAuthToken;
+        this.twilioFromNumber = twilioFromNumber;
     }
 
     @PostConstruct
     public void validate() {
         log.info("[FailFast] Validating production secrets...");
+        validateDatabasePassword();
         validateAdminPassword();
         validateJwtKeys();
+        validateWhatsAppProvider();
         log.info("[FailFast] Production secrets validation passed.");
+    }
+
+    private void validateDatabasePassword() {
+        if (isPlaceholderOrDefault(dbPassword)) {
+            throw new IllegalStateException(
+                    "[FailFast] POSTGRES_PASSWORD is missing or uses a dev/placeholder default in production. "
+                            + "Set POSTGRES_PASSWORD to a generated secret (e.g. openssl rand -hex 16).");
+        }
+        if (dbPassword.strip().length() < MIN_SECRET_LENGTH) {
+            throw new IllegalStateException(
+                    "[FailFast] POSTGRES_PASSWORD is too short — at least " + MIN_SECRET_LENGTH
+                            + " characters are required in production.");
+        }
+        log.info("[FailFast] POSTGRES_PASSWORD ✓");
     }
 
     private void validateAdminPassword() {
         String pwd = adminProperties.password();
-        if (isInsecurePassword(pwd)) {
+        if (isPlaceholderOrDefault(pwd)) {
             throw new IllegalStateException(
-                    "[FailFast] ADMIN_PASSWORD is required in production — do not use the default value. "
+                    "[FailFast] ADMIN_PASSWORD is required in production — do not use the default or placeholder value. "
                             + "Set the ADMIN_PASSWORD environment variable to a strong, unique password.");
+        }
+        if (PasswordLimits.exceedsBcryptLimit(pwd)) {
+            throw new IllegalStateException(
+                    "[FailFast] ADMIN_PASSWORD exceeds " + PasswordLimits.MAX_BCRYPT_BYTES
+                            + " UTF-8 bytes (BCrypt limit) — choose a shorter password.");
+        }
+        if (pwd.strip().length() < MIN_SECRET_LENGTH || characterClassCount(pwd) < 3) {
+            throw new IllegalStateException(
+                    "[FailFast] ADMIN_PASSWORD is too weak — at least " + MIN_SECRET_LENGTH
+                            + " characters and 3 of 4 character classes (lowercase, uppercase, digit, symbol) are required.");
         }
         log.info("[FailFast] ADMIN_PASSWORD ✓");
     }
@@ -76,6 +159,45 @@ public class ProdSecretsValidator {
         validateJwtKey("KEEVO_JWT_PUBLIC_KEY_PATH", jwtPublicKeyPath);
         validatePrivateKeyNotWorldReadable("KEEVO_JWT_PRIVATE_KEY_PATH", jwtPrivateKeyPath);
         log.info("[FailFast] JWT key paths ✓");
+    }
+
+    private void validateWhatsAppProvider() {
+        // No trim: the adapters' @ConditionalOnProperty compare the raw value (case-insensitive),
+        // so an empty or padded value would leave no WhatsAppPort adapter — reject it here.
+        String provider = whatsappProvider == null ? PROVIDER_NOOP : whatsappProvider.toLowerCase(Locale.ROOT);
+        switch (provider) {
+            case PROVIDER_NOOP -> log.warn("[FailFast] KEEVO_WHATSAPP_PROVIDER is noop — "
+                    + "WhatsApp messages (OTP, notifications) will NOT be delivered in this environment.");
+            case PROVIDER_WASSENDER -> validateWassender();
+            case PROVIDER_TWILIO -> validateTwilio();
+            case PROVIDER_FAILOVER -> {
+                validateWassender();
+                validateTwilio();
+            }
+            default -> throw new IllegalStateException(
+                    "[FailFast] KEEVO_WHATSAPP_PROVIDER has an unknown value — expected one of "
+                            + "noop, wassender, twilio, failover.");
+        }
+        log.info("[FailFast] WhatsApp provider configuration ✓");
+    }
+
+    private void validateWassender() {
+        requireProviderValue("WASSENDER_API_URL", wassenderApiUrl);
+        requireProviderValue("WASSENDER_API_TOKEN", wassenderApiToken);
+    }
+
+    private void validateTwilio() {
+        requireProviderValue("TWILIO_ACCOUNT_SID", twilioAccountSid);
+        requireProviderValue("TWILIO_AUTH_TOKEN", twilioAuthToken);
+        requireProviderValue("TWILIO_FROM_NUMBER", twilioFromNumber);
+    }
+
+    private static void requireProviderValue(String envVar, String value) {
+        if (isBlankOrPlaceholder(value)) {
+            throw new IllegalStateException(
+                    "[FailFast] " + envVar + " is missing or a placeholder, but the selected "
+                            + "KEEVO_WHATSAPP_PROVIDER requires it. Set " + envVar + " to the real value.");
+        }
     }
 
     private static void validateJwtKey(String envVar, String keyPath) {
@@ -92,8 +214,39 @@ public class ProdSecretsValidator {
         }
     }
 
-    private static boolean isInsecurePassword(String password) {
-        return password == null || password.isBlank() || KNOWN_DEFAULT_PASSWORD.equals(password);
+    /** Blank, contains a placeholder marker, or equals a known dev/CI/example default (case-insensitive). */
+    static boolean isPlaceholderOrDefault(String value) {
+        return isBlankOrPlaceholder(value)
+                || KNOWN_DEFAULTS.contains(value.trim().toLowerCase(Locale.ROOT));
+    }
+
+    private static boolean isBlankOrPlaceholder(String value) {
+        if (value == null || value.isBlank()) {
+            return true;
+        }
+        String lower = value.toLowerCase(Locale.ROOT);
+        return PLACEHOLDER_MARKERS.stream().anyMatch(lower::contains);
+    }
+
+    private static int characterClassCount(String pwd) {
+        boolean lower = false;
+        boolean upper = false;
+        boolean digit = false;
+        boolean symbol = false;
+        for (int i = 0; i < pwd.length(); ) {
+            int cp = pwd.codePointAt(i);
+            if (Character.isLowerCase(cp)) {
+                lower = true;
+            } else if (Character.isUpperCase(cp)) {
+                upper = true;
+            } else if (Character.isDigit(cp)) {
+                digit = true;
+            } else if (!Character.isWhitespace(cp)) {
+                symbol = true;
+            }
+            i += Character.charCount(cp);
+        }
+        return (lower ? 1 : 0) + (upper ? 1 : 0) + (digit ? 1 : 0) + (symbol ? 1 : 0);
     }
 
     private static boolean isInvalidKeyPath(String keyPath) {
