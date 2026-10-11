@@ -27,7 +27,9 @@ public class SaleRepositoryAdapter implements SaleRepository {
     @Override
     public void save(Sale sale) {
         SaleJpaEntity entity = toJpaEntity(sale);
-        springRepository.save(entity);
+        // Story v1s-13-10: flush now so a stale version fails inside the calling service
+        // (ObjectOptimisticLockingFailureException → 409) rather than at commit.
+        springRepository.saveAndFlush(entity);
     }
 
     @Override
@@ -55,6 +57,7 @@ public class SaleRepositoryAdapter implements SaleRepository {
         entity.setOccurredAt(sale.getOccurredAt());
         entity.setCreatedAt(sale.getCreatedAt());
         entity.setUpdatedAt(Instant.now());
+        entity.setVersion(sale.getVersion());
 
         var itemEntities = sale.getItems().stream()
                 .map(item -> toItemJpaEntity(item, entity))
@@ -93,7 +96,8 @@ public class SaleRepositoryAdapter implements SaleRepository {
                 SaleStatus.valueOf(entity.getStatus()),
                 entity.getOccurredAt(),
                 entity.getCreatedAt(),
-                items
+                items,
+                entity.getVersion()
         );
     }
 
@@ -144,6 +148,13 @@ public class SaleRepositoryAdapter implements SaleRepository {
     public boolean updateStatusIfCurrent(UUID saleId, SaleStatus expected, SaleStatus newStatus) {
         return springRepository.updateStatusIfCurrent(
                 saleId, expected.name(), newStatus.name(), Instant.now()) == 1;
+    }
+
+    @Override
+    public boolean updateStatusIfCurrent(UUID saleId, SaleStatus expected, long expectedVersion,
+                                         SaleStatus newStatus) {
+        return springRepository.updateStatusIfCurrentAndVersion(
+                saleId, expected.name(), expectedVersion, newStatus.name(), Instant.now()) == 1;
     }
 
     @Override

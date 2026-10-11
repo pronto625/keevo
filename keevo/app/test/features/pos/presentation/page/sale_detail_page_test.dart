@@ -1,9 +1,11 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:keevo/core/di/providers.dart';
+import 'package:keevo/core/sync/sync_service.dart';
 import 'package:keevo/features/pos/domain/model/payment_mode_enum.dart';
 import 'package:keevo/features/pos/domain/model/sale_model.dart';
 import 'package:keevo/features/pos/domain/repository/sale_repository.dart';
@@ -13,6 +15,8 @@ import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockSaleRepository extends Mock implements SaleRepository {}
+
+class MockSyncService extends Mock implements SyncService {}
 
 void main() {
   setUpAll(() async {
@@ -301,6 +305,59 @@ void main() {
           find.widgetWithText(FilledButton, 'Confirmer annulation'));
       expect(confirmButton.onPressed, isNotNull,
           reason: '>= 10 chars must enable the button');
+    });
+
+    // v1s-13-10: a 409 (concurrent cancel/correct) shows the error, pulls the
+    // server state and re-reads the sale instead of keeping a stale view.
+    testWidgets('cancel 409: pulls, re-reads the sale and shows the error',
+        (tester) async {
+      final sync = MockSyncService();
+      when(() => sync.pull()).thenAnswer((_) async {});
+      when(() => mockRepo.cancelSale(any(), any())).thenThrow(DioException(
+        requestOptions: RequestOptions(path: '/sales/sale-999/cancel'),
+        response: Response(
+          requestOptions: RequestOptions(path: '/sales/sale-999/cancel'),
+          statusCode: 409,
+          data: {
+            'domainCode': 'OPTIMISTIC_LOCK',
+            'message': 'Cette donnée a été modifiée par une autre opération',
+          },
+        ),
+        type: DioExceptionType.badResponse,
+      ));
+      var reads = 0;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            saleByIdProvider('sale-999').overrideWith((ref) {
+              reads++;
+              return Future.value(saleWithStatus('COMPLETED'));
+            }),
+            currentUserRoleProvider.overrideWithValue('OWNER'),
+            saleRepositoryProvider.overrideWithValue(mockRepo),
+            syncServiceProvider.overrideWithValue(sync),
+          ],
+          child: const MaterialApp(
+            home: SaleDetailPage(saleId: 'sale-999'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final readsBefore = reads;
+
+      await tester.tap(find.text('Annuler entièrement'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byType(TextField).first, 'Erreur de scan article vendu');
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Confirmer annulation'));
+      await tester.pumpAndSettle();
+
+      verify(() => sync.pull()).called(1);
+      expect(reads, greaterThan(readsBefore));
+      expect(find.text('Cette donnée a été modifiée par une autre opération'),
+          findsOneWidget);
     });
 
     testWidgets('confirming cancel calls saleRepo.cancelSale', (tester) async {

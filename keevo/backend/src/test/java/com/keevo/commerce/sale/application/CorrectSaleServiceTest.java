@@ -17,6 +17,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.OptimisticLockingFailureException;
 
 import java.time.Instant;
 import java.util.List;
@@ -233,5 +234,37 @@ class CorrectSaleServiceTest {
 
         verifyNoInteractions(stockOperationService);
         verify(saleRepository, never()).save(any());
+    }
+
+    // ── Story v1s-13-10: optimistic lock ────────────────────────────────────
+
+    @Test
+    void correctSale_propagatesReadVersionToSavedSale() {
+        Sale read = completedSale(5, 0);
+        Sale versioned = new Sale(read.getId(), read.getStoreId(), read.getEmployeeId(), null,
+                read.getPaymentMode(), read.getTotalAmount(), read.getDiscountAmount(),
+                read.getStatus(), read.getOccurredAt(), read.getCreatedAt(), read.getItems(), 7L);
+        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(versioned));
+
+        service.correctSale(new CorrectSaleCommand(SALE_ID, ACTOR_ID, null,
+                JUSTIFICATION, Map.of(itemId, 2)));
+
+        var captor = ArgumentCaptor.forClass(Sale.class);
+        verify(saleRepository).save(captor.capture());
+        assertThat(captor.getValue().getVersion()).isEqualTo(7L);
+    }
+
+    // A concurrent cancel/correction committed since the read: the version-checked save throws,
+    // the exception propagates (→ 409 OPTIMISTIC_LOCK, transaction rolls back) and no event is sent.
+    @Test
+    void correctSale_staleVersion_propagatesOptimisticLock_noEvent() {
+        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(completedSale(5, 0)));
+        doThrow(new OptimisticLockingFailureException("stale")).when(saleRepository).save(any());
+
+        assertThatThrownBy(() -> service.correctSale(new CorrectSaleCommand(SALE_ID, ACTOR_ID, null,
+                JUSTIFICATION, Map.of(itemId, 2))))
+                .isInstanceOf(OptimisticLockingFailureException.class);
+
+        verify(eventPublisher, never()).publishEvent(any());
     }
 }

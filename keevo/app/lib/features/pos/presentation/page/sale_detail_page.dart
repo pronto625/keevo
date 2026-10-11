@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
@@ -206,6 +207,20 @@ class _SaleDetailContentState extends ConsumerState<_SaleDetailContent> {
     ref.invalidate(dashboardSnapshotProvider);
   }
 
+  /// The local cache (read by [saleByIdProvider]) does not know what the
+  /// concurrent writer changed: pull it first (best effort), then drop any
+  /// earlier local override so the re-read sale is displayed.
+  Future<void> _resyncAfterConflict() async {
+    try {
+      await ref.read(syncServiceProvider).pull();
+    } catch (e) {
+      debugPrint('[SaleDetail] pull after 409 failed: $e');
+    }
+    if (!mounted) return;
+    setState(() => _locallyUpdated = false);
+    _refreshAfterOwnerAction();
+  }
+
   Future<void> _showCancelDialog() async {
     final justification = await showDialog<String>(
       context: context,
@@ -254,6 +269,11 @@ class _SaleDetailContentState extends ConsumerState<_SaleDetailContent> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(appErrorMessage(e))),
       );
+      // v1s-13-10: 409 (OPTIMISTIC_LOCK / concurrent cancel-correct) → silent
+      // refresh so the page shows the sale as it is now (13-1 convention).
+      if (e is DioException && e.response?.statusCode == 409) {
+        await _resyncAfterConflict();
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }

@@ -237,6 +237,8 @@ public class TenantSchemaSyncService {
             // Story 5.2 — add updated_at on sales and sale_items for delta pull sync
             stmt.execute(TenantSchemaProvisioner.DDL_SALES_MIGRATE_UPDATED_AT);
             stmt.execute(TenantSchemaProvisioner.DDL_SALE_ITEMS_MIGRATE_UPDATED_AT);
+            // Story v1s-13-10 — optimistic lock column on sales
+            stmt.execute(TenantSchemaProvisioner.DDL_SALES_MIGRATE_VERSION);
             // Story 5.3 — sync conflicts log indexes
             stmt.execute(TenantSchemaProvisioner.DDL_SYNC_CONFLICTS_LOG_IDX_RESOLVED);
             stmt.execute(TenantSchemaProvisioner.DDL_SYNC_CONFLICTS_LOG_IDX_ENTITY);

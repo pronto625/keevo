@@ -1,6 +1,7 @@
 import 'dart:ffi';
 import 'dart:io';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/pos/data/datasource/local_sale_datasource.dart';
 import 'package:keevo/features/pos/domain/model/payment_mode_enum.dart';
@@ -150,6 +151,164 @@ void main() {
       expect(movements, hasLength(1));
       expect(movements.single.type, 'SALE');
       expect(movements.single.id, 'item-1');
+    });
+
+    // v1s-13-10: validating a PENDING sale (manual or cascade) also reuses the
+    // sale item id as the SALE movement id, like the backend.
+    Sale pendingSale() => Sale(
+          id: 'sale-p',
+          storeId: 'store-1',
+          employeeId: 'emp-1',
+          paymentMode: PaymentModeEnum.cash,
+          totalAmount: 1500,
+          status: 'PENDING_VALIDATION',
+          items: const [
+            SaleItemModel(
+              id: 'item-p1',
+              productId: 'prod-1',
+              productName: 'Savon',
+              catalogueUnitPrice: 500,
+              appliedUnitPrice: 500,
+              quantity: 3,
+              subtotal: 1500,
+            ),
+          ],
+          occurredAt: DateTime(2026, 3, 17),
+          createdAt: DateTime(2026, 3, 17),
+        );
+
+    Future<void> stockProd1(int qty) =>
+        db.into(db.stockLevels).insert(StockLevelsCompanion.insert(
+              id: 'sl-prod-1',
+              productId: 'prod-1',
+              storeId: 'store-1',
+              quantity: qty,
+              updatedAt: DateTime(2026),
+            ));
+
+    Future<String?> saleStatus(String id) async =>
+        (await (db.select(db.sales)..where((s) => s.id.equals(id)))
+                .getSingle())
+            .status;
+
+    test('validateAndDecrementStock: SALE movement id is the sale item id',
+        () async {
+      await stockProd1(10);
+      await ds.insertAll(pendingSale());
+      expect(await db.select(db.stockMovements).get(), isEmpty);
+
+      await ds.validateAndDecrementStock('sale-p');
+
+      final movements = await db.select(db.stockMovements).get();
+      expect(movements, hasLength(1));
+      expect(movements.single.type, 'SALE');
+      expect(movements.single.id, 'item-p1');
+      expect(await saleStatus('sale-p'), 'COMPLETED');
+    });
+
+    test('validateAndDecrementStock: a CANCELLED sale is left untouched',
+        () async {
+      await stockProd1(10);
+      await ds.insertAll(pendingSale());
+      await (db.update(db.sales)..where((s) => s.id.equals('sale-p')))
+          .write(const SalesCompanion(status: Value('CANCELLED')));
+
+      await ds.validateAndDecrementStock('sale-p');
+
+      expect(await saleStatus('sale-p'), 'CANCELLED');
+      expect(await db.select(db.stockMovements).get(), isEmpty);
+      final level = await (db.select(db.stockLevels)
+            ..where((l) => l.id.equals('sl-prod-1')))
+          .getSingle();
+      expect(level.quantity, 10);
+    });
+
+    test(
+        'validateAndDecrementStock: a SALE movement already pulled with the '
+        'item id does not abort the validation', () async {
+      await stockProd1(10);
+      await ds.insertAll(pendingSale());
+      await db.into(db.stockMovements).insert(StockMovementsCompanion.insert(
+            id: 'item-p1',
+            productId: 'prod-1',
+            storeId: 'store-1',
+            type: 'SALE',
+            quantityDelta: -3,
+            actorId: 'emp-1',
+            createdAt: DateTime(2026),
+          ));
+
+      await ds.validateAndDecrementStock('sale-p');
+
+      expect(await saleStatus('sale-p'), 'COMPLETED');
+      final movements = await db.select(db.stockMovements).get();
+      expect(movements, hasLength(1));
+      expect(movements.single.id, 'item-p1');
+    });
+
+    test('cascadeValidatePendingSales: SALE movement id is the sale item id',
+        () async {
+      await stockProd1(10);
+      await ds.insertAll(pendingSale());
+
+      final validated =
+          await ds.cascadeValidatePendingSales('prod-1', 'store-1', 'actor-1');
+
+      expect(validated, 1);
+      final movements = await db.select(db.stockMovements).get();
+      expect(movements, hasLength(1));
+      expect(movements.single.type, 'SALE');
+      expect(movements.single.id, 'item-p1');
+      expect(await saleStatus('sale-p'), 'COMPLETED');
+      final level = await (db.select(db.stockLevels)
+            ..where((l) => l.id.equals('sl-prod-1')))
+          .getSingle();
+      expect(level.quantity, 7);
+    });
+
+    test(
+        'cascadeValidatePendingSales: a sale already settled before the cascade '
+        'runs is not selected (no stock change, no movement)', () async {
+      await stockProd1(10);
+      await ds.insertAll(pendingSale());
+      // Settled before the cascade starts, so its PENDING query never selects
+      // it. The read→claim race itself is covered by the concurrent-cascade
+      // test below (conditional status write).
+      await (db.update(db.sales)..where((s) => s.id.equals('sale-p')))
+          .write(const SalesCompanion(status: Value('CANCELLED')));
+
+      final validated =
+          await ds.cascadeValidatePendingSales('prod-1', 'store-1', 'actor-1');
+
+      expect(validated, 0);
+      expect(await db.select(db.stockMovements).get(), isEmpty);
+      expect(await saleStatus('sale-p'), 'CANCELLED');
+      final level = await (db.select(db.stockLevels)
+            ..where((l) => l.id.equals('sl-prod-1')))
+          .getSingle();
+      expect(level.quantity, 10);
+    });
+
+    test(
+        'cascadeValidatePendingSales: two concurrent cascades on the same sale '
+        '→ validated and decremented once', () async {
+      await stockProd1(10);
+      await ds.insertAll(pendingSale());
+
+      // Both calls read the sale as PENDING before either claims it; the
+      // conditional status write lets only one decrement the stock.
+      final results = await Future.wait([
+        ds.cascadeValidatePendingSales('prod-1', 'store-1', 'actor-1'),
+        ds.cascadeValidatePendingSales('prod-1', 'store-1', 'actor-1'),
+      ]);
+
+      expect(results.fold<int>(0, (a, b) => a + b), 1);
+      final movements = await db.select(db.stockMovements).get();
+      expect(movements, hasLength(1));
+      final level = await (db.select(db.stockLevels)
+            ..where((l) => l.id.equals('sl-prod-1')))
+          .getSingle();
+      expect(level.quantity, 7);
     });
   });
 }
