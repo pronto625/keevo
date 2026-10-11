@@ -3,7 +3,7 @@ baseline_commit: 6a0efea
 ---
 # Story 9.8: Monitoring Synchronisation & Santé Devices (Super Admin) — frontend Next.js manquant
 
-Status: ready-for-dev
+Status: review
 
 <!-- V1-stabilization track — tag A (release-blocker pour le build dashboard).
      Branche : v1-stabilization (HEAD 6a0efea).
@@ -38,19 +38,19 @@ Status: ready-for-dev
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Inspecter le domaine backend avant de coder (AC5)**
-  - [ ] 1.1 Lire `com.keevo.admin.sync_monitoring.domain.model.AdminTenantSyncHealth` (et le service qui calcule `status`) pour connaître les valeurs exactes possibles du champ `status` — ne pas deviner.
-- [ ] **Task 2 — Types + client API (AC1, AC2)**
-  - [ ] 2.1 `types/sync-monitoring.ts` : les 6 interfaces miroir des DTOs backend (voir Contexte).
-  - [ ] 2.2 `lib/api/admin-sync.ts` : 3 fonctions, miroir `lib/api/admin-catalog.ts`.
-- [ ] **Task 3 — Hook (AC3)**
-  - [ ] 3.1 `hooks/useSyncMonitoring.ts` — `overviewQuery`/`healthQuery` (`useQuery`, `staleTime: 30_000`), `selectedTenantId` (`useState`), `refresh` (`queryClient.invalidateQueries`).
-- [ ] **Task 4 — Composants (AC4, AC5)**
-  - [ ] 4.1 `components/sync/SyncOverviewCards.tsx` — 5 cartes KPI, squelette `animate-pulse` pendant `isLoading`, bouton refresh (miroir `OperationsKpiCards` de 9-7 si déjà écrite, sinon `CatalogSummaryCards`).
-  - [ ] 4.2 `components/sync/SyncHealthTable.tsx` — table avec badge `status` coloré (Task 1), ligne cliquable, surbrillance `selectedTenantId`.
-  - [ ] 4.3 `components/sync/SyncTenantDetailDrawer.tsx` — drawer conditionnel sur `tenantId`, `useQuery(['admin-sync-tenant-detail', tenantId], () => getTenantSyncDetail(tenantId!), {enabled: tenantId !== null})`, 3 sous-sections (devices/failedOps/conflicts), bouton fermeture.
-- [ ] **Task 5 — Vérification build (AC6)**
-  - [ ] 5.1 `npm run build` — 0 erreur `Module not found`.
+- [x] **Task 1 — Inspecter le domaine backend avant de coder (AC5)**
+  - [x] 1.1 Lire `com.keevo.admin.sync_monitoring.domain.model.AdminTenantSyncHealth` (et le service qui calcule `status`) pour connaître les valeurs exactes possibles du champ `status` — ne pas deviner.
+- [x] **Task 2 — Types + client API (AC1, AC2)**
+  - [x] 2.1 `types/sync-monitoring.ts` : les 6 interfaces miroir des DTOs backend (voir Contexte).
+  - [x] 2.2 `lib/api/admin-sync.ts` : 3 fonctions, miroir `lib/api/admin-catalog.ts`.
+- [x] **Task 3 — Hook (AC3)**
+  - [x] 3.1 `hooks/useSyncMonitoring.ts` — `overviewQuery`/`healthQuery` (`useQuery`, `staleTime: 30_000`), `selectedTenantId` (`useState`), `refresh` (`queryClient.invalidateQueries`).
+- [x] **Task 4 — Composants (AC4, AC5)**
+  - [x] 4.1 `components/sync/SyncOverviewCards.tsx` — 5 cartes KPI, squelette `animate-pulse` pendant `isLoading`, bouton refresh (miroir `OperationsKpiCards` de 9-7 si déjà écrite, sinon `CatalogSummaryCards`).
+  - [x] 4.2 `components/sync/SyncHealthTable.tsx` — table avec badge `status` coloré (Task 1), ligne cliquable, surbrillance `selectedTenantId`.
+  - [x] 4.3 `components/sync/SyncTenantDetailDrawer.tsx` — drawer conditionnel sur `tenantId`, `useQuery(['admin-sync-tenant-detail', tenantId], () => getTenantSyncDetail(tenantId!), {enabled: tenantId !== null})`, 3 sous-sections (devices/failedOps/conflicts), bouton fermeture.
+- [x] **Task 5 — Vérification build (AC6)**
+  - [x] 5.1 `npm run build` — 0 erreur `Module not found`.
 - [ ] **Task 6 — Documentation rétroactive**
   - [ ] 6.1 Ajouter "Story 9.8" à `epic-9-super-admin-dashboard-toor.md` (absente aujourd'hui).
 
@@ -80,12 +80,37 @@ Status: ready-for-dev
 - [Source: keevo/backend/.../admin/sync_monitoring/adapter/in/rest/AdminSyncMonitoringController.java + dto/*.java — contrat backend complet et exact]
 - [Source: keevo/dashboard/src/{hooks/useProducts.ts, lib/api/admin-catalog.ts, components/catalog/CatalogSummaryCards.tsx} — pattern Next.js/React Query de référence]
 
+### Deferred items routed 2026-10-11
+
+- [ ] [Deferred-from: v1s-17-1-dashboard-build-ci, 2026-10-11] Harnais de tests dashboard absent [keevo/dashboard/package.json] — aucun script `test` ni dépendance de test ; les comportements UI de 9-8 (squelettes, vide/erreur, sélection clavier, drawer + Échap) ne sont couverts que par lint/tsc/build + revue. Mettre en place Vitest + Testing Library et couvrir `SyncHealthTable`, `SyncTenantDetailDrawer`, ainsi que la restauration du token au refresh (`lib/auth/auth-context.tsx` : seed `sessionStorage.ks_admin_token`, la 1re requête doit porter `Authorization: Bearer`).
+- [ ] [Deferred-from: v1s-17-1-dashboard-build-ci, 2026-10-11] Contrat JSON sync non verrouillé [AdminSyncMonitoringControllerTest.java:58,85,102] — ajouter des assertions `jsonPath` sur chaque champ lu par `keevo/dashboard/src/types/sync-monitoring.ts` (overview, tenants, detail) pour qu'un renommage de DTO casse un test.
+- [ ] [Deferred-from: v1s-17-1-dashboard-build-ci, 2026-10-11] Erreurs de rafraîchissement silencieuses [components/sync/SyncOverviewCards.tsx, SyncHealthTable.tsx] — `page.tsx` (contrat figé) ne transmet ni `isError` ni `isFetching` : un refetch échoué garde les données périmées sans signal, une requête « paused » hors-ligne affiche l'erreur. Réglé si la page passe `error`/`isFetching` aux composants (retry + spinner sur « Actualiser »).
+- [ ] Task 6.1 (ajout de "Story 9.8" à `epic-9-super-admin-dashboard-toor.md`) reste ouverte.
+
 ## Dev Agent Record
 
 ### Agent Model Used
+
+Claude Opus 5.5 (via v1s-17-1-dashboard-build-ci)
 
 ### Debug Log References
 
 ### Completion Notes List
 
+- 2026-10-11 — Frontend livré par la story v1s-17-1 (audit-coherence-2026-10-11 C1). `page.tsx` non modifié ; aucun changement backend.
+- Valeurs de `status` vérifiées dans `AdminSyncMonitoringService.computeStatus` : `OK | WARN | ERROR` (badge vert/ambre/rouge).
+- La table conserve l'ordre renvoyé par le backend (pas de tri côté client). Instants `null` affichés « — ».
+- `refresh()` invalide aussi la clé du détail tenant (`admin-sync-tenant-detail`) en plus des 2 queries du hook.
+- Comme `page.tsx` ne transmet pas l'erreur des queries, `SyncOverviewCards`/`SyncHealthTable` affichent une erreur inline quand `!isLoading && data === undefined`.
+- Entrée sidebar « Synchronisation » passée à `comingSoon: false`.
+- Vérifié : `npm ci && npm run lint && npx tsc --noEmit && npm run build` sur copie propre — 0 erreur.
+
 ### File List
+
+- keevo/dashboard/src/types/sync-monitoring.ts (nouveau)
+- keevo/dashboard/src/lib/api/admin-sync.ts (nouveau)
+- keevo/dashboard/src/hooks/useSyncMonitoring.ts (nouveau)
+- keevo/dashboard/src/components/sync/SyncOverviewCards.tsx (nouveau)
+- keevo/dashboard/src/components/sync/SyncHealthTable.tsx (nouveau)
+- keevo/dashboard/src/components/sync/SyncTenantDetailDrawer.tsx (nouveau)
+- keevo/dashboard/src/components/layout/Sidebar.tsx (modifié)
