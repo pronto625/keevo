@@ -384,3 +384,23 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-catalog-product-visibility-other-stores.md`
   summary: Test pré-existant en échec, sans rapport avec ce fix — `catalog_page_test.dart` "hides 'Créer un produit' button for EMPLOYEE on empty search" échoue déjà sur `HEAD` avant ce diff (le bouton reste visible pour le rôle EMPLOYEE sur une recherche sans résultat).
   evidence: Confirmé par `git stash` + `flutter test` isolé avant application de ce fix — comportement inchangé par les modifications de ce fix (aucun fichier touché par ce fix n'est `catalog_page.dart` ou son rôle de garde EMPLOYEE). Non documenté ailleurs dans ce fichier à ce jour.
+
+## Deferred from: code review of UI-3-rebrand-rollout-and-bug-hunt.md — lot 1 backend (2026-10-11)
+
+- `SessionTokenIssuer.onboardingCompleted` catches a SQL error inside the caller's transaction (refresh, select-tenant, registration); on PostgreSQL a failed statement aborts the transaction and the following refresh-token save fails. Unverified: settle by checking whether a tenant schema can lack `tenant_preferences` at that point, or with a Testcontainers test; fix with `to_regclass` probe.
+- `CorrectSaleService` races with a concurrent COMPLETED→CANCELLED cancellation and can save the cancelled sale back as COMPLETED (pre-existing).
+- Offline sales (`RecordSaleService` sync path) still create server-side SALE stock movements with server ids; the pull adds a second movement next to the device's local one. Needs movement ids in the CREATE_SALE payload (app + backend).
+- Weekly report with the default Sunday 20:00 trigger covers Monday → Sunday 20:00 only; Sunday evening sales never appear in any weekly report (pre-existing).
+- `refresh_tokens` keeps every rotated row (V8) with no purge job and no index on `user_id` / `replaced_by_id`.
+- Keyset pull ordering `(cursor expression, CAST(id AS text))` in `DeltaPageQuery` has no supporting index; check with EXPLAIN on a large tenant.
+
+## Deferred from: code review of UI-3-rebrand-rollout-and-bug-hunt.md — lots 2–5 app (2026-10-11)
+
+- Legacy pending-sale validation flow (no client creates PENDING_VALIDATION any more): 5xx not treated as network, receiveTimeout re-queues VALIDATE_SALE, draft promotions not atomic with validation, duplicate draft dialogs, actions visible while role loads.
+- QuickAddProductNotifier offline path and LocalProductDataSource.insert/insertDraft write and queue without a transaction.
+- csv_import_page: _mapping not cleared on cancel / new file (stale dropdown value).
+- ProductCard draft promotion: invalid stock input silently becomes 0.
+- Client/supplier list headers: action buttons scroll out with the FlexibleSpaceBar; contact search ignores "Voir les archivés" and sync refresh replaces search results.
+- period_filter_chips custom picker: initial range before firstDate after New Year asserts.
+- app_router: /auth/login with a session redirects straight to /dashboard|/pos, bypassing wizard / forced password change checks.
+- TenantPickerPage and forced PasswordChangePage have no way back / sign-out; ResetPasswordPage without phone extra; auth pages French-only.
