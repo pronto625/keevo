@@ -1,7 +1,11 @@
 # ============================================================
 # AI / Agent tooling (BMAD framework — local only)
 # ============================================================
-_bmad/                  # BMAD framework engine (agents, workflows, configs) — local only
+# BMAD framework engine (agents, workflows, configs) — local only,
+# except _bmad/custom/ (team overrides: persistent_facts, project rules).
+# Personal overrides (_bmad/custom/*.user.toml) stay ignored via _bmad/custom/.gitignore.
+_bmad/*
+!_bmad/custom/
 # _bmad-output/ is intentionally tracked — it contains project documentation (PRD, architecture, epics, stories)
 .agent/
 .agents/
@@ -91,6 +95,5 @@ Thumbs.db
 logs/
 tmp/
 temp/
-_bmad
 .gemini
 keevo/keevo-1d289-firebase-adminsdk-fbsvc-4094494885.json

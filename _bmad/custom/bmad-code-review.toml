@@ -1,0 +1,9 @@
+# Règle projet Keevo (2026-10-11) : deferred-work.md reste toujours vide.
+# Chaque élément à corriger va directement dans la story qui possède le code.
+# Une nouvelle story = une clé dans sprint-status + un brief dans son epic ; jamais de story file (réservé à bmad-create-story).
+[workflow]
+persistent_facts = [
+  "PROJECT RULE — deferred-work.md must always stay empty. Never append, create or edit entries in {implementation_artifacts}/deferred-work.md, even where a step says so.",
+  "PROJECT RULE — every item that would be deferred (review 'defer' bucket, out-of-scope finding, split-off goal, pre-existing bug) goes to the story that owns the affected code: if that story has a story file, append it there under '### Deferred items routed <date>' as '- [ ] [Deferred-from: <source>, <date>] <title> [file:line] — <why/what would settle it>'; if the story is 'done', set it back to 'in-progress' in sprint-status.yaml with a dated comment.",
+  "PROJECT RULE — when no existing story owns the item, create the story as a KEY ONLY: add '<key>: backlog  # <date> <source> — <n> items' in sprint-status.yaml under the owning epic, and add a brief for it in the epic document ({planning_artifacts}/epics/epics-remediation-audit.md for v1s-* keys, {planning_artifacts}/epics-refonte-modulaire.md for refonte epics 10–17, {planning_artifacts}/epics/epic-<n>-*.md for V1 epics 1–9): title, one-paragraph scope, the routed items as a checklist, interim AC. NEVER create a story file yourself — only bmad-create-story creates story files. Report every routed item in the final summary as '<item> → <story key>'.",
+]
