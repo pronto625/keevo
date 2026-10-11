@@ -22,9 +22,9 @@ Deliver on the V1 production line (`deploy`) the functional requirements that we
 - Story 14.12: Forgot-password flow via WhatsApp OTP. Done.
 - Story 14.13: Enforcing the Free plan limits. Done. This story is in the tracker only.
 - Story 14.14: Category delete sync gap. Done. This story is in the tracker only.
-- Story 14.15: Category hardening (404 instead of 500, audit events, Flutter atomicity). Backlog.
+- Story 14.15: Category hardening (404 instead of 500, audit events, Flutter atomicity). In progress.
 - Story 14.16: Day-closure WhatsApp report sent to the real owner. Done.
-- Story 14.17: Single, reliable owner-recipient resolution (shared resolver). In progress.
+- Story 14.17: Single, reliable owner-recipient resolution (shared resolver). Done.
 
 ## Requirements & Constraints
 
@@ -41,7 +41,7 @@ Deliver on the V1 production line (`deploy`) the functional requirements that we
   - Audit entries record actor, timestamp, store, a readable label for the object, device, source (online or sync), and before/after values.
 - **Error handling:**
   - Errors follow the `{ error, code, domainCode, details }` envelope, and every exception carries a `domainCode`.
-  - A not-found case must return 404 through a domain exception, never a generic 500 from an `IllegalArgumentException`.
+  - A not-found case must return 404 through a domain exception, never a generic 500 from an `IllegalArgumentException`. On categories this affects the repository's toggle, rename and delete paths and the create/rename use cases, not only delete; each needs a not-found test.
 - **Interim AC for routed-items stories (14.15, 14.16, 14.17):** handle every listed item one of two ways:
   - Fix it and tick the box, noting the commit.
   - Reject it explicitly and record the reason next to the item.
@@ -58,7 +58,7 @@ Deliver on the V1 production line (`deploy`) the functional requirements that we
 - **WhatsApp:**
   - All sends go through `WhatsAppPort`, which is provider-agnostic and currently implemented by the Wassender adapter.
   - Day-closure and report recipients come from an owner lookup per tenant; when there is no owner phone the send is refused and logged (`ReportHistoryService` since v1s-15-7, `DayClosureWhatsAppListener` since v1s-14-16, which also sends after commit and restores the tenant context).
-  - The owner-phone rule is currently duplicated across about nine call sites (messaging notification listeners, reporting services such as `DailyReportGenerator` and `MultiStoreSummaryService`). It must be centralised in one shared resolver (a `UserRepository` default method or a small `OwnerPhoneResolver`) so the rules cannot drift; it lives with identity data and is consumed through ports, respecting the no-cross-domain-import rule. Changes to the owner lookup query need a database-level test.
+  - Every owner-directed WhatsApp send resolves its recipient through the single shared `OwnerRecipientResolver` port (identity adapter: oldest active OWNER membership, active user only, phone normalised to `+<digits>`). An architecture test blocks new ad-hoc owner-phone lookups, so any new sender must use the resolver. Changes to the owner lookup query need a database-level test.
 - **Notifications:**
   - Owner notifications use FCM plus WhatsApp (`channel=BOTH`).
   - Bursts are batched in a time window per employee, using the `ConcurrentHashMap` pattern from `StockAlertNotificationListener`.
@@ -66,7 +66,8 @@ Deliver on the V1 production line (`deploy`) the functional requirements that we
   - Online: write to the backend first, then cache locally with `synced:true` and no queue entry.
   - Offline: write to Drift and enqueue in `sync_queue`. Queue inserts happen in the repository layer and are atomic with the local write, in the same `_database.transaction()`.
   - After every write, call `refresh()` or `invalidate()` on the Riverpod notifier.
-- **Category deletion** is a sync operation: `TOGGLE_CATEGORY` with `isActive:false`. There is no `DELETE_CATEGORY` operation.
+- **Category deletion** is a sync operation: `TOGGLE_CATEGORY` with `isActive:false`. There is no `DELETE_CATEGORY` operation. `TOGGLE_CATEGORY` is OWNER-only on both sync and REST.
+- **Category audit:** toggle and custom-category creation must emit domain events consumed by an audit listener, matching how product changes are audited; the audit log is append-only.
 - **Reuse existing patterns:**
   - Ranking uses the Strategy pattern, mirroring `StoreRankingStrategy`.
   - Plan limits go through `PlanLimitGuard`.
@@ -83,9 +84,8 @@ Deliver on the V1 production line (`deploy`) the functional requirements that we
 ## Cross-Story Dependencies
 
 - **14.16** (done) comes from v1s-15-7 (D1, owner lookup in `ReportHistoryService`) and relates to Story 13.11. The refactor re-applies it in `messaging`.
-- **14.17** comes from the 14.16 review and builds on it; it depends on 14.11 (role promotion creating several OWNER memberships). The refactor re-applies it in `identity`/`messaging`.
-- **14.15** builds on 14.14 (deletion through `TOGGLE_CATEGORY`) and on 15.3, 15.5 and 13.4 (atomicity of Drift write plus queue).
-- The audit flags that `TOGGLE_CATEGORY` has no role check, while the REST `DELETE` is owner-only.
+- **14.17** (done) came from the 14.16 review and builds on it and on 14.11 (role promotion creating several OWNER memberships). The refactor re-applies it in `identity`/`messaging`.
+- **14.15** builds on 14.14 (deletion through `TOGGLE_CATEGORY`), on 15.3 and 15.5 (where the items were found), on 13.4 (atomicity of Drift write plus queue) and on 12.10 (owner-only `TOGGLE_CATEGORY`). The refactor re-applies it in `catalog` and Flutter.
 - **14.6:** the FR67 activity part overlaps refactor Story 17-3.
 - **14.2:** the refactor re-applies it in 17-2.
 - **14.7** is superseded by Epic 18, which handles data export (FR55, FR94–FR98).
