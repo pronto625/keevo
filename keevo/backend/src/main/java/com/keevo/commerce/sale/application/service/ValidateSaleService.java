@@ -125,7 +125,11 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
                         MovementType.SALE,
                         -effectiveDecrement,
                         command.actorId(),
-                        "Validation manuelle vente " + sale.getId()
+                        "Validation manuelle vente " + sale.getId(),
+                        // Story v1s-13-10: the sale item id is the SALE movement id on both app and
+                        // backend, so the device's pull does not add a second SALE movement.
+                        item.getId(),
+                        false
                 );
             }
         }
@@ -168,10 +172,11 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
                 requireJustification(command.justification());
                 // Claim the COMPLETED→CANCELLED transition first: a concurrent cancellation that
                 // read the same COMPLETED sale loses here and must not restore the stock again.
+                // Story v1s-13-10: the claim also checks the version read above, so a cancel that
+                // read pre-correction items cannot restore the wrong quantities.
                 if (!saleRepository.updateStatusIfCurrent(
-                        sale.getId(), SaleStatus.COMPLETED, SaleStatus.CANCELLED)) {
-                    throw new DomainException(ErrorCode.SALE_ALREADY_CANCELLED,
-                            "Sale " + sale.getId() + " is already cancelled");
+                        sale.getId(), SaleStatus.COMPLETED, sale.getVersion(), SaleStatus.CANCELLED)) {
+                    throw lostCompletedRace(sale.getId());
                 }
                 for (SaleItem item : sale.getItems()) {
                     stockOperationService.recordOperation(
@@ -214,6 +219,20 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
         }
         return new DomainException(ErrorCode.SALE_NOT_PENDING,
                 "Sale " + saleId + " is no longer pending validation (status=" + current + ")");
+    }
+
+    /**
+     * Maps a lost versioned COMPLETED→CANCELLED claim: already cancelled → SALE_ALREADY_CANCELLED,
+     * otherwise the sale was modified (corrected) since it was read → 409 OPTIMISTIC_LOCK.
+     */
+    private DomainException lostCompletedRace(UUID saleId) {
+        SaleStatus current = saleRepository.findById(saleId).map(Sale::getStatus).orElse(null);
+        if (current == SaleStatus.CANCELLED) {
+            return new DomainException(ErrorCode.SALE_ALREADY_CANCELLED,
+                    "Sale " + saleId + " is already cancelled");
+        }
+        return new DomainException(ErrorCode.OPTIMISTIC_LOCK,
+                "Sale " + saleId + " was modified concurrently (status=" + current + ")");
     }
 
     private Sale loadPendingSale(UUID saleId) {

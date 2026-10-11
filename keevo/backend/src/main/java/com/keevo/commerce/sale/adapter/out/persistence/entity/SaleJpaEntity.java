@@ -45,6 +45,12 @@ public class SaleJpaEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    // Story v1s-13-10: optimistic lock. Primitive long so Hibernate still inserts on merge of an
+    // assigned-id entity (same as StockLevelJpaEntity). Bulk JPQL status updates bump it explicitly.
+    @Version
+    @Column(name = "version", nullable = false)
+    private long version;
+
     @OneToMany(mappedBy = "sale", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private List<SaleItemJpaEntity> items = new ArrayList<>();
 
@@ -85,6 +91,8 @@ public class SaleJpaEntity {
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+    public long getVersion() { return version; }
+    public void setVersion(long version) { this.version = version; }
     public List<SaleItemJpaEntity> getItems() { return items; }
     public void setItems(List<SaleItemJpaEntity> items) { this.items = items; }
 }

@@ -75,7 +75,8 @@ class SaleRepositoryAdapterUpdatedAtTest {
         new SaleRepositoryAdapter(springRepository).save(sale);
 
         var saved = ArgumentCaptor.forClass(SaleJpaEntity.class);
-        verify(springRepository).save(saved.capture());
+        // Story v1s-13-10: flushed so a stale version fails inside the calling service.
+        verify(springRepository).saveAndFlush(saved.capture());
         assertThat(saved.getValue().getUpdatedAt()).isAfterOrEqualTo(before);
     }
 
@@ -115,6 +116,7 @@ class SaleRepositoryAdapterUpdatedAtTest {
         String jpql = method.getAnnotation(org.springframework.data.jpa.repository.Query.class).value();
 
         assertThat(jpql).contains("s.updatedAt = :now");
+        assertThat(jpql).contains("s.version = s.version + 1");
         assertThat(jpql).contains("WHERE s.id = :id AND s.status = :expected");
         assertThat(method.isAnnotationPresent(org.springframework.data.jpa.repository.Modifying.class)).isTrue();
     }

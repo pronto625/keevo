@@ -134,6 +134,25 @@ class TenantSchemaSyncServiceTest {
     }
 
     @Test
+    @DisplayName("syncIfNeeded() adds the sales optimistic-lock version column (Story v1s-13-10)")
+    void should_add_sales_version_column() throws Exception {
+        when(dataSource.getConnection()).thenReturn(connection);
+        when(connection.prepareStatement(contains("information_schema.tables")))
+                .thenReturn(tablesStmt);
+        when(tablesStmt.executeQuery()).thenReturn(tablesRs);
+        when(tablesRs.next()).thenReturn(false);
+        when(connection.createStatement()).thenReturn(execStmt);
+
+        service.syncIfNeeded("kv_ver123");
+
+        org.mockito.ArgumentCaptor<String> sqlCaptor =
+                org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(execStmt, atLeastOnce()).execute(sqlCaptor.capture());
+        assertThat(sqlCaptor.getAllValues())
+                .contains("ALTER TABLE sales ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0");
+    }
+
+    @Test
     @DisplayName("syncIfNeeded() does NOT re-create audit_log if it already exists")
     void should_not_recreate_audit_log_when_already_present() throws Exception {
         when(dataSource.getConnection()).thenReturn(connection);

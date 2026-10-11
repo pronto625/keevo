@@ -80,13 +80,30 @@ public interface SaleSpringRepository extends JpaRepository<SaleJpaEntity, UUID>
 
     /**
      * Compare-and-set status change in one statement: of two concurrent callers expecting the
-     * same status, exactly one gets 1. Bumps updated_at so the delta pull carries the change.
+     * same status, exactly one gets 1. Bumps updated_at so the delta pull carries the change, and
+     * the optimistic-lock version (bulk JPQL bypasses Hibernate versioning — Story v1s-13-10) so a
+     * concurrent save of a stale copy fails.
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("UPDATE SaleJpaEntity s SET s.status = :newStatus, s.updatedAt = :now " +
+    @Query("UPDATE SaleJpaEntity s SET s.status = :newStatus, s.updatedAt = :now, " +
+           "s.version = s.version + 1 " +
            "WHERE s.id = :id AND s.status = :expected")
     int updateStatusIfCurrent(@Param("id") UUID id,
                               @Param("expected") String expected,
                               @Param("newStatus") String newStatus,
                               @Param("now") Instant now);
+
+    /**
+     * Story v1s-13-10 — same compare-and-set, also guarded by the optimistic-lock version the
+     * caller read: a concurrent correction (status unchanged, version bumped) makes it update 0 rows.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE SaleJpaEntity s SET s.status = :newStatus, s.updatedAt = :now, " +
+           "s.version = s.version + 1 " +
+           "WHERE s.id = :id AND s.status = :expected AND s.version = :expectedVersion")
+    int updateStatusIfCurrentAndVersion(@Param("id") UUID id,
+                                        @Param("expected") String expected,
+                                        @Param("expectedVersion") long expectedVersion,
+                                        @Param("newStatus") String newStatus,
+                                        @Param("now") Instant now);
 }

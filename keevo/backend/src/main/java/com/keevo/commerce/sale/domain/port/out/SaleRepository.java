@@ -34,7 +34,8 @@ public interface SaleRepository {
     /**
      * Compare-and-set status change: moves the sale to {@code newStatus} only if it is still in
      * {@code expected}. Returns true when this call made the transition, so that two concurrent
-     * cancellations cannot both restore the stock.
+     * cancellations cannot both restore the stock. A successful transition also bumps the sale's
+     * optimistic-lock version (Story v1s-13-10).
      *
      * <p>The default is a read-then-write and is NOT atomic; persistence adapters must override it
      * with a single conditional UPDATE ({@code ... WHERE id = :id AND status = :expected}) and
@@ -45,6 +46,15 @@ public interface SaleRepository {
         if (matches) updateStatus(saleId, newStatus);
         return matches;
     }
+
+    /**
+     * Story v1s-13-10 — versioned compare-and-set: moves the sale to {@code newStatus} only if it
+     * is still in {@code expected} AND its optimistic-lock version is still {@code expectedVersion}.
+     * A successful transition also bumps the version. Returns false when 0 rows matched (status
+     * changed, or the sale was modified — e.g. corrected — since it was read).
+     */
+    boolean updateStatusIfCurrent(UUID saleId, SaleStatus expected, long expectedVersion,
+                                  SaleStatus newStatus);
 
     void remapItemProductIds(UUID saleId, Map<UUID, UUID> remappings);
 

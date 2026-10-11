@@ -88,8 +88,13 @@ public class SaleValidationCascadeService {
             }
         }
 
-        // All conditions met — validate sale
-        saleRepository.updateStatus(sale.getId(), SaleStatus.COMPLETED);
+        // All conditions met — claim PENDING_VALIDATION→COMPLETED atomically (Story v1s-13-10).
+        // Another actor that already settled the sale wins: skip it, never fail the activation.
+        if (!saleRepository.updateStatusIfCurrent(
+                sale.getId(), SaleStatus.PENDING_VALIDATION, SaleStatus.COMPLETED)) {
+            log.debug("Cascade skipped for sale {}: no longer pending validation", sale.getId());
+            return false;
+        }
 
         // Decrement stock for ALL items
         for (SaleItem item : sale.getItems()) {
@@ -100,7 +105,10 @@ public class SaleValidationCascadeService {
                     MovementType.SALE,
                     -item.getQuantity(),
                     actorId,
-                    "Vente auto-validée " + sale.getId()
+                    "Vente auto-validée " + sale.getId(),
+                    // Story v1s-13-10: sale item id = SALE movement id (same on the app).
+                    item.getId(),
+                    false
             );
         }
 

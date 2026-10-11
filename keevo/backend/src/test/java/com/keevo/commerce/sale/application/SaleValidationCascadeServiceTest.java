@@ -1,5 +1,6 @@
 package com.keevo.commerce.sale.application;
 
+import com.keevo.catalog.stock.domain.entity.MovementType;
 import com.keevo.catalog.stock.domain.entity.StockLevel;
 import com.keevo.catalog.stock.domain.port.out.StockLevelRepository;
 import com.keevo.catalog.stock.domain.service.StockOperationService;
@@ -51,6 +52,9 @@ class SaleValidationCascadeServiceTest {
         service = new SaleValidationCascadeService(
                 saleRepository, productStatusPort, stockLevelRepository,
                 stockOperationService, eventPublisher);
+        // Story v1s-13-10: the cascade claims PENDING_VALIDATION→COMPLETED atomically; default = won.
+        lenient().when(saleRepository.updateStatusIfCurrent(
+                any(), eq(SaleStatus.PENDING_VALIDATION), eq(SaleStatus.COMPLETED))).thenReturn(true);
     }
 
     @AfterEach
@@ -85,9 +89,9 @@ class SaleValidationCascadeServiceTest {
 
         service.onProductActivated(PRODUCT_A, ACTOR_ID);
 
-        verify(saleRepository).updateStatus(SALE_ID, SaleStatus.COMPLETED);
+        verify(saleRepository).updateStatusIfCurrent(SALE_ID, SaleStatus.PENDING_VALIDATION, SaleStatus.COMPLETED);
         verify(stockOperationService, times(2)).recordOperation(
-                any(), any(), eq(STORE_ID), any(), anyInt(), eq(ACTOR_ID), any());
+                any(), any(), eq(STORE_ID), any(), anyInt(), eq(ACTOR_ID), any(), any(), eq(false));
 
         var eventCaptor = ArgumentCaptor.forClass(Object.class);
         verify(eventPublisher, atLeastOnce()).publishEvent(eventCaptor.capture());
@@ -104,8 +108,8 @@ class SaleValidationCascadeServiceTest {
 
         service.onProductActivated(PRODUCT_A, ACTOR_ID);
 
-        verify(saleRepository, never()).updateStatus(any(), any());
-        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
+        verify(saleRepository, never()).updateStatusIfCurrent(any(), any(), any());
+        verifyNoInteractions(stockOperationService);
         verify(eventPublisher, never()).publishEvent(any());
     }
 
@@ -119,7 +123,8 @@ class SaleValidationCascadeServiceTest {
 
         service.onProductActivated(PRODUCT_A, ACTOR_ID);
 
-        verify(saleRepository, never()).updateStatus(any(), any());
+        verify(saleRepository, never()).updateStatusIfCurrent(any(), any(), any());
+        verifyNoInteractions(stockOperationService);
         verify(eventPublisher, never()).publishEvent(any());
     }
 
@@ -139,8 +144,8 @@ class SaleValidationCascadeServiceTest {
 
         service.onProductActivated(PRODUCT_A, ACTOR_ID);
 
-        verify(saleRepository).updateStatus(SALE_ID, SaleStatus.COMPLETED);
-        verify(saleRepository).updateStatus(saleId2, SaleStatus.COMPLETED);
+        verify(saleRepository).updateStatusIfCurrent(SALE_ID, SaleStatus.PENDING_VALIDATION, SaleStatus.COMPLETED);
+        verify(saleRepository).updateStatusIfCurrent(saleId2, SaleStatus.PENDING_VALIDATION, SaleStatus.COMPLETED);
     }
 
     @Test
@@ -149,7 +154,7 @@ class SaleValidationCascadeServiceTest {
 
         service.onProductActivated(PRODUCT_A, ACTOR_ID);
 
-        verify(saleRepository, never()).updateStatus(any(), any());
+        verify(saleRepository, never()).updateStatusIfCurrent(any(), any(), any());
         verify(eventPublisher, never()).publishEvent(any());
     }
 
@@ -163,6 +168,43 @@ class SaleValidationCascadeServiceTest {
 
         service.onStockChanged(PRODUCT_A, STORE_ID, ACTOR_ID);
 
-        verify(saleRepository).updateStatus(SALE_ID, SaleStatus.COMPLETED);
+        verify(saleRepository).updateStatusIfCurrent(SALE_ID, SaleStatus.PENDING_VALIDATION, SaleStatus.COMPLETED);
+    }
+
+    // ── Story v1s-13-10 ─────────────────────────────────────────────────────
+
+    @Test
+    void cascade_saleMovementIdsAreSaleItemIds() {
+        Sale pending = pendingSaleWith(PRODUCT_A, PRODUCT_B);
+        when(saleRepository.findPendingByProductId(PRODUCT_A)).thenReturn(List.of(pending));
+        when(productStatusPort.getProductStatus(any())).thenReturn("ACTIVE");
+        when(stockLevelRepository.findByProductAndStore(any(), eq(STORE_ID)))
+                .thenAnswer(inv -> Optional.of(stockLevel(inv.getArgument(0), 10)));
+
+        service.onProductActivated(PRODUCT_A, ACTOR_ID);
+
+        for (SaleItem item : pending.getItems()) {
+            verify(stockOperationService).recordOperation(
+                    eq(item.getProductId()), any(), eq(STORE_ID), eq(MovementType.SALE),
+                    eq(-item.getQuantity()), eq(ACTOR_ID), any(), eq(item.getId()), eq(false));
+        }
+    }
+
+    // Another actor settled the sale between the cascade's read and its claim: skip it —
+    // no stock movement, no event, and the activation itself does not fail.
+    @Test
+    void cascade_lostClaim_skipsSale_noStockNoEvent() {
+        Sale pending = pendingSaleWith(PRODUCT_A);
+        when(saleRepository.findPendingByProductId(PRODUCT_A)).thenReturn(List.of(pending));
+        when(productStatusPort.getProductStatus(PRODUCT_A)).thenReturn("ACTIVE");
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_A, STORE_ID))
+                .thenReturn(Optional.of(stockLevel(PRODUCT_A, 10)));
+        when(saleRepository.updateStatusIfCurrent(SALE_ID, SaleStatus.PENDING_VALIDATION, SaleStatus.COMPLETED))
+                .thenReturn(false);
+
+        service.onProductActivated(PRODUCT_A, ACTOR_ID);
+
+        verifyNoInteractions(stockOperationService);
+        verify(eventPublisher, never()).publishEvent(any());
     }
 }

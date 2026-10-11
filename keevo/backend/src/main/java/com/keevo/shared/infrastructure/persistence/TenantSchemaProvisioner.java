@@ -432,6 +432,10 @@ public class TenantSchemaProvisioner {
     static final String DDL_SALE_ITEMS_MIGRATE_UPDATED_AT =
             "ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()";
 
+    /** Story v1s-13-10 — optimistic lock column for sales (idempotent) */
+    static final String DDL_SALES_MIGRATE_VERSION =
+            "ALTER TABLE sales ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0";
+
     // ── Employees (Story 3.5) ─────────────────────────────────────────────────
 
     static final String DDL_EMPLOYEES = """
@@ -880,6 +884,7 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_SALE_ITEMS_MIGRATE_CATALOGUE_PRICE);
             // Story 5.2 — updated_at for sales/sale_items delta pull
             stmt.execute(DDL_SALES_MIGRATE_UPDATED_AT);
+            stmt.execute(DDL_SALES_MIGRATE_VERSION);            // Story v1s-13-10: optimistic lock
             stmt.execute(DDL_SALE_ITEMS_MIGRATE_UPDATED_AT);
             // Story 3.5 — employees
             stmt.execute(DDL_EMPLOYEES);

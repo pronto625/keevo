@@ -299,7 +299,9 @@ class LocalSaleDataSource {
       // Idempotency guard: if the sale was already completed offline
       // (e.g. a previous validate attempt succeeded locally), skip all
       // stock mutations to prevent double-decrement on retry.
-      if (sale.status == 'COMPLETED') return;
+      // v1s-13-10: same for any non-pending sale (a CANCELLED sale must not
+      // be decremented and rewritten to COMPLETED).
+      if (sale.status != 'PENDING_VALIDATION') return;
 
       final now = DateTime.now();
 
@@ -382,9 +384,14 @@ class LocalSaleDataSource {
           ));
         }
 
-        await _db.into(_db.stockMovements).insert(
+        // insertOnConflictUpdate: a pull may already have upserted the
+        // server's movement with this id.
+        await _db.into(_db.stockMovements).insertOnConflictUpdate(
             StockMovementsCompanion.insert(
-          id: const Uuid().v4(),
+          // v1s-13-10: SALE movement id = sale item id, as on the backend
+          // (ValidateSaleService) — the pull upserts this row instead of
+          // adding a second SALE movement.
+          id: item.id,
           productId: item.productId,
           storeId: sale.storeId,
           type: 'SALE',
@@ -447,10 +454,15 @@ class LocalSaleDataSource {
       if (!allActive) continue;
 
       // All products active — validate and decrement stock.
-      await _db.transaction(() async {
-        await (_db.update(_db.sales)
-              ..where((s) => s.id.equals(saleId)))
+      final claimed = await _db.transaction(() async {
+        // v1s-13-10: conditional claim — a sale settled meanwhile (validated
+        // or cancelled by another path) is skipped without touching stock.
+        final updated = await (_db.update(_db.sales)
+              ..where((s) =>
+                  s.id.equals(saleId) &
+                  s.status.equals('PENDING_VALIDATION')))
             .write(const SalesCompanion(status: Value('COMPLETED')));
+        if (updated == 0) return false;
 
         final now = DateTime.now();
         for (final item in items) {
@@ -472,8 +484,12 @@ class LocalSaleDataSource {
                 .write(StockLevelsCompanion(quantity: Value(qAfter)));
           }
 
-          await _db.into(_db.stockMovements).insert(StockMovementsCompanion.insert(
-            id: const Uuid().v4(),
+          // insertOnConflictUpdate: a pull may already hold this id.
+          await _db.into(_db.stockMovements).insertOnConflictUpdate(
+              StockMovementsCompanion.insert(
+            // v1s-13-10: SALE movement id = sale item id (backend cascade does
+            // the same), so the pull does not add a second SALE movement.
+            id: item.id,
             productId: item.productId,
             storeId: storeId,
             type: 'SALE',
@@ -484,8 +500,9 @@ class LocalSaleDataSource {
             createdAt: now,
           ));
         }
+        return true;
       });
-      validated++;
+      if (claimed) validated++;
     }
     return validated;
   }

@@ -5,7 +5,7 @@
 
 ## Goal
 
-Remove the concurrency races and data-loss paths on the production V1 line that the 2026-07-20 audit found to be mechanically certain (B-CRIT-1/2/3, F-CRIT-1/2/3, F-HIGH-4), together with the residual integrity gaps routed from deferred-work on 2026-10-11. The aim is that offline-first sync, stock mutations, transfers, sale cancellation, inventory validation, schedulers, report windows and tenant-schema provisioning never double-apply, lose or silently drop data. Stories 13.1–13.8 are done and 13.9 is in progress. 13.8–13.12 are item-list stories made from redistributed review deferrals. All are tag A (urgent V1 patch) except 13.12, which is tag C (V1 patch that the refonte also absorbs).
+Remove the concurrency races and data-loss paths on the production V1 line that the 2026-07-20 audit found to be mechanically certain (B-CRIT-1/2/3, F-CRIT-1/2/3, F-HIGH-4), together with the residual integrity gaps routed from deferred-work on 2026-10-11. The aim is that offline-first sync, stock mutations, transfers, sale cancellation, inventory validation, schedulers, report windows and tenant-schema provisioning never double-apply, lose or silently drop data. Stories 13.1–13.9 are done and 13.10 is in progress. 13.8–13.12 are item-list stories made from redistributed review deferrals. All are tag A (urgent V1 patch) except 13.12, which is tag C (V1 patch that the refonte also absorbs).
 
 ## Stories
 
@@ -17,8 +17,8 @@ Remove the concurrency races and data-loss paths on the production V1 line that 
 - Story 13.6: Draft-sale status PENDING_VALIDATION (done)
 - Story 13.7: Audit/movement events on offline inventory validation (done)
 - Story 13.8: Residual sync integrity: offline write paths, handler parity (done)
-- Story 13.9: Scheduler locking and check-then-act races (in progress)
-- Story 13.10: Optimistic lock on Sale (@Version + 409) (backlog)
+- Story 13.9: Scheduler locking and check-then-act races (done)
+- Story 13.10: Optimistic lock on Sale (@Version + 409) (in progress)
 - Story 13.11: Day-closure and report windows (PO decisions) (backlog)
 - Story 13.12: Tenant schema provisioning hygiene (backlog)
 
@@ -60,7 +60,10 @@ Remove the concurrency races and data-loss paths on the production V1 line that 
 - **Concurrency primitives.**
   - Optimistic locking uses `@Version long version` on the JPA entity and the domain object, mapped to 409. The Flutter client does a silent refresh and shows a human-readable SnackBar.
   - Alternatives are conditional or atomic `UPDATE … WHERE status=… / quantity+?>=0` (0 rows → idempotent) or `SELECT … FOR UPDATE`.
-  - Check-then-act races are closed with unique constraints plus a catch, row/advisory locks, or ShedLock on schedulers.
+  - Check-then-act races are closed with unique constraints plus a catch, row locks, or a transaction-scoped advisory lock through `TransactionLockPort` taken as the first statement (keys like `day-closure:<storeId>`, `product-limit:<schema>`, `owners:<schema>`, `transfer:<clientId>`).
+  - Sale status transitions are atomic conditional claims: PENDING_VALIDATION→COMPLETED (validate; loser gets `SALE_NOT_PENDING` and rolls back) and PENDING_VALIDATION→CANCELLED (sync cancel with `pendingOnly`; a COMPLETED sale gets FORBIDDEN). Version checks added for Sale must compose with these claims.
+  - Every `@Scheduled` job carries ShedLock `@SchedulerLock` (JDBC provider, DB time, `public.shedlock` table). `SchedulerLockCoverageTest` fails on a new unlocked job. Per-instance in-memory jobs (such as batch-window eviction) are deliberately not locked.
+  - Notification cooldowns use one atomic `INSERT … ON CONFLICT DO UPDATE … WHERE` statement instead of check-then-upsert.
   - Long-lived in-memory maps get a TTL cache.
 - **Time.** Inject `Clock` (as in DayClosureAutoScheduler) rather than calling `LocalDate.now()`. Validate the `eodReportTime` format on write (422) instead of silently falling back to 20:00.
 - **Tenant schemas.** Use the single `TenantSchema` validation helper (`^kv_[a-z0-9]{6}$`). Per-tenant DDL is synced at boot by `TenantSchemaSyncService`; its failures must be visible (log ERROR / fail), not silent. Schema migrations go through Flyway; non-idempotent constraints are fixed with `DO $$` blocks in a new migration.
@@ -77,7 +80,7 @@ Remove the concurrency races and data-loss paths on the production V1 line that 
 ## Cross-Story Dependencies
 
 - **13.8** consolidates leftovers from 13.4, 13.6, 13.7, 16.6, 12.10 and the UI-3 reviews. Its CREATE_SALE movement-id change spans the app and the backend. The inventory variant unique index waits for variants (14.1). Its other follow-ups went to 13.10, 15.9 (intValue range checks in other handlers) and 16.12 (local inventory-session reconciliation after rejection).
-- **13.9** depends on 13.3 (day-closure scheduler), 13.5 (cancel sync handler), 14.5 (account deletion scheduler), 14.10, 14.11 (anti-lockout) and the transfer clientId idempotency work.
+- **13.9** (done) built on 13.3, 13.5, 14.5, 14.10 and 14.11. Its ShedLock setup, advisory-lock port and conditional sale-status claims are the base for 13.10 and 13.11.
 - **13.10** mirrors 13.1 for `Sale` and protects the cancel/correct paths from 13.5. It also carries the follow-up from 13.8: ValidateSaleService / SaleValidationCascadeService (and the app's pending-sale validation/cascade) must reuse the sale item id as the SALE movement id.
 - **13.11** needs PO decisions before code: the EOD closure cut-off (`eodReportTime` vs 23:59), the weekly Sunday 20:00–23:59 gap, and whether cancel/correct after closure is blocked, warned about or triggers regeneration (e.g. `SALE_DAY_CLOSED`). It builds on 13.3 and 13.5.
 - **13.12** relates to 12.5 (TenantSchema) and 13.1 (the V5 version column depends on the boot-time schema sync), and is absorbed natively by refonte 10.1/10.2.

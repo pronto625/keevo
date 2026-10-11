@@ -24,11 +24,21 @@ public class Sale {
     private final Instant occurredAt;
     private final Instant createdAt;
     private final List<SaleItem> items;
+    /** Optimistic-lock version (Story v1s-13-10) — 0 for a sale that was never persisted. */
+    private final long version;
 
     public Sale(UUID id, UUID storeId, UUID employeeId, UUID clientId,
                 PaymentMode paymentMode, int totalAmount, int discountAmount,
                 SaleStatus status, Instant occurredAt, Instant createdAt,
                 List<SaleItem> items) {
+        this(id, storeId, employeeId, clientId, paymentMode, totalAmount, discountAmount,
+                status, occurredAt, createdAt, items, 0L);
+    }
+
+    public Sale(UUID id, UUID storeId, UUID employeeId, UUID clientId,
+                PaymentMode paymentMode, int totalAmount, int discountAmount,
+                SaleStatus status, Instant occurredAt, Instant createdAt,
+                List<SaleItem> items, long version) {
         if (discountAmount < 0) {
             throw new IllegalArgumentException("Discount amount must be non-negative, got: " + discountAmount);
         }
@@ -52,6 +62,7 @@ public class Sale {
         this.occurredAt = occurredAt;
         this.createdAt = createdAt;
         this.items = items != null ? List.copyOf(items) : List.of();
+        this.version = version;
     }
 
     public UUID getId() { return id; }
@@ -65,4 +76,5 @@ public class Sale {
     public Instant getOccurredAt() { return occurredAt; }
     public Instant getCreatedAt() { return createdAt; }
     public List<SaleItem> getItems() { return items; }
+    public long getVersion() { return version; }
 }

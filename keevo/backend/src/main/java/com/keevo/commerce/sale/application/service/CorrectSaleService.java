@@ -110,8 +110,12 @@ public class CorrectSaleService implements CorrectSaleUseCase {
 
         Sale correctedSale = new Sale(sale.getId(), sale.getStoreId(), sale.getEmployeeId(),
                 sale.getClientId(), sale.getPaymentMode(), newTotal, sale.getDiscountAmount(),
-                SaleStatus.COMPLETED, sale.getOccurredAt(), sale.getCreatedAt(), correctedItems);
+                SaleStatus.COMPLETED, sale.getOccurredAt(), sale.getCreatedAt(), correctedItems,
+                sale.getVersion());
 
+        // Story v1s-13-10: version-checked save — a concurrent cancel/correction that committed
+        // since the read makes it throw OptimisticLockingFailureException (→ 409), rolling back
+        // the ADJUSTMENT movements above.
         saleRepository.save(correctedSale);
 
         String tenantId = TenantContext.getCurrentTenant();
