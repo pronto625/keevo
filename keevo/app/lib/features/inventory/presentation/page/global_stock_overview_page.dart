@@ -280,7 +280,10 @@ class _SearchResultsSliver extends ConsumerWidget {
         child: Center(child: CircularProgressIndicator()),
       ),
       error: (e, _) => SliverFillRemaining(
-        child: AppErrorWidget(error: e),
+        child: AppErrorWidget(
+          error: e,
+          onRetry: () => ref.invalidate(stockSearchResultsProvider),
+        ),
       ),
       data: (results) {
         if (results.isEmpty) {
@@ -339,27 +342,10 @@ class _OverviewSliver extends ConsumerWidget {
         child: Center(child: CircularProgressIndicator()),
       ),
       error: (e, _) => SliverFillRemaining(
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.cloud_off_rounded,
-                  size: 56, color: theme.colorScheme.outline),
-              const SizedBox(height: 12),
-              Text('Données indisponibles',
-                  style: theme.textTheme.titleMedium),
-              const SizedBox(height: 4),
-              Text('$e',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.outline),
-                  textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              FilledButton.tonal(
-                onPressed: () => ref.invalidate(globalStockOverviewProvider),
-                child: const Text('Réessayer'),
-              ),
-            ],
-          ),
+        child: AppErrorWidget(
+          error: e,
+          title: 'Données indisponibles',
+          onRetry: () => ref.invalidate(globalStockOverviewProvider),
         ),
       ),
       data: (stores) {

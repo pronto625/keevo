@@ -96,7 +96,11 @@ class _InventoryCountingPageState
       floatingActionButton: null,
       body: productsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, st) => AppErrorWidget(error: e),
+        error: (e, st) => AppErrorWidget(
+          error: e,
+          onRetry: () =>
+              ref.invalidate(countingProductsProvider(widget.sessionId)),
+        ),
         data: (products) {
           final filtered = _applyFilters(products, filter, search);
           final total = products.length;

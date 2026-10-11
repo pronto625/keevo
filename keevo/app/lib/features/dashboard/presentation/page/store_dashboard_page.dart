@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import '../../domain/model/dashboard_snapshot.dart';
 import '../provider/dashboard_providers.dart';
@@ -42,8 +43,10 @@ class StoreDashboardPage extends ConsumerWidget {
       ),
       body: storesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) => const Center(
-          child: Text('Impossible de charger les données'),
+        error: (e, _) => AppErrorWidget(
+          error: e,
+          title: 'Impossible de charger les données',
+          onRetry: () => ref.invalidate(storeOverviewsProvider),
         ),
         data: (stores) {
           final store = stores.where((s) => s.storeId == storeId).firstOrNull;

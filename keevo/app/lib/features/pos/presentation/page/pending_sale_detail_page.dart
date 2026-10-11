@@ -54,9 +54,13 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
         appBar: PosAppBar(title: 'Vente en attente'),
         body: Center(child: CircularProgressIndicator()),
       ),
-      error: (_, __) => const Scaffold(
-        appBar: PosAppBar(title: 'Vente en attente'),
-        body: Center(child: Text('Erreur de chargement de la vente')),
+      error: (e, _) => Scaffold(
+        appBar: const PosAppBar(title: 'Vente en attente'),
+        body: AppErrorWidget(
+          error: e,
+          title: 'Erreur de chargement de la vente',
+          onRetry: () => ref.invalidate(saleByIdProvider(widget.saleId)),
+        ),
       ),
       data: (loadedSale) {
         if (loadedSale == null) {

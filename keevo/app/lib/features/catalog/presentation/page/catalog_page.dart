@@ -555,19 +555,19 @@ class _ProductListView extends ConsumerWidget {
       skipLoadingOnReload: true,
       loading: () =>
           const Center(child: CircularProgressIndicator()),
-      error: (error, _) => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, size: 48, color: AppTheme.errorColor),
-            const SizedBox(height: 12),
-            Text(
-              'Erreur : $error',
-              textAlign: TextAlign.center,
+      // skipLoadingOnReload keeps the error during a retry: show the
+      // spinner instead so the tap gets visible feedback.
+      error: (error, _) => listAsync.isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : AppErrorWidget(
+              error: error,
+              onRetry: () => ref.invalidate(switch (tab) {
+                CatalogTab.active => productListProvider,
+                CatalogTab.archived => archivedProductListProvider,
+                CatalogTab.outOfStock => outOfStockProductListProvider,
+                CatalogTab.lowStock => lowStockProductListProvider,
+              }),
             ),
-          ],
-        ),
-      ),
       data: (products) {
         if (products.isEmpty) {
           final query = ref.watch(productSearchQueryProvider);
@@ -875,7 +875,10 @@ class _CategoryManagerSheetState
             child: categoriesAsync.when(
               loading: () =>
                   const Center(child: CircularProgressIndicator()),
-              error: (e, _) => AppErrorWidget(error: e),
+              error: (e, _) => AppErrorWidget(
+                error: e,
+                onRetry: () => ref.invalidate(categoriesProvider),
+              ),
               data: (categories) {
                 if (categories.isEmpty) {
                   return Center(

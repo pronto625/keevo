@@ -48,7 +48,10 @@ class SaleDetailPage extends ConsumerWidget {
           return _SaleDetailContent(sale: sale);
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => AppErrorWidget(error: e),
+        error: (e, _) => AppErrorWidget(
+          error: e,
+          onRetry: () => ref.invalidate(saleByIdProvider(saleId)),
+        ),
       ),
     );
   }

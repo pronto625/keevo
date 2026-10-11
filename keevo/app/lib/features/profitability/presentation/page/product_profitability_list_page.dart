@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/sync/sync_status.dart';
 import '../../../../core/sync/sync_status_provider.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import '../../domain/model/product_profitability_model.dart';
 import '../provider/profitability_providers.dart';
@@ -110,24 +111,10 @@ class ProductProfitabilityListPage extends ConsumerWidget {
               child: Center(child: CircularProgressIndicator()),
             ),
             error: (e, _) => SliverFillRemaining(
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SoftIconBadge(icon: Icons.cloud_off_outlined, size: 72),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Impossible de charger les données',
-                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                    ),
-                    const SizedBox(height: 8),
-                    FilledButton.tonal(
-                      onPressed: () =>
-                          ref.invalidate(productProfitabilityProvider),
-                      child: const Text('Réessayer'),
-                    ),
-                  ],
-                ),
+              child: AppErrorWidget(
+                error: e,
+                title: 'Impossible de charger les données',
+                onRetry: () => ref.invalidate(productProfitabilityProvider),
               ),
             ),
             data: (fetched) {

@@ -48,7 +48,10 @@ class ReportDetailPage extends ConsumerWidget {
       ),
       body: reportAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => AppErrorWidget(error: e),
+        error: (e, _) => AppErrorWidget(
+          error: e,
+          onRetry: () => ref.invalidate(reportDetailProvider(reportId)),
+        ),
         data: (_) => const Center(child: Text('Rapport introuvable.')),
       ),
     );

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import '../../domain/model/subscription_info.dart';
 import '../provider/subscription_info_provider.dart';
@@ -22,31 +23,11 @@ class SubscriptionPage extends ConsumerWidget {
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
       body: asyncSub.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.error_outline,
-                    size: 48, color: AppTheme.errorColor),
-                const SizedBox(height: 12),
-                const Text(
-                  'Impossible de charger l\'abonnement',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w600, fontSize: 16),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '$err',
-                  style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 13),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
+        error: (err, _) => SafeArea(
+          child: AppErrorWidget(
+            error: err,
+            title: 'Impossible de charger l\'abonnement',
+            onRetry: () => ref.invalidate(subscriptionInfoProvider),
           ),
         ),
         data: (sub) => _SubscriptionBody(info: sub),

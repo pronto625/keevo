@@ -1,4 +1,5 @@
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/soft_icon_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -130,12 +131,10 @@ class StockLevelWidget extends ConsumerWidget {
             child: Center(child: CircularProgressIndicator()),
           )
         else if (stockState.error != null)
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: Text(
-              'Erreur: ${stockState.error}',
-              style: const TextStyle(color: AppTheme.errorColor),
-            ),
+          AppErrorWidget(
+            error: stockState.error!,
+            title: 'Stock indisponible',
+            onRetry: () => ref.invalidate(stockNotifierProvider(productId)),
           )
         else if (stockState.levels.isEmpty)
           Padding(

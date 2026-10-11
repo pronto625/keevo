@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import '../../../../core/widget/soft_icon_button.dart';
 
@@ -31,8 +32,12 @@ class DashboardPage extends ConsumerWidget {
     return Scaffold(
       body: snapshotAsync.when(
         loading: () => const _SkeletonDashboard(),
-        error: (err, _) => _ErrorState(
-          onRetry: () => ref.invalidate(dashboardSnapshotProvider),
+        error: (err, _) => SafeArea(
+          child: AppErrorWidget(
+            error: err,
+            title: 'Impossible de charger le tableau de bord',
+            onRetry: () => ref.invalidate(dashboardSnapshotProvider),
+          ),
         ),
         data: (snapshot) {
           // Empty state only when there is truly nothing to show: once a
@@ -449,35 +454,6 @@ class _EmptyState extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  final VoidCallback onRetry;
-  const _ErrorState({required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SoftIconBadge(
-            icon: Icons.error_outline_rounded,
-            color: Theme.of(context).colorScheme.error,
-            size: 72,
-          ),
-          const SizedBox(height: 12),
-          const Text('Impossible de charger le tableau de bord'),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: onRetry,
-            icon: const Icon(Icons.refresh_rounded),
-            label: const Text('Réessayer'),
-          ),
-        ],
       ),
     );
   }

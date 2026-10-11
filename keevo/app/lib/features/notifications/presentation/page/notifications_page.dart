@@ -64,7 +64,10 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       ),
       body: notificationsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => AppErrorWidget(error: e),
+        error: (e, _) => AppErrorWidget(
+          error: e,
+          onRetry: () => ref.invalidate(notificationsListProvider),
+        ),
         data: (notifications) => notifications.isEmpty
             ? _buildEmptyState(context)
             : _buildList(notifications),

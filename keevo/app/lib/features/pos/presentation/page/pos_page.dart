@@ -351,7 +351,10 @@ class _FrequentProductsSliver extends ConsumerWidget {
         child: Center(child: CircularProgressIndicator()),
       ),
       error: (e, _) => SliverFillRemaining(
-        child: AppErrorWidget(error: e),
+        child: AppErrorWidget(
+          error: e,
+          onRetry: () => ref.invalidate(frequentProductsProvider(key)),
+        ),
       ),
       data: (gridState) {
         final products = gridState.products;
@@ -469,7 +472,15 @@ class _SearchResultsSliver extends ConsumerWidget {
         child: Center(child: CircularProgressIndicator()),
       ),
       error: (e, _) => SliverFillRemaining(
-        child: AppErrorWidget(error: e),
+        child: AppErrorWidget(
+          error: e,
+          // Re-run the failed query: invalidating would reset the notifier
+          // to an empty result and lose the query.
+          onRetry: () {
+            final search = ref.read(posSearchProvider.notifier);
+            search.search(search.lastQuery, ref.read(activeStoreIdProvider));
+          },
+        ),
       ),
       data: (results) {
         if (results.isEmpty) {

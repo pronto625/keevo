@@ -206,14 +206,15 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
                 child: CircularProgressIndicator(),
               ),
             ),
-            error: (e, _) => Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Text(
-                  'Erreur: $e',
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ),
+            error: (e, _) => AppErrorWidget(
+              error: e,
+              onRetry: () {
+                _cancelAutoDismiss();
+                ref.invalidate(todaySummaryProvider((
+                  storeId: widget.storeId,
+                  employeeId: widget.employeeId,
+                )));
+              },
             ),
           ),
 

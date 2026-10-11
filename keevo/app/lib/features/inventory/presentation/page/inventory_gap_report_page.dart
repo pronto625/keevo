@@ -94,7 +94,10 @@ class InventoryGapReportPage extends ConsumerWidget {
       ),
       body: reportAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, st) => AppErrorWidget(error: e),
+        error: (e, st) => AppErrorWidget(
+          error: e,
+          onRetry: () => ref.invalidate(gapReportProvider(sessionId)),
+        ),
         data: (report) => _buildReportBody(context, ref, report),
       ),
       bottomNavigationBar: reportAsync.whenOrNull(
