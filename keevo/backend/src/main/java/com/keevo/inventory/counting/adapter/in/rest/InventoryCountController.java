@@ -1,5 +1,6 @@
 package com.keevo.inventory.counting.adapter.in.rest;
 
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.inventory.counting.adapter.in.rest.dto.*;
 import com.keevo.inventory.counting.domain.model.InventoryCount;
 import com.keevo.inventory.counting.domain.model.InventoryProductRow;
@@ -8,7 +9,6 @@ import com.keevo.inventory.counting.domain.port.in.*;
 import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.security.AuthDetails;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -17,8 +17,6 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
@@ -78,7 +76,7 @@ public class InventoryCountController {
             @Valid @RequestBody SaveInventoryCountRequestDto request) {
 
         requireSessionInEmployeeStore(sessionId);
-        UUID actorId = extractActorId();
+        UUID actorId = CurrentActor.actorId();
         var command = new SaveInventoryCountCommand(
                 sessionId, request.productId(), request.variantId(),
                 request.productName(), request.variantLabel(),
@@ -101,7 +99,7 @@ public class InventoryCountController {
             @Valid @RequestBody BulkSaveCountsRequestDto request) {
 
         requireSessionInEmployeeStore(sessionId);
-        UUID actorId = extractActorId();
+        UUID actorId = CurrentActor.actorId();
         List<InventoryCountResponseDto> results = new ArrayList<>();
 
         for (SaveInventoryCountRequestDto item : request.counts()) {
@@ -145,7 +143,7 @@ public class InventoryCountController {
             @Valid @RequestBody QuickAddProductRequestDto request) {
 
         requireSessionInEmployeeStore(sessionId);  // v1s-12-10: writes stock + count into the session
-        UUID actorId = extractActorId();
+        UUID actorId = CurrentActor.actorId();
         var command = new QuickAddProductCommand(
                 sessionId, request.name(), request.categoryId(),
                 request.physicalQty(), request.sellingPrice(), actorId
@@ -164,7 +162,7 @@ public class InventoryCountController {
      * unscoped. Unknown session → left to the use case (existing not-found error).
      */
     private void requireSessionInEmployeeStore(UUID sessionId) {
-        UUID assignedStoreId = extractAssignedStoreId();
+        UUID assignedStoreId = CurrentActor.assignedStoreId();
         if (assignedStoreId == null) return;
         sessionRepository.findById(sessionId).ifPresent(session -> {
             if (!assignedStoreId.equals(session.getStoreId())) {
@@ -172,24 +170,5 @@ public class InventoryCountController {
                         "EMPLOYEE cannot write counts into another store's inventory session");
             }
         });
-    }
-
-    /** Mirror of {@code InventorySessionController.extractAssignedStoreId()}. */
-    private UUID extractAssignedStoreId() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        Object details = auth.getDetails();
-        if (details instanceof AuthDetails ad && ad.storeId() != null) {
-            return ad.storeId();
-        }
-        boolean isEmployee = auth.getAuthorities().stream()
-                .anyMatch(a -> "ROLE_EMPLOYEE".equals(a.getAuthority()));
-        if (isEmployee) {
-            throw new DomainException(ErrorCode.FORBIDDEN, "EMPLOYEE token missing assigned store");
-        }
-        return null;
-    }
-
-    private UUID extractActorId() {
-        return (UUID) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
     }
 }

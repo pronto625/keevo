@@ -292,4 +292,44 @@ class ProductSyncHandlerTest {
         verify(createDraftProduct).execute(captor.capture());
         assertThat(captor.getValue().actorRole()).isEqualTo("EMPLOYEE");
     }
+
+    // ── v1s-15-9: integral guard on optional numeric fields ─────────────
+
+    @Test
+    void handle_createProduct_fractionalPrice_isRejectedNotTruncated() {
+        var op = new SyncOperation("op-int", "CREATE_PRODUCT", UUID.randomUUID().toString(),
+                Map.of("name", "Test Product", "price", 1.5), Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).startsWith("Invalid price");
+        verifyNoInteractions(createProduct);
+    }
+
+    @Test
+    void handle_updateProduct_outOfRangeStockQuantity_isRejected() {
+        var productId = UUID.randomUUID();
+        var op = new SyncOperation("op-int", "UPDATE_PRODUCT", productId.toString(),
+                Map.of("productId", productId.toString(), "name", "Test Product", "stockQuantity", 3e10),
+                Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).startsWith("Invalid stockQuantity");
+        verifyNoInteractions(updateProduct);
+    }
+
+    @Test
+    void handle_createProduct_wholeDoublePrice_isAccepted() {
+        var productId = UUID.randomUUID();
+        var op = new SyncOperation("op-int", "CREATE_PRODUCT", productId.toString(),
+                Map.of("name", "Test Product", "price", 5000.0), Instant.now());
+        when(createProduct.execute(any())).thenReturn(dummyProduct(productId, "Test Product"));
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+    }
 }

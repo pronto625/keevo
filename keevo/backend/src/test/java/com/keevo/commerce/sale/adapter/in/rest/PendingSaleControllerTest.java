@@ -348,4 +348,45 @@ class PendingSaleControllerTest {
 
         verify(cancelPendingSaleUseCase, never()).cancelPendingSale(any());
     }
+
+    // ── v1s-15-9: fail-closed assigned store (CurrentActor.assignedStoreId) ──
+
+    private void authenticateAsEmployeeWithoutStore() {
+        var auth = new UsernamePasswordAuthenticationToken(
+                actorId, null,
+                List.of(new SimpleGrantedAuthority("ROLE_EMPLOYEE")));
+        auth.setDetails(new com.keevo.shared.infrastructure.security.AuthDetails("Loïc", null));
+        SecurityContextHolder.getContext().setAuthentication(auth);
+    }
+
+    @Test
+    void POST_validate_employeeWithoutStore_returns403() throws Exception {
+        authenticateAsEmployeeWithoutStore();
+        try {
+            String payload = mapper.writeValueAsString(Map.of(
+                    "justification", "Produit vérifié et stock confirmé par le fournisseur"));
+
+            mockMvc.perform(post("/api/v1/sales/{id}/validate", saleId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(payload))
+                    .andExpect(status().isForbidden());
+
+            verifyNoInteractions(validateSaleUseCase);
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+    }
+
+    @Test
+    void GET_pending_employeeWithoutStore_returns403() throws Exception {
+        authenticateAsEmployeeWithoutStore();
+        try {
+            mockMvc.perform(get("/api/v1/sales/pending"))
+                    .andExpect(status().isForbidden());
+
+            verifyNoInteractions(getPendingSalesUseCase);
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+    }
 }

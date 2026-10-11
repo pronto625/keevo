@@ -43,11 +43,13 @@ public class AccountDeletionScheduler {
     private static final Logger log = LoggerFactory.getLogger(AccountDeletionScheduler.class);
 
     /**
-     * Row lock + re-check. Guarantee: a cancel whose UPDATE is already in flight (uncommitted) when
-     * the scheduler locks makes the scheduler wait, then see the cancelled row and skip it. Not
-     * guaranteed: {@code cancelDeletion} reads unlocked and then blind-writes ACTIVE, so a cancel
-     * that read DELETION_PENDING before our commit can still overwrite DELETED afterwards — known
-     * residual, routed to v1s-15-9 (conditional UPDATE {@code WHERE status = 'DELETION_PENDING'}).
+     * Row lock + re-check. A cancel whose UPDATE is already in flight (uncommitted) when the
+     * scheduler locks makes the scheduler wait, then see the cancelled row and skip it. Conversely,
+     * since v1s-15-9 every cancel is a single conditional UPDATE ({@code WHERE status =
+     * 'DELETION_PENDING' AND to_regnamespace(schema_name) IS NOT NULL}, plus a grace-period guard
+     * for the owner): a cancel issued while we hold this lock waits, then re-evaluates against the
+     * committed DELETED row and matches nothing. The former residual race (blind ACTIVE write over
+     * DELETED) is closed — proven by {@code AccountDeletionConcurrencyPostgresIntegrationTest}.
      */
     static final String LOCK_TENANT_SQL =
             "SELECT status, deletion_scheduled_at FROM public.tenants WHERE id = ? FOR UPDATE";
@@ -102,43 +104,60 @@ public class AccountDeletionScheduler {
         log.info("[AccountDeletionScheduler] Starting daily deletion check...");
         Instant now = clock.instant();
 
-        List<Tenant> allTenants = tenantRepository.findAll();
+        // v1s-15-9: only the due DELETION_PENDING tenants, not every tenant
+        List<Tenant> due = tenantRepository.findDeletionsDueBy(now);
         int processed = 0;
 
-        for (Tenant tenant : allTenants) {
-            if (tenant.getStatus() != TenantStatus.DELETION_PENDING) continue;
-
-            Instant deletionScheduledAt = tenant.getDeletionScheduledAt();
-            if (deletionScheduledAt == null || deletionScheduledAt.isAfter(now)) continue;
-
-            List<String> ownerPhones;
+        for (Tenant tenant : due) {
             try {
-                ownerPhones = transactionTemplate.execute(status -> executeDeletionForTenant(tenant.getId()));
+                if (runTenantDeletion(tenant.getId(), true)) processed++;
             } catch (Exception e) {
                 log.error("[AccountDeletionScheduler] Failed to delete tenant {} ({}): {}",
                         tenant.getId(), tenant.getSchemaName(), e.getMessage(), e);
                 // Per-tenant transaction rolled back: still DELETION_PENDING, retried on the next daily run
-                continue;
             }
-            if (ownerPhones == null) continue; // skipped (cancelled / no longer pending)
-
-            processed++;
-            // After commit only — a rolled-back or retried deletion never sends it twice
-            sendFinalWhatsApp(tenant.getId(), ownerPhones);
         }
 
         log.info("[AccountDeletionScheduler] Processed {} tenant deletion(s).", processed);
     }
 
     /**
-     * Execute complete deletion for a single expired tenant, inside the caller's per-tenant
-     * transaction.
+     * v1s-15-9 — immediate deletion for the SUPER_ADMIN force-delete, through the exact routine
+     * the daily run uses (row lock, DROP, purge, DELETED last, WhatsApp after commit). The caller
+     * must first commit the tenant as DELETION_PENDING. Not {@code @SchedulerLock}ed: the row lock
+     * already serialises it with a concurrent daily run. Exceptions propagate to the caller.
+     *
+     * @return {@code true} when the tenant was deleted, {@code false} when it was no longer
+     *         DELETION_PENDING (e.g. cancelled or deleted concurrently)
+     */
+    public boolean deleteNow(UUID tenantId) {
+        return runTenantDeletion(tenantId, false);
+    }
+
+    /**
+     * One tenant, one transaction; the final WhatsApp is sent only after commit, so a rolled-back
+     * or retried deletion never sends it twice.
+     *
+     * @param requireExpired {@code true} for the daily run (grace period must be over by the
+     *                       scheduler clock); {@code false} for {@link #deleteNow}
+     * @return {@code true} when deleted, {@code false} when skipped
+     */
+    boolean runTenantDeletion(UUID tenantId, boolean requireExpired) {
+        List<String> ownerPhones = transactionTemplate.execute(
+                status -> executeDeletionForTenant(tenantId, requireExpired));
+        if (ownerPhones == null) return false; // skipped (cancelled / no longer pending)
+        sendFinalWhatsApp(tenantId, ownerPhones);
+        return true;
+    }
+
+    /**
+     * Execute complete deletion for a single tenant, inside the caller's per-tenant transaction.
      *
      * <p><b>Order is critical</b> (v1s-15-11 supersedes the 14-5 DN1 "DELETED before DROP" order,
      * which left a DELETED tenant with a lingering schema that the loop never retried):
      * <ol>
-     *   <li>Lock the tenant row ({@code FOR UPDATE}) and skip it unless still DELETION_PENDING with an
-     *       expired {@code deletion_scheduled_at}.</li>
+     *   <li>Lock the tenant row ({@code FOR UPDATE}) and skip it unless still DELETION_PENDING (with an
+     *       expired {@code deletion_scheduled_at} when {@code requireExpired}).</li>
      *   <li>Capture the OWNER phone numbers (memberships still exist).</li>
      *   <li>DROP schema CASCADE — own auto-commit connection, {@code IF EXISTS} so idempotent.
      *       If it throws, the transaction rolls back and nothing is persisted.</li>
@@ -150,11 +169,11 @@ public class AccountDeletionScheduler {
      *
      * @return the OWNER phone numbers to notify after commit, or {@code null} when skipped
      */
-    private List<String> executeDeletionForTenant(UUID tenantId) {
-        // 1. Row lock + re-check of status AND expiry (detects a cancellation — or a cancel then a
-        //    new request with a future date — since findAll)
+    private List<String> executeDeletionForTenant(UUID tenantId, boolean requireExpired) {
+        // 1. Row lock + re-check of status (AND expiry for the daily run: detects a cancellation —
+        //    or a cancel then a new request with a future date — since findDeletionsDueBy)
         List<Map<String, Object>> locked = jdbcTemplate.queryForList(LOCK_TENANT_SQL, tenantId);
-        if (locked.isEmpty() || !isExpiredPending(locked.get(0), clock.instant())) {
+        if (locked.isEmpty() || !isDeletable(locked.get(0), requireExpired, clock.instant())) {
             log.info("[AccountDeletionScheduler] Tenant {} no longer expired DELETION_PENDING (cancelled?), skipping.",
                     tenantId);
             return null;
@@ -210,8 +229,9 @@ public class AccountDeletionScheduler {
         return ownerPhones;
     }
 
-    private static boolean isExpiredPending(Map<String, Object> row, Instant now) {
+    private static boolean isDeletable(Map<String, Object> row, boolean requireExpired, Instant now) {
         if (!TenantStatus.DELETION_PENDING.name().equals(row.get("status"))) return false;
+        if (!requireExpired) return true;
         Instant scheduledAt = toInstant(row.get("deletion_scheduled_at"));
         return scheduledAt != null && !scheduledAt.isAfter(now);
     }

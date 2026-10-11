@@ -1,5 +1,6 @@
 package com.keevo.reporting.report.adapter.in.rest;
 
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.commerce.sale.domain.model.DayClosure;
 import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
 import com.keevo.identity.onboarding.domain.model.ReportChannel;
@@ -230,9 +231,6 @@ public class ReportController {
         if (auth == null || !auth.isAuthenticated()) {
             throw new DomainException(ErrorCode.UNAUTHORIZED, "Authentication required");
         }
-        if (auth.getAuthorities().stream()
-                .noneMatch(a -> "ROLE_OWNER".equals(a.getAuthority()))) {
-            throw new DomainException(ErrorCode.FORBIDDEN, "OWNER role required");
-        }
+        CurrentActor.requireOwner("OWNER role required");
     }
 }

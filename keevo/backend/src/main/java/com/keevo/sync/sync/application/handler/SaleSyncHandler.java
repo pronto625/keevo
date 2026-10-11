@@ -59,7 +59,7 @@ public class SaleSyncHandler extends AbstractSyncOperationHandler {
         UUID clientId = p.get("clientId") != null ? UUID.fromString((String) p.get("clientId")) : null;
         PaymentMode paymentMode = PaymentMode.valueOf((String) p.get("paymentMode"));
         String mobileMoneyRef = (String) p.get("mobileMoneyRef");
-        int discountAmount = p.get("discountAmount") != null ? ((Number) p.get("discountAmount")).intValue() : 0;
+        int discountAmount = p.get("discountAmount") != null ? requireIntegralInt(p.get("discountAmount"), "discountAmount") : 0;
 
         SaleStatus requestedStatus = resolveRequestedStatus(p);
 
@@ -70,9 +70,9 @@ public class SaleSyncHandler extends AbstractSyncOperationHandler {
                 UUID.fromString((String) item.get("productId")),
                 item.get("variantId") != null ? UUID.fromString((String) item.get("variantId")) : null,
                 (String) item.get("productName"),
-                ((Number) item.get("catalogueUnitPrice")).intValue(),
-                ((Number) item.get("appliedUnitPrice")).intValue(),
-                ((Number) item.get("quantity")).intValue()
+                requireIntegralInt(item.get("catalogueUnitPrice"), "catalogueUnitPrice"),
+                requireIntegralInt(item.get("appliedUnitPrice"), "appliedUnitPrice"),
+                requireIntegralInt(item.get("quantity"), "quantity")
         )).toList();
 
         recordSaleUseCase.recordSale(new RecordSaleCommand(

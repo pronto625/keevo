@@ -44,6 +44,13 @@ public record ApiResponseWrapper<T>(
      * <p>The {@code meta} field is {@code @JsonInclude(NON_NULL)} so it is absent
      * from JSON serialisation when {@code null} — existing non-paginated endpoints
      * are unaffected.
+     *
+     * <p>v1s-15-9: inputs are validated so an inconsistent envelope can never be emitted.
+     *
+     * @throws IllegalArgumentException when {@code page < 0}, {@code size < 1},
+     *         {@code totalElements < 0}, {@code totalPages < 0}, or when exactly one of
+     *         {@code totalPages} / {@code totalElements} is 0 ({@code totalPages == 0} iff
+     *         {@code totalElements == 0}); a page past the end stays valid
      */
     public static <T> ApiResponseWrapper<T> paginated(
             T data,
@@ -51,6 +58,17 @@ public record ApiResponseWrapper<T>(
             int size,
             long totalElements,
             int totalPages) {
+        if (page < 0) throw new IllegalArgumentException("page must be >= 0: " + page);
+        if (size < 1) throw new IllegalArgumentException("size must be >= 1: " + size);
+        if (totalElements < 0) throw new IllegalArgumentException("totalElements must be >= 0: " + totalElements);
+        if (totalPages < 0) throw new IllegalArgumentException("totalPages must be >= 0: " + totalPages);
+        // A page beyond the last one is legitimate (Spring returns it with empty content): not rejected.
+        if (totalElements == 0 && totalPages != 0) {
+            throw new IllegalArgumentException("totalPages must be 0 when totalElements is 0: " + totalPages);
+        }
+        if (totalElements > 0 && totalPages < 1) {
+            throw new IllegalArgumentException("totalPages must be >= 1 when totalElements > 0: " + totalPages);
+        }
         var meta = java.util.Map.of(
                 "page", page,
                 "size", size,

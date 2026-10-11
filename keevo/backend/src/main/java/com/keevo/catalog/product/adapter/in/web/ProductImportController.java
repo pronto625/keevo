@@ -1,5 +1,6 @@
 package com.keevo.catalog.product.adapter.in.web;
 
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.catalog.product.adapter.in.web.dto.CsvColumnMappingRequestDto;
@@ -19,7 +20,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -203,13 +203,12 @@ public class ProductImportController {
     }
 
     private String extractRole() {
-        return SecurityContextHolder.getContext().getAuthentication()
-                .getAuthorities().stream()
-                .findFirst()
-                .map(GrantedAuthority::getAuthority)
-                .map(a -> a.startsWith("ROLE_") ? a.substring(5) : a)
-                .orElseThrow(() -> new DomainException(ErrorCode.FORBIDDEN,
-                        "Rôle introuvable dans le jeton d'authentification"));
+        String role = CurrentActor.role();
+        if (role == null) {
+            throw new DomainException(ErrorCode.FORBIDDEN,
+                    "Rôle introuvable dans le jeton d'authentification");
+        }
+        return role;
     }
 
     private UUID parseStoreId(String storeIdRaw) {

@@ -77,8 +77,8 @@ public class SaleDeltaProvider implements DeltaEntityProvider {
         map.put("storeId", str(row[1]));
         map.put("employeeId", str(row[2]));
         map.put("clientId", str(row[3]));
-        map.put("totalAmount", num(row[4]));
-        map.put("discountAmount", num(row[5]));
+        map.put("totalAmount", DeltaValues.num(row[4]));
+        map.put("discountAmount", DeltaValues.num(row[5]));
         map.put("paymentMode", str(row[6]));
         map.put("status", str(row[7]));
         map.put("occurredAt", ts(row[8]));
@@ -93,14 +93,13 @@ public class SaleDeltaProvider implements DeltaEntityProvider {
         map.put("productId", str(row[2]));
         map.put("variantId", str(row[3]));
         map.put("productName", str(row[4]));
-        map.put("appliedUnitPrice", num(row[5]));
-        map.put("catalogueUnitPrice", num(row[6]));
-        map.put("quantity", num(row[7]));
-        map.put("subtotal", num(row[8]));
+        map.put("appliedUnitPrice", DeltaValues.num(row[5]));
+        map.put("catalogueUnitPrice", DeltaValues.num(row[6]));
+        map.put("quantity", DeltaValues.num(row[7]));
+        map.put("subtotal", DeltaValues.num(row[8]));
         return map;
     }
 
     private String str(Object o) { return o != null ? o.toString() : null; }
-    private Object num(Object o) { return o != null ? ((Number) o).intValue() : 0; }
     private String ts(Object o) { return o != null ? o.toString() : null; }
 }

@@ -323,4 +323,58 @@ class SaleSyncHandlerTest {
         verify(recordSaleUseCase).recordSale(captor.capture());
         assertThat(captor.getValue().items().get(0).itemId()).isEqualTo(itemId);
     }
+
+    // ── v1s-15-9: integral guard — no silent truncation ──────────────────
+
+    private SyncOperation saleWith(Object discount, Object unitPrice, Object quantity) {
+        var saleId = UUID.randomUUID();
+        var item = new java.util.HashMap<String, Object>();
+        item.put("productId", UUID.randomUUID().toString());
+        item.put("productName", "Savon");
+        item.put("catalogueUnitPrice", 500);
+        item.put("appliedUnitPrice", unitPrice);
+        item.put("quantity", quantity);
+        var payload = new java.util.HashMap<String, Object>();
+        payload.put("saleId", saleId.toString());
+        payload.put("storeId", UUID.randomUUID().toString());
+        payload.put("paymentMode", "CASH");
+        payload.put("discountAmount", discount);
+        payload.put("items", List.of(item));
+        return new SyncOperation("op-int", "CREATE_SALE", saleId.toString(), payload, Instant.now());
+    }
+
+    @Test
+    void handle_fractionalQuantity_isRejectedNotTruncated() {
+        var result = handler.handle(saleWith(0, 500, 1.5), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).startsWith("Invalid quantity");
+        verifyNoInteractions(recordSaleUseCase);
+    }
+
+    @Test
+    void handle_outOfRangePrice_isRejected() {
+        var result = handler.handle(saleWith(0, 3e10, 1), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).startsWith("Invalid appliedUnitPrice");
+        verifyNoInteractions(recordSaleUseCase);
+    }
+
+    @Test
+    void handle_nonNumericDiscount_isRejected() {
+        var result = handler.handle(saleWith("x", 500, 1), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).startsWith("Invalid discountAmount");
+        verifyNoInteractions(recordSaleUseCase);
+    }
+
+    @Test
+    void handle_wholeDoubleQuantity_isAccepted() {
+        var result = handler.handle(saleWith(null, 500.0, 2.0), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        assertThat(capturedCommand().items().get(0).quantity()).isEqualTo(2);
+    }
 }

@@ -41,9 +41,13 @@ public class WassenderWhatsAppAdapter implements WhatsAppPort {
         }
     }
 
+    /**
+     * True only when the Wassender API token is set: without it the provider is selected but
+     * cannot send (v1s-15-9 — explicit now that the port method is abstract).
+     */
     @Override
     public boolean isConfigured() {
-        return true;
+        return properties.apiToken() != null && !properties.apiToken().isBlank();
     }
 
     @Override

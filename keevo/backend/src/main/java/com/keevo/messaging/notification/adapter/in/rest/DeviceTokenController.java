@@ -1,5 +1,6 @@
 package com.keevo.messaging.notification.adapter.in.rest;
 
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.messaging.notification.adapter.in.rest.dto.DeleteDeviceTokenRequestDto;
 import com.keevo.messaging.notification.adapter.in.rest.dto.RegisterDeviceTokenRequestDto;
 import com.keevo.messaging.notification.domain.port.in.DeleteDeviceTokenUseCase;
@@ -10,9 +11,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -37,13 +35,9 @@ public class DeviceTokenController {
     public ResponseEntity<ApiResponseWrapper<Map<String, Boolean>>> registerToken(
             @Valid @RequestBody RegisterDeviceTokenRequestDto request) {
 
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        UUID actorId = (UUID) auth.getPrincipal();
-        String role = auth.getAuthorities().stream()
-                .findFirst()
-                .map(GrantedAuthority::getAuthority)
-                .map(a -> a.replace("ROLE_", ""))
-                .orElse("OWNER");
+        UUID actorId = CurrentActor.actorId();
+        String role = CurrentActor.role();
+        if (role == null) role = "OWNER"; // previous default when the token carries no role
 
         RegisterDeviceTokenCommand command = new RegisterDeviceTokenCommand(
                 actorId, role, request.token(), request.platform(), request.deviceName());
@@ -59,7 +53,7 @@ public class DeviceTokenController {
             @Valid @RequestBody DeleteDeviceTokenRequestDto request) {
 
         // Scoped to the caller: a token can only be removed by the user it was registered to.
-        UUID actorId = (UUID) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        UUID actorId = CurrentActor.actorId();
         boolean deleted = deleteUseCase.delete(actorId, request.token());
 
         return ResponseEntity.ok(ApiResponseWrapper.ok(Map.of("deleted", deleted)));

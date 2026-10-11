@@ -1,5 +1,6 @@
 package com.keevo.catalog.stock.domain.service;
 
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
 import com.keevo.catalog.stock.domain.entity.MovementType;
 import com.keevo.catalog.stock.domain.entity.StockLevel;
@@ -145,24 +146,15 @@ public class StockOperationService {
         String tenantId = TenantContext.getCurrentTenant();
 
         // 6. Publish stock adjusted event (Observer — decouples audit from domain)
-        // Story 14.10: extract actorRole/actorName/storeName from SecurityContext
+        // Story 14.10: actorRole/actorName/storeName from the authenticated actor.
+        // v1s-15-9: CurrentActor — the label falls back to a role label, never a raw UUID.
         String actorRole = null;
         String actorName = null;
         String storeName = null;
         try {
-            var auth = org.springframework.security.core.context.SecurityContextHolder
-                    .getContext().getAuthentication();
-            if (auth != null) {
-                actorRole = auth.getAuthorities().stream()
-                        .findFirst()
-                        .map(org.springframework.security.core.GrantedAuthority::getAuthority)
-                        .map(a -> a.startsWith("ROLE_") ? a.substring(5) : a)
-                        .orElse(null);
-                var details = auth.getDetails();
-                if (details instanceof com.keevo.shared.infrastructure.security.AuthDetails ad) {
-                    actorName = ad.firstName();
-                }
-                if (actorName == null) actorName = actorId.toString();
+            if (CurrentActor.authentication() != null) {
+                actorRole = CurrentActor.role();
+                actorName = CurrentActor.actorLabel();
                 // Resolve store name from repository
                 storeName = storeRepository.findById(storeId)
                         .map(s -> s.name())

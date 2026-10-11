@@ -55,7 +55,7 @@ public class ValidateSaleSyncHandler extends AbstractSyncOperationHandler {
             initialStockEntries = ((Map<String, Object>) raw).entrySet().stream()
                     .collect(Collectors.toMap(
                             e -> UUID.fromString(e.getKey()),
-                            e -> ((Number) e.getValue()).intValue()));
+                            e -> requireIntegralInt(e.getValue(), "initialStockEntries")));
         }
 
         try {

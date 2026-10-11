@@ -1,5 +1,6 @@
 package com.keevo.admin.sync_monitoring.adapter.in.rest;
 
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.admin.sync_monitoring.adapter.in.rest.dto.*;
 import com.keevo.admin.sync_monitoring.application.service.AdminSyncMonitoringService;
 import com.keevo.admin.sync_monitoring.domain.port.in.GetSyncTenantDetailQuery;
@@ -10,11 +11,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -23,7 +21,7 @@ import java.util.UUID;
  *
  * <p>Architecture rules:
  * - ZERO business logic in this class
- * - SUPER_ADMIN role checked explicitly via {@link #requireSuperAdmin()}
+ * - SUPER_ADMIN role checked explicitly via {@link CurrentActor#requireSuperAdmin()} (second barrier behind the SecurityConfig URL rule)
  */
 @Tag(name = "Admin — Sync Monitoring", description = "Super Admin sync health monitoring")
 @RestController
@@ -39,7 +37,7 @@ public class AdminSyncMonitoringController {
     @Operation(summary = "Platform sync overview KPIs", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/overview")
     public ResponseEntity<ApiResponseWrapper<AdminSyncOverviewDto>> getOverview() {
-        requireSuperAdmin();
+        CurrentActor.requireSuperAdmin();
         return ResponseEntity.ok(ApiResponseWrapper.ok(
                 AdminSyncOverviewDto.from(adminSyncMonitoringService.getSyncOverview())));
     }
@@ -47,7 +45,7 @@ public class AdminSyncMonitoringController {
     @Operation(summary = "Per-tenant sync health table", security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/tenants")
     public ResponseEntity<ApiResponseWrapper<List<AdminTenantSyncHealthDto>>> listTenantSyncHealth() {
-        requireSuperAdmin();
+        CurrentActor.requireSuperAdmin();
         List<AdminTenantSyncHealthDto> dtos = adminSyncMonitoringService.listTenantSyncHealth().stream()
                 .map(AdminTenantSyncHealthDto::from)
                 .toList();
@@ -59,7 +57,7 @@ public class AdminSyncMonitoringController {
     @GetMapping("/tenants/{tenantId}/detail")
     public ResponseEntity<ApiResponseWrapper<AdminSyncTenantDetailDto>> getTenantDetail(
             @PathVariable String tenantId) {
-        requireSuperAdmin();
+        CurrentActor.requireSuperAdmin();
 
         UUID parsedId;
         try {
@@ -71,17 +69,5 @@ public class AdminSyncMonitoringController {
         return ResponseEntity.ok(ApiResponseWrapper.ok(
                 AdminSyncTenantDetailDto.from(
                         adminSyncMonitoringService.execute(new GetSyncTenantDetailQuery(parsedId)))));
-    }
-
-    // ── Private helper ────────────────────────────────────────────────────────
-
-    private void requireSuperAdmin() {
-        Collection<? extends GrantedAuthority> authorities =
-                SecurityContextHolder.getContext().getAuthentication().getAuthorities();
-        boolean isSuperAdmin = authorities.stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN"));
-        if (!isSuperAdmin) {
-            throw new DomainException(ErrorCode.FORBIDDEN, "SUPER_ADMIN role required");
-        }
     }
 }

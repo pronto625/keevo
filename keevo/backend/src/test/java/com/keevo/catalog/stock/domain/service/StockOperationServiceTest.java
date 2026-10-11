@@ -73,6 +73,7 @@ class StockOperationServiceTest {
     @AfterEach
     void clearTenantContext() {
         TenantContext.clear();
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
     }
 
     private Product productWithThreshold(int threshold) {
@@ -243,5 +244,28 @@ class StockOperationServiceTest {
             PRODUCT_ID, null, STORE_ID, MovementType.STOCK_ENTRY, 5, ACTOR_ID, "delivery", movementId, false);
 
         assertThat(result.getId()).isEqualTo(movementId);
+    }
+
+    // ── v1s-15-9: actor label fallback via CurrentActor ─────────────────────
+
+    @Test
+    void employeeWithoutFirstName_eventCarriesFallbackLabelNotUuid() {
+        var auth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                ACTOR_ID, null,
+                java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_EMPLOYEE")));
+        auth.setDetails(com.keevo.shared.infrastructure.security.AuthDetails.employee(null, STORE_ID));
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
+        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
+            .thenReturn(Optional.of(levelWithQuantity(10)));
+        when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(stockLevelRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.recordOperation(PRODUCT_ID, null, STORE_ID, MovementType.STOCK_ENTRY, 5, ACTOR_ID, "delivery");
+
+        ArgumentCaptor<StockAdjustedEvent> captor = ArgumentCaptor.forClass(StockAdjustedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().actorName()).isEqualTo("Un employé").doesNotContain(ACTOR_ID.toString());
+        assertThat(captor.getValue().actorRole()).isEqualTo("EMPLOYEE");
     }
 }

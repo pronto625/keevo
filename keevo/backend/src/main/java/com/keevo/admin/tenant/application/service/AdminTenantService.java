@@ -7,6 +7,7 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
+import com.keevo.shared.infrastructure.scheduling.AccountDeletionScheduler;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -51,9 +52,11 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
     private static final int AUDIT_PAGE_SIZE = 50;
 
     private final JdbcTemplate jdbc;
+    private final AccountDeletionScheduler accountDeletionScheduler;
 
-    public AdminTenantService(JdbcTemplate jdbcTemplate) {
+    public AdminTenantService(JdbcTemplate jdbcTemplate, AccountDeletionScheduler accountDeletionScheduler) {
         this.jdbc = jdbcTemplate;
+        this.accountDeletionScheduler = accountDeletionScheduler;
     }
 
     // ── ListTenantsUseCase ────────────────────────────────────────────────────
@@ -153,26 +156,56 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
 
     // ── Cancel / Force-delete (called directly by controller) ─────────────────
 
+    /**
+     * SUPER_ADMIN cancel. Conditional UPDATE: refuses a tenant that is no longer DELETION_PENDING
+     * (e.g. DELETED by a concurrent scheduler run — the UPDATE waits on its row lock, then matches
+     * nothing) or whose schema is already dropped (v1s-15-9). Unlike the owner, the admin may
+     * still rescue a tenant whose grace period has expired.
+     */
     @Transactional
     public void cancelDeletion(UUID tenantId) {
         int updated = jdbc.update(
                 "UPDATE public.tenants SET status = 'ACTIVE', deletion_scheduled_at = NULL "
-                + "WHERE id = ? AND status = 'DELETION_PENDING'",
+                + "WHERE id = ? AND status = 'DELETION_PENDING' "
+                + "AND to_regnamespace(schema_name) IS NOT NULL",
                 tenantId);
         if (updated == 0) {
             throw new DomainException(ErrorCode.TENANT_NOT_FOUND,
-                    "Tenant not found or not DELETION_PENDING: " + tenantId);
+                    "Tenant not found, not DELETION_PENDING or schema already dropped: " + tenantId);
         }
     }
 
-    @Transactional
+    /**
+     * SUPER_ADMIN force-delete through the scheduler's deletion routine (v1s-15-9) — previously it
+     * only flipped the status to DELETED, leaking the schema, memberships and tokens.
+     *
+     * <p>Deliberately NOT {@code @Transactional}: the first UPDATE auto-commits a "deleting" marker
+     * (DELETION_PENDING with {@code deletion_scheduled_at = now()}) before the DROP, which runs on
+     * its own connection. If the routine then fails, the expired DELETION_PENDING row is retried by
+     * the next daily run, and the owner cannot cancel it (grace period over).
+     *
+     * @throws DomainException TENANT_NOT_FOUND for an unknown, already DELETED or system tenant;
+     *                         DELETION_NOT_PENDING if the tenant was cancelled concurrently
+     *                         (a concurrent deletion by the daily run counts as success)
+     */
     public void forceDelete(UUID tenantId) {
-        int updated = jdbc.update(
-                "UPDATE public.tenants SET status = 'DELETED' WHERE id = ?",
+        int marked = jdbc.update(
+                "UPDATE public.tenants SET status = 'DELETION_PENDING', deletion_scheduled_at = now() "
+                + "WHERE id = ? AND id <> '" + ADMIN_TENANT_ID + "'::uuid AND status <> 'DELETED'",
                 tenantId);
-        if (updated == 0) {
+        if (marked == 0) {
             throw new DomainException(ErrorCode.TENANT_NOT_FOUND,
-                    "Tenant not found: " + tenantId);
+                    "Tenant not found or already deleted: " + tenantId);
+        }
+        if (!accountDeletionScheduler.deleteNow(tenantId)) {
+            // A concurrent daily run may have deleted it between the marker and the routine:
+            // the admin's intent is fulfilled, so that is a success, not a conflict.
+            String status = jdbc.queryForObject(
+                    "SELECT status FROM public.tenants WHERE id = ?", String.class, tenantId);
+            if (!"DELETED".equals(status)) {
+                throw new DomainException(ErrorCode.DELETION_NOT_PENDING,
+                        "Tenant deletion was cancelled concurrently: " + tenantId);
+            }
         }
     }
 

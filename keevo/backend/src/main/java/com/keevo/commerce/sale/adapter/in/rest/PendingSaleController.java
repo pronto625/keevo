@@ -1,5 +1,6 @@
 package com.keevo.commerce.sale.adapter.in.rest;
 
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.commerce.sale.adapter.in.rest.dto.CancelSaleRequestDto;
 import com.keevo.commerce.sale.adapter.in.rest.dto.CorrectSaleRequestDto;
 import com.keevo.commerce.sale.adapter.in.rest.dto.PendingSaleResponseDto;
@@ -13,14 +14,10 @@ import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase;
 import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase.ValidateSaleCommand;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.security.AuthDetails;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -49,11 +46,9 @@ public class PendingSaleController {
     @GetMapping("/pending")
     @PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
     public ResponseEntity<ApiResponseWrapper<List<PendingSaleResponseDto>>> getPendingSales() {
-        UUID assignedStoreId = extractAssignedStoreId();
-        boolean isEmployee = isEmployeeRole();
-        if (isEmployee && assignedStoreId == null) {
-            throw new AccessDeniedException("EMPLOYEE store assignment is missing");
-        }
+        // Fails closed (FORBIDDEN) for an EMPLOYEE token without an assigned store.
+        UUID assignedStoreId = CurrentActor.assignedStoreId();
+        boolean isEmployee = CurrentActor.isEmployee();
         var sales = (assignedStoreId != null)
                 ? getPendingSalesUseCase.getPendingSalesByStore(assignedStoreId)
                 : getPendingSalesUseCase.getPendingSales();
@@ -68,8 +63,8 @@ public class PendingSaleController {
     public ResponseEntity<ApiResponseWrapper<Map<String, String>>> validateSale(
             @PathVariable UUID id,
             @Valid @RequestBody ValidateSaleRequestDto request) {
-        UUID actorId = extractActorId();
-        UUID assignedStoreId = extractAssignedStoreId();
+        UUID actorId = CurrentActor.actorId();
+        UUID assignedStoreId = CurrentActor.assignedStoreId();
         validateSaleUseCase.validateSale(new ValidateSaleCommand(
                 id, actorId, assignedStoreId, request.justification(), request.productIdRemappings(),
                 request.initialStockEntries()));
@@ -82,11 +77,11 @@ public class PendingSaleController {
             @PathVariable UUID id,
             @Valid @RequestBody CancelSaleRequestDto request) {
         // Defense-in-depth: explicit role check (testable with standaloneSetup)
-        if (!isOwnerRole()) {
+        if (!CurrentActor.isOwner()) {
             throw new DomainException(ErrorCode.FORBIDDEN, "Only OWNER can cancel pending sales");
         }
-        UUID actorId = extractActorId();
-        UUID assignedStoreId = extractAssignedStoreId();
+        UUID actorId = CurrentActor.actorId();
+        UUID assignedStoreId = CurrentActor.assignedStoreId();
         cancelPendingSaleUseCase.cancelPendingSale(
                 new CancelPendingSaleCommand(id, actorId, assignedStoreId, request.justification()));
         return ResponseEntity.ok(ApiResponseWrapper.ok(Map.of("message", "Sale cancelled")));
@@ -97,38 +92,11 @@ public class PendingSaleController {
     public ResponseEntity<ApiResponseWrapper<Map<String, String>>> correctSale(
             @PathVariable UUID id, @Valid @RequestBody CorrectSaleRequestDto request) {
         // Defense-in-depth: explicit role check (testable with standaloneSetup)
-        if (!isOwnerRole()) {
+        if (!CurrentActor.isOwner()) {
             throw new DomainException(ErrorCode.FORBIDDEN, "Only OWNER can correct a sale");
         }
         correctSaleUseCase.correctSale(new CorrectSaleCommand(
-                id, extractActorId(), extractAssignedStoreId(), request.justification(), request.itemQuantities()));
+                id, CurrentActor.actorId(), CurrentActor.assignedStoreId(), request.justification(), request.itemQuantities()));
         return ResponseEntity.ok(ApiResponseWrapper.ok(Map.of("message", "Sale corrected")));
-    }
-
-    private UUID extractActorId() {
-        return (UUID) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-    }
-
-    private boolean isEmployeeRole() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        return auth != null && auth.getAuthorities().stream()
-                .anyMatch(a -> "ROLE_EMPLOYEE".equals(a.getAuthority()));
-    }
-
-    private boolean isOwnerRole() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        return auth != null && auth.getAuthorities().stream()
-                .anyMatch(a -> "ROLE_OWNER".equals(a.getAuthority()));
-    }
-
-    /**
-     * AC5: Returns the store UUID embedded in JWT details for EMPLOYEE tokens,
-     * or null for OWNER tokens (OWNER sees all stores).
-     *
-     * <p>Story 14.10: adapted to {@link AuthDetails}.
-     */
-    private UUID extractAssignedStoreId() {
-        Object details = SecurityContextHolder.getContext().getAuthentication().getDetails();
-        return (details instanceof AuthDetails ad) ? ad.storeId() : null;
     }
 }

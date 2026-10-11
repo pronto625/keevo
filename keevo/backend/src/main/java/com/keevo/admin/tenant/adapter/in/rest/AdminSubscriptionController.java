@@ -1,8 +1,7 @@
 package com.keevo.admin.tenant.adapter.in.rest;
 
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.identity.auth.domain.model.PlanType;
-import com.keevo.shared.domain.exception.DomainException;
-import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.subscription.plan.adapter.in.rest.dto.ActivatePlanRequest;
 import com.keevo.subscription.plan.domain.port.in.ActivatePlanCommand;
@@ -11,11 +10,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Collection;
 import java.util.UUID;
 
 /**
@@ -53,10 +49,9 @@ public class AdminSubscriptionController {
             @PathVariable String tenantId,
             @RequestBody ActivatePlanRequest request) {
 
-        requireSuperAdmin();
+        CurrentActor.requireSuperAdmin();
 
-        UUID actorId = (UUID) SecurityContextHolder.getContext()
-                .getAuthentication().getPrincipal();
+        UUID actorId = CurrentActor.actorId();
 
         activatePlanUseCase.execute(new ActivatePlanCommand(
                 actorId.toString(),
@@ -66,18 +61,5 @@ public class AdminSubscriptionController {
         ));
 
         return ResponseEntity.ok(ApiResponseWrapper.ok(null));
-    }
-
-    // ── Private helper ────────────────────────────────────────────────────────
-
-    private void requireSuperAdmin() {
-        Collection<? extends GrantedAuthority> authorities =
-                SecurityContextHolder.getContext().getAuthentication().getAuthorities();
-        boolean isSuperAdmin = authorities.stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN"));
-        if (!isSuperAdmin) {
-            // H2 fix: authenticated but wrong role → 403 FORBIDDEN, not 401 UNAUTHORIZED
-            throw new DomainException(ErrorCode.FORBIDDEN, "SUPER_ADMIN role required");
-        }
     }
 }

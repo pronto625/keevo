@@ -1,12 +1,16 @@
 package com.keevo.feedback.feedback.domain.model;
 
 import java.time.Instant;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
  * Feedback — Domain model for user-submitted feedback (Story 14.5, FR92).
  *
  * <p>Pure Java — NO Spring, JPA, or framework imports.
+ *
+ * <p>v1s-15-9: the V7 NOT NULL columns (id, type, description, tenantId, userId, submittedAt,
+ * priority) are required; appVersion, platform and screenContext stay nullable.
  */
 public final class Feedback {
 
@@ -25,16 +29,16 @@ public final class Feedback {
                     String tenantId, UUID userId,
                     String appVersion, String platform, String screenContext,
                     Instant submittedAt, String priority) {
-        this.id = id;
-        this.type = type;
-        this.description = description;
-        this.tenantId = tenantId;
-        this.userId = userId;
+        this.id = Objects.requireNonNull(id, "id");
+        this.type = Objects.requireNonNull(type, "type");
+        this.description = Objects.requireNonNull(description, "description");
+        this.tenantId = Objects.requireNonNull(tenantId, "tenantId");
+        this.userId = Objects.requireNonNull(userId, "userId");
         this.appVersion = appVersion;
         this.platform = platform;
         this.screenContext = screenContext;
-        this.submittedAt = submittedAt;
-        this.priority = priority;
+        this.submittedAt = Objects.requireNonNull(submittedAt, "submittedAt");
+        this.priority = Objects.requireNonNull(priority, "priority");
     }
 
     public UUID getId()              { return id; }

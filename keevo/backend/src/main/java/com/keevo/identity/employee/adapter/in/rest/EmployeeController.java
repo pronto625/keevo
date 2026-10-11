@@ -1,5 +1,6 @@
 package com.keevo.identity.employee.adapter.in.rest;
 
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.identity.employee.adapter.in.rest.dto.*;
 import com.keevo.identity.employee.domain.model.CreateEmployeeResult;
 import com.keevo.identity.employee.domain.model.Employee;
@@ -14,7 +15,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -72,8 +72,8 @@ public class EmployeeController {
     @PostMapping
     public ResponseEntity<ApiResponseWrapper<TempPasswordResponseDto>> createEmployee(
             @Valid @RequestBody CreateEmployeeRequestDto request) {
-        requireOwnerOrForbid();
-        UUID actorId = extractActorId();
+        CurrentActor.requireOwner("OWNER role required");
+        UUID actorId = CurrentActor.actorId();
         CreateEmployeeCommand command = new CreateEmployeeCommand(
                 actorId, request.phoneNumber(), request.firstName(),
                 request.lastName(), request.storeId());
@@ -89,8 +89,8 @@ public class EmployeeController {
     @ApiResponse(responseCode = "200", description = "Employee list returned")
     @GetMapping
     public ResponseEntity<ApiResponseWrapper<List<EmployeeResponseDto>>> listEmployees() {
-        requireOwnerOrForbid();
-        UUID actorId = extractActorId();
+        CurrentActor.requireOwner("OWNER role required");
+        UUID actorId = CurrentActor.actorId();
         List<EmployeeResponseDto> dtos = listEmployeesUseCase
                 .execute(new ListEmployeesQuery(actorId))
                 .stream().map(e -> toDto(e)).toList();
@@ -106,8 +106,8 @@ public class EmployeeController {
     public ResponseEntity<ApiResponseWrapper<EmployeeResponseDto>> reassignStore(
             @PathVariable UUID employeeId,
             @Valid @RequestBody ReassignStoreRequestDto request) {
-        requireOwnerOrForbid();
-        UUID actorId = extractActorId();
+        CurrentActor.requireOwner("OWNER role required");
+        UUID actorId = CurrentActor.actorId();
         Employee updated = reassignStoreUseCase.execute(
                 new ReassignStoreCommand(actorId, employeeId, request.storeId()));
         return ResponseEntity.ok(ApiResponseWrapper.ok(
@@ -122,8 +122,8 @@ public class EmployeeController {
     @PatchMapping("/{employeeId}/deactivate")
     public ResponseEntity<ApiResponseWrapper<Void>> deactivateEmployee(
             @PathVariable UUID employeeId) {
-        requireOwnerOrForbid();
-        UUID actorId = extractActorId();
+        CurrentActor.requireOwner("OWNER role required");
+        UUID actorId = CurrentActor.actorId();
         deactivateEmployeeUseCase.execute(new DeactivateEmployeeCommand(actorId, employeeId));
         return ResponseEntity.ok(ApiResponseWrapper.ok(null));
     }
@@ -136,8 +136,8 @@ public class EmployeeController {
     @PatchMapping("/{employeeId}/reactivate")
     public ResponseEntity<ApiResponseWrapper<Void>> reactivateEmployee(
             @PathVariable UUID employeeId) {
-        requireOwnerOrForbid();
-        UUID actorId = extractActorId();
+        CurrentActor.requireOwner("OWNER role required");
+        UUID actorId = CurrentActor.actorId();
         reactivateEmployeeUseCase.execute(new ReactivateEmployeeCommand(actorId, employeeId));
         return ResponseEntity.ok(ApiResponseWrapper.ok(null));
     }
@@ -150,8 +150,8 @@ public class EmployeeController {
     @PostMapping("/{employeeId}/regenerate-password")
     public ResponseEntity<ApiResponseWrapper<TempPasswordResponseDto>> regeneratePassword(
             @PathVariable UUID employeeId) {
-        requireOwnerOrForbid();
-        UUID actorId = extractActorId();
+        CurrentActor.requireOwner("OWNER role required");
+        UUID actorId = CurrentActor.actorId();
         CreateEmployeeResult result = regeneratePasswordUseCase.execute(
                 new RegeneratePasswordCommand(actorId, employeeId));
         TempPasswordResponseDto dto = new TempPasswordResponseDto(
@@ -173,12 +173,12 @@ public class EmployeeController {
     public ResponseEntity<ApiResponseWrapper<EmployeeResponseDto>> updateEmployee(
             @PathVariable UUID employeeId,
             @Valid @RequestBody UpdateEmployeeRequestDto request) {
-        requireOwnerOrForbid();
+        CurrentActor.requireOwner("OWNER role required");
         if (!request.hasAtLeastOneField()) {
             throw new DomainException(ErrorCode.VALIDATION_FAILED,
                     "At least one field must be provided for update");
         }
-        UUID actorId = extractActorId();
+        UUID actorId = CurrentActor.actorId();
         Employee updated = updateEmployeeUseCase.execute(
                 new UpdateEmployeeCommand(actorId, employeeId,
                         request.firstName(), request.lastName(),
@@ -197,8 +197,8 @@ public class EmployeeController {
     public ResponseEntity<ApiResponseWrapper<Void>> changeRole(
             @PathVariable UUID employeeId,
             @Valid @RequestBody ChangeRoleRequestDto request) {
-        requireOwnerOrForbid();
-        UUID actorId = extractActorId();
+        CurrentActor.requireOwner("OWNER role required");
+        UUID actorId = CurrentActor.actorId();
         changeEmployeeRoleUseCase.execute(
                 new ChangeEmployeeRoleCommand(actorId, employeeId, request.role()));
         return ResponseEntity.ok(ApiResponseWrapper.ok(null));
@@ -215,8 +215,8 @@ public class EmployeeController {
     public ResponseEntity<ApiResponseWrapper<Void>> setPassword(
             @PathVariable UUID employeeId,
             @Valid @RequestBody SetPasswordRequestDto request) {
-        requireOwnerOrForbid();
-        UUID actorId = extractActorId();
+        CurrentActor.requireOwner("OWNER role required");
+        UUID actorId = CurrentActor.actorId();
         setEmployeePasswordUseCase.execute(
                 new SetEmployeePasswordCommand(actorId, employeeId, request.newPassword()));
         return ResponseEntity.ok(ApiResponseWrapper.ok(null));
@@ -232,21 +232,5 @@ public class EmployeeController {
         return EmployeeResponseDto.fromDomain(e,
                 employeeRoleResolver.resolveRole(userId),
                 employeeRoleResolver.resolvePhone(userId));
-    }
-
-    /**
-     * Throws FORBIDDEN if the caller is not an OWNER.
-     * Controller-level RBAC: all EmployeeController endpoints are OWNER-only (AC5).
-     */
-    private void requireOwnerOrForbid() {
-        var auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || auth.getAuthorities().stream()
-                .noneMatch(a -> "ROLE_OWNER".equals(a.getAuthority()))) {
-            throw new DomainException(ErrorCode.FORBIDDEN, "OWNER role required");
-        }
-    }
-
-    private UUID extractActorId() {
-        return (UUID) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
     }
 }

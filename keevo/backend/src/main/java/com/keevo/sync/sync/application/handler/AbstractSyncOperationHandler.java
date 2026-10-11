@@ -1,15 +1,13 @@
 package com.keevo.sync.sync.application.handler;
 
 import com.keevo.shared.domain.exception.DomainException;
-import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.security.AuthDetails;
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import com.keevo.sync.sync.domain.port.in.SyncOperationHandler;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
@@ -45,52 +43,54 @@ public abstract class AbstractSyncOperationHandler implements SyncOperationHandl
     }
 
     /**
-     * Returns the EMPLOYEE's assigned store UUID (nullable), or {@code null} for OWNER.
-     * Mirror of {@code PendingSaleController.extractAssignedStoreId()} /
-     * {@code StockController.extractAssignedStoreId()}.
-     *
-     * <p>v1s-12-10 (CR 12-8 D2): fails closed when there is no authenticated actor —
-     * a missing Authentication used to be treated as OWNER (unscoped).
+     * Returns the EMPLOYEE's assigned store UUID, or {@code null} for OWNER. Fails closed
+     * when there is no authenticated actor (v1s-12-10). Delegates to {@link CurrentActor}.
      */
     protected UUID extractAssignedStoreId() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null) {
-            throw new DomainException(ErrorCode.FORBIDDEN, "No authenticated actor");
-        }
-        Object details = auth.getDetails();
-        if (details instanceof AuthDetails ad && ad.storeId() != null) {
-            return ad.storeId();
-        }
-        boolean isEmployee = auth.getAuthorities().stream()
-                .anyMatch(a -> "ROLE_EMPLOYEE".equals(a.getAuthority()));
-        if (isEmployee) {
-            throw new DomainException(ErrorCode.FORBIDDEN, "EMPLOYEE token missing assigned store");
-        }
-        return null;
+        return CurrentActor.assignedStoreId();
     }
 
-    /** Mirror of {@code StockTransferController.isOwnerRole()}. */
+    /** Delegates to {@link CurrentActor#isOwner()}. */
     protected boolean isOwnerRole() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        return auth != null && auth.getAuthorities().stream()
-                .anyMatch(a -> "ROLE_OWNER".equals(a.getAuthority()));
+        return CurrentActor.isOwner();
     }
 
     /**
      * v1s-12-10: the actor's role as the use cases expect it ({@code "OWNER"} /
-     * {@code "EMPLOYEE"}), or {@code null} when unauthenticated or neither role is held.
-     * Always read from the authenticated actor, never from the payload.
+     * {@code "EMPLOYEE"}), or {@code null} when unauthenticated. Always read from the
+     * authenticated actor, never from the payload. Delegates to {@link CurrentActor#role()}.
      */
     protected String actorRole() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null) return null;
-        if (auth.getAuthorities().stream().anyMatch(a -> "ROLE_OWNER".equals(a.getAuthority()))) {
-            return "OWNER";
+        return CurrentActor.role();
+    }
+
+    /**
+     * v1s-13-8 / v1s-15-9: a bare Number-to-int narrowing silently truncated 1.5 → 1
+     * and wrapped values beyond the int range. The value must be a JSON number, integral and
+     * within int range (a whole double such as 5.0 is accepted as 5).
+     *
+     * @throws IllegalArgumentException {@code "Invalid <field>: …"} otherwise (→ REJECTED)
+     */
+    protected static int requireIntegralInt(Object raw, String field) {
+        if (!(raw instanceof Number n)) {
+            throw new IllegalArgumentException("Invalid " + field + ": must be a number");
         }
-        if (auth.getAuthorities().stream().anyMatch(a -> "ROLE_EMPLOYEE".equals(a.getAuthority()))) {
-            return "EMPLOYEE";
+        BigDecimal value;
+        try {
+            value = (n instanceof BigDecimal bd) ? bd : new BigDecimal(n.toString());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid " + field + ": " + n);
         }
-        return null;
+        try {
+            return value.stripTrailingZeros().intValueExact();
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException("Invalid " + field + ": must be a whole number in int range");
+        }
+    }
+
+    /** {@link #requireIntegralInt} for optional fields: {@code null} stays {@code null}. */
+    protected static Integer optionalIntegralInt(Object raw, String field) {
+        return raw == null ? null : requireIntegralInt(raw, field);
     }
 
     /**

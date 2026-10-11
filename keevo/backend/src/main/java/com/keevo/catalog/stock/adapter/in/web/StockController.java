@@ -1,5 +1,6 @@
 package com.keevo.catalog.stock.adapter.in.web;
 
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.catalog.product.adapter.in.web.dto.ProductResponseDto;
 import com.keevo.catalog.stock.adapter.in.web.dto.AdjustStockRequestDto;
 import com.keevo.catalog.stock.adapter.in.web.dto.RecordStockEntryRequestDto;
@@ -14,7 +15,6 @@ import com.keevo.catalog.stock.application.usecase.SetStockThresholdUseCase;
 import com.keevo.catalog.stock.domain.entity.MovementType;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.security.AuthDetails;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -22,8 +22,6 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
@@ -102,13 +100,13 @@ public class StockController {
             @PathVariable UUID productId,
             @Valid @RequestBody RecordStockEntryRequestDto request) {
 
-        UUID assignedStoreId = extractAssignedStoreId();
+        UUID assignedStoreId = CurrentActor.assignedStoreId();
         if (assignedStoreId != null && !assignedStoreId.equals(request.storeId())) {
             throw new DomainException(ErrorCode.FORBIDDEN,
                     "EMPLOYEE cannot record stock entry for another store");
         }
 
-        UUID actorId = actorIdFromContext();
+        UUID actorId = CurrentActor.actorId();
         var movement = recordStockEntryUseCase.execute(
                 productId, request.variantId(), request.storeId(),
                 request.quantity(), actorId, request.notes());
@@ -130,13 +128,13 @@ public class StockController {
             @PathVariable UUID productId,
             @Valid @RequestBody AdjustStockRequestDto request) {
 
-        UUID assignedStoreId = extractAssignedStoreId();
+        UUID assignedStoreId = CurrentActor.assignedStoreId();
         if (assignedStoreId != null && !assignedStoreId.equals(request.storeId())) {
             throw new DomainException(ErrorCode.FORBIDDEN,
                     "EMPLOYEE cannot adjust stock for another store");
         }
 
-        UUID actorId = actorIdFromContext();
+        UUID actorId = CurrentActor.actorId();
         var movement = adjustStockUseCase.execute(
                 productId, request.variantId(), request.storeId(),
                 request.newQuantity(), actorId, request.notes());
@@ -195,28 +193,4 @@ public class StockController {
     }
 
     // ──────────────────────────────────────────────────────────────────
-
-    private UUID actorIdFromContext() {
-        return (UUID) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-    }
-
-    /**
-     * Story 12.6 — Returns the store UUID embedded in JWT details for EMPLOYEE tokens,
-     * or null for OWNER tokens (OWNER is never scoped).
-     *
-     * <p>Story 14.10: adapted to {@link com.keevo.shared.infrastructure.security.AuthDetails}.
-     */
-    private UUID extractAssignedStoreId() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        Object details = auth.getDetails();
-        if (details instanceof AuthDetails ad && ad.storeId() != null) {
-            return ad.storeId();
-        }
-        boolean isEmployee = auth.getAuthorities().stream()
-                .anyMatch(a -> "ROLE_EMPLOYEE".equals(a.getAuthority()));
-        if (isEmployee) {
-            throw new DomainException(ErrorCode.FORBIDDEN, "EMPLOYEE token missing assigned store");
-        }
-        return null;
-    }
 }

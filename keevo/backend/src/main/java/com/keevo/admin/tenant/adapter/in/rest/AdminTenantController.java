@@ -1,5 +1,6 @@
 package com.keevo.admin.tenant.adapter.in.rest;
 
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.admin.tenant.adapter.in.rest.dto.AdminTenantDetailDto;
 import com.keevo.admin.tenant.adapter.in.rest.dto.TenantListResponse;
 import com.keevo.admin.tenant.application.service.AdminTenantService;
@@ -7,8 +8,6 @@ import com.keevo.admin.tenant.domain.model.AdminTenantDetail;
 import com.keevo.admin.tenant.domain.model.AdminTenantListItem;
 import com.keevo.admin.tenant.domain.port.in.GetTenantDetailQuery;
 import com.keevo.admin.tenant.domain.port.in.ListTenantsQuery;
-import com.keevo.shared.domain.exception.DomainException;
-import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -16,12 +15,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
-import java.util.Collection;
 import java.util.UUID;
 
 /**
@@ -29,7 +25,7 @@ import java.util.UUID;
  *
  * <p>Architecture rules:
  * - ZERO business logic in this class
- * - SUPER_ADMIN role checked explicitly via {@link #requireSuperAdmin()}
+ * - SUPER_ADMIN role checked explicitly via {@link CurrentActor#requireSuperAdmin()} (second barrier behind the SecurityConfig URL rule)
  */
 @Tag(name = "Admin — Tenants", description = "Super Admin tenant management")
 @RestController
@@ -55,7 +51,7 @@ public class AdminTenantController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int pageSize) {
 
-        requireSuperAdmin();
+        CurrentActor.requireSuperAdmin();
 
         ListTenantsQuery query = new ListTenantsQuery(
                 search, plan, status,
@@ -74,7 +70,7 @@ public class AdminTenantController {
             @PathVariable UUID tenantId,
             @RequestParam(defaultValue = "0") int auditPage) {
 
-        requireSuperAdmin();
+        CurrentActor.requireSuperAdmin();
 
         AdminTenantDetail detail = adminTenantService.execute(
                 new GetTenantDetailQuery(tenantId, Math.max(0, auditPage)));
@@ -86,7 +82,7 @@ public class AdminTenantController {
     @Operation(summary = "Cancel scheduled deletion", security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/{tenantId}/cancel-deletion")
     public ResponseEntity<ApiResponseWrapper<Void>> cancelDeletion(@PathVariable UUID tenantId) {
-        requireSuperAdmin();
+        CurrentActor.requireSuperAdmin();
         adminTenantService.cancelDeletion(tenantId);
         return ResponseEntity.ok(ApiResponseWrapper.ok(null));
     }
@@ -94,20 +90,8 @@ public class AdminTenantController {
     @Operation(summary = "Force immediate tenant deletion", security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/{tenantId}/force-delete")
     public ResponseEntity<ApiResponseWrapper<Void>> forceDelete(@PathVariable UUID tenantId) {
-        requireSuperAdmin();
+        CurrentActor.requireSuperAdmin();
         adminTenantService.forceDelete(tenantId);
         return ResponseEntity.ok(ApiResponseWrapper.ok(null));
-    }
-
-    // ── Private helper ────────────────────────────────────────────────────────
-
-    private void requireSuperAdmin() {
-        Collection<? extends GrantedAuthority> authorities =
-                SecurityContextHolder.getContext().getAuthentication().getAuthorities();
-        boolean isSuperAdmin = authorities.stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN"));
-        if (!isSuperAdmin) {
-            throw new DomainException(ErrorCode.FORBIDDEN, "SUPER_ADMIN role required");
-        }
     }
 }

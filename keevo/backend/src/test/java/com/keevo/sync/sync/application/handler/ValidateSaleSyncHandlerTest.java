@@ -136,4 +136,36 @@ class ValidateSaleSyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
     }
+
+    // ── v1s-15-9: integral guard on initialStockEntries values ─────────
+
+    @Test
+    void apply_fractionalInitialStock_isRejectedNotTruncated() {
+        authenticateAsOwner();
+        var op = new SyncOperation("op-int", "VALIDATE_SALE", SALE_ID.toString(),
+                Map.of("saleId", SALE_ID.toString(),
+                        "initialStockEntries", Map.of(UUID.randomUUID().toString(), 2.5)),
+                Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).startsWith("Invalid initialStockEntries");
+        verifyNoInteractions(validateSaleUseCase);
+    }
+
+    @Test
+    void apply_outOfRangeInitialStock_isRejected() {
+        authenticateAsOwner();
+        var op = new SyncOperation("op-int", "VALIDATE_SALE", SALE_ID.toString(),
+                Map.of("saleId", SALE_ID.toString(),
+                        "initialStockEntries", Map.of(UUID.randomUUID().toString(), 3e10)),
+                Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).startsWith("Invalid initialStockEntries");
+        verifyNoInteractions(validateSaleUseCase);
+    }
 }

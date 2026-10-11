@@ -1,5 +1,6 @@
 package com.keevo.catalog.product.adapter.in.web;
 
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.catalog.contact.adapter.in.web.dto.SupplierResponseDto;
 import com.keevo.catalog.contact.application.usecase.GetSupplierByProductUseCase;
 import com.keevo.catalog.contact.application.usecase.GetSupplierProfileUseCase;
@@ -20,8 +21,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
 
 import jakarta.validation.Valid;
 import java.util.List;
@@ -72,10 +71,9 @@ public class ProductController {
     public ResponseEntity<ApiResponseWrapper<ProductResponseDto>> createProduct(
             @Valid @RequestBody CreateProductRequestDto request) {
         
-        // Extract actorId from SecurityContext — set by JwtAuthFilter
-        UUID actorId = (UUID) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        String actorRole = extractRole();
-        String actorName = extractActorName();
+        UUID actorId = CurrentActor.actorId();
+        String actorRole = CurrentActor.role();
+        String actorName = CurrentActor.actorLabel();
         String storeName = resolveEmployeeStoreName();
         
         var dto = new CreateProductUseCase.CreateProductDto(
@@ -141,8 +139,7 @@ public class ProductController {
             @PathVariable UUID id,
             @Valid @RequestBody UpdateProductRequestDto request) {
         
-        // Extract actorId from SecurityContext — set by JwtAuthFilter
-        UUID actorId = (UUID) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        UUID actorId = CurrentActor.actorId();
         
         var dto = new UpdateProductUseCase.UpdateProductDto(
                 id,
@@ -155,7 +152,7 @@ public class ProductController {
                 request.transportCost(),
                 request.stockQuantity(),
                 actorId,
-                extractRole()  // v1s-12-10: real role → Story 2.4 draft guard (FORBIDDEN → 403)
+                CurrentActor.role()  // v1s-12-10: real role → Story 2.4 draft guard (FORBIDDEN → 403)
         );
         
         try {
@@ -174,8 +171,7 @@ public class ProductController {
      */
     @PatchMapping("/{id}/archive")
     public ResponseEntity<ApiResponseWrapper<ProductResponseDto>> archiveProduct(@PathVariable UUID id) {
-        // Extract actorId from SecurityContext — set by JwtAuthFilter
-        UUID actorId = (UUID) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        UUID actorId = CurrentActor.actorId();
         
         var dto = new ArchiveProductUseCase.ArchiveProductDto(id, actorId);
         archiveProductUseCase.execute(dto);
@@ -229,32 +225,10 @@ public class ProductController {
 
     // ── Story 14.10 helpers ─────────────────────────────────────────────
 
-    /**
-     * Best-effort role extraction for notification dispatch — must never block product
-     * creation. Returns null (skipping the employee-action notification downstream)
-     * rather than throwing when no authority is present.
-     */
-    private String extractRole() {
-        return SecurityContextHolder.getContext().getAuthentication()
-                .getAuthorities().stream()
-                .findFirst()
-                .map(GrantedAuthority::getAuthority)
-                .map(a -> a.startsWith("ROLE_") ? a.substring(5) : a)
-                .orElse(null);
-    }
-
-    private String extractActorName() {
-        Object details = SecurityContextHolder.getContext().getAuthentication().getDetails();
-        if (details instanceof AuthDetails ad && ad.firstName() != null) {
-            return ad.firstName();
-        }
-        return SecurityContextHolder.getContext().getAuthentication().getPrincipal().toString();
-    }
-
     /** Resolve employee's assigned store name, or null for OWNER. */
     private String resolveEmployeeStoreName() {
-        Object details = SecurityContextHolder.getContext().getAuthentication().getDetails();
-        if (details instanceof AuthDetails ad && ad.storeId() != null) {
+        if (CurrentActor.authentication() != null
+                && CurrentActor.authentication().getDetails() instanceof AuthDetails ad && ad.storeId() != null) {
             return storeRepository.findById(ad.storeId())
                     .map(s -> s.name())
                     .orElse(null);

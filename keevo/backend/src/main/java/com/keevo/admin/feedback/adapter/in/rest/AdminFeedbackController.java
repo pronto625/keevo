@@ -1,10 +1,10 @@
 package com.keevo.admin.feedback.adapter.in.rest;
 
 import com.keevo.feedback.feedback.domain.model.Feedback;
-import com.keevo.feedback.feedback.domain.port.out.FeedbackRepository;
+import com.keevo.feedback.feedback.domain.port.in.ListFeedbackUseCase;
+import com.keevo.feedback.feedback.domain.port.in.ListFeedbackUseCase.ListFeedbackQuery;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -22,10 +22,10 @@ import java.util.UUID;
 @PreAuthorize("hasRole('SUPER_ADMIN')")
 public class AdminFeedbackController {
 
-    private final FeedbackRepository feedbackRepository;
+    private final ListFeedbackUseCase listFeedbackUseCase;
 
-    public AdminFeedbackController(FeedbackRepository feedbackRepository) {
-        this.feedbackRepository = feedbackRepository;
+    public AdminFeedbackController(ListFeedbackUseCase listFeedbackUseCase) {
+        this.listFeedbackUseCase = listFeedbackUseCase;
     }
 
     @GetMapping
@@ -35,16 +35,8 @@ public class AdminFeedbackController {
             @RequestParam(required = false) String priority,
             @RequestParam(required = false) String screenContext) {
 
-        PageRequest pageable = PageRequest.of(page, Math.min(size, 100));
-        Page<Feedback> result;
-
-        if (priority != null) {
-            result = feedbackRepository.findByPriority(priority, pageable);
-        } else if (screenContext != null) {
-            result = feedbackRepository.findByScreenContext(screenContext, pageable);
-        } else {
-            result = feedbackRepository.findAll(pageable);
-        }
+        Page<Feedback> result = listFeedbackUseCase.list(
+                new ListFeedbackQuery(page, size, priority, screenContext));
 
         List<AdminFeedbackDto> dtos = result.getContent().stream()
                 .map(AdminFeedbackDto::from)

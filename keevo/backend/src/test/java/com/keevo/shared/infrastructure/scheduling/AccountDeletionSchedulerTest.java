@@ -27,6 +27,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static com.keevo.shared.infrastructure.scheduling.AccountDeletionScheduler.LOCK_TENANT_SQL;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -101,7 +103,7 @@ class AccountDeletionSchedulerTest {
     @DisplayName("expired tenant: lock, DROP, deletes, DELETED save, commit, then WhatsApp")
     void executeDeletions_deletesExpiredTenant() {
         Tenant tenant = createTenant(TenantStatus.DELETION_PENDING, expiredDate);
-        when(tenantRepository.findAll()).thenReturn(List.of(tenant));
+        when(tenantRepository.findDeletionsDueBy(any())).thenReturn(List.of(tenant));
         stubPending(tenant, "+243812345678");
 
         scheduler.executeDeletions();
@@ -117,41 +119,62 @@ class AccountDeletionSchedulerTest {
         verify(transactionManager, never()).rollback(any());
     }
 
-    // ── Not yet expired / non-PENDING ─────────────────────────────────────────
+    // ── Due-tenant query (v1s-15-9) ───────────────────────────────────────────
 
     @Test
-    @DisplayName("DELETION_PENDING but not yet expired is skipped")
-    void executeDeletions_skipsNotYetExpired() {
-        Tenant tenant = createTenant(TenantStatus.DELETION_PENDING, Instant.parse("2026-09-22T00:00:00Z"));
-        when(tenantRepository.findAll()).thenReturn(List.of(tenant));
+    @DisplayName("queries only the tenants due by the scheduler clock; nothing due → no work")
+    void executeDeletions_queriesDueTenantsOnly() {
+        when(tenantRepository.findDeletionsDueBy(any())).thenReturn(List.of());
 
         scheduler.executeDeletions();
 
+        verify(tenantRepository).findDeletionsDueBy(Instant.parse("2026-08-22T03:00:00Z"));
+        verify(tenantRepository, never()).findAll();
         verifyNoInteractions(jdbcTemplate, transactionManager);
+        verify(tenantRepository, never()).save(any());
+    }
+
+    // ── deleteNow (admin force-delete, v1s-15-9) ──────────────────────────────
+
+    @Test
+    @DisplayName("deleteNow: DELETION_PENDING with a future date is still deleted (no expiry requirement)")
+    void deleteNow_deletesPendingTenantRegardlessOfDate() {
+        Tenant tenant = createTenant(TenantStatus.DELETION_PENDING, Instant.parse("2026-09-22T00:00:00Z"));
+        stubPending(tenant, "+243812345678");
+
+        assertThat(scheduler.deleteNow(tenantId)).isTrue();
+
+        InOrder order = inOrder(schemaProvisioner, tenantRepository, transactionManager, whatsAppPort);
+        order.verify(schemaProvisioner).dropSchemaForDeletion(schemaName);
+        order.verify(tenantRepository).save(argThat(t -> t.getStatus() == TenantStatus.DELETED));
+        order.verify(transactionManager).commit(any());
+        order.verify(whatsAppPort).sendReport(eq("+243812345678"), anyString());
+    }
+
+    @Test
+    @DisplayName("deleteNow: tenant no longer DELETION_PENDING under the lock → false, nothing dropped")
+    void deleteNow_skipsWhenNoLongerPending() {
+        stubLock(tenantId, TenantStatus.ACTIVE, null);
+
+        assertThat(scheduler.deleteNow(tenantId)).isFalse();
+
         verify(schemaProvisioner, never()).dropSchemaForDeletion(anyString());
         verify(tenantRepository, never()).save(any());
+        verifyNoInteractions(whatsAppPort);
     }
 
     @Test
-    @DisplayName("ACTIVE tenant is skipped")
-    void executeDeletions_skipsActiveTenant() {
-        when(tenantRepository.findAll()).thenReturn(List.of(createTenant(TenantStatus.ACTIVE, null)));
+    @DisplayName("deleteNow: a DROP failure propagates to the caller and rolls back")
+    void deleteNow_propagatesFailure() {
+        Tenant tenant = createTenant(TenantStatus.DELETION_PENDING, expiredDate);
+        stubPending(tenant, "+243812345678");
+        doThrow(new RuntimeException("drop failed")).when(schemaProvisioner).dropSchemaForDeletion(schemaName);
 
-        scheduler.executeDeletions();
+        assertThatThrownBy(() -> scheduler.deleteNow(tenantId)).hasMessageContaining("drop failed");
 
-        verifyNoInteractions(jdbcTemplate, transactionManager);
+        verify(transactionManager).rollback(any());
         verify(tenantRepository, never()).save(any());
-    }
-
-    @Test
-    @DisplayName("SUSPENDED tenant is skipped")
-    void executeDeletions_skipsSuspendedTenant() {
-        when(tenantRepository.findAll()).thenReturn(List.of(createTenant(TenantStatus.SUSPENDED, null)));
-
-        scheduler.executeDeletions();
-
-        verifyNoInteractions(jdbcTemplate, transactionManager);
-        verify(tenantRepository, never()).save(any());
+        verifyNoInteractions(whatsAppPort);
     }
 
     // ── Multi-tenant user preservation ───────────────────────────────────────
@@ -160,7 +183,7 @@ class AccountDeletionSchedulerTest {
     @DisplayName("orphan-only user delete: the DELETE … NOT EXISTS guard is issued, the device-token delete is not when none is orphaned")
     void executeDeletions_preservesMultiTenantUser() {
         Tenant tenant = createTenant(TenantStatus.DELETION_PENDING, expiredDate);
-        when(tenantRepository.findAll()).thenReturn(List.of(tenant));
+        when(tenantRepository.findDeletionsDueBy(any())).thenReturn(List.of(tenant));
         stubPending(tenant, "+243812345678");
         // The DELETE … RETURNING deletes nobody: the member still belongs to another tenant
         when(jdbcTemplate.queryForList(startsWith("DELETE FROM public.users"), eq(UUID.class), any(Object.class)))
@@ -179,7 +202,7 @@ class AccountDeletionSchedulerTest {
     @DisplayName("DROP failure: rollback, no delete, no save, no WhatsApp (retried next day)")
     void executeDeletions_doesNotMarkDeletedOnSchemaDropFailure() {
         Tenant tenant = createTenant(TenantStatus.DELETION_PENDING, expiredDate);
-        when(tenantRepository.findAll()).thenReturn(List.of(tenant));
+        when(tenantRepository.findDeletionsDueBy(any())).thenReturn(List.of(tenant));
         stubPending(tenant, "+243812345678");
         doThrow(new RuntimeException("DB connection lost"))
                 .when(schemaProvisioner).dropSchemaForDeletion(schemaName);
@@ -198,7 +221,7 @@ class AccountDeletionSchedulerTest {
     @DisplayName("DROP OK but memberships delete fails: rollback, no save/WhatsApp; the next run completes it once")
     void executeDeletions_retriesAfterPostDropFailure() {
         Tenant tenant = createTenant(TenantStatus.DELETION_PENDING, expiredDate);
-        when(tenantRepository.findAll()).thenReturn(List.of(tenant));
+        when(tenantRepository.findDeletionsDueBy(any())).thenReturn(List.of(tenant));
         stubPending(tenant, "+243812345678");
         when(jdbcTemplate.update(startsWith(MEMBERSHIP_DELETE), any(Object.class)))
                 .thenThrow(new RuntimeException("deadlock detected"))
@@ -225,7 +248,7 @@ class AccountDeletionSchedulerTest {
     void executeDeletions_oneTenantFailureDoesNotAffectAnother() {
         Tenant a = tenant(UUID.randomUUID(), "kv_aaaaaa", TenantStatus.DELETION_PENDING, expiredDate);
         Tenant b = tenant(UUID.randomUUID(), "kv_bbbbbb", TenantStatus.DELETION_PENDING, expiredDate);
-        when(tenantRepository.findAll()).thenReturn(List.of(a, b));
+        when(tenantRepository.findDeletionsDueBy(any())).thenReturn(List.of(a, b));
         stubPending(a, "+243800000001");
         stubPending(b, "+243800000002");
         doThrow(new RuntimeException("boom")).when(schemaProvisioner).dropSchemaForDeletion("kv_aaaaaa");
@@ -245,7 +268,7 @@ class AccountDeletionSchedulerTest {
     @DisplayName("tenant cancelled before the row lock is skipped")
     void executeDeletions_skipsTenantCancelledDuringRun() {
         Tenant pending = createTenant(TenantStatus.DELETION_PENDING, expiredDate);
-        when(tenantRepository.findAll()).thenReturn(List.of(pending));
+        when(tenantRepository.findDeletionsDueBy(any())).thenReturn(List.of(pending));
         stubLock(tenantId, TenantStatus.ACTIVE, null);
 
         scheduler.executeDeletions();
@@ -260,7 +283,7 @@ class AccountDeletionSchedulerTest {
     @DisplayName("tenant cancelled then re-requested (future date) before the row lock is skipped")
     void executeDeletions_skipsTenantReRequestedWithFutureDate() {
         Tenant pending = createTenant(TenantStatus.DELETION_PENDING, expiredDate);
-        when(tenantRepository.findAll()).thenReturn(List.of(pending));
+        when(tenantRepository.findDeletionsDueBy(any())).thenReturn(List.of(pending));
         stubLock(tenantId, TenantStatus.DELETION_PENDING, Instant.parse("2026-09-21T00:00:00Z"));
 
         scheduler.executeDeletions();
