@@ -6,17 +6,18 @@ import com.keevo.admin.catalog.domain.model.AdminCatalogSummary;
 import com.keevo.admin.catalog.domain.model.AdminProductListItem;
 import com.keevo.shared.infrastructure.security.JwtAuthFilter;
 import jakarta.servlet.FilterChain;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
@@ -33,11 +34,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("AdminCatalogController")
 class AdminCatalogControllerTest {
 
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
+
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
 
-    @MockBean AdminCatalogService adminCatalogService;
-    @MockBean JwtAuthFilter jwtAuthFilter;
+    @MockitoBean AdminCatalogService adminCatalogService;
+    @MockitoBean JwtAuthFilter jwtAuthFilter;
 
     private static final UUID ADMIN_ID = UUID.randomUUID();
 

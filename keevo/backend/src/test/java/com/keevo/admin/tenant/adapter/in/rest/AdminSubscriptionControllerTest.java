@@ -5,16 +5,17 @@ import com.keevo.shared.infrastructure.security.JwtAuthFilter;
 import com.keevo.subscription.plan.adapter.in.rest.dto.ActivatePlanRequest;
 import com.keevo.subscription.plan.domain.port.in.ActivatePlanUseCase;
 import jakarta.servlet.FilterChain;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
@@ -35,11 +36,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("AdminSubscriptionController")
 class AdminSubscriptionControllerTest {
 
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
+
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
 
-    @MockBean ActivatePlanUseCase activatePlanUseCase;
-    @MockBean JwtAuthFilter jwtAuthFilter;
+    @MockitoBean ActivatePlanUseCase activatePlanUseCase;
+    @MockitoBean JwtAuthFilter jwtAuthFilter;
 
     private static final UUID ADMIN_ID = UUID.randomUUID();
     private static final String TENANT_ID = UUID.randomUUID().toString();
@@ -88,5 +94,40 @@ class AdminSubscriptionControllerTest {
             chain.doFilter(inv.getArgument(0), inv.getArgument(1));
             return null;
         }).when(jwtAuthFilter).doFilter(any(), any(), any());
+    }
+
+    // ── v1s-15-7: CurrentActor follow-up (URL rule + requireSuperAdmin) ──────
+
+    @Test
+    @DisplayName("v1s-15-7: anonymous POST /{tenantId}/activate → 401, use case never called")
+    void activatePlan_anonymous_returns401() throws Exception {
+        doAnswer(inv -> {
+            FilterChain chain = inv.getArgument(2);
+            chain.doFilter(inv.getArgument(0), inv.getArgument(1));
+            return null;
+        }).when(jwtAuthFilter).doFilter(any(), any(), any());
+
+        mockMvc.perform(post("/api/v1/admin/subscriptions/{tenantId}/activate", TENANT_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ActivatePlanRequest(
+                                "PREMIUM", Instant.now().plus(365, ChronoUnit.DAYS)))))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(activatePlanUseCase);
+    }
+
+    @Test
+    @DisplayName("v1s-15-7: EMPLOYEE POST /{tenantId}/activate → 403 FORBIDDEN, use case never called")
+    void activatePlan_withEmployeeRole_returns403() throws Exception {
+        setupFilterAs("ROLE_EMPLOYEE");
+
+        mockMvc.perform(post("/api/v1/admin/subscriptions/{tenantId}/activate", TENANT_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ActivatePlanRequest(
+                                "PREMIUM", Instant.now().plus(365, ChronoUnit.DAYS)))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.domainCode").value("FORBIDDEN"));
+
+        verify(activatePlanUseCase, never()).execute(any());
     }
 }

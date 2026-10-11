@@ -77,6 +77,24 @@ class StockMovementRepositoryAdapterTest {
     }
 
     @Test
+    @DisplayName("v1s-15-7: save maps a non-null variantId to the JPA entity and back")
+    void save_withVariantId_mapsVariantIdBothWays() {
+        UUID variantId = UUID.randomUUID();
+        StockMovement movement = new StockMovement(MOVEMENT_ID, PRODUCT_ID, variantId, STORE_ID,
+                MovementType.SALE, 10, -3, 7, ACTOR_ID, "Variant sale", NOW);
+        when(springRepository.save(any(StockMovementJpaEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        StockMovement result = adapter.save(movement);
+
+        ArgumentCaptor<StockMovementJpaEntity> captor = ArgumentCaptor.forClass(StockMovementJpaEntity.class);
+        verify(springRepository).save(captor.capture());
+        assertThat(captor.getValue().getVariantId()).isEqualTo(variantId);
+        assertThat(captor.getValue().getProductId()).isEqualTo(PRODUCT_ID);
+        assertThat(result.getVariantId()).isEqualTo(variantId);
+        assertThat(result.getProductId()).isEqualTo(PRODUCT_ID);
+    }
+
+    @Test
     @DisplayName("save when movement id is null generates new UUID")
     void save_whenMovementIdNull_generatesNewUuid() {
         StockMovement movement = new StockMovement(null, PRODUCT_ID, null, STORE_ID,

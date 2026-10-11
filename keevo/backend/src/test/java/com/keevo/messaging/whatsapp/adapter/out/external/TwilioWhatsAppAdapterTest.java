@@ -114,6 +114,23 @@ class TwilioWhatsAppAdapterTest {
     }
 
     @Test
+    void sendReport_addsPlusPrefix_whenNumberHasNone() {
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>("{}", HttpStatus.OK));
+
+        adapter.sendReport("237699000080", "Report");
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<HttpEntity<MultiValueMap<String, String>>> captor = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).exchange(anyString(), eq(HttpMethod.POST), captor.capture(), eq(String.class));
+
+        MultiValueMap<String, String> body = captor.getValue().getBody();
+        assertNotNull(body);
+        assertEquals("whatsapp:+237699000080", body.getFirst("To"),
+                "A number without '+' must be prefixed to E.164");
+    }
+
+    @Test
     void isConfigured_returnsTrue_whenAllFieldsSet() {
         assertTrue(adapter.isConfigured());
     }

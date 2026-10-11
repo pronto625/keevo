@@ -110,6 +110,37 @@ class FailoverWhatsAppAdapterTest {
         verify(wassenderRestTemplate, never()).exchange(anyString(), any(), any(), eq(String.class));
     }
 
+    // ── v1s-15-7 item 6: untested combinations ─────────────────────────
+
+    @Test
+    void sendReport_whenWassenderBlankAndTwilioFails_throwsWhatsAppDeliveryException() {
+        WassenderProperties blankToken = new WassenderProperties("https://api.example.com", "  ");
+        adapter = new FailoverWhatsAppAdapter(wassenderRestTemplate, twilioRestTemplate,
+                blankToken, twilioProperties);
+        when(twilioRestTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenThrow(new RuntimeException("Twilio down"));
+
+        assertThrows(WhatsAppDeliveryException.class,
+                () -> adapter.sendReport("+237699000080", "Report"));
+
+        verify(wassenderRestTemplate, never()).exchange(anyString(), any(), any(), eq(String.class));
+        verify(twilioRestTemplate).exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class));
+    }
+
+    @Test
+    void sendReport_whenWassenderFailsAndTwilioUnconfigured_throwsWithoutCallingTwilio() {
+        TwilioProperties emptyTwilio = new TwilioProperties("", "", "");
+        adapter = new FailoverWhatsAppAdapter(wassenderRestTemplate, twilioRestTemplate,
+                wassenderProperties, emptyTwilio);
+        when(wassenderRestTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenThrow(new RuntimeException("Wassender down"));
+
+        assertThrows(WhatsAppDeliveryException.class,
+                () -> adapter.sendReport("+237699000080", "Report"));
+
+        verify(twilioRestTemplate, never()).exchange(anyString(), any(), any(), eq(String.class));
+    }
+
     // ── isConfigured matrix ───────────────────────────────────────────
 
     @Test

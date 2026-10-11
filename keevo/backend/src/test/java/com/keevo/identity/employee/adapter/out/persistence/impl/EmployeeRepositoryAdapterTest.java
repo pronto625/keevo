@@ -6,7 +6,6 @@ import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.model.EmployeeStatus;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.persistence.JpaBaseEntity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -14,7 +13,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.lang.reflect.Field;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -55,7 +53,7 @@ class EmployeeRepositoryAdapterTest {
     }
 
     private EmployeeJpaEntity toEntity(Employee e) {
-        EmployeeJpaEntity entity = new EmployeeJpaEntity();
+        EmployeeJpaEntity entity = new TimestampedEmployeeJpaEntity(NOW, NOW);
         entity.assignId(e.getId());
         entity.setUserId(e.getUserId());
         entity.setStoreId(e.getStoreId());
@@ -63,20 +61,28 @@ class EmployeeRepositoryAdapterTest {
         entity.setLastName(e.getLastName());
         entity.setStatus(e.getStatus().name());
         entity.setPasswordChangeRequired(e.isPasswordChangeRequired());
-        // JpaBaseEntity.createdAt is set by @PrePersist — set manually for tests
-        setField(entity, "createdAt", NOW);
-        setField(entity, "updatedAt", NOW);
         return entity;
     }
 
-    private void setField(Object target, String fieldName, Object value) {
-        try {
-            Field f = JpaBaseEntity.class.getDeclaredField(fieldName);
-            f.setAccessible(true);
-            f.set(target, value);
-        } catch (Exception ex) {
-            throw new RuntimeException("Cannot set " + fieldName, ex);
+    /**
+     * Test fixture: {@code createdAt/updatedAt} are normally filled by {@code @PrePersist};
+     * this subclass exposes fixed timestamps without reflecting into {@code JpaBaseEntity}
+     * (v1s-15-7 item 11).
+     */
+    private static final class TimestampedEmployeeJpaEntity extends EmployeeJpaEntity {
+        private final Instant createdAt;
+        private final Instant updatedAt;
+
+        TimestampedEmployeeJpaEntity(Instant createdAt, Instant updatedAt) {
+            this.createdAt = createdAt;
+            this.updatedAt = updatedAt;
         }
+
+        @Override
+        public Instant getCreatedAt() { return createdAt; }
+
+        @Override
+        public Instant getUpdatedAt() { return updatedAt; }
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -136,6 +142,26 @@ class EmployeeRepositoryAdapterTest {
 
         assertTrue(result.isPresent());
         assertThat(result.get().getUserId()).isEqualTo(USER_ID);
+    }
+
+    @Test
+    @DisplayName("v1s-15-7: findByUserId when no employee row returns empty")
+    void findByUserId_whenNotFound_returnsEmpty() {
+        when(jpa.findByUserId(USER_ID)).thenReturn(Optional.empty());
+
+        Optional<Employee> result = adapter.findByUserId(USER_ID);
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    @DisplayName("v1s-15-7 D2: unknown status on corrupt data fails fast with IllegalArgumentException (no silent ACTIVE/INACTIVE mapping)")
+    void findById_whenStatusUnknown_throwsIllegalArgumentException() {
+        EmployeeJpaEntity corrupt = toEntity(sampleEmployee);
+        corrupt.setStatus("SUSPENDED");
+        when(jpa.findById(EMPLOYEE_ID)).thenReturn(Optional.of(corrupt));
+
+        assertThrows(IllegalArgumentException.class, () -> adapter.findById(EMPLOYEE_ID));
     }
 
     // ─────────────────────────────────────────────────────────────────

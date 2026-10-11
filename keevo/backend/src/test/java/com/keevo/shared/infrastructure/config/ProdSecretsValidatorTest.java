@@ -10,6 +10,7 @@ import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
@@ -18,6 +19,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * ProdSecretsValidatorTest — Unit tests for the production secrets fail-fast guard.
@@ -43,11 +45,19 @@ class ProdSecretsValidatorTest {
         Path priv = Files.writeString(keyDir.resolve("private.pem"), "-----BEGIN PRIVATE KEY-----\n");
         Path pub = Files.writeString(keyDir.resolve("public.pem"), "-----BEGIN PUBLIC KEY-----\n");
         // Private key must be mode 600 (owner-only) for the world-readability check (story 12.1).
-        Files.setPosixFilePermissions(priv, Set.of(
-                PosixFilePermission.OWNER_READ,
-                PosixFilePermission.OWNER_WRITE));
+        // v1s-15-7: on non-POSIX runners the validator skips that check, so the fixture only
+        // sets the mode where it is supported — the non-permission tests still run everywhere.
+        if (posixSupported()) {
+            Files.setPosixFilePermissions(priv, Set.of(
+                    PosixFilePermission.OWNER_READ,
+                    PosixFilePermission.OWNER_WRITE));
+        }
         privateKey = priv.toAbsolutePath().toString();
         publicKey = pub.toAbsolutePath().toString();
+    }
+
+    private static boolean posixSupported() {
+        return FileSystems.getDefault().supportedFileAttributeViews().contains("posix");
     }
 
     // ── Builder helper (story v1s-12-13: keeps the 9-arg ctor out of every test) ──
@@ -225,6 +235,12 @@ class ProdSecretsValidatorTest {
     @Nested
     @DisplayName("JWT private key world-readability check")
     class JwtKeyPermissionsValidation {
+
+        /** v1s-15-7: these tests set POSIX modes — skip (not fail) on non-POSIX runners. */
+        @BeforeEach
+        void requirePosix() {
+            assumeTrue(posixSupported(), "POSIX file permissions not supported on this filesystem");
+        }
 
         @Test
         @DisplayName("story 12.1: rejects private key that is world-readable (OTHERS_READ)")

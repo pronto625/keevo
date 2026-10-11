@@ -1,5 +1,6 @@
 package com.keevo.identity.auth.adapter.in.rest;
 
+import org.springframework.security.core.context.SecurityContextHolder;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.identity.auth.adapter.in.rest.dto.LoginRequest;
 import com.keevo.identity.auth.adapter.in.rest.dto.RefreshRequest;
@@ -23,13 +24,14 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.JwtAuthFilter;
 import jakarta.servlet.FilterChain;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -57,18 +59,23 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("AuthController")
 class AuthControllerTest {
 
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
+
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
 
-    @MockBean RegisterUserUseCase   registerUserUseCase;
-    @MockBean AuthenticateUserUseCase authenticateUserUseCase;
-    @MockBean SelectTenantUseCase   selectTenantUseCase;
-    @MockBean RefreshTokenUseCase   refreshTokenUseCase;
-    @MockBean ChangePasswordUseCase changePasswordUseCase;
-    @MockBean GetUserProfileUseCase getUserProfileUseCase;
-    @MockBean RequestPasswordResetUseCase requestPasswordResetUseCase;
-    @MockBean ResetPasswordUseCase  resetPasswordUseCase;
-    @MockBean JwtAuthFilter         jwtAuthFilter;
+    @MockitoBean RegisterUserUseCase   registerUserUseCase;
+    @MockitoBean AuthenticateUserUseCase authenticateUserUseCase;
+    @MockitoBean SelectTenantUseCase   selectTenantUseCase;
+    @MockitoBean RefreshTokenUseCase   refreshTokenUseCase;
+    @MockitoBean ChangePasswordUseCase changePasswordUseCase;
+    @MockitoBean GetUserProfileUseCase getUserProfileUseCase;
+    @MockitoBean RequestPasswordResetUseCase requestPasswordResetUseCase;
+    @MockitoBean ResetPasswordUseCase  resetPasswordUseCase;
+    @MockitoBean JwtAuthFilter         jwtAuthFilter;
 
     @BeforeEach
     void letFilterPassThrough() throws Exception {

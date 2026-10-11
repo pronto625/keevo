@@ -25,7 +25,6 @@ import java.util.UUID;
 public class ReportHistoryService implements GetReportHistoryUseCase, ResendReportUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(ReportHistoryService.class);
-    private static final String DEFAULT_OWNER_PHONE = "+243000000000";
 
     private final EndOfDayReportRepository reportRepository;
     private final WhatsAppPort whatsAppPort;
@@ -62,13 +61,22 @@ public class ReportHistoryService implements GetReportHistoryUseCase, ResendRepo
                 .filter(r -> r.getTenantId().equals(command.tenantId()))
                 .orElseThrow(() -> new DomainException(ErrorCode.NOT_FOUND, "Report not found"));
 
+        // v1s-15-7 D1: never guess a recipient. Without a resolvable owner phone the resend is
+        // refused before the report is touched (no reset, no save, no WhatsApp call) — same rule
+        // as ReportDeliveryRetryService (skip) and DailyReportGenerator (IN_APP_ONLY).
+        String ownerPhone = userRepository.findOwnerByTenantSchemaName(command.tenantId())
+                .map(u -> u.getPhoneNumber())
+                .filter(phone -> !phone.isBlank())
+                .orElseThrow(() -> {
+                    log.warn("Resend refused for reportId={} tenant={}: no owner WhatsApp phone",
+                            report.getId(), command.tenantId());
+                    return new DomainException(ErrorCode.WHATSAPP_DELIVERY_FAILED,
+                            "Aucun numéro WhatsApp du propriétaire pour renvoyer le rapport");
+                });
+
         // Reset and attempt immediate delivery (no guard: re-sending an already-SENT report is allowed)
         report.resetForResend();
         reportRepository.save(report);
-
-        String ownerPhone = userRepository.findOwnerByTenantSchemaName(command.tenantId())
-                .map(u -> u.getPhoneNumber())
-                .orElse(DEFAULT_OWNER_PHONE);
 
         try {
             whatsAppPort.sendReport(ownerPhone, report.getContent());

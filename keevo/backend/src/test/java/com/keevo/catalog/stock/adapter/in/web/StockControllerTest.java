@@ -7,6 +7,7 @@ import com.keevo.catalog.stock.domain.entity.MovementType;
 import com.keevo.catalog.stock.domain.entity.StockLevel;
 import com.keevo.catalog.stock.domain.entity.StockMovement;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +39,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @ExtendWith(MockitoExtension.class)
 class StockControllerTest {
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
 
     @Mock private GetCurrentStockUseCase getCurrentStockUseCase;
     @Mock private RecordStockEntryUseCase recordStockEntryUseCase;
