@@ -400,7 +400,7 @@ development_status:
   v1s-16-12-sync-rejection-feedback: done  # 2026-10-11 done (bmad-build-auto, spec-v1s-16-12-sync-rejection-feedback.md) : 4/4 items clos — politique de rejet (transitoire/terminal), rollback des créations fantômes (boutique/produit/catégorie/client/fournisseur) + annulation de session d'inventaire et de ses ops dépendantes, PLAN_LIMIT_EXCEEDED défini + test contrat backend, onAppStartup chaîné ; app 1.1.21+20 ; 1 passe de revue (12 patchs) ; routé → v1s-16-15 | 2026-10-11 +1 item routé depuis v1s-13-8 (session inventaire locale après rejet) | 2026-10-11 deferred-work redistribution — 3 items
   v1s-16-13-app-ux-residual: backlog  # 2026-10-11 deferred-work redistribution — 23 items (incl. v1s-14-12 AC7 amended)
   v1s-16-14-catalog-list-quality: backlog  # 2026-10-11 deferred-work redistribution — 4 items
-  v1s-16-15-sync-stuck-money-ops: backlog  # 2026-10-11 build-auto v1s-16-12 (review defer) — 1 item
+  v1s-16-15-sync-stuck-money-ops: in-progress  # 2026-10-11 build-auto v1s-16-12 (review defer) — 1 item
   v1s-epic-16-retrospective: optional
 
   # ─────────────────────────────────────────────────────────
