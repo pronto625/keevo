@@ -47,8 +47,16 @@ public class InventoryCount {
     public static InventoryCount create(UUID sessionId, UUID productId, UUID variantId,
                                         String productName, String variantLabel,
                                         int theoretical, int physical, UUID actorId) {
+        return create(null, sessionId, productId, variantId, productName, variantLabel,
+                theoretical, physical, actorId);
+    }
+
+    /** @param id client-generated id to keep (offline device), or null to generate one. */
+    public static InventoryCount create(UUID id, UUID sessionId, UUID productId, UUID variantId,
+                                        String productName, String variantLabel,
+                                        int theoretical, int physical, UUID actorId) {
         return new InventoryCount(
-                UUID.randomUUID(), sessionId, productId, variantId,
+                id != null ? id : UUID.randomUUID(), sessionId, productId, variantId,
                 productName, variantLabel, theoretical, physical,
                 Instant.now(), actorId, Instant.now());
     }

@@ -21,9 +21,16 @@ public class DayClosure {
     private final DayClosureSummary summary;
     private final boolean isAutomatic;
     private final String tenantId;
+    private final Instant receivedAt;   // when the server recorded it (null for rows predating it)
 
     public DayClosure(UUID id, UUID storeId, UUID actorId, Instant closedAt,
                       DayClosureSummary summary, boolean isAutomatic, String tenantId) {
+        this(id, storeId, actorId, closedAt, summary, isAutomatic, tenantId, null);
+    }
+
+    public DayClosure(UUID id, UUID storeId, UUID actorId, Instant closedAt,
+                      DayClosureSummary summary, boolean isAutomatic, String tenantId,
+                      Instant receivedAt) {
         Objects.requireNonNull(storeId, "storeId must not be null");
         Objects.requireNonNull(closedAt, "closedAt must not be null");
         this.id = id != null ? id : UUID.randomUUID();
@@ -33,6 +40,7 @@ public class DayClosure {
         this.summary = summary != null ? summary : new DayClosureSummary(0, 0, null, null, 0, 0, 0, 0, 0);
         this.isAutomatic = isAutomatic;
         this.tenantId = tenantId;
+        this.receivedAt = receivedAt;
     }
 
     public UUID getId() { return id; }
@@ -42,6 +50,9 @@ public class DayClosure {
     public DayClosureSummary getSummary() { return summary; }
     public boolean isAutomatic() { return isAutomatic; }
     public String getTenantId() { return tenantId; }
+
+    /** When the server recorded the closure; falls back to closedAt for rows predating the column. */
+    public Instant getReceivedAt() { return receivedAt != null ? receivedAt : closedAt; }
 
     @Override
     public boolean equals(Object o) {

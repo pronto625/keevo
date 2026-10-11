@@ -11,6 +11,8 @@ import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.springframework.stereotype.Service;
 
+import com.keevo.commerce.sale.domain.model.ClosureWindow;
+
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -71,15 +73,18 @@ public class DailyReportGenerator extends AbstractReportGenerator
                 : reportDate.atStartOfDay(WAT).toInstant();
         Instant windowEnd = command.windowEnd() != null ? command.windowEnd()
                 : (command.closedAt() != null ? command.closedAt() : Instant.now());
+        // Same sales as the day closure: late offline sales included (see ClosureWindow).
+        ClosureWindow window = new ClosureWindow(windowStart, windowEnd,
+                command.lateFrom(), command.receivedUntil());
 
         if (command.actorId() != null) {
             String actorName = employeeRepository.findById(command.actorId())
                     .map(e -> e.getFirstName() + " " + e.getLastName())
                     .orElse(null);
             return builder.buildForEmployee(command.storeId(), command.actorId(),
-                    windowStart, windowEnd, storeName, reportDate, closeTime, command.isAutomatic(), actorName);
+                    window, storeName, reportDate, closeTime, command.isAutomatic(), actorName);
         }
-        return builder.build(command.storeId(), windowStart, windowEnd,
+        return builder.build(command.storeId(), window,
                 storeName, reportDate, closeTime, command.isAutomatic());
     }
 

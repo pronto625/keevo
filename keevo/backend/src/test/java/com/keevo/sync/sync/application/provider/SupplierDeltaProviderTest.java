@@ -34,7 +34,7 @@ class SupplierDeltaProviderTest {
     void queryDelta_withSince_returnsOnlyUpdatedSuppliers() {
         when(em.createNativeQuery(anyString())).thenReturn(query);
         when(query.setParameter(eq("since"), any())).thenReturn(query);
-        when(query.setMaxResults(1000)).thenReturn(query);
+        when(query.setMaxResults(anyInt())).thenReturn(query);
         var now = Timestamp.from(Instant.now());
         Object[] row = {UUID.randomUUID(), "Supplier X", "+237622222222", "sup@x.com", false, now, now};
         when(query.getResultList()).thenReturn(Collections.singletonList(row));

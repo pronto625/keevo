@@ -34,7 +34,7 @@ class StoreDeltaProviderTest {
     void queryDelta_withSince_returnsOnlyUpdatedStores() {
         when(em.createNativeQuery(anyString())).thenReturn(query);
         when(query.setParameter(eq("since"), any())).thenReturn(query);
-        when(query.setMaxResults(1000)).thenReturn(query);
+        when(query.setMaxResults(anyInt())).thenReturn(query);
         var now = Timestamp.from(Instant.now());
         Object[] row = {UUID.randomUUID(), "Ma Boutique", "Rue 1", "+237600000001", "STORE", true, now, now};
         when(query.getResultList()).thenReturn(Collections.singletonList(row));

@@ -50,14 +50,14 @@ class AdjustStockUseCaseTest {
         when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
             .thenReturn(Optional.of(levelAt(8)));
         when(stockOperationService.recordOperation(any(), any(), any(),
-            eq(MovementType.ADJUSTMENT), eq(2), any(), any()))
+            eq(MovementType.ADJUSTMENT), eq(2), any(), any(), any(), eq(false)))
             .thenReturn(fakeMovement(8, 2));
 
         // newQuantity=10, currentQuantity=8 → delta=+2
         useCase.execute(PRODUCT_ID, null, STORE_ID, 10, ACTOR_ID, "inventory count");
 
         verify(stockOperationService).recordOperation(
-            PRODUCT_ID, null, STORE_ID, MovementType.ADJUSTMENT, 2, ACTOR_ID, "inventory count");
+            PRODUCT_ID, null, STORE_ID, MovementType.ADJUSTMENT, 2, ACTOR_ID, "inventory count", null, false);
     }
 
     @Test
@@ -65,13 +65,13 @@ class AdjustStockUseCaseTest {
         when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
             .thenReturn(Optional.empty());
         when(stockOperationService.recordOperation(any(), any(), any(),
-            eq(MovementType.ADJUSTMENT), eq(15), any(), any()))
+            eq(MovementType.ADJUSTMENT), eq(15), any(), any(), any(), eq(false)))
             .thenReturn(fakeMovement(0, 15));
 
         useCase.execute(PRODUCT_ID, null, STORE_ID, 15, ACTOR_ID, "initial setup");
 
         verify(stockOperationService).recordOperation(
-            PRODUCT_ID, null, STORE_ID, MovementType.ADJUSTMENT, 15, ACTOR_ID, "initial setup");
+            PRODUCT_ID, null, STORE_ID, MovementType.ADJUSTMENT, 15, ACTOR_ID, "initial setup", null, false);
     }
 
     @Test
@@ -79,5 +79,17 @@ class AdjustStockUseCaseTest {
         assertThatThrownBy(() -> useCase.execute(PRODUCT_ID, null, STORE_ID, -1, ACTOR_ID, "error"))
                 .isInstanceOf(DomainException.class)
                 .hasMessageContaining("négative");
+    }
+
+    @Test
+    void should_pass_client_movement_id() {
+        UUID movementId = UUID.randomUUID();
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
+            .thenReturn(Optional.of(levelAt(8)));
+
+        useCase.execute(PRODUCT_ID, null, STORE_ID, 10, ACTOR_ID, "offline", movementId);
+
+        verify(stockOperationService).recordOperation(
+            PRODUCT_ID, null, STORE_ID, MovementType.ADJUSTMENT, 2, ACTOR_ID, "offline", movementId, false);
     }
 }

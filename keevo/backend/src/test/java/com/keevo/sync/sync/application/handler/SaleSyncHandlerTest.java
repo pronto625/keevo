@@ -5,6 +5,7 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,6 +36,44 @@ class SaleSyncHandlerTest {
     @BeforeEach
     void setUp() {
         handler = new SaleSyncHandler(recordSaleUseCase, eventPublisher);
+    }
+
+    @AfterEach
+    void tearDown() {
+        SyncTestAuth.clear();
+    }
+
+    private SyncOperation saleIn(UUID storeId) {
+        var saleId = UUID.randomUUID();
+        return new SyncOperation("op-1", "CREATE_SALE", saleId.toString(),
+                Map.of("saleId", saleId.toString(), "storeId", storeId.toString(),
+                        "paymentMode", "CASH", "totalAmount", 5000,
+                        "discountAmount", 0, "items", validItems()),
+                Instant.now());
+    }
+
+    // Over REST an employee can only sell in the store of their token; the
+    // sync push must not let them decrement another store's stock.
+    @Test
+    void handle_employeeSellingInAnotherStore_isForbidden() {
+        SyncTestAuth.employee(UUID.randomUUID());
+
+        var result = handler.handle(saleIn(UUID.randomUUID()), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("FORBIDDEN");
+        verifyNoInteractions(recordSaleUseCase);
+    }
+
+    @Test
+    void handle_employeeSellingInOwnStore_isApplied() {
+        var store = UUID.randomUUID();
+        SyncTestAuth.employee(store);
+
+        var result = handler.handle(saleIn(store), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        verify(recordSaleUseCase).recordSale(any());
     }
 
     @Test
@@ -107,6 +146,70 @@ class SaleSyncHandlerTest {
     @Test
     void supportedTypes_containsCreateSale() {
         assertThat(handler.supportedTypes()).containsExactly("CREATE_SALE");
+    }
+
+    // ── Offline sales keep the time they were made, not the push time ──────
+
+    private SyncOperation saleWith(Map<String, Object> extra, Instant clientTimestamp) {
+        var saleId = UUID.randomUUID();
+        var payload = new java.util.HashMap<String, Object>(Map.of(
+                "saleId", saleId.toString(), "storeId", UUID.randomUUID().toString(),
+                "paymentMode", "CASH", "discountAmount", 0, "items", validItems()));
+        payload.putAll(extra);
+        return new SyncOperation("op-1", "CREATE_SALE", saleId.toString(), payload, clientTimestamp);
+    }
+
+    private RecordSaleUseCase.RecordSaleCommand capturedCommand() {
+        var captor = org.mockito.ArgumentCaptor.forClass(RecordSaleUseCase.RecordSaleCommand.class);
+        verify(recordSaleUseCase).recordSale(captor.capture());
+        return captor.getValue();
+    }
+
+    @Test
+    void handle_payloadOccurredAt_isPassedToTheSale() {
+        var soldAt = Instant.parse("2026-09-28T17:00:00Z");
+
+        handler.handle(saleWith(Map.of("occurredAt", "2026-09-28T17:00:00Z"),
+                Instant.parse("2026-09-29T08:00:00Z")), ACTOR_ID, TENANT_ID);
+
+        assertThat(capturedCommand().occurredAt()).isEqualTo(soldAt);
+    }
+
+    @Test
+    void handle_noOccurredAt_fallsBackToClientTimestamp() {
+        var queuedAt = Instant.parse("2026-09-28T17:05:00Z");
+
+        handler.handle(saleWith(Map.of(), queuedAt), ACTOR_ID, TENANT_ID);
+
+        assertThat(capturedCommand().occurredAt()).isEqualTo(queuedAt);
+    }
+
+    @Test
+    void handle_futureOccurredAt_isClampedToNow() {
+        var before = Instant.now();
+
+        handler.handle(saleWith(Map.of("occurredAt", "2099-01-01T00:00:00Z"), null), ACTOR_ID, TENANT_ID);
+
+        var occurredAt = capturedCommand().occurredAt();
+        assertThat(occurredAt).isBetween(before, Instant.now());
+    }
+
+    @Test
+    void handle_unparseableOccurredAt_fallsBackToClientTimestamp() {
+        var queuedAt = Instant.parse("2026-09-28T17:05:00Z");
+
+        handler.handle(saleWith(Map.of("occurredAt", "not-a-date"), queuedAt), ACTOR_ID, TENANT_ID);
+
+        assertThat(capturedCommand().occurredAt()).isEqualTo(queuedAt);
+    }
+
+    // An offline sale already happened: the push must apply it even if the
+    // server stock is short (CONFLICT / STOCK_NEGATIVE is reported afterwards).
+    @Test
+    void handle_allowsNegativeStock() {
+        handler.handle(saleWith(Map.of(), Instant.now()), ACTOR_ID, TENANT_ID);
+
+        assertThat(capturedCommand().allowNegativeStock()).isTrue();
     }
 
     private List<Map<String, Object>> validItems() {

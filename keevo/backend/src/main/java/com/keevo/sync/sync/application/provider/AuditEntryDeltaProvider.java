@@ -1,8 +1,9 @@
 package com.keevo.sync.sync.application.provider;
 
 import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider;
+import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider.Page;
+import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider.Position;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.Query;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -24,20 +25,15 @@ public class AuditEntryDeltaProvider implements DeltaEntityProvider {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
-    public List<Map<String, Object>> queryDelta(Instant since) {
+    public Page queryDeltaPage(Instant since, Position after, int limit) {
         // First-time sync: limit to last 30 days
         Instant thirtyDaysAgo = Instant.now().minus(30, ChronoUnit.DAYS);
         Instant effectiveSince = since.isAfter(thirtyDaysAgo) ? since : thirtyDaysAgo;
 
-        String sql = "SELECT id, user_id, entity_type, entity_id, action, value_before, " +
-                "value_after, occurred_at " +
-                "FROM audit_log WHERE occurred_at > :since ORDER BY occurred_at ASC";
-        Query query = em.createNativeQuery(sql);
-        query.setParameter("since", java.sql.Timestamp.from(effectiveSince));
-        query.setMaxResults(1000);
-        List<Object[]> rows = query.getResultList();
-        return rows.stream().map(this::mapRow).toList();
+        var page = DeltaPageQuery.fetch(em,
+                "id, user_id, entity_type, entity_id, action, value_before, value_after, occurred_at",
+                "audit_log", "occurred_at", effectiveSince, after, limit);
+        return new Page(page.rows().stream().map(this::mapRow).toList(), page.next());
     }
 
     private Map<String, Object> mapRow(Object[] row) {

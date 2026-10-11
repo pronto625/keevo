@@ -64,7 +64,7 @@ public class RecordSaleService implements RecordSaleUseCase {
                 ? command.requestedStatus() : SaleStatus.COMPLETED;
         boolean isPending = effectiveStatus == SaleStatus.PENDING_VALIDATION;
 
-        if (!isPending) {
+        if (!isPending && !command.allowNegativeStock()) {
             // Stock availability check for each item (only for COMPLETED sales)
             for (var item : command.items()) {
                 int available = getAvailableStock(item.productId(), item.variantId(), command.storeId());
@@ -85,15 +85,29 @@ public class RecordSaleService implements RecordSaleUseCase {
         if (!isPending) {
             // Decrement stock for each item (only for COMPLETED sales)
             for (var item : command.items()) {
-                stockOperationService.recordOperation(
-                        item.productId(),
-                        item.variantId(),
-                        command.storeId(),
-                        MovementType.SALE,
-                        -item.quantity(),
-                        command.actorId(),
-                        "Vente " + command.saleId()
-                );
+                if (command.allowNegativeStock()) {
+                    stockOperationService.recordOperation(
+                            item.productId(),
+                            item.variantId(),
+                            command.storeId(),
+                            MovementType.SALE,
+                            -item.quantity(),
+                            command.actorId(),
+                            "Vente " + command.saleId(),
+                            null,
+                            true
+                    );
+                } else {
+                    stockOperationService.recordOperation(
+                            item.productId(),
+                            item.variantId(),
+                            command.storeId(),
+                            MovementType.SALE,
+                            -item.quantity(),
+                            command.actorId(),
+                            "Vente " + command.saleId()
+                    );
+                }
             }
 
             // Story 4.2 — Publish SalePriceOverriddenEvent for each overridden item

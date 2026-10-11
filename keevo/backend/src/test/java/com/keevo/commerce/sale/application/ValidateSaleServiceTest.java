@@ -194,11 +194,13 @@ class ValidateSaleServiceTest {
     @Test
     void cancelPendingSale_completedSale_restoresStockAndCancels() {
         when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(completedSale()));
+        when(saleRepository.updateStatusIfCurrent(SALE_ID, SaleStatus.COMPLETED, SaleStatus.CANCELLED))
+                .thenReturn(true);
 
         service.cancelPendingSale(new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null,
                 "Erreur de scan, article rendu au client"));
 
-        verify(saleRepository).updateStatus(SALE_ID, SaleStatus.CANCELLED);
+        verify(saleRepository).updateStatusIfCurrent(SALE_ID, SaleStatus.COMPLETED, SaleStatus.CANCELLED);
         // completedSale() has exactly 1 item, quantity=1 → recordOperation called once,
         // delta must be POSITIVE (restoration), not negative.
         verify(stockOperationService, times(1)).recordOperation(
@@ -319,5 +321,23 @@ class ValidateSaleServiceTest {
                 .hasMessageContaining("Employee cannot operate pending sale outside assigned store");
 
         verify(saleRepository, never()).updateStatus(any(), any());
+    }
+
+    // Two concurrent cancellations both read COMPLETED: only the one whose conditional
+    // COMPLETED→CANCELLED update changed the row may restore the stock.
+    @Test
+    void cancelPendingSale_completedSale_lostRace_doesNotRestoreStockTwice() {
+        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(completedSale()));
+        when(saleRepository.updateStatusIfCurrent(SALE_ID, SaleStatus.COMPLETED, SaleStatus.CANCELLED))
+                .thenReturn(false);
+
+        assertThatThrownBy(() -> service.cancelPendingSale(new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null,
+                "Erreur de scan, article rendu au client")))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getErrorCode())
+                .isEqualTo(com.keevo.shared.domain.exception.ErrorCode.SALE_ALREADY_CANCELLED);
+
+        verifyNoInteractions(stockOperationService);
+        verify(eventPublisher, never()).publishEvent(any());
     }
 }

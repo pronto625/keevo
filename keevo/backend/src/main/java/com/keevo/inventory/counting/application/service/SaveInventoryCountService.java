@@ -48,6 +48,7 @@ public class SaveInventoryCountService implements SaveInventoryCountUseCase {
         }
 
         InventoryCount count = InventoryCount.create(
+                command.countId(),
                 command.sessionId(),
                 command.productId(),
                 command.variantId(),

@@ -1,6 +1,5 @@
 package com.keevo.identity.employee.application.service;
 
-import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
 import com.keevo.identity.employee.domain.event.EmployeeStoreReassignedEvent;
 import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.port.in.ReassignStoreCommand;
@@ -22,14 +21,11 @@ import java.util.UUID;
 public class ReassignStoreService implements ReassignStoreUseCase {
 
     private final EmployeeRepository employeeRepository;
-    private final RefreshTokenRepository refreshTokenRepository;
     private final ApplicationEventPublisher eventPublisher;
 
     public ReassignStoreService(EmployeeRepository employeeRepository,
-                                 RefreshTokenRepository refreshTokenRepository,
                                  ApplicationEventPublisher eventPublisher) {
         this.employeeRepository = employeeRepository;
-        this.refreshTokenRepository = refreshTokenRepository;
         this.eventPublisher = eventPublisher;
     }
 
@@ -45,8 +41,9 @@ public class ReassignStoreService implements ReassignStoreUseCase {
         // 2. Update store assignment
         Employee updated = employeeRepository.updateStoreId(command.employeeId(), command.newStoreId());
 
-        // 3. Revoke refresh tokens (force re-login for new storeId in JWT)
-        refreshTokenRepository.revokeAllByUserId(employee.getUserId());
+        // 3. No session revocation: JwtAuthFilter answers STORE_REASSIGNED to the
+        //    old token and the app renews through its refresh token, which issues
+        //    a token carrying the new storeId — no re-login needed.
 
         // 4. Publish event
         eventPublisher.publishEvent(new EmployeeStoreReassignedEvent(

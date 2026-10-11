@@ -1,8 +1,9 @@
 package com.keevo.sync.sync.application.provider;
 
 import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider;
+import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider.Page;
+import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider.Position;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.Query;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -23,17 +24,11 @@ public class StockTransferDeltaProvider implements DeltaEntityProvider {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
-    public List<Map<String, Object>> queryDelta(Instant since) {
-        String sql = "SELECT id, source_store_id, destination_store_id, product_id, " +
-                "variant_id, quantity, actor_id, occurred_at, status, notes " +
-                "FROM stock_transfers WHERE GREATEST(occurred_at, COALESCE(updated_at, occurred_at)) > :since " +
-                "ORDER BY occurred_at ASC";
-        Query query = em.createNativeQuery(sql);
-        query.setParameter("since", java.sql.Timestamp.from(since));
-        query.setMaxResults(1000);
-        List<Object[]> rows = query.getResultList();
-        return rows.stream().map(this::mapRow).toList();
+    public Page queryDeltaPage(Instant since, Position after, int limit) {
+        var page = DeltaPageQuery.fetch(em,
+                "id, source_store_id, destination_store_id, product_id, variant_id, quantity, actor_id, occurred_at, status, notes",
+                "stock_transfers", "GREATEST(occurred_at, COALESCE(updated_at, occurred_at))", since, after, limit);
+        return new Page(page.rows().stream().map(this::mapRow).toList(), page.next());
     }
 
     private Map<String, Object> mapRow(Object[] row) {

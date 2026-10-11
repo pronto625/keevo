@@ -34,7 +34,7 @@ class StockTransferDeltaProviderTest {
     void queryDelta_withSince_returnsOnlyRecentTransfers() {
         when(em.createNativeQuery(anyString())).thenReturn(query);
         when(query.setParameter(eq("since"), any())).thenReturn(query);
-        when(query.setMaxResults(1000)).thenReturn(query);
+        when(query.setMaxResults(anyInt())).thenReturn(query);
         var now = Timestamp.from(Instant.now());
         Object[] row = {UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 UUID.randomUUID(), null, 10, UUID.randomUUID(), now, "COMPLETED", null};
@@ -50,7 +50,7 @@ class StockTransferDeltaProviderTest {
     void queryDelta_includesStatusChanges() {
         when(em.createNativeQuery(anyString())).thenReturn(query);
         when(query.setParameter(eq("since"), any())).thenReturn(query);
-        when(query.setMaxResults(1000)).thenReturn(query);
+        when(query.setMaxResults(anyInt())).thenReturn(query);
         var now = Timestamp.from(Instant.now());
         Object[] row = {UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 UUID.randomUUID(), null, 5, UUID.randomUUID(), now, "IN_TRANSIT", "En route"};
@@ -65,7 +65,7 @@ class StockTransferDeltaProviderTest {
     void queryDelta_mapsAllFieldsCorrectly() {
         when(em.createNativeQuery(anyString())).thenReturn(query);
         when(query.setParameter(eq("since"), any())).thenReturn(query);
-        when(query.setMaxResults(1000)).thenReturn(query);
+        when(query.setMaxResults(anyInt())).thenReturn(query);
         UUID id = UUID.randomUUID();
         UUID src = UUID.randomUUID();
         UUID dest = UUID.randomUUID();

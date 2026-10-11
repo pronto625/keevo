@@ -54,10 +54,16 @@ public class StockAdjustSyncHandler extends AbstractSyncOperationHandler {
                     "EMPLOYEE cannot modify stock for another store");
         }
 
+        // The device queues its local movement id as entityId: reusing it lets the pull update
+        // that movement instead of adding a second copy to the history. Some callers queue the
+        // product id instead, which is not a movement id.
+        UUID movementId = parseUuid(operation.entityId());
+        if (productId.equals(movementId)) movementId = null;
+
         if ("RECORD_STOCK_ENTRY".equals(operation.operationType())) {
-            recordStockEntryUseCase.execute(productId, variantId, storeId, quantity, actorId, notes);
+            recordStockEntryUseCase.execute(productId, variantId, storeId, quantity, actorId, notes, movementId);
         } else {
-            adjustStockUseCase.execute(productId, variantId, storeId, quantity, actorId, notes);
+            adjustStockUseCase.execute(productId, variantId, storeId, quantity, actorId, notes, movementId);
         }
 
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED, null, null);

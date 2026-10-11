@@ -6,6 +6,7 @@ import com.keevo.identity.auth.domain.model.Role;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.in.ResetPasswordCommand;
 import com.keevo.identity.auth.domain.port.out.PasswordResetTokenRepository;
+import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
 import com.keevo.identity.auth.domain.port.out.TokenRevocationPort;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.employee.domain.model.Employee;
@@ -41,6 +42,7 @@ class ResetPasswordServiceTest {
     @Mock UserRepository userRepository;
     @Mock EmployeeRepository employeeRepository;
     @Mock TokenRevocationPort tokenRevocationPort;
+    @Mock RefreshTokenRepository refreshTokenRepository;
     @Mock PasswordEncoder passwordEncoder;
     @Mock ApplicationEventPublisher eventPublisher;
 
@@ -84,6 +86,7 @@ class ResetPasswordServiceTest {
         assertThat(userCaptor.getValue().getPasswordHash()).isEqualTo("$2a$12$newHash");
         verify(passwordResetTokenRepository).save(argThat(t -> t.isConsumed()));
         verify(tokenRevocationPort).revokeAllSessionsEverywhere(userId);
+        verify(refreshTokenRepository).revokeAllByUserId(userId);
         verify(eventPublisher).publishEvent(any(PasswordResetEvent.class));
     }
 
@@ -209,5 +212,19 @@ class ResetPasswordServiceTest {
 
         service.execute(new ResetPasswordCommand(phoneNumber, validCode, newPassword));
         // No JWT generation — service has no JwtTokenProvider dependency
+    }
+    // Each wrong code throws DomainException. With the default rollback rule
+    // the attempts increment is rolled back too, the lock at 5 attempts is
+    // never reached, and a 6-digit code can be brute-forced. Mocks cannot see
+    // a rollback, so this pins the transaction rule itself.
+    @Test
+    @DisplayName("wrong-code attempts survive the DomainException (no rollback)")
+    void execute_keepsAttemptCounterWhenCodeIsWrong() throws NoSuchMethodException {
+        var tx = ResetPasswordService.class
+                .getMethod("execute", ResetPasswordCommand.class)
+                .getAnnotation(org.springframework.transaction.annotation.Transactional.class);
+
+        assertThat(tx).isNotNull();
+        assertThat(tx.noRollbackFor()).contains(DomainException.class);
     }
 }

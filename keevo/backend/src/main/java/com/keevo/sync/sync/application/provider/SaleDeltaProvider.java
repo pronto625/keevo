@@ -1,6 +1,8 @@
 package com.keevo.sync.sync.application.provider;
 
 import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider;
+import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider.Page;
+import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider.Position;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import org.springframework.stereotype.Component;
@@ -24,17 +26,16 @@ public class SaleDeltaProvider implements DeltaEntityProvider {
 
     @Override
     @SuppressWarnings("unchecked")
-    public List<Map<String, Object>> queryDelta(Instant since) {
-        String saleSql = "SELECT id, store_id, employee_id, client_id, total_amount, " +
+    public Page queryDeltaPage(Instant since, Position after, int limit) {
+        // updated_at, not created_at: a validation/cancellation must reach the other devices.
+        var page = DeltaPageQuery.fetch(em,
+                "id, store_id, employee_id, client_id, total_amount, " +
                 "COALESCE(discount_amount, 0) AS discount_amount, payment_mode, " +
-                "COALESCE(status, 'COMPLETED') AS status, occurred_at, created_at " +
-                "FROM sales WHERE created_at > :since ORDER BY created_at ASC";
-        Query saleQuery = em.createNativeQuery(saleSql);
-        saleQuery.setParameter("since", java.sql.Timestamp.from(since));
-        saleQuery.setMaxResults(1000);
-        List<Object[]> saleRows = saleQuery.getResultList();
+                "COALESCE(status, 'COMPLETED') AS status, occurred_at, created_at",
+                "sales", "updated_at", since, after, limit);
+        List<Object[]> saleRows = page.rows();
 
-        if (saleRows.isEmpty()) return List.of();
+        if (saleRows.isEmpty()) return new Page(List.of(), page.next());
 
         // Build sale maps and collect IDs for batch item query
         List<String> saleIds = new ArrayList<>();
@@ -67,7 +68,7 @@ public class SaleDeltaProvider implements DeltaEntityProvider {
             }
         }
 
-        return new ArrayList<>(saleMaps.values());
+        return new Page(new ArrayList<>(saleMaps.values()), page.next());
     }
 
     private Map<String, Object> mapSale(Object[] row) {

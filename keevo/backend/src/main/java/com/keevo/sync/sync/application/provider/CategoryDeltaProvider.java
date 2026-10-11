@@ -1,8 +1,9 @@
 package com.keevo.sync.sync.application.provider;
 
 import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider;
+import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider.Page;
+import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider.Position;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.Query;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -23,15 +24,11 @@ public class CategoryDeltaProvider implements DeltaEntityProvider {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
-    public List<Map<String, Object>> queryDelta(Instant since) {
-        String sql = "SELECT id, name, parent_id, is_active, is_custom, created_at, updated_at " +
-                "FROM categories WHERE updated_at >= :since";
-        Query query = em.createNativeQuery(sql);
-        query.setParameter("since", java.sql.Timestamp.from(since));
-        query.setMaxResults(1000);
-        List<Object[]> rows = query.getResultList();
-        return rows.stream().map(this::mapRow).toList();
+    public Page queryDeltaPage(Instant since, Position after, int limit) {
+        var page = DeltaPageQuery.fetch(em,
+                "id, name, parent_id, is_active, is_custom, created_at, updated_at",
+                "categories", "updated_at", since, after, limit);
+        return new Page(page.rows().stream().map(this::mapRow).toList(), page.next());
     }
 
     private Map<String, Object> mapRow(Object[] row) {

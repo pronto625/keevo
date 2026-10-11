@@ -1,8 +1,9 @@
 package com.keevo.sync.sync.application.provider;
 
 import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider;
+import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider.Page;
+import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider.Position;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.Query;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -23,16 +24,11 @@ public class StockLevelDeltaProvider implements DeltaEntityProvider {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
-    public List<Map<String, Object>> queryDelta(Instant since) {
-        String sql = "SELECT id, product_id, variant_id, store_id, quantity, " +
-                "COALESCE(minimum_threshold, 0) AS minimum_threshold, updated_at " +
-                "FROM stock_levels WHERE updated_at > :since";
-        Query query = em.createNativeQuery(sql);
-        query.setParameter("since", java.sql.Timestamp.from(since));
-        query.setMaxResults(1000);
-        List<Object[]> rows = query.getResultList();
-        return rows.stream().map(this::mapRow).toList();
+    public Page queryDeltaPage(Instant since, Position after, int limit) {
+        var page = DeltaPageQuery.fetch(em,
+                "id, product_id, variant_id, store_id, quantity, COALESCE(minimum_threshold, 0) AS minimum_threshold, updated_at",
+                "stock_levels", "updated_at", since, after, limit);
+        return new Page(page.rows().stream().map(this::mapRow).toList(), page.next());
     }
 
     private Map<String, Object> mapRow(Object[] row) {

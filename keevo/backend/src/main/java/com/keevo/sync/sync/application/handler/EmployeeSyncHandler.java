@@ -1,5 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.identity.employee.domain.port.in.*;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
@@ -40,6 +42,11 @@ public class EmployeeSyncHandler extends AbstractSyncOperationHandler {
 
     @Override
     protected SyncOperationResult apply(SyncOperation operation, UUID actorId, String tenantId) {
+        // Mirror of EmployeeController.requireOwnerOrForbid(): the push must not
+        // let an employee create, reassign or (de)activate staff.
+        if (!isOwnerRole()) {
+            throw new DomainException(ErrorCode.FORBIDDEN, "Only OWNER can manage employees");
+        }
         Map<String, Object> p = operation.payload();
 
         return switch (operation.operationType()) {

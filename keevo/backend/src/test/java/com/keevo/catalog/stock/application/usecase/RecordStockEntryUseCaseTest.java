@@ -39,14 +39,14 @@ class RecordStockEntryUseCaseTest {
     @Test
     void should_delegate_to_service_with_stock_entry_type() {
         when(stockOperationService.recordOperation(any(), any(), any(), eq(MovementType.STOCK_ENTRY),
-            eq(10), any(), any())).thenReturn(fakeMovement(10));
+            eq(10), any(), any(), any(), eq(false))).thenReturn(fakeMovement(10));
 
         StockMovement result = useCase.execute(PRODUCT_ID, null, STORE_ID, 10, ACTOR_ID, "delivery");
 
         assertThat(result.getMovementType()).isEqualTo(MovementType.STOCK_ENTRY);
         assertThat(result.getQuantityChange()).isEqualTo(10);
         verify(stockOperationService).recordOperation(
-            PRODUCT_ID, null, STORE_ID, MovementType.STOCK_ENTRY, 10, ACTOR_ID, "delivery");
+            PRODUCT_ID, null, STORE_ID, MovementType.STOCK_ENTRY, 10, ACTOR_ID, "delivery", null, false);
     }
 
     @Test
@@ -58,6 +58,16 @@ class RecordStockEntryUseCaseTest {
         assertThatThrownBy(() -> useCase.execute(PRODUCT_ID, null, STORE_ID, -5, ACTOR_ID, null))
             .isInstanceOf(IllegalArgumentException.class);
 
-        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
+        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any(), anyBoolean());
+    }
+
+    @Test
+    void should_pass_client_movement_id() {
+        UUID movementId = UUID.randomUUID();
+
+        useCase.execute(PRODUCT_ID, null, STORE_ID, 10, ACTOR_ID, "offline", movementId);
+
+        verify(stockOperationService).recordOperation(
+            PRODUCT_ID, null, STORE_ID, MovementType.STOCK_ENTRY, 10, ACTOR_ID, "offline", movementId, false);
     }
 }

@@ -80,14 +80,16 @@ public class ProfitabilityController {
     public ResponseEntity<ApiResponseWrapper<ProductProfitabilityDetailDto>> getProductDetail(
             @PathVariable UUID productId,
             @RequestParam(required = false) String from,
-            @RequestParam(required = false) String to) {
+            @RequestParam(required = false) String to,
+            @RequestParam(required = false) UUID storeId) {
 
         LocalDate dateTo   = to   != null ? LocalDate.parse(to)   : LocalDate.now();
         LocalDate dateFrom = from != null ? LocalDate.parse(from)  : dateTo.minusDays(DEFAULT_PERIOD_DAYS - 1);
 
+        // Same store scope as the list (null → all stores).
         var query = new ProfitabilityQuery(
                 TenantContext.getCurrentTenant(), dateFrom, dateTo,
-                SortOption.MARGIN_PCT_DESC, null);
+                SortOption.MARGIN_PCT_DESC, storeId);
 
         var detail = profitabilityUseCase.getDetail(query, productId);
         return ResponseEntity.ok(ApiResponseWrapper.ok(ProductProfitabilityDetailDto.from(detail)));

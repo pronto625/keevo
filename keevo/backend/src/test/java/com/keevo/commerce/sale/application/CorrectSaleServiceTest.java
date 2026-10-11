@@ -218,4 +218,20 @@ class CorrectSaleServiceTest {
         verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
         verify(saleRepository, never()).save(any());
     }
+
+    // A correction cannot leave a discount larger than what remains of the sale:
+    // refused before any stock movement is written.
+    @Test
+    void correctSale_discountExceedsReducedSubtotal_isRejectedBeforeTouchingStock() {
+        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(completedSale(5, 3000)));
+
+        assertThatThrownBy(() -> service.correctSale(new CorrectSaleCommand(SALE_ID, ACTOR_ID, null,
+                JUSTIFICATION, Map.of(itemId, 2))))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getErrorCode())
+                .isEqualTo(com.keevo.shared.domain.exception.ErrorCode.DISCOUNT_EXCEEDS_SUBTOTAL);
+
+        verifyNoInteractions(stockOperationService);
+        verify(saleRepository, never()).save(any());
+    }
 }

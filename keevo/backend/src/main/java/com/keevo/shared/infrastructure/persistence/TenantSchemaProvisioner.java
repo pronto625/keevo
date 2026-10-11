@@ -501,11 +501,24 @@ public class TenantSchemaProvisioner {
                 momo_amount         INTEGER      NOT NULL DEFAULT 0,
                 pending_sales_count INTEGER      NOT NULL DEFAULT 0,
                 pending_sales_total INTEGER      NOT NULL DEFAULT 0,
+                received_at         TIMESTAMPTZ,
                 CONSTRAINT uq_day_closure_store_date UNIQUE (store_id, closure_date)
             )""";
 
     static final String DDL_DAY_CLOSURES_IDX_STORE_DATE =
             "CREATE INDEX IF NOT EXISTS idx_day_closures_store_date ON day_closures(store_id, closure_date DESC)";
+
+    // UI-3 — received_at: server time a closure was recorded. Pull cursor, since an offline
+    // closure keeps its (earlier) device time in closed_at. Existing rows: received_at = closed_at.
+    // No column default anywhere (here, public V9): the column sync copies public's definition,
+    // and a default would stamp every existing row with the migration time instead of NULL.
+    // The application always writes it.
+    static final String DDL_DAY_CLOSURES_MIGRATE_RECEIVED_AT =
+            "ALTER TABLE day_closures ADD COLUMN IF NOT EXISTS received_at TIMESTAMPTZ";
+    static final String DDL_DAY_CLOSURES_BACKFILL_RECEIVED_AT =
+            "UPDATE day_closures SET received_at = closed_at WHERE received_at IS NULL";
+    static final String DDL_DAY_CLOSURES_IDX_RECEIVED_AT =
+            "CREATE INDEX IF NOT EXISTS idx_day_closures_received_at ON day_closures(received_at, id)";
 
     static final String DDL_SALES_IDX_STORE_OCCURRED_AT =
             "CREATE INDEX IF NOT EXISTS idx_sales_store_occurred_at ON sales(store_id, occurred_at)";
@@ -879,6 +892,7 @@ public class TenantSchemaProvisioner {
             // Story 4.4 — day closures + sales history indexes
             stmt.execute(DDL_DAY_CLOSURES);
             stmt.execute(DDL_DAY_CLOSURES_IDX_STORE_DATE);
+            stmt.execute(DDL_DAY_CLOSURES_IDX_RECEIVED_AT);
             stmt.execute(DDL_SALES_IDX_STORE_OCCURRED_AT);
             stmt.execute(DDL_SALES_IDX_STORE_EMPLOYEE_OCCURRED_AT);
             // Story 5.1 — sync operations log

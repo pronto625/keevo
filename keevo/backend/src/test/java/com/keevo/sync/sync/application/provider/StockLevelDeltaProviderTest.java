@@ -38,7 +38,7 @@ class StockLevelDeltaProviderTest {
         var since = Instant.parse("2026-03-20T10:00:00Z");
         when(em.createNativeQuery(anyString())).thenReturn(query);
         when(query.setParameter(eq("since"), any())).thenReturn(query);
-        when(query.setMaxResults(1000)).thenReturn(query);
+        when(query.setMaxResults(anyInt())).thenReturn(query);
 
         Object[] row = {UUID.randomUUID(), UUID.randomUUID(), null, UUID.randomUUID(), 10, 5,
                 Timestamp.from(Instant.now())};
@@ -54,7 +54,7 @@ class StockLevelDeltaProviderTest {
     void queryDelta_mapsAllFieldsCorrectly() {
         when(em.createNativeQuery(anyString())).thenReturn(query);
         when(query.setParameter(eq("since"), any())).thenReturn(query);
-        when(query.setMaxResults(1000)).thenReturn(query);
+        when(query.setMaxResults(anyInt())).thenReturn(query);
 
         UUID id = UUID.randomUUID();
         UUID prodId = UUID.randomUUID();

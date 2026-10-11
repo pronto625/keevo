@@ -142,6 +142,56 @@ class RecordSaleServiceTest {
                 .isEqualTo(com.keevo.commerce.sale.domain.model.SaleStatus.COMPLETED);
     }
 
+    // ── Offline sync: sale date and negative stock ───────────────────────────
+
+    private RecordSaleCommand offlineCommand(Instant occurredAt) {
+        return new RecordSaleCommand(
+                SALE_ID, ACTOR_ID, STORE_ID, null,
+                PaymentMode.CASH, null, 0, null,
+                List.of(new SaleItemCommand(null, PRODUCT_ID, null, "Produit A", 1500, 1500, 2)),
+                occurredAt, true);
+    }
+
+    @Test
+    void recordSale_withOccurredAt_keepsTheClientSaleTime() {
+        var soldAt = Instant.parse("2026-09-28T17:00:00Z");
+        when(saleRepository.existsById(SALE_ID)).thenReturn(false);
+
+        service.recordSale(offlineCommand(soldAt));
+
+        var saleCaptor = ArgumentCaptor.forClass(com.keevo.commerce.sale.domain.model.Sale.class);
+        verify(saleRepository).save(saleCaptor.capture());
+        assertThat(saleCaptor.getValue().getOccurredAt()).isEqualTo(soldAt);
+        assertThat(saleCaptor.getValue().getCreatedAt()).isAfter(soldAt);
+    }
+
+    @Test
+    void recordSale_withoutOccurredAt_usesNow() {
+        var before = Instant.now();
+        when(saleRepository.existsById(SALE_ID)).thenReturn(false);
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
+                .thenReturn(Optional.of(stockLevel(10)));
+
+        service.recordSale(validCommand());
+
+        var saleCaptor = ArgumentCaptor.forClass(com.keevo.commerce.sale.domain.model.Sale.class);
+        verify(saleRepository).save(saleCaptor.capture());
+        assertThat(saleCaptor.getValue().getOccurredAt()).isBetween(before, Instant.now());
+    }
+
+    @Test
+    void recordSale_allowNegativeStock_appliesSaleDespiteShortStock() {
+        when(saleRepository.existsById(SALE_ID)).thenReturn(false);
+
+        service.recordSale(offlineCommand(Instant.now()));
+
+        verify(saleRepository).save(any());
+        verify(stockLevelRepository, never()).findByProductAndStore(any(), any());
+        verify(stockOperationService).recordOperation(
+                eq(PRODUCT_ID), eq(null), eq(STORE_ID),
+                any(), eq(-2), eq(ACTOR_ID), any(), eq(null), eq(true));
+    }
+
     // ── Story 4.2 — Discount + Price Override tests ──────────────────────────
 
     @Test

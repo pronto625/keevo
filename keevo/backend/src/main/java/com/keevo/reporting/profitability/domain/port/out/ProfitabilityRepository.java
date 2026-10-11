@@ -65,11 +65,25 @@ public interface ProfitabilityRepository {
      * Fetch current catalogue cost + applied price range for a product.
      * Returns empty if no sales match the product in the current tenant.
      */
-    Optional<RawProductCostRow> findProductCosts(UUID productId);
+    default Optional<RawProductCostRow> findProductCosts(UUID productId) {
+        return findProductCosts(productId, null);
+    }
+
+    /**
+     * Same as {@link #findProductCosts(UUID)}; when {@code storeId} is not null the applied
+     * price range only covers that store's sales.
+     */
+    Optional<RawProductCostRow> findProductCosts(UUID productId, UUID storeId);
 
     /**
      * Fetch daily margin aggregation for the last 7 calendar days ending at {@code endDate}.
      */
+    default List<RawDailyMarginRow> findDailyMarginLast7(
+            String tenantId, UUID productId, LocalDate endDate) {
+        return findDailyMarginLast7(tenantId, productId, endDate, null);
+    }
+
+    /** Same as above, limited to {@code storeId}'s sales when not null. */
     List<RawDailyMarginRow> findDailyMarginLast7(
-            String tenantId, UUID productId, LocalDate endDate);
+            String tenantId, UUID productId, LocalDate endDate, UUID storeId);
 }

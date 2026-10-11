@@ -1,30 +1,24 @@
 package com.keevo.identity.auth.application.service;
 
 import com.keevo.identity.auth.domain.model.AuthTokens;
-import com.keevo.identity.auth.domain.model.RefreshToken;
 import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.auth.domain.model.UserAuthenticatedEvent;
 import com.keevo.identity.auth.domain.model.UserTenantMembership;
 import com.keevo.identity.auth.domain.port.in.SelectTenantCommand;
 import com.keevo.identity.auth.domain.port.in.SelectTenantUseCase;
-import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserMembershipRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.security.JwtProperties;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -44,26 +38,20 @@ public class SelectTenantService implements SelectTenantUseCase {
 
     private final TenantRepository        tenantRepository;
     private final UserMembershipRepository membershipRepository;
-    private final RefreshTokenRepository  refreshTokenRepository;
     private final JwtTokenProvider        jwtTokenProvider;
-    private final JwtProperties           jwtProperties;
+    private final SessionTokenIssuer      sessionTokenIssuer;
     private final ApplicationEventPublisher eventPublisher;
-    private final JdbcTemplate            jdbcTemplate;
 
     public SelectTenantService(TenantRepository tenantRepository,
                                 UserMembershipRepository membershipRepository,
-                                RefreshTokenRepository refreshTokenRepository,
                                 JwtTokenProvider jwtTokenProvider,
-                                JwtProperties jwtProperties,
-                                ApplicationEventPublisher eventPublisher,
-                                JdbcTemplate jdbcTemplate) {
-        this.tenantRepository    = tenantRepository;
+                                SessionTokenIssuer sessionTokenIssuer,
+                                ApplicationEventPublisher eventPublisher) {
+        this.tenantRepository     = tenantRepository;
         this.membershipRepository = membershipRepository;
-        this.refreshTokenRepository = refreshTokenRepository;
-        this.jwtTokenProvider    = jwtTokenProvider;
-        this.jwtProperties       = jwtProperties;
-        this.eventPublisher      = eventPublisher;
-        this.jdbcTemplate        = jdbcTemplate;
+        this.jwtTokenProvider     = jwtTokenProvider;
+        this.sessionTokenIssuer   = sessionTokenIssuer;
+        this.eventPublisher       = eventPublisher;
     }
 
     @Override
@@ -82,49 +70,17 @@ public class SelectTenantService implements SelectTenantUseCase {
                 .filter(UserTenantMembership::isActive)
                 .orElseThrow(() -> new DomainException(ErrorCode.MEMBERSHIP_NOT_FOUND));
 
-        // Step 4 — Extract role and schemaName from membership + tenant
+        // Step 4 — Issue the session (claims built from current tenant/membership/employee
+        // data — the same path refresh uses, so a renewed token never differs from a login).
         String schemaName = tenant.getSchemaName();
         String role       = membership.getRole();
-
-        // Step 5 — Generate full RS256 access token (24h, scope=access / no scope claim)
-        // Story 3.5: EMPLOYEE tokens include storeId and passwordChangeRequired claims.
-        // Story 7.1: firstName claim for dashboard greeting.
-        UUID storeId = null;
-        boolean passwordChangeRequired = false;
-        String firstName = null;
-        if ("EMPLOYEE".equals(role)) {
-            try {
-                Map<String, Object> empRow = jdbcTemplate.queryForMap(
-                        "SELECT store_id, password_change_required, first_name FROM \""
-                        + schemaName + "\".employees WHERE user_id = ? LIMIT 1", userId);
-                storeId = (UUID) empRow.get("store_id");
-                passwordChangeRequired = Boolean.TRUE.equals(empRow.get("password_change_required"));
-                firstName = (String) empRow.get("first_name");
-            } catch (org.springframework.dao.EmptyResultDataAccessException ignored) {
-                // Employee row does not exist yet — should not happen in normal flow
-            }
-        }
-        // TODO(Story-7.1/H4): OWNER firstName requires first_name column in public.users
-        // and registration flow update. Currently null → Flutter falls back to "Patron".
-
-        String accessToken = jwtTokenProvider.generateAccessToken(
-                userId, schemaName, role, tenant.getStatus().name(),
-                storeId, passwordChangeRequired, firstName);
-
-        // Step 6 — Generate opaque refresh token and persist its SHA-256 hash
-        String rawRefreshToken = jwtTokenProvider.generateRefreshToken();
-        String tokenHash = hashToken(rawRefreshToken);
-        Instant expiresAt = Instant.now().plus(jwtProperties.getRefreshTokenExpiryDays(), ChronoUnit.DAYS);
-        RefreshToken refreshToken = RefreshToken.create(userId, schemaName, tokenHash, expiresAt);
-        refreshTokenRepository.save(refreshToken);
+        AuthTokens tokens = sessionTokenIssuer.issue(userId, tenant, role).tokens();
 
         // Step 7 — Publish audit event (now we know the tenant context)
         eventPublisher.publishEvent(new UserAuthenticatedEvent(
                 userId, schemaName, role, null, Instant.now()));
 
-        long expiresIn = (long) jwtProperties.getAccessTokenExpiryHours() * 3600;
-        return new AuthTokens(accessToken, rawRefreshToken, expiresIn, userId, schemaName, role,
-                storeId != null ? storeId.toString() : null, passwordChangeRequired);
+        return tokens;
     }
 
     // ── Private helpers ─────────────────────────────────────────────────────
@@ -148,17 +104,6 @@ public class SelectTenantService implements SelectTenantUseCase {
             throw new DomainException(ErrorCode.TOKEN_EXPIRED);
         } catch (JwtException e) {
             throw new DomainException(ErrorCode.TOKEN_INVALID);
-        }
-    }
-
-    /** SHA-256 hash of raw token — deterministic for DB lookup. */
-    private String hashToken(String rawToken) {
-        try {
-            var md = java.security.MessageDigest.getInstance("SHA-256");
-            byte[] hash = md.digest(rawToken.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
-        } catch (java.security.NoSuchAlgorithmException e) {
-            throw new RuntimeException("SHA-256 algorithm not available", e);
         }
     }
 }

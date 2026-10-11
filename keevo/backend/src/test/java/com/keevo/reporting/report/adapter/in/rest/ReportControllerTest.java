@@ -174,4 +174,30 @@ class ReportControllerTest {
                 .andExpect(status().isForbidden());
         verify(resendReportUseCase, never()).resendReport(any());
     }
+
+    // ── POST /api/v1/reports/trigger-weekly ─────────────────────────────────────
+
+    // The manual trigger reports the last completed Mon–Sun week, never the current partial one.
+    @Test
+    void POST_triggerWeekly_coversLastCompletedWeek() throws Exception {
+        authenticateAs("OWNER");
+        var wat = java.time.ZoneId.of("Africa/Lagos");
+        var store = new com.keevo.store.store.domain.model.Store(UUID.randomUUID(), "Boutique",
+                com.keevo.store.store.domain.model.StoreType.STORE, "Yaoundé", null, true,
+                Instant.now(), Instant.now());
+        when(storeRepository.findAllActive()).thenReturn(List.of(store));
+
+        mockMvc.perform(post("/api/v1/reports/trigger-weekly"))
+                .andExpect(status().isOk());
+
+        var captor = org.mockito.ArgumentCaptor.forClass(GenerateWeeklyReportUseCase.WeeklyReportCommand.class);
+        verify(weeklyReportGenerator).generateWeeklyReport(captor.capture());
+        LocalDate today = LocalDate.now(wat);
+        LocalDate expectedSunday = today.with(java.time.temporal.TemporalAdjusters
+                .previousOrSame(java.time.DayOfWeek.SUNDAY));
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().weekEnd())
+                .isEqualTo(expectedSunday.atTime(23, 59, 59).atZone(wat).toInstant());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().weekStart())
+                .isEqualTo(expectedSunday.minusDays(6).atStartOfDay(wat).toInstant());
+    }
 }

@@ -36,6 +36,11 @@ public class DayClosureRepositoryAdapter implements DayClosureRepository {
     }
 
     @Override
+    public boolean existsById(UUID closureId) {
+        return springRepository.existsById(closureId);
+    }
+
+    @Override
     public boolean existsByStoreIdAndDate(UUID storeId, LocalDate date) {
         return springRepository.existsByStoreIdAndClosureDate(storeId, date);
     }
@@ -65,6 +70,7 @@ public class DayClosureRepositoryAdapter implements DayClosureRepository {
         entity.setClosureDate(closure.getClosedAt().atZone(WAT).toLocalDate());
         entity.setAutomatic(closure.isAutomatic());
         entity.setTenantId(closure.getTenantId());
+        entity.setReceivedAt(closure.getReceivedAt());
 
         DayClosureSummary summary = closure.getSummary();
         entity.setTotalSales(summary.totalSales());
@@ -100,7 +106,8 @@ public class DayClosureRepositoryAdapter implements DayClosureRepository {
                 entity.getClosedAt(),
                 summary,
                 entity.isAutomatic(),
-                entity.getTenantId()
+                entity.getTenantId(),
+                entity.getReceivedAt()
         );
     }
 }

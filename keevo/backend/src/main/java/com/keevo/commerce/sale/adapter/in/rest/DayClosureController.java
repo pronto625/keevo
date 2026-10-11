@@ -7,6 +7,7 @@ import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase.CloseDayCommand;
 import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.security.AuthDetails;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import io.jsonwebtoken.Claims;
@@ -59,6 +60,13 @@ public class DayClosureController {
             @Valid @RequestBody CloseDayRequestDto request,
             HttpServletRequest httpRequest) {
 
+        // An employee closes only the day of the store they are assigned to (same guard
+        // as the sync push, DayClosureSyncHandler).
+        UUID assignedStoreId = extractAssignedStoreId();
+        if (assignedStoreId != null && !assignedStoreId.equals(request.storeId())) {
+            throw new DomainException(ErrorCode.FORBIDDEN, "Employee cannot close another store's day");
+        }
+
         UUID actorId = extractActorId(httpRequest);
         String tenantId = extractTenantId(httpRequest);
 
@@ -66,7 +74,9 @@ public class DayClosureController {
                 request.storeId(),
                 actorId,
                 tenantId,
-                false // manual closure
+                false, // manual closure
+                request.id(),
+                request.closedAt()
         );
 
         var closure = closeDayUseCase.closeDay(command);
@@ -165,6 +175,21 @@ public class DayClosureController {
             return jwtTokenProvider.extractTenantId(claims);
         }
         throw new IllegalStateException("No valid JWT token found");
+    }
+
+    /** Assigned store of an EMPLOYEE token; null for an owner. Fails closed without it. */
+    private UUID extractAssignedStoreId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return null;
+        if (auth.getDetails() instanceof AuthDetails ad && ad.storeId() != null) {
+            return ad.storeId();
+        }
+        boolean isEmployee = auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_EMPLOYEE".equals(a.getAuthority()));
+        if (isEmployee) {
+            throw new DomainException(ErrorCode.FORBIDDEN, "EMPLOYEE token missing assigned store");
+        }
+        return null;
     }
 
     private boolean isOwnerRole() {

@@ -136,7 +136,8 @@ public class AuthController {
                 result.tenantCode(),
                 result.token(),
                 result.userId(),
-                result.tenantId()
+                result.tenantId(),
+                result.refreshToken()
             ));
     }
 
@@ -234,6 +235,19 @@ public class AuthController {
 
         AuthTokens tokens = refreshTokenUseCase.refresh(request.refreshToken());
         return ResponseEntity.ok(toLoginResponse(tokens));
+    }
+
+    /**
+     * POST /api/v1/auth/logout — revokes the refresh token so a signed-out
+     * device's token can never renew a session. Public: the access token may
+     * already be expired when the user signs out. Always 204 (no oracle).
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(@RequestBody(required = false) RefreshRequest request) {
+        if (request != null && request.refreshToken() != null && !request.refreshToken().isBlank()) {
+            refreshTokenUseCase.revoke(request.refreshToken());
+        }
+        return ResponseEntity.noContent().build();
     }
 
     // ── Profile (Story 8.6) ───────────────────────────────────────────────────

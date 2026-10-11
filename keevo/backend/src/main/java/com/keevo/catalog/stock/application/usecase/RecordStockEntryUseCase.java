@@ -38,12 +38,19 @@ public class RecordStockEntryUseCase {
     @Transactional
     public StockMovement execute(UUID productId, UUID variantId, UUID storeId,
                                  int quantity, UUID actorId, String notes) {
+        return execute(productId, variantId, storeId, quantity, actorId, notes, null);
+    }
+
+    /** @param movementId client-generated movement id (offline device), null → server generates. */
+    @Transactional
+    public StockMovement execute(UUID productId, UUID variantId, UUID storeId,
+                                 int quantity, UUID actorId, String notes, UUID movementId) {
         if (quantity <= 0) {
             throw new IllegalArgumentException("Entry quantity must be positive");
         }
         return stockOperationService.recordOperation(
                 productId, variantId, storeId,
                 MovementType.STOCK_ENTRY, quantity,
-                actorId, notes);
+                actorId, notes, movementId, false);
     }
 }

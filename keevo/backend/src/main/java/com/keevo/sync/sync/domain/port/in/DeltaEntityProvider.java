@@ -15,12 +15,30 @@ import java.util.Map;
  */
 public interface DeltaEntityProvider {
 
+    /** Rows returned per entity and per pull page. */
+    int PAGE_SIZE = 1000;
+
+    /** Keyset position in a provider's stable (cursor column, id) order. */
+    record Position(Instant cursor, String id) {}
+
+    /** One page of a delta; {@code next} is null once the delta is exhausted. */
+    record Page(List<Map<String, Object>> rows, Position next) {
+        public boolean hasMore() { return next != null; }
+    }
+
     /** Entity key for the pull response (e.g. "products", "stockLevels"). */
     String entityKey();
 
     /**
-     * Query records modified after the given timestamp.
-     * If since is null or Instant.EPOCH → return ALL records (first-time sync).
+     * Records whose cursor column is {@code >= since} (the overlap is intentional: the pull
+     * cursor keeps a safety margin and the client upserts idempotently), ordered by
+     * (cursor column, id), strictly after {@code after} when given, at most {@code limit} rows.
+     * If since is Instant.EPOCH → ALL records (first-time sync).
      */
-    List<Map<String, Object>> queryDelta(Instant since);
+    Page queryDeltaPage(Instant since, Position after, int limit);
+
+    /** First page of the delta since the given timestamp. */
+    default List<Map<String, Object>> queryDelta(Instant since) {
+        return queryDeltaPage(since, null, PAGE_SIZE).rows();
+    }
 }

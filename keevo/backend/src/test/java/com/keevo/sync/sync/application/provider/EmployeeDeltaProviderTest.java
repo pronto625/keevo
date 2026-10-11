@@ -34,7 +34,7 @@ class EmployeeDeltaProviderTest {
     void queryDelta_withSince_returnsOnlyUpdatedEmployees() {
         when(em.createNativeQuery(anyString())).thenReturn(query);
         when(query.setParameter(eq("since"), any())).thenReturn(query);
-        when(query.setMaxResults(1000)).thenReturn(query);
+        when(query.setMaxResults(anyInt())).thenReturn(query);
         var now = Timestamp.from(Instant.now());
         Object[] row = {UUID.randomUUID(), UUID.randomUUID(), "Jean", "Dupont",
                 UUID.randomUUID(), "ACTIVE", false, now, now};

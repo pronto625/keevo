@@ -1,5 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.commerce.sale.domain.model.PaymentMode;
 import com.keevo.commerce.sale.domain.model.SaleDraftProductsUpgradedEvent;
 import com.keevo.commerce.sale.domain.model.SaleStatus;
@@ -47,6 +49,13 @@ public class SaleSyncHandler extends AbstractSyncOperationHandler {
 
         UUID saleId = UUID.fromString((String) p.get("saleId"));
         UUID storeId = UUID.fromString((String) p.get("storeId"));
+        // SaleController only lets an employee sell in the store of their token.
+        // Rejected rather than rewritten: rewriting would decrement stock in a
+        // store where the sale never happened.
+        UUID assignedStoreId = extractAssignedStoreId();
+        if (assignedStoreId != null && !assignedStoreId.equals(storeId)) {
+            throw new DomainException(ErrorCode.FORBIDDEN, "Employee cannot sell in another store");
+        }
         UUID clientId = p.get("clientId") != null ? UUID.fromString((String) p.get("clientId")) : null;
         PaymentMode paymentMode = PaymentMode.valueOf((String) p.get("paymentMode"));
         String mobileMoneyRef = (String) p.get("mobileMoneyRef");
@@ -69,7 +78,9 @@ public class SaleSyncHandler extends AbstractSyncOperationHandler {
 
         recordSaleUseCase.recordSale(new RecordSaleCommand(
                 saleId, actorId, storeId, clientId, paymentMode, mobileMoneyRef,
-                discountAmount, requestedStatus, saleItems));
+                discountAmount, requestedStatus, saleItems,
+                resolveClientTime(p.get("occurredAt"), operation.clientTimestamp()),
+                true));
 
         // Notify owner when sale contained originally-draft products.
         @SuppressWarnings("unchecked")

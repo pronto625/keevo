@@ -37,6 +37,11 @@ public class RefreshTokenRepositoryAdapter implements RefreshTokenRepository {
     }
 
     @Override
+    public Optional<RefreshToken> findById(UUID id) {
+        return springRepository.findById(id).map(this::toDomain);
+    }
+
+    @Override
     public void revokeAllByUserId(UUID userId) {
         springRepository.revokeAllByUserId(userId);
     }
@@ -46,14 +51,16 @@ public class RefreshTokenRepositoryAdapter implements RefreshTokenRepository {
     private RefreshTokenJpaEntity toEntity(RefreshToken t) {
         return new RefreshTokenJpaEntity(
             t.id(), t.userId(), t.tenantId(),
-            t.tokenHash(), t.expiresAt(), t.revoked()
+            t.tokenHash(), t.expiresAt(), t.revoked(),
+            t.replacedById(), t.rotatedAt()
         );
     }
 
     private RefreshToken toDomain(RefreshTokenJpaEntity e) {
         return new RefreshToken(
             e.getId(), e.getUserId(), e.getTenantId(),
-            e.getTokenHash(), e.getExpiresAt(), e.isRevoked()
+            e.getTokenHash(), e.getExpiresAt(), e.isRevoked(),
+            e.getReplacedById(), e.getRotatedAt()
         );
     }
 }

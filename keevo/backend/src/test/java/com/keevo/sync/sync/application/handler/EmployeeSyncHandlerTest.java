@@ -9,6 +9,7 @@ import com.keevo.identity.employee.domain.port.in.ReactivateEmployeeUseCase;
 import com.keevo.identity.employee.domain.port.in.ReassignStoreUseCase;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,6 +41,28 @@ class EmployeeSyncHandlerTest {
     @BeforeEach
     void setUp() {
         handler = new EmployeeSyncHandler(createEmployee, reassignStore, deactivateEmployee, reactivateEmployee);
+        SyncTestAuth.owner();
+    }
+
+    @AfterEach
+    void tearDown() {
+        SyncTestAuth.clear();
+    }
+
+    // Employee management is OWNER-only over REST; the sync push must not be a
+    // way around it (e.g. an employee reassigning themselves to another store).
+    @Test
+    void handle_employeeActor_isForbidden() {
+        SyncTestAuth.employee(UUID.randomUUID());
+        var op = new SyncOperation("op-1", "REASSIGN_EMPLOYEE", UUID.randomUUID().toString(),
+                Map.of("employeeId", UUID.randomUUID().toString(), "storeId", UUID.randomUUID().toString()),
+                Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("FORBIDDEN");
+        org.mockito.Mockito.verifyNoInteractions(reassignStore);
     }
 
     @Test

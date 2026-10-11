@@ -95,4 +95,32 @@ class InventoryCountSyncHandlerTest {
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).isEqualTo("INVENTORY_SESSION_NOT_IN_PROGRESS");
     }
+
+    // The device's count id is kept so the pull updates its own row.
+    @Test
+    void handle_passesEntityIdAsCountId() {
+        UUID sessionId = UUID.randomUUID();
+        UUID productId = UUID.randomUUID();
+        UUID countId = UUID.randomUUID();
+        when(saveInventoryCountUseCase.execute(any())).thenAnswer(inv -> {
+            com.keevo.inventory.counting.domain.port.in.SaveInventoryCountCommand cmd = inv.getArgument(0);
+            return InventoryCount.create(cmd.countId(), sessionId, productId, null, "Savon", null, 50, 47, ACTOR_ID);
+        });
+
+        var op = new SyncOperation("op-4", "SAVE_INVENTORY_COUNT", countId.toString(),
+                Map.of("sessionId", sessionId.toString(),
+                        "productId", productId.toString(),
+                        "productName", "Savon",
+                        "theoretical", 50,
+                        "physical", 47),
+                Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        var captor = org.mockito.ArgumentCaptor.forClass(
+                com.keevo.inventory.counting.domain.port.in.SaveInventoryCountCommand.class);
+        verify(saveInventoryCountUseCase).execute(captor.capture());
+        assertThat(captor.getValue().countId()).isEqualTo(countId);
+        assertThat(result.serverEntityId()).isEqualTo(countId.toString());
+    }
 }

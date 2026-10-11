@@ -1,7 +1,6 @@
 package com.keevo.identity.employee.application.service;
 
 import com.keevo.identity.auth.domain.model.User;
-import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.employee.domain.event.EmployeeUpdatedEvent;
 import com.keevo.identity.employee.domain.model.Employee;
@@ -33,16 +32,13 @@ public class UpdateEmployeeService implements UpdateEmployeeUseCase {
 
     private final EmployeeRepository employeeRepository;
     private final UserRepository userRepository;
-    private final RefreshTokenRepository refreshTokenRepository;
     private final ApplicationEventPublisher eventPublisher;
 
     public UpdateEmployeeService(EmployeeRepository employeeRepository,
                                   UserRepository userRepository,
-                                  RefreshTokenRepository refreshTokenRepository,
                                   ApplicationEventPublisher eventPublisher) {
         this.employeeRepository = employeeRepository;
         this.userRepository = userRepository;
-        this.refreshTokenRepository = refreshTokenRepository;
         this.eventPublisher = eventPublisher;
     }
 
@@ -98,8 +94,8 @@ public class UpdateEmployeeService implements UpdateEmployeeUseCase {
 
         // 5. Apply storeId if provided and different
         if (command.storeId() != null && !command.storeId().equals(employee.getStoreId())) {
+            // No revocation: STORE_REASSIGNED + refresh renews onto the new store.
             employee = employeeRepository.updateStoreId(employee.getId(), command.storeId());
-            refreshTokenRepository.revokeAllByUserId(employee.getUserId());
             storeChanged = true;
             fieldsChanged.add("storeId");
         }

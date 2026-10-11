@@ -9,10 +9,12 @@ import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase.CloseDayCommand;
 import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.security.AuthDetails;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -66,11 +68,18 @@ class DayClosureControllerTest {
         storeId = UUID.randomUUID();
     }
 
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
+
     private void authenticateAs(String role) {
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(
-                        actorId, null,
-                        List.of(new SimpleGrantedAuthority("ROLE_" + role))));
+        var auth = new UsernamePasswordAuthenticationToken(
+                actorId, null,
+                List.of(new SimpleGrantedAuthority("ROLE_" + role)));
+        // JwtAuthFilter puts the employee's assigned store in the details.
+        if ("EMPLOYEE".equals(role)) auth.setDetails(new AuthDetails(null, storeId));
+        SecurityContextHolder.getContext().setAuthentication(auth);
     }
 
     private Claims claimsWithStore(String role) {
@@ -127,6 +136,41 @@ class DayClosureControllerTest {
                 .andExpect(jsonPath("$.data.summary.totalSales").value(3));
 
         verify(closeDayUseCase).closeDay(any(CloseDayCommand.class));
+    }
+
+    @Test
+    void POST_dayClosures_returns403_forEmployeeClosingAnotherStore() throws Exception {
+        authenticateAs("EMPLOYEE");
+
+        mockMvc.perform(post("/api/v1/day-closures")
+                        .header("Authorization", "Bearer fake-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("storeId", UUID.randomUUID()))))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(closeDayUseCase);
+    }
+
+    // The app stores the closure under its own id: the server must reuse it.
+    @Test
+    void POST_dayClosures_keepsClientIdAndClosedAt() throws Exception {
+        mockJwt("OWNER");
+        var closureId = UUID.randomUUID();
+        var closedAt = Instant.parse("2026-09-28T19:00:00Z");
+        var closure = new DayClosure(closureId, storeId, actorId, closedAt, null, false, "kv_abc123");
+        when(closeDayUseCase.closeDay(any(CloseDayCommand.class))).thenReturn(closure);
+
+        mockMvc.perform(post("/api/v1/day-closures")
+                        .header("Authorization", "Bearer fake-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "storeId", storeId, "id", closureId,
+                                "closedAt", "2026-09-28T19:00:00.000Z"))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.id").value(closureId.toString()));
+
+        verify(closeDayUseCase).closeDay(argThat(cmd ->
+                closureId.equals(cmd.closureId()) && closedAt.equals(cmd.closedAt())));
     }
 
     @Test

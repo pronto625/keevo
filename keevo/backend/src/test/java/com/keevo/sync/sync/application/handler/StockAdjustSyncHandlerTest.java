@@ -89,7 +89,7 @@ class StockAdjustSyncHandlerTest {
         authenticateAsOwner();
         var result = handler.handle(stockAdjustOp(STORE_ID), ACTOR_ID, TENANT_ID);
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(adjustStockUseCase).execute(any(), any(), any(), anyInt(), any(), any());
+        verify(adjustStockUseCase).execute(any(), any(), any(), anyInt(), any(), any(), any());
     }
 
     @Test
@@ -97,7 +97,7 @@ class StockAdjustSyncHandlerTest {
         authenticateAsEmployee(STORE_ID);
         var result = handler.handle(stockAdjustOp(STORE_ID), ACTOR_ID, TENANT_ID);
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(adjustStockUseCase).execute(any(), any(), any(), anyInt(), any(), any());
+        verify(adjustStockUseCase).execute(any(), any(), any(), anyInt(), any(), any(), any());
     }
 
     @Test
@@ -107,7 +107,7 @@ class StockAdjustSyncHandlerTest {
         var result = handler.handle(stockAdjustOp(STORE_ID), ACTOR_ID, TENANT_ID);
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).isEqualTo("FORBIDDEN");
-        verify(adjustStockUseCase, never()).execute(any(), any(), any(), anyInt(), any(), any());
+        verify(adjustStockUseCase, never()).execute(any(), any(), any(), anyInt(), any(), any(), any());
     }
 
     @Test
@@ -115,7 +115,7 @@ class StockAdjustSyncHandlerTest {
         authenticateAsEmployee(STORE_ID);
         var result = handler.handle(stockEntryOp(STORE_ID), ACTOR_ID, TENANT_ID);
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(recordStockEntryUseCase).execute(any(), any(), any(), anyInt(), any(), any());
+        verify(recordStockEntryUseCase).execute(any(), any(), any(), anyInt(), any(), any(), any());
     }
 
     @Test
@@ -125,7 +125,7 @@ class StockAdjustSyncHandlerTest {
         var result = handler.handle(stockEntryOp(STORE_ID), ACTOR_ID, TENANT_ID);
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).isEqualTo("FORBIDDEN");
-        verify(recordStockEntryUseCase, never()).execute(any(), any(), any(), anyInt(), any(), any());
+        verify(recordStockEntryUseCase, never()).execute(any(), any(), any(), anyInt(), any(), any(), any());
     }
 
     @Test
@@ -134,10 +134,48 @@ class StockAdjustSyncHandlerTest {
         var op = stockAdjustOp(STORE_ID);
 
         doThrow(new DomainException(ErrorCode.INSUFFICIENT_STOCK))
-                .when(adjustStockUseCase).execute(any(), any(), any(), anyInt(), any(), any());
+                .when(adjustStockUseCase).execute(any(), any(), any(), anyInt(), any(), any(), any());
 
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+    }
+
+    // ── The device's movement id is kept (no duplicate row after pull) ──────
+
+    @Test
+    void handle_adjust_passesEntityIdAsMovementId() {
+        authenticateAsOwner();
+        var op = stockAdjustOp(STORE_ID);
+
+        handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        verify(adjustStockUseCase).execute(any(), any(), any(), anyInt(), any(), any(),
+                eq(UUID.fromString(op.entityId())));
+    }
+
+    @Test
+    void handle_stockEntry_passesEntityIdAsMovementId() {
+        authenticateAsOwner();
+        var op = stockEntryOp(STORE_ID);
+
+        handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        verify(recordStockEntryUseCase).execute(any(), any(), any(), anyInt(), any(), any(),
+                eq(UUID.fromString(op.entityId())));
+    }
+
+    // Some callers queue the product id as entityId: it is not a movement id.
+    @Test
+    void handle_entityIdIsTheProductId_serverGeneratesMovementId() {
+        authenticateAsOwner();
+        var productId = UUID.randomUUID().toString();
+        var op = new SyncOperation("op-3", "RECORD_STOCK_ENTRY", productId,
+                Map.of("productId", productId, "storeId", STORE_ID.toString(), "quantity", 5),
+                Instant.now());
+
+        handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        verify(recordStockEntryUseCase).execute(any(), any(), any(), anyInt(), any(), any(), isNull());
     }
 
     @Test

@@ -54,6 +54,7 @@ public class SaleRepositoryAdapter implements SaleRepository {
         entity.setStatus(sale.getStatus().name());
         entity.setOccurredAt(sale.getOccurredAt());
         entity.setCreatedAt(sale.getCreatedAt());
+        entity.setUpdatedAt(Instant.now());
 
         var itemEntities = sale.getItems().stream()
                 .map(item -> toItemJpaEntity(item, entity))
@@ -134,8 +135,15 @@ public class SaleRepositoryAdapter implements SaleRepository {
     public void updateStatus(UUID saleId, SaleStatus newStatus) {
         springRepository.findById(saleId).ifPresent(entity -> {
             entity.setStatus(newStatus.name());
+            entity.setUpdatedAt(Instant.now());
             springRepository.save(entity);
         });
+    }
+
+    @Override
+    public boolean updateStatusIfCurrent(UUID saleId, SaleStatus expected, SaleStatus newStatus) {
+        return springRepository.updateStatusIfCurrent(
+                saleId, expected.name(), newStatus.name(), Instant.now()) == 1;
     }
 
     @Override
@@ -147,6 +155,7 @@ public class SaleRepositoryAdapter implements SaleRepository {
                     item.setProductId(newId);
                 }
             }
+            entity.setUpdatedAt(Instant.now());
             springRepository.save(entity);
         });
     }
@@ -165,6 +174,13 @@ public class SaleRepositoryAdapter implements SaleRepository {
     public Page<Sale> findByStoreIdAndDateRange(UUID storeId, Instant from, Instant to, Pageable pageable) {
         return springRepository.findByStoreIdAndOccurredAtBetween(storeId, from, to, pageable)
                 .map(this::toDomain);
+    }
+
+    @Override
+    public List<Sale> findForClosure(UUID storeId, ClosureWindow window) {
+        return springRepository.findForClosure(storeId, window.start(), window.end(),
+                        window.lateFrom(), window.receivedUntil())
+                .stream().map(this::toDomain).toList();
     }
 
     @Override

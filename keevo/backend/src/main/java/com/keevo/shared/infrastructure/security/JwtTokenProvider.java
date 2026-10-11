@@ -104,6 +104,19 @@ public class JwtTokenProvider {
     public String generateAccessToken(UUID userId, String tenantId, String role,
                                        String tenantStatus, UUID storeId,
                                        boolean passwordChangeRequired, String firstName) {
+        return generateAccessToken(userId, tenantId, role, tenantStatus, storeId,
+                passwordChangeRequired, firstName, null);
+    }
+
+    /**
+     * Full-claims access token. {@code onboardingCompleted} is the authoritative
+     * "setup wizard done" signal for the app (tenantStatus is ACTIVE from the
+     * moment the account exists, so it cannot tell); omitted when null.
+     */
+    public String generateAccessToken(UUID userId, String tenantId, String role,
+                                       String tenantStatus, UUID storeId,
+                                       boolean passwordChangeRequired, String firstName,
+                                       Boolean onboardingCompleted) {
         Instant now = Instant.now();
         var builder = Jwts.builder()
                 .subject(userId.toString())
@@ -121,6 +134,9 @@ public class JwtTokenProvider {
         }
         if (firstName != null) {
             builder.claim("firstName", firstName);
+        }
+        if (onboardingCompleted != null) {
+            builder.claim("onboardingCompleted", onboardingCompleted);
         }
         return builder.compact();
     }

@@ -46,6 +46,13 @@ public class AdjustStockUseCase {
     @Transactional
     public StockMovement execute(UUID productId, UUID variantId, UUID storeId,
                                  int newQuantity, UUID actorId, String notes) {
+        return execute(productId, variantId, storeId, newQuantity, actorId, notes, null);
+    }
+
+    /** @param movementId client-generated movement id (offline device), null → server generates. */
+    @Transactional
+    public StockMovement execute(UUID productId, UUID variantId, UUID storeId,
+                                 int newQuantity, UUID actorId, String notes, UUID movementId) {
         if (newQuantity < 0) {
             throw new DomainException(ErrorCode.VALIDATION_ERROR,
                     "La nouvelle quantité ne peut pas être négative");
@@ -69,6 +76,6 @@ public class AdjustStockUseCase {
         return stockOperationService.recordOperation(
                 productId, variantId, storeId,
                 MovementType.ADJUSTMENT, delta,
-                actorId, notes);
+                actorId, notes, movementId, false);
     }
 }

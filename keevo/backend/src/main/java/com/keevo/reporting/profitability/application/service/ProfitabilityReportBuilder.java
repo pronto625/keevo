@@ -56,11 +56,11 @@ public class ProfitabilityReportBuilder {
      */
     public ProductProfitabilityDetail buildDetail(ProfitabilityQuery query, UUID productId) {
         // Fetch product cost info first — throws PRODUCT_NOT_FOUND only if product doesn't exist.
-        var costs = repo.findProductCosts(productId)
+        var costs = repo.findProductCosts(productId, query.storeId())
                 .orElseThrow(() -> new DomainException("PRODUCT_NOT_FOUND"));
 
         List<DailyMarginEntry> sparkline = repo.findDailyMarginLast7(
-                query.tenantId(), productId, query.to()).stream()
+                query.tenantId(), productId, query.to(), query.storeId()).stream()
                 .map(r -> new DailyMarginEntry(r.date(), r.dailyMargin()))
                 .toList();
 

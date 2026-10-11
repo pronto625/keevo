@@ -34,7 +34,7 @@ class CategoryDeltaProviderTest {
     void queryDelta_withSince_returnsOnlyUpdatedCategories() {
         when(em.createNativeQuery(anyString())).thenReturn(query);
         when(query.setParameter(eq("since"), any())).thenReturn(query);
-        when(query.setMaxResults(1000)).thenReturn(query);
+        when(query.setMaxResults(anyInt())).thenReturn(query);
         Object[] row = {UUID.randomUUID(), "Vêtements", null, true, false,
                 Timestamp.from(Instant.now()), Timestamp.from(Instant.now())};
         when(query.getResultList()).thenReturn(Collections.singletonList(row));

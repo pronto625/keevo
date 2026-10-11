@@ -233,8 +233,10 @@ class WeeklyReportSchedulerTest {
         assertThat(captor.getValue().deliveryChannel()).isEqualTo(ReportChannel.IN_APP_ONLY);
     }
 
+    // Triggered on a Saturday, the report covers the last completed week (Mon–Sun before),
+    // not the current partial week.
     @Test
-    void shouldComputeMondayToSundayWindowWhenTriggeredOnSaturday() {
+    void shouldReportLastCompletedWeekWhenTriggeredOnSaturday() {
         // Given: Saturday 20:05 WAT + prefs day=6 (Saturday)
         Clock saturdayClock = fixedClockAt(SATURDAY_DATE, "20:05:00", WAT);
         scheduler = new WeeklyReportScheduler(tenantRepository, storeRepository, reportRepository,
@@ -255,14 +257,36 @@ class WeeklyReportSchedulerTest {
 
         var captor = ArgumentCaptor.forClass(GenerateWeeklyReportUseCase.WeeklyReportCommand.class);
         verify(weeklyReportGenerator).generateWeeklyReport(captor.capture());
-        // weekStart must be Monday, not Sunday
-        LocalDate expectedMonday = SATURDAY_DATE.with(DayOfWeek.SUNDAY).minusDays(6);
-        Instant expectedWeekStart = expectedMonday.atStartOfDay(WAT).toInstant();
-        assertThat(captor.getValue().weekStart()).isEqualTo(expectedWeekStart);
-        // weekEnd must be Sunday
-        LocalDate expectedSunday = SATURDAY_DATE.with(DayOfWeek.SUNDAY);
-        Instant expectedWeekEnd = expectedSunday.atTime(23, 59, 59).atZone(WAT).toInstant();
-        assertThat(captor.getValue().weekEnd()).isEqualTo(expectedWeekEnd);
+        LocalDate expectedSunday = LocalDate.of(2025, 12, 28);
+        LocalDate expectedMonday = LocalDate.of(2025, 12, 22);
+        assertThat(captor.getValue().weekStart()).isEqualTo(expectedMonday.atStartOfDay(WAT).toInstant());
+        assertThat(captor.getValue().weekEnd())
+                .isEqualTo(expectedSunday.atTime(23, 59, 59).atZone(WAT).toInstant());
+        // The "already generated" guard looks at the report's own date (its Sunday).
+        verify(reportRepository).findByDateAndTenant(expectedSunday, TENANT_SCHEMA, ReportType.WEEKLY);
+    }
+
+    @Test
+    void shouldReportTheWeekEndingTodayWhenTriggeredOnSunday() {
+        var tenant = activeTenant();
+        var store = activeStore();
+        when(tenantRepository.findAll()).thenReturn(List.of(tenant));
+        when(storeRepository.findAllActive()).thenReturn(List.of(store));
+        when(tenantPreferencesRepository.findByCurrentTenant())
+                .thenReturn(Optional.of(prefs(0, "20:00:00", true)));
+        when(reportRepository.findByDateAndTenant(any(LocalDate.class), eq(TENANT_SCHEMA), eq(ReportType.WEEKLY)))
+                .thenReturn(List.of());
+        when(weeklyReportGenerator.generateWeeklyReport(any()))
+                .thenReturn(mock(EndOfDayReport.class));
+
+        scheduler.runWeeklyReport();
+
+        var captor = ArgumentCaptor.forClass(GenerateWeeklyReportUseCase.WeeklyReportCommand.class);
+        verify(weeklyReportGenerator).generateWeeklyReport(captor.capture());
+        assertThat(captor.getValue().weekStart())
+                .isEqualTo(SUNDAY_DATE.minusDays(6).atStartOfDay(WAT).toInstant());
+        assertThat(captor.getValue().weekEnd())
+                .isEqualTo(SUNDAY_DATE.atTime(23, 59, 59).atZone(WAT).toInstant());
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

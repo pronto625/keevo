@@ -6,6 +6,7 @@ import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.in.ResetPasswordCommand;
 import com.keevo.identity.auth.domain.port.in.ResetPasswordUseCase;
 import com.keevo.identity.auth.domain.port.out.PasswordResetTokenRepository;
+import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
 import com.keevo.identity.auth.domain.port.out.TokenRevocationPort;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.employee.domain.model.Employee;
@@ -47,6 +48,7 @@ public class ResetPasswordService implements ResetPasswordUseCase {
     private final UserRepository userRepository;
     private final EmployeeRepository employeeRepository;
     private final TokenRevocationPort tokenRevocationPort;
+    private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -54,18 +56,23 @@ public class ResetPasswordService implements ResetPasswordUseCase {
                                  UserRepository userRepository,
                                  EmployeeRepository employeeRepository,
                                  TokenRevocationPort tokenRevocationPort,
+                                 RefreshTokenRepository refreshTokenRepository,
                                  PasswordEncoder passwordEncoder,
                                  ApplicationEventPublisher eventPublisher) {
         this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.userRepository = userRepository;
         this.employeeRepository = employeeRepository;
         this.tokenRevocationPort = tokenRevocationPort;
+        this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.eventPublisher = eventPublisher;
     }
 
     @Override
-    @Transactional
+    // Wrong codes throw DomainException after saving attempts+1: that write
+    // must commit, or the 5-attempt lock is never reached. Every other
+    // DomainException here is thrown before any write.
+    @Transactional(noRollbackFor = DomainException.class)
     public void execute(ResetPasswordCommand command) {
         String phone = command.phoneNumber();
 
@@ -118,7 +125,9 @@ public class ResetPasswordService implements ResetPasswordUseCase {
         employeeOpt.ifPresent(emp ->
                 employeeRepository.updatePasswordChangeRequired(emp.getId(), false));
 
-        // 9. Revoke ALL sessions across all tenants (reuse Story 12.2 — ChangePasswordService L118)
+        // 9. Revoke ALL sessions across all tenants (reuse Story 12.2 — ChangePasswordService L118):
+        //    refresh tokens too, otherwise a stolen one keeps renewing the session.
+        refreshTokenRepository.revokeAllByUserId(user.getId());
         tokenRevocationPort.revokeAllSessionsEverywhere(user.getId());
 
         // 10. Publish event (AC3 — after all writes)

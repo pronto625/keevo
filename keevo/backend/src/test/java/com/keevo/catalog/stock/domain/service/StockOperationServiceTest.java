@@ -198,4 +198,50 @@ class StockOperationServiceTest {
         // No events should be published (transaction rolls back)
         verify(eventPublisher, never()).publishEvent(any());
     }
+
+    // ── Offline sync: negative stock allowed on request, client movement id ──
+
+    @Test
+    void allowNegative_appliesTheDeltaBelowZero() {
+        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
+            .thenReturn(Optional.of(levelWithQuantity(2)));
+        when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(stockLevelRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        StockMovement result = service.recordOperation(
+            PRODUCT_ID, null, STORE_ID, MovementType.SALE, -3, ACTOR_ID, "offline sale", null, true);
+
+        assertThat(result.getQuantityAfter()).isEqualTo(-1);
+        verify(stockLevelRepository).save(argThat(l -> l.getQuantity() == -1));
+    }
+
+    @Test
+    void negativeLevel_canBeReadAndRestocked() {
+        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
+            .thenReturn(Optional.of(levelWithQuantity(-2)));
+        when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(stockLevelRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        StockMovement result = service.recordOperation(
+            PRODUCT_ID, null, STORE_ID, MovementType.STOCK_ENTRY, 5, ACTOR_ID, "delivery");
+
+        assertThat(result.getQuantityAfter()).isEqualTo(3);
+    }
+
+    @Test
+    void clientMovementId_isKeptAsTheMovementId() {
+        UUID movementId = UUID.randomUUID();
+        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
+            .thenReturn(Optional.of(levelWithQuantity(10)));
+        when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(stockLevelRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        StockMovement result = service.recordOperation(
+            PRODUCT_ID, null, STORE_ID, MovementType.STOCK_ENTRY, 5, ACTOR_ID, "delivery", movementId, false);
+
+        assertThat(result.getId()).isEqualTo(movementId);
+    }
 }

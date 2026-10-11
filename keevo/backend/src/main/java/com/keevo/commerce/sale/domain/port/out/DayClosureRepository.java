@@ -27,6 +27,9 @@ public interface DayClosureRepository {
      */
     boolean existsByStoreIdAndDate(UUID storeId, LocalDate date);
 
+    /** True when a closure with this id exists (client-supplied ids: a retried push). */
+    boolean existsById(UUID closureId);
+
     /**
      * Find all closures for a store on a given date.
      *

@@ -36,6 +36,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -237,5 +238,25 @@ class SyncControllerTest {
         mockMvc.perform(get("/api/v1/sync/pull")
                         .header("Authorization", "Bearer fake-jwt"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void pull_withCursor_forwardsItAndExposesPaging() throws Exception {
+        mockJwt("OWNER");
+        var pullResult = new SyncPullResult(Instant.now(), Map.of(), Map.of(), true, "next-page");
+        when(syncUseCase.pull(any())).thenReturn(pullResult);
+
+        mockMvc.perform(get("/api/v1/sync/pull")
+                        .param("since", "2026-03-20T10:00:00Z")
+                        .param("cursor", "page-2")
+                        .header("Authorization", "Bearer fake-jwt"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.hasMore").value(true))
+                .andExpect(jsonPath("$.data.nextCursor").value("next-page"));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(
+                com.keevo.sync.sync.domain.port.in.SyncUseCase.PullCommand.class);
+        verify(syncUseCase).pull(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().cursor()).isEqualTo("page-2");
     }
 }

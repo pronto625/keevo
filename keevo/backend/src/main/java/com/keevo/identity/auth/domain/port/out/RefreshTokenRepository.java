@@ -19,6 +19,8 @@ public interface RefreshTokenRepository {
     /** Find a refresh token by its bcrypt hash. */
     Optional<RefreshToken> findByHash(String hash);
 
+    Optional<RefreshToken> findById(UUID id);
+
     /** Revoke all refresh tokens for a user (e.g., on logout or password change). */
     void revokeAllByUserId(UUID userId);
 }

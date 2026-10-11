@@ -20,8 +20,8 @@ class DeltaEntityProviderTest {
         }
 
         @Override
-        public List<Map<String, Object>> queryDelta(Instant since) {
-            return List.of(Map.of("id", "t1", "name", "Test"));
+        public Page queryDeltaPage(Instant since, Position after, int limit) {
+            return new Page(List.of(Map.of("id", "t1", "name", "Test")), null);
         }
     }
 

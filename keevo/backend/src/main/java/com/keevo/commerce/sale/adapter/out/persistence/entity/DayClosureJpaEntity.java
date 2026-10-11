@@ -66,6 +66,10 @@ public class DayClosureJpaEntity {
     @Column(name = "pending_sales_total", nullable = false)
     private int pendingSalesTotal;
 
+    /** Server time the closure was recorded — the pull cursor (closed_at may be backdated offline). */
+    @Column(name = "received_at")
+    private Instant receivedAt;
+
     public DayClosureJpaEntity() {}
 
     // ── Getters & Setters ─────────────────────────────────────────────────────
@@ -81,6 +85,9 @@ public class DayClosureJpaEntity {
 
     public Instant getClosedAt() { return closedAt; }
     public void setClosedAt(Instant closedAt) { this.closedAt = closedAt; }
+
+    public Instant getReceivedAt() { return receivedAt; }
+    public void setReceivedAt(Instant receivedAt) { this.receivedAt = receivedAt; }
 
     public LocalDate getClosureDate() { return closureDate; }
     public void setClosureDate(LocalDate closureDate) { this.closureDate = closureDate; }

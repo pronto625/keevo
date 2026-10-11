@@ -25,7 +25,9 @@ public class StockLevel {
                       int quantity, Instant updatedAt, long version) {
         if (productId == null) throw new IllegalArgumentException("productId cannot be null");
         if (storeId == null)   throw new IllegalArgumentException("storeId cannot be null");
-        if (quantity < 0)      throw new IllegalArgumentException("quantity cannot be negative");
+        // No non-negative invariant here: an offline sale pushed after the stock ran out
+        // legitimately leaves a negative level (flagged as a STOCK_NEGATIVE sync conflict).
+        // Online operations are refused upstream by StockOperationService.
         this.id         = id;
         this.productId  = productId;
         this.variantId  = variantId;

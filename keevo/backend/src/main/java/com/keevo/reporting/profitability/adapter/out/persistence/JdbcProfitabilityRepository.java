@@ -2,6 +2,7 @@ package com.keevo.reporting.profitability.adapter.out.persistence;
 
 import com.keevo.reporting.profitability.domain.port.out.ProfitabilityRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
 import java.sql.Timestamp;
@@ -102,8 +103,13 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
     }
 
     @Override
-    public Optional<RawProductCostRow> findProductCosts(UUID productId) {
+    public Optional<RawProductCostRow> findProductCosts(UUID productId, UUID storeId) {
         // LEFT JOIN so the row is returned even when the product has no sales yet.
+        // With a store filter, only that store's sale lines feed the applied price range.
+        String saleItemsJoin = storeId == null
+            ? "LEFT JOIN sale_items si ON si.product_id = p.id "
+            : "LEFT JOIN sale_items si ON si.product_id = p.id " +
+              "  AND si.sale_id IN (SELECT s.id FROM sales s WHERE s.store_id = ?::uuid) ";
         String sql =
             "SELECT p.name AS product_name, " +
             "  c.name AS category_name, " +
@@ -113,12 +119,12 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
             "  COALESCE(AVG(si.applied_unit_price::float), 0.0) AS avg_applied " +
             "FROM products p " +
             "LEFT JOIN categories c ON c.id = p.category_id " +
-            "LEFT JOIN sale_items si ON si.product_id = p.id " +
+            saleItemsJoin +
             "WHERE p.id = ?::uuid " +
             "GROUP BY p.name, c.name, p.price, p.buy_price, p.transport_cost";
 
-        List<RawProductCostRow> result = jdbc.query(sql,
-                (rs, rowNum) -> new RawProductCostRow(
+        RowMapper<RawProductCostRow> mapper =
+            (rs, rowNum) -> new RawProductCostRow(
                         rs.getString("product_name"),
                         rs.getString("category_name"),
                         rs.getInt("price"),
@@ -127,14 +133,17 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
                         rs.getInt("min_applied"),
                         rs.getInt("max_applied"),
                         rs.getDouble("avg_applied")
-                ), productId.toString());
+                );
+        List<RawProductCostRow> result = storeId == null
+            ? jdbc.query(sql, mapper, productId.toString())
+            : jdbc.query(sql, mapper, storeId.toString(), productId.toString());
 
         return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
     }
 
     @Override
     public List<RawDailyMarginRow> findDailyMarginLast7(
-            String tenantId, UUID productId, LocalDate endDate) {
+            String tenantId, UUID productId, LocalDate endDate, UUID storeId) {
         LocalDate startDate = endDate.minusDays(6);
         Timestamp tsFrom = Timestamp.from(startDate.atStartOfDay().toInstant(ZoneOffset.UTC));
         Timestamp tsTo   = Timestamp.from(endDate.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC));
@@ -149,13 +158,16 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
             "WHERE s.status = 'COMPLETED' " +
             "  AND si.product_id = ?::uuid " +
             "  AND s.occurred_at >= ? AND s.occurred_at < ? " +
+            (storeId != null ? "  AND s.store_id = ?::uuid " : "") +
             "GROUP BY DATE(s.occurred_at) " +
             "ORDER BY day ASC";
 
-        return jdbc.query(sql, (rs, rowNum) -> new RawDailyMarginRow(
+        RowMapper<RawDailyMarginRow> mapper = (rs, rowNum) -> new RawDailyMarginRow(
                 rs.getString("day"),
-                rs.getLong("daily_margin")
-        ), productId.toString(), tsFrom, tsTo);
+                rs.getLong("daily_margin"));
+        return storeId == null
+            ? jdbc.query(sql, mapper, productId.toString(), tsFrom, tsTo)
+            : jdbc.query(sql, mapper, productId.toString(), tsFrom, tsTo, storeId.toString());
     }
 
     // ── private helpers ──────────────────────────────────────────────────────

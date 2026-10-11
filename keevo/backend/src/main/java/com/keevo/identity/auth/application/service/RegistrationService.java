@@ -12,7 +12,6 @@ import com.keevo.identity.auth.domain.port.out.UserMembershipRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -40,7 +39,7 @@ public class RegistrationService implements RegisterUserUseCase {
     private final UserMembershipRepository userMembershipRepository;
     private final TenantFactory tenantFactory;
     private final PasswordEncoder passwordEncoder;
-    private final JwtTokenProvider jwtTokenProvider;
+    private final SessionTokenIssuer sessionTokenIssuer;
     private final ApplicationEventPublisher eventPublisher;
     private final TenantSchemaPort tenantSchemaPort;
 
@@ -48,14 +47,14 @@ public class RegistrationService implements RegisterUserUseCase {
                                 UserMembershipRepository userMembershipRepository,
                                 TenantFactory tenantFactory,
                                 PasswordEncoder passwordEncoder,
-                                JwtTokenProvider jwtTokenProvider,
+                                SessionTokenIssuer sessionTokenIssuer,
                                 ApplicationEventPublisher eventPublisher,
                                 TenantSchemaPort tenantSchemaPort) {
         this.userRepository = userRepository;
         this.userMembershipRepository = userMembershipRepository;
         this.tenantFactory = tenantFactory;
         this.passwordEncoder = passwordEncoder;
-        this.jwtTokenProvider = jwtTokenProvider;
+        this.sessionTokenIssuer = sessionTokenIssuer;
         this.eventPublisher = eventPublisher;
         this.tenantSchemaPort = tenantSchemaPort;
     }
@@ -90,12 +89,10 @@ public class RegistrationService implements RegisterUserUseCase {
         //    Runs within the same @Transactional boundary — rolls back on failure.
         tenantSchemaPort.assignOwnerRole(tenant.getSchemaName(), savedUser.getId());
 
-        // 6. Generate RS256 JWT access token (Story 1.3 real JWT)
-        String token = jwtTokenProvider.generateAccessToken(
-            savedUser.getId(),
-            tenant.getSchemaName(),
-            savedUser.getRole().name()
-        );
+        // 6. Issue the session (access + refresh token) like a login does: without
+        //    a refresh token the app cannot renew it and the owner is logged out
+        //    when the access token expires.
+        var tokens = sessionTokenIssuer.issue(savedUser.getId(), tenant, "OWNER").tokens();
 
         // 7. Publish domain event (Observer pattern → AuditEventListener)
         eventPublisher.publishEvent(
@@ -105,9 +102,10 @@ public class RegistrationService implements RegisterUserUseCase {
 
         return new RegistrationResult(
             tenant.getCode(),
-            token,
+            tokens.accessToken(),
             savedUser.getId().toString(),
-            tenant.getId().toString()
+            tenant.getId().toString(),
+            tokens.refreshToken()
         );
     }
 }

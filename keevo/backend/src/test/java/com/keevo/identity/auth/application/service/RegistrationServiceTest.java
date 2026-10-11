@@ -13,7 +13,7 @@ import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.auth.domain.model.UserRegisteredEvent;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.security.JwtTokenProvider;
+import com.keevo.identity.auth.domain.model.AuthTokens;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,7 +40,7 @@ class RegistrationServiceTest {
     @Mock private UserMembershipRepository userMembershipRepository;
     @Mock private TenantFactory tenantFactory;
     @Mock private PasswordEncoder passwordEncoder;
-    @Mock private JwtTokenProvider jwtTokenProvider;
+    @Mock private SessionTokenIssuer sessionTokenIssuer;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private TenantSchemaPort tenantSchemaPort; // C2 — role assignment in tenant schema
 
@@ -76,8 +76,7 @@ class RegistrationServiceTest {
         when(tenantFactory.create()).thenReturn(tenant);
         when(userRepository.save(any(User.class))).thenReturn(user);
         when(userMembershipRepository.save(any(UserTenantMembership.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(jwtTokenProvider.generateAccessToken(any(), anyString(), anyString()))
-                .thenReturn("jwt-access-token");
+        stubSession();
 
         // act
         RegistrationResult result = registrationService.register(
@@ -86,6 +85,10 @@ class RegistrationServiceTest {
         // assert
         assertThat(result.tenantCode()).isEqualTo(tenant.getCode());
         assertThat(result.token()).isEqualTo("jwt-access-token");
+        // Without a refresh token the app cannot renew the session and the new
+        // owner is logged out when the access token expires.
+        assertThat(result.refreshToken()).isEqualTo("refresh-token");
+        verify(sessionTokenIssuer).issue(user.getId(), tenant, "OWNER");
         assertThat(result.userId()).isEqualTo(user.getId().toString());
         assertThat(result.tenantId()).isEqualTo(tenant.getId().toString());
     }
@@ -102,7 +105,7 @@ class RegistrationServiceTest {
         when(tenantFactory.create()).thenReturn(tenant);
         when(userRepository.save(any(User.class))).thenReturn(user);
         when(userMembershipRepository.save(any(UserTenantMembership.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(jwtTokenProvider.generateAccessToken(any(), anyString(), anyString())).thenReturn("jwt-access-token");
+        stubSession();
 
         // act
         registrationService.register(new RegisterUserCommand(PHONE, PASSWORD, null));
@@ -159,7 +162,7 @@ class RegistrationServiceTest {
         when(tenantFactory.create()).thenReturn(tenant);
         when(userRepository.save(any(User.class))).thenReturn(savedUser);
         when(userMembershipRepository.save(any(UserTenantMembership.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(jwtTokenProvider.generateAccessToken(any(), anyString(), anyString())).thenReturn("jwt-access-token");
+        stubSession();
 
         registrationService.register(new RegisterUserCommand(PHONE, PASSWORD, null));
 
@@ -187,5 +190,13 @@ class RegistrationServiceTest {
         // If user was never saved, no role assignment must occur
         verify(tenantSchemaPort, never()).assignOwnerRole(anyString(), any(UUID.class));
         verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    private void stubSession() {
+        when(sessionTokenIssuer.issue(any(), any(), anyString())).thenReturn(
+                new SessionTokenIssuer.IssuedSession(
+                        new AuthTokens("jwt-access-token", "refresh-token", 3600,
+                                UUID.randomUUID(), "kv_abc123", "OWNER"),
+                        UUID.randomUUID()));
     }
 }

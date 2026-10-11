@@ -76,13 +76,14 @@ public class EndOfDayReportListener {
                     event.occurredAt(),   // Fix H1: actual closure time for ⏰ display
                     event.windowStart(),
                     event.windowEnd(),    // Fix H1: calendar window end (23:59:59 WAT) for queries
-                    channel
+                    channel,
+                    event.lateFrom(),
+                    event.receivedUntil()
             );
             generateReportUseCase.generateReport(storeCommand);
 
             // 2. Generate one personal report per employee with sales in this window
-            List<UUID> employeeIds = builder.getDistinctEmployeeIds(
-                    event.storeId(), event.windowStart(), event.windowEnd());
+            List<UUID> employeeIds = builder.getDistinctEmployeeIds(event.storeId(), event.window());
 
             for (UUID employeeId : employeeIds) {
                 try {
@@ -94,7 +95,9 @@ public class EndOfDayReportListener {
                             event.occurredAt(),   // Fix H1: actual closure time for ⏰ display
                             event.windowStart(),
                             event.windowEnd(),    // Fix H1: calendar window end (23:59:59 WAT) for queries
-                            channel
+                            channel,
+                            event.lateFrom(),
+                            event.receivedUntil()
                     );
                     generateReportUseCase.generateReport(empCommand);
                 } catch (Exception e) {

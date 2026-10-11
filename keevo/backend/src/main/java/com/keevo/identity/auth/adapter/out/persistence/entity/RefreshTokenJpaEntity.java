@@ -36,16 +36,30 @@ public class RefreshTokenJpaEntity extends JpaBaseEntity {
     @Column(name = "revoked", nullable = false)
     private boolean revoked;
 
+    @Column(name = "replaced_by_id")
+    private UUID replacedById;
+
+    @Column(name = "rotated_at")
+    private Instant rotatedAt;
+
     protected RefreshTokenJpaEntity() {}
 
     public RefreshTokenJpaEntity(UUID id, UUID userId, String tenantId,
                                  String tokenHash, Instant expiresAt, boolean revoked) {
+        this(id, userId, tenantId, tokenHash, expiresAt, revoked, null, null);
+    }
+
+    public RefreshTokenJpaEntity(UUID id, UUID userId, String tenantId,
+                                 String tokenHash, Instant expiresAt, boolean revoked,
+                                 UUID replacedById, Instant rotatedAt) {
         if (id != null) setId(id);
-        this.userId     = userId;
-        this.tenantId   = tenantId;
-        this.tokenHash  = tokenHash;
-        this.expiresAt  = expiresAt;
-        this.revoked    = revoked;
+        this.userId       = userId;
+        this.tenantId     = tenantId;
+        this.tokenHash    = tokenHash;
+        this.expiresAt    = expiresAt;
+        this.revoked      = revoked;
+        this.replacedById = replacedById;
+        this.rotatedAt    = rotatedAt;
     }
 
     public UUID    getUserId()    { return userId; }
@@ -53,4 +67,6 @@ public class RefreshTokenJpaEntity extends JpaBaseEntity {
     public String  getTokenHash() { return tokenHash; }
     public Instant getExpiresAt() { return expiresAt; }
     public boolean isRevoked()    { return revoked; }
+    public UUID    getReplacedById() { return replacedById; }
+    public Instant getRotatedAt()    { return rotatedAt; }
 }

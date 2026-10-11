@@ -120,12 +120,12 @@ class ValidateInventoryServiceTest {
 
         // recordOperation called exactly 2 times
         verify(stockOperationService, times(2)).recordOperation(
-                any(), isNull(), eq(storeId), eq(MovementType.ADJUSTMENT), anyInt(), eq(actorId), anyString());
+                any(), isNull(), eq(storeId), eq(MovementType.ADJUSTMENT), anyInt(), eq(actorId), anyString(), isNull(), eq(false));
 
         // Verify prodB: delta = 8 - 5 = +3
-        verify(stockOperationService).recordOperation(prodB, null, storeId, MovementType.ADJUSTMENT, 3, actorId, "INVENTORY:" + sessionId);
+        verify(stockOperationService).recordOperation(prodB, null, storeId, MovementType.ADJUSTMENT, 3, actorId, "INVENTORY:" + sessionId, null, false);
         // Verify prodC: delta = 7 - 10 = -3
-        verify(stockOperationService).recordOperation(prodC, null, storeId, MovementType.ADJUSTMENT, -3, actorId, "INVENTORY:" + sessionId);
+        verify(stockOperationService).recordOperation(prodC, null, storeId, MovementType.ADJUSTMENT, -3, actorId, "INVENTORY:" + sessionId, null, false);
 
         verify(sessionRepo).save(session);
         verify(eventPublisher).publishEvent(any(InventoryValidatedEvent.class));
@@ -180,7 +180,7 @@ class ValidateInventoryServiceTest {
 
         assertThat(result.adjustmentsApplied()).isEqualTo(0);
         assertThat(result.status()).isEqualTo(InventorySessionStatus.VALIDATED);
-        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
+        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any(), anyBoolean());
     }
 
     @Test
@@ -202,7 +202,7 @@ class ValidateInventoryServiceTest {
         assertThat(result.adjustmentsApplied()).isEqualTo(1);
         // Only prodB adjusted
         verify(stockOperationService, times(1)).recordOperation(
-                eq(prodB), isNull(), eq(storeId), eq(MovementType.ADJUSTMENT), eq(3), eq(actorId), anyString());
+                eq(prodB), isNull(), eq(storeId), eq(MovementType.ADJUSTMENT), eq(3), eq(actorId), anyString(), isNull(), eq(false));
     }
 
     @Test
@@ -222,7 +222,7 @@ class ValidateInventoryServiceTest {
 
         // delta = physical(7) - currentStock(10) = -3
         verify(stockOperationService).recordOperation(
-                prodA, null, storeId, MovementType.ADJUSTMENT, -3, actorId, "INVENTORY:" + sessionId);
+                prodA, null, storeId, MovementType.ADJUSTMENT, -3, actorId, "INVENTORY:" + sessionId, null, false);
     }
 
     @Test
@@ -249,5 +249,73 @@ class ValidateInventoryServiceTest {
         assertThat(event.actorId()).isEqualTo(actorId);
         assertThat(event.adjustmentCount()).isEqualTo(2);
         assertThat(event.tenantId()).isEqualTo("kv_test");
+    }
+
+    // ── Sales between the count and the validation are not erased ───────
+
+    @Test
+    void execute_saleAfterCount_appliesTheCountedGapOnTopOfCurrentStock() {
+        InventorySession session = inProgressSession();
+        UUID prodA = UUID.randomUUID();
+
+        when(sessionRepo.findById(sessionId)).thenReturn(Optional.of(session));
+        when(countRepo.findBySessionId(sessionId)).thenReturn(List.of(
+                count(prodA, null, 10, 7) // 3 missing at count time
+        ));
+        // 2 sold after the count: stock is now 8, real shelf is 7 - 2 = 5
+        when(stockLevelRepo.findByProductAndStore(prodA, storeId)).thenReturn(Optional.of(stockLevel(prodA, storeId, 8)));
+        when(sessionRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.execute(new ValidateInventoryCommand(sessionId, actorId));
+
+        verify(stockOperationService).recordOperation(
+                prodA, null, storeId, MovementType.ADJUSTMENT, -3, actorId, "INVENTORY:" + sessionId, null, false);
+    }
+
+    @Test
+    void execute_gapLargerThanCurrentStock_stopsAtZero() {
+        InventorySession session = inProgressSession();
+        UUID prodA = UUID.randomUUID();
+
+        when(sessionRepo.findById(sessionId)).thenReturn(Optional.of(session));
+        when(countRepo.findBySessionId(sessionId)).thenReturn(List.of(
+                count(prodA, null, 10, 2) // gap -8
+        ));
+        when(stockLevelRepo.findByProductAndStore(prodA, storeId)).thenReturn(Optional.of(stockLevel(prodA, storeId, 5)));
+        when(sessionRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.execute(new ValidateInventoryCommand(sessionId, actorId));
+
+        verify(stockOperationService).recordOperation(
+                prodA, null, storeId, MovementType.ADJUSTMENT, -5, actorId, "INVENTORY:" + sessionId, null, false);
+    }
+
+    // Offline validation: the device sends the ids of the ADJUSTMENT movements it created, so the
+    // pull updates its own rows instead of adding a second copy of each adjustment.
+    @Test
+    void execute_reusesTheDeviceMovementIds() {
+        InventorySession session = inProgressSession();
+        UUID prodA = UUID.randomUUID();
+        UUID prodB = UUID.randomUUID();
+        UUID variantB = UUID.randomUUID();
+        UUID movementA = UUID.randomUUID();
+
+        when(sessionRepo.findById(sessionId)).thenReturn(Optional.of(session));
+        when(countRepo.findBySessionId(sessionId)).thenReturn(List.of(
+                count(prodA, null, 10, 7),
+                count(prodB, variantB, 5, 6)
+        ));
+        when(stockLevelRepo.findByProductAndStore(prodA, storeId)).thenReturn(Optional.of(stockLevel(prodA, storeId, 10)));
+        when(stockLevelRepo.findByProductVariantAndStore(prodB, variantB, storeId)).thenReturn(Optional.empty());
+        when(sessionRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.execute(new ValidateInventoryCommand(sessionId, actorId,
+                java.util.Map.of(ValidateInventoryCommand.movementKey(prodA, null), movementA)));
+
+        verify(stockOperationService).recordOperation(
+                prodA, null, storeId, MovementType.ADJUSTMENT, -3, actorId, "INVENTORY:" + sessionId, movementA, false);
+        // No id sent for this line: the server generates one, as before.
+        verify(stockOperationService).recordOperation(
+                prodB, variantB, storeId, MovementType.ADJUSTMENT, 1, actorId, "INVENTORY:" + sessionId, null, false);
     }
 }

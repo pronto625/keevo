@@ -1,5 +1,6 @@
 package com.keevo.reporting.report.application.service;
 
+import com.keevo.commerce.sale.domain.model.ClosureWindow;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
@@ -75,7 +76,7 @@ class DailyReportGeneratorTest {
     void generateReport_shouldReturnDailyType() {
         when(storeRepository.findById(storeId)).thenReturn(Optional.of(
                 new Store(storeId, "Boutique Test", StoreType.STORE, null, null, true, Instant.now(), Instant.now())));
-        when(builder.build(any(), any(), any(), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
+        when(builder.build(any(), any(ClosureWindow.class), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
         when(formatter.format(any())).thenReturn("Rapport WhatsApp");
         when(userRepository.findOwnerByTenantSchemaName("kv_test01")).thenReturn(Optional.empty());
 
@@ -86,13 +87,13 @@ class DailyReportGeneratorTest {
     @Test
     void generateReport_whenStoreNotFound_shouldUseFallbackName() {
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
-        when(builder.build(any(), any(), any(), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
+        when(builder.build(any(), any(ClosureWindow.class), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
         when(formatter.format(any())).thenReturn("Rapport");
         when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.empty());
 
         // Should not throw
         generator.generateReport(command);
-        verify(builder, times(1)).build(eq(storeId), any(), any(), anyString(), any(), any(), eq(false));
+        verify(builder, times(1)).build(eq(storeId), any(ClosureWindow.class), anyString(), any(), any(), eq(false));
     }
 
     @Test
@@ -100,7 +101,7 @@ class DailyReportGeneratorTest {
         User owner = mock(User.class);
         when(owner.getPhoneNumber()).thenReturn("+243812345678");
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
-        when(builder.build(any(), any(), any(), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
+        when(builder.build(any(), any(ClosureWindow.class), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
         when(formatter.format(any())).thenReturn("Rapport");
         when(userRepository.findOwnerByTenantSchemaName("kv_test01")).thenReturn(Optional.of(owner));
 
@@ -111,7 +112,7 @@ class DailyReportGeneratorTest {
     @Test
     void generateReport_whenOwnerPhoneAbsent_shouldMarkInAppOnly() {
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
-        when(builder.build(any(), any(), any(), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
+        when(builder.build(any(), any(ClosureWindow.class), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
         when(formatter.format(any())).thenReturn("Rapport");
         when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.empty());
 
@@ -123,7 +124,7 @@ class DailyReportGeneratorTest {
     @Test
     void generateReport_shouldPersistWithTenantId() {
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
-        when(builder.build(any(), any(), any(), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
+        when(builder.build(any(), any(ClosureWindow.class), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
         when(formatter.format(any())).thenReturn("Rapport");
         when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.empty());
 
@@ -136,7 +137,7 @@ class DailyReportGeneratorTest {
         User owner = mock(User.class);
         when(owner.getPhoneNumber()).thenReturn("+243812345678");
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
-        when(builder.build(any(), any(), any(), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
+        when(builder.build(any(), any(ClosureWindow.class), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
         when(formatter.format(any())).thenReturn("Rapport");
         when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.of(owner));
 
@@ -149,7 +150,7 @@ class DailyReportGeneratorTest {
         User owner = mock(User.class);
         when(owner.getPhoneNumber()).thenReturn("+243812345678");
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
-        when(builder.build(any(), any(), any(), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
+        when(builder.build(any(), any(ClosureWindow.class), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
         when(formatter.format(any())).thenReturn("Rapport");
         when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.of(owner));
         doThrow(new RuntimeException("net error")).when(whatsAppPort).sendReport(anyString(), anyString());

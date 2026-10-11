@@ -17,4 +17,10 @@ public interface RefreshTokenUseCase {
      * @throws com.keevo.shared.domain.exception.DomainException REFRESH_TOKEN_INVALID
      */
     AuthTokens refresh(String rawRefreshToken);
+
+    /**
+     * Logout: revoke the refresh token so it can never renew a session again.
+     * Unknown or already revoked tokens are ignored (idempotent).
+     */
+    void revoke(String rawRefreshToken);
 }

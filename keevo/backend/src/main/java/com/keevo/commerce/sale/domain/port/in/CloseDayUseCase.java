@@ -2,6 +2,7 @@ package com.keevo.commerce.sale.domain.port.in;
 
 import com.keevo.commerce.sale.domain.model.DayClosure;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -19,8 +20,17 @@ public interface CloseDayUseCase {
      * @param actorId     Employee/Owner triggering closure, or SYSTEM_UUID for automatic
      * @param tenantId    Tenant schema name
      * @param isAutomatic true if triggered by scheduler
+     * @param closureId   client-generated id (offline device) — null → server generates
+     * @param closedAt    when the closure was made on the device — null → now; it decides
+     *                    which day is closed, so an offline closure pushed the next morning
+     *                    still closes the day it was made
      */
-    record CloseDayCommand(UUID storeId, UUID actorId, String tenantId, boolean isAutomatic) {}
+    record CloseDayCommand(UUID storeId, UUID actorId, String tenantId, boolean isAutomatic,
+                           UUID closureId, Instant closedAt) {
+        public CloseDayCommand(UUID storeId, UUID actorId, String tenantId, boolean isAutomatic) {
+            this(storeId, actorId, tenantId, isAutomatic, null, null);
+        }
+    }
 
     /**
      * Close the day for the given store.

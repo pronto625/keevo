@@ -22,8 +22,11 @@ import java.util.UUID;
  * @param isAutomatic true if triggered by scheduler, false if manual
  * @param tenantId    Tenant schema name
  * @param occurredAt  Timestamp when the closure occurred
- * @param windowStart Start of the reporting window (00:00:00 WAT of reportDate)
- * @param windowEnd   End of the reporting window (23:59:59.999 WAT of reportDate)
+ * @param windowStart Start of the reporting window (just after the previous closure, else 00:00 WAT)
+ * @param windowEnd   End of the reporting window (= closure time)
+ * @param lateFrom      Sales received after this instant are covered even if they happened
+ *                      before windowStart (late offline sales), see {@link ClosureWindow}
+ * @param receivedUntil Sales received after this instant belong to the next closure
  */
 public record DayClosedEvent(
         UUID closureId,
@@ -34,5 +37,20 @@ public record DayClosedEvent(
         String tenantId,
         Instant occurredAt,
         Instant windowStart,
-        Instant windowEnd
-) {}
+        Instant windowEnd,
+        Instant lateFrom,
+        Instant receivedUntil
+) {
+    /** Plain time window (no late sales). */
+    public DayClosedEvent(UUID closureId, UUID storeId, UUID actorId, DayClosureSummary summary,
+                          boolean isAutomatic, String tenantId, Instant occurredAt,
+                          Instant windowStart, Instant windowEnd) {
+        this(closureId, storeId, actorId, summary, isAutomatic, tenantId, occurredAt,
+                windowStart, windowEnd, null, null);
+    }
+
+    /** The sales this closure covers. */
+    public ClosureWindow window() {
+        return new ClosureWindow(windowStart, windowEnd, lateFrom, receivedUntil);
+    }
+}

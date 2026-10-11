@@ -55,6 +55,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             "/api/v1/auth/register",
             "/api/v1/auth/login",
             "/api/v1/auth/refresh",
+            "/api/v1/auth/logout",
             "/api/v1/auth/select-tenant"   // Story 1.7 — AC7: two-step login step 2 is public
     );
 

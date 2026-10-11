@@ -19,7 +19,6 @@ import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
@@ -68,10 +67,7 @@ class CloseDayServiceTest {
 
         when(dayClosureRepository.existsByStoreIdAndDate(eq(STORE_ID), any(LocalDate.class)))
                 .thenReturn(false);
-        when(saleRepository.findByStoreIdAndDateRange(eq(STORE_ID), any(), any(), any()))
-                .thenAnswer(inv -> {
-                    return new org.springframework.data.domain.PageImpl<>(salesForDay);
-                });
+        when(saleRepository.findForClosure(eq(STORE_ID), any())).thenReturn(salesForDay);
 
         // When
         var result = service.closeDay(new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, false));
@@ -94,8 +90,7 @@ class CloseDayServiceTest {
 
         when(dayClosureRepository.existsByStoreIdAndDate(eq(STORE_ID), any(LocalDate.class)))
                 .thenReturn(false);
-        when(saleRepository.findByStoreIdAndDateRange(eq(STORE_ID), any(), any(), any()))
-                .thenAnswer(inv -> new org.springframework.data.domain.PageImpl<>(allSalesForDay));
+        when(saleRepository.findForClosure(eq(STORE_ID), any())).thenReturn(allSalesForDay);
 
         // When
         var result = service.closeDay(new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, false));
@@ -116,8 +111,7 @@ class CloseDayServiceTest {
 
         when(dayClosureRepository.existsByStoreIdAndDate(eq(STORE_ID), any(LocalDate.class)))
                 .thenReturn(false);
-        when(saleRepository.findByStoreIdAndDateRange(eq(STORE_ID), any(), any(), any()))
-                .thenAnswer(inv -> new org.springframework.data.domain.PageImpl<>(salesForDay));
+        when(saleRepository.findForClosure(eq(STORE_ID), any())).thenReturn(salesForDay);
 
         // When
         service.closeDay(new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, false));
@@ -156,8 +150,7 @@ class CloseDayServiceTest {
 
         when(dayClosureRepository.existsByStoreIdAndDate(eq(STORE_ID), any(LocalDate.class)))
                 .thenReturn(false);
-        when(saleRepository.findByStoreIdAndDateRange(eq(STORE_ID), any(), any(), any()))
-                .thenAnswer(inv -> new org.springframework.data.domain.PageImpl<>(salesForDay));
+        when(saleRepository.findForClosure(eq(STORE_ID), any())).thenReturn(salesForDay);
 
         // When
         service.closeDay(new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, false));
@@ -172,54 +165,129 @@ class CloseDayServiceTest {
         assertThat(saved.getTenantId()).isEqualTo(TENANT_ID);
     }
 
-    // ── Story 7.6: Calendar window tests ─────────────────────────────────────
+    // ── Closure window: (previous closure, this closure] ─────────────────────
 
-    @Test
-    void windowIsFullCalendarDay_forManualClose() {
-        // Given - manual closure; window = today WAT 00:00 → 23:59:59.999999999
-        ZoneId wat = ZoneId.of("Africa/Lagos");
-        LocalDate today = LocalDate.now(wat);
-        Instant expectedStart = today.atStartOfDay(wat).toInstant();
-        Instant expectedEnd = today.atTime(LocalTime.MAX).atZone(wat).toInstant();
-
+    private DayClosedEvent closeAndCaptureEvent(CloseDayCommand command) {
         when(dayClosureRepository.existsByStoreIdAndDate(eq(STORE_ID), any(LocalDate.class)))
                 .thenReturn(false);
-        when(saleRepository.findByStoreIdAndDateRange(eq(STORE_ID), any(), any(), any()))
-                .thenAnswer(inv -> new org.springframework.data.domain.PageImpl<>(List.of()));
-
-        // When
-        service.closeDay(new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, false));
-
-        // Then
+        when(saleRepository.findForClosure(eq(STORE_ID), any())).thenReturn(List.of());
+        service.closeDay(command);
         var eventCaptor = ArgumentCaptor.forClass(DayClosedEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
-        DayClosedEvent event = eventCaptor.getValue();
-        assertThat(event.windowStart()).isEqualTo(expectedStart);
-        assertThat(event.windowEnd()).isEqualTo(expectedEnd);
+        return eventCaptor.getValue();
+    }
+
+    private DayClosure previousClosure(Instant closedAt) {
+        return previousClosure(closedAt, closedAt);
+    }
+
+    private DayClosure previousClosure(Instant closedAt, Instant receivedAt) {
+        return new DayClosure(UUID.randomUUID(), STORE_ID, ACTOR_ID, closedAt, null, true, TENANT_ID,
+                receivedAt);
     }
 
     @Test
-    void windowIsTodayCalendarDay_forAutoClose() {
-        // Given - automatic closure (Story 13.3: closes TODAY at configured eodReportTime)
+    void window_noPreviousClosure_startsAtMidnightAndEndsAtClosure() {
         ZoneId wat = ZoneId.of("Africa/Lagos");
-        LocalDate today = LocalDate.now(wat);
-        Instant expectedStart = today.atStartOfDay(wat).toInstant();
-        Instant expectedEnd = today.atTime(LocalTime.MAX).atZone(wat).toInstant();
+        Instant before = Instant.now();
+        when(dayClosureRepository.findLastClosureForStore(STORE_ID)).thenReturn(java.util.Optional.empty());
 
+        DayClosedEvent event = closeAndCaptureEvent(new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, false));
+
+        assertThat(event.windowStart()).isEqualTo(LocalDate.now(wat).atStartOfDay(wat).toInstant());
+        assertThat(event.windowEnd()).isEqualTo(event.occurredAt());
+        assertThat(event.windowEnd()).isBetween(before, Instant.now());
+    }
+
+    // Sales made after an automatic 20:00 closure belong to the next closure, and so do sales
+    // made before the previous closure but received after it (offline devices syncing late).
+    @Test
+    void window_startsRightAfterPreviousClosure_andTakesLateSales() {
+        Instant previous = Instant.now().minus(java.time.Duration.ofHours(20));
+        Instant previousReceived = previous.plusSeconds(30);
+        when(dayClosureRepository.findLastClosureForStore(STORE_ID))
+                .thenReturn(java.util.Optional.of(previousClosure(previous, previousReceived)));
+
+        DayClosedEvent event = closeAndCaptureEvent(new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, true));
+
+        assertThat(event.windowStart()).isAfter(previous);
+        assertThat(java.time.Duration.between(previous, event.windowStart()).toMillis()).isLessThan(1);
+        assertThat(event.lateFrom()).isEqualTo(previousReceived);
+        assertThat(event.receivedUntil()).isBetween(event.windowEnd(), Instant.now());
+        verify(saleRepository).findForClosure(STORE_ID, event.window());
+    }
+
+    // Closures of a store only move forward: an older offline closure pushed after a newer
+    // one would count the newer closure's sales a second time.
+    @Test
+    void closureOlderThanLastClosure_isRefusedAsAlreadyClosed() {
+        ZoneId wat = ZoneId.of("Africa/Lagos");
+        Instant closedAt = LocalDate.now(wat).minusDays(1).atTime(21, 0).atZone(wat).toInstant();
+        when(dayClosureRepository.findLastClosureForStore(STORE_ID))
+                .thenReturn(java.util.Optional.of(previousClosure(Instant.now().minusSeconds(60))));
+
+        assertThatThrownBy(() -> service.closeDay(
+                new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, false, null, closedAt)))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getErrorCode())
+                .isEqualTo(ErrorCode.DAY_ALREADY_CLOSED);
+        verify(dayClosureRepository, never()).save(any());
+    }
+
+    @Test
+    void retriedPushWithExistingClosureId_isAlreadyClosed() {
+        UUID closureId = UUID.randomUUID();
+        when(dayClosureRepository.existsById(closureId)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.closeDay(
+                new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, false, closureId, null)))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getErrorCode())
+                .isEqualTo(ErrorCode.DAY_ALREADY_CLOSED);
+        verify(dayClosureRepository, never()).save(any());
+    }
+
+    @Test
+    void closureOlderThanSevenDays_isRejected() {
+        Instant closedAt = Instant.now().minus(CloseDayService.MAX_BACKDATE).minusSeconds(60);
+
+        assertThatThrownBy(() -> service.closeDay(
+                new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, false, null, closedAt)))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verifyNoInteractions(saleRepository);
+    }
+
+    // ── Offline closure: the device's id and the day it was made ─────────────
+
+    @Test
+    void offlineClosure_keepsClientIdAndClosesTheDayItWasMade() {
+        ZoneId wat = ZoneId.of("Africa/Lagos");
+        LocalDate yesterday = LocalDate.now(wat).minusDays(1);
+        Instant closedAt = yesterday.atTime(21, 0).atZone(wat).toInstant();
+        UUID closureId = UUID.randomUUID();
+        when(dayClosureRepository.existsByStoreIdAndDate(STORE_ID, yesterday)).thenReturn(false);
+        when(saleRepository.findForClosure(eq(STORE_ID), any())).thenReturn(List.of());
+
+        var result = service.closeDay(
+                new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, false, closureId, closedAt));
+
+        assertThat(result.getId()).isEqualTo(closureId);
+        assertThat(result.getClosedAt()).isEqualTo(closedAt);
+        verify(dayClosureRepository).existsByStoreIdAndDate(STORE_ID, yesterday);
+    }
+
+    @Test
+    void offlineClosure_inTheFuture_isClampedToNow() {
         when(dayClosureRepository.existsByStoreIdAndDate(eq(STORE_ID), any(LocalDate.class)))
                 .thenReturn(false);
-        when(saleRepository.findByStoreIdAndDateRange(eq(STORE_ID), any(), any(), any()))
-                .thenAnswer(inv -> new org.springframework.data.domain.PageImpl<>(List.of()));
+        when(saleRepository.findForClosure(eq(STORE_ID), any())).thenReturn(List.of());
 
-        // When
-        service.closeDay(new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, true));
+        var result = service.closeDay(new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, false,
+                null, Instant.now().plus(java.time.Duration.ofDays(2))));
 
-        // Then
-        var eventCaptor = ArgumentCaptor.forClass(DayClosedEvent.class);
-        verify(eventPublisher).publishEvent(eventCaptor.capture());
-        DayClosedEvent event = eventCaptor.getValue();
-        assertThat(event.windowStart()).isEqualTo(expectedStart);
-        assertThat(event.windowEnd()).isEqualTo(expectedEnd);
+        assertThat(result.getClosedAt()).isBeforeOrEqualTo(Instant.now());
     }
 
     // ── Helper methods ────────────────────────────────────────────────────────

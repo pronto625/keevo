@@ -9,13 +9,17 @@ import java.util.Map;
 public record SyncPullResponseDto(
         Instant serverTimestamp,
         Map<String, List<Map<String, Object>>> entities,
-        Map<String, Integer> counts
+        Map<String, Integer> counts,
+        boolean hasMore,
+        String nextCursor
 ) {
     public static SyncPullResponseDto from(SyncPullResult result) {
         return new SyncPullResponseDto(
                 result.serverTimestamp(),
                 result.entities(),
-                result.counts()
+                result.counts(),
+                result.hasMore(),
+                result.nextCursor()
         );
     }
 }

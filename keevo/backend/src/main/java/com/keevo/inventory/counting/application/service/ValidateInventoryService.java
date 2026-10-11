@@ -77,16 +77,21 @@ public class ValidateInventoryService implements ValidateInventoryUseCase {
         for (InventoryCount count : counts) {
             if (!count.isCounted()) continue; // skip uncounted
 
-            int ecart = count.getEcart(); // physical - theoretical (gap detection only)
+            int ecart = count.getEcart(); // physical - theoretical
             if (ecart == 0) continue;      // AC3: skip concordant products
 
-            // Load CURRENT stock level for accurate delta (not theoretical snapshot)
+            // Apply the gap measured at count time on top of the current stock: sales and
+            // entries recorded between the count and this validation stay counted (an absolute
+            // "set to physical" would erase them). Never below zero.
             int currentQty = loadCurrentStockQuantity(
                     count.getProductId(), count.getVariantId(), session.getStoreId());
-            int delta = count.getPhysical() - currentQty;
-            if (delta == 0) continue; // stock already at physical (rare: concurrent adjustment)
+            int delta = Math.max(ecart, -Math.max(currentQty, 0));
+            if (delta == 0) continue;
 
             // Reuse StockOperationService — DO NOT reinvent stock mutation
+            // An offline device sends the ids of the ADJUSTMENT movements it created locally.
+            UUID movementId = command.movementIds().get(
+                    ValidateInventoryCommand.movementKey(count.getProductId(), count.getVariantId()));
             stockOperationService.recordOperation(
                     count.getProductId(),
                     count.getVariantId(),
@@ -94,7 +99,9 @@ public class ValidateInventoryService implements ValidateInventoryUseCase {
                     MovementType.ADJUSTMENT,
                     delta,
                     command.actorId(),
-                    "INVENTORY:" + session.getId()
+                    "INVENTORY:" + session.getId(),
+                    movementId,
+                    false
             );
             adjustmentsApplied++;
         }

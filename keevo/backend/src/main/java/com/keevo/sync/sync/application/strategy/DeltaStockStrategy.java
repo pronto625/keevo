@@ -41,49 +41,74 @@ public class DeltaStockStrategy implements ConflictResolutionStrategy {
         if (tenantId == null || !TENANT_PATTERN.matcher(tenantId).matches()) return null;
 
         Map<String, Object> payload = operation.payload();
-        String productId = extractProductId(payload, operation.operationType());
         String storeId = extractStoreId(payload, operation.operationType());
-        if (productId == null || storeId == null) return null;
+        List<StockTouch> touches = extractTouches(payload, operation.operationType());
+        if (touches.isEmpty() || storeId == null) return null;
 
-        Integer currentStock = queryCurrentStock(tenantId, productId, storeId);
-        if (currentStock == null) return new ConflictResult(null, "DELTA_SUM", null);
+        // Every product of a multi-item sale is checked; the first one that went
+        // negative is reported (one conflict per operation).
+        ConflictResult negative = null;
+        for (StockTouch touch : touches) {
+            Integer currentStock = queryCurrentStock(tenantId, touch.productId(), touch.variantId(), storeId);
+            if (currentStock == null) continue;
 
-        int deltaApplied = extractDelta(payload, operation.operationType());
-        int previousStock = currentStock - deltaApplied;
+            int deltaApplied = touch.delta();
+            int previousStock = currentStock - deltaApplied;
+            // Only an operation that took stock out can have caused negative stock: an entry
+            // on stock that is already negative (late offline sales) is not a conflict.
+            boolean wentNegative = deltaApplied < 0 && currentStock < 0;
 
-        // Publish StockConflictResolvedEvent always (AC12 — audit completeness)
-        eventPublisher.publishEvent(new StockConflictResolvedEvent(
-                operation.operationId(), productId, storeId,
-                deltaApplied, currentStock, previousStock,
-                "DELTA_SUM", currentStock < 0, tenantId, Instant.now()));
+            // Publish StockConflictResolvedEvent always (AC12 — audit completeness)
+            eventPublisher.publishEvent(new StockConflictResolvedEvent(
+                    operation.operationId(), touch.productId(), storeId,
+                    deltaApplied, currentStock, previousStock,
+                    "DELTA_SUM", wentNegative, tenantId, Instant.now()));
 
-        if (currentStock < 0) {
-            String productName = resolveProductName(tenantId, productId);
-            Map<String, Object> conflictData = new LinkedHashMap<>();
-            conflictData.put("conflictType", "STOCK_NEGATIVE");
-            conflictData.put("productId", productId);
-            conflictData.put("productName", productName);
-            conflictData.put("storeId", storeId);
-            conflictData.put("deltaApplied", deltaApplied);
-            conflictData.put("resultingStock", currentStock);
-            conflictData.put("previousStock", previousStock);
-            return new ConflictResult("STOCK_NEGATIVE", "DELTA_SUM", conflictData);
+            if (wentNegative && negative == null) {
+                String productName = resolveProductName(tenantId, touch.productId());
+                Map<String, Object> conflictData = new LinkedHashMap<>();
+                conflictData.put("conflictType", "STOCK_NEGATIVE");
+                conflictData.put("productId", touch.productId());
+                conflictData.put("productName", productName);
+                conflictData.put("storeId", storeId);
+                conflictData.put("deltaApplied", deltaApplied);
+                conflictData.put("resultingStock", currentStock);
+                conflictData.put("previousStock", previousStock);
+                negative = new ConflictResult("STOCK_NEGATIVE", "DELTA_SUM", conflictData);
+            }
         }
 
+        if (negative != null) return negative;
         return new ConflictResult(null, "DELTA_SUM", null);
     }
 
+    /** One (product, variant) stock level touched by the operation, with its summed delta. */
+    private record StockTouch(String productId, String variantId, int delta) {}
+
     @SuppressWarnings("unchecked")
-    private String extractProductId(Map<String, Object> payload, String opType) {
+    private List<StockTouch> extractTouches(Map<String, Object> payload, String opType) {
         if ("CREATE_SALE".equals(opType)) {
             var items = (List<Map<String, Object>>) payload.get("items");
-            if (items != null && !items.isEmpty()) {
-                return String.valueOf(items.get(0).get("productId"));
+            if (items == null) return List.of();
+            Map<List<String>, Integer> deltas = new LinkedHashMap<>();
+            for (var item : items) {
+                Object pid = item.get("productId");
+                if (pid == null) continue;
+                Object vid = item.get("variantId");
+                Object qty = item.get("quantity");
+                int quantity = (qty instanceof Number n) ? n.intValue() : 0;
+                deltas.merge(Arrays.asList(String.valueOf(pid), vid != null ? String.valueOf(vid) : null),
+                        -quantity, Integer::sum);
             }
-            return null;
+            List<StockTouch> touches = new ArrayList<>();
+            deltas.forEach((key, delta) -> touches.add(new StockTouch(key.get(0), key.get(1), delta)));
+            return touches;
         }
         Object pid = payload.get("productId");
-        return pid != null ? String.valueOf(pid) : null;
+        if (pid == null) return List.of();
+        Object vid = payload.get("variantId");
+        return List.of(new StockTouch(String.valueOf(pid), vid != null ? String.valueOf(vid) : null,
+                extractDelta(payload, opType)));
     }
 
     private String extractStoreId(Map<String, Object> payload, String opType) {
@@ -91,19 +116,8 @@ public class DeltaStockStrategy implements ConflictResolutionStrategy {
         return sid != null ? String.valueOf(sid) : null;
     }
 
-    @SuppressWarnings("unchecked")
     private int extractDelta(Map<String, Object> payload, String opType) {
         return switch (opType) {
-            case "CREATE_SALE" -> {
-                var items = (List<Map<String, Object>>) payload.get("items");
-                if (items == null) yield 0;
-                int total = 0;
-                for (var item : items) {
-                    Object qty = item.get("quantity");
-                    total += (qty instanceof Number n) ? n.intValue() : 0;
-                }
-                yield -total;
-            }
             case "STOCK_ADJUST" -> {
                 Object qty = payload.get("quantity");
                 yield (qty instanceof Number n) ? n.intValue() : 0;
@@ -120,13 +134,18 @@ public class DeltaStockStrategy implements ConflictResolutionStrategy {
         };
     }
 
-    private Integer queryCurrentStock(String tenantId, String productId, String storeId) {
+    private Integer queryCurrentStock(String tenantId, String productId, String variantId, String storeId) {
         try {
-            Object result = entityManager.createNativeQuery(
-                            "SELECT quantity FROM \"" + tenantId + "\".stock_levels WHERE product_id = CAST(?1 AS uuid) AND store_id = CAST(?2 AS uuid)")
+            String variantClause = variantId != null
+                    ? " AND variant_id = CAST(?3 AS uuid)"
+                    : " AND variant_id IS NULL";
+            var query = entityManager.createNativeQuery(
+                            "SELECT quantity FROM \"" + tenantId + "\".stock_levels WHERE product_id = CAST(?1 AS uuid) AND store_id = CAST(?2 AS uuid)"
+                                    + variantClause)
                     .setParameter(1, productId)
-                    .setParameter(2, storeId)
-                    .getSingleResult();
+                    .setParameter(2, storeId);
+            if (variantId != null) query.setParameter(3, variantId);
+            Object result = query.getSingleResult();
             return ((Number) result).intValue();
         } catch (NoResultException e) {
             return null;

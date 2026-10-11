@@ -142,13 +142,16 @@ public class SyncController {
     @Operation(summary = "Pull delta changes since timestamp",
             description = "Returns all entities modified after the given timestamp. " +
                     "Omit 'since' for full sync (first-time). " +
-                    "Response includes serverTimestamp as the cursor for next pull.")
+                    "Response includes serverTimestamp as the cursor for next pull. " +
+                    "When hasMore is true, call again with cursor=nextCursor and the same 'since' " +
+                    "before saving serverTimestamp.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Delta entities returned"),
             @ApiResponse(responseCode = "401", description = "Missing or invalid authentication")
     })
     public ResponseEntity<ApiResponseWrapper<SyncPullResponseDto>> pull(
             @RequestParam(required = false) String since,
+            @RequestParam(required = false) String cursor,
             @RequestHeader(value = "X-Device-Id", required = false) String deviceId,
             HttpServletRequest httpRequest) {
 
@@ -170,7 +173,8 @@ public class SyncController {
                 : null;
 
         SyncPullResult result = syncUseCase.pull(
-                new SyncUseCase.PullCommand(actorId, tenantId, sinceInstant));
+                new SyncUseCase.PullCommand(actorId, tenantId, sinceInstant,
+                        cursor != null && !cursor.isBlank() ? cursor : null));
 
         return ResponseEntity.ok(ApiResponseWrapper.ok(SyncPullResponseDto.from(result)));
     }

@@ -1,5 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.inventory.counting.domain.model.InventorySessionStatus;
 import com.keevo.inventory.counting.domain.port.in.ValidateInventoryCommand;
 import com.keevo.inventory.counting.domain.port.in.ValidateInventoryUseCase;
@@ -9,6 +11,7 @@ import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -43,8 +46,28 @@ public class InventoryValidationSyncHandler extends AbstractSyncOperationHandler
         }
     }
 
+    /**
+     * Local ADJUSTMENT movement ids sent by the device ({"productId|variantId": movementId}).
+     * Invalid entries are ignored: the server then generates the id, as before.
+     */
+    private static Map<String, UUID> movementIds(Map<String, Object> payload) {
+        Map<String, UUID> ids = new HashMap<>();
+        if (payload.get("movementIds") instanceof Map<?, ?> raw) {
+            raw.forEach((key, value) -> {
+                UUID id = parseUuid(value);
+                if (key instanceof String k && id != null) ids.put(k, id);
+            });
+        }
+        return ids;
+    }
+
     @Override
     protected SyncOperationResult apply(SyncOperation operation, UUID actorId, String tenantId) {
+        // Mirror of InventorySessionController validate (@PreAuthorize OWNER):
+        // validation rewrites stock with the counted quantities.
+        if (!isOwnerRole()) {
+            throw new DomainException(ErrorCode.FORBIDDEN, "Only OWNER can validate an inventory");
+        }
         UUID sessionId = UUID.fromString((String) operation.payload().get("sessionId"));
 
         // Idempotency guard: if session already VALIDATED, skip
@@ -54,7 +77,8 @@ public class InventoryValidationSyncHandler extends AbstractSyncOperationHandler
                     sessionId.toString(), null);
         }
 
-        var result = validateUseCase.execute(new ValidateInventoryCommand(sessionId, actorId));
+        var result = validateUseCase.execute(
+                new ValidateInventoryCommand(sessionId, actorId, movementIds(operation.payload())));
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                 result.sessionId().toString(), null);
     }

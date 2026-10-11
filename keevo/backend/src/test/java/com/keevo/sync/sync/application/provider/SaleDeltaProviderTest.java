@@ -36,7 +36,7 @@ class SaleDeltaProviderTest {
         var since = Instant.parse("2026-03-20T10:00:00Z");
         when(em.createNativeQuery(contains("FROM sales"))).thenReturn(query);
         when(query.setParameter(eq("since"), any())).thenReturn(query);
-        when(query.setMaxResults(1000)).thenReturn(query);
+        when(query.setMaxResults(anyInt())).thenReturn(query);
 
         UUID saleId = UUID.randomUUID();
         var now = Timestamp.from(Instant.now());
@@ -61,7 +61,7 @@ class SaleDeltaProviderTest {
     void queryDelta_includesSaleItems() {
         when(em.createNativeQuery(contains("FROM sales"))).thenReturn(query);
         when(query.setParameter(eq("since"), any())).thenReturn(query);
-        when(query.setMaxResults(1000)).thenReturn(query);
+        when(query.setMaxResults(anyInt())).thenReturn(query);
 
         UUID saleId = UUID.randomUUID();
         var now = Timestamp.from(Instant.now());
@@ -79,5 +79,20 @@ class SaleDeltaProviderTest {
         var result = provider.queryDelta(Instant.EPOCH);
         var items = (List<?>) result.get(0).get("items");
         assertThat(items).hasSize(2);
+    }
+
+    // A sale validated or cancelled after creation keeps its created_at: filtering on it
+    // would never send the new status to the other devices.
+    @Test
+    void queryDelta_filtersOnUpdatedAt_soStatusChangesArePulled() {
+        when(em.createNativeQuery(contains("FROM sales"))).thenReturn(query);
+        when(query.getResultList()).thenReturn(Collections.emptyList());
+
+        provider.queryDelta(Instant.parse("2026-03-20T10:00:00Z"));
+
+        var sql = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(em).createNativeQuery(sql.capture());
+        assertThat(sql.getValue()).contains("WHERE updated_at >= :since");
+        assertThat(sql.getValue()).doesNotContain("created_at > :since");
     }
 }

@@ -1,8 +1,9 @@
 package com.keevo.sync.sync.application.provider;
 
 import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider;
+import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider.Page;
+import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider.Position;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.Query;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -23,18 +24,11 @@ public class ReportsDeltaProvider implements DeltaEntityProvider {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
-    public List<Map<String, Object>> queryDelta(Instant since) {
-        String sql = "SELECT id, tenant_id, store_id, store_name, actor_id, " +
-                "actor_name, report_type, report_date, content, delivery_status, " +
-                "delivery_attempts, last_attempt_at, total_revenue, total_sales, " +
-                "is_automatic, created_at " +
-                "FROM reports WHERE created_at > :since ORDER BY created_at ASC";
-        Query query = em.createNativeQuery(sql);
-        query.setParameter("since", java.sql.Timestamp.from(since));
-        query.setMaxResults(1000);
-        List<Object[]> rows = query.getResultList();
-        return rows.stream().map(this::mapRow).toList();
+    public Page queryDeltaPage(Instant since, Position after, int limit) {
+        var page = DeltaPageQuery.fetch(em,
+                "id, tenant_id, store_id, store_name, actor_id, actor_name, report_type, report_date, content, delivery_status, delivery_attempts, last_attempt_at, total_revenue, total_sales, is_automatic, created_at",
+                "reports", "created_at", since, after, limit);
+        return new Page(page.rows().stream().map(this::mapRow).toList(), page.next());
     }
 
     private Map<String, Object> mapRow(Object[] row) {

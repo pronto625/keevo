@@ -10,5 +10,6 @@ public record RegistrationResponse(
     String tenantCode,
     String token,
     String userId,
-    String tenantId
+    String tenantId,
+    String refreshToken
 ) {}

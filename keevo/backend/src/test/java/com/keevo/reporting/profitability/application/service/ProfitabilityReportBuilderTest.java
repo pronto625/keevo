@@ -135,4 +135,24 @@ class ProfitabilityReportBuilderTest {
 
         assertThat(entries).hasSize(1);
     }
+
+    // Every figure of the detail (metrics, sparkline, applied price range) follows the store filter.
+    @Test
+    void buildDetail_withStore_scopesEveryQueryToThatStore() {
+        UUID productId = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+        when(repo.findProductCosts(productId, storeId)).thenReturn(Optional.of(
+                new RawProductCostRow("ProductA", "Cat", 5000, 1000, 500, 4000, 5000, 4500.0)));
+        when(repo.findDailyMarginLast7(TENANT, productId, TO, storeId)).thenReturn(
+                List.of(new RawDailyMarginRow("2026-01-31", 700L)));
+        when(repo.findRawByPeriod(TENANT, FROM, TO, storeId)).thenReturn(List.of(
+                new RawProfitabilityRow(productId, "ProductA", "Cat", 1000, 500, 2, 9000L, 3000L)));
+
+        var detail = builder.buildDetail(
+                new ProfitabilityQuery(TENANT, FROM, TO, SortOption.MARGIN_PCT_DESC, storeId), productId);
+
+        assertThat(detail.totalRevenue()).isEqualTo(9000);
+        assertThat(detail.dailyMarginLast7()).hasSize(1);
+        assertThat(detail.minAppliedPrice()).isEqualTo(4000);
+    }
 }

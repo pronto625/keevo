@@ -83,11 +83,6 @@ public class CorrectSaleService implements CorrectSaleUseCase {
                 correctedItems.add(item);
                 continue;
             }
-            // Decrease → restore stock (positive delta); increase → decrement (negative delta).
-            stockOperationService.recordOperation(
-                    item.getProductId(), item.getVariantId(), sale.getStoreId(),
-                    MovementType.ADJUSTMENT, -(newQty - item.getQuantity()),
-                    command.actorId(), "Correction vente " + sale.getId());
             correctedItems.add(new SaleItem(
                     item.getId(), item.getSaleId(), item.getProductId(), item.getVariantId(),
                     item.getProductName(), item.getCatalogueUnitPrice(), item.getAppliedUnitPrice(),
@@ -95,7 +90,23 @@ public class CorrectSaleService implements CorrectSaleUseCase {
         }
 
         int newSubtotal = correctedItems.stream().mapToInt(SaleItem::getSubtotal).sum();
+        // Same rule as the Sale constructor, checked before any stock movement is written.
+        if (sale.getDiscountAmount() > newSubtotal) {
+            throw new DomainException(ErrorCode.DISCOUNT_EXCEEDS_SUBTOTAL,
+                    "Discount (" + sale.getDiscountAmount() + ") exceeds corrected subtotal (" + newSubtotal + ")");
+        }
         int newTotal = newSubtotal - sale.getDiscountAmount();
+
+        for (int i = 0; i < correctedItems.size(); i++) {
+            SaleItem before = sale.getItems().get(i);
+            SaleItem after = correctedItems.get(i);
+            if (after.getQuantity() == before.getQuantity()) continue;
+            // Decrease → restore stock (positive delta); increase → decrement (negative delta).
+            stockOperationService.recordOperation(
+                    before.getProductId(), before.getVariantId(), sale.getStoreId(),
+                    MovementType.ADJUSTMENT, -(after.getQuantity() - before.getQuantity()),
+                    command.actorId(), "Correction vente " + sale.getId());
+        }
 
         Sale correctedSale = new Sale(sale.getId(), sale.getStoreId(), sale.getEmployeeId(),
                 sale.getClientId(), sale.getPaymentMode(), newTotal, sale.getDiscountAmount(),

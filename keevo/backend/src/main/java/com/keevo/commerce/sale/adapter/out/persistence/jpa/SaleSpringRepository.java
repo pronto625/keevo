@@ -4,6 +4,7 @@ import com.keevo.commerce.sale.adapter.out.persistence.entity.SaleJpaEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -49,6 +50,18 @@ public interface SaleSpringRepository extends JpaRepository<SaleJpaEntity, UUID>
             UUID storeId, Instant from, Instant to, Pageable pageable);
 
     /**
+     * Sales covered by a day closure — see {@link com.keevo.commerce.sale.domain.model.ClosureWindow}.
+     */
+    @Query("SELECT s FROM SaleJpaEntity s WHERE s.storeId = :storeId " +
+           "AND s.occurredAt <= :end AND s.createdAt <= :receivedUntil " +
+           "AND (s.occurredAt >= :start OR s.createdAt > :lateFrom)")
+    List<SaleJpaEntity> findForClosure(@Param("storeId") UUID storeId,
+                                       @Param("start") Instant start,
+                                       @Param("end") Instant end,
+                                       @Param("lateFrom") Instant lateFrom,
+                                       @Param("receivedUntil") Instant receivedUntil);
+
+    /**
      * Find sales for a store within a date range with a specific status.
      */
     Page<SaleJpaEntity> findByStoreIdAndOccurredAtBetweenAndStatus(
@@ -64,4 +77,16 @@ public interface SaleSpringRepository extends JpaRepository<SaleJpaEntity, UUID>
      * Find all sales for a store within a date range (List version for closure summary).
      */
     List<SaleJpaEntity> findAllByStoreIdAndOccurredAtBetween(UUID storeId, Instant from, Instant to);
+
+    /**
+     * Compare-and-set status change in one statement: of two concurrent callers expecting the
+     * same status, exactly one gets 1. Bumps updated_at so the delta pull carries the change.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE SaleJpaEntity s SET s.status = :newStatus, s.updatedAt = :now " +
+           "WHERE s.id = :id AND s.status = :expected")
+    int updateStatusIfCurrent(@Param("id") UUID id,
+                              @Param("expected") String expected,
+                              @Param("newStatus") String newStatus,
+                              @Param("now") Instant now);
 }

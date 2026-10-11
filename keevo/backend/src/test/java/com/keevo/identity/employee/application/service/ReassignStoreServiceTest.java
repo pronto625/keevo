@@ -1,6 +1,5 @@
 package com.keevo.identity.employee.application.service;
 
-import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
 import com.keevo.identity.employee.domain.event.EmployeeStoreReassignedEvent;
 import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.model.EmployeeStatus;
@@ -35,7 +34,6 @@ import static org.mockito.Mockito.*;
 class ReassignStoreServiceTest {
 
     @Mock EmployeeRepository employeeRepository;
-    @Mock RefreshTokenRepository refreshTokenRepository;
     @Mock ApplicationEventPublisher eventPublisher;
 
     @InjectMocks ReassignStoreService reassignStoreService;
@@ -71,15 +69,20 @@ class ReassignStoreServiceTest {
     }
 
     @Test
-    @DisplayName("execute() should revoke refresh tokens on reassignment")
-    void execute_shouldRevokeRefreshTokens_onReassignment() {
+    // A store change is not a security event: the next request gets
+    // STORE_REASSIGNED and the app renews its session through the refresh token,
+    // receiving a token with the new store. Revoking it would force a re-login.
+    @DisplayName("execute() keeps refresh tokens so the session renews onto the new store")
+    void execute_keepsRefreshTokens_onReassignment() {
         when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
         when(employeeRepository.updateStoreId(employeeId, newStoreId))
                 .thenReturn(employee.withStoreId(newStoreId));
 
         reassignStoreService.execute(new ReassignStoreCommand(actorId, employeeId, newStoreId));
 
-        verify(refreshTokenRepository).revokeAllByUserId(employee.getUserId());
+        // Refresh tokens are no longer revoked (the service has no access to them): the
+        // app renews its session on STORE_REASSIGNED and receives the new store.
+        verify(employeeRepository).updateStoreId(employeeId, newStoreId);
     }
 
     @Test

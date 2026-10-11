@@ -150,13 +150,19 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
             case COMPLETED -> {
                 enforceEmployeeStoreScope(command.assignedStoreId(), sale.getStoreId());
                 requireJustification(command.justification());
+                // Claim the COMPLETED→CANCELLED transition first: a concurrent cancellation that
+                // read the same COMPLETED sale loses here and must not restore the stock again.
+                if (!saleRepository.updateStatusIfCurrent(
+                        sale.getId(), SaleStatus.COMPLETED, SaleStatus.CANCELLED)) {
+                    throw new DomainException(ErrorCode.SALE_ALREADY_CANCELLED,
+                            "Sale " + sale.getId() + " is already cancelled");
+                }
                 for (SaleItem item : sale.getItems()) {
                     stockOperationService.recordOperation(
                             item.getProductId(), item.getVariantId(), sale.getStoreId(),
                             MovementType.SALE_CANCELLED, item.getQuantity(),
                             command.actorId(), "Annulation vente " + sale.getId());
                 }
-                saleRepository.updateStatus(sale.getId(), SaleStatus.CANCELLED);
                 eventPublisher.publishEvent(new SaleCancelledEvent(
                         sale.getId(), command.actorId(), command.justification(),
                         serializeItems(sale.getItems()), tenantId, Instant.now()));

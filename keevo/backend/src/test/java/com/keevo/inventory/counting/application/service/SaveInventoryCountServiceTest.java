@@ -122,4 +122,19 @@ class SaveInventoryCountServiceTest {
         assertThat(captor.getValue().getSessionId()).isEqualTo(SESSION_ID);
         assertThat(captor.getValue().getProductName()).isEqualTo("Savon bio");
     }
+
+    @Test
+    void execute_clientCountId_isUsedForTheNewCount() {
+        var countId = UUID.randomUUID();
+        var sessionWithId = new InventorySession(SESSION_ID, STORE_ID, InventoryScope.FULL,
+                null, InventorySessionStatus.IN_PROGRESS, UUID.randomUUID(), Instant.now(),
+                null, null, null, Instant.now());
+        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(sessionWithId));
+        when(countRepository.upsert(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        InventoryCount result = service.execute(new SaveInventoryCountCommand(SESSION_ID, PRODUCT_ID, null,
+                "Savon bio", null, 50, 47, ACTOR_ID, countId));
+
+        assertThat(result.getId()).isEqualTo(countId);
+    }
 }

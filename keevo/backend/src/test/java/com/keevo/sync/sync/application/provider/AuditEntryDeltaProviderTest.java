@@ -35,7 +35,7 @@ class AuditEntryDeltaProviderTest {
         var since = Instant.parse("2026-03-20T10:00:00Z");
         when(em.createNativeQuery(anyString())).thenReturn(query);
         when(query.setParameter(eq("since"), any())).thenReturn(query);
-        when(query.setMaxResults(1000)).thenReturn(query);
+        when(query.setMaxResults(anyInt())).thenReturn(query);
         var now = Timestamp.from(Instant.now());
         Object[] row = {UUID.randomUUID(), UUID.randomUUID(), "Product", UUID.randomUUID(),
                 "PRODUCT_CREATED", null, "{\"name\":\"test\"}", now};
@@ -50,7 +50,7 @@ class AuditEntryDeltaProviderTest {
     void queryDelta_firstTime_limitsTo30Days() {
         when(em.createNativeQuery(anyString())).thenReturn(query);
         when(query.setParameter(eq("since"), any())).thenReturn(query);
-        when(query.setMaxResults(1000)).thenReturn(query);
+        when(query.setMaxResults(anyInt())).thenReturn(query);
         when(query.getResultList()).thenReturn(List.of());
 
         provider.queryDelta(Instant.EPOCH);
@@ -66,7 +66,7 @@ class AuditEntryDeltaProviderTest {
     void queryDelta_mapsAllFieldsCorrectly() {
         when(em.createNativeQuery(anyString())).thenReturn(query);
         when(query.setParameter(eq("since"), any())).thenReturn(query);
-        when(query.setMaxResults(1000)).thenReturn(query);
+        when(query.setMaxResults(anyInt())).thenReturn(query);
         UUID id = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         UUID entityId = UUID.randomUUID();

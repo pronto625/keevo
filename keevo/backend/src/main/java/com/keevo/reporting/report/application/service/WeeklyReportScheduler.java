@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.temporal.TemporalAdjusters;
 
 /**
  * WeeklyReportScheduler — hourly tick that triggers weekly reports per tenant.
@@ -116,18 +117,21 @@ public class WeeklyReportScheduler {
             return;
         }
 
-        // Guard: skip if already generated for this week's Sunday
-        if (!reportRepository.findByDateAndTenant(todayWAT, tenantId, ReportType.WEEKLY).isEmpty()) {
-            log.debug("WeeklyReport already generated for tenant={} date={}", tenantId, todayWAT);
+        // Last completed ISO week: Monday 00:00 → Sunday 23:59:59 WAT, the Sunday being today
+        // or the one before. (with(SUNDAY) would pick the coming Sunday and report the current
+        // partial week whenever the configured day is not Sunday.)
+        // Mirror ReportController.triggerWeekly.
+        LocalDate weekEndLocal   = todayWAT.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY));
+        LocalDate weekStartLocal = weekEndLocal.minusDays(6);
+
+        // Guard: skip if already generated for that week (reports are dated by their Sunday)
+        if (!reportRepository.findByDateAndTenant(weekEndLocal, tenantId, ReportType.WEEKLY).isEmpty()) {
+            log.debug("WeeklyReport already generated for tenant={} week ending {}", tenantId, weekEndLocal);
             return;
         }
 
         var channel = prefs != null ? prefs.weeklyReportChannel() : null;
 
-        // Monday 00:00:00 WAT → Sunday 23:59:59 WAT (ISO week, invariant regardless of trigger day)
-        // Mirror ReportController.triggerWeekly pattern: todayWAT.with(DayOfWeek.SUNDAY).minusDays(6)
-        LocalDate weekEndLocal   = todayWAT.with(DayOfWeek.SUNDAY);
-        LocalDate weekStartLocal = weekEndLocal.minusDays(6);
         Instant weekStart = weekStartLocal.atStartOfDay(WAT).toInstant();
         Instant weekEnd   = weekEndLocal.atTime(23, 59, 59).atZone(WAT).toInstant();
 

@@ -58,7 +58,7 @@ class SyncPushServiceConflictTest {
         var op = new SyncOperation("op-1", "CREATE_SALE", "e1",
                 Map.of("storeId", "s1", "items", List.of()), Instant.now());
 
-        when(logRepository.existsById("op-1")).thenReturn(false);
+        when(logRepository.isSettled("op-1")).thenReturn(false);
         when(handlerRegistry.resolve("CREATE_SALE")).thenReturn(Optional.of(saleHandler));
         when(saleHandler.handle(any(), eq(ACTOR_ID), eq(TENANT_ID)))
                 .thenReturn(new SyncOperationResult("op-1", SyncOperationStatus.APPLIED, "srv-1", null));
@@ -78,7 +78,7 @@ class SyncPushServiceConflictTest {
         var op = new SyncOperation("op-1", "CREATE_SALE", "e1",
                 Map.of("storeId", "s1"), Instant.now());
 
-        when(logRepository.existsById("op-1")).thenReturn(false);
+        when(logRepository.isSettled("op-1")).thenReturn(false);
         when(handlerRegistry.resolve("CREATE_SALE")).thenReturn(Optional.of(saleHandler));
         when(saleHandler.handle(any(), eq(ACTOR_ID), eq(TENANT_ID)))
                 .thenReturn(new SyncOperationResult("op-1", SyncOperationStatus.APPLIED, "srv-1", null));
@@ -98,7 +98,7 @@ class SyncPushServiceConflictTest {
     void pushBatch_conflictDetected_statusChangedToConflict() {
         var op = new SyncOperation("op-1", "CREATE_SALE", "e1", Map.of(), Instant.now());
 
-        when(logRepository.existsById("op-1")).thenReturn(false);
+        when(logRepository.isSettled("op-1")).thenReturn(false);
         when(handlerRegistry.resolve("CREATE_SALE")).thenReturn(Optional.of(saleHandler));
         when(saleHandler.handle(any(), eq(ACTOR_ID), eq(TENANT_ID)))
                 .thenReturn(new SyncOperationResult("op-1", SyncOperationStatus.APPLIED, "srv-1", null));
@@ -118,7 +118,7 @@ class SyncPushServiceConflictTest {
     void pushBatch_conflictDetected_logsToSyncConflictsLog() {
         var op = new SyncOperation("op-1", "CREATE_SALE", "e1", Map.of(), Instant.now());
 
-        when(logRepository.existsById("op-1")).thenReturn(false);
+        when(logRepository.isSettled("op-1")).thenReturn(false);
         when(handlerRegistry.resolve("CREATE_SALE")).thenReturn(Optional.of(saleHandler));
         when(saleHandler.handle(any(), eq(ACTOR_ID), eq(TENANT_ID)))
                 .thenReturn(new SyncOperationResult("op-1", SyncOperationStatus.APPLIED, "srv-1", null));
@@ -138,7 +138,7 @@ class SyncPushServiceConflictTest {
     void pushBatch_noConflict_resultUnchanged() {
         var op = new SyncOperation("op-1", "CREATE_SALE", "e1", Map.of(), Instant.now());
 
-        when(logRepository.existsById("op-1")).thenReturn(false);
+        when(logRepository.isSettled("op-1")).thenReturn(false);
         when(handlerRegistry.resolve("CREATE_SALE")).thenReturn(Optional.of(saleHandler));
         when(saleHandler.handle(any(), eq(ACTOR_ID), eq(TENANT_ID)))
                 .thenReturn(new SyncOperationResult("op-1", SyncOperationStatus.APPLIED, "srv-1", null));
@@ -158,7 +158,7 @@ class SyncPushServiceConflictTest {
     void pushBatch_handlerRejected_skipsConflictEvaluation() {
         var op = new SyncOperation("op-1", "CREATE_SALE", "e1", Map.of(), Instant.now());
 
-        when(logRepository.existsById("op-1")).thenReturn(false);
+        when(logRepository.isSettled("op-1")).thenReturn(false);
         when(handlerRegistry.resolve("CREATE_SALE")).thenReturn(Optional.of(saleHandler));
         when(saleHandler.handle(any(), eq(ACTOR_ID), eq(TENANT_ID)))
                 .thenReturn(new SyncOperationResult("op-1", SyncOperationStatus.REJECTED, null, "ERROR"));
@@ -174,7 +174,7 @@ class SyncPushServiceConflictTest {
     void pushBatch_handlerDuplicate_skipsConflictEvaluation() {
         var op = new SyncOperation("op-dup", "CREATE_SALE", "e1", Map.of(), Instant.now());
 
-        when(logRepository.existsById("op-dup")).thenReturn(true);
+        when(logRepository.isSettled("op-dup")).thenReturn(true);
 
         var command = new com.keevo.sync.sync.domain.port.in.SyncUseCase.PushBatchCommand(
                 ACTOR_ID, TENANT_ID, "device-1", List.of(op));
@@ -187,7 +187,7 @@ class SyncPushServiceConflictTest {
     void pushBatch_lwwConflict_statusStaysApplied() {
         var op = new SyncOperation("op-1", "UPDATE_PRODUCT", "p1", Map.of(), Instant.now());
 
-        when(logRepository.existsById("op-1")).thenReturn(false);
+        when(logRepository.isSettled("op-1")).thenReturn(false);
         when(handlerRegistry.resolve("UPDATE_PRODUCT")).thenReturn(Optional.of(saleHandler));
         when(saleHandler.handle(any(), eq(ACTOR_ID), eq(TENANT_ID)))
                 .thenReturn(new SyncOperationResult("op-1", SyncOperationStatus.APPLIED, "p1", null));
@@ -210,7 +210,7 @@ class SyncPushServiceConflictTest {
     void pushBatch_stockNegative_statusChangesToConflict() {
         var op = new SyncOperation("op-1", "CREATE_SALE", "e1", Map.of(), Instant.now());
 
-        when(logRepository.existsById("op-1")).thenReturn(false);
+        when(logRepository.isSettled("op-1")).thenReturn(false);
         when(handlerRegistry.resolve("CREATE_SALE")).thenReturn(Optional.of(saleHandler));
         when(saleHandler.handle(any(), eq(ACTOR_ID), eq(TENANT_ID)))
                 .thenReturn(new SyncOperationResult("op-1", SyncOperationStatus.APPLIED, "srv-1", null));

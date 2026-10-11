@@ -1,5 +1,7 @@
 package com.keevo.commerce.sale.domain.port.out;
 
+import com.keevo.commerce.sale.domain.model.ClosureWindow;
+
 import com.keevo.commerce.sale.domain.model.Sale;
 import com.keevo.commerce.sale.domain.model.SaleStatus;
 import org.springframework.data.domain.Page;
@@ -29,6 +31,21 @@ public interface SaleRepository {
 
     void updateStatus(UUID saleId, SaleStatus newStatus);
 
+    /**
+     * Compare-and-set status change: moves the sale to {@code newStatus} only if it is still in
+     * {@code expected}. Returns true when this call made the transition, so that two concurrent
+     * cancellations cannot both restore the stock.
+     *
+     * <p>The default is a read-then-write and is NOT atomic; persistence adapters must override it
+     * with a single conditional UPDATE ({@code ... WHERE id = :id AND status = :expected}) and
+     * return whether a row was updated.
+     */
+    default boolean updateStatusIfCurrent(UUID saleId, SaleStatus expected, SaleStatus newStatus) {
+        boolean matches = findById(saleId).map(s -> s.getStatus() == expected).orElse(false);
+        if (matches) updateStatus(saleId, newStatus);
+        return matches;
+    }
+
     void remapItemProductIds(UUID saleId, Map<UUID, UUID> remappings);
 
     // ── Story 4.4 — Sales History queries ─────────────────────────────────────
@@ -45,6 +62,9 @@ public interface SaleRepository {
      * Used by OWNER role — sees all store sales.
      */
     Page<Sale> findByStoreIdAndDateRange(UUID storeId, Instant from, Instant to, Pageable pageable);
+
+    /** Sales a day closure covers, late offline sales included — see {@link ClosureWindow}. */
+    List<Sale> findForClosure(UUID storeId, ClosureWindow window);
 
     /**
      * Find sales for a store within a date range, filtered by status.

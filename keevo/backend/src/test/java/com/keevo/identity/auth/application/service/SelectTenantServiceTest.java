@@ -53,6 +53,7 @@ class SelectTenantServiceTest {
     @Mock UserMembershipRepository membershipRepository;
     @Mock RefreshTokenRepository  refreshTokenRepository;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     private JwtTokenProvider realJwtProvider;
     private SelectTenantService selectTenantService;
@@ -66,9 +67,9 @@ class SelectTenantServiceTest {
         RSAPublicKey  publicKey  = loadTestPublicKey();
         JwtProperties props = new JwtProperties(24, 30);
         realJwtProvider = new JwtTokenProvider(privateKey, publicKey, props);
+        var issuer = new SessionTokenIssuer(realJwtProvider, props, refreshTokenRepository, jdbcTemplate);
         selectTenantService = new SelectTenantService(
-                tenantRepository, membershipRepository,
-                refreshTokenRepository, realJwtProvider, props, eventPublisher, null);
+                tenantRepository, membershipRepository, realJwtProvider, issuer, eventPublisher);
     }
 
     // ── Happy path ─────────────────────────────────────────────────────────

@@ -226,4 +226,31 @@ class JdbcProfitabilityRepositoryTest {
         assertThat(captured.get(0)).isEqualTo(expectedFrom);
         assertThat(captured.get(1)).isEqualTo(expectedTo);
     }
+
+    @Test
+    @DisplayName("findDailyMarginLast7 with store filter adds the store predicate and param")
+    void findDailyMarginLast7_withStoreFilter_passesStoreId() {
+        ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+        doReturn(Collections.emptyList()).when(jdbc)
+                .query(sqlCaptor.capture(), any(RowMapper.class), any(), any(), any(), any());
+
+        repository.findDailyMarginLast7(tenantId, productId, LocalDate.of(2026, 7, 23), storeId);
+
+        assertThat(sqlCaptor.getValue()).contains("s.store_id");
+        verify(jdbc).query(anyString(), any(RowMapper.class),
+                eq(productId.toString()), any(Timestamp.class), any(Timestamp.class), eq(storeId.toString()));
+    }
+
+    @Test
+    @DisplayName("findProductCosts with store filter only uses that store's sales for the price range")
+    void findProductCosts_withStoreFilter_passesStoreId() {
+        ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+        doReturn(Collections.emptyList()).when(jdbc)
+                .query(sqlCaptor.capture(), any(RowMapper.class), any(), any());
+
+        repository.findProductCosts(productId, storeId);
+
+        assertThat(sqlCaptor.getValue()).contains("store_id");
+        verify(jdbc).query(anyString(), any(RowMapper.class), eq(storeId.toString()), eq(productId.toString()));
+    }
 }

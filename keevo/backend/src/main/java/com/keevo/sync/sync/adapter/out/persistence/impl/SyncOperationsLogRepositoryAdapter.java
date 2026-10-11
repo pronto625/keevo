@@ -7,6 +7,7 @@ import com.keevo.sync.sync.domain.model.SyncOperationsLogEntry;
 import com.keevo.sync.sync.domain.port.out.SyncOperationsLogRepository;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -24,6 +25,23 @@ public class SyncOperationsLogRepositoryAdapter implements SyncOperationsLogRepo
     @Override
     public boolean existsById(String operationId) {
         return jpa.existsById(operationId);
+    }
+
+    @Override
+    public boolean isSettled(String operationId) {
+        return jpa.findById(operationId)
+                .map(e -> !SyncOperationStatus.REJECTED.name().equals(e.getStatus()))
+                .orElse(false);
+    }
+
+    @Override
+    public boolean isSettledElseClaim(String operationId, String operationType, String entityId,
+                                      Instant clientTimestamp) {
+        Instant now = Instant.now();
+        // Placeholder only; the final save overwrites it. Never null: a null Instant
+        // in a native insert is bound without a type and rejected by PostgreSQL.
+        return jpa.claim(operationId, operationType, entityId, now,
+                clientTimestamp != null ? clientTimestamp : now) == 0;
     }
 
     @Override

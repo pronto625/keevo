@@ -28,10 +28,19 @@ public interface StockTransferSpringRepository
      * exactly one returns 1, the other returns 0.
      * Story v1s-13-1 (Option A).
      */
+    default int transitionStatus(UUID id, TransferStatus expectedStatus, TransferStatus newStatus) {
+        return transitionStatusNative(id, expectedStatus.name(), newStatus.name());
+    }
+
+    /**
+     * Native because updated_at (the delta pull cursor for transfers) is not mapped on the
+     * entity: the public baseline table lacks it and ddl-auto=validate would reject the mapping.
+     */
     @Modifying(clearAutomatically = true)
-    @Query("UPDATE StockTransferJpaEntity t SET t.status = :newStatus, t.version = t.version + 1 " +
-           "WHERE t.id = :id AND t.status = :expectedStatus")
-    int transitionStatus(@Param("id") UUID id,
-                         @Param("expectedStatus") TransferStatus expectedStatus,
-                         @Param("newStatus") TransferStatus newStatus);
+    @Query(value = "UPDATE stock_transfers SET status = :newStatus, version = version + 1, " +
+           "updated_at = now() WHERE id = :id AND status = :expectedStatus",
+           nativeQuery = true)
+    int transitionStatusNative(@Param("id") UUID id,
+                               @Param("expectedStatus") String expectedStatus,
+                               @Param("newStatus") String newStatus);
 }

@@ -22,12 +22,21 @@ public interface GenerateEndOfDayReportUseCase {
             Instant closedAt,      // actual closure time — used for display (⏰ HH:mm)
             Instant windowStart,
             Instant windowEnd,     // calendar window end (23:59:59 WAT) — used for queries (Story 7.6)
-            ReportChannel deliveryChannel   // null → defaults to WHATSAPP (legacy callers)
+            ReportChannel deliveryChannel,  // null → defaults to WHATSAPP (legacy callers)
+            Instant lateFrom,      // day closure: late offline sales received after this are included
+            Instant receivedUntil  // day closure: sales received after this belong to the next one
     ) {
+        /** Plain time window (no late sales). */
+        public GenerateReportCommand(UUID storeId, UUID actorId, String tenantId,
+                                     boolean isAutomatic, Instant closedAt, Instant windowStart,
+                                     Instant windowEnd, ReportChannel deliveryChannel) {
+            this(storeId, actorId, tenantId, isAutomatic, closedAt, windowStart, windowEnd,
+                    deliveryChannel, null, null);
+        }
         /** Backward-compatible constructor for callers that pre-date Story 7.5 (no channel). */
         public GenerateReportCommand(UUID storeId, UUID actorId, String tenantId,
                                      boolean isAutomatic, Instant closedAt, Instant windowStart) {
-            this(storeId, actorId, tenantId, isAutomatic, closedAt, windowStart, null, null);
+            this(storeId, actorId, tenantId, isAutomatic, closedAt, windowStart, null, (ReportChannel) null);
         }
         /** Backward-compatible constructor for callers that pre-date Story 7.6 (no windowEnd). */
         public GenerateReportCommand(UUID storeId, UUID actorId, String tenantId,

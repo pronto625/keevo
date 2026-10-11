@@ -57,8 +57,8 @@ class SyncPushServiceTest {
         var op1 = new SyncOperation("op-1", "CREATE_SALE", "e1", Map.of(), Instant.parse("2026-03-20T10:00:00Z"));
         var op2 = new SyncOperation("op-2", "CREATE_SALE", "e2", Map.of(), Instant.parse("2026-03-20T10:01:00Z"));
 
-        when(logRepository.existsById("op-1")).thenReturn(false);
-        when(logRepository.existsById("op-2")).thenReturn(false);
+        when(logRepository.isSettled("op-1")).thenReturn(false);
+        when(logRepository.isSettled("op-2")).thenReturn(false);
         when(handlerRegistry.resolve("CREATE_SALE")).thenReturn(Optional.of(saleHandler));
         when(saleHandler.handle(any(), eq(ACTOR_ID), eq(TENANT_ID)))
                 .thenReturn(new SyncOperationResult("op-1", SyncOperationStatus.APPLIED, "srv-1", null))
@@ -79,7 +79,7 @@ class SyncPushServiceTest {
         var op1 = new SyncOperation("op-1", "CREATE_SALE", "e1", Map.of(), Instant.now());
         var op2 = new SyncOperation("op-2", "CREATE_PRODUCT", "e2", Map.of(), Instant.now());
 
-        when(logRepository.existsById(any())).thenReturn(false);
+        when(logRepository.isSettled(any())).thenReturn(false);
         when(handlerRegistry.resolve("CREATE_SALE")).thenReturn(Optional.of(saleHandler));
         when(handlerRegistry.resolve("CREATE_PRODUCT")).thenReturn(Optional.of(productHandler));
         when(saleHandler.handle(any(), eq(ACTOR_ID), eq(TENANT_ID)))
@@ -102,7 +102,7 @@ class SyncPushServiceTest {
         var op1 = new SyncOperation("op-1", "CREATE_SALE", "e1", Map.of(), Instant.now());
         var op2 = new SyncOperation("op-2", "CREATE_SALE", "e2", Map.of(), Instant.now());
 
-        when(logRepository.existsById(any())).thenReturn(false);
+        when(logRepository.isSettled(any())).thenReturn(false);
         when(handlerRegistry.resolve("CREATE_SALE")).thenReturn(Optional.of(saleHandler));
         when(saleHandler.handle(eq(op1), eq(ACTOR_ID), eq(TENANT_ID)))
                 .thenThrow(new RuntimeException("unexpected error"));
@@ -123,7 +123,7 @@ class SyncPushServiceTest {
     void pushBatch_duplicateOperationId_returnsDuplicate() {
         var op = new SyncOperation("op-dup", "CREATE_SALE", "e1", Map.of(), Instant.now());
 
-        when(logRepository.existsById("op-dup")).thenReturn(true);
+        when(logRepository.isSettled("op-dup")).thenReturn(true);
 
         var command = new com.keevo.sync.sync.domain.port.in.SyncUseCase.PushBatchCommand(
                 ACTOR_ID, TENANT_ID, "device-1", List.of(op));
@@ -133,6 +133,26 @@ class SyncPushServiceTest {
         assertThat(result.results()).hasSize(1);
         assertThat(result.results().get(0).status()).isEqualTo(SyncOperationStatus.DUPLICATE);
         verify(saleHandler, never()).handle(any(), any(), any());
+    }
+
+    // A REJECTED log entry must not answer DUPLICATE on replay: the client
+    // deletes DUPLICATE ops as synced, which would silently drop the sale.
+    @Test
+    void pushBatch_replayOfPreviouslyRejectedOperation_isProcessedAgain() {
+        var op = new SyncOperation("op-retry", "CREATE_SALE", "e1", Map.of(), Instant.now());
+
+        when(logRepository.isSettled("op-retry")).thenReturn(false);
+        when(handlerRegistry.resolve("CREATE_SALE")).thenReturn(Optional.of(saleHandler));
+        when(saleHandler.handle(any(), eq(ACTOR_ID), eq(TENANT_ID)))
+                .thenReturn(new SyncOperationResult("op-retry", SyncOperationStatus.APPLIED, "srv-1", null));
+
+        var command = new com.keevo.sync.sync.domain.port.in.SyncUseCase.PushBatchCommand(
+                ACTOR_ID, TENANT_ID, "device-1", List.of(op));
+
+        SyncBatchResult result = service.pushBatch(command);
+
+        assertThat(result.results().get(0).status()).isEqualTo(SyncOperationStatus.APPLIED);
+        verify(saleHandler).handle(any(), eq(ACTOR_ID), eq(TENANT_ID));
     }
 
     @Test
@@ -150,7 +170,7 @@ class SyncPushServiceTest {
         var later = new SyncOperation("op-2", "CREATE_SALE", "e2", Map.of(), Instant.parse("2026-03-20T12:00:00Z"));
         var earlier = new SyncOperation("op-1", "CREATE_SALE", "e1", Map.of(), Instant.parse("2026-03-20T10:00:00Z"));
 
-        when(logRepository.existsById(any())).thenReturn(false);
+        when(logRepository.isSettled(any())).thenReturn(false);
         when(handlerRegistry.resolve("CREATE_SALE")).thenReturn(Optional.of(saleHandler));
         when(saleHandler.handle(any(), eq(ACTOR_ID), eq(TENANT_ID)))
                 .thenAnswer(inv -> {
@@ -173,7 +193,7 @@ class SyncPushServiceTest {
     void pushBatch_publishesSyncOperationProcessedEvent() {
         var op = new SyncOperation("op-1", "CREATE_SALE", "e1", Map.of(), Instant.now());
 
-        when(logRepository.existsById("op-1")).thenReturn(false);
+        when(logRepository.isSettled("op-1")).thenReturn(false);
         when(handlerRegistry.resolve("CREATE_SALE")).thenReturn(Optional.of(saleHandler));
         when(saleHandler.handle(any(), eq(ACTOR_ID), eq(TENANT_ID)))
                 .thenReturn(new SyncOperationResult("op-1", SyncOperationStatus.APPLIED, "srv-1", null));
@@ -194,7 +214,7 @@ class SyncPushServiceTest {
     void pushBatch_unknownOperationType_returnsRejected() {
         var op = new SyncOperation("op-1", "UNKNOWN_OP", "e1", Map.of(), Instant.now());
 
-        when(logRepository.existsById("op-1")).thenReturn(false);
+        when(logRepository.isSettled("op-1")).thenReturn(false);
         when(handlerRegistry.resolve("UNKNOWN_OP")).thenReturn(Optional.empty());
 
         var command = new com.keevo.sync.sync.domain.port.in.SyncUseCase.PushBatchCommand(
@@ -213,7 +233,7 @@ class SyncPushServiceTest {
         var op2 = new SyncOperation("op-2", "CREATE_SALE", "e2", Map.of(), Instant.parse("2026-03-20T10:01:00Z"));
         SyncOperationHandler productHandler = mock(SyncOperationHandler.class);
 
-        when(logRepository.existsById(any())).thenReturn(false);
+        when(logRepository.isSettled(any())).thenReturn(false);
         when(handlerRegistry.resolve("UPDATE_PRODUCT")).thenReturn(Optional.of(productHandler));
         when(handlerRegistry.resolve("CREATE_SALE")).thenReturn(Optional.of(saleHandler));
         when(productHandler.handle(eq(op1), eq(ACTOR_ID), eq(TENANT_ID)))
@@ -245,7 +265,7 @@ class SyncPushServiceTest {
                 Map.of("productId", "local-id", "quantity", 5), Instant.now());
         SyncOperationHandler stockHandler = mock(SyncOperationHandler.class);
 
-        when(logRepository.existsById(any())).thenReturn(false);
+        when(logRepository.isSettled(any())).thenReturn(false);
         when(logRepository.findMergedProductTargets(any())).thenReturn(Map.of("local-id", "existing-id"));
         when(handlerRegistry.resolve("RECORD_STOCK_ENTRY")).thenReturn(Optional.of(stockHandler));
         when(stockHandler.handle(any(), eq(ACTOR_ID), eq(TENANT_ID)))
@@ -265,7 +285,7 @@ class SyncPushServiceTest {
         var op = new SyncOperation("op-1", "STOCK_ADJUST", "e1", Map.of(), Instant.now());
         SyncOperationHandler stockHandler = mock(SyncOperationHandler.class);
 
-        when(logRepository.existsById(any())).thenReturn(false);
+        when(logRepository.isSettled(any())).thenReturn(false);
         when(handlerRegistry.resolve("STOCK_ADJUST")).thenReturn(Optional.of(stockHandler));
         when(stockHandler.handle(any(), eq(ACTOR_ID), eq(TENANT_ID)))
                 .thenReturn(new SyncOperationResult("op-1", SyncOperationStatus.REJECTED, null, "PRODUCT_NOT_FOUND"));
@@ -280,5 +300,92 @@ class SyncPushServiceTest {
 
         assertThat(result.results().get(0).status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.results().get(0).reason()).isEqualTo("PRODUCT_NOT_FOUND");
+    }
+
+    private List<String> processedOrder(List<SyncOperation> ops) {
+        SyncOperationHandler handler = mock(SyncOperationHandler.class);
+        List<String> order = new java.util.ArrayList<>();
+        lenient().when(logRepository.isSettled(any())).thenReturn(false);
+        lenient().when(handlerRegistry.resolve(any())).thenReturn(Optional.of(handler));
+        lenient().when(handler.handle(any(), eq(ACTOR_ID), eq(TENANT_ID))).thenAnswer(inv -> {
+            SyncOperation op = inv.getArgument(0);
+            order.add(op.operationId());
+            return new SyncOperationResult(op.operationId(), SyncOperationStatus.APPLIED, null, null);
+        });
+        service.pushBatch(new com.keevo.sync.sync.domain.port.in.SyncUseCase.PushBatchCommand(
+                ACTOR_ID, TENANT_ID, "device-1", ops));
+        return order;
+    }
+
+    // STOCK_ADJUST sets an absolute quantity: replaying it before an earlier sale
+    // would leave the stock 2 units below what the user counted.
+    @Test
+    void pushBatch_saleThenLaterStockAdjust_keepsClientOrder() {
+        var sale = new SyncOperation("op-sale", "CREATE_SALE", "s1",
+                Map.of("items", List.of(Map.of("productId", "p1", "quantity", 2))),
+                Instant.parse("2026-03-20T09:00:00Z"));
+        var adjust = new SyncOperation("op-adjust", "STOCK_ADJUST", "a1",
+                Map.of("productId", "p1", "newQuantity", 5), Instant.parse("2026-03-20T10:00:00Z"));
+
+        assertThat(processedOrder(List.of(adjust, sale))).containsExactly("op-sale", "op-adjust");
+    }
+
+    @Test
+    void pushBatch_productUpdateIsNotHoistedAboveEarlierStockEntry() {
+        var entry = new SyncOperation("op-entry", "RECORD_STOCK_ENTRY", "m1",
+                Map.of("productId", "p1", "quantity", 3), Instant.parse("2026-03-20T09:00:00Z"));
+        var archive = new SyncOperation("op-archive", "ARCHIVE_PRODUCT", "p1",
+                Map.of("productId", "p1"), Instant.parse("2026-03-20T10:00:00Z"));
+
+        assertThat(processedOrder(List.of(archive, entry))).containsExactly("op-entry", "op-archive");
+    }
+
+    @Test
+    void pushBatch_creationsOthersDependOn_areStillProcessedFirst() {
+        var entry = new SyncOperation("op-entry", "RECORD_STOCK_ENTRY", "m1",
+                Map.of("productId", "p1", "quantity", 3), Instant.parse("2026-03-20T09:00:00Z"));
+        var product = new SyncOperation("op-product", "CREATE_PRODUCT", "p1",
+                Map.of("productId", "p1", "categoryId", "c1"), Instant.parse("2026-03-20T09:30:00Z"));
+        var category = new SyncOperation("op-category", "CREATE_CATEGORY", "c1",
+                Map.of(), Instant.parse("2026-03-20T09:45:00Z"));
+
+        assertThat(processedOrder(List.of(entry, product, category)))
+                .containsExactly("op-category", "op-product", "op-entry");
+    }
+
+    // Two pushes of the same batch can run concurrently (reconnect + new sale):
+    // only the push that inserts the log row may run the handler.
+    @Test
+    void pushBatch_operationClaimedByConcurrentPush_isDuplicateAndHandlerNotRun() {
+        var op = new SyncOperation("op-race", "RECORD_STOCK_ENTRY", "m1",
+                Map.of("productId", "p1", "quantity", 3), Instant.now());
+        SyncOperationHandler stockHandler = mock(SyncOperationHandler.class);
+        when(logRepository.isSettled("op-race")).thenReturn(false);
+        when(logRepository.isSettledElseClaim(eq("op-race"), eq("RECORD_STOCK_ENTRY"), eq("m1"), any()))
+                .thenReturn(true);
+
+        SyncBatchResult result = service.pushBatch(new com.keevo.sync.sync.domain.port.in.SyncUseCase.PushBatchCommand(
+                ACTOR_ID, TENANT_ID, "device-1", List.of(op)));
+
+        assertThat(result.results().get(0).status()).isEqualTo(SyncOperationStatus.DUPLICATE);
+        verify(stockHandler, never()).handle(any(), any(), any());
+        verify(logRepository, never()).save(any());
+    }
+
+    @Test
+    void pushBatch_claimsLogRowBeforeRunningHandler() {
+        var op = new SyncOperation("op-1", "CREATE_SALE", "s1", Map.of(), Instant.now());
+        when(logRepository.isSettled("op-1")).thenReturn(false);
+        when(handlerRegistry.resolve("CREATE_SALE")).thenReturn(Optional.of(saleHandler));
+        when(saleHandler.handle(any(), eq(ACTOR_ID), eq(TENANT_ID)))
+                .thenReturn(new SyncOperationResult("op-1", SyncOperationStatus.APPLIED, null, null));
+
+        service.pushBatch(new com.keevo.sync.sync.domain.port.in.SyncUseCase.PushBatchCommand(
+                ACTOR_ID, TENANT_ID, "device-1", List.of(op)));
+
+        var inOrder = inOrder(logRepository, saleHandler);
+        inOrder.verify(logRepository).isSettledElseClaim(eq("op-1"), eq("CREATE_SALE"), eq("s1"), any());
+        inOrder.verify(saleHandler).handle(any(), eq(ACTOR_ID), eq(TENANT_ID));
+        inOrder.verify(logRepository).save(any());
     }
 }

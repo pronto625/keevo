@@ -134,6 +134,34 @@ class ProfitabilityControllerTest {
                 .andExpect(jsonPath("$.data.topStoreName").value("Store A"));
     }
 
+    // The detail must be scoped to the store selected on the list, like the list itself.
+    @Test
+    void GET_productDetail_withStoreId_scopesTheQueryToThatStore() throws Exception {
+        when(profitabilityUseCase.getDetail(any(), any())).thenReturn(sampleDetail());
+        UUID productId = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+
+        mockMvc.perform(get("/api/v1/reporting/profitability/products/" + productId)
+                        .param("storeId", storeId.toString()))
+                .andExpect(status().isOk());
+
+        var captor = org.mockito.ArgumentCaptor.forClass(ProfitabilityQuery.class);
+        org.mockito.Mockito.verify(profitabilityUseCase).getDetail(captor.capture(), org.mockito.ArgumentMatchers.eq(productId));
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().storeId()).isEqualTo(storeId);
+    }
+
+    @Test
+    void GET_productDetail_withoutStoreId_coversAllStores() throws Exception {
+        when(profitabilityUseCase.getDetail(any(), any())).thenReturn(sampleDetail());
+
+        mockMvc.perform(get("/api/v1/reporting/profitability/products/" + UUID.randomUUID()))
+                .andExpect(status().isOk());
+
+        var captor = org.mockito.ArgumentCaptor.forClass(ProfitabilityQuery.class);
+        org.mockito.Mockito.verify(profitabilityUseCase).getDetail(captor.capture(), any());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().storeId()).isNull();
+    }
+
     @Test
     void GET_productDetail_unknownId_shouldReturn404() throws Exception {
         when(profitabilityUseCase.getDetail(any(), any()))

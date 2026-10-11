@@ -17,6 +17,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -42,7 +43,7 @@ class ProductDeltaProviderTest {
         var since = Instant.parse("2026-03-20T10:00:00Z");
         when(em.createNativeQuery(anyString())).thenReturn(query);
         when(query.setParameter(eq("since"), any())).thenReturn(query);
-        when(query.setMaxResults(1000)).thenReturn(query);
+        when(query.setMaxResults(anyInt())).thenReturn(query);
 
         UUID id = UUID.randomUUID();
         Object[] row = {id, "TestProduct", 5000, 3000, 100, "SKU001",
@@ -63,7 +64,7 @@ class ProductDeltaProviderTest {
     void queryDelta_withNullSince_returnsAllProducts() {
         when(em.createNativeQuery(anyString())).thenReturn(query);
         when(query.setParameter(eq("since"), any())).thenReturn(query);
-        when(query.setMaxResults(1000)).thenReturn(query);
+        when(query.setMaxResults(anyInt())).thenReturn(query);
         when(query.getResultList()).thenReturn(List.of());
 
         var result = provider.queryDelta(Instant.EPOCH);
@@ -76,7 +77,7 @@ class ProductDeltaProviderTest {
     void queryDelta_mapsAllFieldsCorrectly() {
         when(em.createNativeQuery(anyString())).thenReturn(query);
         when(query.setParameter(eq("since"), any())).thenReturn(query);
-        when(query.setMaxResults(1000)).thenReturn(query);
+        when(query.setMaxResults(anyInt())).thenReturn(query);
 
         UUID id = UUID.randomUUID();
         UUID catId = UUID.randomUUID();

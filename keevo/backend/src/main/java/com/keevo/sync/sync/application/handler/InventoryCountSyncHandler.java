@@ -54,10 +54,12 @@ public class InventoryCountSyncHandler extends AbstractSyncOperationHandler {
         int theoretical = ((Number) p.get("theoretical")).intValue();
         int physical = ((Number) p.get("physical")).intValue();
 
+        // Keep the device's count id so the pull updates its own row instead of adding one.
         var command = new SaveInventoryCountCommand(
                 sessionId, productId, variantId,
                 productName, variantLabel,
-                theoretical, physical, actorId);
+                theoretical, physical, actorId,
+                parseUuid(operation.entityId()));
 
         InventoryCount saved = saveInventoryCountUseCase.execute(command);
 

@@ -33,7 +33,7 @@ class ReportsDeltaProviderTest {
     void queryDelta_buildsSqlWithSinceFilterAndBindsExactTimestamp() {
         when(em.createNativeQuery(anyString())).thenReturn(query);
         when(query.setParameter(eq("since"), any())).thenReturn(query);
-        when(query.setMaxResults(1000)).thenReturn(query);
+        when(query.setMaxResults(anyInt())).thenReturn(query);
         when(query.getResultList()).thenReturn(Collections.emptyList());
 
         var since = Instant.parse("2026-03-20T10:00:00Z");
@@ -41,17 +41,17 @@ class ReportsDeltaProviderTest {
 
         var sqlCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
         verify(em).createNativeQuery(sqlCaptor.capture());
-        assertThat(sqlCaptor.getValue()).contains("WHERE created_at > :since");
+        assertThat(sqlCaptor.getValue()).contains("WHERE created_at >= :since");
 
         verify(query).setParameter("since", Timestamp.from(since));
-        verify(query).setMaxResults(1000);
+        verify(query).setMaxResults(1001);
     }
 
     @Test
     void queryDelta_mapsAllSixteenColumnsToCamelCaseKeys() {
         when(em.createNativeQuery(anyString())).thenReturn(query);
         when(query.setParameter(eq("since"), any())).thenReturn(query);
-        when(query.setMaxResults(1000)).thenReturn(query);
+        when(query.setMaxResults(anyInt())).thenReturn(query);
         var id = UUID.randomUUID();
         var tenantId = "kv_test";
         var storeId = UUID.randomUUID();

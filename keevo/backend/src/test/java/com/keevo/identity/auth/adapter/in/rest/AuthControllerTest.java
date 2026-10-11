@@ -10,6 +10,9 @@ import com.keevo.identity.auth.domain.port.in.AuthenticateUserCommand;
 import com.keevo.identity.auth.domain.port.in.AuthenticateUserUseCase;
 import com.keevo.identity.auth.domain.port.in.LoginSessionResult;
 import com.keevo.identity.auth.domain.port.in.RefreshTokenUseCase;
+import com.keevo.identity.auth.domain.port.in.ResetPasswordUseCase;
+import com.keevo.identity.auth.domain.port.in.RequestPasswordResetUseCase;
+import com.keevo.identity.auth.domain.port.in.GetUserProfileUseCase;
 import com.keevo.identity.auth.domain.port.in.RegisterUserCommand;
 import com.keevo.identity.auth.domain.port.in.RegisterUserUseCase;
 import com.keevo.identity.auth.domain.port.in.RegistrationResult;
@@ -36,6 +39,8 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -60,6 +65,9 @@ class AuthControllerTest {
     @MockBean SelectTenantUseCase   selectTenantUseCase;
     @MockBean RefreshTokenUseCase   refreshTokenUseCase;
     @MockBean ChangePasswordUseCase changePasswordUseCase;
+    @MockBean GetUserProfileUseCase getUserProfileUseCase;
+    @MockBean RequestPasswordResetUseCase requestPasswordResetUseCase;
+    @MockBean ResetPasswordUseCase  resetPasswordUseCase;
     @MockBean JwtAuthFilter         jwtAuthFilter;
 
     @BeforeEach
@@ -79,7 +87,7 @@ class AuthControllerTest {
     @DisplayName("POST /register → 201 Created with tenantCode and token")
     void register_returns201OnSuccess() throws Exception {
         RegistrationResult result = new RegistrationResult(
-                "KV-ABC123", "STUB:user-id:tenant-id", "user-id", "tenant-id");
+                "KV-ABC123", "STUB:user-id:tenant-id", "user-id", "tenant-id", "refresh-tok");
 
         when(registerUserUseCase.register(any(RegisterUserCommand.class))).thenReturn(result);
 
@@ -89,7 +97,8 @@ class AuthControllerTest {
                                 new RegistrationRequest("+237600000001", "SecurePass123!"))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.tenantCode").value("KV-ABC123"))
-                .andExpect(jsonPath("$.token").value("STUB:user-id:tenant-id"));
+                .andExpect(jsonPath("$.token").value("STUB:user-id:tenant-id"))
+                .andExpect(jsonPath("$.refreshToken").value("refresh-tok"));
     }
 
     @Test
@@ -272,5 +281,33 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new RefreshRequest(""))))
                 .andExpect(status().isUnprocessableEntity());
+    }
+
+    // ══════════════════════════════════════════════════
+    // POST /api/v1/auth/logout
+    // ══════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("POST /logout → 204 without access token and revokes the refresh token")
+    void logout_returns204AndRevokes() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new RefreshRequest("some-refresh-token"))))
+                .andExpect(status().isNoContent());
+
+        verify(refreshTokenUseCase).revoke("some-refresh-token");
+    }
+
+    @Test
+    @DisplayName("POST /logout → 204 with a blank token or no body (always 204, no oracle)")
+    void logout_returns204WhenTokenBlankOrMissing() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new RefreshRequest(""))))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(post("/api/v1/auth/logout").contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNoContent());
+
+        verify(refreshTokenUseCase, never()).revoke(any());
     }
 }

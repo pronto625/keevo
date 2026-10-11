@@ -127,6 +127,71 @@ class DeltaStockStrategyTest {
         verifyNoInteractions(entityManager);
     }
 
+    // A multi-item sale can drive any of its products negative, not only the first one.
+    @Test
+    void evaluate_multiItemSale_secondItemNegative_reportsThatItem() {
+        var op = new SyncOperation("op-1", "CREATE_SALE", "sale-1",
+                Map.of("saleId", "sale-1", "storeId", "s1",
+                        "items", java.util.List.of(
+                                Map.of("productId", "p1", "quantity", 1),
+                                Map.of("productId", "p2", "quantity", 4))),
+                Instant.now());
+        var handlerResult = new SyncOperationResult("op-1", SyncOperationStatus.APPLIED, "srv-1", null);
+
+        Query q1 = mock(Query.class);
+        Query q2 = mock(Query.class);
+        when(entityManager.createNativeQuery(argThat(s -> s != null && s.contains("stock_levels"))))
+                .thenReturn(q1, q2);
+        when(q1.setParameter(anyInt(), any())).thenReturn(q1);
+        when(q1.getSingleResult()).thenReturn(5);
+        when(q2.setParameter(anyInt(), any())).thenReturn(q2);
+        when(q2.getSingleResult()).thenReturn(-2);
+        mockProductName("Fanta");
+
+        var result = strategy.evaluate(op, handlerResult, UUID.randomUUID(), "kv_abc123");
+
+        assertThat(result.conflictType()).isEqualTo("STOCK_NEGATIVE");
+        assertThat(result.conflictData()).containsEntry("productId", "p2");
+        assertThat(result.conflictData().get("deltaApplied")).isEqualTo(-4);
+        assertThat(result.conflictData().get("previousStock")).isEqualTo(2);
+    }
+
+    // An entry on stock that is already negative (late offline sales) did not cause it.
+    @Test
+    void evaluate_entryOnAlreadyNegativeStock_returnsNoConflict() {
+        var op = new SyncOperation("op-1", "RECORD_STOCK_ENTRY", "mv-1",
+                Map.of("productId", "p1", "storeId", "s1", "quantity", 3), Instant.now());
+        var handlerResult = new SyncOperationResult("op-1", SyncOperationStatus.APPLIED, "srv-1", null);
+        mockStockQuery(-2);
+
+        var result = strategy.evaluate(op, handlerResult, UUID.randomUUID(), "kv_abc123");
+
+        assertThat(result.conflictType()).isNull();
+    }
+
+    // Variant products: one stock level per (product, variant); same-variant lines are summed.
+    @Test
+    void evaluate_variantSale_queriesTheVariantLevelWithSummedDelta() {
+        var op = new SyncOperation("op-1", "CREATE_SALE", "sale-1",
+                Map.of("saleId", "sale-1", "storeId", "s1",
+                        "items", java.util.List.of(
+                                Map.of("productId", "p1", "variantId", "v1", "quantity", 2),
+                                Map.of("productId", "p1", "variantId", "v1", "quantity", 3))),
+                Instant.now());
+        var handlerResult = new SyncOperationResult("op-1", SyncOperationStatus.APPLIED, "srv-1", null);
+        mockStockQuery(-1);
+        mockProductName("Pagne");
+
+        var result = strategy.evaluate(op, handlerResult, UUID.randomUUID(), "kv_abc123");
+
+        verify(entityManager, times(1)).createNativeQuery(
+                argThat((String sql) -> sql.contains("stock_levels") && sql.contains("variant_id = CAST(?3")));
+        verify(nativeQuery).setParameter(3, "v1");
+        assertThat(result.conflictType()).isEqualTo("STOCK_NEGATIVE");
+        assertThat(result.conflictData().get("deltaApplied")).isEqualTo(-5);
+        assertThat(result.conflictData().get("previousStock")).isEqualTo(4);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────
 
     private SyncOperation saleOperation(String productId, String storeId, int quantity) {

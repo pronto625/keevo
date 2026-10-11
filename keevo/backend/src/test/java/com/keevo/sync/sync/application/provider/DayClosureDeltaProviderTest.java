@@ -34,7 +34,7 @@ class DayClosureDeltaProviderTest {
     void queryDelta_withSince_returnsOnlyRecentClosures() {
         when(em.createNativeQuery(anyString())).thenReturn(query);
         when(query.setParameter(eq("since"), any())).thenReturn(query);
-        when(query.setMaxResults(1000)).thenReturn(query);
+        when(query.setMaxResults(anyInt())).thenReturn(query);
         var now = Timestamp.from(Instant.now());
         Object[] row = {UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), now,
                 50000, 10, 40000, 10000};

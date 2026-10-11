@@ -220,6 +220,10 @@ public class TenantSchemaSyncService {
             stmt.execute(TenantSchemaProvisioner.DDL_SALE_ITEMS_MIGRATE_CATALOGUE_PRICE);
             // Story 4.4 — day closure + sales history indexes
             stmt.execute(TenantSchemaProvisioner.DDL_DAY_CLOSURES_IDX_STORE_DATE);
+            // UI-3 — day_closures.received_at (pull cursor for backdated offline closures)
+            stmt.execute(TenantSchemaProvisioner.DDL_DAY_CLOSURES_MIGRATE_RECEIVED_AT);
+            stmt.execute(TenantSchemaProvisioner.DDL_DAY_CLOSURES_BACKFILL_RECEIVED_AT);
+            stmt.execute(TenantSchemaProvisioner.DDL_DAY_CLOSURES_IDX_RECEIVED_AT);
             stmt.execute(TenantSchemaProvisioner.DDL_SALES_IDX_STORE_OCCURRED_AT);
             stmt.execute(TenantSchemaProvisioner.DDL_SALES_IDX_STORE_EMPLOYEE_OCCURRED_AT);
             // Story 5.1 — sync operations log indexes

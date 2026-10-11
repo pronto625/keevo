@@ -41,10 +41,26 @@ public class SaleJpaEntity {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    // Delta pull cursor for sales: must move on every write so other devices get the change.
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+
     @OneToMany(mappedBy = "sale", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private List<SaleItemJpaEntity> items = new ArrayList<>();
 
     public SaleJpaEntity() {}
+
+    // Hibernate writes the column explicitly, so the DB default never applies.
+    // updated_at is the pull cursor for sales: it must move on every write.
+    @PrePersist
+    void touchUpdatedAtOnInsert() {
+        if (updatedAt == null) updatedAt = Instant.now();
+    }
+
+    @PreUpdate
+    void touchUpdatedAtOnUpdate() {
+        updatedAt = Instant.now();
+    }
 
     // Getters & setters
     public UUID getId() { return id; }
@@ -67,6 +83,8 @@ public class SaleJpaEntity {
     public void setOccurredAt(Instant occurredAt) { this.occurredAt = occurredAt; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
     public List<SaleItemJpaEntity> getItems() { return items; }
     public void setItems(List<SaleItemJpaEntity> items) { this.items = items; }
 }

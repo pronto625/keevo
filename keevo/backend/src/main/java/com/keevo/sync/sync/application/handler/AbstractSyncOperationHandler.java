@@ -10,6 +10,9 @@ import com.keevo.sync.sync.domain.port.in.SyncOperationHandler;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.UUID;
 
 /**
@@ -66,6 +69,36 @@ public abstract class AbstractSyncOperationHandler implements SyncOperationHandl
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         return auth != null && auth.getAuthorities().stream()
                 .anyMatch(a -> "ROLE_OWNER".equals(a.getAuthority()));
+    }
+
+    /**
+     * When something happened on the device: the ISO-8601 payload value, else the time the
+     * operation was queued, else now. Never in the future — a device clock running ahead must
+     * not move a sale or a closure into a day that has not started yet.
+     */
+    protected static Instant resolveClientTime(Object rawPayloadValue, Instant clientTimestamp) {
+        Instant now = Instant.now();
+        Instant resolved = null;
+        if (rawPayloadValue instanceof String str && !str.isBlank()) {
+            try {
+                resolved = OffsetDateTime.parse(str).toInstant();
+            } catch (DateTimeParseException e) {
+                resolved = null;
+            }
+        }
+        if (resolved == null) resolved = clientTimestamp;
+        if (resolved == null || resolved.isAfter(now)) return now;
+        return resolved;
+    }
+
+    /** Lenient UUID parse for optional client ids: null when absent or not a UUID. */
+    protected static UUID parseUuid(Object raw) {
+        if (!(raw instanceof String str) || str.isBlank()) return null;
+        try {
+            return UUID.fromString(str);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     protected abstract void validate(SyncOperation operation);

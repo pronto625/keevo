@@ -6,6 +6,8 @@ import com.keevo.inventory.counting.domain.port.in.ValidateInventoryUseCase;
 import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -27,6 +29,32 @@ class InventoryValidationSyncHandlerTest {
     @Mock ValidateInventoryUseCase validateUseCase;
     @Mock InventorySessionRepository sessionRepo;
     @InjectMocks InventoryValidationSyncHandler handler;
+
+    @BeforeEach
+    void setUp() {
+        SyncTestAuth.owner();
+    }
+
+    @AfterEach
+    void tearDown() {
+        SyncTestAuth.clear();
+    }
+
+    // Validation overwrites stock with the counted quantities; it is OWNER-only
+    // over REST (@PreAuthorize) and must stay so through the sync push.
+    @Test
+    void apply_employeeActor_isForbidden() {
+        SyncTestAuth.employee(UUID.randomUUID());
+        UUID sessionId = UUID.randomUUID();
+        var op = new SyncOperation("op-emp", "VALIDATE_INVENTORY", sessionId.toString(),
+                Map.of("sessionId", sessionId.toString()), Instant.now());
+
+        var result = handler.handle(op, UUID.randomUUID(), "kv_test");
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("FORBIDDEN");
+        verifyNoInteractions(validateUseCase);
+    }
 
     @Test
     void supportedTypes_shouldReturnValidateInventory() {
@@ -53,6 +81,33 @@ class InventoryValidationSyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         verify(validateUseCase).execute(any(ValidateInventoryCommand.class));
+    }
+
+    @Test
+    void apply_passesTheDeviceMovementIds_ignoringInvalidOnes() {
+        UUID sessionId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        UUID productId = UUID.randomUUID();
+        UUID movementId = UUID.randomUUID();
+
+        when(sessionRepo.findById(sessionId)).thenReturn(Optional.of(
+                new InventorySession(sessionId, UUID.randomUUID(), InventoryScope.FULL, null,
+                        InventorySessionStatus.IN_PROGRESS, actorId, Instant.now(),
+                        null, null, null, Instant.now())));
+        when(validateUseCase.execute(any())).thenReturn(
+                new ValidateInventoryResult(sessionId, 1, InventorySessionStatus.VALIDATED, Instant.now()));
+
+        String key = ValidateInventoryCommand.movementKey(productId, null);
+        var op = new SyncOperation("op1", "VALIDATE_INVENTORY", sessionId.toString(),
+                Map.of("sessionId", sessionId.toString(),
+                        "movementIds", Map.of(key, movementId.toString(), "other|", "not-a-uuid")),
+                Instant.now());
+
+        handler.handle(op, actorId, "kv_test");
+
+        var captor = org.mockito.ArgumentCaptor.forClass(ValidateInventoryCommand.class);
+        verify(validateUseCase).execute(captor.capture());
+        assertThat(captor.getValue().movementIds()).containsExactly(Map.entry(key, movementId));
     }
 
     @Test

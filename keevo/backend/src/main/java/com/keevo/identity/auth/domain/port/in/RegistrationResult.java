@@ -9,5 +9,6 @@ public record RegistrationResult(
     String tenantCode,
     String token,
     String userId,
-    String tenantId
+    String tenantId,
+    String refreshToken
 ) {}

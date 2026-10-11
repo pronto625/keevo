@@ -21,6 +21,8 @@ public final class SaleFactory {
 
     public static Sale from(RecordSaleCommand command, SaleStatus statusOverride) {
         Instant now = Instant.now();
+        // An offline sale keeps the time it was made so it lands in the right day's closure.
+        Instant occurredAt = command.occurredAt() != null ? command.occurredAt() : now;
         List<SaleItem> items = command.items().stream()
                 .map(itemCmd -> toSaleItem(command.saleId(), itemCmd))
                 .toList();
@@ -40,7 +42,7 @@ public final class SaleFactory {
                 totalAmount,
                 command.discountAmount(),
                 statusOverride,
-                now,
+                occurredAt,
                 now,
                 items
         );

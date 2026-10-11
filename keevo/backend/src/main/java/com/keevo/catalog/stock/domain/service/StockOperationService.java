@@ -82,6 +82,25 @@ public class StockOperationService {
     public StockMovement recordOperation(UUID productId, UUID variantId, UUID storeId,
                                          MovementType movementType, int quantityChange,
                                          UUID actorId, String notes) {
+        return recordOperation(productId, variantId, storeId, movementType, quantityChange,
+                actorId, notes, null, false);
+    }
+
+    /**
+     * Same as {@link #recordOperation(UUID, UUID, UUID, MovementType, int, UUID, String)} for
+     * operations replayed from an offline device.
+     *
+     * @param movementId    client-generated movement id (null → server generates). Keeping the
+     *                      local id lets the pull upsert the device's own movement row instead of
+     *                      adding a second copy to the history.
+     * @param allowNegative true only for an offline sale that already happened: the stock may go
+     *                      negative and the sync layer reports it as a STOCK_NEGATIVE conflict.
+     */
+    @Transactional
+    public StockMovement recordOperation(UUID productId, UUID variantId, UUID storeId,
+                                         MovementType movementType, int quantityChange,
+                                         UUID actorId, String notes,
+                                         UUID movementId, boolean allowNegative) {
         // 1. Load product (for name + threshold)
         var product = productRepository.findById(productId)
                 .orElseThrow(() -> new DomainException(ErrorCode.PRODUCT_NOT_FOUND,
@@ -103,7 +122,7 @@ public class StockOperationService {
         int quantityAfter  = quantityBefore + quantityChange;
 
         // 3. Guard: no negative stock (except explicit adjustment to 0 via AdjustStockUseCase)
-        if (quantityAfter < 0) {
+        if (quantityAfter < 0 && !allowNegative) {
             throw new DomainException(ErrorCode.INSUFFICIENT_STOCK,
                     "Stock insuffisant: avant=" + quantityBefore + " delta=" + quantityChange);
         }
@@ -111,7 +130,7 @@ public class StockOperationService {
         // 4. Build and persist the immutable movement record
         var now = Instant.now();
         var movement = new StockMovement(
-            UUID.randomUUID(),
+            movementId != null ? movementId : UUID.randomUUID(),
             productId, variantId, storeId,
             movementType,
             quantityBefore, quantityChange, quantityAfter,

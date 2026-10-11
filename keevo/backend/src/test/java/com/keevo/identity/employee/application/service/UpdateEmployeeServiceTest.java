@@ -1,7 +1,6 @@
 package com.keevo.identity.employee.application.service;
 
 import com.keevo.identity.auth.domain.model.User;
-import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.model.EmployeeStatus;
@@ -38,7 +37,6 @@ class UpdateEmployeeServiceTest {
 
     @Mock EmployeeRepository employeeRepository;
     @Mock UserRepository userRepository;
-    @Mock RefreshTokenRepository refreshTokenRepository;
     @Mock ApplicationEventPublisher eventPublisher;
 
     UpdateEmployeeService service;
@@ -53,8 +51,7 @@ class UpdateEmployeeServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new UpdateEmployeeService(employeeRepository, userRepository,
-                refreshTokenRepository, eventPublisher);
+        service = new UpdateEmployeeService(employeeRepository, userRepository, eventPublisher);
         actorId = UUID.randomUUID();
         employeeId = UUID.randomUUID();
         userId = UUID.randomUUID();
@@ -152,8 +149,8 @@ class UpdateEmployeeServiceTest {
     }
 
     @Test
-    @DisplayName("should update store ID and revoke refresh tokens")
-    void shouldUpdateStoreIdAndRevokeRefreshTokens() {
+    @DisplayName("should update store ID and keep refresh tokens (session renews onto the new store)")
+    void shouldUpdateStoreIdAndKeepRefreshTokens() {
         when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
         when(employeeRepository.updateStoreId(employeeId, newStoreId))
@@ -165,7 +162,6 @@ class UpdateEmployeeServiceTest {
         service.execute(cmd);
 
         verify(employeeRepository).updateStoreId(employeeId, newStoreId);
-        verify(refreshTokenRepository).revokeAllByUserId(userId);
         verify(eventPublisher).publishEvent(any(Object.class));
     }
 

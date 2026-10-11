@@ -21,7 +21,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.Instant;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Service
 public class SyncPushService implements SyncUseCase {
@@ -56,76 +55,28 @@ public class SyncPushService implements SyncUseCase {
     }
 
     /**
-     * Operation types that mutate a product entity.
-     * These must be processed BEFORE stock operations that reference the same product.
+     * Creations other operations of the same batch may reference, hoisted ahead of everything
+     * else (tier = index). Categories/stores/contacts first, then products and employees (which
+     * reference categories/stores), then inventory sessions (which reference both).
+     * Every other operation keeps clientTimestamp order: e.g. STOCK_ADJUST sets an absolute
+     * quantity and must not jump ahead of an earlier sale on the same product.
      */
-    private static final Set<String> PRODUCT_MUTATION_TYPES = Set.of(
-            "CREATE_PRODUCT", "CREATE_DRAFT_PRODUCT", "UPDATE_PRODUCT",
-            "PROMOTE_PRODUCT", "ARCHIVE_PRODUCT", "UNARCHIVE_PRODUCT");
+    private static final List<Set<String>> HOISTED_CREATION_TIERS = List.of(
+            Set.of("CREATE_CATEGORY", "CREATE_STORE", "CREATE_CLIENT", "CREATE_SUPPLIER"),
+            Set.of("CREATE_PRODUCT", "CREATE_DRAFT_PRODUCT", "CREATE_EMPLOYEE"),
+            Set.of("CREATE_INVENTORY_SESSION"));
 
-    /**
-     * Operation types that mutate stock for a product.
-     * These must be processed AFTER product mutations for the same product.
-     */
-    private static final Set<String> STOCK_MUTATION_TYPES = Set.of(
-            "RECORD_STOCK_ENTRY", "STOCK_ADJUST");
-
-    /**
-     * Extracts the productId from an operation's payload, if present.
-     */
-    private String productIdOf(SyncOperation op) {
-        Object pid = op.payload().get("productId");
-        return pid != null ? pid.toString() : null;
+    private int hoistTier(SyncOperation op) {
+        for (int i = 0; i < HOISTED_CREATION_TIERS.size(); i++) {
+            if (HOISTED_CREATION_TIERS.get(i).contains(op.operationType())) return i;
+        }
+        return HOISTED_CREATION_TIERS.size();
     }
 
-    /**
-     * Priority for topological sort: product mutations (0) before stock mutations (1).
-     * All other types get priority 2 (neutral — sorted by timestamp only).
-     */
-    private int topologicalPriority(SyncOperation op) {
-        if (PRODUCT_MUTATION_TYPES.contains(op.operationType())) return 0;
-        if (STOCK_MUTATION_TYPES.contains(op.operationType())) return 1;
-        return 2;
-    }
-
-    /**
-     * Sorts operations with dependency awareness: for the same productId,
-     * product mutations (CREATE/UPDATE/PROMOTE) always come before
-     * stock mutations (RECORD_STOCK_ENTRY/STOCK_ADJUST).
-     *
-     * <p>Within the same priority level, chronological order is preserved.
-     * Operations without a productId are sorted by timestamp only.
-     */
-    private List<SyncOperation> topologicalSort(List<SyncOperation> operations) {
-        // Build a map of productId → earliest timestamp among product mutations
-        Map<String, Instant> productMutationEarliest = operations.stream()
-                .filter(op -> PRODUCT_MUTATION_TYPES.contains(op.operationType()))
-                .filter(op -> productIdOf(op) != null)
-                .collect(Collectors.groupingBy(
-                        this::productIdOf,
-                        Collectors.mapping(SyncOperation::clientTimestamp,
-                                Collectors.minBy(Comparator.nullsLast(Comparator.naturalOrder())))))
-                .entrySet().stream()
-                .filter(e -> e.getValue().isPresent())
-                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().get()));
-
+    /** Hoisted creations first (by tier), then chronological order. The sort is stable. */
+    private List<SyncOperation> dependencyOrder(List<SyncOperation> operations) {
         return operations.stream()
-                .sorted(Comparator
-                        // 1. Topological priority (product before stock)
-                        .comparingInt(this::topologicalPriority)
-                        // 2. For stock ops, use the product mutation's earliest timestamp as tiebreaker
-                        //    so stock ops are grouped right after their product mutation
-                        .thenComparing((SyncOperation op) -> {
-                            if (STOCK_MUTATION_TYPES.contains(op.operationType())) {
-                                String pid = productIdOf(op);
-                                if (pid != null) {
-                                    Instant earliest = productMutationEarliest.get(pid);
-                                    return earliest != null ? earliest : op.clientTimestamp();
-                                }
-                            }
-                            return op.clientTimestamp();
-                        }, Comparator.nullsLast(Comparator.naturalOrder()))
-                        // 3. Within same priority, chronological order
+                .sorted(Comparator.comparingInt(this::hoistTier)
                         .thenComparing(SyncOperation::clientTimestamp,
                                 Comparator.nullsLast(Comparator.naturalOrder())))
                 .toList();
@@ -133,7 +84,7 @@ public class SyncPushService implements SyncUseCase {
 
     @Override
     public SyncBatchResult pushBatch(PushBatchCommand command) {
-        List<SyncOperation> sorted = topologicalSort(command.operations());
+        List<SyncOperation> sorted = dependencyOrder(command.operations());
 
         List<SyncOperationResult> results = new ArrayList<>();
 
@@ -300,7 +251,14 @@ public class SyncPushService implements SyncUseCase {
     }
 
     private SyncOperationResult processOperation(SyncOperation originalOperation, PushBatchCommand command) {
-        if (logRepository.existsById(originalOperation.operationId())) {
+        // A previously REJECTED op is processed again; saving its new outcome
+        // below overwrites the log row (assigned id → merge).
+        if (logRepository.isSettled(originalOperation.operationId())
+                // Claiming the log row before the handler runs makes a concurrent push of the
+                // same operation wait on our insert, then see it settled instead of applying it twice.
+                || logRepository.isSettledElseClaim(originalOperation.operationId(),
+                        originalOperation.operationType(), originalOperation.entityId(),
+                        originalOperation.clientTimestamp())) {
             return new SyncOperationResult(
                     originalOperation.operationId(), SyncOperationStatus.DUPLICATE, null, null);
         }
@@ -383,10 +341,18 @@ public class SyncPushService implements SyncUseCase {
         return operationType;
     }
 
+    /**
+     * Subtracted from the returned pull cursor. A row is stamped when its transaction writes it
+     * but only becomes visible at commit: one committing just after the providers ran can carry
+     * an updated_at before "now". The overlap is re-sent and upserted idempotently by the client.
+     */
+    static final java.time.Duration PULL_CURSOR_MARGIN = java.time.Duration.ofSeconds(30);
+
     @Override
     public SyncPullResult pull(PullCommand command) {
-        Instant serverTimestamp = Instant.now();
         Instant since = command.since() != null ? command.since() : Instant.EPOCH;
+        PullCursor state = PullCursor.decode(command.cursor());
+        if (state == null) state = new PullCursor(Instant.now(), false, new HashMap<>());
 
         Map<String, List<Map<String, Object>>> entities = new LinkedHashMap<>();
         Map<String, Integer> counts = new LinkedHashMap<>();
@@ -398,18 +364,104 @@ public class SyncPushService implements SyncUseCase {
         readOnlyTx.setReadOnly(true);
 
         for (DeltaEntityProvider provider : deltaProviders) {
-            try {
-                List<Map<String, Object>> delta = readOnlyTx.execute(status ->
-                        provider.queryDelta(since));
-                entities.put(provider.entityKey(), delta != null ? delta : List.of());
-                counts.put(provider.entityKey(), delta != null ? delta.size() : 0);
-            } catch (Exception e) {
-                entities.put(provider.entityKey(), List.of());
-                counts.put(provider.entityKey(), 0);
-                log.error("Delta provider {} failed: {}", provider.entityKey(), e.getMessage());
+            String key = provider.entityKey();
+            List<Map<String, Object>> rows = List.of();
+            if (!state.isDone(key)) {
+                DeltaEntityProvider.Position after = state.positions().get(key);
+                try {
+                    DeltaEntityProvider.Page page = readOnlyTx.execute(status ->
+                            provider.queryDeltaPage(since, after, DeltaEntityProvider.PAGE_SIZE));
+                    if (page != null && page.rows() != null) rows = page.rows();
+                    if (page != null && page.hasMore()) state.positions().put(key, page.next());
+                    else state.positions().put(key, PullCursor.DONE);
+                } catch (Exception e) {
+                    // Its rows were not sent: the cursor must not move past them (see below).
+                    state = state.withFailure();
+                    state.positions().put(key, PullCursor.DONE);
+                    log.error("Delta provider {} failed: {}", key, e.getMessage());
+                }
+            }
+            entities.put(key, rows);
+            counts.put(key, rows.size());
+        }
+
+        Optional<Instant> oldestPending = state.positions().values().stream()
+                .filter(p -> p != PullCursor.DONE)
+                .map(DeltaEntityProvider.Position::cursor)
+                .min(Comparator.naturalOrder());
+        boolean hasMore = oldestPending.isPresent();
+
+        Instant serverTimestamp;
+        if (state.failed()) {
+            serverTimestamp = since;
+        } else {
+            serverTimestamp = state.startedAt().minus(PULL_CURSOR_MARGIN);
+            // Clients that ignore hasMore save this: never past rows not sent yet.
+            if (hasMore && oldestPending.get().isBefore(serverTimestamp)) {
+                serverTimestamp = oldestPending.get();
             }
         }
 
-        return new SyncPullResult(serverTimestamp, entities, counts);
+        return new SyncPullResult(serverTimestamp, entities, counts,
+                hasMore, hasMore ? state.encode() : null);
+    }
+
+    /**
+     * State of a paged pull, round-tripped to the client as an opaque cursor: when the pull
+     * started (its final cursor), whether a provider failed, and each provider's keyset
+     * position (or DONE).
+     */
+    record PullCursor(Instant startedAt, boolean failed,
+                      Map<String, DeltaEntityProvider.Position> positions) {
+
+        static final DeltaEntityProvider.Position DONE = new DeltaEntityProvider.Position(Instant.EPOCH, "");
+
+        boolean isDone(String key) {
+            return positions.get(key) == DONE;
+        }
+
+        PullCursor withFailure() {
+            return new PullCursor(startedAt, true, positions);
+        }
+
+        String encode() {
+            StringBuilder sb = new StringBuilder();
+            sb.append(startedAt).append('\n').append(failed ? '1' : '0');
+            positions.forEach((key, pos) -> {
+                sb.append('\n').append(key).append('=');
+                if (pos == DONE) sb.append('-');
+                else sb.append(pos.cursor()).append('|').append(pos.id());
+            });
+            return Base64.getUrlEncoder().withoutPadding()
+                    .encodeToString(sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+
+        /** Null when absent or unreadable — the pull then restarts from {@code since}. */
+        static PullCursor decode(String cursor) {
+            if (cursor == null || cursor.isBlank()) return null;
+            try {
+                String[] lines = new String(Base64.getUrlDecoder().decode(cursor),
+                        java.nio.charset.StandardCharsets.UTF_8).split("\n");
+                Instant startedAt = Instant.parse(lines[0]);
+                boolean failed = "1".equals(lines[1]);
+                Map<String, DeltaEntityProvider.Position> positions = new HashMap<>();
+                for (int i = 2; i < lines.length; i++) {
+                    int eq = lines[i].indexOf('=');
+                    String key = lines[i].substring(0, eq);
+                    String value = lines[i].substring(eq + 1);
+                    if ("-".equals(value)) {
+                        positions.put(key, DONE);
+                    } else {
+                        int bar = value.indexOf('|');
+                        positions.put(key, new DeltaEntityProvider.Position(
+                                Instant.parse(value.substring(0, bar)), value.substring(bar + 1)));
+                    }
+                }
+                return new PullCursor(startedAt, failed, positions);
+            } catch (RuntimeException e) {
+                log.warn("[Sync] Ignoring unreadable pull cursor: {}", e.getMessage());
+                return null;
+            }
+        }
     }
 }
