@@ -1036,6 +1036,25 @@ As a Toor, I want local stock movements typed correctly and offline store writes
 
 **Doc:** Story 2.3 AC5/AC6 + Story 3.1 AC1/AC5 (ties 13.4). **TDD:** `shouldWriteAdjustmentMovementType()`, `shouldQueueStoreCreateOffline()`.
 
+## Story 16.11: Boutons « Réessayer » sur les écrans d'erreur de l'app — **[A]**
+
+As a Toor, I want every full-page / section error state of the app to offer a « Réessayer » action that re-runs the failed load, so that a transient network or database failure never leaves me stuck on a dead screen (UX hygiene, audit M4).
+
+**Scope:** Factoriser l'état d'erreur réutilisable (`AppErrorWidget`, design system post-UI-3) avec une action « Réessayer » qui invalide/rafraîchit le provider Riverpod concerné, et le brancher sur tous les écrans d'erreur recensés (y compris les états d'erreur ad hoc qui n'utilisent pas encore le widget commun). Tracker key: `v1s-16-11-app-error-retry`.
+
+**Refs:** audit-coherence-2026-10-11.md M4 (et #11 de l'audit 2026-07-23), sprint-change-proposal-2026-10-11.md §4, ux-design-specification.md (états d'erreur), Story UI-3. **Refonte absorption:** re-appliquer Flutter.
+
+**Items:**
+- [ ] [audit M4, 2026-10-11] `AppErrorWidget` : 4 usages sur 23 passent `onRetry` — brancher `onRetry` (invalidate/refresh du provider) sur les 19 autres [`sync_settings_page.dart:260,338,456`, `pos_page.dart:354,472`, `sales_history_page.dart:85,116`, `catalog_page.dart:878`, `categories_page.dart:209`, `notifications_page.dart:67`, `sale_detail_page.dart:50`, `report_detail_page.dart:51`, `stores_list_page.dart:234`, `sync_conflict_log_page.dart`, `inventory_*_page.dart`, `global_stock_overview_page.dart`, `pending_sales_page.dart`]
+- [ ] [audit M4, 2026-10-11] États d'erreur pleine page ad hoc (Text/Center maison, sans retry) — migrer vers l'état d'erreur commun avec « Réessayer » [contacts, profitability, team, dashboard, subscription, transfer history, stock history, …]
+
+**AC (interim):**
+**Given** un écran dont le chargement principal (FutureProvider/StreamProvider/AsyncNotifier) échoue
+**When** l'état d'erreur est affiché
+**Then** il utilise le widget d'erreur commun (tokens du design system, pas de couleur codée en dur) avec un bouton « Réessayer »
+**And** taper « Réessayer » invalide/rafraîchit le provider concerné et relance le chargement (test widget : erreur → tap → données affichées)
+**And** les états d'erreur inline/compacts (dropdowns, bottom sheets) hors scope sont listés et justifiés dans la spec.
+
 ## Story 16.12: Retour utilisateur sur les rejets de sync — **[A]**
 
 As a Toor, I want REJECTED push operations surfaced to the user (and their ghost local rows rolled back), so that an offline create that the server refused does not silently survive on the device.
