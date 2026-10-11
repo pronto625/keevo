@@ -5,7 +5,7 @@
 
 ## Goal
 
-Remove the concurrency races and data-loss paths on the production V1 line that the 2026-07-20 audit found to be mechanically certain (B-CRIT-1/2/3, F-CRIT-1/2/3, F-HIGH-4), together with the residual integrity gaps routed from deferred-work on 2026-10-11. The aim is that offline-first sync, stock mutations, transfers, sale cancellation, inventory validation, schedulers, report windows and tenant-schema provisioning never double-apply, lose or silently drop data. Stories 13.1–13.7 are done. 13.8–13.12 are item-list stories made from redistributed review deferrals. All are tag A (urgent V1 patch) except 13.12, which is tag C (V1 patch that the refonte also absorbs).
+Remove the concurrency races and data-loss paths on the production V1 line that the 2026-07-20 audit found to be mechanically certain (B-CRIT-1/2/3, F-CRIT-1/2/3, F-HIGH-4), together with the residual integrity gaps routed from deferred-work on 2026-10-11. The aim is that offline-first sync, stock mutations, transfers, sale cancellation, inventory validation, schedulers, report windows and tenant-schema provisioning never double-apply, lose or silently drop data. Stories 13.1–13.8 are done and 13.9 is in progress. 13.8–13.12 are item-list stories made from redistributed review deferrals. All are tag A (urgent V1 patch) except 13.12, which is tag C (V1 patch that the refonte also absorbs).
 
 ## Stories
 
@@ -16,8 +16,8 @@ Remove the concurrency races and data-loss paths on the production V1 line that 
 - Story 13.5: FR90: cancel/correct a completed sale with stock restoration (done)
 - Story 13.6: Draft-sale status PENDING_VALIDATION (done)
 - Story 13.7: Audit/movement events on offline inventory validation (done)
-- Story 13.8: Residual sync integrity: offline write paths, handler parity (in progress)
-- Story 13.9: Scheduler locking and check-then-act races (backlog)
+- Story 13.8: Residual sync integrity: offline write paths, handler parity (done)
+- Story 13.9: Scheduler locking and check-then-act races (in progress)
 - Story 13.10: Optimistic lock on Sale (@Version + 409) (backlog)
 - Story 13.11: Day-closure and report windows (PO decisions) (backlog)
 - Story 13.12: Tenant schema provisioning hygiene (backlog)
@@ -48,7 +48,7 @@ Remove the concurrency races and data-loss paths on the production V1 line that 
   - The UI refreshes from Drift after every write.
 - **Sync API.** `POST /api/v1/sync/push` is used only to replay queued operations, in batch. `GET /api/v1/sync/pull?since=` returns deltas through `DeltaEntityProvider`s.
   - Conflict resolution: stock uses delta sums (`DeltaStockResolver`); other entities use last-write-wins by timestamp.
-  - IDs are UUID v4 assigned by the client or domain, never `@GeneratedValue`. Client ids make replays idempotent; for example, sale movement ids are sent in the CREATE_SALE payload so a pull does not create a second SALE movement.
+  - IDs are UUID v4 assigned by the client or domain, never `@GeneratedValue`. Client ids make replays idempotent; for example, a SALE movement's id is the client sale item id (sent in the CREATE_SALE payload) on both app and backend, so a pull does not create a second SALE movement. Every path that writes SALE movements (record, validate pending, validation cascade) must follow this rule.
 - **Sync handler parity.** Every sync handler must validate input like its REST DTO (for example a store name of 2–100 characters, and a range check before `intValue`). Every handler must also be idempotent on retry and must route through the use case, not `repository.save`, so that existence checks, single-active-session rules and domain events still apply (for example InventorySessionSyncHandler).
 - **RBAC (Epic 12, merged).** Sync handlers keep the Epic 12 rules:
   - RBAC failure → op REJECTED with `DomainException(ErrorCode.FORBIDDEN)` thrown before the use case.
@@ -76,9 +76,9 @@ Remove the concurrency races and data-loss paths on the production V1 line that 
 
 ## Cross-Story Dependencies
 
-- **13.8** consolidates leftovers from 13.4, 13.6, 13.7, 16.6, 12.10 and the UI-3 reviews. Its CREATE_SALE movement-id change spans the app and the backend. The inventory variant unique index waits for variants (14.1).
+- **13.8** consolidates leftovers from 13.4, 13.6, 13.7, 16.6, 12.10 and the UI-3 reviews. Its CREATE_SALE movement-id change spans the app and the backend. The inventory variant unique index waits for variants (14.1). Its other follow-ups went to 13.10, 15.9 (intValue range checks in other handlers) and 16.12 (local inventory-session reconciliation after rejection).
 - **13.9** depends on 13.3 (day-closure scheduler), 13.5 (cancel sync handler), 14.5 (account deletion scheduler), 14.10, 14.11 (anti-lockout) and the transfer clientId idempotency work.
-- **13.10** mirrors 13.1 for `Sale` and protects the cancel/correct paths from 13.5.
+- **13.10** mirrors 13.1 for `Sale` and protects the cancel/correct paths from 13.5. It also carries the follow-up from 13.8: ValidateSaleService / SaleValidationCascadeService (and the app's pending-sale validation/cascade) must reuse the sale item id as the SALE movement id.
 - **13.11** needs PO decisions before code: the EOD closure cut-off (`eodReportTime` vs 23:59), the weekly Sunday 20:00–23:59 gap, and whether cancel/correct after closure is blocked, warned about or triggers regeneration (e.g. `SALE_DAY_CLOSED`). It builds on 13.3 and 13.5.
 - **13.12** relates to 12.5 (TenantSchema) and 13.1 (the V5 version column depends on the boot-time schema sync), and is absorbed natively by refonte 10.1/10.2.
 - Sync-rejection feedback to users belongs to Epic 16 (16.12). FR90 in the refonte is 17-1.
