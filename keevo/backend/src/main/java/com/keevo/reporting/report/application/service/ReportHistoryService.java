@@ -8,7 +8,7 @@ import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
-import com.keevo.identity.auth.domain.port.out.UserRepository;
+import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -28,14 +28,14 @@ public class ReportHistoryService implements GetReportHistoryUseCase, ResendRepo
 
     private final EndOfDayReportRepository reportRepository;
     private final WhatsAppPort whatsAppPort;
-    private final UserRepository userRepository;
+    private final OwnerRecipientResolver ownerRecipientResolver;
 
     public ReportHistoryService(EndOfDayReportRepository reportRepository,
                                  WhatsAppPort whatsAppPort,
-                                 UserRepository userRepository) {
+                                 OwnerRecipientResolver ownerRecipientResolver) {
         this.reportRepository = reportRepository;
         this.whatsAppPort = whatsAppPort;
-        this.userRepository = userRepository;
+        this.ownerRecipientResolver = ownerRecipientResolver;
     }
 
     @Override
@@ -64,9 +64,7 @@ public class ReportHistoryService implements GetReportHistoryUseCase, ResendRepo
         // v1s-15-7 D1: never guess a recipient. Without a resolvable owner phone the resend is
         // refused before the report is touched (no reset, no save, no WhatsApp call) — same rule
         // as ReportDeliveryRetryService (skip) and DailyReportGenerator (IN_APP_ONLY).
-        String ownerPhone = userRepository.findOwnerByTenantSchemaName(command.tenantId())
-                .map(u -> u.getPhoneNumber())
-                .filter(phone -> !phone.isBlank())
+        String ownerPhone = ownerRecipientResolver.resolveOwnerWhatsAppPhone(command.tenantId())
                 .orElseThrow(() -> {
                     log.warn("Resend refused for reportId={} tenant={}: no owner WhatsApp phone",
                             report.getId(), command.tenantId());

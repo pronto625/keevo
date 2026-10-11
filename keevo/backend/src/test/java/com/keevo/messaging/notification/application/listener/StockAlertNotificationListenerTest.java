@@ -1,8 +1,7 @@
 package com.keevo.messaging.notification.application.listener;
 
 import com.keevo.catalog.stock.domain.event.StockThresholdBreachedEvent;
-import com.keevo.identity.auth.domain.model.User;
-import com.keevo.identity.auth.domain.port.out.UserRepository;
+import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
 import com.keevo.identity.onboarding.domain.model.SectorType;
 import com.keevo.identity.onboarding.domain.model.StockAlertChannel;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
@@ -45,7 +44,7 @@ class StockAlertNotificationListenerTest {
     @Mock private WhatsAppPort whatsAppPort;
     @Mock private NotificationCooldownRepository cooldownRepository;
     @Mock private TenantPreferencesRepository tenantPreferencesRepository;
-    @Mock private UserRepository userRepository;
+    @Mock private OwnerRecipientResolver ownerRecipientResolver;
     @Mock private StoreRepository storeRepository;
 
     private StockAlertNotificationListener listener;
@@ -62,7 +61,7 @@ class StockAlertNotificationListenerTest {
         clock = new MutableClock(Instant.parse("2026-10-11T10:00:00Z"));
         listener = new StockAlertNotificationListener(
                 notificationPort, whatsAppPort, cooldownRepository,
-                tenantPreferencesRepository, userRepository, storeRepository, clock);
+                tenantPreferencesRepository, ownerRecipientResolver, storeRepository, clock);
     }
 
     private StockThresholdBreachedEvent event() {
@@ -107,10 +106,7 @@ class StockAlertNotificationListenerTest {
                 Instant.now(), Instant.now());
     }
 
-    private User ownerUser() {
-        return new User(UUID.randomUUID(), "+243990001234", "hash",
-                com.keevo.identity.auth.domain.model.Role.OWNER, true, Instant.now());
-    }
+    private static final String OWNER_PHONE = "+243990001234";
 
     // ── AC1: Individual alert — enabled, no cooldown ─────────────────────────
 
@@ -120,7 +116,7 @@ class StockAlertNotificationListenerTest {
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(enabledPrefs()));
         when(cooldownRepository.tryAcquireCooldown(eq("STOCK_ALERT"), any(), any(), any())).thenReturn(true);
         when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(testStore()));
-        when(userRepository.findOwnerByTenantSchemaName(TENANT_ID)).thenReturn(Optional.of(ownerUser()));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT_ID)).thenReturn(Optional.of(OWNER_PHONE));
 
         listener.onStockThresholdBreached(event());
 
@@ -171,7 +167,7 @@ class StockAlertNotificationListenerTest {
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(bothChannelPrefs()));
         when(cooldownRepository.tryAcquireCooldown(any(), any(), any(), any())).thenReturn(true);
         when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(testStore()));
-        when(userRepository.findOwnerByTenantSchemaName(TENANT_ID)).thenReturn(Optional.of(ownerUser()));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT_ID)).thenReturn(Optional.of(OWNER_PHONE));
         doThrow(new RuntimeException("FCM timeout")).when(notificationPort).notifyOwners(any(), any());
 
         assertDoesNotThrow(() -> listener.onStockThresholdBreached(event()));
@@ -185,7 +181,7 @@ class StockAlertNotificationListenerTest {
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(bothChannelPrefs()));
         when(cooldownRepository.tryAcquireCooldown(any(), any(), any(), any())).thenReturn(true);
         when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(testStore()));
-        when(userRepository.findOwnerByTenantSchemaName(TENANT_ID)).thenReturn(Optional.of(ownerUser()));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT_ID)).thenReturn(Optional.of(OWNER_PHONE));
         doThrow(new RuntimeException("WA fail")).when(whatsAppPort).sendReport(any(), any());
 
         assertDoesNotThrow(() -> listener.onStockThresholdBreached(event()));
@@ -199,7 +195,7 @@ class StockAlertNotificationListenerTest {
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(enabledPrefs()));
         when(cooldownRepository.tryAcquireCooldown(any(), any(), any(), any())).thenReturn(true);
         when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(testStore()));
-        when(userRepository.findOwnerByTenantSchemaName(TENANT_ID)).thenReturn(Optional.of(ownerUser()));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT_ID)).thenReturn(Optional.of(OWNER_PHONE));
 
         listener.onStockThresholdBreached(event());
 
@@ -215,7 +211,7 @@ class StockAlertNotificationListenerTest {
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(enabledPrefs()));
         when(cooldownRepository.tryAcquireCooldown(any(), any(), any(), any())).thenReturn(true);
         when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(testStore()));
-        when(userRepository.findOwnerByTenantSchemaName(TENANT_ID)).thenReturn(Optional.of(ownerUser()));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT_ID)).thenReturn(Optional.of(OWNER_PHONE));
 
         for (int i = 0; i < 3; i++) {
             listener.onStockThresholdBreached(event(UUID.randomUUID(), STORE_ID));
@@ -235,7 +231,7 @@ class StockAlertNotificationListenerTest {
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(enabledPrefs()));
         when(cooldownRepository.tryAcquireCooldown(any(), any(), any(), any())).thenReturn(true);
         when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(testStore()));
-        when(userRepository.findOwnerByTenantSchemaName(TENANT_ID)).thenReturn(Optional.of(ownerUser()));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT_ID)).thenReturn(Optional.of(OWNER_PHONE));
 
         // Fire 4 events for the same store
         for (int i = 0; i < 4; i++) {
@@ -274,7 +270,7 @@ class StockAlertNotificationListenerTest {
         when(cooldownRepository.tryAcquireCooldown(eq("STOCK_ALERT"), eq(PRODUCT_ID), eq(STORE_ID), any()))
                 .thenReturn(true, false);
         when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(testStore()));
-        when(userRepository.findOwnerByTenantSchemaName(TENANT_ID)).thenReturn(Optional.of(ownerUser()));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT_ID)).thenReturn(Optional.of(OWNER_PHONE));
 
         listener.onStockThresholdBreached(event());
         listener.onStockThresholdBreached(event());
@@ -300,7 +296,7 @@ class StockAlertNotificationListenerTest {
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(enabledPrefs()));
         when(cooldownRepository.tryAcquireCooldown(any(), any(), any(), any())).thenReturn(true);
         when(storeRepository.findById(any())).thenReturn(Optional.of(testStore()));
-        when(userRepository.findOwnerByTenantSchemaName(TENANT_ID)).thenReturn(Optional.of(ownerUser()));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT_ID)).thenReturn(Optional.of(OWNER_PHONE));
 
         listener.onStockThresholdBreached(event(UUID.randomUUID(), STORE_ID));
         listener.onStockThresholdBreached(event(UUID.randomUUID(), UUID.randomUUID()));
@@ -321,7 +317,7 @@ class StockAlertNotificationListenerTest {
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(enabledPrefs()));
         when(cooldownRepository.tryAcquireCooldown(any(), any(), any(), any())).thenReturn(true);
         when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(testStore()));
-        when(userRepository.findOwnerByTenantSchemaName(TENANT_ID)).thenReturn(Optional.of(ownerUser()));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT_ID)).thenReturn(Optional.of(OWNER_PHONE));
 
         for (int i = 0; i < 3; i++) {
             listener.onStockThresholdBreached(event(UUID.randomUUID(), STORE_ID));
@@ -351,5 +347,19 @@ class StockAlertNotificationListenerTest {
         @Override public Clock withZone(ZoneId zone) { return this; }
 
         @Override public Instant instant() { return now; }
+    }
+
+    /** v1s-14-17 — BOTH channel: the alert reaches the resolved owner phone on WhatsApp. */
+    @Test
+    @DisplayName("v1s-14-17: BOTH channel → WhatsApp sent to the resolved owner phone")
+    void onStockThresholdBreached_bothChannel_sendsWhatsAppToResolvedOwnerPhone() {
+        when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(bothChannelPrefs()));
+        when(cooldownRepository.tryAcquireCooldown(any(), any(), any(), any())).thenReturn(true);
+        when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(testStore()));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT_ID)).thenReturn(Optional.of("+237600000001"));
+
+        listener.onStockThresholdBreached(event());
+
+        verify(whatsAppPort).sendReport(eq("+237600000001"), anyString());
     }
 }

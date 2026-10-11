@@ -2,7 +2,7 @@ package com.keevo.messaging.notification.application.listener;
 
 import com.keevo.catalog.stock.domain.entity.MovementType;
 import com.keevo.catalog.stock.domain.event.StockAdjustedEvent;
-import com.keevo.identity.auth.domain.port.out.UserRepository;
+import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
 import com.keevo.messaging.notification.domain.model.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationPort;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
@@ -19,6 +19,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -29,6 +30,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * TDD tests for StockModificationNotificationListener (Story 14.10).
@@ -44,7 +46,7 @@ class StockModificationNotificationListenerTest {
 
     @Mock private NotificationPort notificationPort;
     @Mock private WhatsAppPort whatsAppPort;
-    @Mock private UserRepository userRepository;
+    @Mock private OwnerRecipientResolver ownerRecipientResolver;
 
     private MutableClock clock;
     private StockModificationNotificationListener listener;
@@ -60,7 +62,7 @@ class StockModificationNotificationListenerTest {
     void setUp() {
         clock = new MutableClock(NOW);
         listener = new StockModificationNotificationListener(
-                notificationPort, whatsAppPort, userRepository, WINDOW_MIN, clock);
+                notificationPort, whatsAppPort, ownerRecipientResolver, WINDOW_MIN, clock);
     }
 
     private void advancePastWindow() {
@@ -266,7 +268,7 @@ class StockModificationNotificationListenerTest {
             @Override public Clock withZone(ZoneId zone) { return this; }
             @Override public Instant instant() { return racingClock.get(); }
         };
-        var racing = new StockModificationNotificationListener(notificationPort, whatsAppPort, userRepository, WINDOW_MIN, movingClock);
+        var racing = new StockModificationNotificationListener(notificationPort, whatsAppPort, ownerRecipientResolver, WINDOW_MIN, movingClock);
         var delivered = new java.util.concurrent.atomic.AtomicInteger();
         org.mockito.Mockito.doAnswer(inv -> {
             NotificationPayload p = inv.getArgument(1);
@@ -321,5 +323,21 @@ class StockModificationNotificationListenerTest {
         public Instant instant() {
             return instant;
         }
+    }
+
+    /** v1s-14-17 — the batched recap reaches the owner's WhatsApp via the resolver. */
+    @Test
+    @DisplayName("v1s-14-17: owner WhatsApp recap goes to the resolved owner phone")
+    void flush_sendsWhatsAppToResolvedOwnerPhone() {
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT_ID)).thenReturn(Optional.of("+237600000001"));
+        listener.onStockAdjusted(new StockAdjustedEvent(
+                PRODUCT_ID, null, STORE_ID, MovementType.STOCK_ENTRY,
+                0, 10, 10, ACTOR_ID, "Livraison", TENANT_ID,
+                "EMPLOYEE", "Loïc", "Boutique A", "Widget", NOW));
+        advancePastWindow();
+
+        listener.flushExpiredWindows();
+
+        verify(whatsAppPort).sendReport(eq("+237600000001"), anyString());
     }
 }

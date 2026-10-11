@@ -28,13 +28,18 @@ public interface UserRepository {
     boolean existsByPhoneNumber(String phoneNumber);
 
     /**
-     * Story 7.2 — Find the OWNER user for a given tenant schema name.
-     * Used for resolving WhatsApp delivery phone number.
+     * Story 7.2 / v1s-14-17 — Find the primary active OWNER user for a given tenant schema name.
      *
-     * <p>Queries public schema: user_tenant_memberships JOIN users WHERE role='OWNER'.
+     * <p>Primary owner = active OWNER membership ({@code m.is_active}) of an active user
+     * ({@code u.is_active}) with the oldest membership {@code created_at}, tie-break on user id —
+     * deterministic when several owners exist.
+     *
+     * <p>Do not call this to pick a WhatsApp recipient: use
+     * {@link OwnerRecipientResolver#resolveOwnerWhatsAppPhone(String)}, which applies the
+     * normalisation / format rules (enforced by {@code OwnerRecipientResolutionArchTest}).
      *
      * @param schemaName tenant schema name (e.g., "kv_abc123")
-     * @return the OWNER User, or empty if not found
+     * @return the primary active OWNER User, or empty if none
      */
     Optional<User> findOwnerByTenantSchemaName(String schemaName);
 

@@ -46,6 +46,8 @@ public class UserRepositoryAdapter implements UserRepository {
             JOIN public.user_tenant_memberships m ON u.id = m.user_id
             JOIN public.tenants t ON t.id = m.tenant_id
             WHERE t.schema_name = ? AND m.role = 'OWNER' AND m.is_active = true
+              AND u.is_active = true
+            ORDER BY m.created_at ASC, u.id ASC
             LIMIT 1
             """;
     private static final String OWNERS_BY_SCHEMA_SQL = """

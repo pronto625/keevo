@@ -2,6 +2,9 @@ package com.keevo.reporting.report.application.service;
 
 import com.keevo.commerce.sale.domain.model.ClosureWindow;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.identity.auth.adapter.out.persistence.impl.OwnerRecipientResolverAdapter;
+import com.keevo.identity.auth.domain.model.Role;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
@@ -45,7 +48,7 @@ class DailyReportGeneratorTest {
     @Mock private EndOfDayReportBuilder builder;
     @Mock private DailyReportFormatter formatter;
     @Mock private StoreRepository storeRepository;
-    @Mock private UserRepository userRepository;
+    @Mock private OwnerRecipientResolver ownerRecipientResolver;
     @Mock private EmployeeRepository employeeRepository;
 
     private DailyReportGenerator generator;
@@ -57,7 +60,7 @@ class DailyReportGeneratorTest {
     void setUp() {
         generator = new DailyReportGenerator(
                 reportRepository, whatsAppPort, multiStoreSummaryService,
-                builder, formatter, storeRepository, userRepository, employeeRepository);
+                builder, formatter, storeRepository, ownerRecipientResolver, employeeRepository);
         storeId = UUID.randomUUID();
         actorId = UUID.randomUUID();
         command = new GenerateReportCommand(storeId, null, "kv_test01", false, Instant.now(), null);
@@ -78,7 +81,7 @@ class DailyReportGeneratorTest {
                 new Store(storeId, "Boutique Test", StoreType.STORE, null, null, true, Instant.now(), Instant.now())));
         when(builder.build(any(), any(ClosureWindow.class), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
         when(formatter.format(any())).thenReturn("Rapport WhatsApp");
-        when(userRepository.findOwnerByTenantSchemaName("kv_test01")).thenReturn(Optional.empty());
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone("kv_test01")).thenReturn(Optional.empty());
 
         EndOfDayReport report = generator.generateReport(command);
         assertThat(report.getReportType()).isEqualTo(ReportType.DAILY);
@@ -89,7 +92,7 @@ class DailyReportGeneratorTest {
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
         when(builder.build(any(), any(ClosureWindow.class), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
         when(formatter.format(any())).thenReturn("Rapport");
-        when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.empty());
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(anyString())).thenReturn(Optional.empty());
 
         // Should not throw
         generator.generateReport(command);
@@ -97,13 +100,11 @@ class DailyReportGeneratorTest {
     }
 
     @Test
-    void generateReport_shouldUseOwnerPhoneFromRepository() {
-        User owner = mock(User.class);
-        when(owner.getPhoneNumber()).thenReturn("+243812345678");
+    void generateReport_shouldUseOwnerPhoneFromResolver() {
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
         when(builder.build(any(), any(ClosureWindow.class), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
         when(formatter.format(any())).thenReturn("Rapport");
-        when(userRepository.findOwnerByTenantSchemaName("kv_test01")).thenReturn(Optional.of(owner));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone("kv_test01")).thenReturn(Optional.of("+243812345678"));
 
         generator.generateReport(command);
         verify(whatsAppPort, times(1)).sendReport(eq("+243812345678"), anyString());
@@ -114,7 +115,7 @@ class DailyReportGeneratorTest {
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
         when(builder.build(any(), any(ClosureWindow.class), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
         when(formatter.format(any())).thenReturn("Rapport");
-        when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.empty());
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(anyString())).thenReturn(Optional.empty());
 
         EndOfDayReport report = generator.generateReport(command);
         assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.IN_APP_ONLY);
@@ -126,7 +127,7 @@ class DailyReportGeneratorTest {
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
         when(builder.build(any(), any(ClosureWindow.class), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
         when(formatter.format(any())).thenReturn("Rapport");
-        when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.empty());
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(anyString())).thenReturn(Optional.empty());
 
         EndOfDayReport report = generator.generateReport(command);
         assertThat(report.getTenantId()).isEqualTo("kv_test01");
@@ -134,12 +135,10 @@ class DailyReportGeneratorTest {
 
     @Test
     void generateReport_deliverySuccess_shouldMarkSent() {
-        User owner = mock(User.class);
-        when(owner.getPhoneNumber()).thenReturn("+243812345678");
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
         when(builder.build(any(), any(ClosureWindow.class), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
         when(formatter.format(any())).thenReturn("Rapport");
-        when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.of(owner));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(anyString())).thenReturn(Optional.of("+243812345678"));
 
         EndOfDayReport report = generator.generateReport(command);
         assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.SENT);
@@ -147,15 +146,33 @@ class DailyReportGeneratorTest {
 
     @Test
     void generateReport_deliveryFailure_shouldMarkFailed() {
-        User owner = mock(User.class);
-        when(owner.getPhoneNumber()).thenReturn("+243812345678");
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
         when(builder.build(any(), any(ClosureWindow.class), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
         when(formatter.format(any())).thenReturn("Rapport");
-        when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.of(owner));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(anyString())).thenReturn(Optional.of("+243812345678"));
         doThrow(new RuntimeException("net error")).when(whatsAppPort).sendReport(anyString(), anyString());
 
         EndOfDayReport report = generator.generateReport(command);
         assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.FAILED);
+    }
+
+    /** v1s-14-17 — real resolver over a blank owner phone: IN_APP_ONLY, WhatsApp never called. */
+    @Test
+    void generateReport_withRealResolver_blankOwnerPhone_marksInAppOnly_neverSends() {
+        UserRepository userRepository = mock(UserRepository.class);
+        when(userRepository.findOwnerByTenantSchemaName("kv_test01")).thenReturn(Optional.of(
+                new User(UUID.randomUUID(), "   ", "hash", Role.OWNER, true, Instant.now())));
+        DailyReportGenerator realResolverGenerator = new DailyReportGenerator(
+                reportRepository, whatsAppPort, multiStoreSummaryService,
+                builder, formatter, storeRepository,
+                new OwnerRecipientResolverAdapter(userRepository), employeeRepository);
+        when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
+        when(builder.build(any(), any(ClosureWindow.class), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
+        when(formatter.format(any())).thenReturn("Rapport");
+
+        EndOfDayReport report = realResolverGenerator.generateReport(command);
+
+        assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.IN_APP_ONLY);
+        verify(whatsAppPort, never()).sendReport(anyString(), anyString());
     }
 }

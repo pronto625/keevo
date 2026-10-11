@@ -4,10 +4,14 @@ import com.keevo.commerce.sale.domain.model.Sale;
 import com.keevo.commerce.sale.domain.model.SaleDraftProductsUpgradedEvent;
 import com.keevo.commerce.sale.domain.model.SaleItem;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
+import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
+import com.keevo.identity.onboarding.domain.model.TenantPreferences;
+import com.keevo.identity.onboarding.domain.model.StockAlertChannel;
+import com.keevo.identity.onboarding.domain.model.SectorType;
 import com.keevo.messaging.notification.domain.model.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationPort;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
@@ -29,6 +33,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -46,6 +51,7 @@ class SaleDraftValidatedNotificationListenerTest {
     @Mock private EmployeeRepository employeeRepository;
     @Mock private StoreRepository storeRepository;
     @Mock private UserRepository userRepository;
+    @Mock private OwnerRecipientResolver ownerRecipientResolver;
     @Mock private TenantPreferencesRepository tenantPreferencesRepository;
     @Mock private NotificationPort notificationPort;
     @Mock private WhatsAppPort whatsAppPort;
@@ -61,7 +67,7 @@ class SaleDraftValidatedNotificationListenerTest {
     @BeforeEach
     void setUp() {
         listener = new SaleDraftValidatedNotificationListener(saleRepository, employeeRepository,
-                storeRepository, userRepository, tenantPreferencesRepository, notificationPort, whatsAppPort);
+                storeRepository, userRepository, ownerRecipientResolver, tenantPreferencesRepository, notificationPort, whatsAppPort);
 
         SaleItem item = mock(SaleItem.class);
         when(item.getProductId()).thenReturn(draftId);
@@ -135,5 +141,25 @@ class SaleDraftValidatedNotificationListenerTest {
         assertThat(payload.title()).isEqualTo("🆕 Nouveaux produits activés");
         assertThat(payload.body()).endsWith("(produits brouillons activés lors d'une vente)");
         verify(whatsAppPort, never()).sendReport(any(), any());
+    }
+
+    /** v1s-14-17 — BOTH channel: the owner WhatsApp message goes to the resolved owner phone. */
+    @Test
+    void bothChannel_sendsWhatsAppToResolvedOwnerPhone() {
+        var defaults = TenantPreferences.withDefaults(
+                UUID.randomUUID(), SectorType.FOOD_GROCERY, "20:00:00", true, Instant.now());
+        var bothPrefs = new TenantPreferences(
+                defaults.id(), defaults.sectorType(), defaults.eodReportTime(), true, defaults.createdAt(),
+                defaults.eodReportEnabled(), defaults.eodReportChannel(),
+                defaults.weeklyReportEnabled(), defaults.weeklyReportDay(),
+                defaults.weeklyReportTime(), defaults.weeklyReportChannel(),
+                defaults.inventoryReportEnabled(), defaults.inventoryReportChannel(),
+                StockAlertChannel.BOTH, defaults.trendNotificationEnabled());
+        when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(bothPrefs));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT)).thenReturn(Optional.of("+237600000001"));
+
+        fire(true);
+
+        verify(whatsAppPort).sendReport(eq("+237600000001"), anyString());
     }
 }

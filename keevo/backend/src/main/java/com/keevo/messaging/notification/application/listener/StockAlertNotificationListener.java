@@ -1,7 +1,7 @@
 package com.keevo.messaging.notification.application.listener;
 
 import com.keevo.catalog.stock.domain.event.StockThresholdBreachedEvent;
-import com.keevo.identity.auth.domain.port.out.UserRepository;
+import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
 import com.keevo.identity.onboarding.domain.model.StockAlertChannel;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
@@ -53,7 +53,7 @@ public class StockAlertNotificationListener {
     private final WhatsAppPort whatsAppPort;
     private final NotificationCooldownRepository cooldownRepository;
     private final TenantPreferencesRepository tenantPreferencesRepository;
-    private final UserRepository userRepository;
+    private final OwnerRecipientResolver ownerRecipientResolver;
     private final StoreRepository storeRepository;
     private final Clock clock;
 
@@ -64,10 +64,10 @@ public class StockAlertNotificationListener {
                                           WhatsAppPort whatsAppPort,
                                           NotificationCooldownRepository cooldownRepository,
                                           TenantPreferencesRepository tenantPreferencesRepository,
-                                          UserRepository userRepository,
+                                          OwnerRecipientResolver ownerRecipientResolver,
                                           StoreRepository storeRepository) {
         this(notificationPort, whatsAppPort, cooldownRepository, tenantPreferencesRepository,
-             userRepository, storeRepository, Clock.systemUTC());
+             ownerRecipientResolver, storeRepository, Clock.systemUTC());
     }
 
     /** Test-only constructor — injects a controllable {@link Clock} instead of the real one. */
@@ -75,7 +75,7 @@ public class StockAlertNotificationListener {
                                    WhatsAppPort whatsAppPort,
                                    NotificationCooldownRepository cooldownRepository,
                                    TenantPreferencesRepository tenantPreferencesRepository,
-                                   UserRepository userRepository,
+                                   OwnerRecipientResolver ownerRecipientResolver,
                                    StoreRepository storeRepository,
                                    Clock clock) {
         this.clock = clock;
@@ -83,7 +83,7 @@ public class StockAlertNotificationListener {
         this.whatsAppPort = whatsAppPort;
         this.cooldownRepository = cooldownRepository;
         this.tenantPreferencesRepository = tenantPreferencesRepository;
-        this.userRepository = userRepository;
+        this.ownerRecipientResolver = ownerRecipientResolver;
         this.storeRepository = storeRepository;
     }
 
@@ -286,8 +286,7 @@ public class StockAlertNotificationListener {
     }
 
     private String resolveOwnerPhone(String tenantId) {
-        return userRepository.findOwnerByTenantSchemaName(tenantId)
-                .map(u -> u.getPhoneNumber())
+        return ownerRecipientResolver.resolveOwnerWhatsAppPhone(tenantId)
                 .orElseGet(() -> {
                     log.debug("[STOCK-ALERT] No owner phone found for tenant={}", tenantId);
                     return null;

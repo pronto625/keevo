@@ -110,7 +110,7 @@ public abstract class AbstractReportGenerator {
         }
 
         String ownerPhone = resolveOwnerPhone(command);
-        if (ownerPhone == null) {
+        if (ownerPhone == null || ownerPhone.isBlank()) {
             log.warn("Owner phone not resolved for tenantId={} — report {} marked IN_APP_ONLY",
                     command.tenantId(), report.getId());
             report.markInAppOnly();

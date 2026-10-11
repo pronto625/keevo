@@ -2,8 +2,7 @@ package com.keevo.commerce.sale.application.service;
 
 import com.keevo.commerce.sale.domain.model.DayClosedEvent;
 import com.keevo.commerce.sale.domain.model.DayClosureSummary;
-import com.keevo.identity.auth.domain.model.User;
-import com.keevo.identity.auth.domain.port.out.UserRepository;
+import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.store.domain.model.StoreType;
@@ -43,13 +42,13 @@ class DayClosureWhatsAppListenerTest {
 
     @Mock private WhatsAppPort whatsAppPort;
     @Mock private StoreRepository storeRepository;
-    @Mock private UserRepository userRepository;
+    @Mock private OwnerRecipientResolver ownerRecipientResolver;
 
     private DayClosureWhatsAppListener listener;
 
     @BeforeEach
     void setUp() {
-        listener = new DayClosureWhatsAppListener(whatsAppPort, storeRepository, userRepository);
+        listener = new DayClosureWhatsAppListener(whatsAppPort, storeRepository, ownerRecipientResolver);
     }
 
     @AfterEach
@@ -68,12 +67,6 @@ class DayClosureWhatsAppListenerTest {
                 automatic, tenantId, now, now.minusSeconds(36000), now);
     }
 
-    private User ownerWithPhone(String phone) {
-        User owner = mock(User.class);
-        when(owner.getPhoneNumber()).thenReturn(phone);
-        return owner;
-    }
-
     private void storeNamed(String name) {
         when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(
                 new Store(STORE_ID, name, StoreType.STORE, null, null, true, Instant.now(), Instant.now())));
@@ -81,8 +74,7 @@ class DayClosureWhatsAppListenerTest {
 
     @Test
     void sendsToTenantOwnerPhone_withStoreNameInReport() {
-        User owner = ownerWithPhone(OWNER_PHONE);
-        when(userRepository.findOwnerByTenantSchemaName(TENANT)).thenReturn(Optional.of(owner));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT)).thenReturn(Optional.of(OWNER_PHONE));
         storeNamed("Boutique Akwa");
 
         listener.onDayClosed(event(TENANT));
@@ -93,9 +85,10 @@ class DayClosureWhatsAppListenerTest {
         assertThat(report.getValue()).contains("Boutique Akwa");
     }
 
+    /** v1s-14-17: no owner, null / blank / invalid phone all surface as an empty resolver result. */
     @Test
-    void noOwner_skipsSend() {
-        when(userRepository.findOwnerByTenantSchemaName(TENANT)).thenReturn(Optional.empty());
+    void noOwnerRecipient_skipsSend() {
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT)).thenReturn(Optional.empty());
 
         listener.onDayClosed(event(TENANT));
 
@@ -103,37 +96,18 @@ class DayClosureWhatsAppListenerTest {
     }
 
     @Test
-    void ownerPhoneNull_skipsSend() {
-        User owner = ownerWithPhone(null);
-        when(userRepository.findOwnerByTenantSchemaName(TENANT)).thenReturn(Optional.of(owner));
-
-        listener.onDayClosed(event(TENANT));
-
-        verifyNoInteractions(whatsAppPort);
-    }
-
-    @Test
-    void ownerPhoneBlank_skipsSend() {
-        User owner = ownerWithPhone("   ");
-        when(userRepository.findOwnerByTenantSchemaName(TENANT)).thenReturn(Optional.of(owner));
-
-        listener.onDayClosed(event(TENANT));
-
-        verifyNoInteractions(whatsAppPort);
-    }
-
-    @Test
-    void nullTenant_noLookupNoSend() {
+    void nullTenant_noSend() {
         listener.onDayClosed(event(null));
 
-        verifyNoInteractions(userRepository, whatsAppPort);
+        // The resolver yields empty for a null tenant (OwnerRecipientResolverAdapterTest); nothing else runs.
+        verifyNoInteractions(storeRepository, whatsAppPort);
     }
 
     @Test
-    void blankTenant_noLookupNoSend() {
+    void blankTenant_noSend() {
         listener.onDayClosed(event("  "));
 
-        verifyNoInteractions(userRepository, whatsAppPort);
+        verifyNoInteractions(storeRepository, whatsAppPort);
     }
 
     @Test
@@ -141,8 +115,7 @@ class DayClosureWhatsAppListenerTest {
         String previous = System.getProperty("keevo.owner.whatsapp");
         System.setProperty("keevo.owner.whatsapp", "+243000000000");
         try {
-            User owner = ownerWithPhone(OWNER_PHONE);
-            when(userRepository.findOwnerByTenantSchemaName(TENANT)).thenReturn(Optional.of(owner));
+            when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT)).thenReturn(Optional.of(OWNER_PHONE));
             storeNamed("Boutique Akwa");
 
             listener.onDayClosed(event(TENANT));
@@ -160,7 +133,7 @@ class DayClosureWhatsAppListenerTest {
 
     @Test
     void lookupThrows_noSendNoException() {
-        when(userRepository.findOwnerByTenantSchemaName(TENANT)).thenThrow(new RuntimeException("db down"));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT)).thenThrow(new RuntimeException("db down"));
 
         assertDoesNotThrow(() -> listener.onDayClosed(event(TENANT)));
 
@@ -169,8 +142,7 @@ class DayClosureWhatsAppListenerTest {
 
     @Test
     void sendReportThrows_noExceptionEscapes() {
-        User owner = ownerWithPhone(OWNER_PHONE);
-        when(userRepository.findOwnerByTenantSchemaName(TENANT)).thenReturn(Optional.of(owner));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT)).thenReturn(Optional.of(OWNER_PHONE));
         storeNamed("Boutique Akwa");
         doThrow(new RuntimeException("wa down")).when(whatsAppPort).sendReport(anyString(), anyString());
 
@@ -179,8 +151,7 @@ class DayClosureWhatsAppListenerTest {
 
     @Test
     void storeLookupThrows_noExceptionEscapes_nothingSent() {
-        User owner = ownerWithPhone(OWNER_PHONE);
-        when(userRepository.findOwnerByTenantSchemaName(TENANT)).thenReturn(Optional.of(owner));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT)).thenReturn(Optional.of(OWNER_PHONE));
         when(storeRepository.findById(any())).thenThrow(new RuntimeException("store db down"));
 
         assertDoesNotThrow(() -> listener.onDayClosed(event(TENANT)));
@@ -199,8 +170,7 @@ class DayClosureWhatsAppListenerTest {
 
     @Test
     void storeLookupRunsInEventTenant_previousContextRestored() {
-        User owner = ownerWithPhone(OWNER_PHONE);
-        when(userRepository.findOwnerByTenantSchemaName(TENANT)).thenReturn(Optional.of(owner));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT)).thenReturn(Optional.of(OWNER_PHONE));
         AtomicReference<String> tenantDuringLookup = new AtomicReference<>();
         when(storeRepository.findById(STORE_ID)).thenAnswer(inv -> {
             tenantDuringLookup.set(TenantContext.getCurrentTenant());
@@ -216,8 +186,7 @@ class DayClosureWhatsAppListenerTest {
 
     @Test
     void storeLookupRunsInEventTenant_contextClearedWhenNonePreviously() {
-        User owner = ownerWithPhone(OWNER_PHONE);
-        when(userRepository.findOwnerByTenantSchemaName(TENANT)).thenReturn(Optional.of(owner));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT)).thenReturn(Optional.of(OWNER_PHONE));
         AtomicReference<String> tenantDuringLookup = new AtomicReference<>();
         when(storeRepository.findById(STORE_ID)).thenAnswer(inv -> {
             tenantDuringLookup.set(TenantContext.getCurrentTenant());
@@ -233,8 +202,7 @@ class DayClosureWhatsAppListenerTest {
 
     @Test
     void automaticClosure_sendsToOwner() {
-        User owner = ownerWithPhone(OWNER_PHONE);
-        when(userRepository.findOwnerByTenantSchemaName(TENANT)).thenReturn(Optional.of(owner));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT)).thenReturn(Optional.of(OWNER_PHONE));
         storeNamed("Boutique Akwa");
 
         listener.onDayClosed(event(TENANT, true));
@@ -246,8 +214,7 @@ class DayClosureWhatsAppListenerTest {
 
     @Test
     void storeNotFound_sendsWithFallbackName() {
-        User owner = ownerWithPhone(OWNER_PHONE);
-        when(userRepository.findOwnerByTenantSchemaName(TENANT)).thenReturn(Optional.of(owner));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT)).thenReturn(Optional.of(OWNER_PHONE));
         when(storeRepository.findById(STORE_ID)).thenReturn(Optional.empty());
 
         listener.onDayClosed(event(TENANT));

@@ -1,8 +1,7 @@
 package com.keevo.identity.onboarding.application.service;
 
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
-import com.keevo.identity.auth.domain.model.User;
-import com.keevo.identity.auth.domain.port.out.UserRepository;
+import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
 import com.keevo.identity.onboarding.domain.port.in.SendTestReportUseCase;
 import com.keevo.reporting.report.application.service.DailyReportFormatter;
 import com.keevo.reporting.report.application.service.EndOfDayReportBuilder;
@@ -34,18 +33,18 @@ public class SendTestReportService implements SendTestReportUseCase {
     private final DailyReportFormatter formatter;
     private final WhatsAppPort whatsAppPort;
     private final StoreRepository storeRepository;
-    private final UserRepository userRepository;
+    private final OwnerRecipientResolver ownerRecipientResolver;
 
     public SendTestReportService(EndOfDayReportBuilder reportBuilder,
                                  DailyReportFormatter formatter,
                                  WhatsAppPort whatsAppPort,
                                  StoreRepository storeRepository,
-                                 UserRepository userRepository) {
+                                 OwnerRecipientResolver ownerRecipientResolver) {
         this.reportBuilder = reportBuilder;
         this.formatter = formatter;
         this.whatsAppPort = whatsAppPort;
         this.storeRepository = storeRepository;
-        this.userRepository = userRepository;
+        this.ownerRecipientResolver = ownerRecipientResolver;
     }
 
     @Override
@@ -56,8 +55,7 @@ public class SendTestReportService implements SendTestReportUseCase {
         }
 
         // Resolve owner phone using tenantId (schema name) — no TenantContext dependency
-        String ownerPhone = userRepository.findOwnerByTenantSchemaName(tenantId)
-                .map(User::getPhoneNumber)
+        String ownerPhone = ownerRecipientResolver.resolveOwnerWhatsAppPhone(tenantId)
                 .orElse(null);
 
         if (ownerPhone == null || ownerPhone.isBlank()) {

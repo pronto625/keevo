@@ -3,7 +3,7 @@ package com.keevo.reporting.report.application.service;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.auth.domain.model.TenantStatus;import com.keevo.identity.auth.domain.port.out.TenantRepository;
-import com.keevo.identity.auth.domain.port.out.UserRepository;
+import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
 import com.keevo.reporting.report.domain.model.DeliveryStatus;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.ReportType;
@@ -34,22 +34,20 @@ class ReportDeliveryRetryServiceTest {
     @Mock private EndOfDayReportRepository reportRepository;
     @Mock private WhatsAppPort whatsAppPort;
     @Mock private TenantRepository tenantRepository;
-    @Mock private UserRepository userRepository;
+    @Mock private OwnerRecipientResolver ownerRecipientResolver;
 
     private ReportDeliveryRetryService service;
     private Tenant activeTenant;
 
     @BeforeEach
     void setUp() {
-        service = new ReportDeliveryRetryService(reportRepository, whatsAppPort, tenantRepository, userRepository);
+        service = new ReportDeliveryRetryService(reportRepository, whatsAppPort, tenantRepository, ownerRecipientResolver);
         activeTenant = mock(Tenant.class);
         lenient().when(activeTenant.getStatus()).thenReturn(TenantStatus.ACTIVE);
         lenient().when(activeTenant.getSchemaName()).thenReturn("kv_test01");
         lenient().when(tenantRepository.findAll()).thenReturn(List.of(activeTenant));
         // Default: owner phone is resolved
-        com.keevo.identity.auth.domain.model.User owner = mock(com.keevo.identity.auth.domain.model.User.class);
-        lenient().when(owner.getPhoneNumber()).thenReturn("+237600000001");
-        lenient().when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.of(owner));
+        lenient().when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(anyString())).thenReturn(Optional.of("+237600000001"));
     }
 
     private EndOfDayReport failedReport(int attempts) {
