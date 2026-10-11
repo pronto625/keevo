@@ -103,6 +103,8 @@ Status: done
 **And** sur erreur : messages humains distincts pour `INVALID_OR_EXPIRED_CODE`, `CODE_LOCKED`, `VALIDATION_FAILED` (pattern `_computeErrorMessage` de `auth_page.dart` L98-113)
 **And** rate-limit côté client : le bouton "Envoyer le code" se désactive 60s après un envoi réussi (mitigation UX, le vrai rate-limit est serveur)
 
+> **Amendement AC7 (2026-10-11, décision owner) :** un seul champ OTP de 6 chiffres suffit — les « 6 inputs séparés avec auto-focus » mentionnés par la spec ne sont plus exigés ; l'écart « PASS avec écarts » de la code review 2026-07-23 est donc clos. Les 2 items différés de cette story (deep link sans `phoneNumber`, inputs OTP séparés) sont routés vers `v1s-16-13-app-ux-residual` par la redistribution deferred-work du 2026-10-11. La story reste **done** (pas de réouverture).
+
 ## Tasks / Subtasks
 
 ### Task 1 — Backend : migration + domain model + port + adapter (AC1)

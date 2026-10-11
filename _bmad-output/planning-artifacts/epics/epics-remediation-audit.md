@@ -56,11 +56,12 @@ L'audit a tourné sur `refractoring` ; la refonte venant à peine de commencer, 
 
 | Epic | Titre | Risk class | Release-blocker | Stories |
 |---|---|---|---|---|
-| **Epic 12** | Stabilisation V1 — Sécurité & Hardening (Piste A) | S1–S7, B-HIGH-5/6/9/10 | OUI (V1) | 7 |
-| **Epic 13** | Stabilisation V1 — Concurrence & Intégrité données (Piste A) | B-CRIT-1/2/3, F-CRIT-1/2/3, F-HIGH-4 | OUI (V1) | 7 |
-| **Epic 14** | Récupération scope V1 — Gaps fonctionnels (Pistes A/B/C) | FR22/44/55/64/65/66/67/79/82/83/90/91/92, X-* | Partiel | 12 |
-| **Epic 15** | Discipline de tests & dette technique (Pistes B/C) | ARCH11–14, dette | Non (hygiène) | 6 |
-| **Epic 16** | Mobile Frontend Hardening & Parity (Piste A/C) | frontend F-1..F-6, UX9/15/20, FR27/30 | OUI (V1) | 6 |
+| **Epic 12** | Stabilisation V1 — Sécurité & Hardening (Piste A) | S1–S7, B-HIGH-5/6/9/10 | OUI (V1) | 11 |
+| **Epic 13** | Stabilisation V1 — Concurrence & Intégrité données (Piste A) | B-CRIT-1/2/3, F-CRIT-1/2/3, F-HIGH-4 | OUI (V1) | 12 |
+| **Epic 14** | Récupération scope V1 — Gaps fonctionnels (Pistes A/B/C) | FR22/44/55/64/65/66/67/79/82/83/90/91/92, X-* | Partiel | 13 |
+| **Epic 15** | Discipline de tests & dette technique (Pistes B/C) | ARCH11–14, dette | Non (hygiène) | 11 |
+| **Epic 16** | Mobile Frontend Hardening & Parity (Piste A/C) | frontend F-1..F-6, UX9/15/20, FR27/30 | OUI (V1) | 9 |
+| **Epic 18** | Export de données & Audit détaillé (Piste C) — sprint-change-proposal-2026-10-11 | FR55, FR84, FR94–FR98 | Non | 7 |
 
 ---
 
@@ -184,6 +185,91 @@ As a Toor, I want client secrets handled securely on all platforms + session-rev
 
 **Doc:** ARCH21 + Story 8.3. **TDD:** `shouldUseEncryptedSharedPreferencesOnAndroid()`, `shouldNotLogAuthorizationHeaderInRelease()`, `shouldRedirectToLoginOnAccountInactive()`.
 
+## Story 12.10: RBAC sync résiduel (PROMOTE_PRODUCT, TOGGLE_CATEGORY, session d'inventaire) — **[A]**
+
+As a Toor, I want the remaining sync operations (PROMOTE_PRODUCT, TOGGLE_CATEGORY, inventory session) to enforce the same OWNER-only / store-scope rules as their REST counterparts, so that the sync channel cannot bypass the RBAC delivered by 12.6 / 12.8 (FR36, audit I1 2026-10-11).
+
+**Scope:** (sprint-status.yaml, 2026-10-11 audit I1) PROMOTE_PRODUCT, TOGGLE_CATEGORY and inventory-session sync operations are not limited to the employee's assigned store; align the sync handlers with the REST RBAC (OWNER-only / store scope) delivered by v1s-12-6 / v1s-12-8. Tracker key: `v1s-12-10-sync-rbac-residual`.
+
+**Refs:** S6/S7, FR36, Story 12.6, Story 12.8, audit-coherence-2026-10-11 I1. **Refonte absorption:** re-appliquer dans les handlers sync du module `sync` (12.7 refonte).
+
+**AC:**
+**Given** an EMPLOYEE pushing PROMOTE_PRODUCT / TOGGLE_CATEGORY / inventory-session operations **When** the operation targets another store or an OWNER-only action **Then** it is REJECTED with the same rule as the REST endpoint (403 / store scope)
+
+**Items (routed 2026-10-11 from deferred-work):**
+- [ ] [Deferred-from: CR v1s-12-8, 2026-07-24] D2 extractAssignedStoreId fail-open when auth==null [AbstractSyncOperationHandler.java:50-51] — null auth is treated as OWNER; fail closed
+- [ ] [Deferred-from: CR v1s-14-14, 2026-07-24] TOGGLE_CATEGORY sync has no OWNER-only check [CategorySyncHandler.java:104-120] — named in 12-10 scope; REST DELETE is OWNER-only
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
+## Story 12.11: Transfert — un employé ne transfère que depuis sa boutique (REST + sync) — **[A]**
+
+As a Toor, I want an EMPLOYEE to initiate transfers only from their assigned store, so that FR36 and v1s-12-8 AC4 hold again after the opening made in 4302eba.
+
+**Scope:** (sprint-status.yaml, 2026-10-11 décision PO) Un employé ne transfère que depuis sa boutique ; annuler l'ouverture de 4302eba (REST + sync) ; FR36 et v1s-12-8 AC4. Tracker key: `v1s-12-11-transfer-employee-own-store`.
+
+**Refs:** FR36, Story 12.8 AC4, Story 12.9, commit 4302eba. **Refonte absorption:** re-appliquer dans `inventory`/`store` (règle de source de transfert).
+
+**AC:**
+**Given** an EMPLOYEE initiating a transfer (REST or TRANSFER sync op) **When** `sourceStoreId` differs from the JWT assigned store **Then** 403 / REJECTED; OWNER keeps cross-store transfers (FR36, v1s-12-8 AC4 restored)
+
+**Items (routed 2026-10-11 from deferred-work):**
+- [ ] [Deferred-from: CR v1s-12-9, 2026-07-24] No widget test for _shouldShowReceiveButton [transfer_history_page.dart:456-465] — 12-11 changes transfer rules; add EMPLOYEE match/mismatch + OWNER cases
+- [ ] [Deferred-from: CR v1s-12-8, 2026-07-24] D4 TransferSyncHandler does not validate sourceStoreId [TransferSyncHandler.java:41-49] — 12-11 reworks transfer source rules on sync; validate store belongs to tenant/employee
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
+## Story 12.12: Durcissement auth & session (JWT filter, cache de révocation, reset mot de passe, ownership device sync) — **[A]**
+
+As a Toor, I want the auth/session seams hardened (JWT filter edge cases, bounded revocation cache, password-reset transactions and limits, refresh-token hygiene, device ownership on sync), so that the residual findings of the 12.2/12.3/12.5/13.2/14.12 reviews are closed in one pass.
+
+**Scope:** JWT filter edge cases (clock skew, OWNER bad tenantId, >1 row), revocation-cache rework (Caffeine, atomic load, Clock, logs), password-reset hardening (tx around OTP send, @Version attempts, token index/purge, rate-limiter eviction, PII), refresh_tokens purge/index, SessionTokenIssuer tx abort, JSON 403, sync device-ownership TOCTOU/logging/enumeration, E.164 phone normalisation. Tracker key: `v1s-12-12-auth-session-hardening`.
+
+**Refs:** S1–S5, FR68, Stories 12.2 / 12.3 / 12.5 / 13.2 / 14.11 / 14.12, UI-3 lot 1 backend review. **Refonte absorption:** re-appliquer dans `identity` (JwtAuthFilter, révocation, reset) et `sync` (ownership device).
+
+**Items (routed 2026-10-11 from deferred-work):**
+- [ ] [Deferred-from: CR v1s-14-12, 2026-07-23] @Transactional wraps synchronous WhatsApp OTP send [RequestPasswordResetService.java:58,97] — DB connection held 5-30s during network call; move send after commit
+- [ ] [Deferred-from: CR v1s-14-12, 2026-07-23] Reset token attempts read-modify-write without @Version [ResetPasswordService.java:89-90] — concurrent guesses can exceed attempt cap; @Version or atomic UPDATE
+- [ ] [Deferred-from: CR v1s-14-12, 2026-07-23] No index on consumed_at + no purge job for reset tokens [V6__password_reset_tokens.sql] — add partial index + cleanup job
+- [ ] [Deferred-from: CR v1s-14-12, 2026-07-23] PII phoneNumber in PasswordResetRequestedEvent [PasswordResetRequestedEvent.java] — not serialized today; drop field or mask before event tracing is enabled
+- [ ] [Deferred-from: CR v1s-14-12, 2026-07-23] PasswordResetRateLimiter maps never evicted [PasswordResetRateLimiter.java:30-33] — unbounded per-phone buckets; Caffeine/expiry sweep
+- [ ] [Deferred-from: CR v1s-12-5, 2026-07-21] D3 OWNER + invalid tenantId -> 500 instead of 401 [JwtAuthFilter.java] — OWNER tokens skip tenant validation; global validation
+- [ ] [Deferred-from: CR v1s-12-5, 2026-07-21] D5 attacker-controlled JWT claim in exception message [TenantSchema.java:65] — sanitise before it can reach logs
+- [ ] [Deferred-from: CR v1s-12-5, 2026-07-21] D10 IncorrectResultSizeDataAccessException -> 500 [JwtAuthFilter.java:155,183] — catch and map to 401/500 with log; root cause is data integrity
+- [ ] [Deferred-from: CR v1s-12-3, 2026-07-21] accessDeniedHandler returns HTML not JSON [SecurityConfig.java:86-87] — res.sendError(403) -> servlet HTML page; write JSON body
+- [ ] [Deferred-from: CR v1s-12-2, 2026-07-21] No clock-skew policy / future iat accepted [JwtAuthFilter.java:141] — setAllowedClockSkewSeconds + reject far-future iat
+- [ ] [Deferred-from: CR v1s-12-2, 2026-07-21] Revocation cache unbounded [CachedTokenRevocationAdapter.java:40] — Caffeine expireAfterWrite + maximumSize
+- [ ] [Deferred-from: CR v1s-12-2, 2026-07-21] Stale cache re-population race [CachedTokenRevocationAdapter.java:54-55] — atomic compute/tombstone
+- [ ] [Deferred-from: CR v1s-12-2, 2026-07-21] Cache stampede on miss [CachedTokenRevocationAdapter.java:49-55] — coalesce loads
+- [ ] [Deferred-from: CR v1s-12-2, 2026-07-21] TTL-expiry test does not exercise expiry (AC7 coverage) [CachedTokenRevocationAdapterTest.java:42-60] — inject Clock and advance it on the same key; behaviour correct by inspection, so no reopen of v1s-12-2
+- [ ] [Deferred-from: CR v1s-12-2, 2026-07-21] Unused logger, no observability on revocation cache [CachedTokenRevocationAdapter.java:32] — debug logs on miss/invalidate
+- [ ] [Deferred-from: CR v1s-12-2, 2026-07-21] OWNER per-request revocation DB hit on miss [JwtAuthFilter.java:138] — merge with EMPLOYEE query into one round-trip
+- [ ] [Deferred-from: CR v1s-13-2, 2026-07-21] TOCTOU device ownership check vs upsert on pull [SyncController.java:146-157] — UNIQUE device_id + ON CONFLICT
+- [ ] [Deferred-from: CR v1s-13-2, 2026-07-21] No security log on DEVICE_ID_MISMATCH [SyncController.java] — emit security/audit log
+- [ ] [Deferred-from: CR v1s-13-2, 2026-07-21] Device existence disclosure via 403 vs success [SyncController.java] — generic error or rate-limit
+- [ ] [Deferred-from: CR v1s-14-11, 2026-07-23] Phone stored as '+237…' or '237…' (no E.164 normalisation) [UpdateEmployeeService.java:83-96, RegistrationRequest] — normalise to E.164 before uniqueness check
+- [ ] [Deferred-from: CR UI-3 lot 1 backend, 2026-10-11] SessionTokenIssuer swallows SQL error inside caller tx [SessionTokenIssuer.java:96] — Postgres aborts tx -> refresh-token save fails; verify whether tenant_preferences can be missing, use to_regclass probe
+- [ ] [Deferred-from: CR UI-3 lot 1 backend, 2026-10-11] refresh_tokens keeps every rotated row, no purge/index [V8__refresh_token_rotation.sql] — purge job + index on user_id/replaced_by_id
+- [ ] [Deferred-from: CR v1s-14-11, 2026-07-23] bcrypt DoS: no @Size(max) on SetPasswordRequestDto [SetPasswordRequestDto.java:11] — add @Size(min=8,max=128); also ChangePassword DTOs
+- [ ] [Deferred-from: CR v1s-14-5, 2026-07-23] SUSPENDED -> DELETION_PENDING -> cancel -> ACTIVE bypasses suspension [tenant status transitions] — PO decision: restore SUSPENDED on cancel or forbid the request
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
+## Story 12.13: Durcissement secrets & config prod (extension ProdSecretsValidator) — **[A]**
+
+As a Toor, I want production to fail fast on every weak or defaulted secret (DB password, provider tokens, admin password strength), so that a misconfigured deploy cannot start with dev defaults.
+
+**Scope:** Extend ProdSecretsValidator to POSTGRES_PASSWORD (+ provider tokens), admin password strength policy, Spring-context fail-fast test. Tracker key: `v1s-12-13-prod-secrets-config-hardening`.
+
+**Refs:** Story 10.3 (refonte), MOD-NFR11, Story 12.1. **Refonte absorption:** native — le validateur est repris tel quel.
+
+**Items (routed 2026-10-11 from deferred-work):**
+- [ ] [Deferred-from: CR 10-3, 2026-06-19] POSTGRES_PASSWORD falls back to dev default in prod [application.yml:17] — extend ProdSecretsValidator to DB password (and Twilio/Wassender tokens)
+- [ ] [Deferred-from: CR 10-3, 2026-06-19] Fail-fast not tested at Spring wiring level [ProdSecretsValidatorTest] — add @SpringBootTest @ActiveProfiles(prod) proving ApplicationContextException
+- [ ] [Deferred-from: CR 10-3, 2026-06-19] No admin password strength policy [ProdSecretsValidator.java:95-96] — only exact 'Admin@1234!' rejected; .env.example placeholder passes
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
 ---
 
 # Epic 13: Stabilisation V1 — Concurrence & Intégrité données (Piste A, release-blocker)
@@ -298,6 +384,103 @@ As a Toor, I want offline inventory validation to emit `StockAdjustedEvent` + `S
 **And** variant respected (`variantId` filter)
 
 **Doc:** Story 6.4 AC4. **TDD:** `shouldEmitStockMovementOnOfflineValidate()`, `shouldSkipEcartZero()`, `shouldQueueThresholdEventWhenBelowMin()`.
+
+## Story 13.8: Intégrité sync résiduelle (chemins d'écriture offline, parité des handlers) — **[A]**
+
+As a Toor, I want every offline write path to be atomic and every sync handler to validate and be idempotent like its REST counterpart, so that offline sales/stores/products never duplicate movements, double-apply stock or leave ghost rows.
+
+**Scope:** Offline write paths: duplicate SALE movement on pull (movement ids in CREATE_SALE), initial-stock double apply / stale draft map, Drift write+queue atomicity (store, quick-add, product insert), store repo crash/fallback, sync handler validation/idempotency parity (store, stock adjust), offline inventory validation guards, stale sync_queue payloads. Tracker key: `v1s-13-8-sync-integrity-residual`.
+
+**Refs:** B-CRIT-3, F-CRIT-1/2, FR27/FR30, Stories 13.4 / 13.6 / 13.7 / 16.6, UI-3 reviews. **Refonte absorption:** re-appliquer (Flutter Drift + handlers `sync`).
+
+**Items (routed 2026-10-11 from deferred-work):**
+- [ ] [Deferred-from: CR v1s-13-6, 2026-07-22] Stale draftInitialStocksProvider entries [record_sale_notifier.dart:66-67] — item removed from cart keeps its initial-stock entry which is still applied
+- [ ] [Deferred-from: CR v1s-13-4, 2026-07-22] Initial stock applied twice on retry after recordSale failure [record_sale_notifier.dart:70-83,124] — idempotency guard or move into recordSale transaction
+- [ ] [Deferred-from: CR v1s-13-7, 2026-07-22] UNIQUE violation on variant mismatch in offline inventory [validate_inventory_provider.dart:91-131, stock_levels_table.dart:31-33] — unique index lacks variant_id; extend when variants land
+- [ ] [Deferred-from: CR v1s-13-7, 2026-07-22] Session with zero counts silently VALIDATED [validate_inventory_provider.dart:214-220] — guard empty session
+- [ ] [Deferred-from: CR v1s-13-7, 2026-07-22] Re-validation overwrites completedAt [validate_inventory_provider.dart:214-220] — guard already-VALIDATED session
+- [ ] [Deferred-from: legacy cart UI session, 2026-04-07] Stale sync_queue CREATE_SALE payloads with 'status' key [sync_queue / _buildPayload] — one-off migration to rename status->requestedStatus or confirm none remain in prod
+- [ ] [Deferred-from: CR v1s-12-8, 2026-07-24] D3 StockAdjust quantity truncated via intValue [StockAdjustSyncHandler.java:47] — validate range before intValue
+- [ ] [Deferred-from: CR v1s-16-6, 2026-07-27] deactivateStore() crashes on existing! when not cached [store_repository_impl.dart:152-153] — null-safe path; queue op already committed before crash
+- [ ] [Deferred-from: CR v1s-16-6, 2026-07-27] Store offline write + queueOperation not atomic [store_repository_impl.dart:71-83,121-132,145-151] — single Drift transaction (also clients/suppliers)
+- [ ] [Deferred-from: CR v1s-16-6, 2026-07-27] updateStore() fallback fabricates type/isActive [store_repository_impl.dart:108-114] — mislabelled cache until next sync
+- [ ] [Deferred-from: CR v1s-16-6, 2026-07-27] CreateStoreSyncHandler skips 2-100 name length [CreateStoreSyncHandler.java:49-52] — sync handlers bypass DTO validation (clients too); align
+- [ ] [Deferred-from: CR v1s-16-6, 2026-07-27] StoreSyncHandler no idempotency guard [StoreSyncHandler.java] — retried UPDATE/DEACTIVATE re-executes use case
+- [ ] [Deferred-from: CR UI-3 lot 1 backend, 2026-10-11] Offline sales create a 2nd SALE stock movement on pull [RecordSaleService.java:89] — send movement ids in CREATE_SALE payload (app + backend)
+- [ ] [Deferred-from: CR UI-3 lots 2-5 app, 2026-10-11] QuickAdd offline path / LocalProductDataSource insert without transaction [quick_add_product_notifier.dart, local_product_datasource.dart] — write + queue in one Drift transaction
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
+## Story 13.9: Verrouillage des schedulers & courses check-then-act — **[A]**
+
+As a Toor, I want schedulers protected by a distributed lock and the remaining check-then-act races closed, so that a multi-instance deploy or a concurrent request cannot double-close a day, exceed a plan limit or lock out every owner.
+
+**Scope:** ShedLock/distributed lock for schedulers (day closure, account deletion, trends), check-then-act races (product count, anti-lockout, cancel sync, transfer clientId, alert cooldown), TTL eviction for notification batch maps. Tracker key: `v1s-13-9-scheduler-locking-races`.
+
+**Refs:** B-CRIT-1/2, NFR (multi-instance), Stories 13.3 / 13.5 / 14.5 / 14.10 / 14.11 / 14.13, legacy 8-1. **Refonte absorption:** re-appliquer (ShedLock transverse, verrous dans `commerce`/`identity`).
+
+**Items (routed 2026-10-11 from deferred-work):**
+- [ ] [Deferred-from: CR v1s-14-13, 2026-07-24] TOCTOU countActiveProducts->save [CreateProductUseCase.java:128-137] — concurrent creates can exceed plan limit; @Transactional + lock if seen in prod
+- [ ] [Deferred-from: CR v1s-14-10, 2026-07-22] Notification batchWindows never evicted [ProductCreationNotificationListener.java, StockModificationNotificationListener.java] — bounded but unbounded-lifetime map; TTL cache
+- [ ] [Deferred-from: CR v1s-13-3, 2026-07-21] Day-closure scheduler check-then-act TOCTOU [DayClosureAutoScheduler.java:122-134] — UNIQUE(store_id, report_date) or distributed lock
+- [ ] [Deferred-from: CR v1s-13-3, 2026-07-21] Hourly closure cron overhead [DayClosureAutoScheduler.java:86] — N tenants x M stores x 24; monitor before scale
+- [ ] [Deferred-from: CR v1s-13-3, 2026-07-21] Scheduler restart can double-close mid-run [DayClosureAutoScheduler.java:91-103] — idempotency key / lock
+- [ ] [Deferred-from: CR v1s-13-5, 2026-07-22] TOCTOU in CancelSaleSyncHandler AC5 guard [CancelSaleSyncHandler.java:54-62] — pass the loaded status into the command
+- [ ] [Deferred-from: CR v1s-14-11, 2026-07-23] Anti-lockout TOCTOU (two owners demote each other) [ChangeEmployeeRoleService.java:95-99] — SELECT FOR UPDATE / advisory lock
+- [ ] [Deferred-from: legacy CR 8-1, 2026-04-04] StockAlert/notification batchWindows never evicted (8-1 D1) [StockAlertNotificationListener.java] — same as v1s-14-10 item; TTL cache
+- [ ] [Deferred-from: legacy CR 8-1, 2026-04-04] Cooldown check/upsert TOCTOU [StockAlertNotificationListener / cooldown repo] — benign duplicate; advisory lock if dedup becomes critical
+- [ ] [Deferred-from: legacy CR 8-1, 2026-04-04] No @SchedulerLock on trend scheduler [trend scheduler detectTrends()] — ShedLock before multi-instance
+- [ ] [Deferred-from: CR v1s-14-5, 2026-07-23] No distributed lock on AccountDeletionScheduler [AccountDeletionScheduler.java] — multi-instance race; ShedLock with the other schedulers
+- [ ] [Deferred-from: CR spec-stock-transfer-offline-sync-flow-fix, 2026-08-11] TOCTOU on transfer clientId idempotency [ExecuteTransferService.java:74-79] — double-fire can decrement twice / PK violation; unique + catch
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
+## Story 13.10: Verrou optimiste sur Sale (@Version + 409) — **[A]**
+
+As a Toor, I want concurrent cancel/correct on the same sale to conflict instead of overwriting each other (mirror of 13.1 for `Sale`).
+
+**Scope:** @Version on Sale + 409 mapping so cancel/correct can't overwrite each other (mirror v1s-13-1). Tracker key: `v1s-13-10-sale-optimistic-lock`.
+
+**Refs:** FR90, Story 13.1, Story 13.5. **Refonte absorption:** native (entité `Sale` du module `commerce`).
+
+**Items (routed 2026-10-11 from deferred-work):**
+- [ ] [Deferred-from: CR v1s-13-5, 2026-07-22] No optimistic lock on Sale (double cancel / correct overwrites cancel) [CorrectSaleService.java:91-95,115; ValidateSaleService.java] — @Version on SaleJpaEntity + 409 mapping (mirror v1s-13-1)
+- [ ] [Deferred-from: CR UI-3 lot 1 backend, 2026-10-11] CorrectSaleService race with concurrent cancel (dup) [CorrectSaleService.java:115] — same as v1s-13-5 item; @Version on Sale
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
+## Story 13.11: Fenêtres de clôture journalière & rapports (décisions PO) — **[A]**
+
+As a Toor, I want the day-closure and weekly-report windows decided and enforced (sales after eodReportTime, cancel/correct after closure, eodReportTime validation), so that no sale is silently excluded from a closure or report.
+
+**Scope:** PO decisions + code: EOD closure window, weekly Sunday 20:00 gap, cancel/correct after closure, eodReportTime validation, Clock in CloseDayService. Tracker key: `v1s-13-11-closure-report-windows`.
+
+**Refs:** FR90, Story 4.4, Story 7.2/7.3, Stories 13.3 / 13.5, UI-3 lot 1 backend review. **Refonte absorption:** re-appliquer dans `reporting`/`commerce`.
+
+**Items (routed 2026-10-11 from deferred-work):**
+- [ ] [Deferred-from: CR v1s-13-3, 2026-07-21] CloseDayService uses LocalDate.now() without Clock [CloseDayService.java:56-58] — inject Clock like DayClosureAutoScheduler
+- [ ] [Deferred-from: CR v1s-13-3, 2026-07-21] parseTime silently falls back to 20:00 [DayClosureAutoScheduler.java:141-149] — validate format on PUT /tenant/preferences (422)
+- [ ] [Deferred-from: CR v1s-13-3, 2026-07-21] Closure at 20:00 excludes 20:01-23:59 sales [CloseDayService.java:67-68] — PO decision: close at eodReportTime or 23:59; document in PRD/AC
+- [ ] [Deferred-from: CR v1s-13-5, 2026-07-22] Cancel/correct allowed after day closure or weekly report [ValidateSaleService.java, CorrectSaleService.java] — PO decision (block/warn/regenerate), then guard e.g. SALE_DAY_CLOSED
+- [ ] [Deferred-from: CR UI-3 lot 1 backend, 2026-10-11] Weekly report misses Sunday 20:00-23:59 sales [WeeklyReportScheduler.java:124] — pre-existing; decide window with EOD decision
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
+## Story 13.12: Hygiène du provisioning de schéma tenant — **[C]**
+
+As a Toor, I want tenant-schema provisioning to be consistent (single validation helper, complete DDL, idempotent constraints) and its failures visible, so that a tenant never ends up with a half-provisioned schema.
+
+**Scope:** Converge schema helpers on TenantSchema, complete DDL_USERS, idempotent V1 CHECK constraints, make TenantSchemaSyncService failures visible. Tracker key: `v1s-13-12-schema-provisioning-hygiene`.
+
+**Refs:** NFR10, Stories 10.1 / 10.2 (refonte), Stories 12.5 / 13.1. **Refonte absorption:** native — le provisioning est repris dans `identity`/infra.
+
+**Items (routed 2026-10-11 from deferred-work):**
+- [ ] [Deferred-from: CR v1s-12-5, 2026-07-21] D7 4 schema helpers not migrated to TenantSchema [SchemaAwareMultiTenantConnectionProvider, TenantSchemaSyncService, TenantSchemaProvisioner] — converge on TenantSchema validation
+- [ ] [Deferred-from: CR 10-2, 2026-06-19] DDL_USERS in TenantSchemaProvisioner incomplete [TenantSchemaProvisioner.java] — failed_attempts/locked_until only added at first login by TenantSchemaSyncService
+- [ ] [Deferred-from: CR v1s-13-1, 2026-07-21] V5 per-tenant column relies on boot-time TenantSchemaSyncService [V5__stock_optimistic_lock.sql, TenantSchemaSyncService.java:230-232] — silent sync failure -> 'column version does not exist'; log ERROR / fail visibly
+- [ ] [Deferred-from: legacy CR 10.1 flyway-baseline, 2026-06-18] V1 inline CHECK constraints not idempotent [V1__baseline_public.sql] — constraints skipped on Hibernate-created tables; DO $$ blocks in a new migration
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
 
 ---
 
@@ -506,6 +689,24 @@ As a proprietor, I want to be directly notified (push + WhatsApp) when an employ
 
 **Contrepartie mobile (Flutter):** réception FCM des types `EMPLOYEE_PRODUCT_CREATED`/`EMPLOYEE_PRODUCT_CREATED_BATCH`/`EMPLOYEE_STOCK_MODIFIED`/`EMPLOYEE_STOCK_MODIFIED_BATCH` → `FcmService` mappe le `type` à une icône + deep-link (`/products/{productId}/edit`, `/stock/history`) ; `onMessageOpenedApp`/cold-start appelle `router.go(payload.deepLink())` ; cloche/notification history affiche ces notifs (ties Epic 16.1/16.2) ; le OWNER reçoit push + WhatsApp (le WhatsApp n'a pas de contrepartie mobile — c'est un message externe).
 
+## Story 14.15: Durcissement Category (500 → 404, événements d'audit, atomicité repo Flutter) — **[C]**
+
+As a Toor, I want category operations to fail cleanly (404 instead of 500), be audited, and be atomic on the device, so that the category feature matches the quality bar of products.
+
+**Scope:** Category IAE->500 (audit M6) + not-found test, audit events on toggle/createCustom, Flutter category repo transaction/atomicity/StateError, sub-category cascade decision. Tracker key: `v1s-14-15-category-hardening`.
+
+**Refs:** audit-coherence-2026-10-11 M6, Stories 14.14 / 15.3 / 15.5, Story 13.4. **Refonte absorption:** re-appliquer dans `catalog` + Flutter.
+
+**Items (routed 2026-10-11 from deferred-work):**
+- [ ] [Deferred-from: CR v1s-15-3, 2026-07-23] DELETE /categories/{id} not-found -> 500 [JpaCategoryRepository.java:118] — IllegalArgumentException falls to generic 500 handler (audit-coherence-2026-10-11 M6); map to DomainException 404 + test
+- [ ] [Deferred-from: v1s-15-5 new defers, 2026-07-23] D2 Category toggleActive/createCustom not audited [JpaCategoryRepository.java:79,96] — emit domain event + audit listener; same story as the category 500s
+- [ ] [Deferred-from: CR v1s-14-14, 2026-07-24] Category read-check-write not transactional (dup TOGGLE ops) [category_repository_impl.dart:96-118,141-161] — wrap in _database.transaction()
+- [ ] [Deferred-from: CR v1s-14-14, 2026-07-24] Category Drift write and queueOperation not atomic [category_repository_impl.dart:141-161] — same transaction as the write (cf. v1s-13-4)
+- [ ] [Deferred-from: CR v1s-14-14, 2026-07-24] getSingle() StateError surfaces raw in UI [category_repository_impl.dart:144-146; categories_page.dart:128-139] — getSingleOrNull + user message
+- [ ] [Deferred-from: CR v1s-14-14, 2026-07-24] No deactivation cascade to sub-categories [category_repository_impl.dart] — PO decision; confirmation dialog only mentions products
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
 ---
 
 # Epic 15: Discipline de tests & dette technique (Pistes B/C)
@@ -592,6 +793,131 @@ As a Toor, I want one pagination envelope (ARCH28).
 
 **Doc:** ARCH28. **TDD:** contract test per paginated endpoint.
 
+## Story 15.11: Base de tests d'intégration Testcontainers + tests Postgres en attente — **[C]**
+
+As a Toor, I want a real-PostgreSQL test base (Testcontainers) and the integration tests that were waiting for it, so that JPA/Flyway/concurrency behaviour is verified in CI instead of by inspection.
+
+**Scope:** Real-Postgres test base (Testcontainers + docker-java alignment) and the tests waiting for it: Flyway baseline/V2 idempotency fixes, @Modifying+@Version, concurrent transfer complete, sale merge-in-place, transfer replay. Tracker key: `v1s-15-11-testcontainers-integration-tests` (numéro 15.6 partagé avec « Standardiser enveloppe pagination » ci-dessus ; les clés sprint-status diffèrent).
+
+**Refs:** ARCH12, Story 15.1, Stories 10.1 / 10.2 (refonte), Stories 13.1 / 13.5, spec-stock-transfer-offline-sync-flow-fix. **Refonte absorption:** native — infra de tests posée avec la refonte.
+
+**Items (routed 2026-10-11 from deferred-work):**
+- [ ] [Deferred-from: CR 10-1, 2026-06-19] docker-java override only pins api+transport [pom.xml:140-150] — check mvn dependency:tree for docker-java-core skew when Testcontainers is wired
+- [ ] [Deferred-from: CR 10-2, 2026-06-19] v2IsIdempotent asserts migrationsExecuted==0 too broadly [FlywayBaselineIntegrationTest.java:198-201] — V4-V9 now exist; restrict assertion to V2
+- [ ] [Deferred-from: CR 10-2, 2026-06-19] @BeforeAll DROP DATABASE without pg_terminate_backend [FlywayBaselineIntegrationTest.java] — stale DB after crashed run
+- [ ] [Deferred-from: CR 10-2, 2026-06-19] @ActiveProfiles(flyway-test) without profile file [FlywayBaselineIntegrationTest.java] — misleading annotation
+- [ ] [Deferred-from: CR v1s-13-1, 2026-07-21] No real-EntityManager test for @Modifying + @Version [StockTransferSpringRepository.java:31-36] — needs Postgres/Testcontainers
+- [ ] [Deferred-from: CR v1s-13-1, 2026-07-21] No multi-thread test on CompleteTransferService [CompleteTransferService.java:50-104] — CountDownLatch concurrent complete
+- [ ] [Deferred-from: CR v1s-13-5, 2026-07-22] JPA merge-in-place test never executed [SaleRepositoryAdapterTest.java] — needs real Postgres (JSONB)
+- [ ] [Deferred-from: legacy CR 10.1 flyway-baseline, 2026-06-18] FlywayBaselineIntegrationTest uses existing PG, not Testcontainers [FlywayBaselineIntegrationTest.java:32,51] — not CI-portable
+- [ ] [Deferred-from: CR spec-stock-transfer-offline-sync-flow-fix, 2026-08-11] No persistence-level test of idempotent transfer replay [TransferSyncHandler.java, ExecuteTransferService.java] — real DB test that replay returns same id
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
+## Story 15.7: Trous de tests unitaires/slice backend — **[C]**
+
+As a Toor, I want the unit/slice test gaps listed by the 12.x / 14.12 / 15.3 reviews closed (security slice, rate limiter with Clock, adapters, @MockitoBean), so that documented rules have real coverage.
+
+**Scope:** Unit/slice test gaps listed by v1s-15-3, v1s-12-2/12-3/12-5 reviews, rate-limiter test, controller security slice, @MockBean->@MockitoBean. Tracker key: `v1s-15-7-backend-unit-test-gaps`.
+
+**Refs:** ARCH11/13, Stories 12.1 / 12.2 / 12.3 / 12.5 / 14.12 / 15.3. **Refonte absorption:** native — les tests suivent les modules.
+
+**Items (routed 2026-10-11 from deferred-work):**
+- [ ] [Deferred-from: CR v1s-15-3, 2026-07-23] @PreAuthorize never exercised in controller tests [CategoryControllerTest.java] — standaloneSetup mounts no security chain (40/41 controller tests); add security-slice tests
+- [ ] [Deferred-from: CR v1s-15-3, 2026-07-23] Malformed UUID param never tested on CategoryController [CategoryControllerTest.java] — add 400 MethodArgumentTypeMismatch test
+- [ ] [Deferred-from: CR v1s-15-3, 2026-07-23] StockMovementRepositoryAdapterTest variantId non-null mapping [StockMovementRepositoryAdapterTest.java] — add non-null variantId case
+- [ ] [Deferred-from: CR v1s-15-3, 2026-07-23] EmployeeRepositoryAdapterTest findByUserId empty branch [EmployeeRepositoryAdapterTest.java] — add Optional.empty case
+- [ ] [Deferred-from: CR v1s-15-3, 2026-07-23] EmployeeStatus.valueOf on corrupt data [EmployeeRepositoryAdapterTest.java] — unhandled IAE on unknown status; test + decide handling
+- [ ] [Deferred-from: CR v1s-15-3, 2026-07-23] FailoverWhatsAppAdapterTest untested combinations [FailoverWhatsAppAdapterTest.java] — Wassender blank + Twilio fails; Twilio unconfigured during failover
+- [ ] [Deferred-from: CR v1s-15-3, 2026-07-23] sanitizePhone '+'-prefix branch untested [TwilioWhatsAppAdapterTest.java] — add number without '+'
+- [ ] [Deferred-from: CR v1s-15-3, 2026-07-23] JdbcProfitabilityRepositoryTest RowMapper never asserted [JdbcProfitabilityRepositoryTest.java] — invoke/assert the RowMapper
+- [ ] [Deferred-from: CR v1s-15-3, 2026-07-23] resendReport with null/blank owner phone untested [ReportHistoryServiceTest.java] — add case
+- [ ] [Deferred-from: CR v1s-15-3, 2026-07-23] resend of SENT/FAILED report untested [ReportHistoryServiceTest.java / ReportHistoryService.java:65] — documented intentional rule has zero coverage
+- [ ] [Deferred-from: CR v1s-15-3, 2026-07-23] Reflection on JpaBaseEntity.createdAt in test [EmployeeRepositoryAdapterTest.java] — fragile coupling; use a builder/fixture
+- [ ] [Deferred-from: CR v1s-14-12, 2026-07-23] shouldBlockSixthRequestWithinOneHour tests nothing [PasswordResetRateLimiterTest.java:37] — inject Clock to test same-phone hourly cap
+- [ ] [Deferred-from: CR v1s-12-5, 2026-07-21] D4 default filter has jdbcTemplate=null in test setUp [JwtAuthFilterTest.java:50] — NPE trap for future EMPLOYEE tests
+- [ ] [Deferred-from: CR v1s-12-5, 2026-07-21] D6 no EMPLOYEE INACTIVE test with validate() [JwtAuthFilterTest.java] — add INACTIVE case
+- [ ] [Deferred-from: CR v1s-12-1, 2026-07-21] PosixFilePermission tests fail on non-POSIX runners [ProdSecretsValidatorTest] — assumeTrue(POSIX) guard
+- [ ] [Deferred-from: CR v1s-12-3, 2026-07-21] SecurityConfigAdminPathEnforcementTest coverage holes [SecurityConfigAdminPathEnforcementTest.java] — EMPLOYEE, anonymous->401, no-role token, non-GET
+- [ ] [Deferred-from: CR v1s-12-3, 2026-07-21] SecurityContextHolder not cleared between tests [admin controller tests] — @AfterEach clearContext
+- [ ] [Deferred-from: CR v1s-12-3, 2026-07-21] @MockBean deprecated (Boot 3.4+) [backend tests] — migrate to @MockitoBean
+- [ ] [Deferred-from: CR v1s-12-2, 2026-07-21] JdbcTokenRevocationAdapterTest bypasses RowMapper/SQL [JdbcTokenRevocationAdapterTest.java:25-44] — capture RowMapper, assert SQL
+- [ ] [Deferred-from: CR v1s-12-2, 2026-07-21] Tests missing: tva==null and iat==tva boundary [JwtAuthFilterTest.java:345-408] — guard AC2 '>=' contract
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
+## Story 15.8: Hygiène des tests Flutter (tests rouges, mocks, widget tests manquants) — **[C]**
+
+As a Toor, I want the remaining red Flutter tests fixed and the missing widget/provider tests added, so that `flutter test` is green and meaningful.
+
+**Scope:** Remaining red tests (offline_gate_banner colour, category_provider), mocktail SyncService, POS checkout/draft tests, OWNER logout, EMPLOYEE todaySummary, duplicate-route guard test, ResetPassword type test. Tracker key: `v1s-15-8-flutter-test-hygiene`.
+
+**Refs:** ARCH14, Story 15.2, Stories 13.5 / 13.6 / 16.1 / 16.4 / 16.8 / 16.9, HF-2. **Refonte absorption:** re-appliquer Flutter.
+
+**Items (routed 2026-10-11 from deferred-work):**
+- [ ] [Deferred-from: CR v1s-16-9, 2026-07-27] No guard against duplicate GoRoute paths [app_router.dart] — only one instance fixed; add a test walking appRouter routes asserting unique full paths
+- [ ] [Deferred-from: CR v1s-16-4, 2026-07-25] Hand-rolled _NoOpSyncService in tests [local_product_datasource_test.dart, product_provider_test.dart] — replace with mocktail MockSyncService
+- [ ] [Deferred-from: CR v1s-16-1, 2026-07-25] No OWNER logout widget test [settings_page_test.dart] — add OWNER variant of FCM-cleanup logout test
+- [ ] [Deferred-from: CR v1s-13-6, 2026-07-22] Missing test: mixed DRAFT+ACTIVE cart label [checkout_page_test.dart] — assert 'Vente brouillon' label
+- [ ] [Deferred-from: CR v1s-13-6, 2026-07-22] Missing failure-path tests for draft flow [record_sale_notifier_test.dart] — applyInitialStockEntries/promoteToActive throw -> rollback/consistency
+- [ ] [Deferred-from: CR v1s-13-6, 2026-07-22] addTearDown(container.dispose) missing [record_sale_notifier_test.dart:182,235] — dispose containers
+- [ ] [Deferred-from: CR v1s-13-6, 2026-07-22] Missing test: empty cart on CheckoutPage [checkout_page_test.dart] — label + disabled button
+- [ ] [Deferred-from: dev-story v1s-13-5, 2026-07-22] 12 unmasked pre-existing Flutter test failures [test/core/sync/offline_gate_banner_test.dart:56; test/features/catalog/provider/category_provider_test.dart] — backend_first contact/product/transfer files were deleted (612539b, 1041827); remaining: banner test still expects #FFF3BF after rebrand, category_provider_test
+- [ ] [Deferred-from: legacy bugfix HF-2 ghost-badge, 2026-04-28] No test for EMPLOYEE-scoped todaySummaryProvider [day_summary_bottom_sheet_test.dart] — only employeeId:null covered (day_close_button_test removed in v1s-16-10)
+- [ ] [Deferred-from: CR v1s-16-8, 2026-07-27] ResetPassword build() type fix bundled without test [auth_provider.dart:443] — add regression test
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
+## Story 15.9: Hygiène de refactor backend (helpers dupliqués, constantes, casts) — **[C]**
+
+As a Toor, I want duplicated auth helpers, magic strings and unsafe casts factored out, so that the RBAC and delta code has a single source of truth.
+
+**Scope:** Factor extractAssignedStoreId/isOwnerRole/actor extraction, QuickAdd storeName, SUPER_ADMIN constant + requireSuperAdmin decision, delta provider casts, paginated() validation, WhatsAppPort.isConfigured abstract, minor order/regex tidy. Tracker key: `v1s-15-9-backend-refactor-hygiene`.
+
+**Refs:** Stories 12.3 / 12.5 / 12.6 / 12.9 / 14.8 / 14.10 / 14.13, legacy 7-5. **Refonte absorption:** native — helpers `identity.api`.
+
+**Items (routed 2026-10-11 from deferred-work):**
+- [ ] [Deferred-from: CR v1s-14-13, 2026-07-24] Validation order CreateProduct vs CreateDraftProduct [CreateProductUseCase.java] — align plan check position across both use cases
+- [ ] [Deferred-from: CR v1s-12-9, 2026-07-24] extractAssignedStoreId() duplicated in controllers [StockController.java, PendingSaleController, StockTransferController, DayClosureController, InventorySessionController] — extract into a shared helper (AuthDetails/SecurityHelper)
+- [ ] [Deferred-from: CR v1s-14-10, 2026-07-22] Actor extraction logic duplicated [ProductController.java, StockOperationService.java, QuickAddProductService.java] — centralise in AuthDetails
+- [ ] [Deferred-from: CR v1s-14-10, 2026-07-22] Raw UUID shown when firstName claim absent [ProductController.java, StockOperationService.java] — fallback label + test, together with actor refactor
+- [ ] [Deferred-from: CR v1s-14-10, 2026-07-22] QuickAddProductService publishes ProductCreatedEvent with storeName=null [QuickAddProductService.java:132] — session.getStoreId() is known; resolve storeName like ProductController
+- [ ] [Deferred-from: CR v1s-14-8, 2026-07-22] ApiResponseWrapper.paginated() no input validation [ApiResponseWrapper.java:48] — validate page/size/totals when first real caller appears
+- [ ] [Deferred-from: CR v1s-14-8, 2026-07-22] ReportsDeltaProvider.bool() ClassCastException risk [ReportsDeltaProvider.java:55-57] — cast Number without type check; defensive handling (also DayClosureDeltaProvider)
+- [ ] [Deferred-from: CR v1s-14-8, 2026-07-22] ReportsDeltaProvider.num() truncates via intValue [ReportsDeltaProvider.java:61] — INTEGER columns today so no impact; use longValue/BigDecimal
+- [ ] [Deferred-from: CR v1s-12-5, 2026-07-21] D11 String.matches instead of compiled Pattern [TenantSchemaSyncService.java:116] — negligible perf; tidy
+- [ ] [Deferred-from: CR v1s-12-3, 2026-07-21] requireSuperAdmin() now dead for rejection [AdminTenantController / SecurityConfig.java] — decide: keep as second barrier (with test) or remove
+- [ ] [Deferred-from: CR v1s-12-3, 2026-07-21] Magic string SUPER_ADMIN duplicated [SecurityConfig.java:96, JwtAuthFilter.java:181, AdminAccountInitializer] — reference Role enum
+- [ ] [Deferred-from: CR v1s-12-6, 2026-07-21] isOwnerRole()/requireOwner() duplicated in 4 controllers [PendingSaleController, DayClosureController, StoreController, StockTransferController] — factorise with extractAssignedStoreId helper
+- [ ] [Deferred-from: legacy CR 7-5, 2026-04-02] WhatsAppPort.isConfigured() default true [WhatsAppPort.java] — make abstract so new adapters can't silently send
+- [ ] [Deferred-from: CR v1s-14-5, 2026-07-23] AdminFeedbackController bypasses application layer [AdminFeedbackController.java] — inject a use case instead of FeedbackRepository
+- [ ] [Deferred-from: CR v1s-14-5, 2026-07-23] AccountDeletionScheduler.findAll() loads every tenant [AccountDeletionScheduler.java] — findByStatusAndDeletionScheduledAtBefore
+- [ ] [Deferred-from: CR v1s-14-5, 2026-07-23] Feedback domain model has no null-safety [Feedback.java] — requireNonNull like Tenant/User
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
+## Story 15.10: Hygiène de code Flutter & docs obsolètes — **[C]**
+
+As a Toor, I want the Flutter code smells (magic strings, duplicated routing/HTTP helpers, stale Ref capture) and the stale DayCloseButton docs cleaned up.
+
+**Scope:** Status enums, routeForRole, debug HttpClient helper, session cache for router, registration role from server, SyncService contract doc, Ref capture, DayCloseButtonState rename + stale DayCloseButton docs. Tracker key: `v1s-15-10-flutter-code-hygiene-docs`.
+
+**Refs:** Stories 12.7 / 13.4 / 13.6 / 16.10, HF-1, HF-2, legacy 5-6. **Refonte absorption:** re-appliquer Flutter (keevo_core).
+
+**Items (routed 2026-10-11 from deferred-work):**
+- [ ] [Deferred-from: CR v1s-13-6, 2026-07-22] Magic strings 'ACTIVE'/'DRAFT'/'COMPLETED' [cart_item.dart:14,25,32; record_sale_notifier.dart:108] — introduce ProductStatus/SaleStatus enums
+- [ ] [Deferred-from: CR v1s-12-7, 2026-07-21] Secure storage read on every navigation [app_router.dart:216-224] — cache session state in a provider synced on login/logout/refresh
+- [ ] [Deferred-from: CR v1s-12-7, 2026-07-21] badCertificateCallback block duplicated [auth_provider.dart:68,105] — extract _createDebugHttpClient()
+- [ ] [Deferred-from: CR v1s-13-4, 2026-07-22] SyncService strategy swap not guaranteed to share Drift connection [sync_service.dart] — document contract on interface; integration test if a 2nd impl appears
+- [ ] [Deferred-from: legacy bugfix HF-2 ghost-badge, 2026-04-28] computeTodaySummary null employeeId semantics undocumented [day closure repository] — document null = all sales at repository/domain level
+- [ ] [Deferred-from: legacy CR HF-1, 2026-04-19] kUserRoleKey hardcoded 'OWNER' at registration [auth_provider.dart:258] — read role from RegistrationResult
+- [ ] [Deferred-from: legacy CR HF-1, 2026-04-19] role ternary '/dashboard' : '/pos' duplicated [app_router.dart:245, startup_route.dart:76, shop_name_page.dart:80] — extract routeForRole()
+- [ ] [Deferred-from: legacy CR 5-6, 2026-04-23] RiverpodSyncTriggerDispatcher captures Ref [RiverpodSyncTriggerDispatcher] — stale Ref on scope recreation
+- [ ] [Deferred-from: CR v1s-16-10, 2026-07-27] ~11 docs still reference DayCloseButton [ux-design-specification.md, epic-4, 4-4 story, requirements-inventory, etc.] — doc cleanup chore
+- [ ] [Deferred-from: CR v1s-16-10, 2026-07-27] Rename DayCloseButtonState -> DayClosureState [day_closure_providers.dart:17-27, reports_page.dart, pos_speed_dial.dart] — name refers to deleted widget
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
 ---
 
 # Epic 16: Mobile Frontend Hardening & Parity (Piste A/C)
@@ -625,6 +951,11 @@ As a Toor, I want foreground FCM notifications displayed on iOS, so that stock/t
 **And** foreground FCM (stock alerts, trends, EOD, employee-action, global push) display on iOS
 
 **Doc:** Story 8-0 AC4. **TDD:** `shouldInitializeDarwinSettingsOnIos()`, `shouldRequestAlertBadgeSoundPermissions()`.
+
+**Items (routed 2026-10-11 from deferred-work):**
+- [ ] [Deferred-from: CR v1s-16-1, 2026-07-25] FCM token freshness not verified at deleteToken [fcm_service.dart:102-110] — getToken() may differ from backend-registered token; settle when FcmService registration is reworked
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
 
 ## Story 16.3: Dark mode — remplacer les `Colors.white` hardcodés + contraste bannière offline — **[A]**
 
@@ -677,6 +1008,163 @@ As a Toor, I want local stock movements typed correctly and offline store writes
 **Then** local movement type → `ADJUSTMENT` (model field + sync operation label); the filter "Ajustements" matches; `StoreRepositoryImpl` injects `SyncService` + `SyncTriggerDispatcher` and queues `CREATE_STORE`/`UPDATE_STORE`/`DEACTIVATE_STORE` (mirrors clients/suppliers)
 
 **Doc:** Story 2.3 AC5/AC6 + Story 3.1 AC1/AC5 (ties 13.4). **TDD:** `shouldWriteAdjustmentMovementType()`, `shouldQueueStoreCreateOffline()`.
+
+## Story 16.12: Retour utilisateur sur les rejets de sync — **[A]**
+
+As a Toor, I want REJECTED push operations surfaced to the user (and their ghost local rows rolled back), so that an offline create that the server refused does not silently survive on the device.
+
+**Scope:** Surface REJECTED push ops to the user (rollback ghost rows), define PLAN_LIMIT_EXCEEDED on sync, don't drop startup pull when a sync runs. Tracker key: `v1s-16-12-sync-rejection-feedback`.
+
+**Refs:** FR27/FR30, UX15, Stories 14.13 / 16.6 / 16.8. **Refonte absorption:** re-appliquer Flutter + protocole `sync`.
+
+**Items (routed 2026-10-11 from deferred-work):**
+- [ ] [Deferred-from: CR v1s-14-13, 2026-07-24] ProductSyncHandler now rejects with PLAN_LIMIT_EXCEEDED, undocumented [ProductSyncHandler.java] — sync protocol has no handling for plan-limit rejection; define + test expected client behaviour
+- [ ] [Deferred-from: CR v1s-16-6, 2026-07-27] No rollback/notice for REJECTED offline CREATE_STORE (all entity types) [rest_sync_service.dart:106-113] — push->UI rejection channel; ghost local rows
+- [ ] [Deferred-from: CR v1s-16-8, 2026-07-27] onAppStartup() silently no-op if a sync is running [sync_trigger_notifier.dart:205] — queue a follow-up pull instead of dropping
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
+## Story 16.13: Bugs UX résiduels de l'app (auth/router, bannières, listes, pickers) — **[C]**
+
+As a Toor, I want the pre-existing app UX defects (auth/router exits and redirects, banner stacking, SnackBar flood, list/picker glitches) fixed in one sweep.
+
+**Scope:** Pre-existing app UX bugs: auth/router exits and redirects (role null, /auth/login bypass, tenant picker/password change exits, CGU links, back nav, country code, French-only), banners (stacking, stale subscription, SnackBar flood), SyncIndicator details, logout re-entrancy, employee limit label, csv import, product card, contacts header/search, date picker, legacy pending-sale flow. Also receives the two v1s-14-12 items (OTP single field — AC7 amended 2026-10-11 — and reset-page deep link without phone). Tracker key: `v1s-16-13-app-ux-residual`.
+
+**Refs:** UX9/15/20, FR20, Stories 12.7 / 14.9 / 14.12 / 14.13 / 16.1 / 16.5, HF-1, HF-2, UI-3 lots 2-5 review. **Refonte absorption:** re-appliquer Flutter.
+
+**Items (routed 2026-10-11 from deferred-work):**
+- [ ] [Deferred-from: CR v1s-16-1, 2026-07-25] Logout double-tap re-entrancy [settings_page.dart:377-425] — disable tile / show loading while logout runs
+- [ ] [Deferred-from: CR v1s-14-13, 2026-07-24] create_employee_page shows 'Limite : 5' instead of 3 [create_employee_page.dart:113] — FREE plan is 3 employees (PlanType.FREE); read the value from the enum/API
+- [ ] [Deferred-from: CR v1s-14-12, 2026-07-23] ResetPasswordPage without phone extra (deep link) broken [reset_password_page.dart:37 / app_router.dart:271] — phone falls back to '' ("au ."); redirect to /auth/forgot-password when extra missing (also UI-3 L2-15) (AC7 amended 2026-10-11: a single 6-digit OTP field suffices; owner decision, v1s-14-12 stays done)
+- [ ] [Deferred-from: CR v1s-14-12, 2026-07-23] OTP entry is one field, AC7 asks 6 separate auto-focus inputs [reset_password_page.dart:141-145] — AC7 marked 'PASS avec écarts'; implement separate inputs or amend AC7 with PO (AC7 amended 2026-10-11: a single 6-digit OTP field suffices; owner decision, v1s-14-12 stays done)
+- [ ] [Deferred-from: CR v1s-14-9, 2026-07-22] subscriptionInfoProvider not invalidated on auth/tenant change [subscription_info_provider.dart:31] — shared POS device may show previous tenant's trial banner; autoDispose or deferred invalidation
+- [ ] [Deferred-from: CR v1s-14-9, 2026-07-22] No priority between stacked banners [main_shell.dart:356-358] — up to 3 full-width banners; define precedence
+- [ ] [Deferred-from: CR v1s-12-7, 2026-07-21] SnackBar flood on concurrent SESSION_REVOKED [auth_provider.dart:124-131] — debounce / shown-once flag
+- [ ] [Deferred-from: legacy bugfix HF-2 ghost-badge, 2026-04-28] currentUserIdProvider error -> silent store-wide view for EMPLOYEE [todaySummaryProvider callers] — AsyncError -> null -> all sales; show error instead
+- [ ] [Deferred-from: legacy CR HF-1, 2026-04-19] CGU links not tappable [auth_page.dart:445-455] — add TapGestureRecognizer to /docs/politique
+- [ ] [Deferred-from: legacy CR HF-1, 2026-04-19] Router lets role==null through OWNER-only routes [app_router.dart:186] — only 'EMPLOYEE' is redirected; null should go to login
+- [ ] [Deferred-from: legacy CR HF-1, 2026-04-19] Back in login mode without history -> /auth/register [auth_page.dart] — navigation review
+- [ ] [Deferred-from: legacy CR HF-1, 2026-04-19] initialCountryCode 'CM' hardcoded [auth_page.dart:334, forgot_password_page.dart:157, create_employee_page.dart:167] — locale/SIM detection (i18n pass)
+- [ ] [Deferred-from: CR v1s-16-5, 2026-07-26] SyncIndicator loading branch flashes online-stale label [sync_indicator.dart:100] — neutral loading state
+- [ ] [Deferred-from: CR v1s-16-5, 2026-07-26] daysSinceLastSyncProvider no low clamp [sync_gate_provider.dart:16] — clamp negative days from clock skew
+- [ ] [Deferred-from: CR v1s-16-5, 2026-07-26] daysSinceLastSyncProvider not time-reactive [sync_gate_provider.dart:11-17] — periodic re-evaluation
+- [ ] [Deferred-from: CR v1s-16-5, 2026-07-26] No Semantics on '⚠ Sync urgente' [sync_indicator.dart:123] — add label (also blocked branch)
+- [ ] [Deferred-from: CR UI-3 lots 2-5 app, 2026-10-11] Legacy pending-sale validation flow defects [pending_sales_page.dart, validate flow] — 5xx not network, timeout re-queues VALIDATE_SALE, non-atomic promotions; only matters if PENDING_VALIDATION is reactivated
+- [ ] [Deferred-from: CR UI-3 lots 2-5 app, 2026-10-11] csv_import_page _mapping not cleared on cancel/new file [csv_import_page.dart] — stale dropdown value
+- [ ] [Deferred-from: CR UI-3 lots 2-5 app, 2026-10-11] ProductCard draft promotion: invalid stock input becomes 0 [product_card.dart] — validate input
+- [ ] [Deferred-from: CR UI-3 lots 2-5 app, 2026-10-11] Contact list header buttons scroll away; search ignores archived [client/supplier list pages] — pin actions; search respects 'Voir les archivés', sync refresh keeps results
+- [ ] [Deferred-from: CR UI-3 lots 2-5 app, 2026-10-11] Custom period picker asserts after New Year [period_filter_chips.dart] — clamp initial range to firstDate
+- [ ] [Deferred-from: CR UI-3 lots 2-5 app, 2026-10-11] /auth/login with session bypasses wizard / forced pw change [app_router.dart:236-247] — route through splash/startup_route logic
+- [ ] [Deferred-from: CR UI-3 lots 2-5 app, 2026-10-11] TenantPicker/forced PasswordChange no exit; auth pages French-only [tenant_picker_page.dart:88, password change page, auth pages] — add back/sign-out; i18n (reset-without-phone part goes to v1s-14-12)
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
+## Story 16.14: Qualité de la liste catalogue (échappement recherche, dédup, pagination) — **[C]**
+
+As a Toor, I want the catalog list to search safely, deduplicate by id/SKU and scale, so that distinct products are never hidden and the list stays fast.
+
+**Scope:** Catalog search escaping, dedup by id/SKU not name, never-stocked vs out-of-stock, client-side full-catalog load. Tracker key: `v1s-16-14-catalog-list-quality`.
+
+**Refs:** UX9, Story 16.4, spec-catalog-product-visibility-other-stores. **Refonte absorption:** re-appliquer Flutter (`catalog`).
+
+**Items (routed 2026-10-11 from deferred-work):**
+- [ ] [Deferred-from: CR v1s-16-4, 2026-07-25] LIKE %/_ not escaped in catalog search [local_product_datasource.dart:51-60] — user typing % or _ gets over-broad matches; escape + ESCAPE clause
+- [ ] [Deferred-from: CR spec-catalog-product-visibility-other-stores, 2026-09-08] Product dedup by name can hide distinct products [product_provider.dart (seenNames)] — dedup by sync id/SKU instead of name
+- [ ] [Deferred-from: CR spec-catalog-product-visibility-other-stores, 2026-09-08] No UI difference 'never stocked' vs 'out of stock' [catalog / out-of-stock tabs] — PO/UX decision
+- [ ] [Deferred-from: CR spec-catalog-product-visibility-other-stores, 2026-09-08] Whole tenant catalog loaded client-side, no pagination [product list use case] — perf at scale
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
+---
+
+# Epic 18: Export de données & Audit détaillé (Piste V1, tag C)
+
+Le propriétaire peut récupérer toutes ses données dans le format de son choix et comprendre chaque action tracée.
+
+**Refs:** FR55, FR84, FR94–FR98 ; sprint-change-proposal-2026-10-11. **Refonte absorption:** native — `reporting/export` et les `ExportDatasetProvider` sont repris tels quels. Remplace 17-6 et v1s-14-7.
+**Ordre:** 18.6 → 18.7 (valeur immédiate, sans dépendance) ; puis 18.1 → 18.2 → 18.4 → 18.3 → 18.5.
+
+## Story 18.1: Socle du module export (backend) — **[C]**
+
+As an owner, I want to export my data as CSV or Excel, so that I can use it outside Keevo.
+
+**Scope:** ports `ExportDatasetProvider` (clé, libellé, colonnes typées, lecture paginée filtrée tenant/boutique/période) et `ExportRenderer` + registre ; `CsvRenderer` (UTF-8 BOM, `;`), `XlsxRenderer` (POI SXSSF, une feuille par jeu, en-têtes figés, formats XAF/date) ; `POST /api/v1/exports` OWNER-only (synchrone sous le seuil, sinon `ExportJob` en tâche de fond + lien signé 24 h + notification FCM), `GET /api/v1/exports` (Mes exports), `GET /api/v1/exports/{id}/file` ; gating CSV tous plans / reste Premium (`PLAN_FEATURE_REQUIRED`) ; audit `DATA_EXPORTED` ; limite de débit ; purge des fichiers expirés. Confirmer les librairies Excel/PDF et le stockage temporaire en début de story.
+
+**AC:**
+**Given** an EMPLOYEE token **When** calling `POST /api/v1/exports` **Then** 403
+**And** no export ever contains another tenant's rows
+**And** a 50,000-row export completes without exhausting memory (streaming)
+**And** downloading an expired export returns 410
+
+## Story 18.2: Jeux de données exportables — **[C]**
+
+As an owner, I want every business dataset exportable, so that nothing stays locked in the app.
+
+**Scope:** un `ExportDatasetProvider` par domaine : produits (variantes, prix), niveaux de stock, mouvements, ventes + lignes, clôtures, sessions et comptages d'inventaire, clients, fournisseurs, équipe (sans données sensibles), journal d'audit.
+
+**AC:**
+**Given** a store and period filter **When** exporting any dataset **Then** only matching rows are included
+**And** columns are stable and documented (same schema as the local export, story 18.5)
+**And** amounts are integer XAF and dates are WAT
+
+## Story 18.3: Modèles PDF — **[C]**
+
+As an owner, I want branded PDF documents, so that I can share or print clean reports.
+
+**Scope:** `PdfRenderer` (Thymeleaf → OpenHTMLtoPDF), en-tête de marque commun (boutique, logo si présent, période, date de génération) ; modèles Fin de journée, Rapport d'inventaire (écarts), État de stock, Liste des ventes.
+
+**AC:**
+**Given** a closure **When** generating its end-of-day PDF **Then** its figures equal the EOD report of the same closure (same `ClosureWindow`)
+**And** accents render correctly, multi-page documents repeat headers and number pages, format A4
+
+## Story 18.4: Écran « Exporter » (app) — **[C]**
+
+As an owner, I want to pick what, which period and which format to export, then share the file.
+
+**Scope:** parcours UX « Exporter mes données » (ux-design-specification.md) : quoi / filtres / format (badge Premium + feuille d'offre), téléchargement puis feuille de partage (`share_plus`), écran **Mes exports**, notification « export prêt » qui ouvre le fichier, boutons Exporter pré-remplis depuis Rapports, Stock, Ventes, Historique des actions.
+
+**AC:**
+**Given** a Free plan **When** choosing Excel or PDF **Then** the offer sheet opens
+**And** a background export survives closing the app and is listed in Mes exports
+**And** an export error shows a clear message with a retry
+
+## Story 18.5: Export local hors ligne (CSV) — **[C]**
+
+As a user without network, I want to export what is on my device as CSV.
+
+**Scope:** génération CSV depuis Drift avec le schéma de colonnes de 18.2, pour les jeux disponibles localement ; partage.
+
+**AC:**
+**Given** airplane mode **When** exporting **Then** a CSV is produced and shared
+**And** the file is marked « données de cet appareil » and opens directly in French-locale Excel
+**And** 10,000 rows are generated without UI jank (isolate)
+
+## Story 18.6: Audit enrichi (backend) — **[C]**
+
+As an owner, I want each audit entry to say who, what, on what, where and how, so that the history is self-explanatory.
+
+**Scope:** migration (DDL tenant + Flyway) : `store_id`, `entity_label`, `device_id`, `source` (`ONLINE`|`SYNC`|`SYSTEM`), `metadata` jsonb + index (`occurred_at`, `store_id`, `user_id`, `action`) ; tous les producteurs d'audit remplissent ces champs ; `value_before`/`value_after` en JSON champ par champ ; entrées de sync avec `source=SYNC` et l'appareil ; `GET /api/v1/audit` filtré (période, boutique, employé, action, objet), pagination par curseur, nom de l'acteur résolu ; `GET /api/v1/audit/{id}`.
+
+**AC:**
+**Given** entries written before the migration **When** listing or opening them **Then** they stay readable
+**And** immutability is unchanged (NFR13) and an EMPLOYEE gets 403
+
+**Items (routed 2026-10-11 from deferred-work):**
+- [ ] [Deferred-from: CR v1s-13-5, 2026-07-22] Audit snapshot silently '[]' on JSON serialization failure [ValidateSaleService.java:212-217, CorrectSaleService.java:127, RecordSaleService.java] — log/alert on failure across commerce/sale serializers
+- [ ] [Deferred-from: v1s-15-5 new defers, 2026-07-23] D3 audit_log has no DB-level immutability [V1__baseline_public.sql:22-30] — story title promises append-only DB; add trigger BEFORE UPDATE/DELETE + REVOKE (Flyway V10) (owner decision 2026-10-11: 11-3 stays done, DB-level protection delivered here)
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
+## Story 18.7: Journal d'audit consultable (app) — **[C]**
+
+As an owner, I want to tap an audit line and see its full detail.
+
+**Scope:** écran « Historique des actions » (ux-design-specification.md) : liste aux phrases lisibles, filtres, défilement infini ; détail qui / quoi / sur quoi (lien) / quand et où / source / tableau avant-après / contexte ; bouton Exporter. L'écran « Audit » actuel est renommé « Mouvements de stock ».
+
+**AC:**
+**Given** an owner **When** tapping an audit line **Then** the detail shows actor, action, object, time, store, source and the field-by-field changes
+**And** offline the list shows the last known state, and unknown action types use a generic rendering
+**And** the screen is hidden from employees
 
 ---
 

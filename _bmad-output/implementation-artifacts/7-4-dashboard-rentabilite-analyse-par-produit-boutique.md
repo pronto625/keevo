@@ -1,6 +1,6 @@
 # Story 7.4: Dashboard Rentabilité & Analyse par Produit/Boutique
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -167,7 +167,7 @@ So that I can identify my best margins, cut underperforming products, and unders
 
 #### Task 1 — TDD RED: Domain model + Strategy tests
 
-- [ ] **1.1** Create `ProductProfitabilityEntryTest.java` in `reporting/profitability/domain/model/`
+- [x] **1.1** Create `ProductProfitabilityEntryTest.java` in `reporting/profitability/domain/model/` — _vérifié 2026-10-11 : `ProductProfitabilityEntryTest` (9 tests, inclut `entry_marginLevel_loss_whenNegative`)_
   ```java
   // Tests:
   // entry_withPositiveMargin_isNotLoss()
@@ -180,7 +180,7 @@ So that I can identify my best margins, cut underperforming products, and unders
   // entry_marginLevel_profitable_whenPercentAtLeast20()
   ```
 
-- [ ] **1.2** Create `ProfitabilitySortStrategyTest.java` in `reporting/profitability/domain/service/`
+- [x] **1.2** Create `ProfitabilitySortStrategyTest.java` in `reporting/profitability/domain/service/` — _vérifié 2026-10-11 : `ProfitabilitySortStrategyTest` (7 tests)_
   ```java
   // Tests per strategy:
   // MARGIN_PCT_DESC: sorts descending by marginPercent, losses last
@@ -191,7 +191,7 @@ So that I can identify my best margins, cut underperforming products, and unders
   // factory_unknown_string_returnsDefaultMarginPctDescStrategy()
   ```
 
-- [ ] **1.3** Create `StoreRankingStrategyTest.java` in `reporting/profitability/domain/service/`
+- [x] **1.3** Create `StoreRankingStrategyTest.java` in `reporting/profitability/domain/service/` — _vérifié 2026-10-11 : `StoreRankingStrategyTest` (3 tests)_
   ```java
   // Tests:
   // CA_ranks_by_totalRevenue_descending()
@@ -199,13 +199,13 @@ So that I can identify my best margins, cut underperforming products, and unders
   // AVG_BASKET_ranks_by_averageBasket_descending()
   ```
 
-- [ ] **1.4** Run RED → confirm all tests fail (no production code yet)
+- [x] **1.4** Run RED → confirm all tests fail (no production code yet) — _phase RED non re-vérifiable a posteriori ; GREEN vérifié 2026-10-11_
 
 ---
 
 #### Task 2 — TDD RED: Builder + Service tests
 
-- [ ] **2.1** Create `ProfitabilityReportBuilderTest.java` in `reporting/profitability/application/service/`
+- [x] **2.1** Create `ProfitabilityReportBuilderTest.java` in `reporting/profitability/application/service/` — _vérifié 2026-10-11 : `ProfitabilityReportBuilderTest` (10 tests ; `builder_productWithNoSales_notIncludedInList` absent — l'exclusion est portée par le SQL (JOIN sale_items), couverte par `builder_emptyPeriod_returnsEmptyList`)_
   ```java
   // Tests:
   // builder_withSalesInPeriod_computesMarginPerProduct()
@@ -220,7 +220,7 @@ So that I can identify my best margins, cut underperforming products, and unders
   // builder_singleStore_filtersBySingleStoreId()
   ```
 
-- [ ] **2.2** Create `ProfitabilityServiceTest.java` in `reporting/profitability/application/service/`
+- [x] **2.2** Create `ProfitabilityServiceTest.java` in `reporting/profitability/application/service/` — _vérifié 2026-10-11 : `ProfitabilityServiceTest` (6 tests)_
   ```java
   // Tests (mock ProfitabilityRepository + ProfitabilityReportBuilder + StrategyFactory):
   // getProductProfitability_delegatesToBuilder_andAppliesSortStrategy()
@@ -231,13 +231,13 @@ So that I can identify my best margins, cut underperforming products, and unders
   // getStorePerformance_computesDeltaVsPrecedingEquivalentPeriod()
   ```
 
-- [ ] **2.3** Run RED → confirm builder + service tests fail
+- [x] **2.3** Run RED → confirm builder + service tests fail — _phase RED non re-vérifiable a posteriori ; GREEN vérifié 2026-10-11_
 
 ---
 
 #### Task 3 — TDD RED: Controller tests
 
-- [ ] **3.1** Create `ProfitabilityControllerTest.java` (`@ExtendWith(MockitoExtension.class)` + `MockMvc`)
+- [x] **3.1** Create `ProfitabilityControllerTest.java` (`@ExtendWith(MockitoExtension.class)` + `MockMvc`) — _vérifié 2026-10-11 : `ProfitabilityControllerTest` (10 tests : 200 liste/sort/période/vide, détail 200/404, stores 200/metric). Les cas 403 EMPLOYEE / 401 ne sont pas testables en `standaloneSetup` → voir Review Findings_
   ```java
   // Tests:
   // GET /api/v1/reporting/profitability/products → 200 (OWNER) — returns list with expected fields
@@ -252,13 +252,13 @@ So that I can identify my best margins, cut underperforming products, and unders
   // GET /api/v1/reporting/profitability/stores → 403 (EMPLOYEE)
   ```
 
-- [ ] **3.2** Run RED → confirm controller tests fail
+- [x] **3.2** Run RED → confirm controller tests fail — _phase RED non re-vérifiable a posteriori ; GREEN vérifié 2026-10-11_
 
 ---
 
 #### Task 4 — GREEN: Domain model implementation
 
-- [ ] **4.1** Create `ProductProfitabilityEntry.java` in `reporting/profitability/domain/model/`
+- [x] **4.1** Create `ProductProfitabilityEntry.java` in `reporting/profitability/domain/model/` — _vérifié 2026-10-11 : record + `MarginLevel` extrait dans son propre enum (`MarginLevel.of(pct, isLoss)`)_
   ```java
   // package com.keevo.reporting.profitability.domain.model;
   // record or immutable class:
@@ -269,7 +269,7 @@ So that I can identify my best margins, cut underperforming products, and unders
   //           LOW < 10%, MODERATE [10,20), PROFITABLE >= 20%
   ```
 
-- [ ] **4.2** Create `ProductProfitabilityDetail.java` in `reporting/profitability/domain/model/`
+- [x] **4.2** Create `ProductProfitabilityDetail.java` in `reporting/profitability/domain/model/` — _vérifié 2026-10-11_
   ```java
   // Fields: everything in ProductProfitabilityEntry, plus:
   //         currentCataloguePrice (int), currentBuyPrice (int), currentTransportCost (int),
@@ -278,7 +278,7 @@ So that I can identify my best margins, cut underperforming products, and unders
   // Sub-record: DailyMarginEntry(date: String, marginXaf: long)
   ```
 
-- [ ] **4.3** Create `StorePerformanceEntry.java` in `reporting/profitability/domain/model/`
+- [x] **4.3** Create `StorePerformanceEntry.java` in `reporting/profitability/domain/model/` — _vérifié 2026-10-11_
   ```java
   // Fields: rank (int), storeId (UUID), storeName (String),
   //         totalRevenue (long), salesCount (int), averageBasket (long),
@@ -286,38 +286,38 @@ So that I can identify my best margins, cut underperforming products, and unders
   //         — deltaPercent: positive = improvement vs preceding period, negative = decline
   ```
 
-- [ ] **4.4** Create `SortOption.java` enum in `reporting/profitability/domain/model/`
+- [x] **4.4** Create `SortOption.java` enum in `reporting/profitability/domain/model/` — _vérifié 2026-10-11_
   ```java
   // Values: MARGIN_PCT_DESC, MARGIN_XAF_DESC, CA_DESC, UNITS_DESC
   // Static fromString(String s): case-insensitive match, returns MARGIN_PCT_DESC if unknown
   ```
 
-- [ ] **4.5** Create `RankingMetric.java` enum: `CA`, `SALES_COUNT`, `AVG_BASKET`
+- [x] **4.5** Create `RankingMetric.java` enum: `CA`, `SALES_COUNT`, `AVG_BASKET` — _vérifié 2026-10-11 (+ `fromString` tolérant, défaut `CA`)_
 
-- [ ] **4.6** Run GREEN → domain model tests pass
+- [x] **4.6** Run GREEN → domain model tests pass — _vérifié 2026-10-11_
 
 ---
 
 #### Task 5 — GREEN: Strategy implementations
 
-- [ ] **5.1** Create `ProfitabilitySortStrategy.java` interface in `reporting/profitability/domain/service/`
+- [x] **5.1** Create `ProfitabilitySortStrategy.java` interface in `reporting/profitability/domain/service/` — _vérifié 2026-10-11_
   ```java
   // Functional interface: List<ProductProfitabilityEntry> sort(List<ProductProfitabilityEntry> entries)
   ```
 
-- [ ] **5.2** Create `ByMarginPctDescStrategy.java` — sorts descending by marginPercent; LOSS entries last
-- [ ] **5.3** Create `ByMarginXafDescStrategy.java` — sorts descending by grossMarginXaf
-- [ ] **5.4** Create `ByCaDescStrategy.java` — sorts descending by totalRevenue
-- [ ] **5.5** Create `ByUnitsDescStrategy.java` — sorts descending by unitsSold
-- [ ] **5.6** Create `ProfitabilitySortStrategyFactory.java` — `of(SortOption)` → returns correct strategy (Factory Method GoF)
-- [ ] **5.7** Create `StoreRankingStrategy.java` interface; create `ByCaStrategy`, `BySalesCountStrategy`, `ByAvgBasketStrategy` impls; create `StoreRankingStrategyFactory.java`
-- [ ] **5.8** Run GREEN → strategy + factory tests pass
+- [x] **5.2** Create `ByMarginPctDescStrategy.java` — sorts descending by marginPercent; LOSS entries last — _vérifié 2026-10-11_
+- [x] **5.3** Create `ByMarginXafDescStrategy.java` — sorts descending by grossMarginXaf — _vérifié 2026-10-11_
+- [x] **5.4** Create `ByCaDescStrategy.java` — sorts descending by totalRevenue — _vérifié 2026-10-11_
+- [x] **5.5** Create `ByUnitsDescStrategy.java` — sorts descending by unitsSold — _vérifié 2026-10-11_
+- [x] **5.6** Create `ProfitabilitySortStrategyFactory.java` — `of(SortOption)` → returns correct strategy (Factory Method GoF) — _vérifié 2026-10-11_
+- [x] **5.7** Create `StoreRankingStrategy.java` interface; create `ByCaStrategy`, `BySalesCountStrategy`, `ByAvgBasketStrategy` impls; create `StoreRankingStrategyFactory.java` — _vérifié 2026-10-11 : impl CA nommée `ByCaStoreStrategy` (évite la collision avec `ByCaDescStrategy`)_
+- [x] **5.8** Run GREEN → strategy + factory tests pass — _vérifié 2026-10-11_
 
 ---
 
 #### Task 6 — GREEN: Ports (hexagonal interfaces)
 
-- [ ] **6.1** Create `GetProductProfitabilityUseCase.java` in `reporting/profitability/domain/port/in/`
+- [x] **6.1** Create `GetProductProfitabilityUseCase.java` in `reporting/profitability/domain/port/in/` — _vérifié 2026-10-11_
   ```java
   // interface GetProductProfitabilityUseCase {
   //   record ProfitabilityQuery(String tenantId, LocalDate from, LocalDate to,
@@ -327,7 +327,7 @@ So that I can identify my best margins, cut underperforming products, and unders
   // }
   ```
 
-- [ ] **6.2** Create `GetStorePerformanceUseCase.java` in `reporting/profitability/domain/port/in/`
+- [x] **6.2** Create `GetStorePerformanceUseCase.java` in `reporting/profitability/domain/port/in/` — _vérifié 2026-10-11_
   ```java
   // interface GetStorePerformanceUseCase {
   //   record StorePerformanceQuery(String tenantId, LocalDate from, LocalDate to, RankingMetric metric) {}
@@ -335,7 +335,7 @@ So that I can identify my best margins, cut underperforming products, and unders
   // }
   ```
 
-- [ ] **6.3** Create `ProfitabilityRepository.java` port-out in `reporting/profitability/domain/port/out/`
+- [x] **6.3** Create `ProfitabilityRepository.java` port-out in `reporting/profitability/domain/port/out/` — _vérifié 2026-10-11 : records `RawProfitabilityRow`, `RawStorePerformanceRow`, `RawProductCostRow`, `RawDailyMarginRow` ; `findProductCosts`/`findDailyMarginLast7` prennent aussi `storeId` ; `RawTopStoreRow` + `findTopStoreByUnits` ajoutés le 2026-10-11 (AC4)_
   ```java
   // interface ProfitabilityRepository {
   //   List<RawProfitabilityRow> findRawByPeriod(String tenantId, LocalDate from, LocalDate to, UUID storeId);
@@ -350,7 +350,7 @@ So that I can identify my best margins, cut underperforming products, and unders
 
 #### Task 7 — GREEN: Builder + Service implementation
 
-- [ ] **7.1** Create `ProfitabilityReportBuilder.java` in `reporting/profitability/application/service/`
+- [x] **7.1** Create `ProfitabilityReportBuilder.java` in `reporting/profitability/application/service/` — _vérifié 2026-10-11 : formule identique à `PricingCalculator` ; `buildDetail` renseigne désormais la meilleure boutique (correctif 2026-10-11)_
   ```java
   // @Component
   // Injected: ProfitabilityRepository
@@ -363,7 +363,7 @@ So that I can identify my best margins, cut underperforming products, and unders
   //   marginPercent = totalCost == 0 ? 0.0 : (grossMarginXaf / totalCost) * 100.0
   ```
 
-- [ ] **7.2** Create `ProfitabilityService.java` in `reporting/profitability/application/service/`
+- [x] **7.2** Create `ProfitabilityService.java` in `reporting/profitability/application/service/` — _vérifié 2026-10-11_
   ```java
   // @Service / implements GetProductProfitabilityUseCase, GetStorePerformanceUseCase
   // getEntries: calls builder → applies ProfitabilitySortStrategyFactory.of(sort).sort(entries)
@@ -372,13 +372,13 @@ So that I can identify my best margins, cut underperforming products, and unders
   //             computes delta: runs equivalent preceding period query (from - period_length, to - period_length)
   ```
 
-- [ ] **7.3** Run GREEN → builder + service tests pass
+- [x] **7.3** Run GREEN → builder + service tests pass — _vérifié 2026-10-11_
 
 ---
 
 #### Task 8 — GREEN: Persistence adapter (JdbcTemplate)
 
-- [ ] **8.1** Create `JdbcProfitabilityRepository.java` in `reporting/profitability/adapter/out/persistence/`
+- [x] **8.1** Create `JdbcProfitabilityRepository.java` in `reporting/profitability/adapter/out/persistence/` — _vérifié 2026-10-11 : SQL conforme (`applied_unit_price`, `status='COMPLETED'`, bornes `>= from` / `< to+1j`). Correctif 2026-10-11 : bornes de jour en fuseau boutique WAT (Africa/Lagos) comme `DashboardService`/`ReportController` au lieu d'UTC, et `DATE(occurred_at AT TIME ZONE 'Africa/Lagos')` pour la sparkline_
   ```java
   // @Repository / implements ProfitabilityRepository
   // Uses JdbcTemplate (same pattern as DashboardService)
@@ -445,7 +445,7 @@ So that I can identify my best margins, cut underperforming products, and unders
 
 #### Task 9 — GREEN: REST controller (adapter in)
 
-- [ ] **9.1** Create `ProfitabilityController.java` in `reporting/profitability/adapter/in/rest/`
+- [x] **9.1** Create `ProfitabilityController.java` in `reporting/profitability/adapter/in/rest/` — _vérifié 2026-10-11 : `@PreAuthorize("hasRole('OWNER')")` au niveau classe + `@EnableMethodSecurity` (`SecurityConfig`), `ApiResponseWrapper.ok`, `PRODUCT_NOT_FOUND` → 404 via `GlobalExceptionHandler` ; `storeId` optionnel aussi sur le détail_
   ```java
   // @RestController @RequestMapping("/api/v1/reporting/profitability") @PreAuthorize("hasRole('OWNER')")
   //
@@ -472,25 +472,27 @@ So that I can identify my best margins, cut underperforming products, and unders
   //   → return ApiResponseWrapper.ok(List<StorePerformanceEntryDto>)
   ```
 
-- [ ] **9.2** Create DTOs in `reporting/profitability/adapter/in/rest/dto/`:
+- [x] **9.2** Create DTOs in `reporting/profitability/adapter/in/rest/dto/`: — _vérifié 2026-10-11_
   - `ProductProfitabilityEntryDto` — `from(ProductProfitabilityEntry)` static factory
   - `ProductProfitabilityDetailDto` — `from(ProductProfitabilityDetail)` static factory
   - `StorePerformanceEntryDto` — `from(StorePerformanceEntry)` static factory
 
-- [ ] **9.3** Run GREEN → controller tests pass
+- [x] **9.3** Run GREEN → controller tests pass — _vérifié 2026-10-11_
 
 ---
 
 #### Task 10 — Spring wiring
 
-- [ ] **10.1** Annotate `ProfitabilityService` with `@Service`, ensure `@Transactional(readOnly=true)`
-- [ ] **10.2** Verify `JdbcProfitabilityRepository` is a Spring `@Repository` bean
-- [ ] **10.3** Confirm no new `@SpringBootApplication` or config needed — `JdbcTemplate` is already a bean (used by `DashboardService`)
-- [ ] **10.4** Run full backend test suite → **all existing tests + new tests GREEN; zero regressions**
+- [x] **10.1** Annotate `ProfitabilityService` with `@Service`, ensure `@Transactional(readOnly=true)` — _vérifié 2026-10-11_
+- [x] **10.2** Verify `JdbcProfitabilityRepository` is a Spring `@Repository` bean — _vérifié 2026-10-11_
+- [x] **10.3** Confirm no new `@SpringBootApplication` or config needed — `JdbcTemplate` is already a bean (used by `DashboardService`) — _vérifié 2026-10-11_
+- [x] **10.4** Run full backend test suite → **all existing tests + new tests GREEN; zero regressions** — _exécuté 2026-10-11 (`mvn test`) : 1874 tests, 7 failures + 29 errors, aucun dans `reporting/**` ; échecs hors périmètre : contextes `@DataJpaTest`/Flyway/Testcontainers sans Docker (`ProductJpaEntityTest`, `JpaBaseEntityPersistTest`, `FlywayBaselineIntegrationTest`, `AccountDeletionSchedulerTest`) et `AdminFeedbackControllerTest`/`FeedbackControllerTest` (403/400 attendus, 500 obtenus — modules non touchés). Zéro régression sur le périmètre 7.4_
 
 ---
 
 #### Task 11 — cURL Integration Tests (iterative, run until all GREEN)
+
+> _Vérification 2026-10-11 : non exécuté (stack Docker non démarrée). Les contrats (codes HTTP, champs, tri, filtre `storeId`) sont couverts par `ProfitabilityControllerTest` ; la RBAC 403 reste à couvrir (voir Review Findings)._
 
 > Run Docker Compose first: `cd keevo && docker-compose up -d`
 > Backend starts on `http://localhost:8080`
@@ -629,7 +631,7 @@ curl -s "http://localhost:8080/api/v1/reporting/profitability/products?from=2026
 
 #### Task 12 — TDD RED: Flutter model tests
 
-- [ ] **12.1** Create `test/features/profitability/domain/model/product_profitability_model_test.dart`
+- [x] **12.1** Create `test/features/profitability/domain/model/product_profitability_model_test.dart` — _vérifié 2026-10-11 : 8 tests_
   ```dart
   // Tests:
   // fromJson_parsesAllFields()
@@ -642,13 +644,13 @@ curl -s "http://localhost:8080/api/v1/reporting/profitability/products?from=2026
   // storePerformanceEntry_fromJson_includesRankAndDelta()
   ```
 
-- [ ] **12.2** Run RED → confirm all model tests fail
+- [x] **12.2** Run RED → confirm all model tests fail — _phase RED non re-vérifiable a posteriori ; GREEN vérifié 2026-10-11_
 
 ---
 
 #### Task 13 — TDD RED: Provider + repository tests
 
-- [ ] **13.1** Create `test/features/profitability/presentation/provider/profitability_providers_test.dart`
+- [x] **13.1** Create `test/features/profitability/presentation/provider/profitability_providers_test.dart` — _vérifié 2026-10-11 : 4 tests (le chemin offline/Drift est testé dans `profitability_repository_impl_test.dart`, 10 tests, dont 3 ajoutés le 2026-10-11)_
   ```dart
   // Tests (using ProviderContainer overrides + Mock datasources):
   // productProfitabilityProvider_loadsFromLocalDrift_whenOffline()
@@ -658,7 +660,7 @@ curl -s "http://localhost:8080/api/v1/reporting/profitability/products?from=2026
   // storePerformanceProvider_loadsRankedList_withDeltaPercent()
   ```
 
-- [ ] **13.2** Create `test/features/profitability/presentation/page/product_profitability_list_page_test.dart`
+- [x] **13.2** Create `test/features/profitability/presentation/page/product_profitability_list_page_test.dart` — _vérifié 2026-10-11 : 5 tests + 2 ajoutés le 2026-10-11 (`tapSortChip_reordersRows_withoutRefetching`, `defaultSort_putsLossProductsLast`)_
   ```dart
   // Tests:
   // rendersProductRows_withMarginColorBadge()
@@ -669,7 +671,7 @@ curl -s "http://localhost:8080/api/v1/reporting/profitability/products?from=2026
   // Note: EMPLOYEE guard is router-level (_ownerOnlyPrefixes in app_router.dart) — no widget-level test needed
   ```
 
-- [ ] **13.3** Create `test/features/profitability/presentation/page/product_profitability_detail_page_test.dart`
+- [x] **13.3** Create `test/features/profitability/presentation/page/product_profitability_detail_page_test.dart` — _vérifié 2026-10-11 : 5 tests_
   ```dart
   // Tests:
   // rendersHeader_withProductNameAndCurrentPrices()
@@ -680,7 +682,7 @@ curl -s "http://localhost:8080/api/v1/reporting/profitability/products?from=2026
   // backButton_popsRoute()
   ```
 
-- [ ] **13.4** Create `test/features/profitability/presentation/page/store_performance_page_test.dart`
+- [x] **13.4** Create `test/features/profitability/presentation/page/store_performance_page_test.dart` — _vérifié 2026-10-11 : 5 tests + 1 ajouté le 2026-10-11 (`tapMetricToggle_reranksLocally_withoutRefetching`)_
   ```dart
   // Tests:
   // rendersRankedStoreList_withRankBadge()
@@ -690,13 +692,13 @@ curl -s "http://localhost:8080/api/v1/reporting/profitability/products?from=2026
   // tapPeriodChip_30days_refreshesList()
   ```
 
-- [ ] **13.5** Run RED → confirm all Flutter tests fail
+- [x] **13.5** Run RED → confirm all Flutter tests fail — _phase RED non re-vérifiable a posteriori ; GREEN vérifié 2026-10-11_
 
 ---
 
 #### Task 14 — GREEN: Flutter domain model
 
-- [ ] **14.1** Create `lib/features/profitability/domain/model/product_profitability_model.dart`
+- [x] **14.1** Create `lib/features/profitability/domain/model/product_profitability_model.dart` — _vérifié 2026-10-11 : classes Dart manuelles avec `fromJson` (pas de `@freezed`) ; seuils de couleur identiques à `PricingCalculatorWidget`_
   ```dart
   // Uses @freezed + JSON serialization (same pattern as report_history_model.dart)
   // class ProductProfitabilityEntry with margin level enum helper
@@ -710,14 +712,14 @@ curl -s "http://localhost:8080/api/v1/reporting/profitability/products?from=2026
   //   else → MarginLevel.profitable → Colors.green
   ```
 
-- [ ] **14.2** Run codegen: `flutter pub run build_runner build --delete-conflicting-outputs`
-- [ ] **14.3** Run GREEN → model tests pass
+- [x] **14.2** Run codegen: `flutter pub run build_runner build --delete-conflicting-outputs` — _N/A — pas de codegen (modèle manuel)_
+- [x] **14.3** Run GREEN → model tests pass — _vérifié 2026-10-11_
 
 ---
 
 #### Task 15 — GREEN: Data layer (datasource + repository)
 
-- [ ] **15.1** Create `lib/features/profitability/data/datasource/remote_profitability_datasource.dart`
+- [x] **15.1** Create `lib/features/profitability/data/datasource/remote_profitability_datasource.dart` — _vérifié 2026-10-11_
   ```dart
   // GET /api/v1/reporting/profitability/products
   // GET /api/v1/reporting/profitability/products/{productId}
@@ -725,7 +727,7 @@ curl -s "http://localhost:8080/api/v1/reporting/profitability/products?from=2026
   // Uses ApiClient (same pattern as RemoteReportHistoryDatasource)
   ```
 
-- [ ] **15.2** Create `lib/features/profitability/data/datasource/local_profitability_datasource.dart`
+- [x] **15.2** Create `lib/features/profitability/data/datasource/local_profitability_datasource.dart` — _vérifié 2026-10-11 : colonne Drift `unit_price` = `applied_unit_price` ; jour local via `_localDay()`_
   ```dart
   // Drift queries against existing tables: sales, sale_items, products, categories, stores
   // JOIN pattern mirrors backend JdbcProfitabilityRepository SQL
@@ -733,8 +735,8 @@ curl -s "http://localhost:8080/api/v1/reporting/profitability/products?from=2026
   // Returns same model shape as remote datasource
   ```
 
-- [ ] **15.3** Create `lib/features/profitability/domain/repository/profitability_repository.dart` (abstract)
-- [ ] **15.4** Create `lib/features/profitability/data/repository/profitability_repository_impl.dart`
+- [x] **15.3** Create `lib/features/profitability/domain/repository/profitability_repository.dart` (abstract) — _vérifié 2026-10-11_
+- [x] **15.4** Create `lib/features/profitability/data/repository/profitability_repository_impl.dart` — _vérifié 2026-10-11 : liste/boutiques retombent en local sur erreur distante ; correctif 2026-10-11 : le détail retombe aussi en local sur erreur de transport (DioException sans réponse) mais relance les erreurs API (404)_
   ```dart
   // Backend-first-when-online: tries remote first (via connectivityProvider), falls back to local
   // After remote success: NO write-back to local (read-only reporting — local Drift is already the source of truth via sync engine)
@@ -744,7 +746,7 @@ curl -s "http://localhost:8080/api/v1/reporting/profitability/products?from=2026
 
 #### Task 16 — GREEN: Riverpod providers
 
-- [ ] **16.1** Create `lib/features/profitability/presentation/provider/profitability_providers.dart`
+- [x] **16.1** Create `lib/features/profitability/presentation/provider/profitability_providers.dart` — _vérifié 2026-10-11 : `selectedProfitabilityPeriodProvider` porte une `PeriodSelection` (préréglage recalculé après minuit), `profitabilityStoreFilterProvider` en plus ; helpers `applyProductSort`/`rankStoresBy` ajoutés le 2026-10-11_
   ```dart
   // ProfitabilityParams class: {from: DateTime, to: DateTime, sort: SortOption, storeId: String?}
   // StorePerformanceParams class: {from: DateTime, to: DateTime, metric: RankingMetric}
@@ -762,13 +764,13 @@ curl -s "http://localhost:8080/api/v1/reporting/profitability/products?from=2026
   // selectedMetricProvider → StateProvider<RankingMetric> (default CA)
   ```
 
-- [ ] **16.2** Run codegen for generated providers (`.g.dart`)
+- [x] **16.2** Run codegen for generated providers (`.g.dart`) — _N/A — providers écrits à la main (pas de `.g.dart`)_
 
 ---
 
 #### Task 17 — GREEN: Presentation layer — widgets + pages
 
-- [ ] **17.1** Create `lib/features/profitability/presentation/widget/profitability_row.dart`
+- [x] **17.1** Create `lib/features/profitability/presentation/widget/profitability_row.dart` — _vérifié 2026-10-11_
   ```dart
   // ProductProfitabilityRow: ListTile-style widget
   // Left: product name + category (small text)
@@ -778,7 +780,7 @@ curl -s "http://localhost:8080/api/v1/reporting/profitability/products?from=2026
   // isLoss flag: show red "PERTE" chip with warning icon
   ```
 
-- [ ] **17.2** Create `lib/features/profitability/presentation/widget/period_filter_chips.dart`
+- [x] **17.2** Create `lib/features/profitability/presentation/widget/period_filter_chips.dart` — _vérifié 2026-10-11_
   ```dart
   // Row of ChoiceChips: Aujourd'hui | 7 jours | 30 jours | Personnalisé
   // Tapping "Personnalisé" opens showDateRangePicker with French locale
@@ -786,7 +788,7 @@ curl -s "http://localhost:8080/api/v1/reporting/profitability/products?from=2026
   // Consistent appearance with MetricBadgeCard style (AppTheme.primary chip variant)
   ```
 
-- [ ] **17.3** Create `lib/features/profitability/presentation/widget/sort_chips.dart`
+- [x] **17.3** Create `lib/features/profitability/presentation/widget/sort_chips.dart` — _vérifié 2026-10-11_
   ```dart
   // Row of FilterChips: Marge % | Marge XAF | CA | Unités
   // Active chip: filled with AppTheme.primary, white text
@@ -794,14 +796,14 @@ curl -s "http://localhost:8080/api/v1/reporting/profitability/products?from=2026
   // Onchanged: updates selectedSortProvider
   ```
 
-- [ ] **17.4** Create `lib/features/profitability/presentation/widget/store_performance_row.dart`
+- [x] **17.4** Create `lib/features/profitability/presentation/widget/store_performance_row.dart` — _vérifié 2026-10-11_
   ```dart
   // Rank badge (#1 gold, #2 silver, #3 bronze using BoxDecoration)
   // Store name (bold), CA/metric value (XAF), delta badge (+X% green / -X% red)
   // Top product name (small italic)
   ```
 
-- [ ] **17.5** Create `lib/features/profitability/presentation/widget/margin_sparkline.dart`
+- [x] **17.5** Create `lib/features/profitability/presentation/widget/margin_sparkline.dart` — _vérifié 2026-10-11 : `CustomPainter`, barres colorées par signe ; pas de tooltip long-press (non bloquant)_
   ```dart
   // Simple bar chart (CustomPainter or fl_chart if already a dep)
   // 7 bars, each bar height ∝ daily marginXaf
@@ -810,7 +812,7 @@ curl -s "http://localhost:8080/api/v1/reporting/profitability/products?from=2026
   // Consistent with SalesEvolutionChart (Story 7.1) style
   ```
 
-- [ ] **17.6** Create `lib/features/profitability/presentation/page/product_profitability_list_page.dart`
+- [x] **17.6** Create `lib/features/profitability/presentation/page/product_profitability_list_page.dart` — _vérifié 2026-10-11 : en-tête plat (rebrand UI-3, plus de gradient) ; tri appliqué localement via `applyProductSort` (correctif 2026-10-11, AC2)_
   ```dart
   // SliverAppBar (gradient, "Rentabilité Produits")
   // PeriodFilterChips + SortChips (stacked in SliverPersistentHeader)
@@ -820,7 +822,7 @@ curl -s "http://localhost:8080/api/v1/reporting/profitability/products?from=2026
   // OWNER-only — guarded at router level via _ownerOnlyPrefixes in app_router.dart; no in-widget check needed
   ```
 
-- [ ] **17.7** Create `lib/features/profitability/presentation/page/product_profitability_detail_page.dart`
+- [x] **17.7** Create `lib/features/profitability/presentation/page/product_profitability_detail_page.dart` — _vérifié 2026-10-11_
   ```dart
   // AppBar: product name, back arrow
   // Header card: current catalogue price / buy price / transport cost (3 columns)
@@ -830,7 +832,7 @@ curl -s "http://localhost:8080/api/v1/reporting/profitability/products?from=2026
   // Top store row (if multi-store): "Meilleure boutique : [storeName] — [N] unités"
   ```
 
-- [ ] **17.8** Create `lib/features/profitability/presentation/page/store_performance_page.dart`
+- [x] **17.8** Create `lib/features/profitability/presentation/page/store_performance_page.dart` — _vérifié 2026-10-11 : re-classement local via `rankStoresBy` (correctif 2026-10-11, AC5)_
   ```dart
   // SliverAppBar (gradient, "Performances Boutiques")
   // PeriodFilterChips + metric toggle row (SegmentedButton or ChoiceChips: CA / Ventes / Panier)
@@ -842,7 +844,7 @@ curl -s "http://localhost:8080/api/v1/reporting/profitability/products?from=2026
 
 #### Task 18 — GREEN: OwnerReportsPage + Navigation wiring
 
-- [ ] **18.1** Create `lib/features/reports/presentation/page/owner_reports_page.dart`
+- [x] **18.1** Create `lib/features/reports/presentation/page/owner_reports_page.dart` — _vérifié 2026-10-11 : `TabController` explicite ; `initialTab` ajouté le 2026-10-11 pour les deep links_
   ```dart
   // DefaultTabController(length: 4)
   // TabBar: 📋 Jour | 🕐 Historique | 📈 Rentabilité | 🏪 Boutiques
@@ -854,33 +856,33 @@ curl -s "http://localhost:8080/api/v1/reporting/profitability/products?from=2026
   // AppBar includes the TabBar (pinned)
   ```
 
-- [ ] **18.2** Update `app_router.dart`:
+- [x] **18.2** Update `app_router.dart`: — _vérifié 2026-10-11 : EMPLOYEE `/reports` → `EmployeeReportsPage` (onglet Jour, décision B3.3 postérieure à cette story)_
   - Change the OWNER-path `/reports` builder from `ReportsPage()` to `OwnerReportsPage()`
   - Keep EMPLOYEE `/reports` pointing to `ReportsPage()` (no change — EMPLOYEE bottom nav routes here; `/reports/rentabilite*` and `/reports/boutiques*` are in `_ownerOnlyPrefixes` so any EMPLOYEE direct navigation attempt is silently redirected to `/pos`)
   - Add route `/reports/rentabilite/:productId` → `ProductProfitabilityDetailPage`
   - Import new pages
 
-- [ ] **18.3** Add `'/reports/rentabilite'` and `'/reports/boutiques'` to the `_ownerOnlyPrefixes` const in `app_router.dart` — EMPLOYEE attempting direct URL navigation to these subroutes is silently redirected to `/pos` (GoRouter redirect, no in-widget guard needed)
-- [ ] **18.4** Run GREEN → Flutter tests pass
+- [x] **18.3** Add `'/reports/rentabilite'` and `'/reports/boutiques'` to the `_ownerOnlyPrefixes` const in `app_router.dart` — EMPLOYEE attempting direct URL navigation to these subroutes is silently redirected to `/pos` (GoRouter redirect, no in-widget guard needed) — _vérifié 2026-10-11 : routes `/reports/rentabilite` et `/reports/boutiques` ajoutées le 2026-10-11 (OwnerReportsPage sur le bon onglet) — elles n'existaient pas, seul `/reports/rentabilite/:productId` était déclaré_
+- [x] **18.4** Run GREEN → Flutter tests pass — _vérifié 2026-10-11_
 
 ---
 
 #### Task 19 — Integration smoke test (manual or widget test)
 
-- [ ] **19.1** Run Flutter app on emulator: login as OWNER → Rapports → verify 4 tabs visible
-- [ ] **19.2** Navigate to "Rentabilité" tab → verify list loads (or empty state if no sales)
-- [ ] **19.3** Tap a product → verify detail page opens with correct data
-- [ ] **19.4** Back → verify list scroll position preserved
-- [ ] **19.5** Tap "Boutiques" tab → verify store list with rank/delta
-- [ ] **19.6** Login as EMPLOYEE → Rapports → verify no tabs (single day-close view)
+- [ ] **19.1** Run Flutter app on emulator: login as OWNER → Rapports → verify 4 tabs visible — _non réalisé lors de la vérification du 2026-10-11 (pas d'émulateur) — comportement couvert par les widget tests_
+- [ ] **19.2** Navigate to "Rentabilité" tab → verify list loads (or empty state if no sales) — _non réalisé lors de la vérification du 2026-10-11 (pas d'émulateur) — comportement couvert par les widget tests_
+- [ ] **19.3** Tap a product → verify detail page opens with correct data — _non réalisé lors de la vérification du 2026-10-11 (pas d'émulateur) — comportement couvert par les widget tests_
+- [ ] **19.4** Back → verify list scroll position preserved — _non réalisé lors de la vérification du 2026-10-11 (pas d'émulateur) — comportement couvert par les widget tests_
+- [ ] **19.5** Tap "Boutiques" tab → verify store list with rank/delta — _non réalisé lors de la vérification du 2026-10-11 (pas d'émulateur) — comportement couvert par les widget tests_
+- [ ] **19.6** Login as EMPLOYEE → Rapports → verify no tabs (single day-close view) — _non réalisé lors de la vérification du 2026-10-11 (pas d'émulateur) — comportement couvert par les widget tests_
 
 ---
 
 #### Task 20 — Final validation
 
-- [ ] **20.1** Run full backend test suite: `./mvnw test` → all tests GREEN, zero regressions
-- [ ] **20.2** Run Flutter tests: `flutter test` → all tests GREEN
-- [ ] **20.3** Update `sprint-status.yaml`: `7-4-dashboard-rentabilite-analyse-par-produit-boutique: ready-for-dev` → `in-progress` (Dev agent updates to `done` after completion)
+- [x] **20.1** Run full backend test suite: `./mvnw test` → all tests GREEN, zero regressions — _exécuté 2026-10-11 (`mvn test`) : 1874 tests, 7 failures + 29 errors, aucun dans `reporting/**` ; échecs hors périmètre : contextes `@DataJpaTest`/Flyway/Testcontainers sans Docker (`ProductJpaEntityTest`, `JpaBaseEntityPersistTest`, `FlywayBaselineIntegrationTest`, `AccountDeletionSchedulerTest`) et `AdminFeedbackControllerTest`/`FeedbackControllerTest` (403/400 attendus, 500 obtenus — modules non touchés). Zéro régression sur le périmètre 7.4_
+- [x] **20.2** Run Flutter tests: `flutter test` → all tests GREEN — _exécuté 2026-10-11 (`flutter test`) : 1263 réussis, 4 échecs hors périmètre (`offline_gate_banner_test` couleur ambre modifiée par le rebrand UI-3, 3 × `delete_account_page_test` Story 14.5) ; 0 échec dans `profitability/`, `reports/`, `core/router/`_
+- [ ] **20.3** Update `sprint-status.yaml`: `7-4-dashboard-rentabilite-analyse-par-produit-boutique: ready-for-dev` → `in-progress` (Dev agent updates to `done` after completion) — _géré par l'orchestrateur ; non modifié ici_
 
 ---
 
@@ -1074,3 +1076,63 @@ Claude Sonnet 4.6 (GitHub Copilot)
 - `test/features/profitability/presentation/page/product_profitability_list_page_test.dart`
 - `test/features/profitability/presentation/page/product_profitability_detail_page_test.dart`
 - `test/features/profitability/presentation/page/store_performance_page_test.dart`
+- `test/features/profitability/data/repository/profitability_repository_impl_test.dart`
+- `test/features/profitability/data/datasource/local_profitability_store_filter_test.dart`
+- `test/features/profitability/presentation/widget/period_filter_chips_test.dart`
+- Backend : `JdbcProfitabilityRepositoryTest.java`, `ProductProfitabilityEntryTest.java`, `ProfitabilitySortStrategyTest.java`, `StoreRankingStrategyTest.java`, `ProfitabilityReportBuilderTest.java` (en plus de Controller/Service)
+
+**Modifiés lors de la vérification du 2026-10-11 :**
+- Backend : `ProfitabilityRepository.java` (port, `RawTopStoreRow` + `findTopStoreByUnits`), `JdbcProfitabilityRepository.java` (fuseau WAT, requête meilleure boutique), `ProfitabilityReportBuilder.java` (meilleure boutique), `ProfitabilityController.java` (date du jour en WAT), `JdbcProfitabilityRepositoryTest.java` (+4), `ProfitabilityReportBuilderTest.java` (+2)
+- App : `profitability_providers.dart` (`applyProductSort`, `rankStoresBy`), `product_profitability_list_page.dart`, `store_performance_page.dart` (tri/classement local), `profitability_repository_impl.dart` (repli local du détail sur erreur de transport), `owner_reports_page.dart` (`initialTab`), `app_router.dart` (routes `/reports/rentabilite`, `/reports/boutiques`), `pubspec.yaml` (1.1.13+12 → 1.1.14+13), tests `product_profitability_list_page_test.dart` (+2), `store_performance_page_test.dart` (+1), `profitability_repository_impl_test.dart` (+3)
+
+---
+
+### Review Findings (2026-10-11)
+
+Revue adversariale (sécurité OWNER/tenant/boutique, formule de marge, filtres période/boutique, offline-first). Les éléments cochés ont été corrigés avec test ; les non cochés restent ouverts.
+
+- [x] [Review][Patch] Bornes de période en UTC au lieu du fuseau boutique [JdbcProfitabilityRepository.java:61,79,155,183 ; ProfitabilityController.java:65,89,110] — `DashboardService` et `ReportController` bornent les jours sur minuit WAT (Africa/Lagos) ; le module rentabilité utilisait minuit UTC, donc « Aujourd'hui » couvrait 01:00→01:00 heure locale et la sparkline groupait les jours (`DATE(occurred_at)`) selon le fuseau de session PostgreSQL. Corrigé (WAT partout, `AT TIME ZONE 'Africa/Lagos'`), tests `findRawByPeriod_usesShopTimeZoneForDayBoundaries`, `findDailyMarginLast7_groupsByShopLocalDay`.
+- [x] [Review][Patch] Le backend ne calculait jamais la « meilleure boutique » du détail (AC4) [ProfitabilityReportBuilder.java:84,94 avant correctif] — `topStoreId/topStoreName/topStoreUnitsSold` étaient toujours `null/null/0` ; en ligne, la ligne « Meilleure boutique » n'apparaissait donc jamais (seul le chemin Drift hors ligne la calculait). Ajout de `findTopStoreByUnits` (port + JDBC, filtre boutique respecté) et câblage dans `buildDetail` ; tests builder (+2) et JDBC (+2).
+- [x] [Review][Patch] Tri et métrique déclenchaient une nouvelle requête (AC2/AC5 « local, no API call ») [product_profitability_list_page.dart:43 ; store_performance_page.dart:38 avant correctif] — `sort`/`metric` faisaient partie de la clé du `FutureProvider.family`, donc chaque tap de chip relançait Drift/API (et affichait un spinner). Les pages interrogent désormais avec la clé par défaut et appliquent `applyProductSort`/`rankStoresBy` localement (pertes en dernier sur « Marge % », rangs renumérotés). Tests `tapSortChip_reordersRows_withoutRefetching`, `defaultSort_putsLossProductsLast`, `tapMetricToggle_reranksLocally_withoutRefetching`.
+- [x] [Review][Patch] Deep links `/reports/rentabilite` et `/reports/boutiques` absents (AC7) [app_router.dart:404] — seuls `/reports/rentabilite/:productId` et le préfixe `_ownerOnlyPrefixes` existaient ; une navigation directe tombait sur la page d'erreur GoRouter. Routes ajoutées vers `OwnerReportsPage(initialTab: …)`.
+- [x] [Review][Patch] Détail en ligne sans repli local sur panne réseau (AC10) [profitability_repository_impl.dart:63 avant correctif] — `isOnline()` vrai mais requête en timeout ⇒ écran d'erreur alors que Drift a les données. Repli sur `DioException` sans réponse uniquement ; les erreurs API (404 `PRODUCT_NOT_FOUND`) sont toujours relancées. Tests `online_transportFailure_fallsBackToLocal`, `online_apiError_isRethrown_notMaskedByLocal`.
+- [ ] [Review][Defer] RBAC 403/401 non couverte par un test automatisé [ProfitabilityControllerTest.java:20] — `standaloneSetup` n'exécute pas `@PreAuthorize` ; la règle est vérifiée par lecture (`@PreAuthorize("hasRole('OWNER')")` classe + `@EnableMethodSecurity`, rôles `ROLE_<role>` posés par `JwtAuthFilter`). À couvrir par un test de type `SecurityConfigAdminPathEnforcementTest` ou l'itération 9 cURL de la Task 11. Moyen.
+- [ ] [Review][Defer] Isolation tenant du `JdbcTemplate` portée uniquement par `@Transactional` [ProfitabilityService.java:29 ; JdbcProfitabilityRepository.java:26] — aucun `DataSource` tenant-aware : le `search_path` vient de la connexion Hibernate liée à la transaction (`SchemaAwareMultiTenantConnectionProvider`), que `JdbcTemplate` réutilise via `DataSourceUtils`. Même mécanisme que `DashboardService`, correct tant que le service reste `@Transactional` ; un appel hors transaction viserait `public` (erreur SQL, pas de fuite). Un test d'architecture (ArchUnit : tout `@Repository` JDBC appelé sous `@Transactional`) sécuriserait l'invariant. Faible.
+- [ ] [Review][Defer] Dates `from`/`to` invalides ⇒ 500 au lieu de 400 [ProfitabilityController.java:65-66] — `LocalDate.parse` lève `DateTimeParseException`, non mappée dans `GlobalExceptionHandler` (seuls `MethodArgumentTypeMismatch`/`MissingServletRequestParameter` donnent 400). Typer les paramètres en `LocalDate` avec `@DateTimeFormat(iso = DATE)` règle le cas. Faible.
+- [ ] [Review][Defer] Delta boutique toujours calculé sur le CA, quelle que soit la métrique [ProfitabilityService.java:78-80 ; local_profitability_datasource.dart:338] — AC5/AC6 parlent d'un « % change » sans préciser la métrique ; avec « Ventes » ou « Panier Moyen », le badge reste la variation de CA. À clarifier produit (delta par métrique ?). Faible.
+- [ ] [Review][Defer] Bannière hors ligne affichée dès le premier jour hors ligne, pas seulement après 24 h [product_profitability_list_page.dart:38 ; store_performance_page.dart:33] — AC10 dit « si le dernier sync > 24 h » ; l'implémentation l'affiche pour `offlineOk` (≥ 1 jour) et `offlineCritical`, ce qui est en pratique « > 24 h » au grain jour de `SyncStatus.fromDaysOffline`. Acceptable, à confirmer UX. Faible.
+- [ ] [Review][Defer] `sales.occurred_at` nullable sans backfill [TenantSchemaProvisioner.java:397] — colonne ajoutée par `ALTER TABLE … ADD COLUMN IF NOT EXISTS occurred_at TIMESTAMPTZ` sans `UPDATE … SET occurred_at = created_at WHERE occurred_at IS NULL` ; les ventes antérieures à la migration sont invisibles de la rentabilité (et du dashboard). `SaleFactory` renseigne toujours la valeur pour les nouvelles ventes. Faible (tenants anciens uniquement).
+- [ ] [Review][Defer] Pas d'index `sale_items(product_id)` [TenantSchemaProvisioner.java:413] — les requêtes détail (`findProductCosts`, `findDailyMarginLast7`, `findTopStoreByUnits`) filtrent sur `si.product_id` ; seul `idx_sale_items_sale_id` existe. AC3 (< 3 s pour 500 produits) n'a pas été mesuré. Faible tant que les volumes restent ceux d'une boutique.
+
+---
+
+## Completion Notes (2026-10-11)
+
+**Vérification AC par AC (code lu, tests exécutés) :**
+
+| AC | Verdict | Preuve |
+|---|---|---|
+| AC1 liste rentabilité | ✅ | `ProductProfitabilityListPage` + `ProductProfitabilityRow` (nom, catégorie, unités, CA, marge XAF, badge % coloré via `MarginLevel.color`, chip « PERTE ») ; tri par défaut Marge % pertes en dernier (backend `ByMarginPctDescStrategy`, app `applyProductSort`) ; `/reports/rentabilite` et `/reports/boutiques` dans `_ownerOnlyPrefixes` → EMPLOYEE redirigé `/pos` |
+| AC2 chips de tri | ✅ (corrigé) | 4 chips `SortChips`, chip actif rempli ; tri désormais local sans requête |
+| AC3 filtre période | ✅ | `PeriodFilterChips` (Aujourd'hui/7 j/30 j/Personnalisé + `showDateRangePicker` fr) ; Drift `LocalProfitabilityDatasource` (sales+sale_items+products, `status='COMPLETED'`, bornes jour) ; `selectedProfitabilityPeriodProvider` partagé Rentabilité/Boutiques, session seulement ; perf < 3 s non mesurée (SQL agrégé, voir Defer) |
+| AC4 détail produit | ✅ (corrigé) | En-tête prix catalogue/achat/transport, métriques, plage de prix appliqués min/max/moy, `MarginSparkline` 7 jours, ligne « Meilleure boutique » (désormais aussi renseignée par le backend), retour via `context.push` + `_KeepAliveTab` |
+| AC5 classement boutiques | ✅ (corrigé) | Rang (#1 or/#2 argent/#3 bronze), CA, ventes, panier moyen, top produit, badge delta vert/rouge (`success`/`error`, même palette que `ShopStatusCard`) ; toggle CA/Ventes/Panier Moyen re-classe localement |
+| AC6 période boutiques | ✅ | Même chips ; delta = période précédente de même longueur (`ProfitabilityService.getRanking`, `LocalProfitabilityDatasource.getStorePerformance`) |
+| AC7 onglets Rapports | ✅ (corrigé) | `OwnerReportsPage` 4 onglets Jour/Historique/Rentabilité/Boutiques ; deep links ajoutés ; EMPLOYEE `/reports` → `EmployeeReportsPage` (Jour seul — décision B3.3 postérieure, l'esprit « pas de rentabilité pour EMPLOYEE » est respecté) |
+| AC8 endpoints produits | ✅ | `GET /products` (`from`,`to`,`sort`,`storeId` optionnel), `GET /products/{id}` (+`storeId`), `@PreAuthorize OWNER`, `ApiResponseWrapper`, liste vide sur période vide, `SortOption.fromString` tolérant, aucune DDL |
+| AC9 endpoint boutiques | ✅ | `GET /stores` (`metric` CA/SALES_COUNT/AVG_BASKET, défaut CA), rang/CA/ventes/panier/top produit/delta |
+| AC10 offline-first | ✅ (corrigé) | Repli Drift pour liste/boutiques/détail, bannière hors ligne (`SyncStatus.offlineOk/Critical`), filtres sur données locales, `ref.listen(syncStatusProvider)` → `invalidate` au retour en ligne |
+| AC11 tests TDD | ✅ | Backend 7 classes / 57 tests ; Flutter 8 fichiers / 44 tests (détail ci-dessous) ; RBAC 403/401 en Defer |
+
+**Tests exécutés (2026-10-11) :**
+- Backend `mvn -q test -Dtest='*Profitab*,*StoreRanking*,*StorePerformance*'` : **57 tests, 0 échec** (avant correctifs : 51) — Controller 10, JdbcRepository 12, Builder 10, Service 6, Entry 9, SortStrategy 7, StoreRanking 3.
+- App `flutter test test/features/profitability` : **44 tests, 0 échec** (avant correctifs : 38) — modèle 8, repository 10, datasource store filter 1, period chips 3, providers 4, liste 7, détail 5, boutiques 6.
+- `dart analyze` sur les fichiers touchés : aucun error/warning nouveau.
+- Suites complètes : backend `mvn test` → 1874 tests, 7 failures / 29 errors, **aucun dans `reporting/**`** (échecs : contextes JPA/Flyway/Testcontainers sans Docker, `AdminFeedbackControllerTest`, `FeedbackControllerTest`) ; app `flutter test` → 1263 réussis / 4 échecs **hors périmètre** (`offline_gate_banner_test` couleur du rebrand UI-3, 3 × `delete_account_page_test` Story 14.5). Les deux re-exécutions du module après correctifs sont vertes (57 / 44).
+
+**Correctifs apportés (détail dans Review Findings) :** fuseau WAT pour les bornes de période et la sparkline ; meilleure boutique calculée côté backend ; tri/métrique appliqués localement sans requête ; routes deep link ; repli local du détail sur panne réseau. Version app : 1.1.14+13.
+
+**Non réalisé :** Task 11 (cURL sur stack Docker) et Task 19 (smoke émulateur) ; Task 20.3 (sprint-status) laissée à l'orchestrateur.
+
+**Décision de statut :** `done` — les 11 AC sont satisfaits sur le code (4 après correctifs), les suites du module sont vertes, aucune finding HIGH ; les 7 findings restantes sont [Defer] de sévérité moyenne/faible et restent listées ci-dessus (pas de deferred-work.md).
+

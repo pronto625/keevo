@@ -3,7 +3,7 @@ baseline_commit: 851b722e850b24588fdf97756676739ab5c4a73e
 ---
 # Story 10.5: Environnement de staging iso-prod
 
-Status: review
+Status: done
 
 ## Story
 
@@ -516,7 +516,7 @@ claude-sonnet-4-6
 
 > Infra (yaml/compose/CI) non testable ici. AC1-AC7 majoritairement PASS ; Template Method, iso-prod, ddl-auto=validate (Flyway activé en base → OK sur DB vierge), isolation containers/volumes/réseau/ports confirmés.
 
-- [ ] [Review][Decision] **TLS staging — ACME HTTP-01 sur :8080 ne sera jamais validé** — **DÉCISION (Toor) : router via le Traefik prod.** Le Traefik prod (:80/:443) gère le FQDN + ACME staging puis proxy vers `keevo_staging_backend`. ⚠️ Implémentation = réécriture cross-stack du pipeline **prod** (non testable en review, à fort enjeu) → **non appliquée à l'aveugle**, consignée comme tâche deploy-time. Étapes concrètes :
+- [x] [Review][Decision] **TLS staging — ACME HTTP-01 sur :8080 ne sera jamais validé** — *2026-10-11 : déplacé vers la story `10-7-ops-hardening-backups-staging` (brief dans epics-refonte-modulaire.md, Story 10.7) avec les autres items ops ; AC1–AC7 de cette story sont validés, la story passe `done`.* — **DÉCISION (Toor) : router via le Traefik prod.** Le Traefik prod (:80/:443) gère le FQDN + ACME staging puis proxy vers `keevo_staging_backend`. ⚠️ Implémentation = réécriture cross-stack du pipeline **prod** (non testable en review, à fort enjeu) → **non appliquée à l'aveugle**, consignée comme tâche deploy-time. Étapes concrètes :
   1. **Réseau partagé** : créer un réseau Docker externe (ex. `keevo_edge`) ; y attacher le `traefik` prod ET le `keevo_staging_backend`.
   2. **Prod `traefik/dynamic.yml`** : ajouter un router `staging` (`Host(\`staging.api.keevo.cm\`)`, entrypoint `websecure`, `certResolver: letsencrypt`) + un service pointant `http://keevo_staging_backend:4500`.
   3. **Staging `deploy-staging.yml`** : retirer le Traefik staging + l'ACME + le mapping `:8443` (plus de TLS local) ; attacher le backend staging au réseau `keevo_edge` ; ne plus exposer publiquement le backend (accès uniquement via Traefik prod).
@@ -534,3 +534,8 @@ claude-sonnet-4-6
 ### Change Log
 
 - **2026-06-19** : Implémentation story 10-5 — environnement de staging iso-prod (AC1-AC7)
+
+## Completion Notes (2026-10-11)
+
+- AC1–AC7 validés en code review (2026-06-19, 3 patches appliqués). Le point ouvert « TLS staging via le Traefik prod » est une tâche deploy-time hors des AC de cette story : il est suivi, avec les 5 autres items staging et les 5 items backups de 10-4, dans `10-7-ops-hardening-backups-staging`. Statut → done (résolution en lot des stories review/in-progress, 2026-10-11).
+

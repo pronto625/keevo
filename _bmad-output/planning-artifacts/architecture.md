@@ -204,7 +204,8 @@ src/main/java/com/keevo/
 │
 ├── reporting/                       # DOMAIN: Reports & Analytics
 │   ├── dashboard/                   # MODULE: Real-time dashboard
-│   └── report/                      # MODULE: End-of-day, weekly
+│   ├── report/                      # MODULE: End-of-day, weekly
+│   └── export/                      # MODULE: Data export (CSV / Excel / PDF templates)
 │
 ├── messaging/                       # DOMAIN: Communication
 │   ├── whatsapp/                    # MODULE: WhatsApp integration
@@ -300,6 +301,24 @@ lib/
 - All external services accessed via interfaces (sync, storage, WhatsApp)
 - All repositories performing data mutations MUST use `ConnectivityService` (in `core/sync/`) to determine online/offline branching
 - After every data mutation, Riverpod notifiers MUST call `refresh()` or `ref.invalidate()` to trigger instant UX update from local Drift
+
+### Export Module (`reporting/export`) — FR55, FR94–FR97
+
+*Added by sprint-change-proposal-2026-10-11.*
+
+- **Domain-contributed datasets:** each domain exposes its exportable dataset through the `ExportDatasetProvider` port (key, typed columns, paginated query filtered by tenant, store and period), mirroring the sync `DeltaEntityProvider`. The export module reads no table directly; a new module declares its provider without changing the export module (ready for the modular refonte).
+- **Format engines** behind the `ExportRenderer` port (Strategy): `CsvRenderer` (commons-csv, UTF-8 with BOM, `;` separator for direct opening in French-locale Excel), `XlsxRenderer` (Apache POI SXSSF streaming, one sheet per dataset), `PdfRenderer` (HTML/CSS templates rendered to PDF).
+- **PDF templates:** versioned HTML templates in code (Thymeleaf) with a shared brand header (store name and logo, period, generation date, XAF), rendered by an HTML-to-PDF library (OpenHTMLtoPDF). Not user-editable in V1. Library choice confirmed in story v1s-18-1.
+- **Sync vs background:** below a threshold (e.g. 5,000 rows) the file is returned directly; above it an `ExportJob` (PENDING, RUNNING, READY, FAILED, EXPIRED) runs in the background, the file is stored temporarily (object storage, or local disk in V1) and downloaded through a signed link valid 24 h; the owner is notified by FCM.
+- **Gating:** CSV on all plans; Excel, PDF and background jobs Premium (`PlanGuard`, error `PLAN_FEATURE_REQUIRED`).
+- **Security:** owner-only, tenant-isolated; every export audited (`DATA_EXPORTED`: datasets, format, filters, row count); per-tenant rate limit (FR93).
+- **Local export (app):** CSV generated on device from Drift with the same column schema as the server, shared via `share_plus`; works offline, local data only.
+
+### Audit Log Enrichment — FR84, FR98
+
+*Added by sprint-change-proposal-2026-10-11.*
+
+`audit_log` gains `store_id` (nullable), `entity_label` (readable label at action time), `device_id`, `source` (`ONLINE` | `SYNC` | `SYSTEM`) and `metadata` jsonb (reason, justification, context). `value_before` / `value_after` become structured field-by-field JSON for new entries; older entries stay readable as-is. `GET /api/v1/audit` gets filters (period, store, user, action, entity) with cursor paging and resolved actor name; new `GET /api/v1/audit/{id}` for the detail view. Immutability (NFR13) unchanged.
 
 ### Decision Priority Analysis
 
@@ -1048,7 +1067,8 @@ backend/
 │   │   └── warehouse/                 # MODULE: Warehouse management
 │   ├── reporting/                     # DOMAIN: Reports & Analytics
 │   │   ├── dashboard/                 # MODULE: Real-time dashboard
-│   │   └── report/                    # MODULE: End-of-day, weekly, custom
+│   │   ├── report/                    # MODULE: End-of-day, weekly, custom
+│   │   └── export/                    # MODULE: Data export (CSV / Excel / PDF templates)
 │   ├── messaging/                     # DOMAIN: Communication
 │   │   ├── whatsapp/                  # MODULE: WhatsApp integration
 │   │   └── notification/              # MODULE: Alerts & push notifications
@@ -1110,6 +1130,8 @@ app/
 | FR45-49: Inventory | `catalog/stock/` (stock tracking + inter-store transfers — Story 3.3) | `inventory/` |
 > ⚠️ Inter-store transfers (FR32, Story 3.3) are in `catalog/stock/` (not `inventory/transfer/`) — they reuse `StockOperationService`. Two-step flow: `ExecuteTransferService` (TRANSFER_OUT, → IN_TRANSIT) + `CompleteTransferService` (TRANSFER_IN, → COMPLETED).
 | FR50-56: Reports | `reporting/dashboard/`, `report/` | `reports/` |
+| FR55, FR94-97: Data export | `reporting/export/` (+ one `ExportDatasetProvider` per domain) | `export/` |
+| FR84, FR98: Audit log | `shared/` audit port + `AuditController` | `audit/` |
 | FR57-64: WhatsApp & Alerts | `messaging/whatsapp/`, `notification/` | — (push) |
 | FR65-68: User Management | `identity/user/` | `settings/` |
 | FR69-76: Offline Sync | `sync/sync/` | `core/sync/` |

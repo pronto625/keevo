@@ -3,7 +3,7 @@ baseline_commit: 851b722e850b24588fdf97756676739ab5c4a73e
 ---
 # Story 10.4: Sauvegardes PostgreSQL automatisées + test de restauration
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -351,11 +351,26 @@ claude-sonnet-4-6
   - Dump testé : `keevo_backup_2026-06-18T23-58-24Z.dump`
   - Commande pg_restore utilisée : `pg_restore -h localhost -p 5444 -U keevo -d keevo_restore_test --no-owner --no-acl`
   - Résultat vérification : 303 tenant schemas restaurés, 29 tables public restaurées
-  - Résultat `/actuator/health` : N/A (pas de backend running sur la DB de restauration — test local DB-only)
+  - Résultat `/actuator/health` : N/A (pas de backend running sur la DB de restauration — test local DB-only) → **remplacé par le test e2e du 2026-10-11 ci-dessous**
+
+## Completion Notes (2026-10-11)
+
+**Smoke test e2e AC4 — PASS.** Exécuté localement avec Docker (`postgres:16-alpine` = PostgreSQL 16.15, `--tmpfs` pour les données, conteneurs supprimés en fin de run), backend jar `keevo-backend-1.0.0-SNAPSHOT` buildé avec `mvn -DskipTests package`, profil `dev`, `KEEVO_FCM_ENABLED=false` / `KEEVO_WHATSAPP_PROVIDER=noop` (le `.env` local n'a pas été importé : jar lancé hors du répertoire backend).
+
+- **Backup** : conteneur source `keevo_smoke_src` → backend booté (UP en 10 s, Flyway V1→V9) → `POST /auth/register` crée le tenant `KV-3ZT60W` (schéma `kv_3zt60w`) → `backup-db.sh` en mode `docker-exec` (`DOCKER_CONTAINER=keevo_smoke_src`) : `[BACKUP][INFO] Backup complete: keevo_backup_2026-10-11T02-42-33Z.dump`, 104 Ko, exit 0 ; `pg_restore --list` : 258 entrées TOC, format CUSTOM, 1 schéma `kv_*`, 118 TABLE. Conteneur source détruit avant la restauration.
+- **Restauration** (§5 suivi à la lettre dans un conteneur vierge `keevo_smoke_restore`, DB initiale `keevo_staging`) : `createdb keevo_restore` puis `pg_restore --no-owner --no-acl` ; vérification §5.3 : `kv_3zt60w` présent, 31 tables public, 28 tables tenant, 8 lignes `flyway_schema_history`, 2 users, 2 tenants (= source).
+- **Backend sur la DB restaurée** (`POSTGRES_DB=keevo_restore`, port 5445) : `GET /actuator/health` → **`HTTP 200 {"status":"UP"}`** après 12 s ; log Flyway « Current version of schema "public": 9 — Schema "public" is up to date. No migration necessary — Successfully validated 8 migrations » ; `POST /auth/login` avec l'utilisateur créé avant le backup → 200, membership `KV-3ZT60W`/OWNER ; `GET /v3/api-docs` → 200 ; `select-tenant` + `GET /auth/profile` (Bearer, `tenantId=kv_3zt60w`) → 200.
+- **Écarts de procédure détectés et corrigés dans `BACKUP_RESTORE.md`** :
+  1. §5.1 `createdb` sans `PGPASSWORD` bloque sur un prompt `Password:` (tué après 2 min, exit 143) → `PGPASSWORD` ajouté + variante `docker exec psql -c "CREATE DATABASE"`.
+  2. §2/§5.2 : un `pg_restore` plus récent que le serveur (hôte 18.6 vs serveur 16.15) émet `SET transaction_timeout = 0;` → `ERROR: unrecognized configuration parameter`, contenu restauré intégralement mais **exit 1** (`errors ignored on restore: 1`). Prérequis renforcé (« 16.x exactement ») et restauration via le `pg_restore` du conteneur documentée comme méthode recommandée (exit 0 vérifié).
+  3. Le contrôle `grep -i error restore.log` matche les tables `sync_error_log` → filtre `^pg_restore: (error|warning)` documenté.
+- **Nettoyage vérifié** : aucun conteneur `keevo_smoke_*`, aucun volume créé (tmpfs), aucun process `java -jar` résiduel, ports 4500/5444/5445 libres.
+- Détail complet (commandes, sorties, durées) : `keevo/backend/docs/BACKUP_RESTORE.md` §10 ; tableau §6.2 mis à jour.
 
 ### Change Log
 
 - 2026-06-19 : Implémentation complète — script backup-db.sh (modes docker-exec + direct), systemd timer/service, déploiement CI/CD, documentation BACKUP_RESTORE.md, mise à jour DEPLOYMENT_CHECKLIST.md, tests locaux validés.
+- 2026-10-11 : Smoke test e2e AC4 exécuté (backup → restore DB vierge → backend UP) ; BACKUP_RESTORE.md corrigé (§2 version client, §5.1 PGPASSWORD, §5.2 restauration via conteneur, §6.2, nouveau §10) ; décision bloquante levée → Status: done.
 
 ### File List
 
@@ -373,7 +388,7 @@ claude-sonnet-4-6
 > Infra (bash/systemd/CI) non testable dans l'environnement de review (pas de systemd/S3/VPS). Findings d'inspection.
 
 - [x] [Review][Decision] **Double source de vérité — `deploy-backend.yml` réinjectait une copie inline** — **RÉSOLU (option a)** : l'étape inline (heredocs) est remplacée par `actions/checkout` + `appleboy/scp-action` qui copie les fichiers commités `keevo/backend/scripts/*` sur le VPS, puis une étape SSH d'install allégée (`script_stop: true`). Source unique = fichiers commités. [deploy-backend.yml]
-- [ ] [Review][Decision] 🔴 **BLOQUANT — AC4 smoke test e2e restauration non prouvé** — **DÉCISION : e2e exigé** (Toor). Completion Notes l.354 : `N/A (DB-only)`. Le chemin restauration→backend bootée→`/actuator/health UP` doit être exécuté et documenté avant de passer la story `done`. Non exécutable dans l'environnement de review (pas de backend + DB restaurée). **Reste ouvert.**
+- [x] [Review][Decision] 🔴 **BLOQUANT — AC4 smoke test e2e restauration non prouvé** — **DÉCISION : e2e exigé** (Toor). **RÉSOLU 2026-10-11** : chemin complet exécuté localement avec Docker — dump produit par `backup-db.sh` (mode docker-exec, `keevo_backup_2026-10-11T02-42-33Z.dump`, 258 entrées TOC, public + `kv_3zt60w`) → restauration dans un conteneur `postgres:16-alpine` vierge (`pg_restore` 16.15 via `docker exec`, exit 0) → backend `keevo-backend-1.0.0-SNAPSHOT.jar` démarré sur `keevo_restore` → `GET /actuator/health` = `HTTP 200 {"status":"UP"}` après 12 s, Flyway « Successfully validated 8 migrations », login de l'utilisateur créé avant le backup = 200 (`KV-3ZT60W`/OWNER), `/auth/profile` authentifié = 200. Preuves et commandes : `keevo/backend/docs/BACKUP_RESTORE.md` §10. Voir Completion Notes (2026-10-11) pour les 2 écarts de procédure corrigés.
 - [x] [Review][Patch] **Rotation locale sautée si l'upload S3 échoue** — **FIXÉ** : `s3_failed` flag, rotation exécutée indépendamment, `exit 1` signalé après mise en sécurité de la copie locale. [backup-db.sh]
 - [x] [Review][Patch] **Aucun verrou anti-concurrence** — **FIXÉ** : `flock -n 9` sur `/tmp/keevo-backup.lock`, skip propre si déjà en cours. [backup-db.sh]
 - [x] [Review][Patch] **`2>/dev/null` masque la cause d'échec docker-exec** — **FIXÉ** : stderr capturé dans `${LOCAL_FILE}.err` et surfacé sur échec. [backup-db.sh]

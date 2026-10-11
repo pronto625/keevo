@@ -612,7 +612,7 @@ Simon ouvre Keevo le matin → "Bonjour Simon 👋" + message motivationnel → 
 #### Flow 9 — Rapport WhatsApp
 **Acteur :** Simon | **Fréquence :** 1x/jour + hebdo | **FRs :** FR50-60
 
-Simon reçoit notification WhatsApp → Rapport formaté: CA, ventes, top produits → Si besoin détails: ouvrir Keevo > Rapports → Dashboard graphiques + filtres → Export PDF/Excel (plan payant).
+Simon reçoit notification WhatsApp → Rapport formaté: CA, ventes, top produits → Si besoin détails: ouvrir Keevo > Rapports → Dashboard graphiques + filtres → bouton **Exporter** (pré-rempli avec la vue en cours).
 
 #### Flow 20 — Réaction aux Alertes Stock Critique
 **Acteur :** Simon | **Fréquence :** Au besoin | **FRs :** FR26, FR61-62
@@ -987,3 +987,25 @@ d'autres écrans.
 Voir la story d'implémentation `_bmad-output/implementation-artifacts/UI-2-onboarding-soft-modern-rebrand.md`
 pour le détail fichier par fichier, les décisions de design et les critères
 d'acceptation vérifiés.
+
+## Journeys added by sprint-change-proposal-2026-10-11
+
+### Exporter mes données (propriétaire) — FR55, FR94–FR97
+
+Accès : Réglages > **Exporter mes données**, ou bouton **Exporter** depuis Rapports, Stock, Ventes, Historique des actions (pré-rempli avec la vue en cours).
+
+1. **Quoi** : cases à cocher par jeu de données (Produits, Stocks, Mouvements, Ventes, Clôtures, Inventaires, Clients, Fournisseurs, Équipe, Journal d'audit), raccourci « Tout ».
+2. **Filtres** : boutique (une ou toutes), période (Aujourd'hui, 7 jours, Mois, Personnalisé).
+3. **Format** : CSV, Excel, PDF. Badge **Premium** sur Excel et PDF ; un appui en plan Free ouvre la feuille d'offre. Avec PDF : choix du modèle (Fin de journée, Inventaire, État de stock, Ventes).
+4. **Exporter** : petit volume → téléchargement immédiat puis feuille de partage (WhatsApp, e-mail, fichiers). Gros volume → « Votre export se prépare, nous vous prévenons dès qu'il est prêt », puis notification et entrée dans **Mes exports** (fichier disponible 24 h).
+5. **Hors ligne** : seul « CSV — données de cet appareil » est proposé, avec la mention « Contient uniquement les données synchronisées sur cet appareil ».
+
+### Historique des actions (propriétaire) — FR84, FR98
+
+Principe « la traçabilité comme bouclier » : vocabulaire *historique*, *protection*.
+
+- **Liste** : une ligne par action — icône du type, phrase lisible (« **Awa** a modifié le prix de **Pagne wax 6 yards** »), boutique, heure ; regroupée par jour, défilement infini ; filtres en puces : période, boutique, employé, type d'action, recherche d'objet.
+- **Ligne cliquable → Détail** (feuille ou page) : **Qui** (nom, rôle, appareil) · **Quoi** (l'action) · **Sur quoi** (objet, lien vers la fiche produit / vente / employé s'il existe encore) · **Quand et où** (date et heure exactes, boutique, source « En ligne » ou « Synchronisé depuis l'appareil le… ») · **Changements** (tableau Avant → Après champ par champ, montants en XAF, quantités en unités) · **Contexte** (motif, justification).
+- **Exporter** cette vue (parcours d'export pré-rempli : jeu « Journal d'audit » + filtres en cours).
+- L'écran actuel « Audit » (historique des mouvements de stock) est conservé et renommé **Mouvements de stock**.
+

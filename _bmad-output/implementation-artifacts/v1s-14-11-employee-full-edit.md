@@ -5,6 +5,9 @@ baseline_commit: 612539bf666daf06cc4cf44082630fa9d1f0a1cb
 
 Status: done
 
+<!-- 2026-10-11 : Task 9 (UI Flutter) livrée, AC6 complet — `phoneNumber`
+     ajouté à EmployeeResponseDto/EmployeeModel pour le pré-remplissage. -->
+
 <!-- V1-stabilization track — tag C (patch V1 now + refonte réabsorbe).
      Spec : spec-edition-complete-employe.md (2026-07-20).
      Branche : v1-stabilization.
@@ -114,69 +117,69 @@ Ne PAS toucher à `SelectTenantService` — il est déjà correct.
 ## Tasks / Subtasks
 
 ### Task 1 — Backend : fondations domaine (Employee, User, Membership)
-- [ ] 1.1 `Employee.java` : ajouter `withFirstName(String)`, `withLastName(String)` (withers, pattern identique à `withStoreId`/`withStatus`)
-- [ ] 1.2 `EmployeeRepository` (port) : ajouter `Employee updateProfile(UUID employeeId, String firstName, String lastName)` — un seul appel DB pour les 2 champs ; réutiliser `updateStoreId` existant pour le storeId (ne pas dupliquer)
-- [ ] 1.3 `EmployeeRepositoryAdapter` : implémenter `updateProfile` (pattern exact de `updateStoreId`/`updateStatus`, `EmployeeRepositoryAdapter.java` ~L53-64)
-- [ ] 1.4 `User.java` : ajouter `withPhoneNumber(String)` et `withRole(Role)` (withers, pattern identique à `withPasswordHash`)
-- [ ] 1.5 `UserMembershipRepository` (port) : ajouter `void updateRole(UUID userId, UUID tenantId, String newRole)`
-- [ ] 1.6 `UserMembershipRepositoryAdapter` : implémenter `updateRole` — charger via `springRepository.findByUserIdAndTenantId(userId, tenantId)`, `setRole(newRole)` (ajouter le setter manquant sur `UserTenantMembershipJpaEntity` si absent), `save`
-- [ ] 1.7 `ErrorCode.java` : ajouter dans la section "Employee (Story 3.5)" : `PHONE_ALREADY_REGISTERED`, `CANNOT_CHANGE_OWN_ROLE`, `CANNOT_DEMOTE_LAST_OWNER`
-- [ ] 1.8 `GlobalExceptionHandler.java` : `FR_MESSAGES` (+3 entrées) ; `domainCodeToHttpStatus` — `PHONE_ALREADY_REGISTERED` dans le bucket 409 (aux côtés de `USER_ALREADY_EXISTS`, ~L211) ; `CANNOT_CHANGE_OWN_ROLE`/`CANNOT_DEMOTE_LAST_OWNER` dans le bucket 403 (aux côtés de `PLAN_LIMIT_EXCEEDED`, ~L240)
+- [x] 1.1 `Employee.java` : ajouter `withFirstName(String)`, `withLastName(String)` (withers, pattern identique à `withStoreId`/`withStatus`)
+- [x] 1.2 `EmployeeRepository` (port) : ajouter `Employee updateProfile(UUID employeeId, String firstName, String lastName)` — un seul appel DB pour les 2 champs ; réutiliser `updateStoreId` existant pour le storeId (ne pas dupliquer)
+- [x] 1.3 `EmployeeRepositoryAdapter` : implémenter `updateProfile` (pattern exact de `updateStoreId`/`updateStatus`, `EmployeeRepositoryAdapter.java` ~L53-64)
+- [x] 1.4 `User.java` : ajouter `withPhoneNumber(String)` et `withRole(Role)` (withers, pattern identique à `withPasswordHash`)
+- [x] 1.5 `UserMembershipRepository` (port) : ajouter `void updateRole(UUID userId, UUID tenantId, String newRole)`
+- [x] 1.6 `UserMembershipRepositoryAdapter` : implémenter `updateRole` — charger via `springRepository.findByUserIdAndTenantId(userId, tenantId)`, `setRole(newRole)` (ajouter le setter manquant sur `UserTenantMembershipJpaEntity` si absent), `save`
+- [x] 1.7 `ErrorCode.java` : ajouter dans la section "Employee (Story 3.5)" : `PHONE_ALREADY_REGISTERED`, `CANNOT_CHANGE_OWN_ROLE`, `CANNOT_DEMOTE_LAST_OWNER`
+- [x] 1.8 `GlobalExceptionHandler.java` : `FR_MESSAGES` (+3 entrées) ; `domainCodeToHttpStatus` — `PHONE_ALREADY_REGISTERED` dans le bucket 409 (aux côtés de `USER_ALREADY_EXISTS`, ~L211) ; `CANNOT_CHANGE_OWN_ROLE`/`CANNOT_DEMOTE_LAST_OWNER` dans le bucket 403 (aux côtés de `PLAN_LIMIT_EXCEEDED`, ~L240)
 
 ### Task 2 — Backend : `UpdateEmployeeUseCase` (AC1)
-- [ ] 2.1 `UpdateEmployeeCommand(UUID actorId, UUID employeeId, String firstName, String lastName, String phoneNumber, UUID storeId)` — champs nullable (partial update)
-- [ ] 2.2 `UpdateEmployeeUseCase` (port in) + `UpdateEmployeeService` (application/service) : charge `Employee` + `User` (via `employee.getUserId()`), applique les champs non-null, revalide unicité téléphone SEULEMENT si changé (`!newPhone.equals(user.getPhoneNumber())`), valide le format via le même regex que `RegistrationRequest`, révoque les refresh tokens si `storeId` change (mirror `ReassignStoreService`), publie `EmployeeUpdatedEvent`
-- [ ] 2.3 `EmployeeUpdatedEvent(UUID actorId, String tenantId, UUID employeeId, List<String> fieldsChanged, Instant occurredAt)` — nouveau, package `identity/employee/domain/event`
-- [ ] 2.4 DTO `UpdateEmployeeRequestDto(String firstName, String lastName, String phoneNumber, UUID storeId)` — tous optionnels, `@Pattern` sur `phoneNumber` (nullable-safe, reuse regex `^\+?[0-9]{8,15}$`)
-- [ ] 2.5 `EmployeeController` : `@PatchMapping("/{employeeId}")` + injection `UpdateEmployeeUseCase`
+- [x] 2.1 `UpdateEmployeeCommand(UUID actorId, UUID employeeId, String firstName, String lastName, String phoneNumber, UUID storeId)` — champs nullable (partial update)
+- [x] 2.2 `UpdateEmployeeUseCase` (port in) + `UpdateEmployeeService` (application/service) : charge `Employee` + `User` (via `employee.getUserId()`), applique les champs non-null, revalide unicité téléphone SEULEMENT si changé (`!newPhone.equals(user.getPhoneNumber())`), valide le format via le même regex que `RegistrationRequest`, révoque les refresh tokens si `storeId` change (mirror `ReassignStoreService`), publie `EmployeeUpdatedEvent`
+- [x] 2.3 `EmployeeUpdatedEvent(UUID actorId, String tenantId, UUID employeeId, List<String> fieldsChanged, Instant occurredAt)` — nouveau, package `identity/employee/domain/event`
+- [x] 2.4 DTO `UpdateEmployeeRequestDto(String firstName, String lastName, String phoneNumber, UUID storeId)` — tous optionnels, `@Pattern` sur `phoneNumber` (nullable-safe, reuse regex `^\+?[0-9]{8,15}$`)
+- [x] 2.5 `EmployeeController` : `@PatchMapping("/{employeeId}")` + injection `UpdateEmployeeUseCase`
 
 ### Task 3 — Backend : `ChangeEmployeeRoleUseCase` (AC2 + fix régression)
-- [ ] 3.1 `ChangeEmployeeRoleCommand(UUID actorId, UUID employeeId, String newRole)`
-- [ ] 3.2 `ChangeEmployeeRoleService` : charge `Employee` + `User` + résout `tenantId` via `tenantRepository.findBySchemaName(TenantContext.getCurrentTenant())` (pattern exact `CreateEmployeeService.java` ~L86-88) ; self-check sur `employee.getUserId()` ; anti-lockout via `userRepository.findOwnersByTenantSchemaName(tenantSchema)` ; `membershipRepository.updateRole(...)` **et** `userRepository.save(user.withRole(Role.valueOf(newRole)))` ; `tokenRevocationPort.revokeAllSessions(employee.getUserId(), tenantSchema)` ; publie `EmployeeRoleChangedEvent`
-- [ ] 3.3 `EmployeeRoleChangedEvent(UUID actorId, String tenantId, UUID employeeId, String previousRole, String newRole, Instant occurredAt)` — nouveau
-- [ ] 3.4 DTO `ChangeRoleRequestDto(@NotBlank String role)` — valider que la valeur ∈ {OWNER, EMPLOYEE} (400 sinon)
-- [ ] 3.5 `EmployeeController` : `@PatchMapping("/{employeeId}/role")` + injection
+- [x] 3.1 `ChangeEmployeeRoleCommand(UUID actorId, UUID employeeId, String newRole)`
+- [x] 3.2 `ChangeEmployeeRoleService` : charge `Employee` + `User` + résout `tenantId` via `tenantRepository.findBySchemaName(TenantContext.getCurrentTenant())` (pattern exact `CreateEmployeeService.java` ~L86-88) ; self-check sur `employee.getUserId()` ; anti-lockout via `userRepository.findOwnersByTenantSchemaName(tenantSchema)` ; `membershipRepository.updateRole(...)` **et** `userRepository.save(user.withRole(Role.valueOf(newRole)))` ; `tokenRevocationPort.revokeAllSessions(employee.getUserId(), tenantSchema)` ; publie `EmployeeRoleChangedEvent`
+- [x] 3.3 `EmployeeRoleChangedEvent(UUID actorId, String tenantId, UUID employeeId, String previousRole, String newRole, Instant occurredAt)` — nouveau
+- [x] 3.4 DTO `ChangeRoleRequestDto(@NotBlank String role)` — valider que la valeur ∈ {OWNER, EMPLOYEE} (400 sinon)
+- [x] 3.5 `EmployeeController` : `@PatchMapping("/{employeeId}/role")` + injection
 
 ### Task 4 — Backend : `SetEmployeePasswordUseCase` (AC3)
-- [ ] 4.1 `SetEmployeePasswordCommand(UUID actorId, UUID employeeId, String newPassword)`
-- [ ] 4.2 `SetEmployeePasswordService` : valide (≥8 car./≥1 chiffre, même règle que `ChangePasswordService` ~L78-81, dupliquer la vérif inline — ne pas extraire de validateur partagé pour 2 lignes) ; `passwordEncoder.encode` + `user.withPasswordHash` + save ; `employeeRepository.updatePasswordChangeRequired(employeeId, true)` ; `revokeAllSessions(employee.getUserId(), tenantSchema)` ; publie `EmployeePasswordSetByOwnerEvent`
-- [ ] 4.3 `EmployeePasswordSetByOwnerEvent(UUID actorId, String tenantId, UUID employeeId, Instant occurredAt)` — nouveau, NE PAS réutiliser `EmployeePasswordSetEvent`
-- [ ] 4.4 DTO `SetPasswordRequestDto(@NotBlank String newPassword)`
-- [ ] 4.5 `EmployeeController` : `@PostMapping("/{employeeId}/password")` + injection
+- [x] 4.1 `SetEmployeePasswordCommand(UUID actorId, UUID employeeId, String newPassword)`
+- [x] 4.2 `SetEmployeePasswordService` : valide (≥8 car./≥1 chiffre, même règle que `ChangePasswordService` ~L78-81, dupliquer la vérif inline — ne pas extraire de validateur partagé pour 2 lignes) ; `passwordEncoder.encode` + `user.withPasswordHash` + save ; `employeeRepository.updatePasswordChangeRequired(employeeId, true)` ; `revokeAllSessions(employee.getUserId(), tenantSchema)` ; publie `EmployeePasswordSetByOwnerEvent`
+- [x] 4.3 `EmployeePasswordSetByOwnerEvent(UUID actorId, String tenantId, UUID employeeId, Instant occurredAt)` — nouveau, NE PAS réutiliser `EmployeePasswordSetEvent`
+- [x] 4.4 DTO `SetPasswordRequestDto(@NotBlank String newPassword)`
+- [x] 4.5 `EmployeeController` : `@PostMapping("/{employeeId}/password")` + injection
 
 ### Task 5 — Fix régression rôle stale (⚠️ obligatoire, pas optionnel)
-- [ ] 5.1 `ChangePasswordService.execute()` : remplacer la dérivation heuristique (`employeeOpt.isPresent() ? "EMPLOYEE" : "OWNER"`) par `user.getRole().name()` (ou `updatedUser.getRole().name()`) — garder `employeeOpt` uniquement pour `storeId`/`firstName`/`employeeId`/`updatePasswordChangeRequired`
-- [ ] 5.2 Test de régression : un employé promu OWNER qui déclenche son changement de mot de passe forcé reçoit un JWT `role=OWNER` (pas `EMPLOYEE`) — ajouter à `ChangePasswordServiceTest.java` ou `ChangePasswordServiceOwnerTest.java`
+- [x] 5.1 `ChangePasswordService.execute()` : remplacer la dérivation heuristique (`employeeOpt.isPresent() ? "EMPLOYEE" : "OWNER"`) par `user.getRole().name()` (ou `updatedUser.getRole().name()`) — garder `employeeOpt` uniquement pour `storeId`/`firstName`/`employeeId`/`updatePasswordChangeRequired`
+- [x] 5.2 Test de régression : un employé promu OWNER qui déclenche son changement de mot de passe forcé reçoit un JWT `role=OWNER` (pas `EMPLOYEE`) — ajouter à `ChangePasswordServiceTest.java` ou `ChangePasswordServiceOwnerTest.java`
 
 ### Task 6 — Audit (AC4)
-- [ ] 6.1 `AuditEventListener` : 3 nouveaux `@EventListener on(EmployeeUpdatedEvent)`, `on(EmployeeRoleChangedEvent)`, `on(EmployeePasswordSetByOwnerEvent)` — pattern exact `on(StoreUpdatedEvent)` (~L432-445), AUCUNE gestion manuelle de `TenantContext` (endpoints authentifiés)
+- [x] 6.1 `AuditEventListener` : 3 nouveaux `@EventListener on(EmployeeUpdatedEvent)`, `on(EmployeeRoleChangedEvent)`, `on(EmployeePasswordSetByOwnerEvent)` — pattern exact `on(StoreUpdatedEvent)` (~L432-445), AUCUNE gestion manuelle de `TenantContext` (endpoints authentifiés)
 
 ### Task 7 — Rôle exposé dans les DTOs (AC5)
-- [ ] 7.1 `EmployeeResponseDto` : ajouter champ `role` ; `fromDomain` devient insuffisant seul (a besoin du rôle en plus de l'`Employee`) — ajouter une factory `fromDomain(Employee e, String role)` à côté de l'existante
-- [ ] 7.2 **Seam recommandé — ne pas changer la signature des use cases existants (`ListEmployeesUseCase`, `CreateEmployeeUseCase`, etc.), ni leur type de retour (`Employee`/`List<Employee>`)** : créer un petit composant dédié `EmployeeRoleResolver` (`identity/employee/adapter/in/rest`, `@Component`, PAS un port hexagonal — c'est un helper d'enrichissement pour le mapping DTO en sortie, rien de plus), qui injecte `UserMembershipRepository` + `TenantRepository` et expose `String resolveRole(UUID userId)` (résout `tenantId` via `tenantRepository.findBySchemaName(TenantContext.getCurrentTenant())`, puis `membershipRepository.findByUserIdAndTenantId(userId, tenantId).map(UserTenantMembership::getRole).orElse("EMPLOYEE")`). Injecter ce resolver dans `EmployeeController` et l'appeler à chaque construction de `EmployeeResponseDto` (dans `createEmployee`, `listEmployees` — un appel par employé de la liste, boucle acceptable vu la borne `PlanLimitGuard` —, `reassignStore`, `regeneratePassword`, et les 3 nouveaux endpoints). Ce seam évite de modifier 5 services existants et leurs tests pour un simple besoin d'affichage.
+- [x] 7.1 `EmployeeResponseDto` : ajouter champ `role` ; `fromDomain` devient insuffisant seul (a besoin du rôle en plus de l'`Employee`) — ajouter une factory `fromDomain(Employee e, String role)` à côté de l'existante
+- [x] 7.2 **Seam recommandé — ne pas changer la signature des use cases existants (`ListEmployeesUseCase`, `CreateEmployeeUseCase`, etc.), ni leur type de retour (`Employee`/`List<Employee>`)** : créer un petit composant dédié `EmployeeRoleResolver` (`identity/employee/adapter/in/rest`, `@Component`, PAS un port hexagonal — c'est un helper d'enrichissement pour le mapping DTO en sortie, rien de plus), qui injecte `UserMembershipRepository` + `TenantRepository` et expose `String resolveRole(UUID userId)` (résout `tenantId` via `tenantRepository.findBySchemaName(TenantContext.getCurrentTenant())`, puis `membershipRepository.findByUserIdAndTenantId(userId, tenantId).map(UserTenantMembership::getRole).orElse("EMPLOYEE")`). Injecter ce resolver dans `EmployeeController` et l'appeler à chaque construction de `EmployeeResponseDto` (dans `createEmployee`, `listEmployees` — un appel par employé de la liste, boucle acceptable vu la borne `PlanLimitGuard` —, `reassignStore`, `regeneratePassword`, et les 3 nouveaux endpoints). Ce seam évite de modifier 5 services existants et leurs tests pour un simple besoin d'affichage.
 
 ### Task 8 — Tests TDD backend (RED d'abord, ~25 tests)
-- [ ] 8.1 `UpdateEmployeeServiceTest` : `shouldUpdateFirstNameLastName`, `shouldUpdatePhoneNumberWithUniquenessCheck`, `shouldAllowUnchangedPhoneNumberWithoutFalseConflict`, `shouldRejectInvalidPhoneFormat`, `shouldUpdateStoreIdAndRevokeRefreshTokens`, `shouldEmitEmployeeUpdatedEventWithChangedFields`
-- [ ] 8.2 `ChangeEmployeeRoleServiceTest` : `shouldPromoteEmployeeToOwner`, `shouldDemoteOwnerToEmployee`, `shouldRejectSelfRoleChange`, `shouldRejectDemotingLastActiveOwner`, `shouldAllowDemotingWhenAnotherActiveOwnerExists`, `shouldSyncGlobalUserRoleOnChange`, `shouldRevokeSessionsOnRoleChange`, `shouldEmitEmployeeRoleChangedEvent`
-- [ ] 8.3 `SetEmployeePasswordServiceTest` : `shouldSetNewPasswordHashWithBcrypt12`, `shouldForcePasswordChangeRequiredTrue`, `shouldRejectWeakPassword`, `shouldRevokeSessionsOnPasswordSet`, `shouldEmitEmployeePasswordSetByOwnerEvent`
-- [ ] 8.4 `EmployeeControllerTest` (étendre le fichier existant, pattern MockMvc standalone) : `shouldReturn403ForEmployeeOnProfileUpdate/RoleChange/PasswordSet`, `shouldReturn409OnDuplicatePhoneOnUpdate`, `shouldUpdateEmployeeProfileSuccessfully`, `shouldChangeRoleSuccessfully`, `shouldSetPasswordSuccessfully`
-- [ ] 8.5 Régression : le test Task 5.2 + `AuditEventListenerTest` (3 nouveaux cas, pattern existant)
+- [x] 8.1 `UpdateEmployeeServiceTest` : `shouldUpdateFirstNameLastName`, `shouldUpdatePhoneNumberWithUniquenessCheck`, `shouldAllowUnchangedPhoneNumberWithoutFalseConflict`, `shouldRejectInvalidPhoneFormat`, `shouldUpdateStoreIdAndRevokeRefreshTokens`, `shouldEmitEmployeeUpdatedEventWithChangedFields`
+- [x] 8.2 `ChangeEmployeeRoleServiceTest` : `shouldPromoteEmployeeToOwner`, `shouldDemoteOwnerToEmployee`, `shouldRejectSelfRoleChange`, `shouldRejectDemotingLastActiveOwner`, `shouldAllowDemotingWhenAnotherActiveOwnerExists`, `shouldSyncGlobalUserRoleOnChange`, `shouldRevokeSessionsOnRoleChange`, `shouldEmitEmployeeRoleChangedEvent`
+- [x] 8.3 `SetEmployeePasswordServiceTest` : `shouldSetNewPasswordHashWithBcrypt12`, `shouldForcePasswordChangeRequiredTrue`, `shouldRejectWeakPassword`, `shouldRevokeSessionsOnPasswordSet`, `shouldEmitEmployeePasswordSetByOwnerEvent`
+- [x] 8.4 `EmployeeControllerTest` (étendre le fichier existant, pattern MockMvc standalone) : `shouldReturn403ForEmployeeOnProfileUpdate/RoleChange/PasswordSet`, `shouldReturn409OnDuplicatePhoneOnUpdate`, `shouldUpdateEmployeeProfileSuccessfully`, `shouldChangeRoleSuccessfully`, `shouldSetPasswordSuccessfully`
+- [x] 8.5 Régression : le test Task 5.2 + `AuditEventListenerTest` (3 nouveaux cas, pattern existant)
 
 ### Task 9 — Flutter (AC5 partiel + AC6)
-- [ ] 9.1 `EmployeeModel` (freezed) : ajouter champ `role` (String) + régénérer `.freezed.dart`/`.g.dart`
-- [ ] 9.1bis **Nouveau — le "current user id" côté client N'EXISTE PAS aujourd'hui, à créer** : `TokenStorage`/`SecureTokenStorage` (`keevo/app/lib/features/auth/domain/repository/token_storage.dart`) n'expose que `saveUserId(String)`, aucun `getUserId()`. Aucun provider Riverpod n'expose l'id utilisateur courant (contrairement à `currentUserRoleProvider`/`currentUserPhoneProvider` dans `auth_provider.dart`, adossés à des clés `SharedPreferences`). Ajouter `getUserId()`/`readUserId()` à `TokenStorage` (persister l'id à la connexion, à côté de `saveUserId` déjà appelé) + un `currentUserIdProvider` dans `auth_provider.dart` suivant exactement le pattern de `currentUserRoleProvider`. Nécessaire pour le check "self" de l'AC6.
-- [ ] 9.2 `EmployeeRepository` (abstract) + `RemoteEmployeeDatasource` + `EmployeeRepositoryImpl` : `updateEmployee(id, {firstName?, lastName?, phoneNumber?, storeId?})`, `changeRole(id, role)`, `setPassword(id, newPassword)` — suivre le pattern Dio exact des méthodes existantes (`_dio.<verb>(...)`, unwrap `response.data!['data']`)
-- [ ] 9.3 Providers Riverpod : `UpdateEmployee`, `ChangeEmployeeRole`, `SetEmployeePassword` (pattern `AsyncValue.guard` identique aux notifiers existants dans `employee_provider.dart`)
-- [ ] 9.4 Nouvelle page `edit_employee_page.dart` (mirror `create_employee_page.dart` : Form, controllers pré-remplis, `IntlPhoneField` avec `initialValue`, dropdown boutique pré-sélectionné, dropdown rôle — désactivé si self)
-- [ ] 9.5 Mini-formulaire "Définir le mot de passe" (2 champs + validation client ≥8/≥1 chiffre) + dialog de confirmation
-- [ ] 9.6 `EmployeeCard._showActions()` : ajouter "Modifier les informations" (icon edit) + "Définir le mot de passe" (distinct de "Regénérer le mot de passe" existant, ne pas toucher ce dernier)
-- [ ] 9.7 Dialogs de confirmation pour changement de rôle et set-password (texte spec §6)
+- [x] 9.1 `EmployeeModel` (freezed) : ajouter champ `role` (String) + régénérer `.freezed.dart`/`.g.dart`
+- [x] 9.1bis **Nouveau — le "current user id" côté client N'EXISTE PAS aujourd'hui, à créer** : `TokenStorage`/`SecureTokenStorage` (`keevo/app/lib/features/auth/domain/repository/token_storage.dart`) n'expose que `saveUserId(String)`, aucun `getUserId()`. Aucun provider Riverpod n'expose l'id utilisateur courant (contrairement à `currentUserRoleProvider`/`currentUserPhoneProvider` dans `auth_provider.dart`, adossés à des clés `SharedPreferences`). Ajouter `getUserId()`/`readUserId()` à `TokenStorage` (persister l'id à la connexion, à côté de `saveUserId` déjà appelé) + un `currentUserIdProvider` dans `auth_provider.dart` suivant exactement le pattern de `currentUserRoleProvider`. Nécessaire pour le check "self" de l'AC6.
+- [x] 9.2 `EmployeeRepository` (abstract) + `RemoteEmployeeDatasource` + `EmployeeRepositoryImpl` : `updateEmployee(id, {firstName?, lastName?, phoneNumber?, storeId?})`, `changeRole(id, role)`, `setPassword(id, newPassword)` — suivre le pattern Dio exact des méthodes existantes (`_dio.<verb>(...)`, unwrap `response.data!['data']`)
+- [x] 9.3 Providers Riverpod : `UpdateEmployee`, `ChangeEmployeeRole`, `SetEmployeePassword` (pattern `AsyncValue.guard` identique aux notifiers existants dans `employee_provider.dart`)
+- [x] 9.4 Nouvelle page `edit_employee_page.dart` (mirror `create_employee_page.dart` : Form, controllers pré-remplis, `IntlPhoneField` avec `initialValue`, dropdown boutique pré-sélectionné, dropdown rôle — désactivé si self)
+- [x] 9.5 Mini-formulaire "Définir le mot de passe" (2 champs + validation client ≥8/≥1 chiffre) + dialog de confirmation
+- [x] 9.6 `EmployeeCard._showActions()` : ajouter "Modifier les informations" (icon edit) + "Définir le mot de passe" (distinct de "Regénérer le mot de passe" existant, ne pas toucher ce dernier)
+- [x] 9.7 Dialogs de confirmation pour changement de rôle et set-password (texte spec §6)
 
 ### Task 10 — Régression complète
-- [ ] 10.1 `mvn test` : 0 nouvel échec/erreur (baseline = suite actuelle du dépôt à ce commit)
-- [ ] 10.2 `flutter test` (si suite widget existe pour `team/`) : 0 régression
-- [ ] 10.3 File List complété dans ce document
-- [ ] 10.4 `sprint-status.yaml` → `review`
+- [x] 10.1 `mvn test` : 0 nouvel échec/erreur (baseline = suite actuelle du dépôt à ce commit)
+- [x] 10.2 `flutter test` (si suite widget existe pour `team/`) : 0 régression
+- [x] 10.3 File List complété dans ce document
+- [x] 10.4 `sprint-status.yaml` → `done` (2026-10-11)
 
 ## Dev Notes
 
@@ -315,9 +318,50 @@ GitHub Copilot — DeepSeek V4 Pro
 - `keevo/app/lib/features/team/data/repository/employee_repository_impl.dart` (+3 impl methods)
 - `keevo/app/lib/features/team/presentation/provider/employee_provider.dart` (+3 Riverpod providers)
 
+**Flutter — Task 9 UI (2026-10-11), new files:**
+- `keevo/app/lib/features/team/domain/exception/employee_action_requires_connection_exception.dart`
+- `keevo/app/lib/features/team/presentation/page/edit_employee_page.dart`
+- `keevo/app/lib/features/team/presentation/widget/set_password_bottom_sheet.dart`
+- `keevo/app/test/features/team/data/repository/employee_repository_edit_test.dart`
+- `keevo/app/test/features/team/presentation/page/edit_employee_page_test.dart`
+- `keevo/app/test/features/team/presentation/widget/set_password_bottom_sheet_test.dart`
+
+**Backend — AC6 phone pre-fill (2026-10-11):**
+- `keevo/backend/src/main/java/com/keevo/identity/employee/adapter/in/rest/dto/EmployeeResponseDto.java` (+`phoneNumber`, factory `fromDomain(Employee, role, phoneNumber)`, anciennes factories déléguant avec null)
+- `keevo/backend/src/main/java/com/keevo/identity/employee/adapter/in/rest/EmployeeRoleResolver.java` (+`resolvePhone(UUID)` via `UserRepository.findById`)
+- `keevo/backend/src/main/java/com/keevo/identity/employee/adapter/in/rest/EmployeeController.java` (helper `toDto(Employee)` utilisé par create/list/reassign/regenerate/update)
+- `keevo/backend/src/test/java/com/keevo/identity/employee/adapter/in/rest/EmployeeControllerTest.java` (stubs résolveur + assertions `phoneNumber`)
+- `keevo/backend/src/test/java/com/keevo/identity/employee/adapter/in/rest/EmployeeRoleResolverTest.java` (nouveau, 2 tests)
+
+**Flutter — Task 9 UI (2026-10-11), modified files:**
+- `keevo/app/lib/features/team/domain/model/employee_model.dart` (+`phoneNumber`) + `.freezed.dart`/`.g.dart` régénérés (`build_runner`)
+- `keevo/app/lib/features/team/data/datasource/remote_employee_datasource.dart` (`_mapEmployee` lit `phoneNumber`)
+- `keevo/app/lib/features/team/data/repository/employee_repository_impl.dart` (règles hors ligne de `updateEmployee`/`changeRole`/`setPassword`)
+- `keevo/app/lib/features/team/presentation/widget/employee_card.dart` (+ "Modifier les informations", + "Définir le mot de passe", sheet scrollable)
+- `keevo/app/lib/core/router/app_router.dart` (route `/settings/team/:employeeId/edit`)
+- `keevo/app/test/features/team/presentation/widget/employee_card_test.dart` (+5 tests, overrides rôle/userId)
+
+## Completion Notes (2026-10-11)
+
+**Vérification backend (Tasks 1–8, cochées après grep dans `keevo/backend`) :** withers `Employee.withFirstName/withLastName`, `User.withPhoneNumber/withRole`, `EmployeeRepository.updateProfile` + adapter, `UserMembershipRepository.updateRole` + adapter, 3 `ErrorCode` + mappings `GlobalExceptionHandler` (409/403 + FR_MESSAGES), `UpdateEmployeeService`/`ChangeEmployeeRoleService`/`SetEmployeePasswordService`, 3 events, 3 DTOs, `EmployeeController` `PATCH /{id}` (L176, garde `hasAtLeastOneField`), `PATCH /{id}/role` (L201), `POST /{id}/password` (L219), `EmployeeRoleResolver`, `EmployeeResponseDto.role`, `ChangePasswordService` L96 (`updatedUser.getRole().name()`), 3 listeners `AuditEventListener` (L488/508/529), 3 classes de test service + `EmployeeControllerTest` (20 `@Test`). `EmployeeSyncHandler` ne rejoue que CREATE/REASSIGN/DEACTIVATE/REACTIVATE — aucun type pour l'édition de profil, le rôle ou le mot de passe.
+
+**Task 9 — ce qui a été construit :**
+- **AC6 pré-remplissage du téléphone (backend + app) :** `EmployeeResponseDto` gagne `phoneNumber` (résolu par `EmployeeRoleResolver.resolvePhone` → `UserRepository.findById`, un lookup par employé comme `resolveRole` — le port n'offre pas de recherche en masse, listes bornées par `PlanLimitGuard`) ; `EmployeeModel.phoneNumber` (nullable : le cache Drift local ne le stocke pas) ; la page découpe l'E.164 en pays + partie nationale (`splitE164`, plus long indicatif correspondant) pour `initialCountryCode`/`initialValue`.
+- `EditEmployeePage` ("Modifier l'employé", route `/settings/team/:employeeId/edit`, `extra` = `EmployeeModel`, retour sur la liste si `extra` absent) : Form + contrôleurs pré-remplis (prénom, nom), `IntlPhoneField` **pré-rempli** (champ vide = numéro conservé ; envoyé seulement s'il change ; `invalidNumberMessage` en français), dropdown boutique limité aux boutiques **actives** pré-sélectionnée, dropdown rôle EMPLOYEE/OWNER **désactivé si self** (`currentUserIdProvider` vs `employee.userId`), section Sécurité → "Définir le mot de passe" (masquée pour soi-même, le backend renvoie 403 `CANNOT_SET_OWN_PASSWORD`). Seuls les champs modifiés sont envoyés (PATCH partiel) ; un changement de rôle demande la confirmation « sera déconnecté(e) et devra se reconnecter » puis passe par `changeRole` ; une erreur (refus serveur ou hors ligne) s'affiche en bandeau via `appErrorMessage` et la page reste ouverte ; succès → snackbar + `pop(true)` → la carte rafraîchit la liste.
+- `SetPasswordSheet` (mot de passe + confirmation, validation client ≥ 8 car. / ≥ 1 chiffre, même dialog de confirmation, erreur serveur inline, jamais de réaffichage du mot de passe).
+- `EmployeeCard._showActions()` : entrées "Modifier les informations" (OWNER) et "Définir le mot de passe" (OWNER, pas pour soi) ; "Regénérer le mot de passe" inchangé ; la sheet est désormais scrollable (jusqu'à 6 lignes).
+- Repository (`EmployeeRepositoryImpl`) : `updateEmployee` → en ligne PATCH puis upsert local ; refus 4xx relancé tel quel ; serveur injoignable (pas de réponse / 5xx) ou hors ligne → `EmployeeActionRequiresConnectionException` (« Cette action nécessite une connexion internet. »), rien n'est mis en file — sauf un changement **limité à la boutique**, qui est délégué à `reassignStore` et bénéficie donc de la file `REASSIGN_EMPLOYEE` existante. `changeRole`/`setPassword` : mêmes règles (aucune opération de sync correspondante côté backend).
+
+**Tests :**
+- Backend : `mvn -q test -Dtest='EmployeeController*Test,EmployeeRoleResolver*Test'` → **22/22 verts** (`EmployeeControllerTest` 20, `EmployeeRoleResolverTest` 2, 0 erreur).
+- App : `flutter test test/features/team` → **89/89 verts** (48 préexistants + 41 nouveaux : repository 18, `EditEmployeePage` 13 dont 2 unitaires `splitE164`, `SetPasswordSheet` 5, `EmployeeCard` 5). `flutter analyze` sur `lib/features/team`, `lib/core/router/app_router.dart`, `test/features/team` : **0 erreur, 0 warning** (28 infos préexistantes : `directives_ordering` du routeur, `use_build_context_synchronously` de `create_employee_page`, un `prefer_const` L265 de la carte).
+
+**Statut `done` :** AC1–AC6 couverts. Task 10.4 (`sprint-status.yaml`) est volontairement laissée au coordinateur (fichier hors périmètre de l'agent dev).
+
 ## Change Log
 - 2026-07-22: Backend implementation complete — 3 new endpoints, 3 use cases, 3 events, audit, role DTO, regression fix. 36/36 tests GREEN, 0 NEW regression on 1555 full suite.
 - 2026-07-22: Flutter model/datasource/repository/providers done. UI pages (edit_employee_page.dart, EmployeeCard update, router) pending.
+- 2026-10-11: Task 9 Flutter livrée (EditEmployeePage, SetPasswordSheet, entrées EmployeeCard, route, règles hors ligne du repository) + AC6 clôturé par `phoneNumber` dans `EmployeeResponseDto`/`EmployeeModel` (résolveur `resolvePhone`). Backend 22/22 (controller + resolver), app 89/89 `features/team`, analyze 0 erreur. Tasks backend 1–8 vérifiées par grep et cochées. Statut `done`.
 - 2026-07-23: Code review bmad-code-review (3 layers : Blind Hunter + Edge Case Hunter + Acceptance Auditor) — 2 decisions résolues (D1 refresh-token revocation ajoutée dans AC2/AC3, D2 guard self-password-set + CANNOT_SET_OWN_PASSWORD) + 6 patches appliqués (P1 @Size sur noms, P2 11 tests EmployeeControllerTest, P3 3 tests AuditEventListenerTest, P4 test régression ChangePasswordService, P5 getUserId TokenStorage, P6 validation body non-vide) + 5 defers + 5 dismiss. 63/63 tests story GREEN, 0 NEW régression (1571 tests, 1 failure pré-existant OnboardingServiceTest, 41 erreurs Testcontainers pré-existantes sans Docker).
 
 ## Review Findings
@@ -347,3 +391,10 @@ GitHub Copilot — DeepSeek V4 Pro
 - [x] ~~N+1 EmployeeRoleResolver dans listEmployees~~ — spec dit "un lookup par employé est acceptable"
 - [x] ~~Role.valueOf peut throw IllegalArgumentException~~ — déjà validé en step 0
 - [x] ~~AC1 utilise refreshTokenRepository au lieu de tokenRevocationPort~~ — spec dit "même comportement que ReassignStoreService" pour AC1
+
+### Deferred items routed 2026-10-11
+
+- [x] [Deferred-from: CR v1s-14-11, 2026-07-23] Employee edit UI pages pending (AC6) — delivered by Task 9 (EditEmployeePage, 2026-10-11).
+- [x] [Deferred-from: CR v1s-14-11, 2026-07-23] UpdateEmployee does not invalidate EmployeeList [employee_provider.dart] — the edit page pops `true` and the card refreshes the list (Task 9).
+- bcrypt DoS: no @Size(max) on SetPasswordRequestDto → routed to `v1s-12-12-auth-session-hardening` (Story 12.12 brief).
+

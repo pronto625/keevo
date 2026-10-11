@@ -245,7 +245,7 @@ Keevo est une application hybride Mobile (Flutter) + Desktop (Tauri 2.0) avec un
 
 - **Plan Free (Gratuit) :** max 1 boutique, 500 produits, 3 employés — fonctionnalités core complètes.
 - **Premium Trial :** Offert automatiquement à chaque nouveau tenant — 6 mois de fonctionnalités Premium sans restriction dès l'inscription.
-- **Premium (Payant) :** boutiques illimitées, employés illimités, produits illimités, rapports avancés, exports PDF/Excel, support prioritaire. Requis après expiration du Premium Trial.
+- **Premium (Payant) :** boutiques illimitées, employés illimités, produits illimités, rapports avancés, exports Excel et PDF à modèles, exports volumineux en arrière-plan, support prioritaire. *(L'export CSV des données reste disponible sur tous les plans — portabilité des données.)* Requis après expiration du Premium Trial.
 - **Rétrogradation automatique :** À l'expiration du Trial ou de l'abonnement Premium sans renouvellement de paiement → bascule vers Plan Free (limitations actives, données conservées intégralement).
 - **Activation manuelle :** V1 — Toor active manuellement les comptes payants après preuve de paiement Mobile Money.
 - **Paiement automatique :** Growth — intégration directe Mobile Money.
@@ -400,7 +400,11 @@ Keevo est une application hybride Mobile (Flutter) + Desktop (Tauri 2.0) avec un
 - **FR52:** Le système peut générer un rapport hebdomadaire automatique (dimanche soir)
 - **FR53:** Les rapports incluent : CA, bénéfices, marges, top/flop produits, ventes par boutique, ventes par employé
 - **FR54:** Un propriétaire peut consulter la rentabilité par produit (prix achat + transport + prix vente = marge nette)
-- **FR55:** Un propriétaire peut exporter des rapports en PDF et Excel *(Plan Payant)*
+- **FR55:** Un propriétaire peut exporter ses données et rapports dans le format de son choix : CSV *(tous plans)*, Excel et PDF *(Plan Payant)*
+- **FR94:** Un propriétaire peut exporter l'intégralité des données de son entreprise (produits, stocks, mouvements, ventes, clôtures, inventaires, clients, fournisseurs, équipe, journal d'audit), filtrées par boutique et par période
+- **FR95:** Le système peut générer des documents PDF à partir de modèles à l'identité de la boutique (rapport de fin de journée, rapport d'inventaire, état de stock, liste des ventes)
+- **FR96:** Le système peut générer les exports volumineux en arrière-plan et notifier le propriétaire quand le fichier est prêt à télécharger ou partager
+- **FR97:** Un utilisateur peut exporter en CSV les données présentes sur son appareil, même hors ligne
 - **FR56:** Un propriétaire peut consulter les performances comparatives entre boutiques
 
 ### Communication WhatsApp
@@ -447,7 +451,8 @@ Keevo est une application hybride Mobile (Flutter) + Desktop (Tauri 2.0) avec un
 
 ### Sécurité & Audit
 
-- **FR84:** Le système peut maintenir un journal d'audit complet de toutes les modifications (stock, prix, ventes, transferts) avec identité, horodatage et valeurs avant/après
+- **FR84:** Le système peut maintenir un journal d'audit complet de toutes les modifications (stock, prix, ventes, transferts) avec identité, horodatage, boutique, objet concerné (libellé lisible), appareil, source (en ligne / synchronisation) et valeurs avant/après
+- **FR98:** Un propriétaire peut consulter le journal d'audit, le filtrer (période, boutique, employé, type d'action, objet) et ouvrir chaque ligne pour voir le détail complet : qui a fait quoi, sur quoi, quand, où, et les valeurs avant/après champ par champ
 - **FR85:** L'application peut chiffrer les données stockées localement sur le device (chiffrement au repos)
 - **FR86:** Le système utilise le Franc CFA (XAF) comme devise unique en V1 pour toutes les opérations financières
 
