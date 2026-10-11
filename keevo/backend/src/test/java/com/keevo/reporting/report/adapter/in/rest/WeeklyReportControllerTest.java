@@ -48,6 +48,7 @@ class WeeklyReportControllerTest {
     @Mock private GenerateEndOfDayReportUseCase dailyReportGenerator;
     @Mock private StoreRepository storeRepository;
     @Mock private DayClosureRepository dayClosureRepository;
+    @Mock private com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository reportRepository;
 
     private MockMvc mockMvc;
     private UUID ownerId;
@@ -56,7 +57,8 @@ class WeeklyReportControllerTest {
     void setUp() {
         ReportController controller = new ReportController(
                 getReportHistoryUseCase, resendReportUseCase, weeklyReportGenerator,
-                dailyReportGenerator, storeRepository, dayClosureRepository);
+                dailyReportGenerator, storeRepository, dayClosureRepository,
+                new com.keevo.reporting.report.application.service.WeeklyReportWindowResolver(reportRepository));
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

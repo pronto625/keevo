@@ -11,6 +11,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -39,6 +40,7 @@ public class CloseDayService implements CloseDayUseCase {
     private final DayClosureRepository dayClosureRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final TransactionLockPort transactionLock;
+    private final Clock clock;
 
     // West Africa Time (WAT) = UTC+1
     private static final ZoneId WAT_ZONE = ZoneId.of("Africa/Lagos");
@@ -49,11 +51,13 @@ public class CloseDayService implements CloseDayUseCase {
     public CloseDayService(SaleRepository saleRepository,
                            DayClosureRepository dayClosureRepository,
                            ApplicationEventPublisher eventPublisher,
-                           TransactionLockPort transactionLock) {
+                           TransactionLockPort transactionLock,
+                           Clock clock) {
         this.saleRepository = saleRepository;
         this.dayClosureRepository = dayClosureRepository;
         this.eventPublisher = eventPublisher;
         this.transactionLock = transactionLock;
+        this.clock = clock;
     }
 
     @Override
@@ -65,8 +69,8 @@ public class CloseDayService implements CloseDayUseCase {
 
         // The closure time decides the closed day. An offline closure keeps the time it
         // was made on the device (never in the future, at most MAX_BACKDATE ago);
-        // otherwise it is now.
-        Instant now      = Instant.now();
+        // otherwise it is now (injected Clock, story 13.11).
+        Instant now      = Instant.now(clock);
         Instant closedAt = command.closedAt() != null && !command.closedAt().isAfter(now)
                 ? command.closedAt() : now;
         if (closedAt.isBefore(now.minus(MAX_BACKDATE))) {

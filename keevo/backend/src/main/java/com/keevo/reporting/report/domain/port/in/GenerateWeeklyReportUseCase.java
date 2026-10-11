@@ -19,10 +19,18 @@ public interface GenerateWeeklyReportUseCase {
             UUID storeId,
             String tenantId,
             boolean isAutomatic,
-            Instant weekStart,         // Monday 00:00:00 WAT as Instant
-            Instant weekEnd,           // Sunday 23:59:59 WAT as Instant
-            ReportChannel deliveryChannel  // null → uses tenant weeklyReportChannel preference
-    ) {}
+            Instant weekStart,         // first sale time covered (see WeeklyReportWindowResolver)
+            Instant weekEnd,           // last sale time covered (generation time or Sunday 23:59:59.999999 WAT)
+            ReportChannel deliveryChannel,  // null → uses tenant weeklyReportChannel preference
+            Instant lateFrom,          // sales received after this are covered even if made before weekStart; null → none
+            Instant receivedUntil      // sales received after this belong to the next report; null → no limit
+    ) {
+        /** Plain time window (no late sales, no arrival limit). */
+        public WeeklyReportCommand(UUID storeId, String tenantId, boolean isAutomatic,
+                                   Instant weekStart, Instant weekEnd, ReportChannel deliveryChannel) {
+            this(storeId, tenantId, isAutomatic, weekStart, weekEnd, deliveryChannel, null, null);
+        }
+    }
 
     EndOfDayReport generateWeeklyReport(WeeklyReportCommand command);
 }

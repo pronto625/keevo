@@ -5,7 +5,7 @@
 
 ## Goal
 
-Remove the concurrency races and data-loss paths on the production V1 line that the 2026-07-20 audit found to be mechanically certain (B-CRIT-1/2/3, F-CRIT-1/2/3, F-HIGH-4), together with the residual integrity gaps routed from deferred-work on 2026-10-11. The aim is that offline-first sync, stock mutations, transfers, sale cancellation, inventory validation, schedulers, report windows and tenant-schema provisioning never double-apply, lose or silently drop data. Stories 13.1–13.9 are done and 13.10 is in progress. 13.8–13.12 are item-list stories made from redistributed review deferrals. All are tag A (urgent V1 patch) except 13.12, which is tag C (V1 patch that the refonte also absorbs).
+Remove the concurrency races and data-loss paths on the production V1 line that the 2026-07-20 audit found to be mechanically certain (B-CRIT-1/2/3, F-CRIT-1/2/3, F-HIGH-4), together with the residual integrity gaps routed from deferred-work on 2026-10-11. The aim is that offline-first sync, stock mutations, transfers, sale cancellation, inventory validation, schedulers, report windows and tenant-schema provisioning never double-apply, lose or silently drop data. Stories 13.1–13.10 are done and 13.11 is in progress. 13.8–13.12 are item-list stories made from redistributed review deferrals. All are tag A (urgent V1 patch) except 13.12, which is tag C (V1 patch that the refonte also absorbs).
 
 ## Stories
 
@@ -18,8 +18,8 @@ Remove the concurrency races and data-loss paths on the production V1 line that 
 - Story 13.7: Audit/movement events on offline inventory validation (done)
 - Story 13.8: Residual sync integrity: offline write paths, handler parity (done)
 - Story 13.9: Scheduler locking and check-then-act races (done)
-- Story 13.10: Optimistic lock on Sale (@Version + 409) (in progress)
-- Story 13.11: Day-closure and report windows (PO decisions) (backlog)
+- Story 13.10: Optimistic lock on Sale (@Version + 409) (done)
+- Story 13.11: Day-closure and report windows (PO decisions) (in progress)
 - Story 13.12: Tenant schema provisioning hygiene (backlog)
 
 ## Requirements & Constraints
@@ -29,11 +29,12 @@ Remove the concurrency races and data-loss paths on the production V1 line that 
 - **Sync performance and retry.** A full sync of 7 days of data completes in under 60 s (NFR2). Retries use exponential backoff (NFR21).
 - **Stock correctness.** Concurrent transfers and stock mutations must never double-credit, lose an update or drive stock negative (FR32, FR37, FR48).
   - Re-receiving an already-completed transfer returns the existing transfer idempotently.
-- **Sale cancel/correct (FR90).** OWNER-only (EMPLOYEE gets 403). A justification of at least 10 characters is required. Stock is restored through `SALE_CANCELLED` movements, and the action emits audit events. Concurrent cancel/correct on the same sale must conflict, not overwrite (13.10).
+- **Sale cancel/correct (FR90).** OWNER-only (EMPLOYEE gets 403). A justification of at least 10 characters is required. Stock is restored through `SALE_CANCELLED` movements, and the action emits audit events. Concurrent cancel/correct on the same sale conflicts (409) instead of overwriting (13.10).
 - **Draft carts.** A cart containing DRAFT items is recorded as `PENDING_VALIDATION` and does not decrement stock.
 - **Offline inventory validation (FR48).** For each non-zero discrepancy, write a `StockMovement` of type `ADJUSTMENT` with `source=INVENTORY`, `inventorySessionId`, quantity before/after and actorId. Also queue a threshold event when stock falls below the minimum.
   - Guard against empty sessions and against re-validating an already-VALIDATED session.
-- **Reports (FR42, FR52, FR53).** Daily recap, weekly report (Sunday evening, ISO Monday-to-Sunday week) and per-tenant `eodReportTime`. No sale may be silently excluded from a closure or report. The window rules are PO decisions to be recorded in the PRD/AC (13.11).
+- **Reports (FR42, FR52, FR53).** Daily recap, weekly report (Sunday evening, ISO Monday-to-Sunday week) and per-tenant `eodReportTime`. A manual closure or an automatic EOD fallback (20:00 by default) always produces a report. No sale may be silently excluded from a closure or report. The window rules are PO decisions that must be recorded in the PRD/AC alongside the code (13.11).
+- **Existing closure rules.** One closure per store per day, and closures more than 7 days old are refused. An EMPLOYEE can close only their own store.
 - **Multi-instance safety.** Schedulers (day closure, account deletion, trends) must not double-run across instances or restarts.
 - **Tenant isolation (NFR10).** Isolation also depends on tenant schemas being fully and consistently provisioned.
 - **Tests.** Each fix ships named TDD tests (red first) for the concurrency or integrity case.
@@ -61,7 +62,8 @@ Remove the concurrency races and data-loss paths on the production V1 line that 
   - Optimistic locking uses `@Version long version` on the JPA entity and the domain object, mapped to 409. The Flutter client does a silent refresh and shows a human-readable SnackBar.
   - Alternatives are conditional or atomic `UPDATE … WHERE status=… / quantity+?>=0` (0 rows → idempotent) or `SELECT … FOR UPDATE`.
   - Check-then-act races are closed with unique constraints plus a catch, row locks, or a transaction-scoped advisory lock through `TransactionLockPort` taken as the first statement (keys like `day-closure:<storeId>`, `product-limit:<schema>`, `owners:<schema>`, `transfer:<clientId>`).
-  - Sale status transitions are atomic conditional claims: PENDING_VALIDATION→COMPLETED (validate; loser gets `SALE_NOT_PENDING` and rolls back) and PENDING_VALIDATION→CANCELLED (sync cancel with `pendingOnly`; a COMPLETED sale gets FORBIDDEN). Version checks added for Sale must compose with these claims.
+  - Sale status transitions are atomic conditional claims: PENDING_VALIDATION→COMPLETED (validate and cascade; loser gets `SALE_NOT_PENDING` and rolls back, cascade skips) and PENDING_VALIDATION→CANCELLED (sync cancel with `pendingOnly`; a COMPLETED sale gets FORBIDDEN).
+  - `Sale` has `@Version` (13.10). Status claims bump the version. COMPLETED→CANCELLED is version-checked: a lost claim returns `SALE_ALREADY_CANCELLED` if the sale is now cancelled, otherwise `OPTIMISTIC_LOCK` (409). A correction saves with `saveAndFlush`, so a concurrent change raises a 409 and rolls back its movements. New guards on cancel/correct (such as a closed-day check) must sit alongside these claims.
   - Every `@Scheduled` job carries ShedLock `@SchedulerLock` (JDBC provider, DB time, `public.shedlock` table). `SchedulerLockCoverageTest` fails on a new unlocked job. Per-instance in-memory jobs (such as batch-window eviction) are deliberately not locked.
   - Notification cooldowns use one atomic `INSERT … ON CONFLICT DO UPDATE … WHERE` statement instead of check-then-upsert.
   - Long-lived in-memory maps get a TTL cache.
@@ -81,7 +83,7 @@ Remove the concurrency races and data-loss paths on the production V1 line that 
 
 - **13.8** consolidates leftovers from 13.4, 13.6, 13.7, 16.6, 12.10 and the UI-3 reviews. Its CREATE_SALE movement-id change spans the app and the backend. The inventory variant unique index waits for variants (14.1). Its other follow-ups went to 13.10, 15.9 (intValue range checks in other handlers) and 16.12 (local inventory-session reconciliation after rejection).
 - **13.9** (done) built on 13.3, 13.5, 14.5, 14.10 and 14.11. Its ShedLock setup, advisory-lock port and conditional sale-status claims are the base for 13.10 and 13.11.
-- **13.10** mirrors 13.1 for `Sale` and protects the cancel/correct paths from 13.5. It also carries the follow-up from 13.8: ValidateSaleService / SaleValidationCascadeService (and the app's pending-sale validation/cascade) must reuse the sale item id as the SALE movement id.
-- **13.11** needs PO decisions before code: the EOD closure cut-off (`eodReportTime` vs 23:59), the weekly Sunday 20:00–23:59 gap, and whether cancel/correct after closure is blocked, warned about or triggers regeneration (e.g. `SALE_DAY_CLOSED`). It builds on 13.3 and 13.5.
+- **13.10** (done) mirrored 13.1 for `Sale`, protecting the cancel/correct paths from 13.5, and made every SALE-movement path (validate, cascade, app and backend) reuse the sale item id.
+- **13.11**'s PO decisions D1–D3 are recorded in prd.md (notes under FR51/FR52/FR90) and in spec-v1s-13-11-closure-report-windows.md: a closure covers every sale since the previous closure, with no 23:59 cut-off (D1); the weekly report chains on the previous weekly report, which closes the Sunday 20:00–23:59 gap (D2); cancel/correct after closure is allowed with an in-app warning and no regeneration or `SALE_DAY_CLOSED` (D3). It builds on 13.3, 13.5 and 13.10; injecting `Clock` into CloseDayService follows the DayClosureAutoScheduler pattern. Who may close a day (EMPLOYEE vs OWNER) and the `'default'` storeId in all-stores mode are separate open PO questions owned by 4-4 / UI-3, not by 13.11.
 - **13.12** relates to 12.5 (TenantSchema) and 13.1 (the V5 version column depends on the boot-time schema sync), and is absorbed natively by refonte 10.1/10.2.
 - Sync-rejection feedback to users belongs to Epic 16 (16.12). FR90 in the refonte is 17-1.

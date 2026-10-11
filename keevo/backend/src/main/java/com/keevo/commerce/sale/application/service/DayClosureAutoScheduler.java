@@ -156,6 +156,9 @@ public class DayClosureAutoScheduler {
         });
     }
 
+    // Defensive only (v1s-13-11): eod_report_time is a TIME column and writes are validated
+    // (HH:mm:ss, 422 VALIDATION_ERROR on PUT /tenant/report-preferences), so the 20:00
+    // fallback never fires on stored data.
     private LocalTime parseTime(String hhMmSs) {
         if (hhMmSs == null) return DEFAULT_EOD_TIME;
         try {

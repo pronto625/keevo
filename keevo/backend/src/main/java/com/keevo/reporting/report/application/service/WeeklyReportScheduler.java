@@ -33,7 +33,7 @@ import java.time.temporal.TemporalAdjusters;
  * Per-tenant weeklyReportDay (0=Sun…6=Sat) and weeklyReportTime are read live from
  * tenant_preferences on each tick — no restart needed after config change.
  *
- * <p>Guard: if a WEEKLY report already exists for todayWAT in reportRepository, skip.
+ * <p>Guard: stores that already have a WEEKLY report for the week's Sunday are skipped (per store).
  *
  * <p>Clock injection via package-private constructor for deterministic unit tests.
  */
@@ -50,6 +50,7 @@ public class WeeklyReportScheduler {
     private final EndOfDayReportRepository reportRepository;
     private final GenerateWeeklyReportUseCase weeklyReportGenerator;
     private final TenantPreferencesRepository tenantPreferencesRepository;
+    private final WeeklyReportWindowResolver windowResolver;
     private final Clock clock;
 
     /** Production constructor — Spring calls this; system clock is used. */
@@ -58,9 +59,10 @@ public class WeeklyReportScheduler {
                                   StoreRepository storeRepository,
                                   EndOfDayReportRepository reportRepository,
                                   GenerateWeeklyReportUseCase weeklyReportGenerator,
-                                  TenantPreferencesRepository tenantPreferencesRepository) {
+                                  TenantPreferencesRepository tenantPreferencesRepository,
+                                  WeeklyReportWindowResolver windowResolver) {
         this(tenantRepository, storeRepository, reportRepository,
-             weeklyReportGenerator, tenantPreferencesRepository, Clock.systemDefaultZone());
+             weeklyReportGenerator, tenantPreferencesRepository, windowResolver, Clock.systemDefaultZone());
     }
 
     /** Package-private constructor for tests with an injected clock. */
@@ -69,12 +71,14 @@ public class WeeklyReportScheduler {
                            EndOfDayReportRepository reportRepository,
                            GenerateWeeklyReportUseCase weeklyReportGenerator,
                            TenantPreferencesRepository tenantPreferencesRepository,
+                           WeeklyReportWindowResolver windowResolver,
                            Clock clock) {
         this.tenantRepository = tenantRepository;
         this.storeRepository = storeRepository;
         this.reportRepository = reportRepository;
         this.weeklyReportGenerator = weeklyReportGenerator;
         this.tenantPreferencesRepository = tenantPreferencesRepository;
+        this.windowResolver = windowResolver;
         this.clock = clock;
     }
 
@@ -119,28 +123,34 @@ public class WeeklyReportScheduler {
             return;
         }
 
-        // Last completed ISO week: Monday 00:00 → Sunday 23:59:59 WAT, the Sunday being today
-        // or the one before. (with(SUNDAY) would pick the coming Sunday and report the current
-        // partial week whenever the configured day is not Sunday.)
-        // Mirror ReportController.triggerWeekly.
+        // Last completed ISO week, its Sunday being today or the one before. (with(SUNDAY)
+        // would pick the coming Sunday and report the current partial week whenever the
+        // configured day is not Sunday.) Mirror ReportController.triggerWeekly.
         LocalDate weekEndLocal   = todayWAT.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY));
-        LocalDate weekStartLocal = weekEndLocal.minusDays(6);
 
-        // Guard: skip if already generated for that week (reports are dated by their Sunday)
-        if (!reportRepository.findByDateAndTenant(weekEndLocal, tenantId, ReportType.WEEKLY).isEmpty()) {
-            log.debug("WeeklyReport already generated for tenant={} week ending {}", tenantId, weekEndLocal);
-            return;
-        }
+        // Guard, per store: skip the stores that already have that week's report (reports are
+        // dated by their Sunday). Per store so a store whose generation failed is retried on the
+        // next tick even though the others succeeded (v1s-13-11: keeps the D2 chain intact).
+        var generatedStoreIds = reportRepository.findByDateAndTenant(weekEndLocal, tenantId, ReportType.WEEKLY)
+                .stream().map(r -> r.getStoreId()).collect(java.util.stream.Collectors.toSet());
 
         var channel = prefs != null ? prefs.weeklyReportChannel() : null;
 
-        Instant weekStart = weekStartLocal.atStartOfDay(WAT).toInstant();
-        Instant weekEnd   = weekEndLocal.atTime(23, 59, 59).atZone(WAT).toInstant();
+        Instant now = Instant.now(clock);
 
         storeRepository.findAllActive().forEach(store -> {
+            if (generatedStoreIds.contains(store.id())) {
+                log.debug("WeeklyReport already generated for tenant={} store={} week ending {}",
+                        tenantId, store.id(), weekEndLocal);
+                return;
+            }
             try {
+                // v1s-13-11 (D2): the window chains on the store's previous weekly report, so
+                // the Sunday evening after a 20:00 report and late offline sales are not lost.
+                var window = windowResolver.resolve(store.id(), tenantId, weekEndLocal, now);
                 var cmd = new WeeklyReportCommand(
-                        store.id(), tenantId, true, weekStart, weekEnd, channel);
+                        store.id(), tenantId, true, window.start(), window.end(), channel,
+                        window.lateFrom(), window.receivedUntil());
                 weeklyReportGenerator.generateWeeklyReport(cmd);
                 log.info("WeeklyReport generated for tenant={} store={}", tenantId, store.id());
             } catch (Exception e) {
@@ -158,6 +168,9 @@ public class WeeklyReportScheduler {
         return DayOfWeek.of(day);
     }
 
+    // Defensive only: weekly_report_time is a TIME column and writes are validated (HH:mm:ss,
+    // 422 VALIDATION_ERROR on PUT /tenant/report-preferences), so the fallback never fires
+    // on stored data.
     private LocalTime parseTime(String hhMmSs) {
         if (hhMmSs == null) return DEFAULT_REPORT_TIME;
         try {

@@ -19,7 +19,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
@@ -58,7 +60,8 @@ class CloseDayServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new CloseDayService(saleRepository, dayClosureRepository, eventPublisher, transactionLock);
+        service = new CloseDayService(saleRepository, dayClosureRepository, eventPublisher, transactionLock,
+                Clock.systemUTC());
     }
 
     @Test
@@ -327,6 +330,93 @@ class CloseDayServiceTest {
                 null, Instant.now().plus(java.time.Duration.ofDays(2))));
 
         assertThat(result.getClosedAt()).isBeforeOrEqualTo(Instant.now());
+    }
+
+    // ── Story 13.11: injected Clock, evening sales (PO decision D1) ──────────
+
+    private static final ZoneId WAT = ZoneId.of("Africa/Lagos");
+    /** Fixed "now": Wednesday 2026-10-14 20:00 WAT. */
+    private static final Instant FIXED_NOW =
+            LocalDate.of(2026, 10, 14).atTime(20, 0).atZone(WAT).toInstant();
+
+    private CloseDayService fixedClockService() {
+        return new CloseDayService(saleRepository, dayClosureRepository, eventPublisher, transactionLock,
+                Clock.fixed(FIXED_NOW, ZoneOffset.UTC));
+    }
+
+    @Test
+    void fixedClock_closedAtAndReceivedAtComeFromTheClock() {
+        when(dayClosureRepository.existsByStoreIdAndDate(STORE_ID, LocalDate.of(2026, 10, 14)))
+                .thenReturn(false);
+        when(saleRepository.findForClosure(eq(STORE_ID), any())).thenReturn(List.of());
+
+        var result = fixedClockService().closeDay(new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, true));
+
+        assertThat(result.getClosedAt()).isEqualTo(FIXED_NOW);
+        assertThat(result.getReceivedAt()).isEqualTo(FIXED_NOW);
+        verify(dayClosureRepository).existsByStoreIdAndDate(STORE_ID, LocalDate.of(2026, 10, 14));
+    }
+
+    @Test
+    void fixedClock_futureOfflineClosure_isClampedToClockNow() {
+        when(dayClosureRepository.existsByStoreIdAndDate(eq(STORE_ID), any(LocalDate.class)))
+                .thenReturn(false);
+        when(saleRepository.findForClosure(eq(STORE_ID), any())).thenReturn(List.of());
+
+        var result = fixedClockService().closeDay(new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, false,
+                null, FIXED_NOW.plusSeconds(3600)));
+
+        assertThat(result.getClosedAt()).isEqualTo(FIXED_NOW);
+    }
+
+    @Test
+    void fixedClock_sevenDayGate_usesTheClock() {
+        // Exactly 7 days before the clock's now: accepted (gate is "strictly older than").
+        Instant sevenDaysAgo = FIXED_NOW.minus(CloseDayService.MAX_BACKDATE);
+        when(dayClosureRepository.existsByStoreIdAndDate(eq(STORE_ID), any(LocalDate.class)))
+                .thenReturn(false);
+        when(saleRepository.findForClosure(eq(STORE_ID), any())).thenReturn(List.of());
+
+        var accepted = fixedClockService().closeDay(new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, false,
+                null, sevenDaysAgo));
+        assertThat(accepted.getClosedAt()).isEqualTo(sevenDaysAgo);
+
+        // One second older than that: refused, relative to the clock (not the system time).
+        assertThatThrownBy(() -> fixedClockService().closeDay(new CloseDayCommand(STORE_ID, ACTOR_ID,
+                TENANT_ID, false, null, sevenDaysAgo.minusSeconds(1))))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+    }
+
+    // D1: a sale made after the evening auto-closure (D 20:00) is not excluded: it belongs
+    // to the next closure (D+1 20:00), and to that one only.
+    @Test
+    void eveningSaleAfterClosure_isCoveredByTheNextClosure() {
+        Instant previousClosedAt = FIXED_NOW.minus(java.time.Duration.ofDays(1)); // D 20:00
+        when(dayClosureRepository.findLastClosureForStore(STORE_ID))
+                .thenReturn(java.util.Optional.of(previousClosure(previousClosedAt)));
+        when(dayClosureRepository.existsByStoreIdAndDate(eq(STORE_ID), any(LocalDate.class)))
+                .thenReturn(false);
+        when(saleRepository.findForClosure(eq(STORE_ID), any())).thenReturn(List.of());
+
+        fixedClockService().closeDay(new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, true)); // D+1 20:00
+
+        var eventCaptor = ArgumentCaptor.forClass(DayClosedEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        ClosureWindow window = eventCaptor.getValue().window();
+        ClosureWindow previousWindow = new ClosureWindow(
+                previousClosedAt.minus(java.time.Duration.ofDays(1)), previousClosedAt, null, previousClosedAt);
+
+        for (int[] hm : new int[][]{{20, 1}, {21, 30}, {23, 59}}) {
+            Instant evening = previousClosedAt.atZone(WAT).toLocalDate().atTime(hm[0], hm[1])
+                    .atZone(WAT).toInstant();
+            assertThat(window.covers(evening, evening)).as("sale at %s", evening).isTrue();
+            assertThat(previousWindow.covers(evening, evening)).isFalse();
+        }
+        // A sale made right at the previous closure stays in the previous one.
+        assertThat(window.covers(previousClosedAt, previousClosedAt)).isFalse();
+        assertThat(window.end()).isEqualTo(FIXED_NOW);
     }
 
     // ── Helper methods ────────────────────────────────────────────────────────

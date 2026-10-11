@@ -117,6 +117,18 @@ final lastClosureProvider = FutureProvider.family<DayClosure?, String>((ref, sto
   return repository.getLastClosure(storeId);
 });
 
+/// Time of the store's last day closure (local cache), or null if none.
+///
+/// v1s-13-11 (PO decision D3): a COMPLETED sale made at or before this instant
+/// is part of a closed day; cancelling/correcting it stays allowed (FR90) but
+/// the already sent report is not regenerated, so the sale detail page warns.
+final lastClosureAtProvider =
+    FutureProvider.family<DateTime?, String>((ref, storeId) async {
+  // Derived from [lastClosureProvider] so its invalidations (post-pull sync,
+  // close-day) refresh this too.
+  return (await ref.watch(lastClosureProvider(storeId).future))?.closedAt;
+});
+
 /// Sales history with date filter.
 ///
 /// Uses [autoDispose] so that re-opening the Sales History page always
@@ -148,6 +160,7 @@ class CloseDayNotifier extends StateNotifier<AsyncValue<DayClosureSummary?>> {
       state = AsyncValue.data(summary);
       // Invalidate related providers to refresh UI
       _ref.invalidate(dayClosureStateProvider);
+      _ref.invalidate(lastClosureProvider);
       _ref.invalidate(todaySummaryProvider);
       _ref.invalidate(reportHistoryProvider);
     } catch (e, st) {

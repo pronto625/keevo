@@ -91,21 +91,21 @@ class WeeklyReportGeneratorTest {
     void generateWeeklyReport_buildsAndFormatsWeeklyData() {
         when(storeRepository.findById(storeId)).thenReturn(Optional.of(
                 new Store(storeId, "Boutique Test", StoreType.STORE, null, null, true, Instant.now(), Instant.now())));
-        when(builder.build(any(), any(), any(), anyString(), any(), anyString(), anyBoolean()))
+        when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))
                 .thenReturn(sampleWeeklyData());
         when(formatter.format(any(WeeklyReportData.class))).thenReturn("📅 Rapport Hebdomadaire");
         when(userRepository.findOwnerByTenantSchemaName("kv_test01")).thenReturn(Optional.empty());
 
         generator.generateWeeklyReport(command);
 
-        verify(builder).build(eq(storeId), any(), any(), anyString(), any(), eq("kv_test01"), eq(true));
+        verify(builder).build(eq(storeId), any(), anyString(), any(), eq("kv_test01"), eq(true));
         verify(formatter).format(any(WeeklyReportData.class));
     }
 
     @Test
     void generateWeeklyReport_persistsWithReportTypeWEEKLY() {
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
-        when(builder.build(any(), any(), any(), anyString(), any(), anyString(), anyBoolean()))
+        when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))
                 .thenReturn(sampleWeeklyData());
         when(formatter.format(any(WeeklyReportData.class))).thenReturn("📅 Rapport");
         when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.empty());
@@ -120,7 +120,7 @@ class WeeklyReportGeneratorTest {
         User owner = mock(User.class);
         when(owner.getPhoneNumber()).thenReturn("+237600072001");
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
-        when(builder.build(any(), any(), any(), anyString(), any(), anyString(), anyBoolean()))
+        when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))
                 .thenReturn(sampleWeeklyData());
         when(formatter.format(any(WeeklyReportData.class))).thenReturn("📅 Rapport");
         when(userRepository.findOwnerByTenantSchemaName("kv_test01")).thenReturn(Optional.of(owner));
@@ -139,7 +139,7 @@ class WeeklyReportGeneratorTest {
                 ReportChannel.IN_APP_ONLY
         );
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
-        when(builder.build(any(), any(), any(), anyString(), any(), anyString(), anyBoolean()))
+        when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))
                 .thenReturn(sampleWeeklyData());
         when(formatter.format(any(WeeklyReportData.class))).thenReturn("📅 Rapport");
 
@@ -154,7 +154,7 @@ class WeeklyReportGeneratorTest {
         User owner = mock(User.class);
         when(owner.getPhoneNumber()).thenReturn("+237600072001");
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
-        when(builder.build(any(), any(), any(), anyString(), any(), anyString(), anyBoolean()))
+        when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))
                 .thenReturn(sampleWeeklyData());
         when(formatter.format(any(WeeklyReportData.class))).thenReturn("📅 Rapport");
         when(userRepository.findOwnerByTenantSchemaName("kv_test01")).thenReturn(Optional.of(owner));
@@ -168,7 +168,7 @@ class WeeklyReportGeneratorTest {
     @Test
     void generateWeeklyReport_getReportType_returnsWEEKLY() {
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
-        when(builder.build(any(), any(), any(), anyString(), any(), anyString(), anyBoolean()))
+        when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))
                 .thenReturn(sampleWeeklyData());
         when(formatter.format(any(WeeklyReportData.class))).thenReturn("Rapport");
         when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.empty());
@@ -181,7 +181,7 @@ class WeeklyReportGeneratorTest {
     @Test
     void generateWeeklyReport_noOwnerPhone_marksInAppOnly() {
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
-        when(builder.build(any(), any(), any(), anyString(), any(), anyString(), anyBoolean()))
+        when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))
                 .thenReturn(sampleWeeklyData());
         when(formatter.format(any(WeeklyReportData.class))).thenReturn("Rapport");
         when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.empty());
@@ -190,5 +190,52 @@ class WeeklyReportGeneratorTest {
 
         verifyNoInteractions(whatsAppPort);
         assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.IN_APP_ONLY);
+    }
+
+    // ── v1s-13-11 (D2): chained window ─────────────────────────────────────────
+
+    @Test
+    void generateWeeklyReport_passesChainedWindowToBuilder_andPersistsCreatedAtAsReceivedUntil() {
+        Instant start = Instant.parse("2026-03-22T19:00:00.500001Z");
+        Instant now = Instant.parse("2026-03-29T19:00:00.123456Z");   // Sunday 20:00 WAT
+        Instant lateFrom = Instant.parse("2026-03-22T19:00:00.500Z");
+        WeeklyReportCommand chained = new WeeklyReportCommand(
+                storeId, "kv_test01", true, start, now, ReportChannel.IN_APP_ONLY, lateFrom, now);
+        when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
+        when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))
+                .thenReturn(sampleWeeklyData());
+        when(formatter.format(any(WeeklyReportData.class))).thenReturn("Rapport");
+
+        EndOfDayReport report = generator.generateWeeklyReport(chained);
+
+        var windowCaptor = org.mockito.ArgumentCaptor.forClass(
+                com.keevo.commerce.sale.domain.model.ClosureWindow.class);
+        verify(builder).build(eq(storeId), windowCaptor.capture(), anyString(), eq(SUNDAY),
+                eq("kv_test01"), eq(true));
+        assertThat(windowCaptor.getValue()).isEqualTo(
+                new com.keevo.commerce.sale.domain.model.ClosureWindow(start, now, lateFrom, now));
+        assertThat(report.getCreatedAt()).isEqualTo(now);
+        var savedCaptor = org.mockito.ArgumentCaptor.forClass(EndOfDayReport.class);
+        verify(reportRepository, atLeastOnce()).save(savedCaptor.capture());
+        assertThat(savedCaptor.getAllValues()).allSatisfy(r -> assertThat(r.getCreatedAt()).isEqualTo(now));
+    }
+
+    @Test
+    void generateWeeklyReport_plainCommand_usesNoLateSalesAndNoArrivalLimit() {
+        when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
+        when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))
+                .thenReturn(sampleWeeklyData());
+        when(formatter.format(any(WeeklyReportData.class))).thenReturn("Rapport");
+        when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.empty());
+
+        generator.generateWeeklyReport(command);
+
+        var windowCaptor = org.mockito.ArgumentCaptor.forClass(
+                com.keevo.commerce.sale.domain.model.ClosureWindow.class);
+        verify(builder).build(eq(storeId), windowCaptor.capture(), anyString(), any(), anyString(), anyBoolean());
+        assertThat(windowCaptor.getValue().lateFrom())
+                .isEqualTo(com.keevo.commerce.sale.domain.model.ClosureWindow.NEVER);
+        assertThat(windowCaptor.getValue().receivedUntil())
+                .isEqualTo(com.keevo.commerce.sale.domain.model.ClosureWindow.NEVER);
     }
 }

@@ -60,4 +60,51 @@ void main() {
           'La journée a déjà été clôturée pour cette boutique.')),
     );
   });
+
+  // v1s-13-11 (D3): lastClosureAtProvider is derived from lastClosureProvider.
+  group('lastClosureAtProvider', () {
+    test('yields the closedAt of the store\'s last closure', () async {
+      final closedAt = DateTime(2026, 3, 19, 20, 0);
+      when(() => repo.getLastClosure('store-1'))
+          .thenAnswer((_) async => _closure(closedAt));
+      final container = ProviderContainer(
+        overrides: [dayClosureRepositoryProvider.overrideWithValue(repo)],
+      );
+      addTearDown(container.dispose);
+
+      expect(await container.read(lastClosureAtProvider('store-1').future),
+          closedAt);
+    });
+
+    test('yields null when the store has no closure', () async {
+      when(() => repo.getLastClosure('store-1')).thenAnswer((_) async => null);
+      final container = ProviderContainer(
+        overrides: [dayClosureRepositoryProvider.overrideWithValue(repo)],
+      );
+      addTearDown(container.dispose);
+
+      expect(
+          await container.read(lastClosureAtProvider('store-1').future), isNull);
+    });
+
+    test('refreshes when lastClosureProvider is invalidated', () async {
+      when(() => repo.getLastClosure('store-1')).thenAnswer((_) async => null);
+      final container = ProviderContainer(
+        overrides: [dayClosureRepositoryProvider.overrideWithValue(repo)],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(lastClosureAtProvider('store-1'), (_, __) {});
+      addTearDown(sub.close);
+      expect(
+          await container.read(lastClosureAtProvider('store-1').future), isNull);
+
+      final closedAt = DateTime(2026, 3, 19, 20, 0);
+      when(() => repo.getLastClosure('store-1'))
+          .thenAnswer((_) async => _closure(closedAt));
+      container.invalidate(lastClosureProvider);
+
+      expect(await container.read(lastClosureAtProvider('store-1').future),
+          closedAt);
+    });
+  });
 }
