@@ -13,6 +13,11 @@ class LocalInventorySessionDataSource {
 
   const LocalInventorySessionDataSource(this._db);
 
+  /// Runs [action] in one Drift transaction. Writes made through the same
+  /// database inside it (sync_queue included) commit or roll back together.
+  Future<T> transaction<T>(Future<T> Function() action) =>
+      _db.transaction(action);
+
   /// Insert a new session row.
   Future<void> insert(InventorySessionModel session) async {
     await _db.into(_db.inventorySessions).insert(

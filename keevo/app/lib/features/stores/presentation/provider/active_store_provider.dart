@@ -1,8 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/di/providers.dart';
-
-const _kActiveStoreIdKey = 'active_store_id';
+import '../../../../core/storage/app_constants.dart';
 
 /// Persists the ID of the store chosen as the active context in Settings.
 ///
@@ -12,15 +11,15 @@ class ActiveStoreNotifier extends Notifier<String?> {
   @override
   String? build() {
     final prefs = ref.watch(sharedPreferencesProvider);
-    return prefs.getString(_kActiveStoreIdKey);
+    return prefs.getString(kActiveStoreIdKey);
   }
 
   void setActiveStore(String? storeId) {
     final prefs = ref.read(sharedPreferencesProvider);
     if (storeId == null) {
-      prefs.remove(_kActiveStoreIdKey);
+      prefs.remove(kActiveStoreIdKey);
     } else {
-      prefs.setString(_kActiveStoreIdKey, storeId);
+      prefs.setString(kActiveStoreIdKey, storeId);
     }
     state = storeId;
   }

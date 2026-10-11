@@ -65,3 +65,8 @@ const String kAutoClosureNotifiedIds = 'auto_closure_notified_ids';
 // claim). Read by the dashboard greeting and the inventory gap report
 // signature.
 const String kUserFirstNameKey = 'user_first_name';
+
+/// SharedPreferences key of the store chosen as the active context
+/// (`ActiveStoreNotifier`). Cleared by sync when that store's offline
+/// creation is rejected by the server (v1s-16-12).
+const String kActiveStoreIdKey = 'active_store_id';

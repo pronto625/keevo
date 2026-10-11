@@ -1,5 +1,6 @@
 import 'dart:developer' as dev;
 
+import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/sync/connectivity_service.dart';
@@ -44,10 +45,17 @@ class InventorySessionRepositoryImpl implements InventorySessionRepository {
           scope: scope,
           categoryIds: categoryIds,
         );
-        await _local.insert(session);
+        // The server has it: stored as synced so pull keeps it up to date.
+        await _local.upsert(session);
         return session;
-      } catch (e) {
-        dev.log('Remote create failed, falling back to offline: $e',
+      } on DioException catch (e) {
+        // Only an unreachable/down server (no answer, or a 5xx from the
+        // gateway) falls back offline. A refusal (e.g. 409
+        // INVENTORY_SESSION_ALREADY_ACTIVE) would just be refused again at
+        // sync — a guaranteed ghost session.
+        final response = e.response;
+        if (response != null && (response.statusCode ?? 0) < 500) rethrow;
+        dev.log('Remote create unreachable, falling back to offline: $e',
             name: 'InventorySessionRepo');
         return _offlineCreate(storeId: storeId, scope: scope, categoryIds: categoryIds);
       }
@@ -72,17 +80,21 @@ class InventorySessionRepositoryImpl implements InventorySessionRepository {
       startedAt: now,
       updatedAt: now,
     );
-    await _local.insert(session);
-    await _syncService.queueOperation(
-      operation: 'CREATE_INVENTORY_SESSION',
-      payload: {
-        'sessionId': id,
-        'storeId': storeId,
-        'scope': scope,
-        if (categoryIds != null) 'categoryIds': categoryIds,
-      },
-      entityId: id,
-    );
+    // One transaction: a session saved without its queue entry would never
+    // reach the server.
+    await _local.transaction(() async {
+      await _local.insert(session);
+      await _syncService.queueOperation(
+        operation: 'CREATE_INVENTORY_SESSION',
+        payload: {
+          'sessionId': id,
+          'storeId': storeId,
+          'scope': scope,
+          if (categoryIds != null) 'categoryIds': categoryIds,
+        },
+        entityId: id,
+      );
+    });
     return session;
   }
 

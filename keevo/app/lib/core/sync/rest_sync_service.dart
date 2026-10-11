@@ -11,6 +11,7 @@ import 'package:uuid/uuid.dart';
 import '../../features/catalog/data/datasource/remote_product_datasource.dart';
 import '../storage/app_constants.dart';
 import '../storage/app_database.dart';
+import 'sync_rejection_policy.dart';
 import 'sync_required_exception.dart';
 import 'sync_service.dart';
 
@@ -88,10 +89,31 @@ class RestSyncService implements SyncService {
     dev.log('📦 Found ${pendingOps.length} pending operations', name: 'RestSync');
 
     final allConflicts = <Map<String, dynamic>>[];
+    // Queue ids removed by a rejection cascade during this push: they are
+    // neither sent in a later batch nor reported from the current one.
+    final removed = <String>{};
+    // Queue ids whose payload a rejection cascade rewrote (ghost reference
+    // stripped): a refusal of the copy already sent is not final.
+    final rewritten = <String>{};
     // Batch in groups of 50
     for (var i = 0; i < pendingOps.length; i += 50) {
-      final batch = pendingOps.sublist(i, min(i + 50, pendingOps.length));
-      allConflicts.addAll(await _pushBatch(batch));
+      var batch = pendingOps
+          .sublist(i, min(i + 50, pendingOps.length))
+          .where((o) => !removed.contains(o.id))
+          .toList();
+      if (i > 0 && batch.isNotEmpty) {
+        // Re-read: an earlier batch's reconciliation may have rewritten
+        // these payloads.
+        final ids = batch.map((o) => o.id).toList();
+        batch = await (_database.select(_database.syncQueue)
+              ..where((t) => t.id.isIn(ids))
+              ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+            .get();
+        // Sent with their current payload from now on.
+        rewritten.removeAll(ids);
+      }
+      if (batch.isEmpty) continue;
+      allConflicts.addAll(await _pushBatch(batch, removed, rewritten));
     }
     return allConflicts;
   }
@@ -119,7 +141,8 @@ class RestSyncService implements SyncService {
         .customStatement('DELETE FROM products WHERE id = ?', [localProductId]);
   }
 
-  Future<List<Map<String, dynamic>>> _pushBatch(List<SyncQueueData> ops) async {
+  Future<List<Map<String, dynamic>>> _pushBatch(
+      List<SyncQueueData> ops, Set<String> removed, Set<String> rewritten) async {
     final payload = {
       'deviceId': await _getDeviceId(),
       'operations': ops.map((op) {
@@ -144,6 +167,9 @@ class RestSyncService implements SyncService {
       for (final result in results) {
         final opId = result['operationId'] as String;
         final status = result['status'] as String;
+        // Already dropped by the reconciliation of an earlier rejection in
+        // this push (dependent of a rolled-back entity): nothing to report.
+        if (removed.contains(opId)) continue;
 
         if (status == 'APPLIED' || status == 'DUPLICATE') {
           // Collect conflicts from APPLIED results with conflictData (LWW)
@@ -184,6 +210,14 @@ class RestSyncService implements SyncService {
                   [confirmedOp.entityId]);
             }
           }
+          if (confirmedOp.operation == 'CREATE_INVENTORY_SESSION' &&
+              confirmedOp.entityId != null) {
+            // The server has the session: let pull update it from now on
+            // (pull skips synced=0 sessions).
+            await _database.customStatement(
+                'UPDATE inventory_sessions SET synced = 1 WHERE id = ?',
+                [confirmedOp.entityId]);
+          }
           if (confirmedOp.entityId != null &&
               _isOneShot(confirmedOp.operation)) {
             await (_database.delete(_database.syncQueue)
@@ -199,25 +233,66 @@ class RestSyncService implements SyncService {
         } else if (status == 'REJECTED') {
           final currentOp = ops.firstWhere((o) => o.id == opId);
           final reason = result['reason'] as String?;
-          // Surface the rejection only the first time this reason is seen for
-          // this operation — otherwise every retry (every 30s-5min) would
-          // re-notify the user for a rejection that isn't going to change.
-          if (currentOp.lastError != reason) {
-            // Enrich with operation/entity info — the server result only
-            // carries operationId/status/reason, not what was rejected.
-            conflicts.add({
-              ...result,
-              'operation': currentOp.operation,
-              'entityId': currentOp.entityId,
-            });
+          // Enrich with operation/entity info — the server result only
+          // carries operationId/status/reason, not what was rejected.
+          Map<String, dynamic> notice({required bool rolledBack}) => {
+                ...result,
+                'operation': currentOp.operation,
+                'entityId': currentOp.entityId,
+                'reason': reason,
+                'rolledBack': rolledBack,
+              };
+
+          // The sale is already cancelled on the server: settled.
+          if (currentOp.operation == 'CANCEL_SALE' &&
+              reason == 'SALE_ALREADY_CANCELLED') {
+            await (_database.delete(_database.syncQueue)
+                  ..where((t) => t.id.equals(opId)))
+                .go();
+            continue;
           }
-          await (_database.update(_database.syncQueue)
-                ..where((t) => t.id.equals(opId)))
-              .write(SyncQueueCompanion(
-            retryCount: Value(currentOp.retryCount + 1),
-            lastAttemptAt: Value(DateTime.now()),
-            lastError: Value(reason),
-          ));
+
+          // The copy sent in this batch still carried a ghost reference that
+          // an earlier rejection stripped: retry the rewritten payload.
+          if (rewritten.contains(opId)) {
+            await (_database.update(_database.syncQueue)
+                  ..where((t) => t.id.equals(opId)))
+                .write(SyncQueueCompanion(
+              retryCount: Value(currentOp.retryCount + 1),
+              lastAttemptAt: Value(DateTime.now()),
+            ));
+            continue;
+          }
+
+          final transient = isTransientSyncRejection(reason);
+          if (transient ||
+              moneyLedgerOperations.contains(currentOp.operation)) {
+            // Kept in the queue and surfaced only the first time this reason
+            // is seen — otherwise every retry would re-notify the user.
+            if (currentOp.lastError != reason) {
+              conflicts.add(notice(rolledBack: false));
+            }
+            await (_database.update(_database.syncQueue)
+                  ..where((t) => t.id.equals(opId)))
+                .write(SyncQueueCompanion(
+              retryCount: Value(currentOp.retryCount + 1),
+              lastAttemptAt: Value(DateTime.now()),
+              lastError: Value(reason),
+            ));
+            continue;
+          }
+
+          // Terminal: reconcile the local state, then drop the operation —
+          // the server would refuse it again on every push, and a stuck op
+          // keeps hasPendingOperations() true, which blocks server refreshes.
+          final rolledBack = await _database.transaction(
+              () => _reconcileRejection(currentOp, reason, removed, rewritten));
+          if (currentOp.operation == 'CREATE_STORE' &&
+              currentOp.entityId != null &&
+              _prefs.getString(kActiveStoreIdKey) == currentOp.entityId) {
+            await _prefs.remove(kActiveStoreIdKey);
+          }
+          conflicts.add(notice(rolledBack: rolledBack));
         } else if (status == 'CONFLICT') {
           conflicts.add(result);
           await (_database.delete(_database.syncQueue)
@@ -247,6 +322,249 @@ class RestSyncService implements SyncService {
       rethrow;
     }
     return conflicts;
+  }
+
+  /// Reconciles the local state after a terminal rejection of [op] (see
+  /// `sync_rejection_policy.dart`) and deletes [op] plus every queued
+  /// operation that depended on it, recording their ids in [removed] (and
+  /// the ids of queued operations whose payload was rewritten in
+  /// [rewritten]). Returns whether a local change was undone on the device.
+  /// Runs inside the caller's transaction.
+  Future<bool> _reconcileRejection(SyncQueueData op, String? reason,
+      Set<String> removed, Set<String> rewritten) async {
+    final queue = await (_database.select(_database.syncQueue)
+          ..where((t) => t.synced.equals(false)))
+        .get();
+    final toDrop = <String>{op.id};
+    var rolledBack = false;
+    final operation = op.operation;
+    final entityId = op.entityId;
+
+    if (ghostCreateOperations.contains(operation) && entityId != null) {
+      await _rollbackGhostEntity(operation, entityId);
+      toDrop.addAll(queue.where((q) => q.entityId == entityId).map((q) => q.id));
+      if (operation == 'CREATE_PRODUCT' ||
+          operation == 'CREATE_DRAFT_PRODUCT') {
+        // Stock entries and counts for the ghost product (quick-add queues
+        // them under their own entity ids). Sales are never dropped.
+        toDrop.addAll(queue
+            .where((q) =>
+                q.operation != 'CREATE_SALE' &&
+                _payloadOf(q)['productId'] == entityId)
+            .map((q) => q.id));
+      }
+      if (operation == 'CREATE_STORE') {
+        // Stock movements recorded in the ghost store. Sales and closures
+        // are never dropped.
+        toDrop.addAll(queue
+            .where((q) {
+              final p = _payloadOf(q);
+              return switch (q.operation) {
+                'RECORD_STOCK_ENTRY' || 'STOCK_ADJUST' =>
+                  p['storeId'] == entityId,
+                'STOCK_TRANSFER' => p['sourceStoreId'] == entityId ||
+                    p['destinationStoreId'] == entityId,
+                _ => false,
+              };
+            })
+            .map((q) => q.id));
+      }
+      // Queued operations that only reference the ghost keep going without
+      // the reference instead of being refused (and rolled back) in turn.
+      final strip = switch (operation) {
+        'CREATE_CATEGORY' => (
+            const {
+              'CREATE_PRODUCT',
+              'CREATE_DRAFT_PRODUCT',
+              'UPDATE_PRODUCT',
+              'PROMOTE_PRODUCT',
+            },
+            'categoryId'
+          ),
+        'CREATE_CLIENT' => (const {'CREATE_SALE'}, 'clientId'),
+        _ => null,
+      };
+      if (strip != null) {
+        final (operations, key) = strip;
+        for (final q in queue) {
+          if (toDrop.contains(q.id) || !operations.contains(q.operation)) {
+            continue;
+          }
+          final payload = Map<String, dynamic>.of(_payloadOf(q));
+          if (payload[key] != entityId) continue;
+          payload.remove(key);
+          await (_database.update(_database.syncQueue)
+                ..where((t) => t.id.equals(q.id)))
+              .write(SyncQueueCompanion(payload: Value(jsonEncode(payload))));
+          rewritten.add(q.id);
+        }
+      }
+      rolledBack = true;
+    } else if (const {
+      'CREATE_INVENTORY_SESSION',
+      'SAVE_INVENTORY_COUNT',
+      'VALIDATE_INVENTORY',
+    }.contains(operation)) {
+      final sessionId = operation == 'SAVE_INVENTORY_COUNT'
+          ? _payloadOf(op)['sessionId'] as String?
+          : entityId ?? _payloadOf(op)['sessionId'] as String?;
+      if (sessionId != null) {
+        Iterable<String> sessionOps() => queue
+            .where((q) =>
+                ((q.operation == 'CREATE_INVENTORY_SESSION' ||
+                        q.operation == 'VALIDATE_INVENTORY') &&
+                    q.entityId == sessionId) ||
+                (q.operation == 'SAVE_INVENTORY_COUNT' &&
+                    _payloadOf(q)['sessionId'] == sessionId))
+            .map((q) => q.id);
+        final now = DateTime.now();
+        final sessionRow = _database.update(_database.inventorySessions)
+          ..where((t) => t.id.equals(sessionId));
+
+        if (operation == 'CREATE_INVENTORY_SESSION' ||
+            reason == 'INVENTORY_SESSION_NOT_FOUND') {
+          // The server never had (or no longer has) this session: abandon it.
+          await _revertInventoryAdjustments(sessionId);
+          await sessionRow.write(InventorySessionsCompanion(
+            status: const Value('CANCELLED'),
+            cancelledAt: Value(now),
+            updatedAt: Value(now),
+          ));
+          toDrop.addAll(sessionOps());
+          rolledBack = true;
+        } else if (reason == 'INVENTORY_SESSION_NOT_IN_PROGRESS') {
+          // Closed on the server (cancelled or validated elsewhere): undo
+          // the offline validation and let the next pull bring its status.
+          await _revertInventoryAdjustments(sessionId);
+          await sessionRow
+              .write(const InventorySessionsCompanion(synced: Value(true)));
+          toDrop.addAll(sessionOps());
+          rolledBack = true;
+        } else if (operation == 'VALIDATE_INVENTORY') {
+          // Validation refused (e.g. FORBIDDEN): the session stays open on
+          // the server, so it goes back to IN_PROGRESS here too.
+          await _revertInventoryAdjustments(sessionId);
+          await sessionRow.write(InventorySessionsCompanion(
+            status: const Value('IN_PROGRESS'),
+            completedAt: const Value(null),
+            updatedAt: Value(now),
+          ));
+          rolledBack = true;
+        } else if (operation == 'SAVE_INVENTORY_COUNT' && entityId != null) {
+          // The server never got this count: a later offline validation must
+          // not apply an adjustment from it.
+          await _database.customStatement(
+              'DELETE FROM inventory_counts WHERE id = ?', [entityId]);
+          rolledBack = true;
+        }
+      }
+    }
+
+    await (_database.delete(_database.syncQueue)
+          ..where((t) => t.id.isIn(toDrop)))
+        .go();
+    removed.addAll(toDrop);
+    return rolledBack;
+  }
+
+  static Map<String, dynamic> _payloadOf(SyncQueueData op) {
+    try {
+      final decoded = jsonDecode(op.payload);
+      return decoded is Map<String, dynamic> ? decoded : const {};
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  /// Deletes the local row created offline by [operation] for [entityId].
+  Future<void> _rollbackGhostEntity(String operation, String entityId) async {
+    switch (operation) {
+      case 'CREATE_PRODUCT':
+      case 'CREATE_DRAFT_PRODUCT':
+        for (final table in const [
+          'inventory_counts',
+          'stock_levels',
+          'stock_movements',
+        ]) {
+          await _database.customStatement(
+              'DELETE FROM $table WHERE product_id = ?', [entityId]);
+        }
+        await _database.customStatement(
+            'DELETE FROM product_suppliers WHERE product_id = ?', [entityId]);
+        await _database
+            .customStatement('DELETE FROM products WHERE id = ?', [entityId]);
+      case 'CREATE_CATEGORY':
+        await _database.customStatement(
+            'UPDATE products SET category_id = NULL WHERE category_id = ?',
+            [entityId]);
+        await _database.customStatement(
+            'UPDATE categories SET parent_id = NULL WHERE parent_id = ?',
+            [entityId]);
+        await _database
+            .customStatement('DELETE FROM categories WHERE id = ?', [entityId]);
+      case 'CREATE_STORE':
+        for (final table in const ['stock_levels', 'stock_movements']) {
+          await _database.customStatement(
+              'DELETE FROM $table WHERE store_id = ?', [entityId]);
+        }
+        await _database
+            .customStatement('DELETE FROM stores WHERE id = ?', [entityId]);
+      case 'CREATE_CLIENT':
+        // The sales are kept, without the client.
+        await _database.customStatement(
+            'UPDATE sales SET client_id = NULL WHERE client_id = ?',
+            [entityId]);
+        await _database
+            .customStatement('DELETE FROM clients WHERE id = ?', [entityId]);
+      case 'CREATE_SUPPLIER':
+        await _database.customStatement(
+            'DELETE FROM product_suppliers WHERE supplier_id = ?', [entityId]);
+        await _database
+            .customStatement('DELETE FROM suppliers WHERE id = ?', [entityId]);
+    }
+  }
+
+  /// Reverts the stock adjustments an offline validation of [sessionId]
+  /// applied (unsynced ADJUSTMENT movements tagged with the session) and
+  /// deletes those movements. Quantities never go below 0.
+  Future<void> _revertInventoryAdjustments(String sessionId) async {
+    final movements = await (_database.select(_database.stockMovements)
+          ..where((t) =>
+              t.inventorySessionId.equals(sessionId) & t.synced.equals(false)))
+        .get();
+    for (final m in movements) {
+      // Same lookup as the offline validation: exact variant, else the
+      // (product, store) row.
+      final exact = await (_database.select(_database.stockLevels)
+            ..where((t) {
+              final base =
+                  t.productId.equals(m.productId) & t.storeId.equals(m.storeId);
+              final variantId = m.variantId;
+              return variantId == null
+                  ? base & t.variantId.isNull()
+                  : base & t.variantId.equals(variantId);
+            }))
+          .get();
+      final rows = exact.isNotEmpty
+          ? exact
+          : await (_database.select(_database.stockLevels)
+                ..where((t) =>
+                    t.productId.equals(m.productId) &
+                    t.storeId.equals(m.storeId)))
+              .get();
+      if (rows.isNotEmpty) {
+        final level = rows.first;
+        await (_database.update(_database.stockLevels)
+              ..where((t) => t.id.equals(level.id)))
+            .write(StockLevelsCompanion(
+          quantity: Value(max(0, level.quantity - m.quantityDelta)),
+          updatedAt: Value(DateTime.now()),
+        ));
+      }
+      await (_database.delete(_database.stockMovements)
+            ..where((t) => t.id.equals(m.id)))
+          .go();
+    }
   }
 
   @override

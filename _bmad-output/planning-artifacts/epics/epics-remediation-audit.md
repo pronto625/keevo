@@ -1064,10 +1064,10 @@ As a Toor, I want REJECTED push operations surfaced to the user (and their ghost
 **Refs:** FR27/FR30, UX15, Stories 14.13 / 16.6 / 16.8. **Refonte absorption:** re-appliquer Flutter + protocole `sync`.
 
 **Items (routed 2026-10-11 from deferred-work):**
-- [ ] [Deferred-from: CR v1s-14-13, 2026-07-24] ProductSyncHandler now rejects with PLAN_LIMIT_EXCEEDED, undocumented [ProductSyncHandler.java] — sync protocol has no handling for plan-limit rejection; define + test expected client behaviour
-- [ ] [Deferred-from: CR v1s-16-6, 2026-07-27] No rollback/notice for REJECTED offline CREATE_STORE (all entity types) [rest_sync_service.dart:106-113] — push->UI rejection channel; ghost local rows
-- [ ] [Deferred-from: CR v1s-16-8, 2026-07-27] onAppStartup() silently no-op if a sync is running [sync_trigger_notifier.dart:205] — queue a follow-up pull instead of dropping
-- [ ] [Deferred-from: build-auto v1s-13-8, 2026-10-11] CREATE_INVENTORY_SESSION can now be REJECTED (INVENTORY_SESSION_ALREADY_ACTIVE / INVENTORY_STORE_NOT_FOUND) [InventorySessionSyncHandler.java] — the local session stays IN_PROGRESS and its queued SAVE_INVENTORY_COUNT / VALIDATE_INVENTORY fail in cascade; cancel/flag the local session and its dependent ops on rejection
+- [x] [Deferred-from: CR v1s-14-13, 2026-07-24] ProductSyncHandler now rejects with PLAN_LIMIT_EXCEEDED, undocumented [ProductSyncHandler.java] — sync protocol has no handling for plan-limit rejection; define + test expected client behaviour — **resolved v1s-16-12**: terminal reason, ghost product/store rolled back + "passez à un forfait supérieur" (`sync_rejection_policy.dart`), backend contract test `ProductSyncHandlerTest.handle_createProduct_planLimitExceeded_*`
+- [x] [Deferred-from: CR v1s-16-6, 2026-07-27] No rollback/notice for REJECTED offline CREATE_STORE (all entity types) [rest_sync_service.dart:106-113] — push->UI rejection channel; ghost local rows — **resolved v1s-16-12**: `_reconcileRejection` rolls back store/product/draft/category/client/supplier ghosts and their follow-ups; SnackBar "… — annulé sur cet appareil"; money ops kept (stuck-sale case → v1s-16-15)
+- [x] [Deferred-from: CR v1s-16-8, 2026-07-27] onAppStartup() silently no-op if a sync is running [sync_trigger_notifier.dart:205] — queue a follow-up pull instead of dropping — **resolved v1s-16-12**: a full sync (push+pull) is chained after the running cycle
+- [x] [Deferred-from: build-auto v1s-13-8, 2026-10-11] CREATE_INVENTORY_SESSION can now be REJECTED (INVENTORY_SESSION_ALREADY_ACTIVE / INVENTORY_STORE_NOT_FOUND) [InventorySessionSyncHandler.java] — the local session stays IN_PROGRESS and its queued SAVE_INVENTORY_COUNT / VALIDATE_INVENTORY fail in cascade; cancel/flag the local session and its dependent ops on rejection — **resolved v1s-16-12**: session CANCELLED locally, offline adjustments reverted, counts/validation ops dropped; online create no longer falls back offline on a server refusal
 
 **AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
 
@@ -1119,6 +1119,19 @@ As a Toor, I want the catalog list to search safely, deduplicate by id/SKU and s
 - [ ] [Deferred-from: CR spec-catalog-product-visibility-other-stores, 2026-09-08] Product dedup by name can hide distinct products [product_provider.dart (seenNames)] — dedup by sync id/SKU instead of name
 - [ ] [Deferred-from: CR spec-catalog-product-visibility-other-stores, 2026-09-08] No UI difference 'never stocked' vs 'out of stock' [catalog / out-of-stock tabs] — PO/UX decision
 - [ ] [Deferred-from: CR spec-catalog-product-visibility-other-stores, 2026-09-08] Whole tenant catalog loaded client-side, no pagination [product list use case] — perf at scale
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
+## Story 16.15: Ventes hors ligne bloquées dans la file de sync — **[A]**
+
+As a Toor, I want an offline sale that the server refuses for good (unknown product/store/client, FORBIDDEN, INSUFFICIENT_STOCK…) to reach a defined end state, so that it neither blocks the sync queue forever nor gets lost.
+
+**Scope:** Since v1s-16-12, money/stock-ledger operations (`CREATE_SALE`, `VALIDATE_SALE`, `CANCEL_SALE`, `CREATE_DAY_CLOSURE`) are never dropped on a terminal rejection: they stay queued, flagged and surfaced once, and keep `hasPendingOperations()` true (which disables catalog/stock refreshes from the server). Decide with the PO the end state: server accepts sale lines whose product no longer exists (ad-hoc line) and/or the app offers an OWNER action "exporter puis retirer" on a rejected sale in Paramètres › Synchronisation › File; then implement it. Tracker key: `v1s-16-15-sync-stuck-money-ops`.
+
+**Refs:** FR27/FR30, NFR zéro vente perdue, Story 16.12, epic 5 (`sync_error_log` 30 days).
+
+**Items (routed 2026-10-11 from build-auto v1s-16-12):**
+- [ ] [Deferred-from: build-auto v1s-16-12, 2026-10-11] Queued CREATE_SALE referencing a rolled-back product/store is refused forever [rest_sync_service.dart `_reconcileRejection`] — pins `hasPendingOperations()`; needs a PO decision on the end state (ad-hoc sale lines server-side or discard/export action)
 
 **AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
 

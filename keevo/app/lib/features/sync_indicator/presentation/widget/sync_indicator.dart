@@ -72,6 +72,10 @@ class SyncIndicator extends ConsumerWidget {
         final operation = friendlySyncOperationLabel(
             r['operation'] as String? ?? '');
         final reason = friendlySyncRejectionReason(r['reason'] as String?);
+        // v1s-16-12: the local change was undone (ghost row removed,
+        // inventory adjustments reverted) — say so.
+        final undone =
+            r['rolledBack'] == true ? ' — annulé sur cet appareil' : '';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppTheme.errorColor,
@@ -83,7 +87,7 @@ class SyncIndicator extends ConsumerWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Non synchronisé ($operation) : $reason',
+                    'Non synchronisé ($operation) : $reason$undone',
                     style: const TextStyle(color: AppTheme.onError),
                   ),
                 ),
