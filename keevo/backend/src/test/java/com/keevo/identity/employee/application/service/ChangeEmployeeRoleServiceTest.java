@@ -15,6 +15,7 @@ import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.model.EmployeeStatus;
 import com.keevo.identity.employee.domain.port.in.ChangeEmployeeRoleCommand;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
+import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -24,6 +25,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -51,6 +53,7 @@ class ChangeEmployeeRoleServiceTest {
     @Mock RefreshTokenRepository refreshTokenRepository;
     @Mock TokenRevocationPort tokenRevocationPort;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock TransactionLockPort transactionLock;
 
     ChangeEmployeeRoleService service;
 
@@ -67,7 +70,7 @@ class ChangeEmployeeRoleServiceTest {
     void setUp() {
         service = new ChangeEmployeeRoleService(employeeRepository, userRepository,
                 membershipRepository, tenantRepository, refreshTokenRepository,
-                tokenRevocationPort, eventPublisher);
+                tokenRevocationPort, eventPublisher, transactionLock);
         actorId = UUID.randomUUID();
         employeeId = UUID.randomUUID();
         employeeUserId = UUID.randomUUID();
@@ -219,5 +222,64 @@ class ChangeEmployeeRoleServiceTest {
         service.execute(new ChangeEmployeeRoleCommand(actorId, employeeId, "OWNER"));
 
         verify(eventPublisher).publishEvent(any(com.keevo.identity.employee.domain.event.EmployeeRoleChangedEvent.class));
+    }
+
+    // ── Story 13.9: anti-lockout TOCTOU (two owners demote each other) ──────────
+
+    @Test
+    @DisplayName("13.9: demotion locks the tenant's owners before counting them")
+    void demotion_locksOwnersBeforeCount() {
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        when(tenantRepository.findBySchemaName(tenantSchema)).thenReturn(Optional.of(tenant));
+        when(membershipRepository.findByUserIdAndTenantId(employeeUserId, tenantId))
+                .thenReturn(Optional.of(UserTenantMembership.create(employeeUserId, tenantId, "OWNER")));
+        when(userRepository.findOwnersByTenantSchemaName(tenantSchema))
+                .thenReturn(List.of(employeeUser,
+                        new User(UUID.randomUUID(), "+2376", "h", Role.OWNER, true, Instant.now())));
+        when(userRepository.findById(employeeUserId)).thenReturn(Optional.of(employeeUser));
+        when(userRepository.save(any(User.class))).thenReturn(employeeUser);
+
+        service.execute(new ChangeEmployeeRoleCommand(actorId, employeeId, "EMPLOYEE"));
+
+        InOrder inOrder = inOrder(transactionLock, userRepository, membershipRepository);
+        inOrder.verify(transactionLock).lock("owners:" + tenantSchema);
+        inOrder.verify(userRepository).findOwnersByTenantSchemaName(tenantSchema);
+        inOrder.verify(membershipRepository).updateRole(employeeUserId, tenantId, "EMPLOYEE");
+    }
+
+    @Test
+    @DisplayName("13.9: second concurrent demotion sees the first one committed → CANNOT_DEMOTE_LAST_OWNER")
+    void concurrentMutualDemotion_loserGetsCannotDemoteLastOwner() {
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        when(tenantRepository.findBySchemaName(tenantSchema)).thenReturn(Optional.of(tenant));
+        when(membershipRepository.findByUserIdAndTenantId(employeeUserId, tenantId))
+                .thenReturn(Optional.of(UserTenantMembership.create(employeeUserId, tenantId, "OWNER")));
+        // After the lock, the other owner's demotion is committed: only one owner left.
+        when(userRepository.findOwnersByTenantSchemaName(tenantSchema)).thenReturn(List.of(employeeUser));
+
+        assertThatThrownBy(() -> service.execute(
+                new ChangeEmployeeRoleCommand(actorId, employeeId, "EMPLOYEE")))
+                .isInstanceOf(DomainException.class)
+                .extracting("domainCode")
+                .isEqualTo(ErrorCode.CANNOT_DEMOTE_LAST_OWNER.name());
+        InOrder inOrder = inOrder(transactionLock, userRepository);
+        inOrder.verify(transactionLock).lock("owners:" + tenantSchema);
+        inOrder.verify(userRepository).findOwnersByTenantSchemaName(tenantSchema);
+        verify(membershipRepository, never()).updateRole(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("13.9: promotion takes no lock")
+    void promotion_takesNoLock() {
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        when(tenantRepository.findBySchemaName(tenantSchema)).thenReturn(Optional.of(tenant));
+        when(membershipRepository.findByUserIdAndTenantId(employeeUserId, tenantId))
+                .thenReturn(Optional.of(UserTenantMembership.create(employeeUserId, tenantId, "EMPLOYEE")));
+        when(userRepository.findById(employeeUserId)).thenReturn(Optional.of(employeeUser));
+        when(userRepository.save(any(User.class))).thenReturn(employeeUser);
+
+        service.execute(new ChangeEmployeeRoleCommand(actorId, employeeId, "OWNER"));
+
+        verifyNoInteractions(transactionLock);
     }
 }

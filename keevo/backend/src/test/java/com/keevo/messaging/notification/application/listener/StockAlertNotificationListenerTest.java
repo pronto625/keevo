@@ -22,8 +22,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -52,11 +55,14 @@ class StockAlertNotificationListenerTest {
     private static final UUID ACTOR_ID = UUID.randomUUID();
     private static final String TENANT_ID = "kv_abc123";
 
+    private MutableClock clock;
+
     @BeforeEach
     void setUp() {
+        clock = new MutableClock(Instant.parse("2026-10-11T10:00:00Z"));
         listener = new StockAlertNotificationListener(
                 notificationPort, whatsAppPort, cooldownRepository,
-                tenantPreferencesRepository, userRepository, storeRepository);
+                tenantPreferencesRepository, userRepository, storeRepository, clock);
     }
 
     private StockThresholdBreachedEvent event() {
@@ -112,7 +118,7 @@ class StockAlertNotificationListenerTest {
     @DisplayName("alert enabled + no cooldown → sends push notification")
     void onStockThresholdBreached_alertEnabled_noActiveCooldown_sendsPush() {
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(enabledPrefs()));
-        when(cooldownRepository.existsActiveCooldown(eq("STOCK_ALERT"), any(), any(), any())).thenReturn(false);
+        when(cooldownRepository.tryAcquireCooldown(eq("STOCK_ALERT"), any(), any(), any())).thenReturn(true);
         when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(testStore()));
         when(userRepository.findOwnerByTenantSchemaName(TENANT_ID)).thenReturn(Optional.of(ownerUser()));
 
@@ -146,13 +152,15 @@ class StockAlertNotificationListenerTest {
     @DisplayName("cooldown active → skips notification")
     void onStockThresholdBreached_cooldownActive_skipsNotification() {
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(enabledPrefs()));
-        when(cooldownRepository.existsActiveCooldown(eq("STOCK_ALERT"), eq(PRODUCT_ID), eq(STORE_ID), any()))
-                .thenReturn(true);
+        when(cooldownRepository.tryAcquireCooldown(eq("STOCK_ALERT"), eq(PRODUCT_ID), eq(STORE_ID), any()))
+                .thenReturn(false);
 
         listener.onStockThresholdBreached(event());
 
         verifyNoInteractions(notificationPort);
         verifyNoInteractions(whatsAppPort);
+        // Cooldown left unchanged: no separate upsert
+        verify(cooldownRepository, never()).upsertCooldown(any(), any(), any());
     }
 
     // ── AC1: Push fails → logs WARN, does not throw ──────────────────────────
@@ -161,7 +169,7 @@ class StockAlertNotificationListenerTest {
     @DisplayName("push fails → logs warn, does not throw")
     void onStockThresholdBreached_pushFails_logsWarnDoesNotThrow() {
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(bothChannelPrefs()));
-        when(cooldownRepository.existsActiveCooldown(any(), any(), any(), any())).thenReturn(false);
+        when(cooldownRepository.tryAcquireCooldown(any(), any(), any(), any())).thenReturn(true);
         when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(testStore()));
         when(userRepository.findOwnerByTenantSchemaName(TENANT_ID)).thenReturn(Optional.of(ownerUser()));
         doThrow(new RuntimeException("FCM timeout")).when(notificationPort).notifyOwners(any(), any());
@@ -175,7 +183,7 @@ class StockAlertNotificationListenerTest {
     @DisplayName("whatsApp fails → logs warn, does not throw")
     void onStockThresholdBreached_whatsAppFails_logsWarnDoesNotThrow() {
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(bothChannelPrefs()));
-        when(cooldownRepository.existsActiveCooldown(any(), any(), any(), any())).thenReturn(false);
+        when(cooldownRepository.tryAcquireCooldown(any(), any(), any(), any())).thenReturn(true);
         when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(testStore()));
         when(userRepository.findOwnerByTenantSchemaName(TENANT_ID)).thenReturn(Optional.of(ownerUser()));
         doThrow(new RuntimeException("WA fail")).when(whatsAppPort).sendReport(any(), any());
@@ -186,16 +194,17 @@ class StockAlertNotificationListenerTest {
     // ── AC1: Upserts cooldown after dispatch ─────────────────────────────────
 
     @Test
-    @DisplayName("upserts cooldown after successful dispatch")
+    @DisplayName("acquires the cooldown atomically (4h window), no separate upsert for the own product")
     void onStockThresholdBreached_upsertsCooldownAfterSuccess() {
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(enabledPrefs()));
-        when(cooldownRepository.existsActiveCooldown(any(), any(), any(), any())).thenReturn(false);
+        when(cooldownRepository.tryAcquireCooldown(any(), any(), any(), any())).thenReturn(true);
         when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(testStore()));
         when(userRepository.findOwnerByTenantSchemaName(TENANT_ID)).thenReturn(Optional.of(ownerUser()));
 
         listener.onStockThresholdBreached(event());
 
-        verify(cooldownRepository).upsertCooldown("STOCK_ALERT", PRODUCT_ID, STORE_ID);
+        verify(cooldownRepository).tryAcquireCooldown("STOCK_ALERT", PRODUCT_ID, STORE_ID, Duration.ofHours(4));
+        verify(cooldownRepository, never()).upsertCooldown("STOCK_ALERT", PRODUCT_ID, STORE_ID);
     }
 
     // ── AC2: Three or fewer events → dispatches individually ─────────────────
@@ -204,7 +213,7 @@ class StockAlertNotificationListenerTest {
     @DisplayName("three events in window → dispatches individually (no batch)")
     void batch_threeOrFewer_dispatches_individually() {
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(enabledPrefs()));
-        when(cooldownRepository.existsActiveCooldown(any(), any(), any(), any())).thenReturn(false);
+        when(cooldownRepository.tryAcquireCooldown(any(), any(), any(), any())).thenReturn(true);
         when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(testStore()));
         when(userRepository.findOwnerByTenantSchemaName(TENANT_ID)).thenReturn(Optional.of(ownerUser()));
 
@@ -224,7 +233,7 @@ class StockAlertNotificationListenerTest {
     @DisplayName("fourth event in window → dispatches batch notification")
     void batch_fourthEventInWindow_dispatchesBatchNotification() {
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(enabledPrefs()));
-        when(cooldownRepository.existsActiveCooldown(any(), any(), any(), any())).thenReturn(false);
+        when(cooldownRepository.tryAcquireCooldown(any(), any(), any(), any())).thenReturn(true);
         when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(testStore()));
         when(userRepository.findOwnerByTenantSchemaName(TENANT_ID)).thenReturn(Optional.of(ownerUser()));
 
@@ -253,5 +262,94 @@ class StockAlertNotificationListenerTest {
 
         verifyNoInteractions(notificationPort);
         verifyNoInteractions(whatsAppPort);
+    }
+
+    // ── Story 13.9: cooldown TOCTOU + batch-window eviction ──────────────────
+
+    @Test
+    @DisplayName("13.9: two concurrent events, same product → only the cooldown winner notifies")
+    void concurrentSameProduct_onlyCooldownWinnerNotifies() {
+        when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(enabledPrefs()));
+        // The atomic upsert lets exactly one caller acquire the cooldown.
+        when(cooldownRepository.tryAcquireCooldown(eq("STOCK_ALERT"), eq(PRODUCT_ID), eq(STORE_ID), any()))
+                .thenReturn(true, false);
+        when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(testStore()));
+        when(userRepository.findOwnerByTenantSchemaName(TENANT_ID)).thenReturn(Optional.of(ownerUser()));
+
+        listener.onStockThresholdBreached(event());
+        listener.onStockThresholdBreached(event());
+
+        verify(notificationPort, times(1)).notifyOwners(eq(TENANT_ID), any());
+    }
+
+    @Test
+    @DisplayName("13.9: lookup failure before dispatch does not consume the cooldown")
+    void lookupFailure_doesNotConsumeCooldown() {
+        when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(enabledPrefs()));
+        when(storeRepository.findById(STORE_ID)).thenThrow(new RuntimeException("DB down"));
+
+        assertDoesNotThrow(() -> listener.onStockThresholdBreached(event()));
+
+        verify(cooldownRepository, never()).tryAcquireCooldown(any(), any(), any(), any());
+        verifyNoInteractions(notificationPort);
+    }
+
+    @Test
+    @DisplayName("13.9: window older than 60 s is evicted by the periodic sweep")
+    void evictExpiredWindows_removesIdleWindow() {
+        when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(enabledPrefs()));
+        when(cooldownRepository.tryAcquireCooldown(any(), any(), any(), any())).thenReturn(true);
+        when(storeRepository.findById(any())).thenReturn(Optional.of(testStore()));
+        when(userRepository.findOwnerByTenantSchemaName(TENANT_ID)).thenReturn(Optional.of(ownerUser()));
+
+        listener.onStockThresholdBreached(event(UUID.randomUUID(), STORE_ID));
+        listener.onStockThresholdBreached(event(UUID.randomUUID(), UUID.randomUUID()));
+        assertEquals(2, listener.openWindowCount());
+
+        clock.advance(Duration.ofSeconds(30));
+        listener.evictExpiredWindows();
+        assertEquals(2, listener.openWindowCount(), "windows still inside the 60 s batch window are kept");
+
+        clock.advance(Duration.ofSeconds(31));
+        listener.evictExpiredWindows();
+        assertEquals(0, listener.openWindowCount());
+    }
+
+    @Test
+    @DisplayName("13.9: event after eviction starts a fresh window (batch counting restarts)")
+    void eventAfterEviction_startsFreshWindow() {
+        when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(enabledPrefs()));
+        when(cooldownRepository.tryAcquireCooldown(any(), any(), any(), any())).thenReturn(true);
+        when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(testStore()));
+        when(userRepository.findOwnerByTenantSchemaName(TENANT_ID)).thenReturn(Optional.of(ownerUser()));
+
+        for (int i = 0; i < 3; i++) {
+            listener.onStockThresholdBreached(event(UUID.randomUUID(), STORE_ID));
+        }
+        clock.advance(Duration.ofSeconds(61));
+        listener.evictExpiredWindows();
+        assertEquals(0, listener.openWindowCount());
+
+        listener.onStockThresholdBreached(event(UUID.randomUUID(), STORE_ID));
+
+        assertEquals(1, listener.openWindowCount());
+        ArgumentCaptor<NotificationPayload> cap = ArgumentCaptor.forClass(NotificationPayload.class);
+        verify(notificationPort, times(4)).notifyOwners(eq(TENANT_ID), cap.capture());
+        cap.getAllValues().forEach(p -> assertEquals("STOCK_ALERT", p.type()));
+    }
+
+    /** Mutable clock — lets the test move time past the batch window. */
+    private static final class MutableClock extends Clock {
+        private Instant now;
+
+        MutableClock(Instant start) { this.now = start; }
+
+        void advance(Duration d) { now = now.plus(d); }
+
+        @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+
+        @Override public Clock withZone(ZoneId zone) { return this; }
+
+        @Override public Instant instant() { return now; }
     }
 }

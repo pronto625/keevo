@@ -1,14 +1,22 @@
 package com.keevo.identity.employee.application.service;
 
+import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.identity.auth.domain.model.Role;
+import com.keevo.identity.auth.domain.model.Tenant;
+import com.keevo.identity.auth.domain.model.TenantStatus;
+import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.model.UserTenantMembership;
 import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
+import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.TokenRevocationPort;
 import com.keevo.identity.auth.domain.port.out.UserMembershipRepository;
+import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.employee.domain.event.EmployeeDeactivatedEvent;
 import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.model.EmployeeStatus;
 import com.keevo.identity.employee.domain.port.in.DeactivateEmployeeCommand;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
+import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -18,12 +26,14 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -44,6 +54,9 @@ class DeactivateEmployeeServiceTest {
     @Mock RefreshTokenRepository refreshTokenRepository;
     @Mock TokenRevocationPort tokenRevocationPort;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock TenantRepository tenantRepository;
+    @Mock UserRepository userRepository;
+    @Mock TransactionLockPort transactionLock;
 
     @InjectMocks DeactivateEmployeeService deactivateEmployeeService;
 
@@ -148,5 +161,66 @@ class DeactivateEmployeeServiceTest {
 
         // Subject = the deactivated EMPLOYEE (employee.getUserId()), NOT the OWNER actor
         verify(tokenRevocationPort).revokeAllSessions(eq(employee.getUserId()), eq("kv_abc123"));
+    }
+
+    // ── Story 13.9: anti-lockout on deactivation of an OWNER membership ─────────
+
+    private Tenant stubTenantWithRole(String role) {
+        Tenant tenant = new Tenant(UUID.randomUUID(), "TEST", "kv_abc123", "Test Shop",
+                TenantStatus.ACTIVE, PlanType.FREE, Instant.now());
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        when(tenantRepository.findBySchemaName("kv_abc123")).thenReturn(Optional.of(tenant));
+        when(membershipRepository.findByUserIdAndTenantId(userId, tenant.getId()))
+                .thenReturn(Optional.of(UserTenantMembership.create(userId, tenant.getId(), role)));
+        return tenant;
+    }
+
+    private User owner(UUID id) {
+        return new User(id, "+237690000009", "hash", Role.OWNER, true, Instant.now());
+    }
+
+    @Test
+    @DisplayName("13.9: deactivating the last OWNER → CANNOT_DEMOTE_LAST_OWNER, nothing deactivated")
+    void execute_lastOwner_rejected() {
+        stubTenantWithRole("OWNER");
+        when(userRepository.findOwnersByTenantSchemaName("kv_abc123")).thenReturn(List.of(owner(userId)));
+
+        assertThatThrownBy(() -> deactivateEmployeeService.execute(new DeactivateEmployeeCommand(actorId, employeeId)))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getErrorCode())
+                .isEqualTo(ErrorCode.CANNOT_DEMOTE_LAST_OWNER);
+
+        verify(transactionLock).lock("owners:kv_abc123");
+        verify(employeeRepository, never()).updateStatus(any(), any());
+        verify(membershipRepository, never()).deactivateByUserId(any());
+        verifyNoInteractions(refreshTokenRepository, tokenRevocationPort, eventPublisher);
+    }
+
+    @Test
+    @DisplayName("13.9: OWNER with another active owner → lock before count, then deactivated")
+    void execute_ownerWithAnotherOwner_locksThenDeactivates() {
+        stubTenantWithRole("OWNER");
+        when(userRepository.findOwnersByTenantSchemaName("kv_abc123"))
+                .thenReturn(List.of(owner(userId), owner(UUID.randomUUID())));
+
+        deactivateEmployeeService.execute(new DeactivateEmployeeCommand(actorId, employeeId));
+
+        InOrder inOrder = inOrder(transactionLock, userRepository, employeeRepository);
+        inOrder.verify(transactionLock).lock("owners:kv_abc123");
+        inOrder.verify(userRepository).findOwnersByTenantSchemaName("kv_abc123");
+        inOrder.verify(employeeRepository).updateStatus(employeeId, EmployeeStatus.INACTIVE);
+        verify(membershipRepository).deactivateByUserId(userId);
+    }
+
+    @Test
+    @DisplayName("13.9: EMPLOYEE membership → no lock, no owner count")
+    void execute_employee_noLock() {
+        stubTenantWithRole("EMPLOYEE");
+
+        deactivateEmployeeService.execute(new DeactivateEmployeeCommand(actorId, employeeId));
+
+        verifyNoInteractions(transactionLock);
+        verify(userRepository, never()).findOwnersByTenantSchemaName(any());
+        verify(employeeRepository).updateStatus(employeeId, EmployeeStatus.INACTIVE);
     }
 }

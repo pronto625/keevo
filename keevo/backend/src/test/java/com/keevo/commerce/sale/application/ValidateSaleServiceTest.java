@@ -55,6 +55,11 @@ class ValidateSaleServiceTest {
         service = new ValidateSaleService(
                 saleRepository, stockLevelRepository, stockOperationService, eventPublisher,
                 new ObjectMapper());
+        // Story 13.9: PENDING_VALIDATION transitions are conditional claims; default = won.
+        lenient().when(saleRepository.updateStatusIfCurrent(SALE_ID, SaleStatus.PENDING_VALIDATION, SaleStatus.COMPLETED))
+                .thenReturn(true);
+        lenient().when(saleRepository.updateStatusIfCurrent(SALE_ID, SaleStatus.PENDING_VALIDATION, SaleStatus.CANCELLED))
+                .thenReturn(true);
     }
 
     @AfterEach
@@ -94,7 +99,7 @@ class ValidateSaleServiceTest {
         service.validateSale(new ValidateSaleCommand(SALE_ID, ACTOR_ID,
                 "Client fidèle, produit confirmé par fournisseur"));
 
-        verify(saleRepository).updateStatus(SALE_ID, SaleStatus.COMPLETED);
+        verify(saleRepository).updateStatusIfCurrent(SALE_ID, SaleStatus.PENDING_VALIDATION, SaleStatus.COMPLETED);
         verify(stockOperationService, times(2)).recordOperation(
                 any(), any(), eq(STORE_ID), any(), anyInt(), eq(ACTOR_ID), any());
 
@@ -116,7 +121,7 @@ class ValidateSaleServiceTest {
         service.validateSale(new ValidateSaleCommand(SALE_ID, ACTOR_ID,
                 "Validation forcée malgré stock insuffisant"));
 
-        verify(saleRepository).updateStatus(SALE_ID, SaleStatus.COMPLETED);
+        verify(saleRepository).updateStatusIfCurrent(SALE_ID, SaleStatus.PENDING_VALIDATION, SaleStatus.COMPLETED);
 
         var eventCaptor = ArgumentCaptor.forClass(Object.class);
         verify(eventPublisher, atLeastOnce()).publishEvent(eventCaptor.capture());
@@ -133,7 +138,7 @@ class ValidateSaleServiceTest {
 
         service.validateSale(new ValidateSaleCommand(SALE_ID, ACTOR_ID, null));
 
-        verify(saleRepository).updateStatus(SALE_ID, SaleStatus.COMPLETED);
+        verify(saleRepository).updateStatusIfCurrent(SALE_ID, SaleStatus.PENDING_VALIDATION, SaleStatus.COMPLETED);
     }
 
     @Test
@@ -163,7 +168,7 @@ class ValidateSaleServiceTest {
         service.cancelPendingSale(new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null,
                 "Produit finalement non disponible chez le fournisseur"));
 
-        verify(saleRepository).updateStatus(SALE_ID, SaleStatus.CANCELLED);
+        verify(saleRepository).updateStatusIfCurrent(SALE_ID, SaleStatus.PENDING_VALIDATION, SaleStatus.CANCELLED);
 
         var eventCaptor = ArgumentCaptor.forClass(Object.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
@@ -186,7 +191,7 @@ class ValidateSaleServiceTest {
 
         service.cancelPendingSale(new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null, null));
 
-        verify(saleRepository).updateStatus(SALE_ID, SaleStatus.CANCELLED);
+        verify(saleRepository).updateStatusIfCurrent(SALE_ID, SaleStatus.PENDING_VALIDATION, SaleStatus.CANCELLED);
     }
 
     // ── Story v1s-13-5 — Cancellation of COMPLETED sales (AC1-AC3) ────────────
@@ -226,7 +231,7 @@ class ValidateSaleServiceTest {
                 .isInstanceOf(DomainException.class)
                 .hasMessageContaining("already cancelled");
 
-        verify(saleRepository, never()).updateStatus(any(), any());
+        verify(saleRepository, never()).updateStatusIfCurrent(any(), any(), any());
         verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
     }
 
@@ -238,7 +243,7 @@ class ValidateSaleServiceTest {
                 new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null, "   ")))
                 .isInstanceOf(DomainException.class);
 
-        verify(saleRepository, never()).updateStatus(any(), any());
+        verify(saleRepository, never()).updateStatusIfCurrent(any(), any(), any());
         verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
     }
 
@@ -261,7 +266,7 @@ class ValidateSaleServiceTest {
                 new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null, "trop crt")))
                 .isInstanceOf(DomainException.class);
 
-        verify(saleRepository, never()).updateStatus(any(), any());
+        verify(saleRepository, never()).updateStatusIfCurrent(any(), any(), any());
         verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
     }
 
@@ -279,7 +284,7 @@ class ValidateSaleServiceTest {
         service.validateSale(new ValidateSaleCommand(SALE_ID, ACTOR_ID, STORE_ID,
                 "Validation par employé de sa boutique", null, null));
 
-        verify(saleRepository).updateStatus(SALE_ID, SaleStatus.COMPLETED);
+        verify(saleRepository).updateStatusIfCurrent(SALE_ID, SaleStatus.PENDING_VALIDATION, SaleStatus.COMPLETED);
     }
 
     @Test
@@ -294,7 +299,7 @@ class ValidateSaleServiceTest {
                 .isInstanceOf(DomainException.class)
                 .hasMessageContaining("Employee cannot operate pending sale outside assigned store");
 
-        verify(saleRepository, never()).updateStatus(any(), any());
+        verify(saleRepository, never()).updateStatusIfCurrent(any(), any(), any());
     }
 
     @Test
@@ -305,7 +310,7 @@ class ValidateSaleServiceTest {
         service.cancelPendingSale(new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, STORE_ID,
                 "Annulation par employé de sa boutique"));
 
-        verify(saleRepository).updateStatus(SALE_ID, SaleStatus.CANCELLED);
+        verify(saleRepository).updateStatusIfCurrent(SALE_ID, SaleStatus.PENDING_VALIDATION, SaleStatus.CANCELLED);
     }
 
     @Test
@@ -320,7 +325,7 @@ class ValidateSaleServiceTest {
                 .isInstanceOf(DomainException.class)
                 .hasMessageContaining("Employee cannot operate pending sale outside assigned store");
 
-        verify(saleRepository, never()).updateStatus(any(), any());
+        verify(saleRepository, never()).updateStatusIfCurrent(any(), any(), any());
     }
 
     // Two concurrent cancellations both read COMPLETED: only the one whose conditional
@@ -339,5 +344,100 @@ class ValidateSaleServiceTest {
 
         verifyNoInteractions(stockOperationService);
         verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    // ── Story 13.9: cancel vs validate races, sync pendingOnly guard ─────────────
+
+    private static final String JUSTIF = "Justification suffisamment longue";
+
+    @Test
+    void validateSale_lostRaceToConcurrentCancel_saleNotPending_noEventsPublished() {
+        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(pendingSale()));
+        when(saleRepository.updateStatusIfCurrent(SALE_ID, SaleStatus.PENDING_VALIDATION, SaleStatus.COMPLETED))
+                .thenReturn(false);
+
+        assertThatThrownBy(() -> service.validateSale(new ValidateSaleCommand(SALE_ID, ACTOR_ID, JUSTIF)))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getErrorCode())
+                .isEqualTo(com.keevo.shared.domain.exception.ErrorCode.SALE_NOT_PENDING);
+        // The claim comes before any stock write or event: nothing to roll back, no alert.
+        verifyNoInteractions(stockOperationService);
+        verify(eventPublisher, never()).publishEvent(any(StockForcedZeroEvent.class));
+        verify(eventPublisher, never()).publishEvent(any(SaleCompletedEvent.class));
+        verify(eventPublisher, never()).publishEvent(any(SaleManuallyValidatedEvent.class));
+    }
+
+    @Test
+    void cancelPending_lostRaceToConcurrentValidate_saleNotPending() {
+        when(saleRepository.findById(SALE_ID))
+                .thenReturn(Optional.of(pendingSale()))
+                .thenReturn(Optional.of(completedSale()));
+        when(saleRepository.updateStatusIfCurrent(SALE_ID, SaleStatus.PENDING_VALIDATION, SaleStatus.CANCELLED))
+                .thenReturn(false);
+
+        assertThatThrownBy(() -> service.cancelPendingSale(new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null, JUSTIF)))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getErrorCode())
+                .isEqualTo(com.keevo.shared.domain.exception.ErrorCode.SALE_NOT_PENDING);
+        verifyNoInteractions(stockOperationService);
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void cancelPending_lostRaceToConcurrentCancel_saleAlreadyCancelled() {
+        Sale cancelled = new Sale(SALE_ID, STORE_ID, ACTOR_ID, null,
+                PaymentMode.CASH, 11000, 0, SaleStatus.CANCELLED, NOW, NOW, List.of());
+        when(saleRepository.findById(SALE_ID))
+                .thenReturn(Optional.of(pendingSale()))
+                .thenReturn(Optional.of(cancelled));
+        when(saleRepository.updateStatusIfCurrent(SALE_ID, SaleStatus.PENDING_VALIDATION, SaleStatus.CANCELLED))
+                .thenReturn(false);
+
+        assertThatThrownBy(() -> service.cancelPendingSale(new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null, JUSTIF)))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getErrorCode())
+                .isEqualTo(com.keevo.shared.domain.exception.ErrorCode.SALE_ALREADY_CANCELLED);
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void cancelPendingOnly_completedAtLoad_forbidden_noStockRestore() {
+        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(completedSale()));
+
+        assertThatThrownBy(() -> service.cancelPendingSale(
+                new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null, JUSTIF, true)))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getErrorCode())
+                .isEqualTo(com.keevo.shared.domain.exception.ErrorCode.FORBIDDEN);
+        verify(saleRepository, never()).updateStatusIfCurrent(any(), any(), any());
+        verifyNoInteractions(stockOperationService);
+    }
+
+    @Test
+    void cancelPendingOnly_validatedConcurrently_forbidden_noStockRestore() {
+        when(saleRepository.findById(SALE_ID))
+                .thenReturn(Optional.of(pendingSale()))
+                .thenReturn(Optional.of(completedSale()));
+        when(saleRepository.updateStatusIfCurrent(SALE_ID, SaleStatus.PENDING_VALIDATION, SaleStatus.CANCELLED))
+                .thenReturn(false);
+
+        assertThatThrownBy(() -> service.cancelPendingSale(
+                new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null, JUSTIF, true)))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getErrorCode())
+                .isEqualTo(com.keevo.shared.domain.exception.ErrorCode.FORBIDDEN);
+        verify(saleRepository, never()).updateStatusIfCurrent(SALE_ID, SaleStatus.COMPLETED, SaleStatus.CANCELLED);
+        verifyNoInteractions(stockOperationService);
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void cancelPendingOnly_pendingSale_cancelled() {
+        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(pendingSale()));
+
+        service.cancelPendingSale(new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null, JUSTIF, true));
+
+        verify(saleRepository).updateStatusIfCurrent(SALE_ID, SaleStatus.PENDING_VALIDATION, SaleStatus.CANCELLED);
+        verifyNoInteractions(stockOperationService);
     }
 }

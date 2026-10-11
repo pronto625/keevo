@@ -32,4 +32,15 @@ public interface NotificationCooldownRepository {
      * @param storeId      store UUID
      */
     void upsertCooldown(String cooldownType, UUID productId, UUID storeId);
+
+    /**
+     * Atomically acquire the cooldown: in a single statement, insert the entry or refresh
+     * {@code last_sent_at} to now only when the previous one is older than {@code window}.
+     * Two concurrent callers cannot both acquire it (Story 13.9 — replaces the racy
+     * {@link #existsActiveCooldown} + {@link #upsertCooldown} pair).
+     *
+     * @return true if the caller acquired the cooldown (and should notify), false if a
+     *         cooldown is still active (entry left unchanged)
+     */
+    boolean tryAcquireCooldown(String cooldownType, UUID productId, UUID storeId, Duration window);
 }

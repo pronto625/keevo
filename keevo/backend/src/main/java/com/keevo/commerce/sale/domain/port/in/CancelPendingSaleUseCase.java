@@ -8,7 +8,20 @@ import java.util.UUID;
  */
 public interface CancelPendingSaleUseCase {
 
-    record CancelPendingSaleCommand(UUID saleId, UUID actorId, UUID assignedStoreId, String justification) {}
+    /**
+     * @param pendingOnly true for the sync channel (Story v1s-13-5 AC5 / 13.9): only a
+     *                    PENDING_VALIDATION sale may be cancelled; a COMPLETED sale — at load time
+     *                    or validated concurrently — is refused with {@code FORBIDDEN}, because
+     *                    cancelling it (stock restoration) needs an online OWNER request.
+     */
+    record CancelPendingSaleCommand(UUID saleId, UUID actorId, UUID assignedStoreId, String justification,
+                                    boolean pendingOnly) {
+
+        /** REST path: PENDING_VALIDATION and COMPLETED sales may be cancelled. */
+        public CancelPendingSaleCommand(UUID saleId, UUID actorId, UUID assignedStoreId, String justification) {
+            this(saleId, actorId, assignedStoreId, justification, false);
+        }
+    }
 
     void cancelPendingSale(CancelPendingSaleCommand command);
 }

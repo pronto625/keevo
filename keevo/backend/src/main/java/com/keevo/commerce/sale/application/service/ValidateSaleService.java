@@ -68,6 +68,16 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
         enforceEmployeeStoreScope(command.assignedStoreId(), sale.getStoreId());
         validateJustification(command.justification());
 
+        // Story 13.9: claim PENDING_VALIDATION→COMPLETED atomically before any stock write or
+        // event (mirrors the COMPLETED→CANCELLED claim). A concurrent cancel/validation that won
+        // leaves 0 rows here: refuse before touching stock — never COMPLETED-without-stock nor
+        // CANCELLED-with-decrement, and no alert for a decrement that would be rolled back.
+        if (!saleRepository.updateStatusIfCurrent(
+                sale.getId(), SaleStatus.PENDING_VALIDATION, SaleStatus.COMPLETED)) {
+            throw new DomainException(ErrorCode.SALE_NOT_PENDING,
+                    "Sale " + sale.getId() + " is no longer pending validation");
+        }
+
         // Step 1: Record initial stock entries for newly promoted draft products.
         // Uses sale.getStoreId() as the authoritative store to avoid storeId mismatch
         // between Flutter local DB and backend (JWT-assigned store).
@@ -120,8 +130,6 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
             }
         }
 
-        saleRepository.updateStatus(sale.getId(), SaleStatus.COMPLETED);
-
         eventPublisher.publishEvent(new SaleManuallyValidatedEvent(
                 sale.getId(), command.actorId(), command.justification(),
                 forcedProducts, tenantId, now));
@@ -142,12 +150,20 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
             case PENDING_VALIDATION -> {
                 enforceEmployeeStoreScope(command.assignedStoreId(), sale.getStoreId());
                 validateJustification(command.justification());
-                saleRepository.updateStatus(sale.getId(), SaleStatus.CANCELLED);
+                // Story 13.9: claim PENDING_VALIDATION→CANCELLED atomically; a concurrent
+                // validation/cancellation that won leaves 0 rows here.
+                if (!saleRepository.updateStatusIfCurrent(
+                        sale.getId(), SaleStatus.PENDING_VALIDATION, SaleStatus.CANCELLED)) {
+                    throw lostPendingRace(sale.getId(), command.pendingOnly());
+                }
                 eventPublisher.publishEvent(new SaleCancelledEvent(
                         sale.getId(), command.actorId(), command.justification(),
                         "[]", tenantId, Instant.now()));
             }
             case COMPLETED -> {
+                if (command.pendingOnly()) {
+                    throw completedViaPendingOnly();
+                }
                 enforceEmployeeStoreScope(command.assignedStoreId(), sale.getStoreId());
                 requireJustification(command.justification());
                 // Claim the COMPLETED→CANCELLED transition first: a concurrent cancellation that
@@ -178,6 +194,26 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
     @Override
     public List<Sale> getPendingSalesByStore(UUID storeId) {
         return saleRepository.findByStoreIdAndStatus(storeId, SaleStatus.PENDING_VALIDATION);
+    }
+
+    /** Story v1s-13-5 AC5 (Décision D2): the sync channel never cancels a COMPLETED sale. */
+    private static DomainException completedViaPendingOnly() {
+        return new DomainException(ErrorCode.FORBIDDEN,
+                "Cancelling a completed sale requires an online OWNER-authenticated request");
+    }
+
+    /** Maps a lost PENDING_VALIDATION→CANCELLED claim to the error matching the winner's outcome. */
+    private DomainException lostPendingRace(UUID saleId, boolean pendingOnly) {
+        SaleStatus current = saleRepository.findById(saleId).map(Sale::getStatus).orElse(null);
+        if (current == SaleStatus.CANCELLED) {
+            return new DomainException(ErrorCode.SALE_ALREADY_CANCELLED,
+                    "Sale " + saleId + " is already cancelled");
+        }
+        if (pendingOnly && current == SaleStatus.COMPLETED) {
+            return completedViaPendingOnly();
+        }
+        return new DomainException(ErrorCode.SALE_NOT_PENDING,
+                "Sale " + saleId + " is no longer pending validation (status=" + current + ")");
     }
 
     private Sale loadPendingSale(UUID saleId) {

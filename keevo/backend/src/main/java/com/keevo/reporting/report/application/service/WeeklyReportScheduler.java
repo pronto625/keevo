@@ -10,6 +10,7 @@ import com.keevo.reporting.report.domain.port.in.GenerateWeeklyReportUseCase.Wee
 import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.domain.port.out.StoreRepository;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -78,6 +79,7 @@ public class WeeklyReportScheduler {
     }
 
     @Scheduled(cron = "0 0 * * * *")
+    @SchedulerLock(name = "weeklyReportScheduler.runWeeklyReport", lockAtMostFor = "PT50M", lockAtLeastFor = "PT1M")
     public void runWeeklyReport() {
         LocalDate todayWAT = LocalDate.now(clock.withZone(WAT));
         LocalTime nowWAT   = LocalTime.now(clock.withZone(WAT));

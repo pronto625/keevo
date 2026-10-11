@@ -92,19 +92,17 @@ public class ProductCreationNotificationListener {
         }
         try {
             String key = batchKey(event.tenantId(), event.actorId());
-            BatchWindow window = batchWindows.computeIfAbsent(key, k -> new BatchWindow());
-
-            synchronized (window) {
-                Instant now = Instant.now(clock);
-                boolean expired = window.windowStart != null
-                        && now.isAfter(window.windowStart.plus(Duration.ofMinutes(windowMin)));
-
-                if (expired || window.windowStart == null) {
-                    window.events.clear();
-                    window.windowStart = now;
+            // Story 13.9: accumulate atomically. If the flush removed the key meanwhile, this
+            // starts a fresh window (never an orphan one). An expired window the sweep has not
+            // flushed yet keeps collecting: the next sweep sends everything, nothing is dropped.
+            batchWindows.compute(key, (k, window) -> {
+                BatchWindow w = window != null ? window : new BatchWindow();
+                if (w.windowStart == null) {
+                    w.windowStart = Instant.now(clock);
                 }
-                window.events.add(event);
-            }
+                w.events.add(event);
+                return w;
+            });
         } catch (Exception e) {
             log.warn("[PRODUCT-NOTIF] Failed to accumulate event for product creation by {}: {}",
                     event.actorId(), e.getMessage());
@@ -120,19 +118,20 @@ public class ProductCreationNotificationListener {
     @Scheduled(fixedDelay = 30_000)
     public void flushExpiredWindows() {
         Instant now = Instant.now(clock);
-        for (Map.Entry<String, BatchWindow> entry : batchWindows.entrySet()) {
-            BatchWindow window = entry.getValue();
-            List<ProductCreatedEvent> toSend = null;
-            synchronized (window) {
-                if (window.windowStart != null
-                        && now.isAfter(window.windowStart.plus(Duration.ofMinutes(windowMin)))
-                        && !window.events.isEmpty()) {
-                    toSend = new ArrayList<>(window.events);
-                    window.events.clear();
-                    window.windowStart = null;
+        Duration window = Duration.ofMinutes(windowMin);
+        for (String key : batchWindows.keySet()) {
+            // Story 13.9: an expired window is removed atomically together with the extraction
+            // of its events (the map no longer keeps one entry per actor forever); an event
+            // arriving right after lands in a fresh window via compute().
+            List<ProductCreatedEvent> toSend = new ArrayList<>();
+            batchWindows.computeIfPresent(key, (k, w) -> {
+                if (w.windowStart == null || now.isAfter(w.windowStart.plus(window))) {
+                    toSend.addAll(w.events);
+                    return null;
                 }
-            }
-            if (toSend != null) {
+                return w;
+            });
+            if (!toSend.isEmpty()) {
                 try {
                     if (toSend.size() == 1) {
                         dispatchSingle(toSend.get(0));
@@ -140,10 +139,15 @@ public class ProductCreationNotificationListener {
                         dispatchBatch(toSend);
                     }
                 } catch (Exception e) {
-                    log.warn("[PRODUCT-NOTIF] Failed to flush window for key={}: {}", entry.getKey(), e.getMessage());
+                    log.warn("[PRODUCT-NOTIF] Failed to flush window for key={}: {}", key, e.getMessage());
                 }
             }
         }
+    }
+
+    /** Test hook — number of open batch windows (Story 13.9 eviction). */
+    int openWindowCount() {
+        return batchWindows.size();
     }
 
     // ── CSV import (Story 2.4 AC9 — preserved) ─────────────────────────

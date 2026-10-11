@@ -2,6 +2,7 @@ package com.keevo.shared.infrastructure.scheduling;
 
 import com.keevo.subscription.plan.domain.port.in.DowngradeExpiredTrialsCommand;
 import com.keevo.subscription.plan.domain.port.in.DowngradeExpiredTrialsUseCase;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -18,7 +19,7 @@ import org.springframework.stereotype.Component;
  * <ul>
  *   <li>Natural expiry always downgrades to FREE — never suspends (AC4).</li>
  *   <li>SUSPENDED status is reserved for manual admin lockout only.</li>
- *   <li>Single-instance safe; for multi-instance, add @SchedulerLock (ShedLock).</li>
+ *   <li>Multi-instance safe: @SchedulerLock (ShedLock, Story 13.9) runs each tick on one instance.</li>
  * </ul>
  */
 @Component
@@ -36,6 +37,7 @@ public class SubscriptionExpiryScheduler {
      * Runs daily at 02:00 — downgrades all expired PREMIUM_TRIAL/PREMIUM subscriptions to FREE.
      */
     @Scheduled(cron = "0 0 2 * * *")
+    @SchedulerLock(name = "subscriptionExpiryScheduler.downgradeExpiredSubscriptions", lockAtMostFor = "PT2H", lockAtLeastFor = "PT1M")
     public void downgradeExpiredSubscriptions() {  // L2 fix: was downgradExpiredSubscriptions (typo)
         log.info("[SubscriptionExpiryScheduler] Starting nightly subscription expiry check...");
         try {

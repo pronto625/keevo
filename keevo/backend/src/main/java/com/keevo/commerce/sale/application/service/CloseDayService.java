@@ -4,6 +4,7 @@ import com.keevo.commerce.sale.domain.model.*;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase;
 import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
+import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import org.springframework.context.ApplicationEventPublisher;
@@ -37,6 +38,7 @@ public class CloseDayService implements CloseDayUseCase {
     private final SaleRepository saleRepository;
     private final DayClosureRepository dayClosureRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final TransactionLockPort transactionLock;
 
     // West Africa Time (WAT) = UTC+1
     private static final ZoneId WAT_ZONE = ZoneId.of("Africa/Lagos");
@@ -46,14 +48,21 @@ public class CloseDayService implements CloseDayUseCase {
 
     public CloseDayService(SaleRepository saleRepository,
                            DayClosureRepository dayClosureRepository,
-                           ApplicationEventPublisher eventPublisher) {
+                           ApplicationEventPublisher eventPublisher,
+                           TransactionLockPort transactionLock) {
         this.saleRepository = saleRepository;
         this.dayClosureRepository = dayClosureRepository;
         this.eventPublisher = eventPublisher;
+        this.transactionLock = transactionLock;
     }
 
     @Override
     public DayClosure closeDay(CloseDayCommand command) {
+        // Story 13.9: serialise closures of a store (auto-close tick vs manual/sync close, or
+        // two instances) so the exists-checks below and the save cannot interleave. Taken
+        // first so the loser computes its window after the winner committed.
+        transactionLock.lock("day-closure:" + command.storeId());
+
         // The closure time decides the closed day. An offline closure keeps the time it
         // was made on the device (never in the future, at most MAX_BACKDATE ago);
         // otherwise it is now.

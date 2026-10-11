@@ -63,6 +63,26 @@ public class JdbcNotificationCooldownAdapter implements NotificationCooldownRepo
     }
 
     /**
+     * Story 13.9: check + set in one statement. The UNIQUE (cooldown_type, product_id, store_id)
+     * constraint serialises concurrent callers on the same row; the {@code WHERE} of the
+     * {@code DO UPDATE} leaves an active cooldown untouched (0 rows), so exactly one caller
+     * gets an update count of 1.
+     */
+    @Override
+    public boolean tryAcquireCooldown(String cooldownType, UUID productId, UUID storeId, Duration window) {
+        String table = qualifiedTable();
+        UUID effectiveProductId = productId != null ? productId : NULL_PRODUCT_SENTINEL;
+        int updated = jdbcTemplate.update(
+            "INSERT INTO " + table + " AS nc (id, cooldown_type, product_id, store_id, last_sent_at) " +
+            "VALUES (gen_random_uuid(), ?, ?, ?, NOW()) " +
+            "ON CONFLICT (cooldown_type, product_id, store_id) DO UPDATE SET last_sent_at = EXCLUDED.last_sent_at " +
+            "WHERE nc.last_sent_at <= NOW() - (? * INTERVAL '1 second')",
+            cooldownType, effectiveProductId, storeId, window.toSeconds()
+        );
+        return updated == 1;
+    }
+
+    /**
      * Returns the fully-qualified table reference: {@code "kv_xxxxxx".notification_cooldowns}.
      * Schema name is validated against the tenant naming convention to prevent SQL injection.
      */

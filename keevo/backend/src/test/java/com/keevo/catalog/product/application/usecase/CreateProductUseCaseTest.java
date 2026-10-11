@@ -4,6 +4,7 @@ import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
 import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -40,6 +42,7 @@ class CreateProductUseCaseTest {
     @Mock private ProductCountPort         productCountPort;
     @Mock private SubscriptionRepository   subscriptionRepository;
     @Mock private PlanLimitGuard           planLimitGuard;
+    @Mock private TransactionLockPort transactionLock;
 
     private CreateProductUseCase useCase;
     private final UUID actorId = UUID.randomUUID();
@@ -49,7 +52,7 @@ class CreateProductUseCaseTest {
     void setUp() {
         useCase = new CreateProductUseCase(
                 productRepository, eventPublisher, productCountPort,
-                subscriptionRepository, planLimitGuard);
+                subscriptionRepository, planLimitGuard, transactionLock);
     }
 
     private CreateProductUseCase.CreateProductDto dto(String name) {
@@ -143,5 +146,54 @@ class CreateProductUseCaseTest {
         assertEquals(existing, result);
         verify(productRepository, never()).save(any());
         verify(productRepository, never()).existsByName(any());
+        // Story 13.9: concurrent same-clientId creates are serialised — lock before the lookup.
+        InOrder inOrder = inOrder(transactionLock, productRepository);
+        inOrder.verify(transactionLock).lock(any());
+        inOrder.verify(productRepository).findById(clientId);
+    }
+
+    // ── Story 13.9: plan-limit TOCTOU ─────────────────────────────────────────
+
+    @Test
+    @DisplayName("13.9: verrou tenant pris en premier (avant nom/comptage), puis save")
+    void locksTenantBeforeCount_thenSaves() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            stubPlanUnderLimit();
+            when(productRepository.existsByName("Produit Concurrent")).thenReturn(false);
+            when(productRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+            useCase.execute(dto("Produit Concurrent"));
+
+            InOrder inOrder = inOrder(transactionLock, productCountPort, productRepository);
+            inOrder.verify(transactionLock).lock("product-limit:kv_test");
+            inOrder.verify(productRepository).existsByName("Produit Concurrent");
+            inOrder.verify(productCountPort).countActiveProducts();
+            inOrder.verify(productRepository).save(any());
+        }
+    }
+
+    @Test
+    @DisplayName("13.9: perdant de la course (count = max après commit du gagnant) → PLAN_LIMIT_EXCEEDED")
+    void concurrentLoserAtLimit_planLimitExceeded_neverSaves() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            when(productRepository.existsByName("Produit Perdant")).thenReturn(false);
+            var sub = mock(com.keevo.subscription.plan.domain.model.Subscription.class);
+            when(sub.getPlanType()).thenReturn(PlanType.FREE);
+            when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(sub));
+            // The winner's product is committed before the lock is released: the loser counts it.
+            when(productCountPort.countActiveProducts()).thenReturn(20);
+            doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "Limite de produits atteinte"))
+                    .when(planLimitGuard).checkProductLimit(PlanType.FREE, 20);
+
+            var ex = assertThrows(DomainException.class, () -> useCase.execute(dto("Produit Perdant")));
+
+            assertEquals(ErrorCode.PLAN_LIMIT_EXCEEDED.name(), ex.getDomainCode());
+            InOrder inOrder = inOrder(transactionLock, productCountPort);
+            inOrder.verify(transactionLock).lock("product-limit:kv_test");
+            inOrder.verify(productCountPort).countActiveProducts();
+            verify(productRepository, never()).save(any());
+        }
     }
 }

@@ -2,6 +2,7 @@ package com.keevo.identity.auth.application.service;
 
 import com.keevo.identity.auth.domain.port.out.PasswordResetTokenRepository;
 import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -40,6 +41,7 @@ public class AuthTokenCleanupJob {
     }
 
     @Scheduled(cron = "0 30 3 * * *")
+    @SchedulerLock(name = "authTokenCleanupJob.cleanup", lockAtMostFor = "PT2H", lockAtLeastFor = "PT1M")
     public void cleanup() {
         Instant cutoff = clock.instant().minus(GRACE);
         try {

@@ -14,6 +14,7 @@ import com.keevo.catalog.stock.domain.service.StockOperationService;
 import com.keevo.catalog.stock.domain.service.TransferValidationStrategy;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.store.domain.model.StoreType;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -46,6 +48,7 @@ class ExecuteTransferServiceTest {
     @Mock private StockOperationService stockOperationService;
     @Mock private StockTransferRepository transferRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private TransactionLockPort transactionLock;
 
     private TransferValidationStrategy validationStrategy;
     private ExecuteTransferService service;
@@ -74,7 +77,7 @@ class ExecuteTransferServiceTest {
         validationStrategy = new DefaultTransferValidationStrategy();
         service = new ExecuteTransferService(
             storeRepository, stockLevelRepository, stockOperationService,
-            transferRepository, validationStrategy, eventPublisher
+            transferRepository, validationStrategy, eventPublisher, transactionLock
         );
     }
 
@@ -261,5 +264,42 @@ class ExecuteTransferServiceTest {
         verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
         verify(transferRepository, never()).save(any());
         verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    // ── Story 13.9: clientId double-fire ─────────────────────────────────────
+
+    @Test
+    void execute_withClientId_locksClientIdBeforeIdempotencyLookup() {
+        // Double-fire: the second execute waited on the lock and now sees the first one's
+        // committed transfer → same transfer returned, no second TRANSFER_OUT.
+        var clientId = UUID.randomUUID();
+        var cmd = new TransferStockCommand(SRC_STORE_ID, DEST_STORE_ID, PRODUCT_ID, null, 5, ACTOR_ID, null, clientId);
+        var existing = new StockTransfer(clientId, SRC_STORE_ID, DEST_STORE_ID, PRODUCT_ID, null, 5,
+            ACTOR_ID, Instant.now(), TransferStatus.IN_TRANSIT, null);
+        when(transferRepository.findById(clientId)).thenReturn(Optional.of(existing));
+
+        var result = service.execute(cmd);
+
+        assertThat(result).isSameAs(existing);
+        InOrder inOrder = inOrder(transactionLock, transferRepository);
+        inOrder.verify(transactionLock).lock("transfer:" + clientId);
+        inOrder.verify(transferRepository).findById(clientId);
+        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
+    }
+
+    @Test
+    void execute_withoutClientId_takesNoLock() {
+        var cmd = new TransferStockCommand(SRC_STORE_ID, DEST_STORE_ID, PRODUCT_ID, null, 5, ACTOR_ID, null, null);
+        when(storeRepository.findById(SRC_STORE_ID)).thenReturn(Optional.of(activeStore(SRC_STORE_ID)));
+        when(storeRepository.findById(DEST_STORE_ID)).thenReturn(Optional.of(activeStore(DEST_STORE_ID)));
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, SRC_STORE_ID))
+            .thenReturn(Optional.of(level(PRODUCT_ID, SRC_STORE_ID, 20)));
+        when(stockOperationService.recordOperation(any(), any(), any(), any(), anyInt(), any(), any()))
+            .thenReturn(movement(MovementType.TRANSFER_OUT));
+        when(transferRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.execute(cmd);
+
+        verifyNoInteractions(transactionLock);
     }
 }
