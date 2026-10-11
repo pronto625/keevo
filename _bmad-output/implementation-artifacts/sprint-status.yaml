@@ -417,4 +417,4 @@ development_status:
   v1s-epic-18-retrospective: optional
 
   # Suivi audit 2026-10-11 (dashboard Next.js)
-  v1s-17-1-dashboard-build-ci: backlog         # audit C1 — réparer ou retirer les pages 9-7/9-8 + CI dashboard ; critique avant la prochaine release du dashboard
+  v1s-17-1-dashboard-build-ci: in-progress         # audit C1 — réparer ou retirer les pages 9-7/9-8 + CI dashboard ; critique avant la prochaine release du dashboard
