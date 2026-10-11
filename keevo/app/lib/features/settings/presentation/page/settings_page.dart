@@ -405,16 +405,27 @@ class SettingsPage extends ConsumerWidget {
       },
     );
     if (!allSent) {
+      // v1s-16-15: blocked operations are never sent automatically.
+      var blocked = 0;
+      try {
+        blocked =
+            await ref.read(syncServiceProvider).quarantinedOperationCount();
+      } catch (_) {}
       if (!context.mounted) return;
       final proceed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Opérations non synchronisées'),
-          content: const Text(
-            "Certaines opérations n'ont pas encore été envoyées au serveur. "
-            'Elles seront envoyées à votre prochaine connexion sur ce téléphone '
-            'avec ce compte, mais seront perdues si un autre compte s’y connecte.',
-          ),
+          content: Text(blocked > 0
+              ? 'Certaines opérations ont été refusées par le serveur et sont '
+                  'bloquées : elles ne seront pas envoyées automatiquement. '
+                  'Traitez-les dans Paramètres › Synchronisation (opérations '
+                  'bloquées). Elles seront perdues si un autre compte se '
+                  'connecte sur ce téléphone.'
+              : "Certaines opérations n'ont pas encore été envoyées au serveur. "
+                  'Elles seront envoyées à votre prochaine connexion sur ce '
+                  'téléphone avec ce compte, mais seront perdues si un autre '
+                  'compte s’y connecte.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),

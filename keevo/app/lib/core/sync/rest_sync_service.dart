@@ -79,8 +79,21 @@ class RestSyncService implements SyncService {
   }
 
   Future<List<Map<String, dynamic>>> _push() async {
+    // A validation/cancellation queued after its sale was quarantined joins
+    // the sale's chain instead of being sent (and refused) on its own.
+    await _database.customStatement(
+      'UPDATE sync_queue SET quarantined_at = ? '
+      'WHERE synced = 0 AND quarantined_at IS NULL '
+      "AND operation IN ('VALIDATE_SALE', 'CANCEL_SALE') "
+      'AND entity_id IN (SELECT entity_id FROM sync_queue '
+      "WHERE synced = 0 AND operation = 'CREATE_SALE' "
+      'AND quarantined_at IS NOT NULL)',
+      [_database.typeMapping.mapToSqlVariable(DateTime.now())],
+    );
+    // Quarantined operations (v1s-16-15) are kept but never pushed until
+    // the user releases them.
     final pendingOps = await (_database.select(_database.syncQueue)
-          ..where((t) => t.synced.equals(false))
+          ..where((t) => t.synced.equals(false) & t.quarantinedAt.isNull())
           ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
         .get();
 
@@ -95,6 +108,10 @@ class RestSyncService implements SyncService {
     // Queue ids whose payload a rejection cascade rewrote (ghost reference
     // stripped): a refusal of the copy already sent is not final.
     final rewritten = <String>{};
+    // Queue ids quarantined during this push together with the sale they
+    // depend on (chain): their own refusal is not reported, and they are
+    // not sent in a later batch.
+    final quarantined = <String>{};
     // Batch in groups of 50
     for (var i = 0; i < pendingOps.length; i += 50) {
       var batch = pendingOps
@@ -106,14 +123,15 @@ class RestSyncService implements SyncService {
         // these payloads.
         final ids = batch.map((o) => o.id).toList();
         batch = await (_database.select(_database.syncQueue)
-              ..where((t) => t.id.isIn(ids))
+              ..where((t) => t.id.isIn(ids) & t.quarantinedAt.isNull())
               ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
             .get();
         // Sent with their current payload from now on.
         rewritten.removeAll(ids);
       }
       if (batch.isEmpty) continue;
-      allConflicts.addAll(await _pushBatch(batch, removed, rewritten));
+      allConflicts
+          .addAll(await _pushBatch(batch, removed, rewritten, quarantined));
     }
     return allConflicts;
   }
@@ -141,8 +159,8 @@ class RestSyncService implements SyncService {
         .customStatement('DELETE FROM products WHERE id = ?', [localProductId]);
   }
 
-  Future<List<Map<String, dynamic>>> _pushBatch(
-      List<SyncQueueData> ops, Set<String> removed, Set<String> rewritten) async {
+  Future<List<Map<String, dynamic>>> _pushBatch(List<SyncQueueData> ops,
+      Set<String> removed, Set<String> rewritten, Set<String> quarantined) async {
     final payload = {
       'deviceId': await _getDeviceId(),
       'operations': ops.map((op) {
@@ -231,6 +249,9 @@ class RestSyncService implements SyncService {
                 .go();
           }
         } else if (status == 'REJECTED') {
+          // Quarantined earlier in this push with the sale it depends on:
+          // the sale's notice already covers it.
+          if (quarantined.contains(opId)) continue;
           final currentOp = ops.firstWhere((o) => o.id == opId);
           final reason = result['reason'] as String?;
           // Enrich with operation/entity info — the server result only
@@ -264,9 +285,43 @@ class RestSyncService implements SyncService {
             continue;
           }
 
-          final transient = isTransientSyncRejection(reason);
-          if (transient ||
-              moneyLedgerOperations.contains(currentOp.operation)) {
+          // A money / stock-ledger operation refused for good: kept on the
+          // device but set aside (never pushed, not pending) until the user
+          // acts on it — see sync_rejection_policy.dart.
+          if (quarantinesOnRejection(currentOp.operation, reason)) {
+            // A validation/cancellation follows its sale: while the sale is
+            // still pending it is only retried; once the sale is
+            // quarantined it joins that chain silently.
+            final sale = saleChainOperations.contains(currentOp.operation) &&
+                    currentOp.entityId != null
+                ? await (_database.select(_database.syncQueue)
+                      ..where((t) =>
+                          t.synced.equals(false) &
+                          t.operation.equals('CREATE_SALE') &
+                          t.entityId.equals(currentOp.entityId!))
+                      ..limit(1))
+                    .getSingleOrNull()
+                : null;
+            if (sale != null) {
+              await (_database.update(_database.syncQueue)
+                    ..where((t) => t.id.equals(opId)))
+                  .write(SyncQueueCompanion(
+                retryCount: Value(currentOp.retryCount + 1),
+                lastAttemptAt: Value(DateTime.now()),
+                lastError: Value(reason),
+                quarantinedAt: sale.quarantinedAt != null
+                    ? Value(DateTime.now())
+                    : const Value.absent(),
+              ));
+              continue;
+            }
+            await _database.transaction(
+                () => _quarantine(currentOp, reason, quarantined));
+            conflicts.add({...notice(rolledBack: false), 'quarantined': true});
+            continue;
+          }
+
+          if (isTransientSyncRejection(reason)) {
             // Kept in the queue and surfaced only the first time this reason
             // is seen — otherwise every retry would re-notify the user.
             if (currentOp.lastError != reason) {
@@ -322,6 +377,36 @@ class RestSyncService implements SyncService {
       rethrow;
     }
     return conflicts;
+  }
+
+  /// Puts [op] in quarantine (v1s-16-15) with, for a `CREATE_SALE`, its
+  /// queued `VALIDATE_SALE` / `CANCEL_SALE` (the chain), whose ids are
+  /// recorded in [quarantined]. Runs inside the caller's transaction.
+  Future<void> _quarantine(
+      SyncQueueData op, String? reason, Set<String> quarantined) async {
+    final now = DateTime.now();
+    await (_database.update(_database.syncQueue)
+          ..where((t) => t.id.equals(op.id)))
+        .write(SyncQueueCompanion(
+      retryCount: Value(op.retryCount + 1),
+      lastAttemptAt: Value(now),
+      lastError: Value(reason),
+      quarantinedAt: Value(now),
+    ));
+    final entityId = op.entityId;
+    if (op.operation != 'CREATE_SALE' || entityId == null) return;
+    final chained = await (_database.select(_database.syncQueue)
+          ..where((t) =>
+              t.synced.equals(false) &
+              t.quarantinedAt.isNull() &
+              t.entityId.equals(entityId) &
+              t.operation.isIn(saleChainOperations)))
+        .get();
+    if (chained.isEmpty) return;
+    final ids = chained.map((q) => q.id).toList();
+    await (_database.update(_database.syncQueue)..where((t) => t.id.isIn(ids)))
+        .write(SyncQueueCompanion(quarantinedAt: Value(now)));
+    quarantined.addAll(ids);
   }
 
   /// Reconciles the local state after a terminal rejection of [op] (see
@@ -507,6 +592,12 @@ class RestSyncService implements SyncService {
           await _database.customStatement(
               'DELETE FROM $table WHERE store_id = ?', [entityId]);
         }
+        // Local transfer history of the ghost store (its queued
+        // STOCK_TRANSFER ops are dropped by the caller).
+        await _database.customStatement(
+            'DELETE FROM stock_transfers '
+            'WHERE source_store_id = ? OR destination_store_id = ?',
+            [entityId, entityId]);
         await _database
             .customStatement('DELETE FROM stores WHERE id = ?', [entityId]);
       case 'CREATE_CLIENT':
@@ -567,14 +658,28 @@ class RestSyncService implements SyncService {
     }
   }
 
+  /// Quarantined operations are not pending: they are never pushed and must
+  /// not block the server refreshes (v1s-16-15).
   @override
   Future<bool> hasPendingOperations() async {
     final count = await (_database.selectOnly(_database.syncQueue)
           ..addColumns([_database.syncQueue.id.count()])
-          ..where(_database.syncQueue.synced.equals(false)))
+          ..where(_database.syncQueue.synced.equals(false) &
+              _database.syncQueue.quarantinedAt.isNull()))
         .map((row) => row.read(_database.syncQueue.id.count()))
         .getSingle();
     return (count ?? 0) > 0;
+  }
+
+  @override
+  Future<int> quarantinedOperationCount() async {
+    final count = await (_database.selectOnly(_database.syncQueue)
+          ..addColumns([_database.syncQueue.id.count()])
+          ..where(_database.syncQueue.synced.equals(false) &
+              _database.syncQueue.quarantinedAt.isNotNull()))
+        .map((row) => row.read(_database.syncQueue.id.count()))
+        .getSingle();
+    return count ?? 0;
   }
 
   Future<String> _getDeviceId() async {
@@ -745,8 +850,9 @@ class RestSyncService implements SyncService {
   /// AC7 — Get entity IDs that have pending (unsynced) operations in sync_queue.
   /// These records must NOT be overwritten by pull data.
   Future<Set<String>> _getPendingEntityIds() async {
+    // Quarantined operations are never pushed: they protect nothing.
     final pendingOps = await (_database.select(_database.syncQueue)
-          ..where((t) => t.synced.equals(false)))
+          ..where((t) => t.synced.equals(false) & t.quarantinedAt.isNull()))
         .get();
     return pendingOps
         .map((o) => o.entityId)
@@ -778,7 +884,9 @@ class RestSyncService implements SyncService {
     };
     final pendingOps = await (_database.select(_database.syncQueue)
           ..where((t) =>
-              t.synced.equals(false) & t.operation.isIn(stockMutatingOps)))
+              t.synced.equals(false) &
+              t.quarantinedAt.isNull() &
+              t.operation.isIn(stockMutatingOps)))
         .get();
 
     final keys = <String>{};

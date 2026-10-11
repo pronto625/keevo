@@ -3,6 +3,8 @@ package com.keevo.sync.sync.application.handler;
 import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.store.store.domain.model.Store;
+import com.keevo.store.store.domain.port.out.StoreRepository;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import org.junit.jupiter.api.AfterEach;
@@ -16,6 +18,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -27,6 +30,7 @@ class SaleSyncHandlerTest {
 
     @Mock private RecordSaleUseCase recordSaleUseCase;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private StoreRepository storeRepository;
 
     private SaleSyncHandler handler;
 
@@ -35,7 +39,8 @@ class SaleSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new SaleSyncHandler(recordSaleUseCase, eventPublisher);
+        handler = new SaleSyncHandler(recordSaleUseCase, eventPublisher, storeRepository);
+        lenient().when(storeRepository.findById(any())).thenReturn(Optional.of(mock(Store.class)));
         SyncTestAuth.owner(); // v1s-12-10: null auth now fails closed
     }
 
@@ -63,6 +68,19 @@ class SaleSyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).isEqualTo("FORBIDDEN");
+        verifyNoInteractions(recordSaleUseCase);
+    }
+
+    // v1s-16-15: no FK on sales.store_id — an unknown store must be refused, not stored
+    // as an orphan sale (the device quarantines it, the payload goes to sync_error_log).
+    @Test
+    void handle_unknownStore_isRejectedStoreNotFound() {
+        when(storeRepository.findById(any())).thenReturn(Optional.empty());
+
+        var result = handler.handle(saleIn(UUID.randomUUID()), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("STORE_NOT_FOUND");
         verifyNoInteractions(recordSaleUseCase);
     }
 

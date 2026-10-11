@@ -22,6 +22,7 @@ class SyncDetailBottomSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncStatus = ref.watch(syncStatusProvider);
     final pendingCount = ref.watch(pendingSyncCountProvider);
+    final quarantinedCount = ref.watch(quarantinedSyncCountProvider);
     final deviceCount = ref.watch(activeDevicesProvider);
     final conflictsAsync = ref.watch(syncConflictsProvider);
     final isOnline = asyncStatus.valueOrNull == SyncStatus.online ||
@@ -56,6 +57,34 @@ class SyncDetailBottomSheet extends ConsumerWidget {
               error: (_, __) =>
                   const _InfoRow(icon: Icons.error, label: 'Erreur'),
             ),
+            // Quarantined ("bloquées") operations — v1s-16-15, all roles.
+            if ((quarantinedCount.valueOrNull ?? 0) > 0) ...[
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () {
+                  // The sheet's context is gone once popped.
+                  final router = GoRouter.of(context);
+                  Navigator.of(context).pop();
+                  router.push('/sync/blocked');
+                },
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _InfoRow(
+                          icon: Icons.block_rounded,
+                          label: _blockedLabel(quarantinedCount.value!),
+                          color: AppTheme.errorColor,
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded,
+                          color: AppTheme.errorColor),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 8),
             // Conflict count
             conflictsAsync.when(
@@ -133,6 +162,10 @@ class SyncDetailBottomSheet extends ConsumerWidget {
     );
   }
 }
+
+String _blockedLabel(int count) => count > 1
+    ? '$count opérations bloquées'
+    : '1 opération bloquée';
 
 class _LastSyncRow extends StatefulWidget {
   const _LastSyncRow();

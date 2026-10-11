@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:keevo/core/sync/sync_gate_provider.dart';
 import 'package:keevo/core/sync/sync_status.dart';
@@ -73,6 +74,64 @@ void main() {
 
     // Dispose inside the test: the sync notifier's periodic timers must not
     // outlive it.
+    await tester.pumpWidget(const SizedBox.shrink());
+    container.dispose();
+  });
+
+  testWidgets(
+      'v1s-16-15: a quarantined notice says "action requise" and "Voir" opens '
+      '/sync/blocked', (tester) async {
+    final container = ProviderContainer(overrides: [
+      syncStatusProvider.overrideWith((ref) => Stream.value(SyncStatus.online)),
+      daysOfflineProvider.overrideWithValue(0),
+      daysSinceLastSyncProvider.overrideWithValue(0),
+    ]);
+    final router = GoRouter(routes: [
+      GoRoute(
+        path: '/',
+        builder: (_, __) => Scaffold(
+          appBar: PreferredSize(
+            preferredSize: const Size.fromHeight(56),
+            child: AppBar(actions: const [SyncIndicator()]),
+          ),
+          body: const SizedBox.shrink(),
+        ),
+      ),
+      GoRoute(
+        path: '/sync/blocked',
+        builder: (_, __) => const Scaffold(body: Text('BLOCKED PAGE')),
+      ),
+    ]);
+
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp.router(routerConfig: router),
+    ));
+    await tester.pump();
+
+    container.read(pendingRejectionNotificationsProvider.notifier).state = [
+      {
+        'status': 'REJECTED',
+        'operation': 'CREATE_SALE',
+        'reason': 'PRODUCT_NOT_FOUND',
+        'rolledBack': false,
+        'quarantined': true,
+      },
+    ];
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(
+        find.text('Bloqué (Enregistrement de vente) : Produit introuvable — '
+            'action requise'),
+        findsOneWidget);
+
+    await tester.tap(find.text('Voir'));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('BLOCKED PAGE'), findsOneWidget);
+
     await tester.pumpWidget(const SizedBox.shrink());
     container.dispose();
   });

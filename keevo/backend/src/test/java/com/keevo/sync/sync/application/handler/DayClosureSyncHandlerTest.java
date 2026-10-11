@@ -5,6 +5,8 @@ import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase.CloseDayCommand;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.store.store.domain.model.Store;
+import com.keevo.store.store.domain.port.out.StoreRepository;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import org.junit.jupiter.api.AfterEach;
@@ -17,11 +19,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -29,6 +34,7 @@ import static org.mockito.Mockito.when;
 class DayClosureSyncHandlerTest {
 
     @Mock private CloseDayUseCase closeDayUseCase;
+    @Mock private StoreRepository storeRepository;
 
     private DayClosureSyncHandler handler;
 
@@ -37,7 +43,8 @@ class DayClosureSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new DayClosureSyncHandler(closeDayUseCase);
+        handler = new DayClosureSyncHandler(closeDayUseCase, storeRepository);
+        lenient().when(storeRepository.findById(any())).thenReturn(Optional.of(mock(Store.class)));
         SyncTestAuth.owner(); // v1s-12-10: null auth now fails closed
     }
 
@@ -57,6 +64,21 @@ class DayClosureSyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).isEqualTo("FORBIDDEN");
+        org.mockito.Mockito.verifyNoInteractions(closeDayUseCase);
+    }
+
+    // v1s-16-15: a closure for a store unknown to the server is refused, not stored.
+    @Test
+    void handle_unknownStore_isRejectedStoreNotFound() {
+        when(storeRepository.findById(any())).thenReturn(Optional.empty());
+        var op = new SyncOperation("op-1", "CREATE_DAY_CLOSURE", UUID.randomUUID().toString(),
+                Map.of("storeId", UUID.randomUUID().toString()),
+                Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("STORE_NOT_FOUND");
         org.mockito.Mockito.verifyNoInteractions(closeDayUseCase);
     }
 

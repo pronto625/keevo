@@ -16,6 +16,10 @@ import 'package:drift/drift.dart';
 ///                   recent push attempt was REJECTED. Null while pending or
 ///                   after a successful push. Used to notify the user once
 ///                   per distinct reason instead of retrying silently forever.
+///   quarantinedAt — Set when a money/stock-ledger operation was refused for
+///                   good (v1s-16-15): the operation is kept but never pushed
+///                   and not counted as pending, until the user releases
+///                   (Renvoyer / Rattacher) or abandons it (with an export).
 class SyncQueue extends Table {
   TextColumn get id => text()();
   TextColumn get operation => text()();
@@ -26,6 +30,7 @@ class SyncQueue extends Table {
   DateTimeColumn get lastAttemptAt => dateTime().nullable()();
   TextColumn get entityId => text().nullable()();
   TextColumn get lastError => text().nullable()();
+  DateTimeColumn get quarantinedAt => dateTime().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};

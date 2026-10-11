@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:keevo/core/sync/sync_monitoring_providers.dart';
 import 'package:keevo/core/sync/sync_status.dart';
 import 'package:keevo/core/sync/sync_status_provider.dart';
@@ -21,6 +22,7 @@ void main() {
   Widget _buildSheet({
     SyncStatus status = SyncStatus.online,
     int pendingCount = 0,
+    int quarantinedCount = 0,
     List<Map<String, dynamic>> devices = const [],
   }) {
     return ProviderScope(
@@ -29,6 +31,8 @@ void main() {
             (ref) => Stream.value(status)),
         pendingSyncCountProvider
             .overrideWith((ref) => Future.value(pendingCount)),
+        quarantinedSyncCountProvider
+            .overrideWith((ref) => Future.value(quarantinedCount)),
         activeDevicesProvider
             .overrideWith((ref) => Future.value(devices)),
         syncConflictsProvider
@@ -69,6 +73,28 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('5 opérations en attente'), findsOneWidget);
+    });
+
+    testWidgets('v1s-16-15: shows the blocked operations row when > 0',
+        (tester) async {
+      _setPhoneSize(tester);
+      await tester.pumpWidget(_buildSheet(quarantinedCount: 2));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('2 opérations bloquées'), findsOneWidget);
+    });
+
+    testWidgets('v1s-16-15: no blocked row when nothing is quarantined',
+        (tester) async {
+      _setPhoneSize(tester);
+      await tester.pumpWidget(_buildSheet());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('bloquée'), findsNothing);
     });
 
     testWidgets('shows zero pending state', (tester) async {
@@ -127,6 +153,48 @@ void main() {
 
       expect(
           find.text('Paramètres de synchronisation'), findsOneWidget);
+    });
+
+    testWidgets('v1s-16-15: tapping the blocked row opens /sync/blocked',
+        (tester) async {
+      _setPhoneSize(tester);
+      final router = GoRouter(routes: [
+        GoRoute(
+          path: '/',
+          builder: (context, _) => Scaffold(
+            body: ElevatedButton(
+              onPressed: () => showModalBottomSheet(
+                context: context,
+                builder: (_) => const SyncDetailBottomSheet(),
+              ),
+              child: const Text('Open'),
+            ),
+          ),
+        ),
+        GoRoute(
+          path: '/sync/blocked',
+          builder: (_, __) => const Scaffold(body: Text('BLOCKED PAGE')),
+        ),
+      ]);
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          syncStatusProvider
+              .overrideWith((ref) => Stream.value(SyncStatus.online)),
+          pendingSyncCountProvider.overrideWith((ref) => Future.value(0)),
+          quarantinedSyncCountProvider.overrideWith((ref) => Future.value(1)),
+          activeDevicesProvider.overrideWith((ref) => Future.value([])),
+          syncConflictsProvider.overrideWith((ref) => Future.value([])),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('1 opération bloquée'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('BLOCKED PAGE'), findsOneWidget);
     });
   });
 }

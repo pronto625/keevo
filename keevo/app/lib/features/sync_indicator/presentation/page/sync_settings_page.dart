@@ -15,6 +15,8 @@ import '../../../../core/sync/sync_status.dart';
 import '../../../../core/sync/sync_status_provider.dart';
 import '../../../../core/sync/sync_trigger_notifier.dart';
 import '../../../../core/storage/app_database.dart';
+import '../../../../core/sync/sync_event_logger.dart';
+import '../widget/quarantined_operations_section.dart';
 
 /// SyncSettingsPage — Paramètres > Synchronisation.
 ///
@@ -271,7 +273,9 @@ class _EventTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isAbandon = event.type == kSyncEventAbandon;
     final icon = switch (event.type) {
+      kSyncEventAbandon => Icons.delete_outline_rounded,
       'PUSH' => Icons.cloud_upload_outlined,
       'PULL' => Icons.cloud_download_outlined,
       'DIAGNOSTIC' => Icons.health_and_safety_outlined,
@@ -280,7 +284,7 @@ class _EventTile extends StatelessWidget {
     final color = switch (event.status) {
       'SUCCESS' || 'OK' => AppTheme.success,
       'FAILED' => AppTheme.errorColor,
-      'WARN' => AppTheme.warning,
+      'WARN' || 'ABANDONED' => AppTheme.warning,
       _ => Theme.of(context).colorScheme.onSurfaceVariant,
     };
     final dateStr = DateFormat('dd/MM HH:mm').format(event.createdAt);
@@ -289,7 +293,7 @@ class _EventTile extends StatelessWidget {
       dense: true,
       leading: Icon(icon, color: color, size: 20),
       title: Text(
-        '${event.type} — ${event.status}',
+        isAbandon ? 'Opération abandonnée' : '${event.type} — ${event.status}',
         style: const TextStyle(fontSize: 13),
       ),
       subtitle: event.errorMessage != null
@@ -450,14 +454,22 @@ class _QueueTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncQueue = ref.watch(pendingSyncQueueProvider);
 
+    // v1s-16-15: blocked (quarantined) operations first — they need an
+    // action — then the operations waiting to be sent.
     return asyncQueue.when(
-      data: (ops) => ops.isEmpty
-          ? const Center(child: Text('Aucune opération en attente'))
-          : ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              itemCount: ops.length,
-              itemBuilder: (_, i) => _QueueTile(op: ops[i]),
-            ),
+      data: (ops) => ListView(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        children: [
+          const QuarantinedOperationsSection(),
+          if (ops.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(child: Text('Aucune opération en attente')),
+            )
+          else
+            for (final op in ops) _QueueTile(op: op),
+        ],
+      ),
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => AppErrorWidget(
         error: e,

@@ -46,6 +46,15 @@ void main() {
       expect(await redirect('/pos', session: true, role: 'EMPLOYEE'), isNull);
     });
 
+    // v1s-16-15: the blocked operations page is open to every role (the
+    // rejection SnackBar sends employees there); /settings/sync is not.
+    test('an employee reaches /sync/blocked', () async {
+      expect(await redirect('/sync/blocked', session: true, role: 'EMPLOYEE'),
+          isNull);
+      expect(await redirect('/settings/sync', session: true, role: 'EMPLOYEE'),
+          '/pos');
+    });
+
     test('an owner reaches owner-only routes', () async {
       expect(await redirect('/dashboard', session: true, role: 'OWNER'), isNull);
     });

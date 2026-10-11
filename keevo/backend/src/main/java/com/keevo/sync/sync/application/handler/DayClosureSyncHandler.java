@@ -5,6 +5,7 @@ import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase.CloseDayCommand;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.store.store.domain.port.out.StoreRepository;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
@@ -19,9 +20,11 @@ import java.util.UUID;
 public class DayClosureSyncHandler extends AbstractSyncOperationHandler {
 
     private final CloseDayUseCase closeDayUseCase;
+    private final StoreRepository storeRepository;
 
-    public DayClosureSyncHandler(CloseDayUseCase closeDayUseCase) {
+    public DayClosureSyncHandler(CloseDayUseCase closeDayUseCase, StoreRepository storeRepository) {
         this.closeDayUseCase = closeDayUseCase;
+        this.storeRepository = storeRepository;
     }
 
     @Override
@@ -43,6 +46,11 @@ public class DayClosureSyncHandler extends AbstractSyncOperationHandler {
         UUID assignedStoreId = extractAssignedStoreId();
         if (assignedStoreId != null && !assignedStoreId.equals(storeId)) {
             throw new DomainException(ErrorCode.FORBIDDEN, "Employee cannot close another store's day");
+        }
+        // v1s-16-15: a closure for a store the server does not know is refused (quarantined
+        // on the device, logged in sync_error_log) instead of being stored as an orphan.
+        if (storeRepository.findById(storeId).isEmpty()) {
+            throw new DomainException(ErrorCode.STORE_NOT_FOUND, "Store not found: " + storeId);
         }
 
         // Keep the device's closure id (otherwise the pull adds a second closure row next to
