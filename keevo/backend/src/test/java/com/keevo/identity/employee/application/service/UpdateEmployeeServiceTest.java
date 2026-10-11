@@ -27,6 +27,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.argThat;
 
 /**
  * UpdateEmployeeServiceTest — TDD tests for Story 14.11 AC1.
@@ -100,6 +101,32 @@ class UpdateEmployeeServiceTest {
         verify(userRepository).existsByPhoneNumber("+237699999999");
         verify(userRepository).save(any(User.class));
         verify(eventPublisher).publishEvent(any(Object.class));
+    }
+
+    @Test
+    @DisplayName("12.12 — phone without '+' is normalised before uniqueness check and persist")
+    void shouldNormalisePhoneBeforeUniquenessAndSave() {
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(userRepository.existsByPhoneNumber("+237699999999")).thenReturn(false);
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.execute(new UpdateEmployeeCommand(actorId, employeeId, null, null, "237699999999", null));
+
+        verify(userRepository).existsByPhoneNumber("+237699999999");
+        verify(userRepository).save(argThat(u -> "+237699999999".equals(u.getPhoneNumber())));
+    }
+
+    @Test
+    @DisplayName("12.12 — unchanged phone sent without '+' is not a change")
+    void shouldTreatUnprefixedSamePhoneAsUnchanged() {
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        service.execute(new UpdateEmployeeCommand(actorId, employeeId, null, null, "237690000001", null));
+
+        verify(userRepository, never()).existsByPhoneNumber(any());
+        verify(userRepository, never()).save(any());
     }
 
     @Test

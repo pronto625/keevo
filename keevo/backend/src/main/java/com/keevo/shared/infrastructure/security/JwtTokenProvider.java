@@ -2,6 +2,7 @@ package com.keevo.shared.infrastructure.security;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import org.springframework.stereotype.Component;
 
@@ -29,6 +30,9 @@ import java.util.UUID;
  */
 @Component
 public class JwtTokenProvider {
+
+    /** Story 12.12 — tolerated clock drift between issuer and verifier (exp/nbf/iat). */
+    public static final long CLOCK_SKEW_SECONDS = 60;
 
     private final RSAPrivateKey privateKey;
     private final RSAPublicKey publicKey;
@@ -202,11 +206,26 @@ public class JwtTokenProvider {
      * @throws io.jsonwebtoken.JwtException if the token is invalid or malformed
      */
     public Claims parseToken(String token) {
-        return Jwts.parser()
+        Claims claims = Jwts.parser()
                 .verifyWith(publicKey)
+                .clockSkewSeconds(CLOCK_SKEW_SECONDS)
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
+        // Story 12.12: a token "issued" in the future (beyond the allowed skew) is invalid —
+        // it would otherwise survive a later revocation cutoff (iat >= tokens_valid_after).
+        Date iat = claims.getIssuedAt();
+        if (iat != null && iat.toInstant().isAfter(Instant.now().plusSeconds(CLOCK_SKEW_SECONDS))) {
+            throw new FutureIssuedAtException("JWT issued-at is in the future beyond allowed clock skew");
+        }
+        return claims;
+    }
+
+    /** Raised when a token's {@code iat} is later than now + {@link #CLOCK_SKEW_SECONDS}. */
+    public static class FutureIssuedAtException extends JwtException {
+        public FutureIssuedAtException(String message) {
+            super(message);
+        }
     }
 
     /** Extract userId (subject) from parsed claims. */
@@ -268,7 +287,7 @@ public class JwtTokenProvider {
     public boolean isTokenExpired(String token) {
         try {
             Claims claims = parseToken(token);
-            return claims.getExpiration().before(new Date());
+            return !claims.getExpiration().after(new Date());
         } catch (ExpiredJwtException e) {
             return true;
         }

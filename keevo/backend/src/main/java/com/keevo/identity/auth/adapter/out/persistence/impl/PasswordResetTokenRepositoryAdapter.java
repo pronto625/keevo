@@ -6,6 +6,7 @@ import com.keevo.identity.auth.domain.model.PasswordResetToken;
 import com.keevo.identity.auth.domain.port.out.PasswordResetTokenRepository;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -40,6 +41,21 @@ public class PasswordResetTokenRepositoryAdapter implements PasswordResetTokenRe
     @Override
     public void invalidateActiveTokensForUser(UUID userId) {
         springRepo.invalidateActiveTokensForUser(userId);
+    }
+
+    @Override
+    public boolean tryClaimAttempt(UUID tokenId, int maxAttempts) {
+        return springRepo.tryClaimAttempt(tokenId, maxAttempts) == 1;
+    }
+
+    @Override
+    public boolean markConsumed(UUID tokenId, Instant consumedAt) {
+        return springRepo.markConsumed(tokenId, consumedAt) == 1;
+    }
+
+    @Override
+    public int purgeExpiredBefore(Instant cutoff) {
+        return springRepo.purgeExpiredBefore(cutoff);
     }
 
     // ── Entity ↔ Domain mapping ───────────────────────────────────────

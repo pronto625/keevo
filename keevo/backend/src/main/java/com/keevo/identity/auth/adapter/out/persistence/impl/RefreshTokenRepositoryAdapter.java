@@ -6,6 +6,7 @@ import com.keevo.identity.auth.domain.model.RefreshToken;
 import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -39,6 +40,11 @@ public class RefreshTokenRepositoryAdapter implements RefreshTokenRepository {
     @Override
     public Optional<RefreshToken> findById(UUID id) {
         return springRepository.findById(id).map(this::toDomain);
+    }
+
+    @Override
+    public int purgeExpiredBefore(Instant cutoff) {
+        return springRepository.purgeExpiredBefore(cutoff);
     }
 
     @Override

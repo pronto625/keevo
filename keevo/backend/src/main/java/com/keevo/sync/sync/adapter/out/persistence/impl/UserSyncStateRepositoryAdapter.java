@@ -27,19 +27,28 @@ public class UserSyncStateRepositoryAdapter implements UserSyncStateRepository {
             "SELECT device_id, user_id, tenant_id, last_push_at, last_pull_at, updated_at "
                     + "FROM public.user_sync_state WHERE device_id = ?";
 
+    /**
+     * Story 12.12 — closes the TOCTOU between the controller's ownership check and the write:
+     * a row owned by another user is never re-assigned (0 rows written instead).
+     */
+    private static final String OWNER_GUARD =
+            "WHERE public.user_sync_state.user_id = EXCLUDED.user_id";
+
     private static final String UPSERT =
             "INSERT INTO public.user_sync_state (device_id, user_id, tenant_id, last_push_at, updated_at) "
                     + "VALUES (?, ?, ?, NOW(), NOW()) "
                     + "ON CONFLICT (device_id) DO UPDATE SET "
                     + "  last_push_at = NOW(), "
-                    + "  updated_at   = NOW()";
+                    + "  updated_at   = NOW() "
+                    + OWNER_GUARD;
 
     private static final String UPSERT_ON_PULL =
             "INSERT INTO public.user_sync_state (device_id, user_id, tenant_id, last_pull_at, updated_at) "
                     + "VALUES (?, ?, ?, NOW(), NOW()) "
                     + "ON CONFLICT (device_id) DO UPDATE SET "
                     + "  last_pull_at = NOW(), "
-                    + "  updated_at   = NOW()";
+                    + "  updated_at   = NOW() "
+                    + OWNER_GUARD;
 
     private static final String FIND_ALL_BY_TENANT =
             "SELECT device_id, user_id, tenant_id, last_push_at, last_pull_at, updated_at "
@@ -58,13 +67,13 @@ public class UserSyncStateRepositoryAdapter implements UserSyncStateRepository {
     }
 
     @Override
-    public void upsert(UserSyncState state) {
-        jdbcTemplate.update(UPSERT, state.deviceId(), state.userId(), state.tenantId());
+    public boolean upsert(UserSyncState state) {
+        return jdbcTemplate.update(UPSERT, state.deviceId(), state.userId(), state.tenantId()) > 0;
     }
 
     @Override
-    public void upsertOnPull(UserSyncState state) {
-        jdbcTemplate.update(UPSERT_ON_PULL, state.deviceId(), state.userId(), state.tenantId());
+    public boolean upsertOnPull(UserSyncState state) {
+        return jdbcTemplate.update(UPSERT_ON_PULL, state.deviceId(), state.userId(), state.tenantId()) > 0;
     }
 
     @Override

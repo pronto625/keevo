@@ -6,7 +6,6 @@ import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
 import com.keevo.shared.infrastructure.security.JwtProperties;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
-import org.springframework.dao.DataAccessException;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -87,15 +86,23 @@ public class SessionTokenIssuer {
      * Onboarding is complete once tenant_preferences has a row (written by
      * OnboardingService). A tenant whose tables are not provisioned yet has not
      * completed it either.
+     *
+     * <p>Story 12.12: this runs inside the caller's transaction (login / select-tenant /
+     * refresh). Catching a "relation does not exist" error there is not enough on Postgres —
+     * the transaction is already aborted and the following refresh-token save fails. So the
+     * table's existence is probed with {@code to_regclass} (never errors) and no SQL error is
+     * swallowed here.
      */
     private boolean onboardingCompleted(String schema) {
-        try {
-            Boolean done = jdbcTemplate.queryForObject(
-                    "SELECT EXISTS (SELECT 1 FROM \"" + schema + "\".tenant_preferences)", Boolean.class);
-            return Boolean.TRUE.equals(done);
-        } catch (DataAccessException e) {
+        Boolean tableExists = jdbcTemplate.queryForObject(
+                "SELECT to_regclass(?) IS NOT NULL", Boolean.class,
+                "\"" + schema + "\".tenant_preferences");
+        if (!Boolean.TRUE.equals(tableExists)) {
             return false;
         }
+        Boolean done = jdbcTemplate.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM \"" + schema + "\".tenant_preferences)", Boolean.class);
+        return Boolean.TRUE.equals(done);
     }
 
     /** SHA-256 of the raw opaque token — deterministic, so it can be looked up. */

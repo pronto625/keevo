@@ -2,6 +2,8 @@ package com.keevo.shared.infrastructure.security;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.Jwts;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -11,6 +13,7 @@ import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.Date;
 import java.util.UUID;
@@ -88,18 +91,53 @@ class JwtTokenProviderTest {
     // ── Token expiry ───────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("parseToken throws ExpiredJwtException for expired token")
+    @DisplayName("parseToken throws ExpiredJwtException for token expired beyond the 60 s skew")
     void should_throw_expired_exception_for_expired_token() {
-        // Use a provider configured with 0-hour expiry
-        JwtProperties expiredProps = new JwtProperties(0, 30);
-        JwtTokenProvider expiredProvider = new JwtTokenProvider(privateKey, publicKey, expiredProps);
+        Instant now = Instant.now();
+        String token = signed(now.minusSeconds(3600), now.minusSeconds(120));
 
-        String token = expiredProvider.generateAccessToken(UUID.randomUUID(), "KV-T", "OWNER");
-
-        // Token with 0-hour expiry should fail immediately (past or exactly now)
-        // Use the standard provider to parse — it will see the token as expired
         assertThatThrownBy(() -> provider.parseToken(token))
                 .isInstanceOf(ExpiredJwtException.class);
+    }
+
+    @Test
+    @DisplayName("Story 12.12 — token expired 30 s ago is accepted (within 60 s clock skew)")
+    void should_accept_token_expired_within_clock_skew() {
+        Instant now = Instant.now();
+        String token = signed(now.minusSeconds(3600), now.minusSeconds(30));
+
+        assertThat(provider.parseToken(token).getSubject()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("Story 12.12 — iat 30 s in the future is accepted (within skew)")
+    void should_accept_iat_slightly_in_future() {
+        Instant now = Instant.now();
+        String token = signed(now.plusSeconds(30), now.plusSeconds(3600));
+
+        assertThat(provider.parseToken(token).getSubject()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("Story 12.12 — iat beyond now + 60 s is rejected with a JwtException")
+    void should_reject_far_future_iat() {
+        Instant now = Instant.now();
+        String token = signed(now.plusSeconds(600), now.plusSeconds(3600));
+
+        assertThatThrownBy(() -> provider.parseToken(token))
+                .isInstanceOf(JwtTokenProvider.FutureIssuedAtException.class)
+                .isInstanceOf(JwtException.class);
+    }
+
+    private String signed(Instant iat, Instant exp) {
+        return Jwts.builder()
+                .subject(UUID.randomUUID().toString())
+                .claim("tenantId", "kv_abc123")
+                .claim("role", "OWNER")
+                .issuedAt(Date.from(iat))
+                .expiration(Date.from(exp))
+                .signWith(privateKey, Jwts.SIG.RS256)
+                .compact();
     }
 
     @Test

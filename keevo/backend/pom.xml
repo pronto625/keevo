@@ -120,6 +120,12 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- ── Cache (bounded, Story 12.12) ─────────────────────── -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
         <!-- ── Test ─────────────────────────────────────────────── -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -25,6 +25,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -46,6 +48,11 @@ import java.util.UUID;
 @Tag(name = "Sync", description = "Offline-first synchronisation — push/pull operations")
 public class SyncController {
 
+    /** Story 12.12 — dedicated security logger (route to the security/audit appender). */
+    private static final Logger securityLog = LoggerFactory.getLogger("SECURITY");
+    private static final String PUSH_ENDPOINT = "/api/v1/sync/push";
+    private static final String PULL_ENDPOINT = "/api/v1/sync/pull";
+
     private final SyncUseCase syncUseCase;
     private final JwtTokenProvider jwtTokenProvider;
     private final SyncConflictsLogRepository conflictsLogRepository;
@@ -66,21 +73,47 @@ public class SyncController {
     /**
      * Verify that the deviceId belongs to the authenticated actor.
      * Throws DEVICE_ID_MISMATCH if the device exists and is owned by a different user.
-     * Tolerates: unknown device (Optional.empty) and legacy devices with userId=null.
+     * Tolerates an unknown device (Optional.empty).
      *
-     * @param deviceId the device identifier to verify
-     * @param actorId the authenticated user's ID from JWT
-     * @throws DomainException with ErrorCode.DEVICE_ID_MISMATCH if ownership check fails
+     * <p>Story 12.12: every mismatch emits a WARN on the {@code SECURITY} logger (actor, owner,
+     * tenant, device, endpoint) so probing is visible. Device ids are client UUIDv4 (122 random
+     * bits): the distinct 403 is kept on purpose — enumeration is infeasible and a generic
+     * error would hide a real misconfiguration from the legitimate owner.
      */
-    private void verifyDeviceOwnership(String deviceId, UUID actorId) {
-        userSyncStateRepository.findByDeviceId(deviceId).ifPresent(s -> {
+    private void verifyDeviceOwnership(Optional<UserSyncState> syncStateOpt, String deviceId,
+                                       UUID actorId, String tenantId, String endpoint) {
+        syncStateOpt.ifPresent(s -> {
             if (s.userId() != null && !s.userId().equals(actorId)) {
+                securityLog.warn("DEVICE_ID_MISMATCH actorId={} ownerId={} tenantId={} deviceId={} endpoint={}",
+                        actorId, s.userId(), tenantId, sanitizeForLog(deviceId), endpoint);
                 throw new DomainException(
                         ErrorCode.DEVICE_ID_MISMATCH,
                         "Ce device n'est pas associé à votre compte",
                         Map.of("deviceId", deviceId));
             }
         });
+    }
+
+    /** Story 12.12 — guarded upsert wrote nothing: the device was claimed by another user meanwhile. */
+    private void warnIfNotWritten(boolean written, String deviceId, UUID actorId, String tenantId,
+                                  String endpoint) {
+        if (!written) {
+            securityLog.warn("DEVICE_OWNERSHIP_RACE upsert skipped (device owned by another user) "
+                    + "actorId={} tenantId={} deviceId={} endpoint={}",
+                    actorId, tenantId, sanitizeForLog(deviceId), endpoint);
+        }
+    }
+
+    /**
+     * Story 12.12 — the deviceId is client-supplied (the pull header is unvalidated): strip control
+     * characters (CR/LF included, no forged log lines) and cap the length before logging it.
+     */
+    static String sanitizeForLog(String value) {
+        if (value == null) {
+            return null;
+        }
+        String cleaned = value.replaceAll("\\p{Cntrl}", "_");
+        return cleaned.length() > 64 ? cleaned.substring(0, 64) + "…" : cleaned;
     }
 
     @PostMapping("/push")
@@ -104,7 +137,7 @@ public class SyncController {
         // v1s-13-2: ownership verification (B-CRIT-3 rotation bypass)
         // v5.4: 7-day offline gate (B-CRIT-3 staleness)
         Optional<UserSyncState> syncStateOpt = userSyncStateRepository.findByDeviceId(deviceId);
-        verifyDeviceOwnership(deviceId, actorId);
+        verifyDeviceOwnership(syncStateOpt, deviceId, actorId, tenantId, PUSH_ENDPOINT);
 
         // ── 7-day offline gate check ──────────────────────────────────────────
         if (syncGateCheckService.isStalePush(deviceId)) {
@@ -131,8 +164,9 @@ public class SyncController {
                 new PushBatchCommand(actorId, tenantId, deviceId, operations));
 
         // ── Record successful push timestamp ──────────────────────────────────
-        userSyncStateRepository.upsert(
+        boolean written = userSyncStateRepository.upsert(
                 new UserSyncState(deviceId, actorId, tenantId, Instant.now(), null, Instant.now()));
+        warnIfNotWritten(written, deviceId, actorId, tenantId, PUSH_ENDPOINT);
 
         return ResponseEntity.ok(ApiResponseWrapper.ok(SyncPushResponseDto.from(result)));
     }
@@ -162,10 +196,12 @@ public class SyncController {
         // Register device on pull so it appears in active devices list
         if (deviceId != null && !deviceId.isBlank()) {
             // ── DeviceId ownership check (v1s-13-2 — B-CRIT-3 rotation bypass) ─────
-            verifyDeviceOwnership(deviceId, actorId);
+            verifyDeviceOwnership(userSyncStateRepository.findByDeviceId(deviceId),
+                    deviceId, actorId, tenantId, PULL_ENDPOINT);
 
-            userSyncStateRepository.upsertOnPull(
+            boolean written = userSyncStateRepository.upsertOnPull(
                     new UserSyncState(deviceId, actorId, tenantId, null, Instant.now(), Instant.now()));
+            warnIfNotWritten(written, deviceId, actorId, tenantId, PULL_ENDPOINT);
         }
 
         Instant sinceInstant = (since != null && !since.isBlank())

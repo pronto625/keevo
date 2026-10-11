@@ -69,6 +69,14 @@ public class AccountDeletionService {
                     "Deletion already requested for tenant: " + tenantId);
         }
 
+        // Story 12.12 (PO decision): a SUSPENDED tenant cannot request deletion — otherwise
+        // request + cancel would restore ACTIVE and bypass the admin suspension. Erasure of a
+        // suspended tenant stays available through SUPER_ADMIN forceDelete.
+        if (tenant.getStatus() == TenantStatus.SUSPENDED) {
+            throw new DomainException(ErrorCode.ACCOUNT_SUSPENDED,
+                    "Account deletion is not available while the account is suspended");
+        }
+
         Instant deletionDate = Instant.now().plus(30, ChronoUnit.DAYS);
         Tenant updated = tenant.withStatus(TenantStatus.DELETION_PENDING, deletionDate);
         tenantRepository.save(updated);

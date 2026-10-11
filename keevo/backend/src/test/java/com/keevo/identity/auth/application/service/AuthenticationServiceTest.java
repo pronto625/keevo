@@ -231,4 +231,20 @@ class AuthenticationServiceTest {
         return (RSAPublicKey) KeyFactory.getInstance("RSA")
                 .generatePublic(new X509EncodedKeySpec(decoded));
     }
+
+    @Test
+    @DisplayName("12.12 — password over 72 UTF-8 bytes → INVALID_CREDENTIALS, BCrypt never called")
+    void should_reject_multibyte_password_over_72_bytes_without_bcrypt() {
+        User user = buildUser(UUID.randomUUID(), "+22670000001", "$2a$12$hash", 0, null);
+        when(userRepository.findByPhoneNumber("+22670000001")).thenReturn(Optional.of(user));
+        when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        String multiByte = "é1" + "é".repeat(39); // 41 chars, 82 bytes
+
+        assertThatThrownBy(() -> authService.authenticate(
+                new AuthenticateUserCommand("+22670000001", multiByte, null)))
+                .isInstanceOf(DomainException.class)
+                .satisfies(e -> assertThat(((DomainException) e).getErrorCode())
+                        .isEqualTo(ErrorCode.INVALID_CREDENTIALS));
+        verify(passwordEncoder, never()).matches(any(), any());
+    }
 }

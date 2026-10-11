@@ -1,5 +1,6 @@
 package com.keevo.identity.employee.application.service;
 
+import com.keevo.shared.domain.PasswordLimits;
 import com.keevo.identity.auth.domain.model.AuthTokens;
 import com.keevo.identity.auth.domain.model.RefreshToken;
 import com.keevo.identity.auth.domain.model.User;
@@ -72,13 +73,15 @@ public class ChangePasswordService implements ChangePasswordUseCase {
         User user = userRepository.findById(command.actorId())
                 .orElseThrow(() -> new DomainException(ErrorCode.INVALID_CREDENTIALS));
 
-        // 2. Verify current password
-        if (!passwordEncoder.matches(command.currentPassword(), user.getPasswordHash())) {
+        // 2. Verify current password (Story 12.12: > 72 bytes can never match — skip BCrypt, no 500)
+        if (PasswordLimits.exceedsBcryptLimit(command.currentPassword())
+                || !passwordEncoder.matches(command.currentPassword(), user.getPasswordHash())) {
             throw new DomainException(ErrorCode.INVALID_CREDENTIALS, "wrong current password");
         }
 
         // 3. Validate new password (≥8 chars, at least one digit)
         if (command.newPassword().length() < 8
+                || PasswordLimits.exceedsBcryptLimit(command.newPassword())
                 || !command.newPassword().matches(".*\\d.*")) {
             throw new DomainException(ErrorCode.VALIDATION_FAILED, "password too short or missing digit");
         }

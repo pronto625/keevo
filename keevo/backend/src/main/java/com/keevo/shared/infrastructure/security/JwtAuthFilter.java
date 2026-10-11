@@ -12,6 +12,9 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -48,6 +51,8 @@ import java.util.UUID;
  */
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
+
+    private static final Logger log = LoggerFactory.getLogger(JwtAuthFilter.class);
 
     /** Paths that must never require a JWT — mirrors SecurityConfig.PUBLIC_PATHS. */
     private static final Set<String> PUBLIC_PATHS = Set.of(
@@ -224,6 +229,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     }
                 } catch (EmptyResultDataAccessException ex) {
                     writeError(response, "ACCOUNT_INACTIVE");
+                    return;
+                } catch (DataAccessException ex) {
+                    // Story 12.12 (D10): `LIMIT 1` + UNIQUE(user_id) make >1 row impossible; any
+                    // remaining DB failure must not escape the filter (servlet HTML 500 + stack).
+                    log.error("EMPLOYEE guard lookup failed for user {} tenant {}", userId, tenantId, ex);
+                    writeErrorWithStatus(response, "INTERNAL_ERROR",
+                            HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
                     return;
                 }
             }

@@ -2,6 +2,7 @@ package com.keevo.identity.auth.domain.port.out;
 
 import com.keevo.identity.auth.domain.model.RefreshToken;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -23,4 +24,10 @@ public interface RefreshTokenRepository {
 
     /** Revoke all refresh tokens for a user (e.g., on logout or password change). */
     void revokeAllByUserId(UUID userId);
+
+    /**
+     * Story 12.12 — delete refresh tokens whose {@code expires_at} is before the cutoff
+     * (rotated, revoked or simply expired rows are never accepted again). Returns rows deleted.
+     */
+    int purgeExpiredBefore(Instant cutoff);
 }

@@ -168,4 +168,78 @@ class SyncControllerPullGateTest {
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk());
     }
+
+    // ── Story 12.12 — security log helpers ───────────────────────────────────
+
+    private ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> captureSecurityLog() {
+        var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger("SECURITY");
+        var appender = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        appender.start();
+        logger.addAppender(appender);
+        return appender;
+    }
+
+    private void releaseSecurityLog(ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender) {
+        ((ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger("SECURITY")).detachAppender(appender);
+    }
+
+    @Test
+    void mismatchOnPullEmitsSecurityWarnAndNeverUpserts() throws Exception {
+        mockJwt("EMPLOYEE");
+        UUID ownerId = UUID.randomUUID();
+        when(userSyncStateRepository.findByDeviceId("device-A"))
+                .thenReturn(Optional.of(new UserSyncState(
+                        "device-A", ownerId, "kv_abc123", Instant.now(), null, Instant.now())));
+        var appender = captureSecurityLog();
+        try {
+            mockMvc.perform(get("/api/v1/sync/pull")
+                            .header("Authorization", "Bearer fake-jwt")
+                            .header("X-Device-Id", "device-A")
+                            .accept(MediaType.APPLICATION_JSON))
+                    .andExpect(status().isForbidden());
+
+            org.assertj.core.api.Assertions.assertThat(appender.list).hasSize(1);
+            var event = appender.list.get(0);
+            org.assertj.core.api.Assertions.assertThat(event.getLevel())
+                    .isEqualTo(ch.qos.logback.classic.Level.WARN);
+            org.assertj.core.api.Assertions.assertThat(event.getFormattedMessage())
+                    .contains("DEVICE_ID_MISMATCH", "actorId=" + actorId, "ownerId=" + ownerId,
+                            "tenantId=kv_abc123", "deviceId=device-A", "/api/v1/sync/pull");
+        } finally {
+            releaseSecurityLog(appender);
+        }
+        org.mockito.Mockito.verify(userSyncStateRepository, org.mockito.Mockito.never()).upsertOnPull(any());
+    }
+
+    @Test
+    void guardedUpsertWritingNothingLogsWarnButStillServesPull() throws Exception {
+        mockJwt("OWNER");
+        // Race: device unknown at check time, claimed by another user before the upsert.
+        when(userSyncStateRepository.findByDeviceId("device-race")).thenReturn(Optional.empty());
+        when(userSyncStateRepository.upsertOnPull(any())).thenReturn(false);
+        when(syncUseCase.pull(any())).thenReturn(new SyncPullResult(Instant.now(), Map.of(), Map.of()));
+        var appender = captureSecurityLog();
+        try {
+            mockMvc.perform(get("/api/v1/sync/pull")
+                            .header("Authorization", "Bearer fake-jwt")
+                            .header("X-Device-Id", "device-race")
+                            .accept(MediaType.APPLICATION_JSON))
+                    .andExpect(status().isOk());
+
+            org.assertj.core.api.Assertions.assertThat(appender.list)
+                    .anySatisfy(e -> org.assertj.core.api.Assertions.assertThat(e.getFormattedMessage())
+                            .contains("DEVICE_OWNERSHIP_RACE", "deviceId=device-race"));
+        } finally {
+            releaseSecurityLog(appender);
+        }
+    }
+
+    @Test
+    void securityLogSanitisesClientDeviceId() {
+        org.assertj.core.api.Assertions.assertThat(SyncController.sanitizeForLog("dev\r\nFAKE LOG LINE"))
+                .isEqualTo("dev__FAKE LOG LINE");
+        org.assertj.core.api.Assertions.assertThat(SyncController.sanitizeForLog("x".repeat(200)))
+                .hasSize(65);
+        org.assertj.core.api.Assertions.assertThat(SyncController.sanitizeForLog(null)).isNull();
+    }
 }

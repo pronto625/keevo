@@ -1,8 +1,14 @@
 package com.keevo.identity.auth.application.service;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.keevo.shared.domain.PhoneNumbers;
 import org.springframework.stereotype.Component;
 
-import java.util.concurrent.ConcurrentHashMap;
+import java.time.Clock;
+import java.time.Duration;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * PasswordResetRateLimiter — In-memory rate limiter for forgot-password requests.
@@ -21,62 +27,53 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li>5 requests per hour per phoneNumber</li>
  * </ul>
  *
- * <p>Design: Fixed-window in memory (OK for MVP single-instance).
- * Mirror of {@code RateLimitFilter.RateLimitBucket} pattern with synchronized reset.
+ * <p>Story 12.12 — bounded: one Caffeine cache per window, {@code expireAfterWrite} = window,
+ * {@code maximumSize} 100 000, ticker from the injected {@link Clock}. A bucket is created on the
+ * first request of a window and counts every request until it expires (fixed window); expired
+ * buckets are evicted, so per-phone state no longer grows without bound. The key is the
+ * normalised phone ({@link PhoneNumbers#normalize}), so formatting variants share one bucket.
  */
 @Component
 public class PasswordResetRateLimiter {
 
-    private final ConcurrentHashMap<String, WindowBucket> perMinute =
-            new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, WindowBucket> perHour =
-            new ConcurrentHashMap<>();
+    static final int PER_MINUTE_MAX = 1;
+    static final int PER_HOUR_MAX = 5;
+    static final long MAX_ENTRIES = 100_000;
+
+    private final Cache<String, AtomicInteger> perMinute;
+    private final Cache<String, AtomicInteger> perHour;
+
+    public PasswordResetRateLimiter(Clock clock) {
+        this.perMinute = window(Duration.ofMinutes(1), clock);
+        this.perHour = window(Duration.ofHours(1), clock);
+    }
+
+    private static Cache<String, AtomicInteger> window(Duration window, Clock clock) {
+        return Caffeine.newBuilder()
+                .expireAfterWrite(window)
+                .maximumSize(MAX_ENTRIES)
+                .ticker(() -> TimeUnit.MILLISECONDS.toNanos(clock.millis()))
+                .executor(Runnable::run)
+                .build();
+    }
 
     /**
      * Try to acquire a rate-limit slot for the given phone number.
      *
-     * @param phoneNumber the phone number (E.164 format)
+     * @param phoneNumber the phone number (normalised internally)
      * @return {@code true} if within both rate limits, {@code false} if either window is exceeded
      */
     public boolean tryAcquire(String phoneNumber) {
-        WindowBucket minuteBucket = perMinute.computeIfAbsent(phoneNumber,
-                k -> new WindowBucket(1, 60_000L));
-        WindowBucket hourBucket = perHour.computeIfAbsent(phoneNumber,
-                k -> new WindowBucket(5, 3_600_000L));
-
-        // Check both windows — if either is exceeded, block
-        boolean minuteOk = !minuteBucket.isLimitExceeded();
-        boolean hourOk   = !hourBucket.isLimitExceeded();
-
+        String key = String.valueOf(PhoneNumbers.normalize(phoneNumber));
+        // Both windows always count the request (same semantics as the pre-12.12 buckets).
+        boolean minuteOk = perMinute.get(key, k -> new AtomicInteger()).incrementAndGet() <= PER_MINUTE_MAX;
+        boolean hourOk = perHour.get(key, k -> new AtomicInteger()).incrementAndGet() <= PER_HOUR_MAX;
         return minuteOk && hourOk;
     }
 
-    /**
-     * Fixed-window rate-limit bucket.
-     * Mirror of {@code RateLimitFilter.RateLimitBucket} — synchronized to prevent
-     * race conditions on window reset (two threads simultaneously detecting expiry
-     * and both resetting the counter).
-     */
-    static final class WindowBucket {
-        private final int maxRequests;
-        private final long windowMs;
-        private int count;
-        private volatile long windowStart;
-
-        WindowBucket(int maxRequests, long windowMs) {
-            this.maxRequests = maxRequests;
-            this.windowMs = windowMs;
-            this.count = 0;
-            this.windowStart = System.currentTimeMillis();
-        }
-
-        synchronized boolean isLimitExceeded() {
-            long now = System.currentTimeMillis();
-            if (now - windowStart > windowMs) {
-                count = 0;
-                windowStart = now;
-            }
-            return ++count > maxRequests;
-        }
+    /** Visible for tests — approximate number of live per-hour buckets. */
+    long trackedPhones() {
+        perHour.cleanUp();
+        return perHour.estimatedSize();
     }
 }

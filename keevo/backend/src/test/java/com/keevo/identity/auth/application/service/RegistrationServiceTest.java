@@ -130,6 +130,19 @@ class RegistrationServiceTest {
         verify(userRepository, never()).save(any());
     }
 
+    @Test
+    @DisplayName("12.12 — '237…' is normalised to '+237…' before the uniqueness check")
+    void register_normalisesPhoneBeforeUniqueness() {
+        when(userRepository.existsByPhoneNumber(PHONE)).thenReturn(true);
+
+        DomainException ex = catchThrowableOfType(
+                () -> registrationService.register(new RegisterUserCommand("237600000001", PASSWORD, null)),
+                DomainException.class);
+
+        assertThat(ex.getDomainCode()).isEqualTo(ErrorCode.USER_ALREADY_EXISTS.name());
+        verify(userRepository).existsByPhoneNumber(PHONE);
+    }
+
     // ── AC4: transactional rollback ─────────────────────────────────────────
 
     @Test
@@ -198,5 +211,37 @@ class RegistrationServiceTest {
                         new AuthTokens("jwt-access-token", "refresh-token", 3600,
                                 UUID.randomUUID(), "kv_abc123", "OWNER"),
                         UUID.randomUUID()));
+    }
+
+    @Test
+    @DisplayName("12.12 — unprefixed phone is saved as '+237…'")
+    void register_savesNormalisedPhone() {
+        Tenant tenant = stubbedTenant();
+        when(userRepository.existsByPhoneNumber(PHONE)).thenReturn(false);
+        when(passwordEncoder.encode(PASSWORD)).thenReturn("hashed_pwd");
+        when(tenantFactory.create()).thenReturn(tenant);
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(userMembershipRepository.save(any(UserTenantMembership.class))).thenAnswer(inv -> inv.getArgument(0));
+        stubSession();
+
+        registrationService.register(new RegisterUserCommand("237600000001", PASSWORD, null));
+
+        org.mockito.ArgumentCaptor<User> saved = org.mockito.ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(saved.capture());
+        assertThat(saved.getValue().getPhoneNumber()).isEqualTo(PHONE);
+    }
+
+    @Test
+    @DisplayName("12.12 — password over 72 UTF-8 bytes → VALIDATION_FAILED, BCrypt never called")
+    void register_rejectsMultibytePasswordOver72Bytes() {
+        String multiByte = "é1" + "é".repeat(39); // 41 chars, 82 bytes
+
+        DomainException ex = catchThrowableOfType(
+                () -> registrationService.register(new RegisterUserCommand(PHONE, multiByte, null)),
+                DomainException.class);
+
+        assertThat(ex.getDomainCode()).isEqualTo(ErrorCode.VALIDATION_FAILED.name());
+        verify(passwordEncoder, never()).encode(anyString());
+        verify(tenantFactory, never()).create();
     }
 }

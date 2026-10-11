@@ -52,6 +52,28 @@ public class JdbcTokenRevocationAdapter implements TokenRevocationPort {
     @Override
     public Instant getTokensValidAfter(UUID userId, String tenantSchema) {
         try {
+            return loadTokensValidAfter(userId, tenantSchema);
+        } catch (DataAccessException e) {
+            // Fail-open (code-review decision 2026-07-21): on DB unavailability (conn refused,
+            // timeout, IncorrectResultSize, ...) we cannot determine revocation state — treat
+            // as not-revoked (allow) rather than 500-ing every request for ALL roles. The filter
+            // runs before @RestControllerAdvice, so an uncaught exception here would leak a
+            // stack trace and bypass the JSON contract. Security cost: a revoked token may pass
+            // during the outage (<5min cross-instance propagation is already contractual per
+            // NFR12).
+            log.warn("Token revocation lookup failed for user {} tenant {}: {} — fail-open (allow)",
+                    userId, tenantSchema, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Story 12.12 — raw lookup for the caching decorator: a missing membership row is
+     * {@code null} (never revoked), but a {@link DataAccessException} PROPAGATES so the cache can
+     * fail open for that request only, without caching the failure as "never revoked".
+     */
+    Instant loadTokensValidAfter(UUID userId, String tenantSchema) {
+        try {
             return jdbcTemplate.queryForObject(SELECT_TVA,
                     (rs, rowNum) -> {
                         java.sql.Timestamp ts = rs.getTimestamp("tokens_valid_after");
@@ -60,17 +82,6 @@ public class JdbcTokenRevocationAdapter implements TokenRevocationPort {
         } catch (EmptyResultDataAccessException e) {
             // No membership row for (userId, tenant) → treat as never-revoked (allow).
             // The EMPLOYEE branch will separately reject via ACCOUNT_INACTIVE/STORE_REASSIGNED.
-            return null;
-        } catch (DataAccessException e) {
-            // Fail-open (code-review decision 2026-07-21): on DB unavailability (conn refused,
-            // timeout, IncorrectResultSize, ...) we cannot determine revocation state — treat
-            // as not-revoked (allow) rather than 500-ing every request for ALL roles. The filter
-            // runs before @RestControllerAdvice, so an uncaught exception here would leak a
-            // stack trace and bypass the JSON contract. Security cost: a revoked token may pass
-            // during the outage (<5min cross-instance propagation is already contractual per
-            // NFR12; the CachedTokenRevocationAdapter masks most blips via stale cache).
-            log.warn("Token revocation lookup failed for user {} tenant {}: {} — fail-open (allow)",
-                    userId, tenantSchema, e.getMessage());
             return null;
         }
     }

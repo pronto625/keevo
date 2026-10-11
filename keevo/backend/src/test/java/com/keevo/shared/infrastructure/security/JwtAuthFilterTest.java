@@ -442,6 +442,75 @@ class JwtAuthFilterTest {
         assertThat(response.getStatus()).isEqualTo(200);
     }
 
+    // ── Story 12.12 — D3 / D10 / clock skew ──────────────────────────────────
+
+    @Test
+    @DisplayName("12.12 D3 — OWNER token with invalid tenantId → 401 TOKEN_INVALID, no SQL, no revocation lookup")
+    void shouldRejectOwnerTokenWithInvalidTenantId() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/products");
+        request.addHeader("Authorization", "Bearer owner.badtenant.jwt");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        UUID userId = UUID.randomUUID();
+        Claims claims = buildClaims(userId, "x; drop", "OWNER");
+        when(jwtTokenProvider.parseToken("owner.badtenant.jwt")).thenReturn(claims);
+        when(jwtTokenProvider.extractScope(claims)).thenReturn("access");
+        when(jwtTokenProvider.extractTenantId(claims)).thenReturn("x; drop");
+        when(jwtTokenProvider.extractRole(claims)).thenReturn("OWNER");
+        when(jwtTokenProvider.extractUserId(claims)).thenReturn(userId);
+        when(jwtTokenProvider.extractTenantStatus(claims)).thenReturn("ACTIVE");
+
+        filterWithJdbc().doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("TOKEN_INVALID");
+        verify(filterChain, never()).doFilter(any(), any());
+        verifyNoInteractions(jdbcTemplate, tokenRevocationPort, tenantSchemaSyncService);
+    }
+
+    @Test
+    @DisplayName("12.12 D10 — EMPLOYEE guard query DB error → 500 JSON INTERNAL_ERROR, no filterChain")
+    void shouldReturnJson500WhenEmployeeQueryFails() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/products");
+        request.addHeader("Authorization", "Bearer emp.dberror.jwt");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        UUID userId = UUID.randomUUID();
+        Claims claims = buildClaims(userId, "kv_abc123", "EMPLOYEE");
+        when(jwtTokenProvider.parseToken("emp.dberror.jwt")).thenReturn(claims);
+        when(jwtTokenProvider.extractScope(claims)).thenReturn("access");
+        when(jwtTokenProvider.extractTenantId(claims)).thenReturn("kv_abc123");
+        when(jwtTokenProvider.extractRole(claims)).thenReturn("EMPLOYEE");
+        when(jwtTokenProvider.extractUserId(claims)).thenReturn(userId);
+        when(jwtTokenProvider.extractTenantStatus(claims)).thenReturn("ACTIVE");
+        when(jdbcTemplate.queryForMap(anyString(), eq(userId)))
+                .thenThrow(new org.springframework.dao.IncorrectResultSizeDataAccessException(1, 2));
+
+        filterWithJdbc().doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(500);
+        assertThat(response.getContentType()).startsWith("application/json");
+        assertThat(response.getContentAsString()).isEqualTo("{\"domainCode\":\"INTERNAL_ERROR\"}");
+        verify(filterChain, never()).doFilter(any(), any());
+    }
+
+    @Test
+    @DisplayName("12.12 — far-future iat (FutureIssuedAtException) → 401 UNAUTHORIZED")
+    void shouldRejectFutureIssuedAtToken() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/products");
+        request.addHeader("Authorization", "Bearer future.iat.jwt");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        when(jwtTokenProvider.parseToken("future.iat.jwt"))
+                .thenThrow(new JwtTokenProvider.FutureIssuedAtException("future iat"));
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("UNAUTHORIZED");
+        verify(filterChain, never()).doFilter(any(), any());
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────
 
     private Claims buildClaims(UUID userId, String tenantId, String role) {

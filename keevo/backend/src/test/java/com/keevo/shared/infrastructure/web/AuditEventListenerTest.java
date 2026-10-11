@@ -331,7 +331,7 @@ class AuditEventListenerTest {
             return null;
         }).when(auditPort).record(any(), any(), any(), any(), any(), any(), any());
 
-        var event = new PasswordResetRequestedEvent(userId, "+237600000000", Instant.now());
+        var event = new PasswordResetRequestedEvent(userId, Instant.now());
         listener.on(event);
 
         // Must audit in BOTH tenants

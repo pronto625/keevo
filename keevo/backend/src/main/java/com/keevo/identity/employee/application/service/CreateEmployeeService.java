@@ -1,5 +1,6 @@
 package com.keevo.identity.employee.application.service;
 
+import com.keevo.shared.domain.PhoneNumbers;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.model.UserTenantMembership;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
@@ -30,6 +31,9 @@ import java.time.Instant;
  */
 @Service
 public class CreateEmployeeService implements CreateEmployeeUseCase {
+
+    private static final java.util.regex.Pattern PHONE_PATTERN =
+            java.util.regex.Pattern.compile("^\\+?[0-9]{8,15}$");
 
     private final UserRepository userRepository;
     private final UserMembershipRepository membershipRepository;
@@ -64,8 +68,15 @@ public class CreateEmployeeService implements CreateEmployeeUseCase {
     @Override
     @Transactional
     public CreateEmployeeResult execute(CreateEmployeeCommand command) {
+        // Story 12.12 — same format rule as UpdateEmployeeService, then canonical +<digits> form
+        // before uniqueness check and persist (never store e.g. "+abc" as an identity).
+        if (command.phoneNumber() == null || !PHONE_PATTERN.matcher(command.phoneNumber()).matches()) {
+            throw new DomainException(ErrorCode.VALIDATION_FAILED, "Invalid phone number format");
+        }
+        String phone = PhoneNumbers.normalize(command.phoneNumber());
+
         // 1. Check phone uniqueness
-        if (userRepository.existsByPhoneNumber(command.phoneNumber())) {
+        if (userRepository.existsByPhoneNumber(phone)) {
             throw new DomainException(ErrorCode.USER_ALREADY_EXISTS, "phone number already registered");
         }
 
@@ -80,7 +91,7 @@ public class CreateEmployeeService implements CreateEmployeeUseCase {
         String hash = passwordEncoder.encode(tempPassword);
 
         // 4. Create user in public.users
-        User newUser = User.newEmployee(command.phoneNumber(), hash);
+        User newUser = User.newEmployee(phone, hash);
         newUser = userRepository.save(newUser);
 
         // 5. Create membership in public.user_tenant_memberships

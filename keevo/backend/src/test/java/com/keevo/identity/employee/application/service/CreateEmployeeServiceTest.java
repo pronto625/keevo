@@ -140,6 +140,37 @@ class CreateEmployeeServiceTest {
     }
 
     @Test
+    @DisplayName("12.12 — '237…' is checked for uniqueness and saved as '+237…'")
+    void execute_normalisesPhoneBeforeUniquenessAndSave() {
+        when(userRepository.existsByPhoneNumber("+237690000004")).thenReturn(false);
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(premiumSubscription));
+        when(employeeCountPort.countActiveEmployees()).thenReturn(0);
+        when(passwordEncoder.encode(anyString())).thenReturn("$2a$12$hashedpassword");
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(tenantRepository.findBySchemaName(any())).thenReturn(Optional.of(
+                new Tenant(UUID.randomUUID(), "KV-TEST01", "kv_test01", TenantStatus.ACTIVE, PlanType.PREMIUM_TRIAL, Instant.now())));
+        when(membershipRepository.save(any(UserTenantMembership.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(employeeRepository.save(any(Employee.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        createEmployeeService.execute(new CreateEmployeeCommand(actorId, "237690000004", "Test", "User", storeId));
+
+        verify(userRepository).existsByPhoneNumber("+237690000004");
+        verify(userRepository).save(org.mockito.ArgumentMatchers.<User>argThat(
+                u -> "+237690000004".equals(u.getPhoneNumber())));
+    }
+
+    @Test
+    @DisplayName("12.12 — invalid phone format → VALIDATION_FAILED, nothing looked up or saved")
+    void execute_rejectsInvalidPhone() {
+        assertThatThrownBy(() -> createEmployeeService.execute(
+                new CreateEmployeeCommand(actorId, "abc", "Test", "User", storeId)))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getDomainCode())
+                .isEqualTo(ErrorCode.VALIDATION_FAILED.name());
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
     @DisplayName("execute() should publish EmployeeCreatedEvent on success")
     void execute_shouldPublishEmployeeCreatedEvent_onSuccess() {
         when(userRepository.existsByPhoneNumber(anyString())).thenReturn(false);
