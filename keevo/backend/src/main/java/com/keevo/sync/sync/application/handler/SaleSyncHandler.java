@@ -93,7 +93,8 @@ public class SaleSyncHandler extends AbstractSyncOperationHandler {
                     .mapToInt(i -> i.appliedUnitPrice() * i.quantity())
                     .sum() - discountAmount;
             eventPublisher.publishEvent(new SaleDraftProductsUpgradedEvent(
-                    saleId, storeId, actorId, draftProductIds, totalAmount, tenantId, Instant.now()));
+                    saleId, storeId, actorId, draftProductIds, totalAmount, tenantId, Instant.now(),
+                    isOwnerRole()));  // v1s-12-10: only an OWNER seller promotes drafts
         }
 
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,

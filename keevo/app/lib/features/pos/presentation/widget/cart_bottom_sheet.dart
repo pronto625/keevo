@@ -4,8 +4,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../domain/model/cart_item.dart';
 import '../provider/cart_provider.dart';
+import '../provider/pos_providers.dart';
 import 'discount_sheet.dart';
 
 /// CartBottomSheet — modal bottom sheet showing cart items with quantity controls.
@@ -74,9 +76,19 @@ class _CartBottomSheetState extends ConsumerState<CartBottomSheet> {
       return;
     }
 
+    // v1s-12-10: only a draft never stocked in the active store asks for an
+    // initial stock. A draft that already has a stock record (an EMPLOYEE sale
+    // leaves it DRAFT until the owner validates it) is sold like any product —
+    // re-prompting would add the initial stock a second time.
+    final storeId = ref.read(activeStoreIdProvider);
+    final localDs = ref.read(localSaleDataSourceProvider);
     final initialStocks = <String, int>{};
     for (final item in draftItems) {
-      if (!mounted) return;
+      if (storeId != null &&
+          await localDs.hasStockRecord(item.productId, storeId)) {
+        continue;
+      }
+      if (!mounted || !context.mounted) return;
       final qty = await _showInitialStockDialog(context, item.productName);
       if (qty == null) return; // user cancelled
       initialStocks[item.productId] = qty;

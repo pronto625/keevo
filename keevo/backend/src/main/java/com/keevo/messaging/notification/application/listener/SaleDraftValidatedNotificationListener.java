@@ -234,7 +234,8 @@ public class SaleDraftValidatedNotificationListener {
     /**
      * Fires when an employee finalises a sale that contained originally-draft products
      * (new flow — stock entered at checkout, sale recorded as COMPLETED immediately).
-     * Notifies the owner so they know new products were activated.
+     * Notifies the owner: {@code draftsPromoted} (OWNER seller) → products were activated;
+     * otherwise (EMPLOYEE seller, v1s-12-10) → drafts were sold and await validation.
      */
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -250,6 +251,11 @@ public class SaleDraftValidatedNotificationListener {
                 return;
             }
 
+            // v1s-12-10: an EMPLOYEE seller no longer promotes drafts (promotion is OWNER-only),
+            // so the owner is told the drafts await validation instead of "activated". The
+            // seller's role travels on the event (draftsPromoted) — never inferred from the
+            // Employee row (an owner may have one; an employee's row may be missing).
+            boolean draftsPromoted = event.draftsPromoted();
             String employeeName = employeeRepository.findByUserId(sale.getEmployeeId())
                     .map(e -> e.getFirstName() + " " + e.getLastName())
                     .orElseGet(() -> userRepository.findById(sale.getEmployeeId())
@@ -265,9 +271,11 @@ public class SaleDraftValidatedNotificationListener {
                     .map(item -> item.getProductName())
                     .collect(Collectors.joining(", "));
 
-            String title = "🆕 Nouveaux produits activés";
+            String title = draftsPromoted ? "🆕 Nouveaux produits activés" : "🆕 Produits brouillons vendus";
             String body = employeeName + " — " + storeName + " : " + productNames
-                    + " (produits brouillons activés lors d'une vente)";
+                    + (draftsPromoted
+                        ? " (produits brouillons activés lors d'une vente)"
+                        : " (brouillons à valider)");
             String deepLink = "/pos/sales-history/" + event.saleId();
 
             NotificationPayload payload = NotificationPayload.of(

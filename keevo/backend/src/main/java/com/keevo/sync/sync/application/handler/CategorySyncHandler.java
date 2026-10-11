@@ -5,6 +5,8 @@ import com.keevo.catalog.category.application.usecase.RenameCategoryUseCase.Rena
 import com.keevo.catalog.category.application.usecase.ToggleCategoryUseCase;
 import com.keevo.catalog.category.domain.model.Category;
 import com.keevo.catalog.category.domain.port.out.CategoryRepository;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
@@ -25,6 +27,7 @@ import java.util.UUID;
  *
  * <p>TOGGLE_CATEGORY is set-based: the payload carries the {@code isActive} target state;
  * the handler toggles only when current state differs — avoiding double-toggle on retry.
+ * OWNER-only (v1s-12-10).
  */
 @Component
 public class CategorySyncHandler extends AbstractSyncOperationHandler {
@@ -102,6 +105,12 @@ public class CategorySyncHandler extends AbstractSyncOperationHandler {
                         saved.id().toString(), null);
             }
             case "TOGGLE_CATEGORY" -> {
+                // v1s-12-10 (CR 14-14): toggle = offline delete since v1s-14-14 → OWNER-only,
+                // matching REST DELETE / PATCH toggle. Checked before any repository read.
+                if (!isOwnerRole()) {
+                    throw new DomainException(ErrorCode.FORBIDDEN,
+                            "Seul le propriétaire peut activer ou supprimer une catégorie");
+                }
                 UUID categoryId = UUID.fromString((String) p.get("categoryId"));
                 boolean targetActive = (boolean) p.get("isActive");
                 // Set-based: only toggle if current state differs from the target.

@@ -18,17 +18,17 @@ Close the security findings from the 2026-07-20 audit (S1–S9, S12, B-HIGH-5/6/
 - Story 12.7: Flutter hardening: secure storage, Bearer logs, HTTPS (done)
 - Story 12.8: RBAC on `/api/v1/sync/push` handlers (done; tracker-only, no epics heading)
 - Story 12.9: Transfer completion scoped to destination store (done; tracker-only)
-- Story 12.10: Residual sync RBAC (PROMOTE_PRODUCT, TOGGLE_CATEGORY, inventory session)
-- Story 12.11: Transfers: an employee transfers only from their own store (REST + sync)
-- Story 12.12: Auth & session hardening (JWT filter, revocation cache, password reset, sync device ownership)
-- Story 12.13: Prod secrets & config hardening (ProdSecretsValidator extension)
+- Story 12.10: Residual sync RBAC (PROMOTE_PRODUCT, TOGGLE_CATEGORY, inventory session) (in progress)
+- Story 12.11: Transfers: an employee transfers only from their own store (REST + sync) (done)
+- Story 12.12: Auth & session hardening (JWT filter, revocation cache, password reset, sync device ownership) (backlog)
+- Story 12.13: Prod secrets & config hardening (ProdSecretsValidator extension) (backlog)
 
 ## Requirements & Constraints
 
 - **Tenant isolation must be 100%.** No cross-tenant data leak, including through raw JDBC or malformed JWT claims.
 - **An employee is limited to operations in their assigned store (FR36).** This applies on both channels, REST and offline sync. An OWNER stays unscoped across stores.
 - **Owner-only governance.** Store management, day-closure reads, pending-sale cancel and catalog promote/category delete/toggle are OWNER-only. The equivalent sync operations must apply the same rule.
-- **Transfer rule (PO decision 2026-10-11).** An EMPLOYEE may initiate a transfer only when `sourceStoreId` equals their JWT-assigned store. Otherwise REST returns 403 and the sync op is REJECTED. OWNER keeps cross-store transfers. This reverts commit 4302eba's "any store" opening and its code comments claiming a product decision. It also supersedes the earlier "transfer initiation OWNER-only" wording. Transfer receipt (`complete()`) stays scoped to the destination store (12.9) and is REST-only; no sync handler exists for it.
+- **Transfer rule (PO decision 2026-10-11).** An EMPLOYEE may initiate a transfer only when `sourceStoreId` equals their JWT-assigned store. Otherwise REST returns 403 and the sync op is REJECTED. OWNER keeps cross-store transfers. Shipped by 12.11, which reverted commit 4302eba's "any store" opening; it supersedes the earlier "transfer initiation OWNER-only" wording. Do not reopen it. Transfer receipt (`complete()`) stays scoped to the destination store (12.9) and is REST-only; no sync handler exists for it.
 - **Session revocation.** A deactivated employee or a password change must invalidate access within 5 min, even though access tokens are long-lived. Revoked tokens get 401 `SESSION_REVOKED`. A remote session revoke by the owner is supported (FR68).
 - **Secrets.** Passwords use bcrypt with cost ≥12. The prod private key must not be world-readable. Prod must fail fast on any weak or defaulted secret (DB password, provider tokens, admin password).
 - **Client secrets.** Tokens are stored encrypted on every platform. Authorization headers never reach release logs. HTTPS is the default.
@@ -66,12 +66,11 @@ Close the security findings from the 2026-07-20 audit (S1–S9, S12, B-HIGH-5/6/
 
 ## Cross-Story Dependencies
 
-- **12.11** restores the transfer-source rule on both REST (`StockTransferController`) and sync (`TransferSyncHandler`), building on the 12.6/12.8 helpers.
-  - It must not regress 12.9's destination-scope check on `complete()`.
-  - It also owns two routed items: validate the sync `sourceStoreId` against the tenant and employee, and add widget tests for `_shouldShowReceiveButton` (EMPLOYEE match/mismatch and OWNER cases).
+- **12.11 (done)** restored the transfer-source rule on REST (`StockTransferController`) and sync (`TransferSyncHandler`) using the 12.6/12.8 helpers, without touching 12.9's destination-scope check on `complete()`. Its two routed items are resolved (sync EMPLOYEE source = JWT store; tenant membership already enforced by the transfer service's store lookup; `_shouldShowReceiveButton` widget tests added). Later stories must not regress it.
 - **12.10** extends the same sync-handler pattern to `ProductSyncHandler`, `CategorySyncHandler` and `InventorySessionSyncHandler`.
   - It passes the real actor role into `UpdateProductDto` instead of the `"OWNER"` default.
-  - It also makes null-auth fail closed in `AbstractSyncOperationHandler`. That change affects every sync handler, including 12.11's.
+  - It also makes null-auth fail closed in `AbstractSyncOperationHandler` (today null auth is treated as OWNER). That change affects every sync handler, including 12.11's transfer handler; re-run their tests.
+  - TOGGLE_CATEGORY sync must become OWNER-only, matching the REST delete/toggle.
 - **12.12** follows up on reviews of 12.2, 12.3, 12.5, 13.2, 14.11 and 14.12.
   - It touches `JwtAuthFilter`, `CachedTokenRevocationAdapter`, password reset, `SyncController` device ownership and `SecurityConfig`.
   - One item needs a PO decision: whether cancelling a deletion should restore SUSPENDED.

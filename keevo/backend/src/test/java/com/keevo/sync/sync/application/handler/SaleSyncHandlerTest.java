@@ -36,6 +36,7 @@ class SaleSyncHandlerTest {
     @BeforeEach
     void setUp() {
         handler = new SaleSyncHandler(recordSaleUseCase, eventPublisher);
+        SyncTestAuth.owner(); // v1s-12-10: null auth now fails closed
     }
 
     @AfterEach
@@ -210,6 +211,41 @@ class SaleSyncHandlerTest {
         handler.handle(saleWith(Map.of(), Instant.now()), ACTOR_ID, TENANT_ID);
 
         assertThat(capturedCommand().allowNegativeStock()).isTrue();
+    }
+
+    // ── v1s-12-10: the draft notification event carries whether drafts were promoted ──
+
+    private SyncOperation draftSaleIn(UUID storeId) {
+        var saleId = UUID.randomUUID();
+        return new SyncOperation("op-1", "CREATE_SALE", saleId.toString(),
+                Map.of("saleId", saleId.toString(), "storeId", storeId.toString(),
+                        "paymentMode", "CASH", "discountAmount", 0, "items", validItems(),
+                        "originalDraftProductIds", List.of(UUID.randomUUID().toString())),
+                Instant.now());
+    }
+
+    private com.keevo.commerce.sale.domain.model.SaleDraftProductsUpgradedEvent publishedDraftEvent() {
+        var captor = org.mockito.ArgumentCaptor.forClass(
+                com.keevo.commerce.sale.domain.model.SaleDraftProductsUpgradedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        return captor.getValue();
+    }
+
+    @Test
+    void handle_ownerDraftSale_eventSaysDraftsPromoted() {
+        handler.handle(draftSaleIn(UUID.randomUUID()), ACTOR_ID, TENANT_ID);
+
+        assertThat(publishedDraftEvent().draftsPromoted()).isTrue();
+    }
+
+    @Test
+    void handle_employeeDraftSale_eventSaysDraftsNotPromoted() {
+        var store = UUID.randomUUID();
+        SyncTestAuth.employee(store);
+
+        handler.handle(draftSaleIn(store), ACTOR_ID, TENANT_ID);
+
+        assertThat(publishedDraftEvent().draftsPromoted()).isFalse();
     }
 
     private List<Map<String, Object>> validItems() {

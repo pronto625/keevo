@@ -11,6 +11,8 @@ import com.keevo.catalog.product.application.usecase.UnarchiveProductUseCase.Una
 import com.keevo.catalog.product.application.usecase.UpdateProductUseCase;
 import com.keevo.catalog.product.application.usecase.UpdateProductUseCase.UpdateProductDto;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
@@ -92,7 +94,8 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                         p.get("buyPrice") != null ? ((Number) p.get("buyPrice")).intValue() : null,
                         p.get("transportCost") != null ? ((Number) p.get("transportCost")).intValue() : null,
                         p.get("stockQuantity") != null ? ((Number) p.get("stockQuantity")).intValue() : null,
-                        actorId));
+                        actorId,
+                        actorRole()));  // v1s-12-10: real role → Story 2.4 draft guard fires for EMPLOYEE
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         product.getId().toString(), null);
             }
@@ -123,7 +126,7 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                         null,  // buyPrice
                         null,  // transportCost
                         actorId,
-                        "OWNER",
+                        actorRole(),  // v1s-12-10: real role instead of hardcoded "OWNER"
                         "Sync"));
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         draft.getId().toString(), null);
@@ -131,6 +134,11 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
             case "PROMOTE_PRODUCT" -> {
                 // Promote the EXISTING draft product (by its local UUID) to ACTIVE.
                 // Uses updateProduct so DRAFT→ACTIVE logic and cascade events fire correctly.
+                // v1s-12-10: promotion is OWNER-only (Story 2.4 AC6) — reject before any lookup.
+                if (!isOwnerRole()) {
+                    throw new DomainException(ErrorCode.FORBIDDEN,
+                            "Seul le propriétaire peut valider un produit en brouillon");
+                }
                 UUID productId = UUID.fromString((String) p.get("productId"));
                 var promoted = updateProduct.execute(new UpdateProductDto(
                         productId,
@@ -142,7 +150,8 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                         p.get("buyPrice") != null ? ((Number) p.get("buyPrice")).intValue() : null,
                         p.get("transportCost") != null ? ((Number) p.get("transportCost")).intValue() : null,
                         null,  // stockQuantity — keep existing
-                        actorId));
+                        actorId,
+                        "OWNER"));
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         promoted.getId().toString(), null);
             }

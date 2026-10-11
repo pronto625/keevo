@@ -25,6 +25,7 @@ class RecordSaleUseCase {
     List<String> originalDraftProductIds = const [],
     Map<String, int> initialStockEntries = const {},
     Map<String, String> initialStockMovementIds = const {},
+    bool promoteDraftProducts = true,
   }) async {
     final now = DateTime.now();
     final saleId = const Uuid().v4();
@@ -59,6 +60,7 @@ class RecordSaleUseCase {
       originalDraftProductIds: originalDraftProductIds,
       initialStockEntries: initialStockEntries,
       initialStockMovementIds: initialStockMovementIds,
+      promoteDraftProducts: promoteDraftProducts,
     );
 
     await _repository.recordSale(sale);

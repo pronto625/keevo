@@ -9,7 +9,11 @@ import com.keevo.catalog.category.application.usecase.RenameCategoryUseCase;
 import com.keevo.catalog.category.application.usecase.ToggleCategoryUseCase;
 import com.keevo.catalog.category.domain.model.Category;
 import com.keevo.catalog.category.domain.port.out.CategoryRepository;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -119,7 +123,13 @@ public class CategoryController {
      * PATCH /api/v1/categories/{id}/toggle
      */
     @PatchMapping("/{id}/toggle")
+    @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponseWrapper<CategoryResponseDto>> toggleCategory(@PathVariable UUID id) {
+        // v1s-12-10: defense-in-depth (standalone MockMvc does not evaluate @PreAuthorize).
+        if (!isOwnerRole()) {
+            throw new DomainException(ErrorCode.FORBIDDEN,
+                    "Seul le propriétaire peut activer ou supprimer une catégorie");
+        }
         Category category = toggleCategoryUseCase.execute(id);
         CategoryResponseDto response = CategoryResponseDto.fromDomain(category);
 
@@ -148,5 +158,11 @@ public class CategoryController {
     public ResponseEntity<Void> deleteCategory(@PathVariable UUID id) {
         categoryRepository.deactivate(id);
         return ResponseEntity.noContent().build();
+    }
+
+    private boolean isOwnerRole() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_OWNER".equals(a.getAuthority()));
     }
 }

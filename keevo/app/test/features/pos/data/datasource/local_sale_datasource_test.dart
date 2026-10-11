@@ -1,8 +1,12 @@
+import 'dart:ffi';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/pos/data/datasource/local_sale_datasource.dart';
 import 'package:keevo/features/pos/domain/model/payment_mode_enum.dart';
 import 'package:keevo/features/pos/domain/model/sale_model.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:sqlite3/open.dart';
 
 // LocalSaleDataSource depends on AppDatabase which requires Drift in-memory.
 // These tests use mocktail to verify the datasource contract without a real DB.
@@ -78,6 +82,54 @@ void main() {
       // Actual DB test: stock_levels table empty → returns 0
       // Contract: returns int ≥ 0
       expect(0, greaterThanOrEqualTo(0));
+    });
+  });
+
+  // v1s-12-10: real in-memory Drift DB — "never stocked" vs "sold out".
+  group('hasStockRecord', () {
+    setUpAll(() {
+      if (Platform.isLinux) {
+        open.overrideFor(OperatingSystem.linux, () {
+          try {
+            return DynamicLibrary.open('libsqlite3.so');
+          } catch (_) {
+            return DynamicLibrary.open('libsqlite3.so.0');
+          }
+        });
+      }
+    });
+
+    late AppDatabase db;
+    late LocalSaleDataSource ds;
+
+    setUp(() {
+      db = AppDatabase.forTesting();
+      ds = LocalSaleDataSource(db);
+    });
+    tearDown(() => db.close());
+
+    Future<void> insertLevel(String storeId, int qty) =>
+        db.into(db.stockLevels).insert(StockLevelsCompanion.insert(
+              id: 'sl-$storeId',
+              productId: 'd1',
+              storeId: storeId,
+              quantity: qty,
+              updatedAt: DateTime(2026),
+            ));
+
+    test('true when a row exists for (product, store), even at quantity 0',
+        () async {
+      await insertLevel('s1', 0);
+      expect(await ds.hasStockRecord('d1', 's1'), isTrue);
+    });
+
+    test('false when there is no row', () async {
+      expect(await ds.hasStockRecord('d1', 's1'), isFalse);
+    });
+
+    test('false when the only row is for another store', () async {
+      await insertLevel('s2', 5);
+      expect(await ds.hasStockRecord('d1', 's1'), isFalse);
     });
   });
 }

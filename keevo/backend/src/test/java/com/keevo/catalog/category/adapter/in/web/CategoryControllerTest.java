@@ -8,6 +8,7 @@ import com.keevo.catalog.category.application.usecase.ToggleCategoryUseCase;
 import com.keevo.catalog.category.domain.model.Category;
 import com.keevo.catalog.category.domain.port.out.CategoryRepository;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -59,6 +63,16 @@ class CategoryControllerTest {
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
         sampleCategory = new Category(CATEGORY_ID, "Boissons", null, true, true, NOW, NOW);
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
+
+    private static void authenticateAs(String role) {
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                UUID.randomUUID(), null, List.of(new SimpleGrantedAuthority("ROLE_" + role))));
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -174,6 +188,7 @@ class CategoryControllerTest {
     @DisplayName("PATCH /api/v1/categories/{id}/toggle returns 200 with toggled category")
     void toggleCategory_returns200_withToggledCategory() throws Exception {
         Category toggled = new Category(CATEGORY_ID, "Boissons", null, false, true, NOW, NOW);
+        authenticateAs("OWNER");
         when(toggleCategoryUseCase.execute(CATEGORY_ID)).thenReturn(toggled);
 
         mockMvc.perform(patch("/api/v1/categories/{id}/toggle", CATEGORY_ID))
@@ -187,11 +202,23 @@ class CategoryControllerTest {
     @DisplayName("PATCH /api/v1/categories/{id}/toggle when not found currently returns 500 (known gap D2)")
     void toggleCategory_whenNotFound_currentlyReturns500() throws Exception {
         // Known gap D2 — same IllegalArgumentException → 500 pattern.
+        authenticateAs("OWNER");
         when(toggleCategoryUseCase.execute(CATEGORY_ID))
                 .thenThrow(new IllegalArgumentException("Category not found"));
 
         mockMvc.perform(patch("/api/v1/categories/{id}/toggle", CATEGORY_ID))
                 .andExpect(status().is5xxServerError());
+    }
+
+    @Test
+    @DisplayName("v1s-12-10: PATCH /api/v1/categories/{id}/toggle by EMPLOYEE returns 403, use case never called")
+    void toggleCategory_byEmployee_returns403() throws Exception {
+        authenticateAs("EMPLOYEE");
+
+        mockMvc.perform(patch("/api/v1/categories/{id}/toggle", CATEGORY_ID))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(toggleCategoryUseCase, categoryRepository);
     }
 
     // ─────────────────────────────────────────────────────────────────

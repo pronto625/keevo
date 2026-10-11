@@ -6,6 +6,7 @@ import com.keevo.catalog.category.domain.model.Category;
 import com.keevo.catalog.category.domain.port.out.CategoryRepository;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,6 +37,12 @@ class CategorySyncHandlerTest {
     @BeforeEach
     void setUp() {
         handler = new CategorySyncHandler(categoryRepository, toggleCategory, renameCategory);
+        SyncTestAuth.owner();
+    }
+
+    @AfterEach
+    void tearDown() {
+        SyncTestAuth.clear();
     }
 
     private Category sampleCategory(UUID id, String name, boolean isActive) {
@@ -220,5 +227,35 @@ class CategorySyncHandlerTest {
     void supportedTypes_containsAllCategoryTypes() {
         assertThat(handler.supportedTypes())
                 .containsExactlyInAnyOrder("CREATE_CATEGORY", "TOGGLE_CATEGORY", "RENAME_CATEGORY");
+    }
+
+    // ── v1s-12-10: TOGGLE_CATEGORY is OWNER-only ────────────────────────────
+
+    @Test
+    void handle_toggleCategory_byEmployee_isRejectedForbidden_withoutRepositoryLookup() {
+        SyncTestAuth.employee(UUID.randomUUID());
+        var catId = UUID.randomUUID();
+        var op = new SyncOperation("op-e", "TOGGLE_CATEGORY", catId.toString(),
+                Map.of("categoryId", catId.toString(), "isActive", false), Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("FORBIDDEN");
+        verifyNoInteractions(categoryRepository, toggleCategory);
+    }
+
+    @Test
+    void handle_toggleCategory_withoutAuthentication_isRejectedForbidden() {
+        SyncTestAuth.clear();
+        var catId = UUID.randomUUID();
+        var op = new SyncOperation("op-n", "TOGGLE_CATEGORY", catId.toString(),
+                Map.of("categoryId", catId.toString(), "isActive", false), Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("FORBIDDEN");
+        verifyNoInteractions(categoryRepository, toggleCategory);
     }
 }

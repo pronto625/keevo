@@ -129,6 +129,20 @@ class LocalSaleDataSource {
     return rows.map((r) => r.quantity).reduce((a, b) => a > b ? a : b);
   }
 
+  /// Whether a `stock_levels` row exists for [productId] in [storeId]
+  /// (v1s-12-10). Unlike [getAvailableStock], tells "never stocked" (false)
+  /// apart from "sold out" (true, quantity 0): a draft already stocked — e.g.
+  /// sold earlier by an employee and still awaiting owner validation — must
+  /// not be prompted for an initial stock again.
+  Future<bool> hasStockRecord(String productId, String storeId) async {
+    final row = await (_db.select(_db.stockLevels)
+          ..where((s) =>
+              s.productId.equals(productId) & s.storeId.equals(storeId))
+          ..limit(1))
+        .getSingleOrNull();
+    return row != null;
+  }
+
   /// Query pending validation sales for a store.
   Future<List<Map<String, dynamic>>> getPendingSaleRows(String storeId) async {
     final rows = await (_db.select(_db.sales)
