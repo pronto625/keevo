@@ -21,7 +21,7 @@ Close the security findings from the 2026-07-20 audit (S1–S9, S12, B-HIGH-5/6/
 - Story 12.10: Residual sync RBAC (PROMOTE_PRODUCT, TOGGLE_CATEGORY, inventory session) (done)
 - Story 12.11: Transfers: an employee transfers only from their own store (REST + sync) (done)
 - Story 12.12: Auth & session hardening (JWT filter, revocation cache, password reset, refresh tokens, sync device ownership) (done)
-- Story 12.13: Prod secrets & config hardening (ProdSecretsValidator extension) (backlog)
+- Story 12.13: Prod secrets & config hardening (ProdSecretsValidator extension) (in progress)
 
 ## Requirements & Constraints
 
@@ -30,10 +30,10 @@ Close the security findings from the 2026-07-20 audit (S1–S9, S12, B-HIGH-5/6/
 - **Owner-only governance.** Store management, day-closure reads, pending-sale cancel and catalog promote/category delete/toggle are OWNER-only. The equivalent sync operations must apply the same rule.
 - **Transfer rule (PO decision 2026-10-11).** An EMPLOYEE may initiate a transfer only when `sourceStoreId` equals their JWT-assigned store. Otherwise REST returns 403 and the sync op is REJECTED. OWNER keeps cross-store transfers. Shipped by 12.11, which reverted commit 4302eba's "any store" opening; it supersedes the earlier "transfer initiation OWNER-only" wording. Do not reopen it. Transfer receipt (`complete()`) stays scoped to the destination store (12.9) and is REST-only; no sync handler exists for it.
 - **Session revocation.** A deactivated employee or a password change must invalidate access within 5 min, even though access tokens are long-lived. Revoked tokens get 401 `SESSION_REVOKED`. A remote session revoke by the owner is supported (FR68).
-- **Secrets.** Passwords use bcrypt with cost ≥12. The prod private key must not be world-readable. Prod must fail fast on any weak or defaulted secret (DB password, provider tokens, admin password).
+- **Secrets.** Passwords use bcrypt with cost ≥12. The prod private key must not be world-readable. Secrets are externalised; under the `prod` profile the app must refuse to start, with an explicit message, when a secret is missing, defaulted or weak. 12.13 extends this to the DB password (no dev fallback for `POSTGRES_PASSWORD`), the Twilio/Wassender provider tokens, and an admin-password strength policy (today only the exact old default is rejected, so the `.env.example` placeholder passes). The fail-fast must be proven at Spring-context level (prod-profile context fails to start), not only by unit tests of the validator.
 - **Client secrets.** Tokens are stored encrypted on every platform. Authorization headers never reach release logs. HTTPS is the default.
 - **Tests.** Each RBAC change ships tests for: EMPLOYEE own store (allowed), EMPLOYEE other store (403/REJECTED, use case never invoked) and OWNER (unchanged).
-- **Deferred items.** Stories 12.10–12.13 carry routed deferred-work items (12.12 has 24). Each item must be resolved, or rejected with a reason recorded beside it (box ticked, commit or decision noted). deferred-work stays empty.
+- **Deferred items.** Stories 12.10–12.13 carry routed deferred-work items (12.12: 24, all closed; 12.13: 3, open). Each item must be resolved, or rejected with a reason recorded beside it (box ticked in the epics file, commit or decision noted). deferred-work stays empty; new follow-ups are routed to their owning story.
 
 ## Technical Decisions
 
@@ -78,6 +78,6 @@ Close the security findings from the 2026-07-20 audit (S1–S9, S12, B-HIGH-5/6/
   - `SecurityConfig`: the 403 body is JSON.
   - `SyncController` device ownership: no TOCTOU (`device_id` PK + guarded ON CONFLICT that never reassigns the owner), a security log on DEVICE_ID_MISMATCH. The distinct 403 is kept on purpose (client UUIDv4 device ids make enumeration infeasible); the security log makes probing visible.
   - Suspended tenant deletion (PO decision): a SUSPENDED tenant cannot request deletion (403 `ACCOUNT_SUSPENDED`), so request + cancel can no longer restore ACTIVE; erasure stays available via SUPER_ADMIN `forceDelete`.
-- **12.13** extends Story 10.3's `ProdSecretsValidator` and relates to 12.1.
+- **12.13 (in progress)** extends the existing `ProdSecretsValidator` (from refonte Story 10.3: no `admin.password` default, Firebase credentials injected at runtime) and relates to 12.1 (prod key handling). The refonte reuses the validator as is.
 - Client-side session revocation spans 12.2, 12.7 and 14.9 (suspension banners).
 - Outside this epic: access-token lifetime (60 days configured vs 24 h specified) is an open audit finding with no story yet. A future roles & privileges module is noted but not planned.
