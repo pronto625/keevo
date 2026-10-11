@@ -11,7 +11,9 @@ import java.util.UUID;
  *
  * <p>This event triggers:
  * <ul>
- *   <li>DayClosureWhatsAppListener → sends report to owner (via WhatsAppPort stub)</li>
+ *   <li>EndOfDayReportListener → active end-of-day report path (AFTER_COMMIT)</li>
+ *   <li>DayClosureWhatsAppListener → legacy listener (off by default, AFTER_COMMIT) sending
+ *       only to the tenant OWNER's phone</li>
  *   <li>AuditEventListener → records audit entry</li>
  * </ul>
  *

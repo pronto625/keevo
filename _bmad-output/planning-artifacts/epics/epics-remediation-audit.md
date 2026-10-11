@@ -723,7 +723,26 @@ As a Toor, I want the day-closure WhatsApp report sent to the tenant owner's own
 **Refs:** Story 15.7 (D1), Story 13.11. **Refonte absorption:** re-appliquer dans `messaging`.
 
 **Items:**
-- [ ] [Deferred-from: v1s-15-7, 2026-10-11] Hardcoded owner phone fallback [commerce/sale/application/service/DayClosureWhatsAppListener.java:43,73] — every day-closure report goes to `keevo.owner.whatsapp` / `+243000000000`; resolve the owner's phone per tenant, never guess (skip + log when missing), with tests
+- [x] [Deferred-from: v1s-15-7, 2026-10-11] Hardcoded owner phone fallback [commerce/sale/application/service/DayClosureWhatsAppListener.java:43,73] — every day-closure report goes to `keevo.owner.whatsapp` / `+243000000000`; resolve the owner's phone per tenant, never guess (skip + log when missing), with tests — **resolved 2026-10-12 (v1s-14-16)**: owner lookup per tenant, skip + warn, AFTER_COMMIT, 15 tests; backend sweep found no other hardcoded recipient; follow-ups → v1s-14-17
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
+---
+
+## Story 14.17: Résolution unique et fiable du destinataire propriétaire — **[C]**
+
+As a Toor, I want every owner-directed WhatsApp message (reports, alerts, notifications) to resolve its recipient through one shared rule, so that the choice of owner and phone is deterministic, active-only and identical everywhere.
+
+**Scope:** Introduce one owner-recipient resolver (e.g. a `UserRepository` default method or a small `OwnerPhoneResolver`) returning the WhatsApp phone of the tenant's active OWNER — deterministic when several owners exist, skipping deactivated users, trimming and rejecting blank phones — and use it in `DayClosureWhatsAppListener`, `ReportHistoryService`, `DailyReportGenerator`, `MultiStoreSummaryService` and the messaging notification listeners. Tracker key: `v1s-14-17-owner-recipient-resolution`.
+
+**Refs:** Story 14.16 (review pass 1), Story 15.7 (D1), Story 14.11 (role promotion makes several OWNER memberships possible). **Refonte absorption:** re-appliquer dans `identity`/`messaging`.
+
+**Items:**
+- [ ] [Deferred-from: v1s-14-16, 2026-10-11] Nondeterministic owner when several OWNER memberships exist [identity/auth/adapter/out/persistence/impl/UserRepositoryAdapter.java:42-50] — `LIMIT 1` without `ORDER BY`; recipient may change between messages. Settle with a deterministic order (or primary owner) + DB test
+- [ ] [Deferred-from: v1s-14-16, 2026-10-11] Deactivated owner user still receives reports [identity/auth/adapter/out/persistence/impl/UserRepositoryAdapter.java:48] — query filters `m.is_active` but not `u.is_active`; decide whether a deactivated owner must be skipped, add filter + test
+- [ ] [Deferred-from: v1s-14-16, 2026-10-11] Owner phone sent untrimmed [reporting/report/application/service/ReportHistoryService.java:68, commerce/sale/application/service/DayClosureWhatsAppListener.java] — strip before blank check in the shared resolver
+- [ ] [Deferred-from: v1s-14-16, 2026-10-11] Active EOD path sends to a blank phone instead of IN_APP_ONLY [reporting/report/application/service/DailyReportGenerator.java:101-105] — no blank filter; `AbstractReportGenerator` only checks null
+- [ ] [Deferred-from: v1s-14-16, 2026-10-11] Owner-phone rule duplicated in ~9 call sites [messaging/notification/application/listener/*, reporting/report/application/service/*] — replace with the shared resolver so the rules above cannot drift
 
 **AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
 
