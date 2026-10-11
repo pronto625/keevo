@@ -1,5 +1,6 @@
 package com.keevo.identity.auth.infrastructure.persistence;
 
+import com.keevo.shared.infrastructure.persistence.SharedPostgresContainer;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
 import org.junit.jupiter.api.*;
 import org.postgresql.ds.PGSimpleDataSource;
@@ -10,7 +11,6 @@ import java.util.HashSet;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * TenantMigrationIntegrationTest — Validates TenantSchemaProvisioner against REAL PostgreSQL.
@@ -19,9 +19,8 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * missing DDL tables. This integration test is the sole source of truth for what
  * actually exists after provisioning.
  *
- * <p>Uses the existing keevo_postgres container (localhost:5444/keevo_dev) that is part
- * of the standard dev docker-compose stack — no additional container spin-up required.
- * Each test class run uses a unique isolated schema (kv_itXXXX) dropped on teardown.
+ * <p>Runs on a fresh database of the shared Testcontainers PostgreSQL
+ * ({@link SharedPostgresContainer#freshDatabase}), dropped on teardown; never skipped.
  *
  * <p>AC1: TenantSchemaProvisioner creates all required tables in the tenant schema.
  */
@@ -47,36 +46,22 @@ class TenantMigrationIntegrationTest {
     private static DataSource dataSource;
     private static TenantSchemaProvisioner schemaProvisioner;
 
+    private static final String DATABASE = "keevo_tenant_migration";
+
     @BeforeAll
     static void setUpDatabase() {
-        // Credentials from keevo/.env / docker-compose.yml (keevo_postgres, port 5444)
-        String host   = System.getProperty("db.host",      "localhost");
-        String port   = System.getProperty("db.port",      "5444");
-        String dbName = System.getProperty("db.name",      "keevo_dev");
-        String user   = System.getProperty("db.user",      "keevo");
-        String pass   = System.getProperty("db.password",  "keevo_local_pwd");
-
+        // Pristine database on the shared Testcontainers PostgreSQL (Story v1s-15-11).
         PGSimpleDataSource ds = new PGSimpleDataSource();
-        ds.setURL("jdbc:postgresql://" + host + ":" + port + "/" + dbName);
-        ds.setUser(user);
-        ds.setPassword(pass);
+        ds.setURL(SharedPostgresContainer.freshDatabase(DATABASE));
+        ds.setUser(SharedPostgresContainer.username());
+        ds.setPassword(SharedPostgresContainer.password());
         dataSource = ds;
-
-        // Skip all tests if the DB is unreachable (CI without dev stack)
-        try (Connection ignored = ds.getConnection()) {
-            schemaProvisioner = new TenantSchemaProvisioner(ds);
-        } catch (SQLException e) {
-            assumeTrue(false, "keevo_postgres not reachable — skipping integration tests: " + e.getMessage());
-        }
+        schemaProvisioner = new TenantSchemaProvisioner(ds);
     }
 
     @AfterAll
-    static void dropTestSchema() {
-        if (dataSource == null) return;
-        try (Connection conn = dataSource.getConnection();
-             Statement stmt = conn.createStatement()) {
-            stmt.execute("DROP SCHEMA IF EXISTS \"" + SCHEMA + "\" CASCADE");
-        } catch (SQLException ignored) { /* best-effort cleanup */ }
+    static void dropTestDatabase() {
+        SharedPostgresContainer.dropDatabase(DATABASE);
     }
 
     @Test

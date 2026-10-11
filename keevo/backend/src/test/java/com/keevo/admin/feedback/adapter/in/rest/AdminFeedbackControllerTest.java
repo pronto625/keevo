@@ -5,17 +5,20 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.keevo.feedback.feedback.domain.model.Feedback;
 import com.keevo.feedback.feedback.domain.port.out.FeedbackRepository;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.authorization.method.AuthorizationManagerBeforeMethodInterceptor;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
@@ -46,12 +49,29 @@ class AdminFeedbackControllerTest {
     @BeforeEach
     void setUp() {
         mapper.registerModule(new JavaTimeModule());
-        var controller = new AdminFeedbackController(feedbackRepository);
-        mockMvc = MockMvcBuilders.standaloneSetup(controller)
+        mockMvc = MockMvcBuilders.standaloneSetup(securedController())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
 
         SecurityContextHolder.clearContext();
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
+
+    /**
+     * standaloneSetup mounts no method security, so the class-level {@code @PreAuthorize} would be
+     * ignored. Wrap the controller in the same AOP interceptor {@code @EnableMethodSecurity}
+     * registers: a denied call throws {@code AuthorizationDeniedException}, which
+     * {@link GlobalExceptionHandler} maps to 403.
+     */
+    private Object securedController() {
+        ProxyFactory factory = new ProxyFactory(new AdminFeedbackController(feedbackRepository));
+        factory.setProxyTargetClass(true);
+        factory.addAdvisor(AuthorizationManagerBeforeMethodInterceptor.preAuthorize());
+        return factory.getProxy();
     }
 
     private void authenticateAs(String role) {

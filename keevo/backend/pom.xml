@@ -155,7 +155,12 @@
             <artifactId>spring-boot-testcontainers</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- Override docker-java for Docker 29.x API compatibility -->
+        <!-- Override docker-java for Docker 29.x API compatibility (api.version in
+             src/test/resources/docker-java.properties).
+             Alignment check (v1s-15-11, `mvn dependency:tree -Dincludes=com.github.docker-java`):
+             docker-java-api, docker-java-transport-zerodep and its transitive docker-java-transport
+             all resolve to ${docker-java.version}; Testcontainers 1.20 does not use docker-java-core,
+             so there is no core artifact to drift. Re-run the check when bumping Testcontainers. -->
         <dependency>
             <groupId>com.github.docker-java</groupId>
             <artifactId>docker-java-api</artifactId>
@@ -176,11 +181,6 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.h2database</groupId>
-            <artifactId>h2</artifactId>
             <scope>test</scope>
         </dependency>
 

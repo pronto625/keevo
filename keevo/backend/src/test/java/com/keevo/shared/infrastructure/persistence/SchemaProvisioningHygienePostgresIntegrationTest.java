@@ -5,15 +5,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 
 import javax.sql.DataSource;
 import java.nio.charset.StandardCharsets;
@@ -36,14 +35,24 @@ import static org.assertj.core.api.Assertions.assertThat;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({TenantSchemaProvisioner.class, TenantSchemaSyncService.class, TenantSchemaMigrationRunner.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
-@Testcontainers
+@ActiveProfiles("test")
 @DisplayName("Tenant schema provisioning hygiene on PostgreSQL (Story v1s-13-12)")
 class SchemaProvisioningHygienePostgresIntegrationTest {
 
-    @Container
-    @ServiceConnection
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
-            .withTmpFs(Map.of("/var/lib/postgresql/data", "rw"));
+    /**
+     * This class drops and recreates public CHECK constraints and commits tenants, so it runs on
+     * its own pristine database of the shared container instead of the shared {@code test} one
+     * (no {@code @ServiceConnection}: it would override these URL properties).
+     */
+    private static final String DATABASE = "keevo_schema_hygiene";
+
+    @DynamicPropertySource
+    static void datasource(DynamicPropertyRegistry registry) {
+        String url = SharedPostgresContainer.freshDatabase(DATABASE);
+        registry.add("spring.datasource.url", () -> url);
+        registry.add("spring.datasource.username", SharedPostgresContainer::username);
+        registry.add("spring.datasource.password", SharedPostgresContainer::password);
+    }
 
     private static final String V13 = "db/migration/V13__idempotent_check_constraints.sql";
 

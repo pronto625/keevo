@@ -1,13 +1,12 @@
 package com.keevo.identity.auth.adapter.out.persistence;
 
+import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
 import com.keevo.identity.auth.adapter.out.persistence.entity.TenantJpaEntity;
 import com.keevo.identity.auth.adapter.out.persistence.jpa.TenantSpringRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
-import org.springframework.test.context.TestPropertySource;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -30,16 +29,8 @@ import static org.assertj.core.api.Assertions.assertThatNoException;
  * forcing persist() for entities with pre-assigned domain UUIDs.
  */
 @DataJpaTest
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@TestPropertySource(properties = {
-        "spring.datasource.url=jdbc:postgresql://localhost:5444/keevo_dev",
-        "spring.datasource.username=keevo",
-        "spring.datasource.password=keevo_local_pwd",
-        "spring.flyway.enabled=false",
-        "spring.jpa.hibernate.ddl-auto=update"
-})
 @DisplayName("JpaBaseEntity — Persistable<UUID> with domain-assigned IDs")
-class JpaBaseEntityPersistTest {
+class JpaBaseEntityPersistTest extends PostgresIntegrationTest {
 
     @Autowired
     private TenantSpringRepository tenantJpaRepository;

@@ -99,23 +99,23 @@ class FeedbackControllerTest {
     }
 
     @Test
-    @DisplayName("POST /feedback returns 400 when description too short")
-    void submit_returns400_whenDescriptionTooShort() throws Exception {
+    @DisplayName("POST /feedback returns 422 when description too short (9 chars, min 10)")
+    void submit_returns422_whenDescriptionTooShort() throws Exception {
         authenticateAs("OWNER");
 
         String body = """
-                {"type":"bug","description":"trop court","appVersion":"1.0","platform":"android","screenContext":"/home"}
+                {"type":"bug","description":"trop cour","appVersion":"1.0","platform":"android","screenContext":"/home"}
                 """;
 
         mockMvc.perform(post("/api/v1/feedback")
                         .contentType("application/json")
                         .content(body))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isUnprocessableEntity());
     }
 
     @Test
-    @DisplayName("POST /feedback returns 400 when type is blank")
-    void submit_returns400_whenTypeBlank() throws Exception {
+    @DisplayName("POST /feedback returns 422 when type is blank")
+    void submit_returns422_whenTypeBlank() throws Exception {
         authenticateAs("OWNER");
 
         String body = """
@@ -125,6 +125,6 @@ class FeedbackControllerTest {
         mockMvc.perform(post("/api/v1/feedback")
                         .contentType("application/json")
                         .content(body))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isUnprocessableEntity());
     }
 }

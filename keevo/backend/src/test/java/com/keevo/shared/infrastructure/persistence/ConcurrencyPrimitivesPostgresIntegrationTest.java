@@ -10,9 +10,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.IllegalTransactionStateException;
@@ -20,16 +18,12 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import javax.sql.DataSource;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -49,17 +43,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * <p>No test-managed transaction: each scenario opens its own transactions (several threads).</p>
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({PostgresTransactionLockAdapter.class, JdbcNotificationCooldownAdapter.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
-@Testcontainers
 @DisplayName("Concurrency primitives on PostgreSQL (Story 13.9)")
-class ConcurrencyPrimitivesPostgresIntegrationTest {
+class ConcurrencyPrimitivesPostgresIntegrationTest extends PostgresIntegrationTest {
 
-    @Container
-    @ServiceConnection
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
-            .withTmpFs(Map.of("/var/lib/postgresql/data", "rw"));
 
     private static final String SCHEMA = "kv_lock13";
 

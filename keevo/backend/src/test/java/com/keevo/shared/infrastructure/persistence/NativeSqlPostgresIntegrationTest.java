@@ -7,17 +7,11 @@ import com.keevo.sync.sync.adapter.out.persistence.jpa.SyncOperationsLogSpringRe
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.sql.Timestamp;
 import java.time.Instant;
-import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -28,15 +22,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * (V1–V9). Mocks only see the query text; these tests see what PostgreSQL does with it.
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Testcontainers
 @DisplayName("Native SQL on PostgreSQL")
-class NativeSqlPostgresIntegrationTest {
+class NativeSqlPostgresIntegrationTest extends PostgresIntegrationTest {
 
-    @Container
-    @ServiceConnection
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
-            .withTmpFs(Map.of("/var/lib/postgresql/data", "rw"));
 
     @Autowired JdbcTemplate jdbc;
     @Autowired SyncOperationsLogSpringRepository syncLog;
