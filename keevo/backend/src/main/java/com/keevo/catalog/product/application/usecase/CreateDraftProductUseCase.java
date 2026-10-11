@@ -6,6 +6,7 @@ import com.keevo.catalog.product.domain.event.ProductCreatedProgressivelyEvent;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
 import com.keevo.messaging.notification.domain.model.DraftPendingValidation;
 import com.keevo.messaging.notification.domain.port.out.DraftNotificationRepository;
+import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -46,6 +47,7 @@ public class CreateDraftProductUseCase {
     private final SubscriptionRepository    subscriptionRepository;
     private final PlanLimitGuard            planLimitGuard;
     private final ApplicationEventPublisher eventPublisher;
+    private final TransactionLockPort       transactionLock;
 
     public CreateDraftProductUseCase(
             ProductRepository productRepository,
@@ -53,13 +55,15 @@ public class CreateDraftProductUseCase {
             ProductCountPort productCountPort,
             SubscriptionRepository subscriptionRepository,
             PlanLimitGuard planLimitGuard,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            TransactionLockPort transactionLock) {
         this.productRepository     = productRepository;
         this.draftRepository       = draftRepository;
         this.productCountPort      = productCountPort;
         this.subscriptionRepository = subscriptionRepository;
         this.planLimitGuard        = planLimitGuard;
         this.eventPublisher        = eventPublisher;
+        this.transactionLock       = transactionLock;
     }
 
     public record CreateDraftCommand(
@@ -91,6 +95,10 @@ public class CreateDraftProductUseCase {
      */
     @Transactional
     public Product execute(CreateDraftCommand command) {
+
+        // Story 13.9: same per-tenant advisory lock as CreateProductUseCase (shared key), first,
+        // so idempotency lookup, name check and plan-limit count → save are serialised.
+        transactionLock.lock("product-limit:" + TenantContext.getCurrentTenant());
 
         // Idempotency: if a client-specified UUID already exists, return the existing product.
         if (command.clientId() != null) {

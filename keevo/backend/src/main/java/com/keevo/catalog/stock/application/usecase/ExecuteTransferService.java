@@ -11,6 +11,7 @@ import com.keevo.catalog.stock.domain.port.out.StockLevelRepository;
 import com.keevo.catalog.stock.domain.port.out.StockTransferRepository;
 import com.keevo.catalog.stock.domain.service.StockOperationService;
 import com.keevo.catalog.stock.domain.service.TransferValidationStrategy;
+import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -48,6 +49,7 @@ public class ExecuteTransferService implements TransferStockUseCase {
     private final StockTransferRepository transferRepository;
     private final TransferValidationStrategy validationStrategy;
     private final ApplicationEventPublisher eventPublisher;
+    private final TransactionLockPort transactionLock;
 
     public ExecuteTransferService(
             StoreRepository storeRepository,
@@ -55,13 +57,15 @@ public class ExecuteTransferService implements TransferStockUseCase {
             StockOperationService stockOperationService,
             StockTransferRepository transferRepository,
             TransferValidationStrategy validationStrategy,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            TransactionLockPort transactionLock) {
         this.storeRepository     = storeRepository;
         this.stockLevelRepository = stockLevelRepository;
         this.stockOperationService = stockOperationService;
         this.transferRepository  = transferRepository;
         this.validationStrategy  = validationStrategy;
         this.eventPublisher      = eventPublisher;
+        this.transactionLock     = transactionLock;
     }
 
     @Override
@@ -72,6 +76,9 @@ public class ExecuteTransferService implements TransferStockUseCase {
         // Covers both an offline-created transfer's push and a sync retry replaying the
         // same STOCK_TRANSFER operation after a network failure.
         if (command.clientId() != null) {
+            // Story 13.9: two concurrent executes with the same clientId (double-fire) are
+            // serialised; the second sees the first's committed transfer and returns it.
+            transactionLock.lock("transfer:" + command.clientId());
             var existing = transferRepository.findById(command.clientId());
             if (existing.isPresent()) {
                 return existing.get();

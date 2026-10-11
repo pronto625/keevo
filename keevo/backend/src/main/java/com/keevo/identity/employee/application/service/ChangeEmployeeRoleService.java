@@ -13,6 +13,7 @@ import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.port.in.ChangeEmployeeRoleCommand;
 import com.keevo.identity.employee.domain.port.in.ChangeEmployeeRoleUseCase;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
+import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -44,6 +45,7 @@ public class ChangeEmployeeRoleService implements ChangeEmployeeRoleUseCase {
     private final RefreshTokenRepository refreshTokenRepository;
     private final TokenRevocationPort tokenRevocationPort;
     private final ApplicationEventPublisher eventPublisher;
+    private final TransactionLockPort transactionLock;
 
     public ChangeEmployeeRoleService(EmployeeRepository employeeRepository,
                                       UserRepository userRepository,
@@ -51,7 +53,8 @@ public class ChangeEmployeeRoleService implements ChangeEmployeeRoleUseCase {
                                       TenantRepository tenantRepository,
                                       RefreshTokenRepository refreshTokenRepository,
                                       TokenRevocationPort tokenRevocationPort,
-                                      ApplicationEventPublisher eventPublisher) {
+                                      ApplicationEventPublisher eventPublisher,
+                                      TransactionLockPort transactionLock) {
         this.employeeRepository = employeeRepository;
         this.userRepository = userRepository;
         this.membershipRepository = membershipRepository;
@@ -59,6 +62,7 @@ public class ChangeEmployeeRoleService implements ChangeEmployeeRoleUseCase {
         this.refreshTokenRepository = refreshTokenRepository;
         this.tokenRevocationPort = tokenRevocationPort;
         this.eventPublisher = eventPublisher;
+        this.transactionLock = transactionLock;
     }
 
     @Override
@@ -97,6 +101,9 @@ public class ChangeEmployeeRoleService implements ChangeEmployeeRoleUseCase {
 
         // 5. Anti-lockout: cannot demote last active owner
         if ("OWNER".equals(previousRole) && "EMPLOYEE".equals(command.newRole())) {
+            // Story 13.9: two owners demoting each other concurrently — serialise per tenant so
+            // the second count sees the first demotion (committed before the lock is released).
+            transactionLock.lock("owners:" + tenantSchema);
             List<User> activeOwners = userRepository.findOwnersByTenantSchemaName(tenantSchema);
             if (activeOwners.size() <= 1) {
                 throw new DomainException(ErrorCode.CANNOT_DEMOTE_LAST_OWNER);

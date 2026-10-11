@@ -219,6 +219,82 @@ class StockModificationNotificationListenerTest {
         verify(notificationPort).notifyOwners(eq(TENANT_ID), any());
     }
 
+    // ── Story 13.9: batch-window eviction ───────────────────────────────
+
+    private StockAdjustedEvent eventNo(int i) {
+        return new StockAdjustedEvent(UUID.randomUUID(), null, STORE_ID, MovementType.STOCK_ENTRY, 0, 1, 1, ACTOR_ID, "Livraison", TENANT_ID, "EMPLOYEE", "Loïc", "Boutique A", "Widget " + i, NOW);
+    }
+
+    @Test
+    @DisplayName("13.9: flushed window is removed from the map")
+    void flush_removesExpiredWindow() {
+        listener.onStockAdjusted(eventNo(1));
+        listener.onStockAdjusted(eventNo(2));
+        assertThat(listener.openWindowCount()).isEqualTo(1);
+
+        listener.flushExpiredWindows();
+        assertThat(listener.openWindowCount()).as("window not yet expired is kept").isEqualTo(1);
+
+        advancePastWindow();
+        listener.flushExpiredWindows();
+
+        assertThat(listener.openWindowCount()).isZero();
+        verify(notificationPort).notifyOwners(eq(TENANT_ID), any());
+    }
+
+    @Test
+    @DisplayName("13.9: event on an expired, not yet flushed window is sent by the next flush (never dropped)")
+    void eventOnExpiredUnflushedWindow_isNotLost() {
+        listener.onStockAdjusted(eventNo(1));
+        advancePastWindow();
+        listener.onStockAdjusted(eventNo(2)); // sweep has not run yet
+
+        listener.flushExpiredWindows();
+
+        ArgumentCaptor<NotificationPayload> captor = ArgumentCaptor.forClass(NotificationPayload.class);
+        verify(notificationPort).notifyOwners(eq(TENANT_ID), captor.capture());
+        assertThat(captor.getValue().metadata()).containsEntry("count", "2");
+        assertThat(listener.openWindowCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("13.9: events racing concurrent flushes are all delivered exactly once")
+    void eventsRacingFlush_neverLostNorDuplicated() throws Exception {
+        var racingClock = new java.util.concurrent.atomic.AtomicReference<>(NOW);
+        Clock movingClock = new Clock() {
+            @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public Clock withZone(ZoneId zone) { return this; }
+            @Override public Instant instant() { return racingClock.get(); }
+        };
+        var racing = new StockModificationNotificationListener(notificationPort, whatsAppPort, userRepository, WINDOW_MIN, movingClock);
+        var delivered = new java.util.concurrent.atomic.AtomicInteger();
+        org.mockito.Mockito.doAnswer(inv -> {
+            NotificationPayload p = inv.getArgument(1);
+            delivered.addAndGet(Integer.parseInt(p.metadata().getOrDefault("count", "1")));
+            return null;
+        }).when(notificationPort).notifyOwners(eq(TENANT_ID), any());
+
+        int total = 2_000;
+        var done = new java.util.concurrent.atomic.AtomicBoolean(false);
+        Thread producer = new Thread(() -> {
+            for (int i = 0; i < total; i++) {
+                racing.onStockAdjusted(eventNo(i));
+            }
+            done.set(true);
+        });
+        producer.start();
+        while (!done.get()) {
+            racingClock.updateAndGet(t -> t.plus(Duration.ofMinutes(WINDOW_MIN).plusSeconds(1)));
+            racing.flushExpiredWindows();
+        }
+        producer.join();
+        racingClock.updateAndGet(t -> t.plus(Duration.ofMinutes(WINDOW_MIN).plusSeconds(1)));
+        racing.flushExpiredWindows();
+
+        assertThat(delivered.get()).isEqualTo(total);
+        assertThat(racing.openWindowCount()).isZero();
+    }
+
     /** Test double — a {@link Clock} whose {@code instant()} can be advanced on demand. */
     static class MutableClock extends Clock {
         private Instant instant;

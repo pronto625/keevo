@@ -8,6 +8,7 @@ import com.keevo.messaging.notification.domain.port.out.NotificationPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.store.domain.port.out.StoreRepository;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -63,6 +64,7 @@ public class SalesTrendDetectionScheduler {
     }
 
     @Scheduled(cron = "0 0 * * * *", zone = "UTC")
+    @SchedulerLock(name = "salesTrendDetectionScheduler.detectTrends", lockAtMostFor = "PT50M", lockAtLeastFor = "PT1M")
     public void detectTrends() {
         log.info("[TREND] Starting hourly sales trend detection");
         List<String> schemas = jdbcTemplate.queryForList(FETCH_ACTIVE_SCHEMAS, String.class);

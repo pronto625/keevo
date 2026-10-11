@@ -13,6 +13,8 @@ import com.keevo.identity.onboarding.domain.model.SectorType;
 import com.keevo.identity.onboarding.domain.model.StockAlertChannel;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.store.domain.model.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
@@ -242,6 +244,34 @@ class DayClosureAutoSchedulerTest {
     }
 
     // ── Helper methods ────────────────────────────────────────────────────────
+
+    // Story 13.9: a manual/sync close of the same store won the advisory lock between our
+    // exists-check and closeDay — DAY_ALREADY_CLOSED is expected, not an error, and the
+    // tick carries on with the next store.
+    @Test
+    void scheduler_dayClosedConcurrently_swallowsDayAlreadyClosed_andContinues() {
+        UUID store1Id = UUID.randomUUID();
+        UUID store2Id = UUID.randomUUID();
+        var tenant = createTenant(TENANT_SCHEMA, TenantStatus.ACTIVE);
+
+        when(tenantRepository.findAll()).thenReturn(List.of(tenant));
+        when(storeRepository.findAllActive())
+                .thenReturn(List.of(createStore(store1Id, "Store 1"), createStore(store2Id, "Store 2")));
+        when(tenantPreferencesRepository.findByCurrentTenant())
+                .thenReturn(Optional.of(defaultEodPrefs("20:00:00", true)));
+        when(dayClosureRepository.existsByStoreIdAndDate(any(UUID.class), any(LocalDate.class)))
+                .thenReturn(false);
+        when(closeDayUseCase.closeDay(any(CloseDayCommand.class)))
+                .thenThrow(new DomainException(ErrorCode.DAY_ALREADY_CLOSED, "déjà clôturée"))
+                .thenReturn(null);
+
+        scheduler.runAutoClosure();
+
+        var captor = ArgumentCaptor.forClass(CloseDayCommand.class);
+        verify(closeDayUseCase, times(2)).closeDay(captor.capture());
+        assertThat(captor.getAllValues()).extracting(CloseDayCommand::storeId)
+                .containsExactly(store1Id, store2Id);
+    }
 
     private Tenant createTenant(String schemaName, TenantStatus status) {
         return new Tenant(UUID.randomUUID(), "KV-TEST", schemaName, "Test Tenant",

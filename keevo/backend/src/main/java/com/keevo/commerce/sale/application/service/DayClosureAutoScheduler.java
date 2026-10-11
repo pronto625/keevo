@@ -8,8 +8,11 @@ import com.keevo.identity.auth.domain.model.TenantStatus;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.domain.port.out.StoreRepository;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -84,14 +87,18 @@ public class DayClosureAutoScheduler {
      * Pattern: 0 0 * * * * = second 0, minute 0, every hour.
      */
     @Scheduled(cron = "0 0 * * * *")
+    @SchedulerLock(name = "dayClosureAutoScheduler.runAutoClosure", lockAtMostFor = "PT50M", lockAtLeastFor = "PT1M")
     public void runAutoClosure() {
         LocalDate todayWAT = LocalDate.now(clock.withZone(WAT));
         LocalTime nowWAT   = LocalTime.now(clock.withZone(WAT));
+        long startNanos    = System.nanoTime();
+        int[] tenantCount  = {0};
 
         tenantRepository.findAll().forEach(tenant -> {
             if (tenant.getStatus() != TenantStatus.ACTIVE) {
                 return;
             }
+            tenantCount[0]++;
             TenantContext.setCurrentTenant(tenant.getSchemaName());
             try {
                 processTenant(tenant, todayWAT, nowWAT);
@@ -101,6 +108,10 @@ public class DayClosureAutoScheduler {
                 TenantContext.clear();
             }
         });
+
+        // Story 13.9 (item 4): monitoring hook for the hourly cost (N tenants x M stores).
+        log.info("DayClosureAutoScheduler tick: {} active tenant(s) processed in {} ms",
+                tenantCount[0], (System.nanoTime() - startNanos) / 1_000_000);
     }
 
     private void processTenant(Tenant tenant, LocalDate todayWAT, LocalTime nowWAT) {
@@ -132,6 +143,13 @@ public class DayClosureAutoScheduler {
                         tenant.getSchemaName(),
                         true  // isAutomatic = true
                 ));
+            } catch (DomainException e) {
+                if (e.getErrorCode() == ErrorCode.DAY_ALREADY_CLOSED) {
+                    // Closed concurrently (manual/sync close won the advisory lock): expected.
+                    log.debug("Store {} closed concurrently for {}", store.id(), todayWAT);
+                } else {
+                    log.error("Failed to auto-close store {}: {}", store.id(), e.getMessage());
+                }
             } catch (Exception e) {
                 log.error("Failed to auto-close store {}: {}", store.id(), e.getMessage());
             }

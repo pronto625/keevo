@@ -7,12 +7,14 @@ import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
 import com.keevo.commerce.sale.application.service.CloseDayService;
 import com.keevo.commerce.sale.application.service.DayClosureSummaryBuilder;
+import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -45,6 +47,9 @@ class CloseDayServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private TransactionLockPort transactionLock;
+
     private CloseDayService service;
 
     private static final UUID STORE_ID = UUID.randomUUID();
@@ -53,7 +58,7 @@ class CloseDayServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new CloseDayService(saleRepository, dayClosureRepository, eventPublisher);
+        service = new CloseDayService(saleRepository, dayClosureRepository, eventPublisher, transactionLock);
     }
 
     @Test
@@ -126,6 +131,40 @@ class CloseDayServiceTest {
         assertThat(event.tenantId()).isEqualTo(TENANT_ID);
         assertThat(event.isAutomatic()).isFalse();
         assertThat(event.summary().totalSales()).isEqualTo(1);
+    }
+
+    // Story 13.9: auto-close vs manual/sync close of the same store — the per-store advisory
+    // lock is taken before any exists-check, so the loser sees the winner's committed closure.
+    @Test
+    void closeDay_locksStoreBeforeExistsChecks_thenSaves() {
+        when(dayClosureRepository.existsByStoreIdAndDate(eq(STORE_ID), any(LocalDate.class)))
+                .thenReturn(false);
+        when(saleRepository.findForClosure(eq(STORE_ID), any())).thenReturn(List.of());
+
+        service.closeDay(new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, true));
+
+        InOrder inOrder = inOrder(transactionLock, dayClosureRepository);
+        inOrder.verify(transactionLock).lock("day-closure:" + STORE_ID);
+        inOrder.verify(dayClosureRepository).findLastClosureForStore(STORE_ID);
+        inOrder.verify(dayClosureRepository).existsByStoreIdAndDate(eq(STORE_ID), any(LocalDate.class));
+        inOrder.verify(dayClosureRepository).save(any());
+    }
+
+    @Test
+    void closeDay_concurrentLoser_seesCommittedClosure_dayAlreadyClosed() {
+        // The winner committed while the loser waited on the lock: the loser's exists-check
+        // (after the lock) now returns true.
+        when(dayClosureRepository.existsByStoreIdAndDate(eq(STORE_ID), any(LocalDate.class)))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> service.closeDay(new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, true)))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getErrorCode())
+                .isEqualTo(ErrorCode.DAY_ALREADY_CLOSED);
+        InOrder inOrder = inOrder(transactionLock, dayClosureRepository);
+        inOrder.verify(transactionLock).lock("day-closure:" + STORE_ID);
+        inOrder.verify(dayClosureRepository).existsByStoreIdAndDate(eq(STORE_ID), any(LocalDate.class));
+        verify(dayClosureRepository, never()).save(any());
     }
 
     @Test

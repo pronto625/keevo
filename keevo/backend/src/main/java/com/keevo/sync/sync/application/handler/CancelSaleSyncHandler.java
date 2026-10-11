@@ -1,11 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.commerce.sale.domain.model.SaleStatus;
 import com.keevo.commerce.sale.domain.port.in.CancelPendingSaleUseCase;
 import com.keevo.commerce.sale.domain.port.in.CancelPendingSaleUseCase.CancelPendingSaleCommand;
-import com.keevo.commerce.sale.domain.port.out.SaleRepository;
-import com.keevo.shared.domain.exception.DomainException;
-import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
@@ -19,12 +15,9 @@ import java.util.UUID;
 public class CancelSaleSyncHandler extends AbstractSyncOperationHandler {
 
     private final CancelPendingSaleUseCase cancelPendingSaleUseCase;
-    private final SaleRepository saleRepository;
 
-    public CancelSaleSyncHandler(CancelPendingSaleUseCase cancelPendingSaleUseCase,
-                                 SaleRepository saleRepository) {
+    public CancelSaleSyncHandler(CancelPendingSaleUseCase cancelPendingSaleUseCase) {
         this.cancelPendingSaleUseCase = cancelPendingSaleUseCase;
-        this.saleRepository = saleRepository;
     }
 
     @Override
@@ -50,17 +43,12 @@ public class CancelSaleSyncHandler extends AbstractSyncOperationHandler {
         // Story v1s-13-5 AC5: cancelling a COMPLETED sale (with stock restoration) requires
         // an online OWNER-authenticated REST request — the sync channel does not carry a
         // verifiable role, so it must reject rather than silently widen what an offline
-        // EMPLOYEE device can do (see Décision D2).
-        var sale = saleRepository.findById(saleId)
-                .orElseThrow(() -> new DomainException(ErrorCode.SALE_NOT_FOUND, "Sale not found: " + saleId));
-        if (sale.getStatus() == SaleStatus.COMPLETED) {
-            throw new DomainException(ErrorCode.FORBIDDEN,
-                    "Cancelling a completed sale requires an online OWNER-authenticated request");
-        }
-
+        // EMPLOYEE device can do (see Décision D2). Story 13.9: the guard lives in the use case
+        // (pendingOnly=true) so the status check and the cancellation are one atomic claim —
+        // a sale validated concurrently is refused with FORBIDDEN too.
         UUID assignedStoreId = extractAssignedStoreId();
         cancelPendingSaleUseCase.cancelPendingSale(
-                new CancelPendingSaleCommand(saleId, actorId, assignedStoreId, justification));
+                new CancelPendingSaleCommand(saleId, actorId, assignedStoreId, justification, true));
 
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                 saleId.toString(), null);

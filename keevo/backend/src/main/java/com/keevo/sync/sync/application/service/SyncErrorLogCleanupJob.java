@@ -1,5 +1,6 @@
 package com.keevo.sync.sync.application.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -33,6 +34,7 @@ public class SyncErrorLogCleanupJob {
     }
 
     @Scheduled(cron = "0 0 3 * * *")
+    @SchedulerLock(name = "syncErrorLogCleanupJob.cleanup", lockAtMostFor = "PT2H", lockAtLeastFor = "PT1M")
     public void cleanup() {
         Instant cutoff = Instant.now().minus(RETENTION_DAYS, ChronoUnit.DAYS);
         List<String> schemas = jdbcTemplate.queryForList(

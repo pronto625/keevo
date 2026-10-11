@@ -6,6 +6,7 @@ import com.keevo.catalog.product.domain.event.ProductCreatedProgressivelyEvent;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
 import com.keevo.messaging.notification.domain.model.DraftPendingValidation;
 import com.keevo.messaging.notification.domain.port.out.DraftNotificationRepository;
+import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -43,6 +45,7 @@ class CreateDraftProductUseCaseTest {
     @Mock private ProductCountPort            productCountPort;
     @Mock private SubscriptionRepository      subscriptionRepository;
     @Mock private PlanLimitGuard              planLimitGuard;
+    @Mock private TransactionLockPort transactionLock;
     @Mock private ApplicationEventPublisher   eventPublisher;
 
     private CreateDraftProductUseCase useCase;
@@ -53,7 +56,7 @@ class CreateDraftProductUseCaseTest {
     void setUp() {
         useCase = new CreateDraftProductUseCase(
                 productRepository, draftRepository, productCountPort,
-                subscriptionRepository, planLimitGuard, eventPublisher);
+                subscriptionRepository, planLimitGuard, eventPublisher, transactionLock);
     }
 
     private CreateDraftProductUseCase.CreateDraftCommand ownerCmd(String name) {
@@ -179,5 +182,48 @@ class CreateDraftProductUseCaseTest {
 
         var ex = assertThrows(DomainException.class, () -> useCase.execute(employeeCmd("Article C")));
         assertEquals(ErrorCode.PLAN_LIMIT_EXCEEDED.name(), ex.getDomainCode());
+    }
+
+    // ── Story 13.9: plan-limit TOCTOU ─────────────────────────────────────────
+
+    @Test
+    @DisplayName("13.9: verrou tenant (clé partagée avec CreateProduct) pris en premier")
+    void locksTenantBeforeCount_thenSaves() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            stubPlan();
+            when(productRepository.existsByName("Article Lock")).thenReturn(false);
+            when(productRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+            lenient().doNothing().when(draftRepository).save(any());
+
+            useCase.execute(ownerCmd("Article Lock"));
+
+            InOrder inOrder = inOrder(transactionLock, productCountPort, productRepository);
+            inOrder.verify(transactionLock).lock("product-limit:kv_test");
+            inOrder.verify(productRepository).existsByName("Article Lock");
+            inOrder.verify(productCountPort).countActiveProducts();
+            inOrder.verify(productRepository).save(any());
+        }
+    }
+
+    @Test
+    @DisplayName("13.9: perdant de la course à la limite → PLAN_LIMIT_EXCEEDED, pas de save")
+    void concurrentLoserAtLimit_planLimitExceeded_neverSaves() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            when(productRepository.existsByName("Article Perdant")).thenReturn(false);
+            var sub = mock(com.keevo.subscription.plan.domain.model.Subscription.class);
+            when(sub.getPlanType()).thenReturn(PlanType.FREE);
+            when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(sub));
+            when(productCountPort.countActiveProducts()).thenReturn(20);
+            doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "Limite atteinte"))
+                    .when(planLimitGuard).checkProductLimit(PlanType.FREE, 20);
+
+            var ex = assertThrows(DomainException.class, () -> useCase.execute(ownerCmd("Article Perdant")));
+
+            assertEquals(ErrorCode.PLAN_LIMIT_EXCEEDED.name(), ex.getDomainCode());
+            verify(transactionLock).lock("product-limit:kv_test");
+            verify(productRepository, never()).save(any());
+        }
     }
 }

@@ -1,12 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.commerce.sale.domain.model.PaymentMode;
-import com.keevo.commerce.sale.domain.model.Sale;
-import com.keevo.commerce.sale.domain.model.SaleItem;
-import com.keevo.commerce.sale.domain.model.SaleStatus;
 import com.keevo.commerce.sale.domain.port.in.CancelPendingSaleUseCase;
 import com.keevo.commerce.sale.domain.port.in.CancelPendingSaleUseCase.CancelPendingSaleCommand;
-import com.keevo.commerce.sale.domain.port.out.SaleRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.AuthDetails;
@@ -26,7 +21,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,7 +34,6 @@ import static org.mockito.Mockito.*;
 class CancelSaleSyncHandlerTest {
 
     @Mock private CancelPendingSaleUseCase cancelPendingSaleUseCase;
-    @Mock private SaleRepository saleRepository;
 
     private CancelSaleSyncHandler handler;
 
@@ -51,7 +44,7 @@ class CancelSaleSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new CancelSaleSyncHandler(cancelPendingSaleUseCase, saleRepository);
+        handler = new CancelSaleSyncHandler(cancelPendingSaleUseCase);
     }
 
     @AfterEach
@@ -74,13 +67,6 @@ class CancelSaleSyncHandlerTest {
         SecurityContextHolder.getContext().setAuthentication(auth);
     }
 
-    private Sale saleWithStatus(SaleStatus status) {
-        var item = new SaleItem(UUID.randomUUID(), SALE_ID, UUID.randomUUID(), null,
-                "Produit", 1000, 1000, 1);
-        return new Sale(SALE_ID, STORE_ID, ACTOR_ID, null,
-                PaymentMode.CASH, 1000, 0, status, Instant.now(), Instant.now(), List.of(item));
-    }
-
     private SyncOperation buildOp() {
         return new SyncOperation("op-1", "CANCEL_SALE", SALE_ID.toString(),
                 Map.of("saleId", SALE_ID.toString(), "justification", "Client a changé d'avis"),
@@ -90,7 +76,6 @@ class CancelSaleSyncHandlerTest {
     @Test
     void apply_pendingSale_ownerSucceeds() {
         authenticateAsOwner();
-        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(saleWithStatus(SaleStatus.PENDING_VALIDATION)));
 
         var result = handler.handle(buildOp(), ACTOR_ID, TENANT_ID);
 
@@ -101,7 +86,6 @@ class CancelSaleSyncHandlerTest {
     @Test
     void apply_pendingSale_employeeSameStore_applied() {
         authenticateAsEmployee(STORE_ID);
-        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(saleWithStatus(SaleStatus.PENDING_VALIDATION)));
 
         var result = handler.handle(buildOp(), ACTOR_ID, TENANT_ID);
 
@@ -117,7 +101,6 @@ class CancelSaleSyncHandlerTest {
     void apply_pendingSale_employeeCrossStore_rejectedForbidden() {
         UUID otherStoreId = UUID.randomUUID();
         authenticateAsEmployee(otherStoreId);
-        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(saleWithStatus(SaleStatus.PENDING_VALIDATION)));
         // Review P2: doAnswer captures the command to verify assignedStoreId was
         // correctly transmitted, then simulates enforceEmployeeStoreScope() rejection.
         doAnswer(invocation -> {
@@ -134,9 +117,25 @@ class CancelSaleSyncHandlerTest {
     }
 
     @Test
+    void apply_alwaysSendsPendingOnly() {
+        authenticateAsOwner();
+
+        handler.handle(buildOp(), ACTOR_ID, TENANT_ID);
+
+        ArgumentCaptor<CancelPendingSaleCommand> captor = ArgumentCaptor.forClass(CancelPendingSaleCommand.class);
+        verify(cancelPendingSaleUseCase).cancelPendingSale(captor.capture());
+        assertThat(captor.getValue().pendingOnly()).isTrue();
+        assertThat(captor.getValue().saleId()).isEqualTo(SALE_ID);
+    }
+
+    // Story v1s-13-5 AC5 / 13.9: COMPLETED (at load or validated concurrently) is refused by the
+    // use case with FORBIDDEN under pendingOnly — the handler no longer pre-checks the status.
+    @Test
     void apply_completedSale_rejectedForbidden() {
         authenticateAsOwner();
-        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(saleWithStatus(SaleStatus.COMPLETED)));
+        doThrow(new DomainException(ErrorCode.FORBIDDEN,
+                "Cancelling a completed sale requires an online OWNER-authenticated request"))
+                .when(cancelPendingSaleUseCase).cancelPendingSale(any());
 
         var op = new SyncOperation("op-2", "CANCEL_SALE", SALE_ID.toString(),
                 Map.of("saleId", SALE_ID.toString(), "justification", "Tentative offline sur vente complétée"),
@@ -145,6 +144,6 @@ class CancelSaleSyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
-        verify(cancelPendingSaleUseCase, never()).cancelPendingSale(any());
+        assertThat(result.reason()).isEqualTo("FORBIDDEN");
     }
 }

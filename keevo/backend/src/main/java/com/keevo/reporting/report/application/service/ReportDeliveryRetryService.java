@@ -8,6 +8,7 @@ import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -44,6 +45,7 @@ public class ReportDeliveryRetryService {
     }
 
     @Scheduled(fixedDelay = 300_000)  // every 5 minutes
+    @SchedulerLock(name = "reportDeliveryRetryService.retryFailedDeliveries", lockAtMostFor = "PT15M", lockAtLeastFor = "PT30S")
     public void retryFailedDeliveries() {
         log.debug("ReportDeliveryRetryService: checking failed reports");
 

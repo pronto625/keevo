@@ -5,6 +5,7 @@ import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -68,6 +69,7 @@ public class AccountDeletionScheduler {
      * Runs daily at 03:00 — processes all tenants whose grace period has expired.
      */
     @Scheduled(cron = "0 0 3 * * *")
+    @SchedulerLock(name = "accountDeletionScheduler.executeDeletions", lockAtMostFor = "PT2H", lockAtLeastFor = "PT1M")
     @Transactional
     public void executeDeletions() {
         log.info("[AccountDeletionScheduler] Starting daily deletion check...");

@@ -4,6 +4,7 @@ import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
 import com.keevo.catalog.product.domain.event.ProductCreatedEvent;
+import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -12,6 +13,7 @@ import com.keevo.subscription.plan.domain.port.out.ProductCountPort;
 import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -35,17 +37,20 @@ public class CreateProductUseCase {
     private final ProductCountPort productCountPort;
     private final SubscriptionRepository subscriptionRepository;
     private final PlanLimitGuard planLimitGuard;
+    private final TransactionLockPort transactionLock;
 
     public CreateProductUseCase(ProductRepository productRepository,
                                ApplicationEventPublisher eventPublisher,
                                ProductCountPort productCountPort,
                                SubscriptionRepository subscriptionRepository,
-                               PlanLimitGuard planLimitGuard) {
+                               PlanLimitGuard planLimitGuard,
+                               TransactionLockPort transactionLock) {
         this.productRepository = productRepository;
         this.eventPublisher = eventPublisher;
         this.productCountPort = productCountPort;
         this.subscriptionRepository = subscriptionRepository;
         this.planLimitGuard = planLimitGuard;
+        this.transactionLock = transactionLock;
     }
 
     /**
@@ -97,7 +102,13 @@ public class CreateProductUseCase {
      * @return created product
      * @throws IllegalArgumentException if validation fails
      */
+    @Transactional
     public Product execute(CreateProductDto dto) {
+        // Story 13.9: per-tenant advisory lock, first, so the clientId idempotency lookup, the
+        // name check and the plan-limit count → save cannot interleave with a concurrent create
+        // (reads see committed rows; the winner commits before the lock is released).
+        transactionLock.lock("product-limit:" + TenantContext.getCurrentTenant());
+
         // Idempotency: if the client-specified id already exists, return the existing
         // product instead of erroring or minting a duplicate (mirrors CreateDraftProductUseCase).
         // Also covers a sync retry replaying the same CREATE_PRODUCT operation.

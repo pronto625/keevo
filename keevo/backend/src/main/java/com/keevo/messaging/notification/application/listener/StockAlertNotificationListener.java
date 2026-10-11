@@ -13,10 +13,13 @@ import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -52,15 +55,30 @@ public class StockAlertNotificationListener {
     private final TenantPreferencesRepository tenantPreferencesRepository;
     private final UserRepository userRepository;
     private final StoreRepository storeRepository;
+    private final Clock clock;
 
     private final ConcurrentHashMap<String, BatchWindow> batchWindows = new ConcurrentHashMap<>();
 
+    @Autowired
     public StockAlertNotificationListener(NotificationPort notificationPort,
                                           WhatsAppPort whatsAppPort,
                                           NotificationCooldownRepository cooldownRepository,
                                           TenantPreferencesRepository tenantPreferencesRepository,
                                           UserRepository userRepository,
                                           StoreRepository storeRepository) {
+        this(notificationPort, whatsAppPort, cooldownRepository, tenantPreferencesRepository,
+             userRepository, storeRepository, Clock.systemUTC());
+    }
+
+    /** Test-only constructor — injects a controllable {@link Clock} instead of the real one. */
+    StockAlertNotificationListener(NotificationPort notificationPort,
+                                   WhatsAppPort whatsAppPort,
+                                   NotificationCooldownRepository cooldownRepository,
+                                   TenantPreferencesRepository tenantPreferencesRepository,
+                                   UserRepository userRepository,
+                                   StoreRepository storeRepository,
+                                   Clock clock) {
+        this.clock = clock;
         this.notificationPort = notificationPort;
         this.whatsAppPort = whatsAppPort;
         this.cooldownRepository = cooldownRepository;
@@ -84,13 +102,6 @@ public class StockAlertNotificationListener {
                 return;
             }
 
-            // AC1: check cooldown per product/store
-            if (cooldownRepository.existsActiveCooldown(
-                    COOLDOWN_TYPE_STOCK_ALERT, event.productId(), event.storeId(), STOCK_ALERT_COOLDOWN)) {
-                log.debug("[STOCK-ALERT] Cooldown active for product={} store={}", event.productId(), event.storeId());
-                return;
-            }
-
             StockAlertChannel channel = prefs.stockAlertChannel() != null
                     ? prefs.stockAlertChannel()
                     : StockAlertChannel.PUSH;
@@ -101,38 +112,38 @@ public class StockAlertNotificationListener {
 
             String ownerPhone = resolveOwnerPhone(event.tenantId());
 
-            // AC2: batch window tracking
-            String storeKey = event.tenantId() + ":" + event.storeId();
-            BatchWindow window = batchWindows.computeIfAbsent(storeKey, k -> new BatchWindow());
-
-            boolean dispatchBatch;
-            List<StockThresholdBreachedEvent> batchEvents;
-
-            synchronized (window) {
-                Instant now = Instant.now();
-                if (window.windowStart == null || now.isAfter(window.windowStart.plus(BATCH_WINDOW_DURATION))) {
-                    // Window expired or first event — reset
-                    window.events.clear();
-                    window.windowStart = now;
-                    window.batchDispatched = false;
-                }
-                window.events.add(event);
-
-                if (window.events.size() >= BATCH_THRESHOLD && !window.batchDispatched) {
-                    window.batchDispatched = true;
-                    batchEvents = new ArrayList<>(window.events);
-                    dispatchBatch = true;
-                } else {
-                    dispatchBatch = false;
-                    batchEvents = null;
-                }
+            // AC1: cooldown per product/store. Story 13.9: check + set in one atomic statement
+            // so two concurrent threshold events for the same product cannot both notify.
+            // Taken after the lookups: a failure there must not consume the 4h cooldown.
+            if (!cooldownRepository.tryAcquireCooldown(
+                    COOLDOWN_TYPE_STOCK_ALERT, event.productId(), event.storeId(), STOCK_ALERT_COOLDOWN)) {
+                log.debug("[STOCK-ALERT] Cooldown active for product={} store={}", event.productId(), event.storeId());
+                return;
             }
 
-            // Upsert cooldown for this product regardless of batch/individual
-            cooldownRepository.upsertCooldown(COOLDOWN_TYPE_STOCK_ALERT, event.productId(), event.storeId());
+            // AC2: batch window tracking — Story 13.9: atomic per store key via compute();
+            // expired windows are replaced here and evicted by evictExpiredWindows().
+            String storeKey = event.tenantId() + ":" + event.storeId();
+            Instant now = Instant.now(clock);
+            List<StockThresholdBreachedEvent> batchEvents = new ArrayList<>();
 
-            if (dispatchBatch) {
-                // Upsert cooldowns for all events in batch
+            batchWindows.compute(storeKey, (k, window) -> {
+                BatchWindow w = window;
+                if (w == null || isExpired(w, now)) {
+                    // Window expired or first event — fresh window
+                    w = new BatchWindow();
+                    w.windowStart = now;
+                }
+                w.events.add(event);
+                if (w.events.size() >= BATCH_THRESHOLD && !w.batchDispatched) {
+                    w.batchDispatched = true;
+                    batchEvents.addAll(w.events);
+                }
+                return w;
+            });
+
+            if (!batchEvents.isEmpty()) {
+                // This product's cooldown was acquired above; set the others in the batch.
                 for (StockThresholdBreachedEvent e : batchEvents) {
                     if (!e.productId().equals(event.productId())) {
                         cooldownRepository.upsertCooldown(COOLDOWN_TYPE_STOCK_ALERT, e.productId(), e.storeId());
@@ -149,6 +160,28 @@ public class StockAlertNotificationListener {
         } finally {
             TenantContext.clear();
         }
+    }
+
+    /**
+     * Story 13.9 — periodic eviction of batch windows older than the 60 s batch window, so
+     * the map does not keep one entry per (tenant, store) forever. In-memory only: runs on
+     * every instance (no ShedLock), each instance owns its own map.
+     */
+    @Scheduled(fixedDelay = 60_000)
+    public void evictExpiredWindows() {
+        Instant now = Instant.now(clock);
+        for (String key : batchWindows.keySet()) {
+            batchWindows.computeIfPresent(key, (k, w) -> isExpired(w, now) ? null : w);
+        }
+    }
+
+    /** Test hook — number of open batch windows. */
+    int openWindowCount() {
+        return batchWindows.size();
+    }
+
+    private static boolean isExpired(BatchWindow w, Instant now) {
+        return w.windowStart == null || now.isAfter(w.windowStart.plus(BATCH_WINDOW_DURATION));
     }
 
     private void dispatchIndividual(StockThresholdBreachedEvent event,
