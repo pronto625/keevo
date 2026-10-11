@@ -1,7 +1,12 @@
+import 'dart:ffi';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:sqlite3/open.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/core/sync/sync_service.dart';
 import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
 import 'package:keevo/features/stores/data/datasource/local_store_datasource.dart';
@@ -19,7 +24,20 @@ class _MockSyncService extends Mock implements SyncService {}
 
 class _MockSyncTriggerDispatcher extends Mock implements SyncTriggerDispatcher {}
 
+void _overrideSqlite3ForLinuxTesting() {
+  if (!Platform.isLinux) return;
+  open.overrideFor(OperatingSystem.linux, () {
+    try {
+      return DynamicLibrary.open('libsqlite3.so');
+    } catch (_) {
+      return DynamicLibrary.open('libsqlite3.so.0');
+    }
+  });
+}
+
 void main() {
+  _overrideSqlite3ForLinuxTesting();
+
   late _MockLocalDataSource local;
   late _MockRemoteDataSource remote;
   late _MockSyncService syncService;
@@ -196,6 +214,133 @@ void main() {
               entityId: 's1',
             )).called(1);
         verify(syncTriggerDispatcher.triggerPushIfIdle).called(1);
+      });
+    });
+
+    group('v1s-13-8 — offline guards', () {
+      test('deactivateStore() offline, store not cached → notFound, nothing written/queued',
+          () async {
+        when(() => remote.deactivate('ghost')).thenThrow(Exception('network'));
+        when(() => local.getById('ghost')).thenAnswer((_) async => null);
+
+        await expectLater(
+          repo.deactivateStore('ghost'),
+          throwsA(isA<StoreException>()
+              .having((e) => e.domainCode, 'domainCode', 'STORE_NOT_FOUND')),
+        );
+        verifyNever(() => local.deactivate(any()));
+        verifyNever(() => syncService.queueOperation(
+              operation: any(named: 'operation'),
+              payload: any(named: 'payload'),
+              entityId: any(named: 'entityId'),
+            ));
+      });
+
+      test('updateStore() offline, store not cached → notFound, nothing written/queued',
+          () async {
+        when(() => remote.update(
+              storeId: any(named: 'storeId'),
+              name: any(named: 'name'),
+              address: any(named: 'address'),
+              phone: any(named: 'phone'),
+            )).thenThrow(Exception('network'));
+        when(() => local.getById('ghost')).thenAnswer((_) async => null);
+
+        await expectLater(
+          repo.updateStore(storeId: 'ghost', name: 'X'),
+          throwsA(isA<StoreException>()
+              .having((e) => e.domainCode, 'domainCode', 'STORE_NOT_FOUND')),
+        );
+        verifyNever(() => local.upsert(any()));
+        verifyNever(() => syncService.queueOperation(
+              operation: any(named: 'operation'),
+              payload: any(named: 'payload'),
+              entityId: any(named: 'entityId'),
+            ));
+      });
+
+      test('deactivateStore() offline returns the cached row with isActive=false',
+          () async {
+        when(() => remote.deactivate('s1')).thenThrow(Exception('network'));
+        when(() => local.deactivate('s1')).thenAnswer((_) async {});
+        when(() => local.getById('s1')).thenAnswer((_) async => sampleStore);
+
+        final result = await repo.deactivateStore('s1');
+
+        expect(result.id, sampleStore.id);
+        expect(result.isActive, isFalse);
+      });
+    });
+
+    group('v1s-13-8 — offline write + queue are atomic (real Drift)', () {
+      late AppDatabase db;
+      late LocalStoreDataSource realLocal;
+      late StoreRepositoryImpl atomicRepo;
+
+      setUp(() async {
+        db = AppDatabase.forTesting();
+        realLocal = LocalStoreDataSource(db);
+        when(() => syncService.queueOperation(
+              operation: any(named: 'operation'),
+              payload: any(named: 'payload'),
+              entityId: any(named: 'entityId'),
+            )).thenThrow(Exception('queue failure'));
+        atomicRepo = StoreRepositoryImpl(
+          local: realLocal,
+          remote: remote,
+          syncService: syncService,
+          syncTriggerDispatcher: syncTriggerDispatcher,
+          db: db,
+        );
+      });
+
+      tearDown(() async => db.close());
+
+      test('createStore() offline: queue failure rolls the local row back', () async {
+        when(() => remote.create(
+              name: any(named: 'name'),
+              type: any(named: 'type'),
+              address: any(named: 'address'),
+              phone: any(named: 'phone'),
+            )).thenThrow(Exception('network'));
+
+        await expectLater(
+          atomicRepo.createStore(name: 'Shop', type: StoreType.store),
+          throwsA(isA<Exception>()),
+        );
+        expect(await realLocal.getAll(includeInactive: true), isEmpty);
+      });
+
+      test('updateStore() offline: queue failure leaves the local row unchanged',
+          () async {
+        await realLocal.upsert(sampleStore);
+        when(() => remote.update(
+              storeId: any(named: 'storeId'),
+              name: any(named: 'name'),
+              address: any(named: 'address'),
+              phone: any(named: 'phone'),
+            )).thenThrow(Exception('network'));
+
+        await expectLater(
+          atomicRepo.updateStore(storeId: sampleStore.id, name: 'Renamed'),
+          throwsA(isA<Exception>()),
+        );
+        final row = await realLocal.getById(sampleStore.id);
+        expect(row!.name, sampleStore.name);
+      });
+
+      test('deactivateStore() offline: queue failure leaves the store active',
+          () async {
+        await realLocal.upsert(sampleStore);
+        when(() => remote.deactivate(sampleStore.id))
+            .thenThrow(Exception('network'));
+
+        await expectLater(
+          atomicRepo.deactivateStore(sampleStore.id),
+          throwsA(isA<Exception>()),
+        );
+        final row = await realLocal.getById(sampleStore.id);
+        expect(row!.isActive, isTrue);
       });
     });
   });

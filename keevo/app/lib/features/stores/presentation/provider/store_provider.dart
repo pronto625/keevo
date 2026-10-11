@@ -30,6 +30,7 @@ final storeRepositoryProvider = Provider<StoreRepository>((ref) {
     remote: ref.watch(remoteStoreDataSourceProvider),
     syncService: ref.watch(syncServiceProvider),
     syncTriggerDispatcher: ref.watch(syncTriggerDispatcherProvider),
+    db: ref.watch(appDatabaseProvider),
   );
 });
 

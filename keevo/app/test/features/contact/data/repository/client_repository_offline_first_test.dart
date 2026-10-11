@@ -4,7 +4,11 @@
 /// create() and update().
 library;
 
+import 'dart:ffi';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/core/sync/connectivity_service.dart';
 import 'package:keevo/core/sync/sync_service.dart';
 import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
@@ -13,6 +17,7 @@ import 'package:keevo/features/contact/data/datasource/remote_client_datasource.
 import 'package:keevo/features/contact/data/repository/client_repository_impl.dart';
 import 'package:keevo/features/contact/domain/model/client_model.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:sqlite3/open.dart';
 
 class MockLocalClientDataSource extends Mock implements LocalClientDataSource {}
 class MockRemoteClientDataSource extends Mock implements RemoteClientDataSource {}
@@ -21,6 +26,17 @@ class MockSyncService extends Mock implements SyncService {}
 class MockSyncTriggerDispatcher extends Mock implements SyncTriggerDispatcher {}
 
 class FakeClientModel extends Fake implements ClientModel {}
+
+void _overrideSqlite3ForLinuxTesting() {
+  if (!Platform.isLinux) return;
+  open.overrideFor(OperatingSystem.linux, () {
+    try {
+      return DynamicLibrary.open('libsqlite3.so');
+    } catch (_) {
+      return DynamicLibrary.open('libsqlite3.so.0');
+    }
+  });
+}
 
 void main() {
   late MockLocalClientDataSource mockLocal;
@@ -159,6 +175,62 @@ void main() {
 
       await expectLater(repo.syncFromRemote(), throwsA(isA<Exception>()));
       verifyNever(() => mockLocal.upsert(any()));
+    });
+  });
+
+  // v1s-13-8: with a db, the local write and its queue entry are atomic.
+  group('v1s-13-8 — local write + queue in one Drift transaction', () {
+    late AppDatabase db;
+    late LocalClientDataSource realLocal;
+    late ClientRepositoryImpl atomicRepo;
+
+    setUpAll(_overrideSqlite3ForLinuxTesting);
+
+    setUp(() {
+      db = AppDatabase.forTesting();
+      realLocal = LocalClientDataSource(db);
+      when(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).thenThrow(Exception('queue failure'));
+      when(() => mockDispatcher.triggerPushIfIdle()).thenReturn(null);
+      atomicRepo = ClientRepositoryImpl(
+        local: realLocal,
+        remote: mockRemote,
+        connectivity: mockConnectivity,
+        syncService: mockSyncService,
+        syncTriggerDispatcher: mockDispatcher,
+        db: db,
+      );
+    });
+
+    tearDown(() async => db.close());
+
+    test('create: queue failure leaves no row', () async {
+      await expectLater(
+        atomicRepo.create(name: 'Orphelin', phone: '+237690000001'),
+        throwsA(isA<Exception>()),
+      );
+      expect(await realLocal.getAll(includeArchived: true), isEmpty);
+    });
+
+    test('update: queue failure leaves the original row', () async {
+      final now = DateTime(2026);
+      await realLocal.upsert(ClientModel(
+        id: 'c-1',
+        name: 'Original',
+        phone: '+237690000002',
+        createdAt: now,
+        updatedAt: now,
+      ));
+
+      await expectLater(
+        atomicRepo.update(id: 'c-1', name: 'Renamed'),
+        throwsA(isA<Exception>()),
+      );
+      final row = await realLocal.getById('c-1');
+      expect(row!.name, 'Original');
     });
   });
 }

@@ -451,6 +451,73 @@ void main() {
       expect(sale.initialStockMovementIds, ids);
     });
 
+    // v1s-13-8: an entry for a product no longer in the cart (or not a draft
+    // in it) is neither applied locally nor queued; the map is cleared.
+    test('draft: stale initial stock entries are filtered out and cleared',
+        () async {
+      final container = createContainer(cart: [draft()]);
+      container.read(draftInitialStocksProvider.notifier).state = {
+        'd1': 2,
+        'gone': 5,
+      };
+      when(() => mockLocalDs.getAvailableStock('d1', any()))
+          .thenAnswer((_) async => 0);
+      when(() => mockLocalDs.applyInitialStockEntries(any(), any(), any(),
+          movementIds: any(named: 'movementIds'))).thenAnswer((_) async {});
+      when(() => mockProductDs.promoteToActive(any())).thenAnswer((_) async {});
+      when(() => mockRepo.recordSale(any())).thenAnswer((_) async {});
+
+      await container.read(recordSaleNotifierProvider.notifier).submit(
+        cart: [draft()],
+        mode: PaymentModeEnum.cash,
+        storeId: 'store-1',
+        employeeId: 'emp-1',
+      );
+
+      expect(
+          container.read(recordSaleNotifierProvider), isA<RecordSaleSuccess>());
+      final applied = verify(() => mockLocalDs.applyInitialStockEntries(
+              captureAny(), any(), any(),
+              movementIds: captureAny(named: 'movementIds')))
+          .captured;
+      expect(applied[0], {'d1': 2});
+      expect((applied[1] as Map<String, String>).keys, ['d1']);
+      final sale = verify(() => mockRepo.recordSale(captureAny()))
+          .captured
+          .single as Sale;
+      expect(sale.initialStockEntries, {'d1': 2});
+      expect(sale.initialStockMovementIds.keys, ['d1']);
+      expect(container.read(draftInitialStocksProvider), isEmpty);
+    });
+
+    test('no draft in cart: stale entry neither applied nor queued, map cleared',
+        () async {
+      final container = createContainer(cart: [_item()]);
+      container.read(draftInitialStocksProvider.notifier).state = {'gone': 5};
+      when(() => mockLocalDs.getAvailableStock(any(), any()))
+          .thenAnswer((_) async => 10);
+      when(() => mockRepo.recordSale(any())).thenAnswer((_) async {});
+
+      await container.read(recordSaleNotifierProvider.notifier).submit(
+        cart: [_item()],
+        mode: PaymentModeEnum.cash,
+        storeId: 'store-1',
+        employeeId: 'emp-1',
+      );
+
+      expect(
+          container.read(recordSaleNotifierProvider), isA<RecordSaleSuccess>());
+      verifyNever(() => mockLocalDs.applyInitialStockEntries(
+          any(), any(), any(),
+          movementIds: any(named: 'movementIds')));
+      final sale = verify(() => mockRepo.recordSale(captureAny()))
+          .captured
+          .single as Sale;
+      expect(sale.initialStockEntries, isEmpty);
+      expect(sale.initialStockMovementIds, isEmpty);
+      expect(container.read(draftInitialStocksProvider), isEmpty);
+    });
+
     // The stubbed datasources above write nothing, so they cannot show a
     // rollback: here the real ones write to the in-memory DB, and a failing
     // sale must leave no credited stock, no movement, and the product DRAFT

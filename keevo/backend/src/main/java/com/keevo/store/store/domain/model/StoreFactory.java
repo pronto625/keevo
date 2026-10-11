@@ -30,6 +30,19 @@ public class StoreFactory {
      * @throws DomainException VALIDATION_ERROR if name is invalid
      */
     public static Store create(String name, StoreType type, String address, String phone) {
+        String trimmed = validateName(name);
+        StoreType resolvedType = type != null ? type : StoreType.STORE;
+        Instant now = Instant.now();
+        return new Store(UUID.randomUUID(), trimmed, resolvedType, address, phone, true, now, now);
+    }
+
+    /**
+     * Validate a store name (required, 2–100 chars once trimmed) and return it trimmed.
+     * Shared by {@link #create} and the CREATE_STORE sync handler (v1s-13-8 — DTO parity).
+     *
+     * @throws DomainException VALIDATION_ERROR if name is invalid
+     */
+    public static String validateName(String name) {
         if (name == null || name.isBlank()) {
             throw new DomainException(ErrorCode.VALIDATION_ERROR,
                     "Le nom de la boutique est obligatoire");
@@ -39,8 +52,6 @@ public class StoreFactory {
             throw new DomainException(ErrorCode.VALIDATION_ERROR,
                     "Le nom doit contenir entre 2 et 100 caractères");
         }
-        StoreType resolvedType = type != null ? type : StoreType.STORE;
-        Instant now = Instant.now();
-        return new Store(UUID.randomUUID(), trimmed, resolvedType, address, phone, true, now, now);
+        return trimmed;
     }
 }

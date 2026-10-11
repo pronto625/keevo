@@ -182,4 +182,46 @@ class StockAdjustSyncHandlerTest {
     void supportedTypes_containsStockAdjustAndEntry() {
         assertThat(handler.supportedTypes()).containsExactlyInAnyOrder("STOCK_ADJUST", "RECORD_STOCK_ENTRY");
     }
+
+    // ── v1s-13-8: strict integral quantity (no silent truncation) ──────────
+
+    private SyncOperation adjustWithQuantity(Object quantity) {
+        return new SyncOperation("op-q", "STOCK_ADJUST", UUID.randomUUID().toString(),
+                Map.of("productId", UUID.randomUUID().toString(),
+                        "storeId", STORE_ID.toString(),
+                        "quantity", quantity),
+                Instant.now());
+    }
+
+    @Test
+    void handle_fractionalQuantity_isRejected_useCaseNeverCalled() {
+        authenticateAsOwner();
+        var result = handler.handle(adjustWithQuantity(1.5), ACTOR_ID, TENANT_ID);
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        verifyNoInteractions(adjustStockUseCase, recordStockEntryUseCase);
+    }
+
+    @Test
+    void handle_stringQuantity_isRejected_useCaseNeverCalled() {
+        authenticateAsOwner();
+        var result = handler.handle(adjustWithQuantity("3"), ACTOR_ID, TENANT_ID);
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        verifyNoInteractions(adjustStockUseCase, recordStockEntryUseCase);
+    }
+
+    @Test
+    void handle_quantityBeyondIntRange_isRejected_useCaseNeverCalled() {
+        authenticateAsOwner();
+        var result = handler.handle(adjustWithQuantity((long) Integer.MAX_VALUE + 1), ACTOR_ID, TENANT_ID);
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        verifyNoInteractions(adjustStockUseCase, recordStockEntryUseCase);
+    }
+
+    @Test
+    void handle_wholeDoubleQuantity_isAppliedAsInt() {
+        authenticateAsOwner();
+        var result = handler.handle(adjustWithQuantity(5.0), ACTOR_ID, TENANT_ID);
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        verify(adjustStockUseCase).execute(any(), any(), eq(STORE_ID), eq(5), eq(ACTOR_ID), any(), any());
+    }
 }

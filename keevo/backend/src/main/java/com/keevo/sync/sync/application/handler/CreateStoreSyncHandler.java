@@ -3,6 +3,7 @@ package com.keevo.sync.sync.application.handler;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.store.store.domain.model.Store;
+import com.keevo.store.store.domain.model.StoreFactory;
 import com.keevo.store.store.domain.model.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import com.keevo.subscription.plan.application.service.PlanLimitGuard;
@@ -56,8 +57,11 @@ public class CreateStoreSyncHandler extends AbstractSyncOperationHandler {
         Map<String, Object> p = operation.payload();
         if (p.get("id") == null)
             throw new IllegalArgumentException("Missing required field: id");
-        if (p.get("name") == null || ((String) p.get("name")).isBlank())
-            throw new IllegalArgumentException("Missing required field: name");
+        if (!(p.get("name") == null || p.get("name") instanceof String))
+            throw new IllegalArgumentException("Invalid field: name");
+        // v1s-13-8: same rule as the REST DTO / StoreFactory (2–100 chars once trimmed)
+        // → DomainException VALIDATION_ERROR → REJECTED.
+        StoreFactory.validateName((String) p.get("name"));
     }
 
     @Override
@@ -95,7 +99,7 @@ public class CreateStoreSyncHandler extends AbstractSyncOperationHandler {
         Instant now = Instant.now();
         Store store = new Store(
                 storeId,
-                (String) p.get("name"),
+                StoreFactory.validateName((String) p.get("name")),
                 type,
                 (String) p.getOrDefault("address", null),
                 (String) p.getOrDefault("phone", null),

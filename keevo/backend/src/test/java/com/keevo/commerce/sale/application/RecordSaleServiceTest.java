@@ -86,7 +86,7 @@ class RecordSaleServiceTest {
         verify(saleRepository).save(any());
         verify(stockOperationService).recordOperation(
                 eq(PRODUCT_ID), eq(null), eq(STORE_ID),
-                any(), eq(-2), eq(ACTOR_ID), any());
+                any(), eq(-2), eq(ACTOR_ID), any(), any(), eq(false));
 
         ArgumentCaptor<SaleCompletedEvent> eventCaptor = ArgumentCaptor.forClass(SaleCompletedEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
@@ -326,7 +326,7 @@ class RecordSaleServiceTest {
         service.recordSale(pendingCommand());
 
         verify(saleRepository).save(any());
-        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
+        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any(), anyBoolean());
         verify(stockLevelRepository, never()).findByProductAndStore(any(), any());
     }
 
@@ -362,9 +362,46 @@ class RecordSaleServiceTest {
 
         verify(saleRepository).save(any());
         verify(stockOperationService).recordOperation(
-                eq(PRODUCT_ID), any(), eq(STORE_ID), any(), eq(-2), eq(ACTOR_ID), any());
+                eq(PRODUCT_ID), any(), eq(STORE_ID), any(), eq(-2), eq(ACTOR_ID), any(), any(), eq(false));
         var eventCaptor = ArgumentCaptor.forClass(Object.class);
         verify(eventPublisher, atLeastOnce()).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getAllValues()).anyMatch(e -> e instanceof SaleCompletedEvent);
+    }
+
+    // ── v1s-13-8: SALE movement id = client sale item id ─────────────────────
+
+    @Test
+    void recordSale_saleMovementId_isTheClientItemId() {
+        UUID itemId = UUID.randomUUID();
+        when(saleRepository.existsById(SALE_ID)).thenReturn(false);
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
+                .thenReturn(Optional.of(stockLevel(10)));
+
+        service.recordSale(new RecordSaleCommand(
+                SALE_ID, ACTOR_ID, STORE_ID, null, PaymentMode.CASH, null, 0,
+                List.of(new SaleItemCommand(itemId, PRODUCT_ID, null, "Produit A", 1500, 1500, 2))));
+
+        verify(stockOperationService).recordOperation(
+                eq(PRODUCT_ID), eq(null), eq(STORE_ID),
+                any(), eq(-2), eq(ACTOR_ID), any(), eq(itemId), eq(false));
+    }
+
+    @Test
+    void recordSale_offline_saleMovementId_isTheClientItemId() {
+        UUID itemId = UUID.randomUUID();
+        when(saleRepository.existsById(SALE_ID)).thenReturn(false);
+        var offline = offlineCommand(Instant.now());
+        var withItemId = new RecordSaleCommand(
+                offline.saleId(), offline.actorId(), offline.storeId(), offline.clientId(),
+                offline.paymentMode(), offline.mobileMoneyRef(), offline.discountAmount(),
+                offline.requestedStatus(),
+                List.of(new SaleItemCommand(itemId, PRODUCT_ID, null, "Produit A", 1500, 1500, 2)),
+                offline.occurredAt(), true);
+
+        service.recordSale(withItemId);
+
+        verify(stockOperationService).recordOperation(
+                eq(PRODUCT_ID), eq(null), eq(STORE_ID),
+                any(), eq(-2), eq(ACTOR_ID), any(), eq(itemId), eq(true));
     }
 }

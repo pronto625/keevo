@@ -147,4 +147,69 @@ class CreateInventorySessionServiceTest {
         assertThat(result.getScope()).isEqualTo(InventoryScope.PARTIAL);
         assertThat(result.getCategoryIds()).containsExactly(catId);
     }
+
+    // ── v1s-13-8: client-supplied session id ─────────────────────
+
+    @Test
+    void create_withClientSessionId_replay_returnsExisting_noChecksNoSaveNoEvent() {
+        UUID sessionId = UUID.randomUUID();
+        var existing = InventorySession.create(sessionId, STORE_ID, InventoryScope.FULL, null, ACTOR_ID);
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(existing));
+
+        var result = service.execute(new CreateInventorySessionCommand(
+                sessionId, STORE_ID, InventoryScope.FULL, null, ACTOR_ID));
+
+        assertThat(result).isSameAs(existing);
+        verifyNoInteractions(storeRepository, eventPublisher);
+        verify(sessionRepository, never()).findActiveByStoreId(any());
+        verify(sessionRepository, never()).save(any());
+    }
+
+    @Test
+    void create_withClientSessionId_new_isSavedWithClientId_andEventPublished() {
+        UUID sessionId = UUID.randomUUID();
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.empty());
+        when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(STORE));
+        when(sessionRepository.findActiveByStoreId(STORE_ID)).thenReturn(Optional.empty());
+        when(sessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.execute(new CreateInventorySessionCommand(
+                sessionId, STORE_ID, InventoryScope.FULL, null, ACTOR_ID));
+
+        assertThat(result.getId()).isEqualTo(sessionId);
+        ArgumentCaptor<InventorySessionCreatedEvent> captor = ArgumentCaptor.forClass(InventorySessionCreatedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().sessionId()).isEqualTo(sessionId);
+    }
+
+    @Test
+    void create_withClientSessionId_otherActiveSession_throwsAlreadyActive() {
+        UUID sessionId = UUID.randomUUID();
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.empty());
+        when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(STORE));
+        when(sessionRepository.findActiveByStoreId(STORE_ID)).thenReturn(Optional.of(
+                InventorySession.create(STORE_ID, InventoryScope.FULL, null, UUID.randomUUID())));
+
+        assertThatThrownBy(() -> service.execute(new CreateInventorySessionCommand(
+                sessionId, STORE_ID, InventoryScope.FULL, null, ACTOR_ID)))
+                .isInstanceOf(DomainException.class)
+                .satisfies(ex -> assertThat(((DomainException) ex).getDomainCode())
+                        .isEqualTo("INVENTORY_SESSION_ALREADY_ACTIVE"));
+        verify(sessionRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void create_withClientSessionId_replayFromAnotherStore_throwsForbidden() {
+        UUID sessionId = UUID.randomUUID();
+        var existing = InventorySession.create(sessionId, UUID.randomUUID(), InventoryScope.FULL, null, ACTOR_ID);
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> service.execute(new CreateInventorySessionCommand(
+                sessionId, STORE_ID, InventoryScope.FULL, null, ACTOR_ID)))
+                .isInstanceOf(DomainException.class)
+                .satisfies(ex -> assertThat(((DomainException) ex).getDomainCode()).isEqualTo("FORBIDDEN"));
+        verify(sessionRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher);
+    }
 }

@@ -63,8 +63,16 @@ public class InventorySession {
      */
     public static InventorySession create(UUID storeId, InventoryScope scope,
                                           List<UUID> categoryIds, UUID startedBy) {
+        return create(UUID.randomUUID(), storeId, scope, categoryIds, startedBy);
+    }
+
+    /**
+     * Factory method for creating a new session with an explicit (client-generated) id.
+     */
+    public static InventorySession create(UUID id, UUID storeId, InventoryScope scope,
+                                          List<UUID> categoryIds, UUID startedBy) {
         return new InventorySession(
-                UUID.randomUUID(), storeId, scope, categoryIds,
+                id != null ? id : UUID.randomUUID(), storeId, scope, categoryIds,
                 InventorySessionStatus.IN_PROGRESS, startedBy, Instant.now(),
                 null, null, null, Instant.now()
         );

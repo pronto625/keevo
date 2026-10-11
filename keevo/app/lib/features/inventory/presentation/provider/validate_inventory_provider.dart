@@ -108,6 +108,14 @@ class ValidateInventoryNotifier extends _$ValidateInventoryNotifier {
         .getSingleOrNull();
     if (session == null) throw Exception('Session not found');
 
+    // v1s-13-8: re-validating an already VALIDATED session is an idempotent
+    // no-op — completedAt is kept and no second VALIDATE_INVENTORY is queued.
+    if (session.status == 'VALIDATED') return 0;
+    if (session.status != 'IN_PROGRESS') {
+      throw Exception(
+          'Cet inventaire n\'est plus en cours et ne peut pas être validé.');
+    }
+
     // Load actorId BEFORE entering the transaction (external call to secure storage).
     final actorId = await ref.read(currentUserIdProvider.future);
     if (actorId == null) throw Exception('No authenticated user');
@@ -117,31 +125,60 @@ class ValidateInventoryNotifier extends _$ValidateInventoryNotifier {
           ..where((t) => t.sessionId.equals(sessionId)))
         .get();
 
+    // v1s-13-8: an offline validation with no counted line would silently
+    // close the session — refuse it (online validation stays server-owned).
+    if (!counts.any((c) => c.physical != null)) {
+      throw Exception(
+          'Aucun produit compté : comptez au moins un produit avant de valider.');
+    }
+
     int adjustmentsApplied = 0;
     final syncService = ref.read(syncServiceProvider);
     // Local ADJUSTMENT movement ids, sent with VALIDATE_INVENTORY so the
     // server reuses them (otherwise the pull adds a second copy of each).
     final movementIds = <String, String>{};
 
+    var alreadyClosed = false;
     await db.transaction(() async {
+      // v1s-13-8: re-check inside the transaction — a concurrent validate()
+      // may have passed the early checks too; only one may apply adjustments.
+      final current = await (db.select(db.inventorySessions)
+            ..where((t) => t.id.equals(sessionId)))
+          .getSingleOrNull();
+      if (current?.status != 'IN_PROGRESS') {
+        alreadyClosed = true;
+        return;
+      }
+
       for (final count in counts) {
         if (count.physical == null) continue;
         final ecart = count.physical! - count.theoretical;
         if (ecart == 0) continue;
 
-        // Variant-aware stock_levels lookup (defensive pattern, D3).
-        final slQuery = db.select(db.stockLevels)
-          ..where((t) {
-            final baseFilter =
-                t.productId.equals(count.productId) &
-                t.storeId.equals(session.storeId);
-            final cvId = count.variantId;
-            if (cvId == null) {
-              return baseFilter & t.variantId.isNull();
-            }
-            return baseFilter & t.variantId.equals(cvId);
-          });
-        final slRows = await slQuery.get();
+        // Variant-aware stock_levels lookup (defensive pattern, D3): exact
+        // variant match first, else the (product, store) row — the only row
+        // the local unique key allows (v1s-13-8: inserting a second row for a
+        // variant mismatch raised a UNIQUE violation). Unique key extension
+        // with variant_id is routed to Story 14.1.
+        final exactRows = await (db.select(db.stockLevels)
+              ..where((t) {
+                final baseFilter =
+                    t.productId.equals(count.productId) &
+                    t.storeId.equals(session.storeId);
+                final cvId = count.variantId;
+                if (cvId == null) {
+                  return baseFilter & t.variantId.isNull();
+                }
+                return baseFilter & t.variantId.equals(cvId);
+              }))
+            .get();
+        final slRows = exactRows.isNotEmpty
+            ? exactRows
+            : await (db.select(db.stockLevels)
+                  ..where((t) =>
+                      t.productId.equals(count.productId) &
+                      t.storeId.equals(session.storeId)))
+                .get();
         final stockLevel = slRows.isEmpty ? null : slRows.first;
 
         // Same rule as the backend (ValidateInventoryService): the gap
@@ -228,6 +265,8 @@ class ValidateInventoryNotifier extends _$ValidateInventoryNotifier {
         entityId: sessionId,
       );
     });
+
+    if (alreadyClosed) return 0;
 
     dev.log('Offline validation: $adjustmentsApplied adjustments queued',
         name: 'ValidateInventory');

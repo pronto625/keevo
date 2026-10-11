@@ -226,4 +226,50 @@ class CreateStoreSyncHandlerTest {
         assertThat(result.reason()).isEqualTo("FORBIDDEN");
         verifyNoInteractions(storeRepository);
     }
+
+    // ── v1s-13-8: name validation parity with the REST DTO / StoreFactory ──
+
+    @Test
+    void handle_createStore_nameTooShortAfterTrim_isRejectedValidationError() {
+        var storeId = UUID.randomUUID();
+        var op = new SyncOperation("op-n1", "CREATE_STORE", storeId.toString(),
+                Map.of("id", storeId.toString(), "name", " a "), Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("VALIDATION_ERROR");
+        verify(storeRepository, never()).save(any());
+    }
+
+    @Test
+    void handle_createStore_nameTooLong_isRejectedValidationError() {
+        var storeId = UUID.randomUUID();
+        var op = new SyncOperation("op-n2", "CREATE_STORE", storeId.toString(),
+                Map.of("id", storeId.toString(), "name", "x".repeat(101)), Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("VALIDATION_ERROR");
+        verify(storeRepository, never()).save(any());
+    }
+
+    @Test
+    void handle_createStore_savesTrimmedName() {
+        var storeId = UUID.randomUUID();
+        when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
+        when(storeRepository.save(any())).thenReturn(sampleStore(storeId));
+        Subscription premiumPlan = samplePlan(PlanType.PREMIUM_TRIAL);
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(premiumPlan));
+        when(storeRepository.countActive()).thenReturn(0);
+
+        var op = new SyncOperation("op-n3", "CREATE_STORE", storeId.toString(),
+                Map.of("id", storeId.toString(), "name", "  Shop  "), Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        verify(storeRepository).save(argThat(s -> "Shop".equals(s.name())));
+    }
 }

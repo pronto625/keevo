@@ -138,11 +138,14 @@ void main() {
 
       await repo.recordSale(sale);
 
-      verify(() => mockSyncService.queueOperation(
+      final payload = verify(() => mockSyncService.queueOperation(
             operation: 'CREATE_SALE',
-            payload: any(named: 'payload'),
+            payload: captureAny(named: 'payload'),
             entityId: sale.id,
-          )).called(1);
+          )).captured.single as Map<String, dynamic>;
+      // v1s-13-8: itemId links the server SALE movement to the local one.
+      final items = payload['items'] as List;
+      expect((items[0] as Map)['itemId'], sale.items[0].id);
     });
 
     // v1s-12-10: PROMOTE_PRODUCT is OWNER-only; an EMPLOYEE sale (flag false)

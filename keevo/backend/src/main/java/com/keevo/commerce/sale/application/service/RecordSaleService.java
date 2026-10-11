@@ -84,30 +84,21 @@ public class RecordSaleService implements RecordSaleUseCase {
 
         if (!isPending) {
             // Decrement stock for each item (only for COMPLETED sales)
+            // v1s-13-8: the SALE movement id is the (client-generated) sale item id on both
+            // sides, so the device's pull upserts its own movement row instead of adding a
+            // second one. itemId null → server-generated.
             for (var item : command.items()) {
-                if (command.allowNegativeStock()) {
-                    stockOperationService.recordOperation(
-                            item.productId(),
-                            item.variantId(),
-                            command.storeId(),
-                            MovementType.SALE,
-                            -item.quantity(),
-                            command.actorId(),
-                            "Vente " + command.saleId(),
-                            null,
-                            true
-                    );
-                } else {
-                    stockOperationService.recordOperation(
-                            item.productId(),
-                            item.variantId(),
-                            command.storeId(),
-                            MovementType.SALE,
-                            -item.quantity(),
-                            command.actorId(),
-                            "Vente " + command.saleId()
-                    );
-                }
+                stockOperationService.recordOperation(
+                        item.productId(),
+                        item.variantId(),
+                        command.storeId(),
+                        MovementType.SALE,
+                        -item.quantity(),
+                        command.actorId(),
+                        "Vente " + command.saleId(),
+                        item.itemId(),
+                        command.allowNegativeStock()
+                );
             }
 
             // Story 4.2 — Publish SalePriceOverriddenEvent for each overridden item

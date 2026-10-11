@@ -213,6 +213,52 @@ void main() {
           )).called(1);
     });
 
+    // v1s-13-8: local inserts + the 3 queued ops commit together.
+    test('quickAdd offline: queue failure leaves no product/stock/count row',
+        () async {
+      when(() => mockDatasource.quickAdd(
+            sessionId: any(named: 'sessionId'),
+            name: any(named: 'name'),
+            categoryId: any(named: 'categoryId'),
+            physicalQty: any(named: 'physicalQty'),
+          )).thenThrow(DioException(
+        requestOptions: RequestOptions(path: ''),
+        type: DioExceptionType.connectionError,
+      ));
+      when(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).thenAnswer((_) async {});
+      when(() => mockSyncService.queueOperation(
+            operation: 'SAVE_INVENTORY_COUNT',
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).thenThrow(Exception('queue failure'));
+
+      final container = buildContainer();
+      addTearDown(container.dispose);
+
+      final notifier =
+          container.read(quickAddProductNotifierProvider.notifier);
+      Object? error;
+      try {
+        await notifier.quickAdd(
+          sessionId: 'session-001',
+          name: 'Produit Orphelin',
+          categoryId: 'cat-001',
+          physicalQty: 5,
+        );
+      } catch (e) {
+        error = e;
+      }
+
+      expect(error, isNotNull);
+      expect(await db.select(db.products).get(), isEmpty);
+      expect(await db.select(db.stockLevels).get(), isEmpty);
+      expect(await db.select(db.inventoryCounts).get(), isEmpty);
+    });
+
     test('quickAdd state transitions to AsyncData on success', () async {
       when(() => mockDatasource.quickAdd(
             sessionId: any(named: 'sessionId'),

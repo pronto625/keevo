@@ -131,5 +131,25 @@ void main() {
       await insertLevel('s2', 5);
       expect(await ds.hasStockRecord('d1', 's1'), isFalse);
     });
+
+    // v1s-13-8: the local SALE movement id is the sale item id (= the
+    // CREATE_SALE payload itemId, reused server-side as the movement id), so
+    // the pull upserts this row instead of adding a second SALE movement.
+    test('insertAll: SALE movement id is the sale item id', () async {
+      await db.into(db.stockLevels).insert(StockLevelsCompanion.insert(
+            id: 'sl-prod-1',
+            productId: 'prod-1',
+            storeId: 'store-1',
+            quantity: 10,
+            updatedAt: DateTime(2026),
+          ));
+
+      await ds.insertAll(_testSale());
+
+      final movements = await db.select(db.stockMovements).get();
+      expect(movements, hasLength(1));
+      expect(movements.single.type, 'SALE');
+      expect(movements.single.id, 'item-1');
+    });
   });
 }

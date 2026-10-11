@@ -25,6 +25,11 @@ String friendlySyncRejectionReason(String? reasonCode) {
     'DISCOUNT_EXCEEDS_SUBTOTAL' => 'Remise supérieure au montant de la vente',
     'JUSTIFICATION_REQUIRED' => 'Justification manquante',
     'JUSTIFICATION_TOO_SHORT' => 'Justification trop courte',
+    'INVENTORY_SESSION_ALREADY_ACTIVE' =>
+      'Un autre inventaire est déjà en cours dans cette boutique',
+    'INVENTORY_STORE_NOT_FOUND' => 'Boutique de l\'inventaire introuvable',
+    'INVENTORY_INVALID_CATEGORIES' => 'Catégories de l\'inventaire invalides',
+    'INVENTORY_SESSION_NOT_IN_PROGRESS' => 'Cet inventaire n\'est plus en cours',
     'VALIDATION_ERROR' || 'VALIDATION_FAILED' => 'Données invalides',
     'FORBIDDEN' => 'Action non autorisée',
     'UNAUTHORIZED' => 'Session expirée',

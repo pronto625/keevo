@@ -2,8 +2,8 @@ package com.keevo.sync.sync.application.handler;
 
 import com.keevo.inventory.counting.domain.model.InventoryScope;
 import com.keevo.inventory.counting.domain.model.InventorySession;
-import com.keevo.inventory.counting.domain.model.InventorySessionStatus;
-import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
+import com.keevo.inventory.counting.domain.port.in.CreateInventorySessionCommand;
+import com.keevo.inventory.counting.domain.port.in.CreateInventorySessionUseCase;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
@@ -11,22 +11,22 @@ import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import org.springframework.stereotype.Component;
 
-import java.time.Instant;
 import java.util.*;
 
 /**
  * InventorySessionSyncHandler — Handles CREATE_INVENTORY_SESSION push operations.
  *
- * <p>Idempotent by session ID: if the session already exists, the operation is skipped
- * and marked APPLIED (no-op).
+ * <p>Delegates to {@link CreateInventorySessionUseCase} with the client session id
+ * (v1s-13-8). Idempotent by session ID: if the session already exists, the use case
+ * returns it without side effects and the operation is marked APPLIED (no-op).
  */
 @Component
 public class InventorySessionSyncHandler extends AbstractSyncOperationHandler {
 
-    private final InventorySessionRepository repository;
+    private final CreateInventorySessionUseCase createInventorySessionUseCase;
 
-    public InventorySessionSyncHandler(InventorySessionRepository repository) {
-        this.repository = repository;
+    public InventorySessionSyncHandler(CreateInventorySessionUseCase createInventorySessionUseCase) {
+        this.createInventorySessionUseCase = createInventorySessionUseCase;
     }
 
     @Override
@@ -51,17 +51,12 @@ public class InventorySessionSyncHandler extends AbstractSyncOperationHandler {
 
         // v1s-12-10: an EMPLOYEE only opens sessions in their assigned store (mirror of
         // InventorySessionController.createSession). OWNER (null) stays unscoped; null auth
-        // fails closed. Checked before the idempotency lookup — no read-back of foreign data.
+        // fails closed. Checked before the use case (and its idempotency lookup) — no
+        // read-back of foreign data.
         UUID assignedStoreId = extractAssignedStoreId();
         if (assignedStoreId != null && !assignedStoreId.equals(storeId)) {
             throw new DomainException(ErrorCode.FORBIDDEN,
                     "Vous ne pouvez démarrer un inventaire que dans votre boutique");
-        }
-
-        // Idempotency guard: if session already exists, skip
-        if (repository.findById(sessionId).isPresent()) {
-            return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
-                    sessionId.toString(), null);
         }
 
         InventoryScope scope = InventoryScope.valueOf((String) p.get("scope"));
@@ -72,11 +67,12 @@ public class InventorySessionSyncHandler extends AbstractSyncOperationHandler {
                 ? categoryIdStrings.stream().map(UUID::fromString).toList()
                 : null;
 
-        InventorySession session = new InventorySession(
-                sessionId, storeId, scope, categoryIds,
-                InventorySessionStatus.IN_PROGRESS, actorId, Instant.now(),
-                null, null, null, Instant.now());
-        repository.save(session);
+        // v1s-13-8: route through the use case (REST parity) with the client session id —
+        // replay of an existing id is a no-op inside the use case (no 2nd row/event); store
+        // existence, single-active-session and category rules surface as DomainException →
+        // REJECTED with their error code.
+        InventorySession session = createInventorySessionUseCase.execute(
+                new CreateInventorySessionCommand(sessionId, storeId, scope, categoryIds, actorId));
 
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                 session.getId().toString(), null);

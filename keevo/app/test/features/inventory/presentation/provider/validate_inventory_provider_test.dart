@@ -634,6 +634,185 @@ void main() {
       expect(movements.first.quantityBefore, 10);
       expect(movements.first.quantityDelta, -5);
     });
+
+    // ── v1s-13-8: offline guards + variant fallback ──────────────────────
+
+    Future<void> seedSession(String id, {String status = 'IN_PROGRESS', DateTime? completedAt}) async {
+      final now = DateTime.now();
+      await db.into(db.inventorySessions).insert(
+            InventorySessionsCompanion.insert(
+              id: id,
+              storeId: 'store-1',
+              scope: 'FULL',
+              status: status,
+              startedBy: 'actor-test',
+              startedAt: now,
+              completedAt: Value(completedAt),
+              updatedAt: now,
+            ),
+          );
+    }
+
+    void verifyNothingQueued() {
+      verifyNever(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          ));
+    }
+
+    test('v1s-13-8: session with no counted line throws, nothing written/queued',
+        () async {
+      await seedSession('sess-empty');
+      await db.into(db.inventoryCounts).insert(
+            InventoryCountsCompanion.insert(
+              id: 'count-uncounted',
+              sessionId: 'sess-empty',
+              productId: 'prod-x',
+              productName: 'Product x',
+              theoretical: 4,
+              physical: const Value(null),
+              updatedAt: DateTime.now(),
+            ),
+          );
+
+      final container = buildContainer();
+      addTearDown(container.dispose);
+      final notifier =
+          container.read(validateInventoryNotifierProvider.notifier);
+
+      await expectLater(notifier.validate('sess-empty'), throwsA(anything));
+
+      final sess = await (db.select(db.inventorySessions)
+            ..where((t) => t.id.equals('sess-empty')))
+          .getSingle();
+      expect(sess.status, 'IN_PROGRESS');
+      expect(await db.select(db.stockMovements).get(), isEmpty);
+      verifyNothingQueued();
+    });
+
+    test('v1s-13-8: session with no count at all throws, nothing written/queued',
+        () async {
+      await seedSession('sess-none');
+
+      final container = buildContainer();
+      addTearDown(container.dispose);
+      final notifier =
+          container.read(validateInventoryNotifierProvider.notifier);
+
+      await expectLater(notifier.validate('sess-none'), throwsA(anything));
+      final sess = await (db.select(db.inventorySessions)
+            ..where((t) => t.id.equals('sess-none')))
+          .getSingle();
+      expect(sess.status, 'IN_PROGRESS');
+      verifyNothingQueued();
+    });
+
+    test('v1s-13-8: re-validating a VALIDATED session returns 0, keeps completedAt, queues nothing',
+        () async {
+      final completedAt = DateTime(2026, 1, 2, 3, 4, 5);
+      await seedSession('sess-done', status: 'VALIDATED', completedAt: completedAt);
+
+      final container = buildContainer();
+      addTearDown(container.dispose);
+      final notifier =
+          container.read(validateInventoryNotifierProvider.notifier);
+
+      final adjustments = await notifier.validate('sess-done');
+
+      expect(adjustments, 0);
+      final sess = await (db.select(db.inventorySessions)
+            ..where((t) => t.id.equals('sess-done')))
+          .getSingle();
+      expect(sess.completedAt, completedAt);
+      verifyNothingQueued();
+    });
+
+    test('v1s-13-8: validating a CANCELLED session throws, nothing written',
+        () async {
+      await seedSession('sess-cancel', status: 'CANCELLED');
+
+      final container = buildContainer();
+      addTearDown(container.dispose);
+      final notifier =
+          container.read(validateInventoryNotifierProvider.notifier);
+
+      await expectLater(notifier.validate('sess-cancel'), throwsA(anything));
+      final sess = await (db.select(db.inventorySessions)
+            ..where((t) => t.id.equals('sess-cancel')))
+          .getSingle();
+      expect(sess.status, 'CANCELLED');
+      verifyNothingQueued();
+    });
+
+    test('v1s-13-8: two concurrent validate() calls apply adjustments once',
+        () async {
+      await _seedInventoryScenario(
+        db: db,
+        sessionId: 'sess-race',
+        storeId: 'store-1',
+        productId: 'prod-race',
+        countTheoretical: 10,
+        countPhysical: 7,
+        stockQty: 10,
+      );
+
+      final container = buildContainer();
+      addTearDown(container.dispose);
+      final notifier =
+          container.read(validateInventoryNotifierProvider.notifier);
+
+      final results = await Future.wait(
+          [notifier.validate('sess-race'), notifier.validate('sess-race')]);
+
+      expect(results.reduce((a, b) => a + b), 1);
+      final movements = await db.select(db.stockMovements).get();
+      expect(movements, hasLength(1));
+      final sl = await (db.select(db.stockLevels)
+            ..where((t) => t.productId.equals('prod-race')))
+          .getSingle();
+      expect(sl.quantity, 7);
+      verify(() => mockSyncService.queueOperation(
+            operation: 'VALIDATE_INVENTORY',
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).called(1);
+    });
+
+    test('v1s-13-8: variant mismatch updates the (product, store) row, no UNIQUE violation',
+        () async {
+      await _seedInventoryScenario(
+        db: db,
+        sessionId: 'sess-var',
+        storeId: 'store-1',
+        productId: 'prod-var',
+        countTheoretical: 10,
+        countPhysical: 7,
+        stockQty: 10,
+        countVariantId: 'var-V',
+        stockVariantId: null,
+      );
+
+      final container = buildContainer();
+      addTearDown(container.dispose);
+      final notifier =
+          container.read(validateInventoryNotifierProvider.notifier);
+
+      final adjustments = await notifier.validate('sess-var');
+
+      expect(adjustments, 1);
+      final slRows = await (db.select(db.stockLevels)
+            ..where((t) =>
+                t.productId.equals('prod-var') & t.storeId.equals('store-1')))
+          .get();
+      expect(slRows.length, 1);
+      expect(slRows.first.quantity, 7);
+      final movements = await db.select(db.stockMovements).get();
+      expect(movements.length, 1);
+      expect(movements.first.variantId, 'var-V');
+      expect(movements.first.quantityBefore, 10);
+      expect(movements.first.quantityAfter, 7);
+    });
   });
 
   group('ValidateInventoryNotifier online with queued counts', () {

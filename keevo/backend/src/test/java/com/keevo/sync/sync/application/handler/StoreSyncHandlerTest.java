@@ -6,6 +6,7 @@ import com.keevo.store.store.domain.port.in.DeactivateStoreCommand;
 import com.keevo.store.store.domain.port.in.DeactivateStoreUseCase;
 import com.keevo.store.store.domain.port.in.UpdateStoreCommand;
 import com.keevo.store.store.domain.port.in.UpdateStoreUseCase;
+import com.keevo.store.store.domain.port.out.StoreRepository;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import org.junit.jupiter.api.AfterEach;
@@ -21,6 +22,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,6 +34,7 @@ class StoreSyncHandlerTest {
 
     @Mock private UpdateStoreUseCase updateStoreUseCase;
     @Mock private DeactivateStoreUseCase deactivateStoreUseCase;
+    @Mock private StoreRepository storeRepository;
 
     private StoreSyncHandler handler;
 
@@ -40,7 +43,7 @@ class StoreSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new StoreSyncHandler(updateStoreUseCase, deactivateStoreUseCase);
+        handler = new StoreSyncHandler(updateStoreUseCase, deactivateStoreUseCase, storeRepository);
         authenticateAsOwner();
     }
 
@@ -126,5 +129,60 @@ class StoreSyncHandlerTest {
     void supportedTypes_containsUpdateAndDeactivate() {
         assertThat(handler.supportedTypes()).containsExactlyInAnyOrder(
                 "UPDATE_STORE", "DEACTIVATE_STORE");
+    }
+
+    // ── v1s-13-8: state-based idempotency (no 2nd domain event on replay) ──
+
+    @Test
+    void handle_deactivateStore_alreadyInactive_isAppliedNoOp() {
+        var storeId = UUID.randomUUID();
+        when(storeRepository.findById(storeId)).thenReturn(Optional.of(new Store(
+                storeId, "Boutique", StoreType.STORE, null, null, false, Instant.now(), Instant.now())));
+
+        var op = new SyncOperation("op-r1", "DEACTIVATE_STORE", storeId.toString(),
+                Map.of("storeId", storeId.toString()), Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        assertThat(result.serverEntityId()).isEqualTo(storeId.toString());
+        verifyNoInteractions(deactivateStoreUseCase);
+    }
+
+    @Test
+    void handle_updateStore_sameValues_isAppliedNoOp() {
+        var storeId = UUID.randomUUID();
+        when(storeRepository.findById(storeId)).thenReturn(Optional.of(new Store(
+                storeId, "Boutique", StoreType.STORE, "Rue 1", "+237690000001", true,
+                Instant.now(), Instant.now())));
+
+        var op = new SyncOperation("op-r2", "UPDATE_STORE", storeId.toString(),
+                Map.of("storeId", storeId.toString(), "name", "  Boutique ",
+                        "address", "Rue 1", "phone", "+237690000001"),
+                Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        assertThat(result.serverEntityId()).isEqualTo(storeId.toString());
+        verifyNoInteractions(updateStoreUseCase);
+    }
+
+    @Test
+    void handle_updateStore_changedValue_callsUseCase() {
+        var storeId = UUID.randomUUID();
+        when(storeRepository.findById(storeId)).thenReturn(Optional.of(new Store(
+                storeId, "Boutique", StoreType.STORE, "Rue 1", null, true,
+                Instant.now(), Instant.now())));
+        when(updateStoreUseCase.execute(any())).thenReturn(sampleStore(storeId));
+
+        var op = new SyncOperation("op-r3", "UPDATE_STORE", storeId.toString(),
+                Map.of("storeId", storeId.toString(), "name", "Boutique", "address", "Rue 2"),
+                Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        verify(updateStoreUseCase).execute(any(UpdateStoreCommand.class));
     }
 }

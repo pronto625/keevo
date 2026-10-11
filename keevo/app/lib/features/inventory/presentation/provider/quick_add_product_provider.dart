@@ -184,88 +184,92 @@ class QuickAddProductNotifier extends _$QuickAddProductNotifier {
         .getSingleOrNull();
     final storeId = session?.storeId ?? '';
 
-    // Create product locally
-    await db.into(db.products).insert(
-          ProductsCompanion.insert(
-            id: productId,
-            name: name.trim(),
-            sku: Value(sku),
-            categoryId: Value(categoryId),
-            price: Value(sellingPrice ?? 0),
-            buyPrice: const Value(0),
-            transportCost: const Value(0),
-            stockQuantity: Value(physicalQty),
-            archived: const Value(false),
-            status: const Value('ACTIVE'),
-            createdAt: now,
-            updatedAt: now,
-          ),
-        );
+    // v1s-13-8: product + stock + count and their 3 queued ops commit
+    // together — a failing queueOperation leaves no orphan local row.
+    await db.transaction(() async {
+      // Create product locally
+      await db.into(db.products).insert(
+            ProductsCompanion.insert(
+              id: productId,
+              name: name.trim(),
+              sku: Value(sku),
+              categoryId: Value(categoryId),
+              price: Value(sellingPrice ?? 0),
+              buyPrice: const Value(0),
+              transportCost: const Value(0),
+              stockQuantity: Value(physicalQty),
+              archived: const Value(false),
+              status: const Value('ACTIVE'),
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
 
-    // Create stock level locally
-    await db.into(db.stockLevels).insert(
-          StockLevelsCompanion.insert(
-            id: stockLevelId,
-            productId: productId,
-            storeId: storeId,
-            quantity: physicalQty,
-            updatedAt: now,
-          ),
-        );
+      // Create stock level locally
+      await db.into(db.stockLevels).insert(
+            StockLevelsCompanion.insert(
+              id: stockLevelId,
+              productId: productId,
+              storeId: storeId,
+              quantity: physicalQty,
+              updatedAt: now,
+            ),
+          );
 
-    // Create inventory count locally
-    await db.into(db.inventoryCounts).insert(
-          InventoryCountsCompanion.insert(
-            id: countId,
-            sessionId: sessionId,
-            productId: productId,
-            productName: name.trim(),
-            theoretical: 0,
-            physical: Value(physicalQty),
-            countedAt: Value(now),
-            updatedAt: now,
-          ),
-        );
+      // Create inventory count locally
+      await db.into(db.inventoryCounts).insert(
+            InventoryCountsCompanion.insert(
+              id: countId,
+              sessionId: sessionId,
+              productId: productId,
+              productName: name.trim(),
+              theoretical: 0,
+              physical: Value(physicalQty),
+              countedAt: Value(now),
+              updatedAt: now,
+            ),
+          );
 
-    // Queue sync operations in order
-    await syncService.queueOperation(
-      operation: 'CREATE_PRODUCT',
-      payload: {
-        // The server keeps the client id only from the payload; the stock
-        // entry and the count queued below reference this id.
-        'id': productId,
-        'name': name.trim(),
-        'sku': sku,
-        'categoryId': categoryId,
-        'price': sellingPrice ?? 0,
-        'buyPrice': 0,
-        'transportCost': 0,
-        'stockQuantity': physicalQty,
-      },
-      entityId: productId,
-    );
+      // Queue sync operations in order
+      await syncService.queueOperation(
+        operation: 'CREATE_PRODUCT',
+        payload: {
+          // The server keeps the client id only from the payload; the stock
+          // entry and the count queued below reference this id.
+          'id': productId,
+          'name': name.trim(),
+          'sku': sku,
+          'categoryId': categoryId,
+          'price': sellingPrice ?? 0,
+          'buyPrice': 0,
+          'transportCost': 0,
+          'stockQuantity': physicalQty,
+        },
+        entityId: productId,
+      );
 
-    await syncService.queueOperation(
-      operation: 'RECORD_STOCK_ENTRY',
-      payload: {
-        'productId': productId,
-        'storeId': storeId,
-        'quantity': physicalQty,
-      },
-      entityId: stockLevelId,
-    );
+      await syncService.queueOperation(
+        operation: 'RECORD_STOCK_ENTRY',
+        payload: {
+          'productId': productId,
+          'storeId': storeId,
+          'quantity': physicalQty,
+        },
+        entityId: stockLevelId,
+      );
 
-    await syncService.queueOperation(
-      operation: 'SAVE_INVENTORY_COUNT',
-      payload: {
-        'sessionId': sessionId,
-        'productId': productId,
-        'productName': name.trim(),
-        'theoretical': 0,
-        'physical': physicalQty,
-      },
-      entityId: countId,
-    );
+      await syncService.queueOperation(
+        operation: 'SAVE_INVENTORY_COUNT',
+        payload: {
+          'sessionId': sessionId,
+          'productId': productId,
+          'productName': name.trim(),
+          'theoretical': 0,
+          'physical': physicalQty,
+        },
+        entityId: countId,
+      );
+    });
 
     dev.log('Quick-add offline: product=$productId, stock=$stockLevelId, count=$countId',
         name: 'QuickAddProduct');
