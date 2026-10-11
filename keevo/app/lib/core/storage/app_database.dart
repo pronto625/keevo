@@ -90,7 +90,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 27;
+  int get schemaVersion => 28;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -272,6 +272,10 @@ class AppDatabase extends _$AppDatabase {
         // sync_queue: add lastError to surface REJECTED sync operations to
         // the user instead of retrying them silently forever.
         await migrator.addColumn(syncQueue, syncQueue.lastError);
+      }
+      if (from < 28) {
+        // v1s-16-15: quarantine for money operations refused for good.
+        await migrator.addColumn(syncQueue, syncQueue.quarantinedAt);
       }
     },
   );

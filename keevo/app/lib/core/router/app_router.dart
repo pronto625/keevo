@@ -48,6 +48,7 @@ import '../../features/settings/presentation/page/account_page.dart';
 import '../../features/settings/presentation/page/settings_page.dart';
 import '../../features/settings/presentation/page/subscription_page.dart';
 import '../../features/settings/presentation/page/report_preferences_page.dart';
+import '../../features/sync_indicator/presentation/page/blocked_operations_page.dart';
 import '../../features/sync_indicator/presentation/page/sync_conflict_log_page.dart';
 import '../../features/sync_indicator/presentation/page/sync_settings_page.dart';
 import '../sync/sync_trigger_notifier.dart';
@@ -578,6 +579,11 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/settings/sync',
       builder: (_, __) => const SyncSettingsPage(),
+    ),
+    // ── Blocked (quarantined) sync operations (v1s-16-15 — all roles) ──────
+    GoRoute(
+      path: '/sync/blocked',
+      builder: (_, __) => const BlockedOperationsPage(),
     ),
     // ── Settings > Report Preferences (Story 7.5 — OWNER only) ───────────
     GoRoute(

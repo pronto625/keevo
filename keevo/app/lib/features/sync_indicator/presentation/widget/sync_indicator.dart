@@ -76,6 +76,12 @@ class SyncIndicator extends ConsumerWidget {
         // inventory adjustments reverted) — say so.
         final undone =
             r['rolledBack'] == true ? ' — annulé sur cet appareil' : '';
+        // v1s-16-15: a money operation refused for good is set aside on the
+        // device until someone acts on it.
+        final quarantined = r['quarantined'] == true;
+        final text = quarantined
+            ? 'Bloqué ($operation) : $reason — action requise'
+            : 'Non synchronisé ($operation) : $reason$undone';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppTheme.errorColor,
@@ -87,7 +93,7 @@ class SyncIndicator extends ConsumerWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Non synchronisé ($operation) : $reason$undone',
+                    text,
                     style: const TextStyle(color: AppTheme.onError),
                   ),
                 ),
@@ -96,7 +102,10 @@ class SyncIndicator extends ConsumerWidget {
             action: SnackBarAction(
               label: 'Voir',
               textColor: AppTheme.onError,
-              onPressed: () => context.push('/settings/sync'),
+              // /sync/blocked is open to every role; /settings/sync is
+              // OWNER-only.
+              onPressed: () => context
+                  .push(quarantined ? '/sync/blocked' : '/settings/sync'),
             ),
           ),
         );

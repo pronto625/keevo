@@ -19,7 +19,13 @@ abstract interface class SyncService {
   ///
   /// Used by repositories to avoid overwriting local data with stale
   /// backend values while offline changes haven't been pushed yet.
+  ///
+  /// Quarantined operations (refused for good, v1s-16-15) are not pending.
   Future<bool> hasPendingOperations();
+
+  /// Number of quarantined operations: money operations refused for good,
+  /// kept on the device until the user acts on them (v1s-16-15).
+  Future<int> quarantinedOperationCount();
 
   /// Pull remote delta changes and merge into local Drift DB.
   Future<void> pull();

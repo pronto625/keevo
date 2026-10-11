@@ -1131,7 +1131,8 @@ As a Toor, I want an offline sale that the server refuses for good (unknown prod
 **Refs:** FR27/FR30, NFR zéro vente perdue, Story 16.12, epic 5 (`sync_error_log` 30 days).
 
 **Items (routed 2026-10-11 from build-auto v1s-16-12):**
-- [ ] [Deferred-from: build-auto v1s-16-12, 2026-10-11] Queued CREATE_SALE referencing a rolled-back product/store is refused forever [rest_sync_service.dart `_reconcileRejection`] — pins `hasPendingOperations()`; needs a PO decision on the end state (ad-hoc sale lines server-side or discard/export action)
+- [x] [Deferred-from: build-auto v1s-16-12, 2026-10-11] Queued CREATE_SALE referencing a rolled-back product/store is refused forever [rest_sync_service.dart `_reconcileRejection`] — pins `hasPendingOperations()`; needs a PO decision on the end state (ad-hoc sale lines server-side or discard/export action) — **resolved v1s-16-15** (decision PRD FR73a): terminal refusal → quarantine (`sync_queue.quarantined_at`), excluded from push/`hasPendingOperations()`; « Bloquées » list (Paramètres › Synchronisation › File, `/sync/blocked`) with Renvoyer/Exporter (all roles), Rattacher/Abandonner après export (OWNER); server-side ad-hoc lines rejected (no stock movement, FR27); backend refuses unknown store `STORE_NOT_FOUND` — spec-v1s-16-15-sync-stuck-money-ops.md
+- [x] [Deferred-from: build-auto v1s-16-12 residual risks, 2026-10-11] Local `stock_transfers` rows of a rolled-back store are not cleaned [rest_sync_service.dart `_rollbackGhostEntity`] — **resolved v1s-16-15**: CREATE_STORE rollback deletes transfers whose source or destination is the ghost store
 
 **AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
 

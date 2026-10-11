@@ -8,6 +8,7 @@ import com.keevo.commerce.sale.domain.model.SaleStatus;
 import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase;
 import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase.RecordSaleCommand;
 import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase.SaleItemCommand;
+import com.keevo.store.store.domain.port.out.StoreRepository;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
@@ -22,11 +23,14 @@ public class SaleSyncHandler extends AbstractSyncOperationHandler {
 
     private final RecordSaleUseCase recordSaleUseCase;
     private final ApplicationEventPublisher eventPublisher;
+    private final StoreRepository storeRepository;
 
     public SaleSyncHandler(RecordSaleUseCase recordSaleUseCase,
-                           ApplicationEventPublisher eventPublisher) {
+                           ApplicationEventPublisher eventPublisher,
+                           StoreRepository storeRepository) {
         this.recordSaleUseCase = recordSaleUseCase;
         this.eventPublisher = eventPublisher;
+        this.storeRepository = storeRepository;
     }
 
     @Override
@@ -55,6 +59,12 @@ public class SaleSyncHandler extends AbstractSyncOperationHandler {
         UUID assignedStoreId = extractAssignedStoreId();
         if (assignedStoreId != null && !assignedStoreId.equals(storeId)) {
             throw new DomainException(ErrorCode.FORBIDDEN, "Employee cannot sell in another store");
+        }
+        // v1s-16-15: sales.store_id has no FK — a sale for a store the server does not
+        // know (rolled back offline creation) would be stored as an orphan. Refused so the
+        // device quarantines it and the payload lands in sync_error_log.
+        if (storeRepository.findById(storeId).isEmpty()) {
+            throw new DomainException(ErrorCode.STORE_NOT_FOUND, "Store not found: " + storeId);
         }
         UUID clientId = p.get("clientId") != null ? UUID.fromString((String) p.get("clientId")) : null;
         PaymentMode paymentMode = PaymentMode.valueOf((String) p.get("paymentMode"));

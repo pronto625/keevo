@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo/core/di/providers.dart';
+import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/core/sync/sync_monitoring_providers.dart';
+import 'package:keevo/core/sync/sync_quarantine_service.dart';
 import 'package:keevo/core/sync/sync_status.dart';
 import 'package:keevo/core/sync/sync_status_provider.dart';
 import 'package:keevo/core/sync/domain/sync_conflict_provider.dart';
 import 'package:keevo/features/sync_indicator/presentation/page/sync_settings_page.dart';
+import 'package:mocktail/mocktail.dart';
 
 /// Story 5.5 — Task 7.5: SyncSettingsPage widget tests.
 void main() {
@@ -26,6 +30,7 @@ void main() {
           syncHistoryProvider.overrideWith((ref) => Future.value([])),
           pendingSyncQueueProvider.overrideWith((ref) => Future.value([])),
           pendingSyncCountProvider.overrideWith((ref) => Future.value(0)),
+          quarantinedSyncQueueProvider.overrideWith((ref) => Future.value([])),
           syncConflictsProvider.overrideWith((ref) => Future.value([])),
           syncStatusProvider.overrideWith(
               (ref) => Stream.value(SyncStatus.online)),
@@ -70,6 +75,7 @@ void main() {
           syncHistoryProvider.overrideWith((ref) => Future.value([])),
           pendingSyncQueueProvider.overrideWith((ref) => Future.value([])),
           pendingSyncCountProvider.overrideWith((ref) => Future.value(0)),
+          quarantinedSyncQueueProvider.overrideWith((ref) => Future.value([])),
           syncConflictsProvider.overrideWith((ref) => Future.value([])),
           syncStatusProvider.overrideWith(
               (ref) => Stream.value(SyncStatus.online)),
@@ -131,5 +137,52 @@ void main() {
 
       expect(find.text('Aucune opération en attente'), findsOneWidget);
     });
+
+    testWidgets(
+        'v1s-16-15: queue tab shows "Bloquées (1)" above the pending tiles',
+        (tester) async {
+      _setPhoneSize(tester);
+      SyncQueueData row(String id, String operation, {bool blocked = false}) =>
+          SyncQueueData(
+            id: id,
+            operation: operation,
+            payload: '{}',
+            createdAt: DateTime(2026, 10, 11, 9),
+            synced: false,
+            retryCount: blocked ? 1 : 0,
+            entityId: 'e-$id',
+            lastError: blocked ? 'PRODUCT_NOT_FOUND' : null,
+            quarantinedAt: blocked ? DateTime(2026, 10, 11, 10) : null,
+          );
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          activeDevicesProvider.overrideWith((ref) => Future.value([])),
+          syncHistoryProvider.overrideWith((ref) => Future.value([])),
+          pendingSyncQueueProvider.overrideWith(
+              (ref) => Future.value([row('p-1', 'UPDATE_CLIENT')])),
+          pendingSyncCountProvider.overrideWith((ref) => Future.value(1)),
+          quarantinedSyncQueueProvider.overrideWith((ref) =>
+              Future.value([row('q-1', 'STOCK_ADJUST', blocked: true)])),
+          syncQuarantineServiceProvider
+              .overrideWithValue(_MockQuarantine()),
+          currentUserRoleProvider.overrideWithValue('OWNER'),
+          syncConflictsProvider.overrideWith((ref) => Future.value([])),
+          syncStatusProvider.overrideWith(
+              (ref) => Stream.value(SyncStatus.online)),
+        ],
+        child: const MaterialApp(home: SyncSettingsPage()),
+      ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('File d\'attente'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Bloquées (1)'), findsOneWidget);
+      expect(find.text('Ajustement de stock'), findsOneWidget);
+      expect(find.text('Modification de client'), findsOneWidget,
+          reason: 'the pending tile is still listed');
+      expect(find.text('Aucune opération en attente'), findsNothing);
+    });
   });
 }
+
+class _MockQuarantine extends Mock implements SyncQuarantineService {}

@@ -437,6 +437,7 @@ Keevo est une application hybride Mobile (Flutter) + Desktop (Tauri 2.0) avec un
 - **FR71:** Le système peut résoudre les conflits multi-device via synchronisation delta-based
 - **FR72:** L'application peut stocker toutes les données critiques localement sur le device
 - **FR73:** Le système peut garantir zéro perte de données après synchronisation
+- **FR73a:** Une opération d'argent ou de stock (vente, validation/annulation de vente, clôture de journée, ajustement, entrée ou transfert de stock) refusée définitivement par le serveur n'est jamais supprimée automatiquement : elle est mise en quarantaine sur l'appareil (conservée, plus envoyée, plus comptée comme en attente) et affichée dans « Opérations bloquées » avec les actions *Renvoyer* et *Exporter* (tous les rôles), *Rattacher* une vente à des produits/une boutique existants et *Abandonner* (propriétaire uniquement, après un export réussi, tracé dans l'historique de synchronisation local). Le serveur conserve la charge refusée 30 jours dans `sync_error_log` et refuse (`STORE_NOT_FOUND`) une vente ou une clôture pour une boutique inconnue (v1s-16-15)
 - **FR74:** Le système peut suspendre l'accès après 7 jours sans connexion (sync obligatoire pour débloquer)
 - **FR75:** L'application peut afficher un indicateur visible du statut de connexion et de la dernière synchronisation
 - **FR76:** Le système peut synchroniser les données en temps réel entre tous les appareils d'un même utilisateur

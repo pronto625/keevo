@@ -22,6 +22,7 @@ import '../../features/team/presentation/provider/employee_provider.dart';
 import '../di/providers.dart';
 import '../storage/app_constants.dart';
 import 'sync_gate_provider.dart';
+import 'sync_monitoring_providers.dart';
 import 'sync_required_exception.dart';
 import 'sync_status_provider.dart';
 
@@ -149,8 +150,10 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
     if (hasPending) {
       // Check if queue is stale (ops pending > 1 hour) — trigger diagnostic
       final db = ref.read(appDatabaseProvider);
+      // Quarantined operations (v1s-16-15) wait for the user, not for a
+      // push: they do not make the queue stale.
       final oldestPending = await (db.select(db.syncQueue)
-            ..where((t) => t.synced.equals(false))
+            ..where((t) => t.synced.equals(false) & t.quarantinedAt.isNull())
             ..orderBy([(t) => OrderingTerm.asc(t.createdAt)])
             ..limit(1))
           .getSingleOrNull();
@@ -299,6 +302,13 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
     if (rejections.any((r) => r['rolledBack'] == true)) {
       ref.invalidate(activeStoreIdProvider);
     }
+    // Blocked list/counts must not wait for a pull that may fail.
+    if (rejections.any((r) => r['quarantined'] == true)) {
+      ref.invalidate(quarantinedSyncQueueProvider);
+      ref.invalidate(quarantinedSyncCountProvider);
+      ref.invalidate(pendingSyncQueueProvider);
+      ref.invalidate(pendingSyncCountProvider);
+    }
 
     // Log LWW conflicts silently (LAST_WRITE_WINS — no user notification)
     for (final c in results) {
@@ -310,6 +320,11 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
 
   /// Invalidate all Riverpod providers for entity types refreshed by pull.
   void _invalidateAllProviders() {
+    // ── Sync queue (v1s-16-15: blocked operations list / counts) ──────────
+    ref.invalidate(quarantinedSyncQueueProvider);
+    ref.invalidate(quarantinedSyncCountProvider);
+    ref.invalidate(pendingSyncQueueProvider);
+    ref.invalidate(pendingSyncCountProvider);
     // ── Catalog ───────────────────────────────────────────────────────────
     ref.invalidate(stockNotifierProvider);
     ref.invalidate(productListForPickerProvider);

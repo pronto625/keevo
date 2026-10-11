@@ -39,6 +39,9 @@ class _EmptyQueueSyncService extends Mock implements SyncService {
 
   @override
   Future<bool> hasPendingOperations() async => false;
+
+  @override
+  Future<int> quarantinedOperationCount() async => 0;
 }
 
 AuthRepository _authRepository() {

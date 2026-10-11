@@ -66,9 +66,20 @@ void main() {
     test('pushes the queue first; nothing left → true', () async {
       when(() => sync.push()).thenAnswer((_) async => []);
       when(() => sync.hasPendingOperations()).thenAnswer((_) async => false);
+      when(() => sync.quarantinedOperationCount()).thenAnswer((_) async => 0);
 
       expect(await service().flushPendingOperations(), isTrue);
       verify(() => sync.push()).called(1);
+    });
+
+    // v1s-16-15: blocked operations are not pending, but signing out would
+    // leave them behind — the user is warned.
+    test('quarantined operations remain → false', () async {
+      when(() => sync.push()).thenAnswer((_) async => []);
+      when(() => sync.hasPendingOperations()).thenAnswer((_) async => false);
+      when(() => sync.quarantinedOperationCount()).thenAnswer((_) async => 1);
+
+      expect(await service().flushPendingOperations(), isFalse);
     });
 
     test('offline: push fails, operations remain → false', () async {

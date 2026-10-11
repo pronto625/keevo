@@ -99,16 +99,18 @@ void main() {
     required String operation,
     Map<String, dynamic> payload = const {},
     String? entityId,
+    bool quarantined = false,
   }) async {
     await db.customStatement(
       'INSERT INTO sync_queue (id, operation, payload, entity_id, synced, '
-      'retry_count, created_at) VALUES (?, ?, ?, ?, 0, 0, ?)',
+      'retry_count, created_at, quarantined_at) VALUES (?, ?, ?, ?, 0, 0, ?, ?)',
       [
         'sq-${opSeq++}',
         operation,
         jsonEncode(payload),
         entityId,
         DateTime.now().toIso8601String(),
+        quarantined ? DateTime.now().toIso8601String() : null,
       ],
     );
   }
@@ -310,6 +312,58 @@ void main() {
 
       final level = (await db.select(db.stockLevels).get()).first;
       expect(level.quantity, 7);
+    });
+
+    // v1s-16-15: a quarantined op is never pushed — it protects nothing, the
+    // server refresh sets the true level.
+    test('pull_quarantinedStockAdjustAndSale_doNotProtectStockLevels',
+        () async {
+      await insertLocalStockLevel(
+        id: 'sl-1', productId: 'prod-1', storeId: 'store-1', quantity: 42);
+      await insertLocalStockLevel(
+        id: 'sl-2', productId: 'prod-2', storeId: 'store-1', quantity: 20);
+      await insertPendingSyncOp(
+        operation: 'STOCK_ADJUST',
+        payload: {'productId': 'prod-1', 'storeId': 'store-1', 'quantity': 42},
+        entityId: 'mov-1',
+        quarantined: true,
+      );
+      await insertPendingSyncOp(
+        operation: 'CREATE_SALE',
+        payload: {
+          'storeId': 'store-1',
+          'items': [
+            {'productId': 'prod-2'},
+          ],
+        },
+        entityId: 'sale-1',
+        quarantined: true,
+      );
+
+      stubPull(entities: {
+        'stockLevels': [
+          for (final (id, product, qty) in const [
+            ('sl-1', 'prod-1', 999),
+            ('sl-2', 'prod-2', 888),
+          ])
+            {
+              'id': id,
+              'productId': product,
+              'variantId': null,
+              'storeId': 'store-1',
+              'quantity': qty,
+              'minimumThreshold': 5,
+              'updatedAt': '2026-03-21T10:00:00.000Z',
+            }
+        ]
+      });
+
+      await syncService.pull();
+
+      final levels = await db.select(db.stockLevels).get();
+      final byProduct = {for (final l in levels) l.productId: l.quantity};
+      expect(byProduct['prod-1'], 999);
+      expect(byProduct['prod-2'], 888);
     });
 
     test('pull_pendingCreateSale_doesNotOverwriteAnyItemStockLevel', () async {
@@ -816,6 +870,22 @@ void main() {
       await syncService.pull();
 
       expect((await localSale()).status, 'CANCELLED');
+    });
+
+    // v1s-16-15: a quarantined op does not protect its entity id.
+    test('pull_quarantinedCancellation_doesNotProtectTheSale', () async {
+      await seedLocalSale('CANCELLED');
+      await insertPendingSyncOp(
+        operation: 'CANCEL_SALE',
+        payload: {'saleId': 'sale-1', 'justification': 'x'},
+        entityId: 'sale-1',
+        quarantined: true,
+      );
+      stubPull(entities: {'sales': [serverSale(status: 'COMPLETED')]});
+
+      await syncService.pull();
+
+      expect((await localSale()).status, 'COMPLETED');
     });
   });
 

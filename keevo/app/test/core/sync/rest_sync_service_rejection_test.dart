@@ -145,18 +145,22 @@ void main() {
     expect(result.single['operation'], 'CREATE_SALE');
     expect(result.single['entityId'], 'sale-1');
     expect(result.single['rolledBack'], false);
+    expect(result.single['quarantined'], true);
 
     final row =
         await (db.select(db.syncQueue)..where((t) => t.id.equals('op-1')))
             .getSingle();
     expect(row.lastError, 'INSUFFICIENT_STOCK');
     expect(row.retryCount, 1);
+    expect(row.quarantinedAt, isNotNull);
   });
 
+  // A transient refusal of a money operation keeps the 16-12 behaviour:
+  // kept pending, retried, surfaced once per reason.
   test('repeated REJECTED with the same reason is not re-surfaced', () async {
     await insertPendingOp(
         id: 'op-1', operation: 'CREATE_SALE', entityId: 'sale-1');
-    stubPushResponse('op-1', 'REJECTED', reason: 'INSUFFICIENT_STOCK');
+    stubPushResponse('op-1', 'REJECTED', reason: 'OPTIMISTIC_LOCK');
 
     await syncService.push(); // first attempt — surfaced
     final second = await syncService.push(); // retried by the queue, same reason
@@ -167,22 +171,24 @@ void main() {
         await (db.select(db.syncQueue)..where((t) => t.id.equals('op-1')))
             .getSingle();
     expect(row.retryCount, 2, reason: 'retries keep counting even when not renotified');
+    expect(row.quarantinedAt, isNull, reason: 'transient: never quarantined');
   });
 
   test('REJECTED with a changed reason is surfaced again', () async {
     await insertPendingOp(
         id: 'op-1', operation: 'CREATE_SALE', entityId: 'sale-1');
-    stubPushResponse('op-1', 'REJECTED', reason: 'INSUFFICIENT_STOCK');
+    stubPushResponse('op-1', 'REJECTED', reason: 'OPTIMISTIC_LOCK');
     await syncService.push();
 
-    stubPushResponse('op-1', 'REJECTED', reason: 'STORE_NOT_ACTIVE');
+    stubPushResponse('op-1', 'REJECTED', reason: 'INTERNAL_ERROR');
     final second = await syncService.push();
 
     expect(second, hasLength(1));
-    expect(second.single['reason'], 'STORE_NOT_ACTIVE');
+    expect(second.single['reason'], 'INTERNAL_ERROR');
   });
 
-  test('a rejected money/stock-ledger operation stays in the queue', () async {
+  test('a rejected money/stock-ledger operation is quarantined, not dropped',
+      () async {
     final now = DateTime.now();
     await db.into(db.sales).insert(SalesCompanion.insert(
           id: 'sale-1',
@@ -201,6 +207,9 @@ void main() {
     expect(await queuedIds(), ['op-1']);
     expect(await db.select(db.sales).get(), hasLength(1),
         reason: 'zero sales lost: the sale is never rolled back');
+    expect(await syncService.hasPendingOperations(), false,
+        reason: 'a quarantined op no longer blocks the server refreshes');
+    expect(await syncService.quarantinedOperationCount(), 1);
   });
 
   group('v1s-16-12 — terminal rejection reconciliation', () {
@@ -276,6 +285,20 @@ void main() {
           id: 'm-x', productId: 'p1', storeId: 'store-x',
           type: 'STOCK_ENTRY', quantityDelta: 4, actorId: 'u',
           createdAt: now));
+      for (final (id, source, destination) in const [
+        ('tr-out', 'store-x', 'store-1'),
+        ('tr-in', 'store-1', 'store-x'),
+        ('tr-other', 'store-1', 'store-2'),
+      ]) {
+        await db.into(db.stockTransfers).insert(StockTransfersCompanion.insert(
+            id: id,
+            sourceStoreId: source,
+            destinationStoreId: destination,
+            productId: 'p1',
+            quantity: 1,
+            actorId: 'u',
+            occurredAt: now));
+      }
       await insertPendingOp(
           id: 'op-1', operation: 'CREATE_STORE', entityId: 'store-x');
       await insertPendingOp(
@@ -317,6 +340,12 @@ void main() {
       expect(result.map((r) => r['operation']), ['CREATE_STORE', 'CREATE_SALE'],
           reason: 'cascaded rejections are not surfaced');
       expect(result.first['rolledBack'], true);
+      // v1s-16-15: the ghost store's local transfer history goes too, and the
+      // sale it can never be recorded in is quarantined.
+      expect((await db.select(db.stockTransfers).get()).map((t) => t.id),
+          ['tr-other']);
+      expect(result.last['quarantined'], true);
+      expect(await syncService.hasPendingOperations(), false);
     });
 
     test(
@@ -844,5 +873,249 @@ void main() {
     await syncService.push();
 
     expect(await db.select(db.products).get(), hasLength(1));
+  });
+
+  group('v1s-16-15 — quarantine of money operations refused for good', () {
+    /// Answers each sent op from [answers] (default APPLIED) and records the
+    /// ids sent per push.
+    List<List<String>> stubServer(Map<String, (String, String?)> answers) {
+      final pushes = <List<String>>[];
+      when(() => mockDio.post<dynamic>(any(), data: any(named: 'data')))
+          .thenAnswer((inv) async {
+        final ops = ((inv.namedArguments[#data] as Map)['operations'] as List)
+            .cast<Map<String, dynamic>>();
+        pushes.add(ops.map((o) => o['operationId'] as String).toList());
+        return Response(
+          requestOptions: RequestOptions(path: '/api/v1/sync/push'),
+          statusCode: 200,
+          data: {
+            'data': {
+              'results': [
+                for (final o in ops)
+                  {
+                    'operationId': o['operationId'],
+                    'status': (answers[o['operationId']] ?? ('APPLIED', null)).$1,
+                    'reason': (answers[o['operationId']] ?? ('APPLIED', null)).$2,
+                  }
+              ],
+            },
+          },
+        );
+      });
+      return pushes;
+    }
+
+    Future<SyncQueueData?> row(String id) =>
+        (db.select(db.syncQueue)..where((t) => t.id.equals(id)))
+            .getSingleOrNull();
+
+    test(
+        'a refused sale is quarantined with its queued validation (chain): '
+        'one notice, not pending, never sent again', () async {
+      await insertPendingOp(
+          id: 'sale-op', operation: 'CREATE_SALE', entityId: 'sale-1');
+      await insertPendingOp(
+          id: 'validate-op', operation: 'VALIDATE_SALE', entityId: 'sale-1');
+      await insertPendingOp(
+          id: 'other-validate', operation: 'VALIDATE_SALE', entityId: 'sale-2');
+      final pushes = stubServer({
+        'sale-op': ('REJECTED', 'PRODUCT_NOT_FOUND'),
+        'validate-op': ('REJECTED', 'SALE_NOT_FOUND'),
+      });
+
+      final result = await syncService.push();
+
+      expect(result, hasLength(1),
+          reason: "the chained op's own refusal is not surfaced again");
+      expect(result.single['operation'], 'CREATE_SALE');
+      expect(result.single['quarantined'], true);
+      expect((await row('sale-op'))!.quarantinedAt, isNotNull);
+      expect((await row('sale-op'))!.lastError, 'PRODUCT_NOT_FOUND');
+      expect((await row('validate-op'))!.quarantinedAt, isNotNull);
+      expect(await row('other-validate'), isNull, reason: 'APPLIED: deleted');
+      expect(await syncService.hasPendingOperations(), false);
+      expect(await syncService.quarantinedOperationCount(), 2);
+
+      await insertPendingOp(
+          id: 'later', operation: 'UPDATE_CLIENT', entityId: 'c-1');
+      await syncService.push();
+      expect(pushes.last, ['later'], reason: 'quarantined ops are not pushed');
+    });
+
+    test('a chained op APPLIED in the same batch is deleted as usual',
+        () async {
+      await insertPendingOp(
+          id: 'sale-op', operation: 'CREATE_SALE', entityId: 'sale-1');
+      await insertPendingOp(
+          id: 'cancel-op', operation: 'CANCEL_SALE', entityId: 'sale-1');
+      stubServer({'sale-op': ('REJECTED', 'FORBIDDEN')});
+
+      await syncService.push();
+
+      expect(await queuedIds(), ['sale-op']);
+      expect((await row('sale-op'))!.quarantinedAt, isNotNull);
+    });
+
+    test('terminal reasons quarantine every money / stock-ledger operation',
+        () async {
+      const cases = [
+        ('CREATE_SALE', 'STORE_NOT_FOUND'),
+        ('VALIDATE_SALE', 'FORBIDDEN'),
+        ('CREATE_DAY_CLOSURE', 'STORE_NOT_FOUND'),
+        ('STOCK_ADJUST', 'Product not found: p-1'),
+        ('RECORD_STOCK_ENTRY', 'PRODUCT_NOT_FOUND'),
+        ('STOCK_TRANSFER', 'INSUFFICIENT_STOCK'),
+      ];
+      final answers = <String, (String, String?)>{};
+      for (final (i, (operation, reason)) in cases.indexed) {
+        await insertPendingOp(
+            id: 'op-$i', operation: operation, entityId: 'e-$i');
+        answers['op-$i'] = ('REJECTED', reason);
+      }
+      stubServer(answers);
+
+      final result = await syncService.push();
+
+      expect(result.map((r) => r['quarantined']), everyElement(true));
+      expect(result, hasLength(cases.length));
+      expect(await syncService.quarantinedOperationCount(), cases.length);
+      expect(await syncService.hasPendingOperations(), false);
+    });
+
+    test(
+        'DATA_INTEGRITY_VIOLATION quarantines a money op, stays transient for '
+        'other ops; other transient reasons never quarantine', () async {
+      await insertPendingOp(
+          id: 'adjust', operation: 'STOCK_ADJUST', entityId: 'sl-1');
+      await insertPendingOp(
+          id: 'product', operation: 'UPDATE_PRODUCT', entityId: 'p-1');
+      await insertPendingOp(
+          id: 'sale', operation: 'CREATE_SALE', entityId: 'sale-1');
+      stubServer({
+        'adjust': ('REJECTED', 'DATA_INTEGRITY_VIOLATION'),
+        'product': ('REJECTED', 'DATA_INTEGRITY_VIOLATION'),
+        'sale': ('REJECTED', 'OPTIMISTIC_LOCK'),
+      });
+
+      await syncService.push();
+
+      expect((await row('adjust'))!.quarantinedAt, isNotNull);
+      expect((await row('product'))!.quarantinedAt, isNull);
+      expect((await row('sale'))!.quarantinedAt, isNull);
+      expect((await row('sale'))!.lastError, 'OPTIMISTIC_LOCK');
+      expect(await syncService.hasPendingOperations(), true);
+    });
+
+    test(
+        'a validation refused while its sale is still pending is only retried; '
+        'once the sale is quarantined it joins the chain silently', () async {
+      await insertPendingOp(
+          id: 'sale-op', operation: 'CREATE_SALE', entityId: 'sale-1');
+      await insertPendingOp(
+          id: 'validate-op', operation: 'VALIDATE_SALE', entityId: 'sale-1');
+      stubServer({
+        'sale-op': ('REJECTED', 'OPTIMISTIC_LOCK'),
+        'validate-op': ('REJECTED', 'SALE_NOT_FOUND'),
+      });
+
+      final first = await syncService.push();
+
+      expect(first.map((r) => r['operation']), ['CREATE_SALE']);
+      final retried = (await row('validate-op'))!;
+      expect(retried.quarantinedAt, isNull);
+      expect(retried.lastError, 'SALE_NOT_FOUND');
+      expect(retried.retryCount, 1);
+
+      // The sale is now quarantined in an earlier push (simulated) while the
+      // validation is still sent and refused.
+      await (db.update(db.syncQueue)..where((t) => t.id.equals('sale-op')))
+          .write(SyncQueueCompanion(quarantinedAt: Value(DateTime.now())));
+      await (db.update(db.syncQueue)..where((t) => t.id.equals('validate-op')))
+          .write(const SyncQueueCompanion(quarantinedAt: Value(null)));
+      final pushes = stubServer({'validate-op': ('REJECTED', 'SALE_NOT_FOUND')});
+
+      // _push first attaches it to the quarantined sale: nothing is sent.
+      final second = await syncService.push();
+      expect(pushes, isEmpty);
+      expect(second, isEmpty);
+      expect((await row('validate-op'))!.quarantinedAt, isNotNull);
+    });
+
+    test(
+        'a validation refused while its sale is quarantined joins the chain '
+        'silently', () async {
+      await insertPendingOp(
+          id: 'sale-op', operation: 'CREATE_SALE', entityId: 'sale-1');
+      await insertPendingOp(
+          id: 'validate-op', operation: 'VALIDATE_SALE', entityId: 'sale-1');
+      // The sale goes into quarantine while the push is in flight (another
+      // batch of the same push): emulated from the server stub.
+      when(() => mockDio.post<dynamic>(any(), data: any(named: 'data')))
+          .thenAnswer((inv) async {
+        await (db.update(db.syncQueue)..where((t) => t.id.equals('sale-op')))
+            .write(SyncQueueCompanion(quarantinedAt: Value(DateTime.now())));
+        return Response(
+          requestOptions: RequestOptions(path: '/api/v1/sync/push'),
+          statusCode: 200,
+          data: {
+            'data': {
+              'results': [
+                {
+                  'operationId': 'validate-op',
+                  'status': 'REJECTED',
+                  'reason': 'SALE_NOT_FOUND',
+                },
+              ],
+            },
+          },
+        );
+      });
+
+      final result = await syncService.push();
+
+      expect(result, isEmpty, reason: 'joins the chain without a notice');
+      expect((await row('validate-op'))!.quarantinedAt, isNotNull);
+    });
+
+    test(
+        'a validation queued after its sale was quarantined is attached to the '
+        'chain, never sent on its own', () async {
+      await insertPendingOp(
+          id: 'sale-op', operation: 'CREATE_SALE', entityId: 'sale-1');
+      final pushes = stubServer({'sale-op': ('REJECTED', 'PRODUCT_NOT_FOUND')});
+      await syncService.push();
+
+      await insertPendingOp(
+          id: 'validate-op', operation: 'VALIDATE_SALE', entityId: 'sale-1');
+      await insertPendingOp(
+          id: 'other', operation: 'UPDATE_CLIENT', entityId: 'c-1');
+      final result = await syncService.push();
+
+      expect(pushes.last, ['other']);
+      expect(result, isEmpty, reason: 'no second notice');
+      expect((await row('validate-op'))!.quarantinedAt, isNotNull);
+      expect(await syncService.hasPendingOperations(), false);
+    });
+
+    test('a released chain refused again goes back with one new notice',
+        () async {
+      await insertPendingOp(
+          id: 'sale-op', operation: 'CREATE_SALE', entityId: 'sale-1');
+      stubServer({'sale-op': ('REJECTED', 'PRODUCT_NOT_FOUND')});
+      await syncService.push();
+
+      // Renvoyer.
+      await (db.update(db.syncQueue)..where((t) => t.id.equals('sale-op')))
+          .write(const SyncQueueCompanion(quarantinedAt: Value(null)));
+      expect(await syncService.hasPendingOperations(), true);
+
+      final again = await syncService.push();
+
+      expect(again, hasLength(1),
+          reason: 'surfaced again even with the same reason');
+      expect(again.single['quarantined'], true);
+      expect((await row('sale-op'))!.quarantinedAt, isNotNull);
+      expect((await row('sale-op'))!.retryCount, 2);
+    });
   });
 }

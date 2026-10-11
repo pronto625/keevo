@@ -35,6 +35,9 @@ class _NoOpSyncService implements SyncService {
   Future<bool> hasPendingOperations() async => false;
 
   @override
+  Future<int> quarantinedOperationCount() async => 0;
+
+  @override
   Future<void> pull() async {}
 
   @override
