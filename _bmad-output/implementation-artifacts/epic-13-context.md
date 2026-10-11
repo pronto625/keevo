@@ -5,7 +5,7 @@
 
 ## Goal
 
-Remove the concurrency races and data-loss paths on the production V1 line that the 2026-07-20 audit found to be mechanically certain (B-CRIT-1/2/3, F-CRIT-1/2/3, F-HIGH-4), together with the residual integrity gaps routed from deferred-work on 2026-10-11. The aim is that offline-first sync, stock mutations, transfers, sale cancellation, inventory validation, schedulers, report windows and tenant-schema provisioning never double-apply, lose or silently drop data. Stories 13.1–13.10 are done and 13.11 is in progress. 13.8–13.12 are item-list stories made from redistributed review deferrals. All are tag A (urgent V1 patch) except 13.12, which is tag C (V1 patch that the refonte also absorbs).
+Remove the concurrency races and data-loss paths on the production V1 line that the 2026-07-20 audit found to be mechanically certain (B-CRIT-1/2/3, F-CRIT-1/2/3, F-HIGH-4), together with the residual integrity gaps routed from deferred-work on 2026-10-11. The aim is that offline-first sync, stock mutations, transfers, sale cancellation, inventory validation, schedulers, report windows and tenant-schema provisioning never double-apply, lose or silently drop data. Stories 13.1–13.11 are done and 13.12 is in progress. 13.8–13.12 are item-list stories made from redistributed review deferrals. All are tag A (urgent V1 patch) except 13.12, which is tag C (V1 patch that the refonte also absorbs).
 
 ## Stories
 
@@ -19,8 +19,8 @@ Remove the concurrency races and data-loss paths on the production V1 line that 
 - Story 13.8: Residual sync integrity: offline write paths, handler parity (done)
 - Story 13.9: Scheduler locking and check-then-act races (done)
 - Story 13.10: Optimistic lock on Sale (@Version + 409) (done)
-- Story 13.11: Day-closure and report windows (PO decisions) (in progress)
-- Story 13.12: Tenant schema provisioning hygiene (backlog)
+- Story 13.11: Day-closure and report windows (PO decisions) (done)
+- Story 13.12: Tenant schema provisioning hygiene (in progress)
 
 ## Requirements & Constraints
 
@@ -33,10 +33,10 @@ Remove the concurrency races and data-loss paths on the production V1 line that 
 - **Draft carts.** A cart containing DRAFT items is recorded as `PENDING_VALIDATION` and does not decrement stock.
 - **Offline inventory validation (FR48).** For each non-zero discrepancy, write a `StockMovement` of type `ADJUSTMENT` with `source=INVENTORY`, `inventorySessionId`, quantity before/after and actorId. Also queue a threshold event when stock falls below the minimum.
   - Guard against empty sessions and against re-validating an already-VALIDATED session.
-- **Reports (FR42, FR52, FR53).** Daily recap, weekly report (Sunday evening, ISO Monday-to-Sunday week) and per-tenant `eodReportTime`. A manual closure or an automatic EOD fallback (20:00 by default) always produces a report. No sale may be silently excluded from a closure or report. The window rules are PO decisions that must be recorded in the PRD/AC alongside the code (13.11).
+- **Reports (FR42, FR52, FR53).** Daily recap, weekly report (Sunday evening, ISO Monday-to-Sunday week) and per-tenant `eodReportTime`. A manual closure or an automatic EOD fallback (20:00 by default) always produces a report. No sale may be silently excluded from a closure or report. The window rules are PO decisions recorded in the PRD (13.11, see dependencies).
 - **Existing closure rules.** One closure per store per day, and closures more than 7 days old are refused. An EMPLOYEE can close only their own store.
 - **Multi-instance safety.** Schedulers (day closure, account deletion, trends) must not double-run across instances or restarts.
-- **Tenant isolation (NFR10).** Isolation also depends on tenant schemas being fully and consistently provisioned.
+- **Tenant isolation (NFR10).** 100% isolation, schema-per-tenant (`kv_xxxxxx`, created automatically at signup). Isolation also depends on tenant schemas being fully and consistently provisioned: a tenant must never end up half-provisioned, and provisioning failures must be visible.
 - **Tests.** Each fix ships named TDD tests (red first) for the concurrency or integrity case.
 - **Deferred items (13.8–13.12).** Each item is resolved, or rejected with a reason, with its box ticked in the epics file and the commit or decision noted. deferred-work.md stays empty; new follow-ups are routed to their owning story.
 
@@ -68,7 +68,13 @@ Remove the concurrency races and data-loss paths on the production V1 line that 
   - Notification cooldowns use one atomic `INSERT … ON CONFLICT DO UPDATE … WHERE` statement instead of check-then-upsert.
   - Long-lived in-memory maps get a TTL cache.
 - **Time.** Inject `Clock` (as in DayClosureAutoScheduler) rather than calling `LocalDate.now()`. Validate the `eodReportTime` format on write (422) instead of silently falling back to 20:00.
-- **Tenant schemas.** Use the single `TenantSchema` validation helper (`^kv_[a-z0-9]{6}$`). Per-tenant DDL is synced at boot by `TenantSchemaSyncService`; its failures must be visible (log ERROR / fail), not silent. Schema migrations go through Flyway; non-idempotent constraints are fixed with `DO $$` blocks in a new migration.
+- **Tenant schemas (13.12).**
+  - All schema-name validation goes through the single `TenantSchema` helper (`^kv_[a-z0-9]{6}$`); the remaining ad-hoc helpers (connection provider, schema sync, provisioner) converge on it.
+  - `public` is the source of truth, managed only by Flyway versioned migrations (`V{n}__*.sql`, baseline 0) with `ddl-auto=validate`. Never edit an applied migration; fix non-idempotent V1 inline CHECK constraints with `DO $$` blocks in a new migration.
+  - `TenantSchemaProvisioner` creates the tenant tables by programmatic JDBC DDL at registration (users, subscriptions, roles, user_roles, stores, categories, tenant_preferences + seeds). Its DDL must be complete on its own (e.g. `users` lockout columns), not rely on a later sync.
+  - `TenantSchemaSyncService` diffs `information_schema` (public vs tenant) and adds missing tables (`LIKE … INCLUDING ALL`, no FKs) and columns, cached per JVM, uses fully-qualified `"schema"."table"` names via raw JDBC, `tenants` excluded. It currently swallows `SQLException`; failures must become visible (ERROR log / fail) so per-tenant columns such as `version` never go silently missing.
+  - Raw SQL rule: tenant tables are touched only via Hibernate or with a schema-qualified name from `TenantContext`; never `JdbcTemplate` inside `@Transactional`.
+  - SQL correctness of migrations/DDL is verified against a real PostgreSQL (integration tests), not mocks.
 - **Drift local retention.** Transactional tables are purged only once they are synced. PENDING queue rows are never purged.
 - **Branches.** Work targets the V1 line (`deploy` → `develop` fast-forward). Each story notes how the refonte absorbs it, either natively or by re-applying.
 
@@ -85,5 +91,5 @@ Remove the concurrency races and data-loss paths on the production V1 line that 
 - **13.9** (done) built on 13.3, 13.5, 14.5, 14.10 and 14.11. Its ShedLock setup, advisory-lock port and conditional sale-status claims are the base for 13.10 and 13.11.
 - **13.10** (done) mirrored 13.1 for `Sale`, protecting the cancel/correct paths from 13.5, and made every SALE-movement path (validate, cascade, app and backend) reuse the sale item id.
 - **13.11**'s PO decisions D1–D3 are recorded in prd.md (notes under FR51/FR52/FR90) and in spec-v1s-13-11-closure-report-windows.md: a closure covers every sale since the previous closure, with no 23:59 cut-off (D1); the weekly report chains on the previous weekly report, which closes the Sunday 20:00–23:59 gap (D2); cancel/correct after closure is allowed with an in-app warning and no regeneration or `SALE_DAY_CLOSED` (D3). It builds on 13.3, 13.5 and 13.10; injecting `Clock` into CloseDayService follows the DayClosureAutoScheduler pattern. Who may close a day (EMPLOYEE vs OWNER) and the `'default'` storeId in all-stores mode are separate open PO questions owned by 4-4 / UI-3, not by 13.11.
-- **13.12** relates to 12.5 (TenantSchema) and 13.1 (the V5 version column depends on the boot-time schema sync), and is absorbed natively by refonte 10.1/10.2.
+- **13.12** (in progress) relates to 12.5 (TenantSchema) and 13.1 (the V5 version column depends on the boot-time schema sync), and is absorbed natively by refonte 10.1/10.2.
 - Sync-rejection feedback to users belongs to Epic 16 (16.12). FR90 in the refonte is 17-1.
