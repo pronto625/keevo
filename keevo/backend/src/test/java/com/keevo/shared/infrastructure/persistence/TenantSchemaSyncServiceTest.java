@@ -31,12 +31,16 @@ class TenantSchemaSyncServiceTest {
     @Mock ResultSet tablesRs;
     @Mock ResultSet columnsRs;
     @Mock ResultSet colDefRs;
+    @Mock PreparedStatement lockStmt;
 
     TenantSchemaSyncService service;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws SQLException {
         service = new TenantSchemaSyncService(dataSource);
+        // Story v1s-13-12: every sync transaction starts with the per-schema advisory lock
+        lenient().when(connection.prepareStatement(TenantSchemaSyncService.ADVISORY_LOCK_SQL))
+                .thenReturn(lockStmt);
     }
 
     // ── Guard conditions ──────────────────────────────────────────────────────
@@ -226,5 +230,90 @@ class TenantSchemaSyncServiceTest {
 
         // Schema NOT cached — will retry on next request
         // (Re-try would also fail but that's acceptable)
+    }
+
+    // ── Story v1s-13-12 — syncNow (boot-time) + users lockout columns ────────
+
+    @Test
+    @DisplayName("syncNow() propagates the SQLException (boot runner must see it) and does not cache")
+    void syncNow_propagates_failure() throws Exception {
+        when(dataSource.getConnection()).thenThrow(new SQLException("connection refused"));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.syncNow("kv_abc123"))
+                .isInstanceOf(SQLException.class)
+                .hasMessageContaining("connection refused");
+
+        // Not cached: the request path retries
+        service.syncIfNeeded("kv_abc123");
+        verify(dataSource, times(2)).getConnection();
+    }
+
+    @Test
+    @DisplayName("syncNow() rejects an invalid schema name with IllegalArgumentException, no DB call")
+    void syncNow_rejects_invalid_schema() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.syncNow("public"))
+                .isInstanceOf(IllegalArgumentException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.syncNow(null))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(dataSource);
+    }
+
+    @Test
+    @DisplayName("syncNow() success caches the schema (first request does not re-sync) and adds users lockout columns")
+    void syncNow_caches_and_adds_users_lockout_columns() throws Exception {
+        when(dataSource.getConnection()).thenReturn(connection);
+        when(connection.prepareStatement(contains("information_schema.tables")))
+                .thenReturn(tablesStmt);
+        when(tablesStmt.executeQuery()).thenReturn(tablesRs);
+        when(tablesRs.next()).thenReturn(false);
+        when(connection.createStatement()).thenReturn(execStmt);
+
+        service.syncNow("kv_usr123");
+        service.syncIfNeeded("kv_usr123");
+
+        verify(dataSource, times(1)).getConnection();
+        org.mockito.ArgumentCaptor<String> sqlCaptor =
+                org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(execStmt, atLeastOnce()).execute(sqlCaptor.capture());
+        assertThat(sqlCaptor.getAllValues())
+                .contains(TenantSchemaProvisioner.DDL_USERS_MIGRATE_FAILED_ATTEMPTS,
+                          TenantSchemaProvisioner.DDL_USERS_MIGRATE_LOCKED_UNTIL);
+    }
+
+    @Test
+    @DisplayName("doSync takes the per-schema advisory xact lock and a bounded lock_timeout first")
+    void sync_takes_advisory_lock_and_lock_timeout() throws Exception {
+        when(dataSource.getConnection()).thenReturn(connection);
+        when(connection.prepareStatement(contains("information_schema.tables")))
+                .thenReturn(tablesStmt);
+        when(tablesStmt.executeQuery()).thenReturn(tablesRs);
+        when(tablesRs.next()).thenReturn(false);
+        when(connection.createStatement()).thenReturn(execStmt);
+
+        service.syncNow("kv_lck123");
+
+        org.mockito.InOrder order = inOrder(connection, lockStmt, execStmt);
+        order.verify(connection).setAutoCommit(false);
+        order.verify(lockStmt).setString(1, "tenant-schema-sync:kv_lck123");
+        order.verify(lockStmt).execute();
+        order.verify(execStmt).execute(TenantSchemaSyncService.LOCK_TIMEOUT_SQL);
+        order.verify(connection, atLeastOnce()).prepareStatement(contains("information_schema.tables"));
+        assertThat(TenantSchemaSyncService.ADVISORY_LOCK_SQL).isEqualTo("SELECT pg_advisory_xact_lock(hashtext(?))");
+        assertThat(TenantSchemaSyncService.LOCK_TIMEOUT_SQL).isEqualTo("SET LOCAL lock_timeout = '10s'");
+    }
+
+    @Test
+    @DisplayName("sync runs the SALE_CANCELLED movement_type migration for existing tenants")
+    void sync_runs_sale_cancelled_migration() throws Exception {
+        when(dataSource.getConnection()).thenReturn(connection);
+        when(connection.prepareStatement(contains("information_schema.tables")))
+                .thenReturn(tablesStmt);
+        when(tablesStmt.executeQuery()).thenReturn(tablesRs);
+        when(tablesRs.next()).thenReturn(false);
+        when(connection.createStatement()).thenReturn(execStmt);
+
+        service.syncNow("kv_sc1234");
+
+        verify(execStmt).execute(TenantSchemaProvisioner.DDL_STOCK_MOVEMENTS_MIGRATE_SALE_CANCELLED);
     }
 }

@@ -1,5 +1,6 @@
 package com.keevo.sync.sync.application.strategy;
 
+import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.sync.sync.domain.model.ConflictResult;
 import com.keevo.sync.sync.domain.model.StockConflictResolvedEvent;
 import com.keevo.sync.sync.domain.model.SyncOperation;
@@ -13,7 +14,6 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.util.*;
-import java.util.regex.Pattern;
 
 /**
  * DeltaStockStrategy — Checks post-application stock level for negative values.
@@ -22,9 +22,6 @@ import java.util.regex.Pattern;
  */
 @Component
 public class DeltaStockStrategy implements ConflictResolutionStrategy {
-
-    /** Valid tenant schema pattern — prevents SQL injection in native queries. */
-    private static final Pattern TENANT_PATTERN = Pattern.compile("^kv_[a-z0-9]{6}$");
 
     private final EntityManager entityManager;
     private final ApplicationEventPublisher eventPublisher;
@@ -38,7 +35,7 @@ public class DeltaStockStrategy implements ConflictResolutionStrategy {
     public ConflictResult evaluate(SyncOperation operation, SyncOperationResult handlerResult,
                                    UUID actorId, String tenantId) {
         if (handlerResult.status() != SyncOperationStatus.APPLIED) return null;
-        if (tenantId == null || !TENANT_PATTERN.matcher(tenantId).matches()) return null;
+        if (!TenantSchema.isValid(tenantId)) return null; // prevents SQL injection in native queries
 
         Map<String, Object> payload = operation.payload();
         String storeId = extractStoreId(payload, operation.operationType());

@@ -6,6 +6,7 @@ import com.keevo.catalog.stock.domain.model.StoreProductStockEntry;
 import com.keevo.catalog.stock.domain.model.StoreStockSummary;
 import com.keevo.catalog.stock.domain.port.out.MultiStoreStockRepository;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.store.store.domain.model.StoreType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -96,7 +97,7 @@ public class MultiStoreStockRepositoryAdapter implements MultiStoreStockReposito
     /** Returns the current tenant schema, validated against the expected format. */
     private String schema() {
         String s = TenantContext.getCurrentTenant();
-        if (s == null || !s.matches("^kv_[a-z0-9]{6}$")) {
+        if (!TenantSchema.isValid(s)) {
             throw new IllegalStateException("No valid tenant schema in context");
         }
         return s;

@@ -38,8 +38,6 @@ import java.sql.Statement;
 public class SchemaAwareMultiTenantConnectionProvider
         implements MultiTenantConnectionProvider<String> {
 
-    private static final String DEFAULT_SCHEMA = TenantIdentifierResolver.DEFAULT_SCHEMA;
-
     private final DataSource dataSource;
 
     public SchemaAwareMultiTenantConnectionProvider(DataSource dataSource) {
@@ -66,7 +64,7 @@ public class SchemaAwareMultiTenantConnectionProvider
     @Override
     public Connection getConnection(String tenantIdentifier) throws SQLException {
         Connection conn = dataSource.getConnection();
-        if (isTenantSchema(tenantIdentifier)) {
+        if (TenantSchema.isValid(tenantIdentifier)) { // "public" never matches the tenant format
             applySearchPath(conn, tenantIdentifier);
         }
         return conn;
@@ -78,7 +76,7 @@ public class SchemaAwareMultiTenantConnectionProvider
      */
     @Override
     public void releaseConnection(String tenantIdentifier, Connection connection) throws SQLException {
-        if (isTenantSchema(tenantIdentifier)) {
+        if (TenantSchema.isValid(tenantIdentifier)) { // "public" never matches the tenant format
             try (Statement stmt = connection.createStatement()) {
                 stmt.execute("SET search_path TO public");
             } catch (SQLException e) {
@@ -111,13 +109,6 @@ public class SchemaAwareMultiTenantConnectionProvider
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
-
-    /** Returns true when the identifier refers to a real tenant schema (not public). */
-    private boolean isTenantSchema(String tenantIdentifier) {
-        return tenantIdentifier != null
-                && !tenantIdentifier.equals(DEFAULT_SCHEMA)
-                && tenantIdentifier.matches("^kv_[a-z0-9]{6}$");
-    }
 
     @SuppressWarnings("SqlSourceToSinkFlow")
     private void applySearchPath(Connection conn, String schemaName) throws SQLException {

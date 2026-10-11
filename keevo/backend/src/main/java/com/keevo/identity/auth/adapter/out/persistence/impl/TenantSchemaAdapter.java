@@ -3,6 +3,7 @@ package com.keevo.identity.auth.adapter.out.persistence.impl;
 import com.keevo.identity.auth.domain.port.out.TenantSchemaPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
@@ -36,9 +37,11 @@ public class TenantSchemaAdapter implements TenantSchemaPort {
      */
     @Override
     public void assignOwnerRole(String schemaName, UUID userId) {
-        if (!schemaName.matches("^kv_[a-z0-9]{6}$")) {
-            throw new DomainException(ErrorCode.TENANT_PROVISION_FAILED,
-                    "Invalid schema name: " + schemaName);
+        try {
+            TenantSchema.validate(schemaName);
+        } catch (IllegalArgumentException e) {
+            // Story 12.12 (D5): report the length only, never the raw value
+            throw new DomainException(ErrorCode.TENANT_PROVISION_FAILED, e.getMessage());
         }
         try (Connection conn = dataSource.getConnection()) {
             UUID ownerRoleId = fetchOwnerRoleId(conn, schemaName);

@@ -86,8 +86,11 @@ public class TenantSchemaSyncService {
                     java.util.Map.entry("notification_cooldowns", TenantSchemaProvisioner.DDL_NOTIFICATION_COOLDOWNS)  // Story 8.1
             );
 
-    /** Valid tenant schema pattern — prevents any SQL injection. */
-    private static final String SCHEMA_PATTERN = "^kv_[a-z0-9]{6}$";
+    /** Transaction-scoped advisory lock serialising syncs of one schema (released on commit/rollback). */
+    static final String ADVISORY_LOCK_SQL = "SELECT pg_advisory_xact_lock(hashtext(?))";
+    static final String ADVISORY_LOCK_PREFIX = "tenant-schema-sync:";
+    /** Bounded wait on table locks taken by the sync DDL (transaction-local). */
+    static final String LOCK_TIMEOUT_SQL = "SET LOCAL lock_timeout = '10s'";
 
     /**
      * In-memory cache of schemas already synced in this JVM lifetime.
@@ -110,10 +113,10 @@ public class TenantSchemaSyncService {
      * <p>Safe to call on every authenticated request — the in-memory cache makes repeated
      * calls effectively free after the first sync.
      *
-     * @param schemaName tenant schema (must match {@code ^kv_[a-z0-9]{6}$})
+     * @param schemaName tenant schema (validated by {@link TenantSchema#isValid(String)})
      */
     public void syncIfNeeded(String schemaName) {
-        if (schemaName == null || !schemaName.matches(SCHEMA_PATTERN)) return;
+        if (!TenantSchema.isValid(schemaName)) return;
         if (syncedSchemas.containsKey(schemaName)) return;
 
         try {
@@ -124,6 +127,25 @@ public class TenantSchemaSyncService {
                     schemaName, e.getMessage(), e);
             // Non-blocking: the request proceeds; worst case, a 500 surfaces the real issue
         }
+    }
+
+    /**
+     * Sync the given tenant schema against {@code public} now, regardless of the cache,
+     * and propagate any failure (Story v1s-13-12).
+     *
+     * <p>Used by {@link TenantSchemaMigrationRunner} at boot so per-tenant columns (e.g.
+     * {@code version}) exist before the first request — schedulers never call
+     * {@link #syncIfNeeded(String)}. On success the schema is cached, so the first request
+     * does not sync it again; on failure nothing is cached and the request path retries.
+     *
+     * @param schemaName tenant schema
+     * @throws IllegalArgumentException if the schema name is not a valid tenant schema
+     * @throws SQLException             if the sync fails (transaction rolled back)
+     */
+    public void syncNow(String schemaName) throws SQLException {
+        TenantSchema.validate(schemaName);
+        doSync(schemaName);
+        syncedSchemas.put(schemaName, Boolean.TRUE);
     }
 
     /**
@@ -142,6 +164,16 @@ public class TenantSchemaSyncService {
         try (Connection conn = dataSource.getConnection()) {
             conn.setAutoCommit(false);
             try {
+                // Story v1s-13-12: serialise concurrent syncs of the same schema (boot syncNow vs
+                // request syncIfNeeded, or several instances) and never wait forever on a DDL lock.
+                try (PreparedStatement lock = conn.prepareStatement(ADVISORY_LOCK_SQL)) {
+                    lock.setString(1, ADVISORY_LOCK_PREFIX + tenantSchema);
+                    lock.execute();
+                }
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute(LOCK_TIMEOUT_SQL);
+                }
+
                 Set<String> sourceTables = getTablesInSchema(conn, SOURCE_SCHEMA);
                 Set<String> tenantTables = getTablesInSchema(conn, tenantSchema);
 
@@ -209,6 +241,11 @@ public class TenantSchemaSyncService {
     private void ensureRequiredIndexes(Connection conn, String tenantSchema) throws SQLException {
         try (Statement stmt = conn.createStatement()) {
             stmt.execute("SET search_path TO \"" + tenantSchema + "\"");
+            // Story v1s-13-12 — users lockout columns (DDL_USERS now carries them for new tenants)
+            stmt.execute(TenantSchemaProvisioner.DDL_USERS_MIGRATE_FAILED_ATTEMPTS);
+            stmt.execute(TenantSchemaProvisioner.DDL_USERS_MIGRATE_LOCKED_UNTIL);
+            // Story v1s-13-5 / v1s-13-12 — movement_type CHECK must accept SALE_CANCELLED on old tenants
+            stmt.execute(TenantSchemaProvisioner.DDL_STOCK_MOVEMENTS_MIGRATE_SALE_CANCELLED);
             stmt.execute(TenantSchemaProvisioner.DDL_PRODUCTS_UQ_NAME);
             stmt.execute(TenantSchemaProvisioner.DDL_DRAFT_NOTIFICATIONS_IDX_PRODUCT);
             stmt.execute(TenantSchemaProvisioner.DDL_DRAFT_NOTIFICATIONS_IDX_PENDING);

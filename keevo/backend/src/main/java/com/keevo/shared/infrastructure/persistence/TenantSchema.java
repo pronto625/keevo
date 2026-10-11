@@ -6,14 +6,25 @@ import java.util.regex.Pattern;
  * Centralized tenant schema name validation (ARCH18).
  *
  * <p>The tenant schema name format {@code kv_[a-z0-9]{6}} is the trust gate for any
- * raw-JDBC tenant-qualified query. This class centralizes the regex previously
- * duplicated across:
+ * raw-JDBC tenant-qualified query. Since Story v1s-13-12 this class is the ONLY place in the
+ * Java sources that defines the regex; every caller goes through {@link #isValid(String)} or
+ * {@link #validate(String)} and keeps its own failure contract:
  * <ul>
- *   <li>{@link SchemaAwareMultiTenantConnectionProvider#isTenantSchema(String)} — {@code search_path} gate</li>
- *   <li>{@link TenantSchemaSyncService#syncIfNeeded(String)} — no-op on invalid</li>
- *   <li>{@link TenantSchemaProvisioner#provision(String, String)} — throw on invalid</li>
+ *   <li>{@code SchemaAwareMultiTenantConnectionProvider} — {@code search_path} gate (public/invalid → no SET)</li>
+ *   <li>{@link TenantSchemaSyncService#syncIfNeeded(String)} — no-op on invalid;
+ *       {@link TenantSchemaSyncService#syncNow(String)} — throws on invalid</li>
+ *   <li>{@link TenantSchemaMigrationRunner} — invalid → skipped</li>
+ *   <li>{@link TenantSchemaProvisioner#provision(String, String)} — DomainException(TENANT_PROVISION_FAILED)</li>
  *   <li>{@link TenantSchemaProvisioner#dropSchemaIfExists(String)} — no-op on invalid</li>
+ *   <li>{@link TenantSchemaProvisioner#dropSchemaForDeletion(String)} — IllegalArgumentException</li>
+ *   <li>{@code TenantSchemaAdapter#assignOwnerRole} — DomainException(TENANT_PROVISION_FAILED)</li>
+ *   <li>{@code JdbcNotificationCooldownAdapter}, {@code MultiStoreStockRepositoryAdapter} — IllegalStateException</li>
+ *   <li>{@code DeltaStockStrategy} — no conflict evaluated on invalid</li>
+ *   <li>{@code SalesTrendDetectionScheduler}, {@code SubscriptionExpiryService} — tenant skipped</li>
  * </ul>
+ *
+ * <p>The SQL-side filter in {@code SyncErrorLogCleanupJob} ({@code schema_name ~ '...'}) is a
+ * database query predicate, not a Java check, and intentionally stays in SQL.
  *
  * <p><b>Format:</b> {@code ^kv_[a-z0-9]{6}$} — exactly 6 lowercase alphanumeric characters
  * after the {@code kv_} prefix. This is the PostgreSQL schema name, <b>not</b> the
