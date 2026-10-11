@@ -5,10 +5,12 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/di/providers.dart';
 import '../../../catalog/domain/model/product_model.dart';
 import '../../../catalog/presentation/provider/product_provider.dart';
 import '../../../catalog/presentation/provider/stock_provider.dart';
 import '../../../stores/domain/model/store_model.dart';
+import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../../stores/presentation/provider/store_provider.dart';
 import '../../../sync_indicator/presentation/widget/sync_required_modal.dart';
 import '../../../../core/sync/sync_gate_provider.dart';
@@ -19,6 +21,10 @@ import '../provider/stock_transfer_provider.dart';
 ///
 /// When [destinationStores] is empty (e.g. from the history FAB), the widget
 /// self-loads stores from [storeListNotifierProvider].
+/// Story v1s-12-11 (FR36): in self-load mode an EMPLOYEE's source store is
+/// locked to their own store ([activeStoreIdProvider], kept equal to the JWT
+/// store by SessionClaimsApplier). OWNER may pick any source store. The
+/// backend enforces the same rule (403 / sync REJECTED).
 /// Returns the id of the created transfer on success, or null if dismissed.
 ///
 /// Story 3.3.
@@ -210,11 +216,23 @@ class _TransferFormBottomSheetState
     // Tests pass destinationStores, so this branch is never reached in tests
     // and storeListNotifierProvider is not watched (no mock needed).
     List<StoreModel> allStores;
+    List<StoreModel> sourceOptions = const [];
+    bool sourceLocked = false;
     AsyncValue<List<ProductModel>>? productsAsync;
     if (_selfLoadMode) {
       final storesAsync = ref.watch(storeListNotifierProvider);
       allStores = storesAsync.value ?? [];
       productsAsync = ref.watch(productListForPickerProvider);
+      // v1s-12-11 — EMPLOYEE transfers only out of their own store.
+      sourceLocked = ref.watch(currentUserRoleProvider) == 'EMPLOYEE';
+      if (sourceLocked) {
+        final ownStoreId = ref.watch(activeStoreIdProvider);
+        sourceOptions = allStores.where((s) => s.id == ownStoreId).toList();
+        // Preselect (or clear, if their store is not in the list → no submit).
+        _selectedSource = sourceOptions.isEmpty ? null : sourceOptions.first;
+      } else {
+        sourceOptions = allStores;
+      }
     } else {
       allStores = widget.destinationStores;
     }
@@ -324,6 +342,7 @@ class _TransferFormBottomSheetState
                         )
                       else
                         DropdownButtonFormField<StoreModel>(
+                          key: const Key('transfer_source_dropdown'),
                           value: _selectedSource,
                           decoration: InputDecoration(
                             labelText: 'Boutique source',
@@ -331,16 +350,24 @@ class _TransferFormBottomSheetState
                                 color: cs.primary),
                           ),
                           hint: const Text('D\'où part le stock'),
-                          items: allStores
+                          // EMPLOYEE whose own store is not loaded: say why
+                          // the (disabled, empty) source cannot be chosen.
+                          disabledHint: sourceLocked && sourceOptions.isEmpty
+                              ? const Text('Votre boutique est introuvable')
+                              : null,
+                          items: sourceOptions
                               .map((s) => DropdownMenuItem(
                                     value: s,
                                     child: Text(s.name),
                                   ))
                               .toList(),
-                          onChanged: (s) => setState(() {
-                            _selectedSource = s;
-                            _selectedDestination = null;
-                          }),
+                          // EMPLOYEE: locked to their own store (disabled).
+                          onChanged: sourceLocked
+                              ? null
+                              : (s) => setState(() {
+                                    _selectedSource = s;
+                                    _selectedDestination = null;
+                                  }),
                           validator: (v) => v == null
                               ? 'Sélectionner une boutique source'
                               : null,

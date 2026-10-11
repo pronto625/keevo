@@ -2,6 +2,8 @@ package com.keevo.sync.sync.application.handler;
 
 import com.keevo.catalog.stock.domain.port.in.TransferStockCommand;
 import com.keevo.catalog.stock.domain.port.in.TransferStockUseCase;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
@@ -36,17 +38,23 @@ public class TransferSyncHandler extends AbstractSyncOperationHandler {
 
     @Override
     protected SyncOperationResult apply(SyncOperation operation, UUID actorId, String tenantId) {
-        // OWNER and EMPLOYEE (any store) can initiate transfers — mirrors
-        // StockTransferController.transfer(), superseding the OWNER-only guard
-        // from Story v1s-12-8 AC4 / Story 12.6 AC7.
+        // Story v1s-12-11 (FR36, PO decision 2026-10-11): OWNER transfers from any store;
+        // EMPLOYEE only from their JWT-assigned store — mirrors StockTransferController.transfer().
+        // Checked before the use case (and its idempotent clientId replay lookup).
         Map<String, Object> p = operation.payload();
+        UUID sourceStoreId = UUID.fromString((String) p.get("sourceStoreId"));
+        UUID assignedStoreId = extractAssignedStoreId();
+        if (assignedStoreId != null && !assignedStoreId.equals(sourceStoreId)) {
+            throw new DomainException(ErrorCode.FORBIDDEN,
+                    "EMPLOYEE can only transfer stock from their assigned store");
+        }
         // Offline-first fix: propagate the client-generated entity id as clientId so the
         // use case preserves it instead of minting a new server-side UUID (mirrors
         // CREATE_PRODUCT). Without this, the pull-merge INSERT ... ON CONFLICT(id) inserts a
         // duplicate row instead of updating the original offline record.
         UUID clientId = operation.entityId() != null ? UUID.fromString(operation.entityId()) : null;
         var transfer = transferStockUseCase.execute(new TransferStockCommand(
-                UUID.fromString((String) p.get("sourceStoreId")),
+                sourceStoreId,
                 UUID.fromString((String) p.get("destinationStoreId")),
                 UUID.fromString((String) p.get("productId")),
                 p.get("variantId") != null ? UUID.fromString((String) p.get("variantId")) : null,

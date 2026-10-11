@@ -5,6 +5,7 @@ import com.keevo.catalog.stock.domain.port.in.TransferStockCommand;
 import com.keevo.catalog.stock.domain.port.in.TransferStockUseCase;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.security.AuthDetails;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import org.junit.jupiter.api.AfterEach;
@@ -28,7 +29,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
- * TransferSyncHandlerTest — Story v1s-12-8 AC4/AC6.
+ * TransferSyncHandlerTest — Story v1s-12-8 AC4/AC6, v1s-12-11 (employee own-store scope).
  */
 @ExtendWith(MockitoExtension.class)
 class TransferSyncHandlerTest {
@@ -57,16 +58,21 @@ class TransferSyncHandlerTest {
                         List.of(new SimpleGrantedAuthority("ROLE_OWNER"))));
     }
 
-    private void authenticateAsEmployee() {
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(
-                        ACTOR_ID, null,
-                        List.of(new SimpleGrantedAuthority("ROLE_EMPLOYEE"))));
+    private void authenticateAsEmployee(UUID storeId) {
+        var auth = new UsernamePasswordAuthenticationToken(
+                ACTOR_ID, null,
+                List.of(new SimpleGrantedAuthority("ROLE_EMPLOYEE")));
+        auth.setDetails(new AuthDetails("Loïc", storeId));
+        SecurityContextHolder.getContext().setAuthentication(auth);
     }
 
     private SyncOperation buildOp() {
+        return buildOp(UUID.randomUUID().toString());
+    }
+
+    private SyncOperation buildOp(String sourceStoreId) {
         return new SyncOperation("op-1", "STOCK_TRANSFER", UUID.randomUUID().toString(),
-                Map.of("sourceStoreId", UUID.randomUUID().toString(),
+                Map.of("sourceStoreId", sourceStoreId,
                         "destinationStoreId", UUID.randomUUID().toString(),
                         "productId", UUID.randomUUID().toString(),
                         "quantity", 10),
@@ -75,6 +81,7 @@ class TransferSyncHandlerTest {
 
     @Test
     void handle_validTransfer_owner_delegates() {
+        // OWNER is never scoped: any source store of the tenant is APPLIED.
         authenticateAsOwner();
         var transferId = UUID.randomUUID();
         var mockTransfer = mock(StockTransfer.class);
@@ -87,20 +94,55 @@ class TransferSyncHandlerTest {
         verify(transferStockUseCase).execute(any());
     }
 
+    // ── Story v1s-12-11 — EMPLOYEE transfers only from their assigned store ──
+
     @Test
-    void handle_validTransfer_employee_delegates() {
-        // Story 12.6's original OWNER-only governance was superseded: employees
-        // are the ones performing this action in practice (any store).
-        authenticateAsEmployee();
-        var transferId = UUID.randomUUID();
+    void handle_employeeOwnStore_applied() {
+        UUID storeA = UUID.randomUUID();
+        authenticateAsEmployee(storeA);
         var mockTransfer = mock(StockTransfer.class);
-        when(mockTransfer.getId()).thenReturn(transferId);
+        when(mockTransfer.getId()).thenReturn(UUID.randomUUID());
         when(transferStockUseCase.execute(any())).thenReturn(mockTransfer);
 
-        var result = handler.handle(buildOp(), ACTOR_ID, TENANT_ID);
+        var result = handler.handle(buildOp(storeA.toString()), ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         verify(transferStockUseCase).execute(any());
+    }
+
+    @Test
+    void handle_employeeOtherStore_rejectedForbidden() {
+        authenticateAsEmployee(UUID.randomUUID());
+
+        var result = handler.handle(buildOp(UUID.randomUUID().toString()), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("FORBIDDEN");
+        verify(transferStockUseCase, never()).execute(any());
+    }
+
+    @Test
+    void handle_employeeWithoutStoreClaim_rejected() {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(
+                        ACTOR_ID, null,
+                        List.of(new SimpleGrantedAuthority("ROLE_EMPLOYEE"))));
+
+        var result = handler.handle(buildOp(), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("FORBIDDEN");
+        verify(transferStockUseCase, never()).execute(any());
+    }
+
+    @Test
+    void handle_malformedSourceStoreId_rejected() {
+        authenticateAsEmployee(UUID.randomUUID());
+
+        var result = handler.handle(buildOp("not-a-uuid"), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        verify(transferStockUseCase, never()).execute(any());
     }
 
     @Test

@@ -214,8 +214,8 @@ As a Toor, I want an EMPLOYEE to initiate transfers only from their assigned sto
 **Given** an EMPLOYEE initiating a transfer (REST or TRANSFER sync op) **When** `sourceStoreId` differs from the JWT assigned store **Then** 403 / REJECTED; OWNER keeps cross-store transfers (FR36, v1s-12-8 AC4 restored)
 
 **Items (routed 2026-10-11 from deferred-work):**
-- [ ] [Deferred-from: CR v1s-12-9, 2026-07-24] No widget test for _shouldShowReceiveButton [transfer_history_page.dart:456-465] — 12-11 changes transfer rules; add EMPLOYEE match/mismatch + OWNER cases
-- [ ] [Deferred-from: CR v1s-12-8, 2026-07-24] D4 TransferSyncHandler does not validate sourceStoreId [TransferSyncHandler.java:41-49] — 12-11 reworks transfer source rules on sync; validate store belongs to tenant/employee
+- [x] [Deferred-from: CR v1s-12-9, 2026-07-24] No widget test for _shouldShowReceiveButton [transfer_history_page.dart:456-465] — 12-11 changes transfer rules; add EMPLOYEE match/mismatch + OWNER cases — **Resolved 2026-10-11 (v1s-12-11):** 4 widget tests in transfer_history_page_test.dart (EMPLOYEE match / mismatch / null, OWNER null).
+- [x] [Deferred-from: CR v1s-12-8, 2026-07-24] D4 TransferSyncHandler does not validate sourceStoreId [TransferSyncHandler.java:41-49] — 12-11 reworks transfer source rules on sync; validate store belongs to tenant/employee — **Resolved 2026-10-11 (v1s-12-11):** EMPLOYEE source must equal JWT store (FORBIDDEN → REJECTED); tenant membership already enforced by ExecuteTransferService STORE_NOT_FOUND lookup in the tenant schema.
 
 **AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
 

@@ -64,14 +64,21 @@ public class StockTransferController {
      * Step 1 — Initiate an inter-store stock transfer.
      * Deducts stock from source. Returns 201 Created with status IN_TRANSIT.
      *
-     * <p>OWNER and EMPLOYEE (any store, not scoped to their assigned store —
-     * product decision superseding Story 12.6's original OWNER-only governance).
+     * <p>Story v1s-12-11 (FR36, PO decision 2026-10-11): OWNER may transfer from any
+     * store of the tenant; EMPLOYEE may transfer only out of their JWT-assigned store
+     * ({@code sourceStoreId} must equal it), else 403 FORBIDDEN before the use case runs.
+     * Destination may be any store of the tenant. Mirrored in {@code TransferSyncHandler}.
      */
     @PostMapping
     public ResponseEntity<ApiResponseWrapper<StockTransferResponseDto>> transfer(
             @Valid @RequestBody TransferStockRequestDto request) {
 
         UUID actorId = extractActorId();
+        UUID assignedStoreId = extractAssignedStoreId();
+        if (assignedStoreId != null && !assignedStoreId.equals(request.sourceStoreId())) {
+            throw new DomainException(ErrorCode.FORBIDDEN,
+                    "EMPLOYEE can only transfer stock from their assigned store");
+        }
 
         var command = new TransferStockCommand(
                 request.sourceStoreId(),

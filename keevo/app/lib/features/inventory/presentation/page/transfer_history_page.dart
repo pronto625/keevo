@@ -203,10 +203,10 @@ class _TransferHistoryPageState extends ConsumerState<TransferHistoryPage> {
       ),
       ),
 
-      // AC1 — FAB opens transfer form. OWNER and EMPLOYEE (any store) can
-      // initiate a transfer — matches the header icon button above, which was
-      // never role-gated, and the backend (StockTransferController.transfer(),
-      // TransferSyncHandler), which now accepts both roles.
+      // AC1 — FAB opens transfer form, visible to OWNER and EMPLOYEE.
+      // Story v1s-12-11 (FR36): OWNER transfers from any store; EMPLOYEE only
+      // from their own store — the form locks the source, and the backend
+      // (StockTransferController.transfer(), TransferSyncHandler) enforces it.
       // Couleur pleine + ombre douce, comme le FAB de la Vue Stock.
       floatingActionButton: Container(
         decoration: BoxDecoration(
