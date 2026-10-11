@@ -6,7 +6,8 @@ import com.keevo.catalog.category.application.usecase.GetCategoriesUseCase;
 import com.keevo.catalog.category.application.usecase.RenameCategoryUseCase;
 import com.keevo.catalog.category.application.usecase.ToggleCategoryUseCase;
 import com.keevo.catalog.category.domain.model.Category;
-import com.keevo.catalog.category.domain.port.out.CategoryRepository;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,7 +46,6 @@ class CategoryControllerTest {
     @Mock GetCategoriesUseCase getCategoriesUseCase;
     @Mock ToggleCategoryUseCase toggleCategoryUseCase;
     @Mock RenameCategoryUseCase renameCategoryUseCase;
-    @Mock CategoryRepository categoryRepository;
 
     @InjectMocks CategoryController controller;
 
@@ -145,7 +145,8 @@ class CategoryControllerTest {
     @Test
     @DisplayName("POST /api/v1/categories returns 201 with created category")
     void createCategory_returns201_withCreatedCategory() throws Exception {
-        when(createCategoryUseCase.execute(any())).thenReturn(sampleCategory);
+        authenticateAs("EMPLOYEE");
+        when(createCategoryUseCase.execute(any(), any(), any())).thenReturn(sampleCategory);
 
         mockMvc.perform(post("/api/v1/categories")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -156,28 +157,27 @@ class CategoryControllerTest {
                 .andExpect(jsonPath("$.data.id").value(CATEGORY_ID.toString()))
                 .andExpect(jsonPath("$.data.name").value("Boissons"));
 
-        verify(createCategoryUseCase).execute(any(CreateCategoryUseCase.CreateCategoryDto.class));
+        verify(createCategoryUseCase).execute(any(CreateCategoryUseCase.CreateCategoryDto.class), any(UUID.class), any());
     }
 
     // ─────────────────────────────────────────────────────────────────
-    // 1.6 — POST /api/v1/categories — parent not found (D2 gap: 500)
+    // 1.6 — POST /api/v1/categories — parent not found → 404 (v1s-14-15)
     // ─────────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("POST /api/v1/categories when parent not found currently returns 500 (known gap D2)")
-    void createCategory_whenParentNotFound_currentlyReturns500() throws Exception {
-        // Known gap D2 — IllegalArgumentException not mapped by GlobalExceptionHandler,
-        // falls through to generic Exception handler → HTTP 500.
-        // Documented as defer, NOT corrected in this story.
-        when(createCategoryUseCase.execute(any()))
-                .thenThrow(new IllegalArgumentException("Parent category not found: " + PARENT_ID));
+    @DisplayName("v1s-14-15: POST /api/v1/categories when parent not found returns 404 CATEGORY_NOT_FOUND")
+    void createCategory_whenParentNotFound_returns404() throws Exception {
+        authenticateAs("EMPLOYEE");
+        when(createCategoryUseCase.execute(any(), any(), any()))
+                .thenThrow(new DomainException(ErrorCode.CATEGORY_NOT_FOUND, "parentId=" + PARENT_ID));
 
         mockMvc.perform(post("/api/v1/categories")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"name":"Orphelin","parentId":"%s"}
                                 """.formatted(PARENT_ID)))
-                .andExpect(status().is5xxServerError());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.domainCode").value("CATEGORY_NOT_FOUND"));
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -189,25 +189,25 @@ class CategoryControllerTest {
     void toggleCategory_returns200_withToggledCategory() throws Exception {
         Category toggled = new Category(CATEGORY_ID, "Boissons", null, false, true, NOW, NOW);
         authenticateAs("OWNER");
-        when(toggleCategoryUseCase.execute(CATEGORY_ID)).thenReturn(toggled);
+        when(toggleCategoryUseCase.execute(eq(CATEGORY_ID), any(UUID.class), any())).thenReturn(toggled);
 
         mockMvc.perform(patch("/api/v1/categories/{id}/toggle", CATEGORY_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.isActive").value(false));
 
-        verify(toggleCategoryUseCase).execute(CATEGORY_ID);
+        verify(toggleCategoryUseCase).execute(eq(CATEGORY_ID), any(UUID.class), any());
     }
 
     @Test
-    @DisplayName("PATCH /api/v1/categories/{id}/toggle when not found currently returns 500 (known gap D2)")
-    void toggleCategory_whenNotFound_currentlyReturns500() throws Exception {
-        // Known gap D2 — same IllegalArgumentException → 500 pattern.
+    @DisplayName("v1s-14-15: PATCH /api/v1/categories/{id}/toggle when not found returns 404 CATEGORY_NOT_FOUND")
+    void toggleCategory_whenNotFound_returns404() throws Exception {
         authenticateAs("OWNER");
-        when(toggleCategoryUseCase.execute(CATEGORY_ID))
-                .thenThrow(new IllegalArgumentException("Category not found"));
+        when(toggleCategoryUseCase.execute(eq(CATEGORY_ID), any(UUID.class), any()))
+                .thenThrow(new DomainException(ErrorCode.CATEGORY_NOT_FOUND, "categoryId=" + CATEGORY_ID));
 
         mockMvc.perform(patch("/api/v1/categories/{id}/toggle", CATEGORY_ID))
-                .andExpect(status().is5xxServerError());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.domainCode").value("CATEGORY_NOT_FOUND"));
     }
 
     @Test
@@ -218,7 +218,7 @@ class CategoryControllerTest {
         mockMvc.perform(patch("/api/v1/categories/{id}/toggle", CATEGORY_ID))
                 .andExpect(status().isForbidden());
 
-        verifyNoInteractions(toggleCategoryUseCase, categoryRepository);
+        verifyNoInteractions(toggleCategoryUseCase);
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -228,9 +228,10 @@ class CategoryControllerTest {
     @Test
     @DisplayName("PATCH /api/v1/categories/{id} returns 200 with renamed category")
     void renameCategory_returns200_withRenamedCategory() throws Exception {
+        authenticateAs("EMPLOYEE");
         String newName = "NouveauNom";
         Category renamed = new Category(CATEGORY_ID, newName, null, true, true, NOW, NOW);
-        when(renameCategoryUseCase.execute(eq(CATEGORY_ID), any(RenameCategoryUseCase.RenameCategoryDto.class)))
+        when(renameCategoryUseCase.execute(eq(CATEGORY_ID), any(RenameCategoryUseCase.RenameCategoryDto.class), any(UUID.class), any()))
                 .thenReturn(renamed);
 
         mockMvc.perform(patch("/api/v1/categories/{id}", CATEGORY_ID)
@@ -241,19 +242,21 @@ class CategoryControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.name").value(newName));
 
-        verify(renameCategoryUseCase).execute(CATEGORY_ID, new RenameCategoryUseCase.RenameCategoryDto(newName));
+        verify(renameCategoryUseCase).execute(eq(CATEGORY_ID), eq(new RenameCategoryUseCase.RenameCategoryDto(newName)), any(UUID.class), any());
     }
 
     @Test
-    @DisplayName("PATCH /api/v1/categories/{id} when not found currently returns 500 (known gap D2)")
-    void renameCategory_whenNotFound_currentlyReturns500() throws Exception {
-        when(renameCategoryUseCase.execute(eq(CATEGORY_ID), any(RenameCategoryUseCase.RenameCategoryDto.class)))
-                .thenThrow(new IllegalArgumentException("Category not found: " + CATEGORY_ID));
+    @DisplayName("v1s-14-15: PATCH /api/v1/categories/{id} when not found returns 404 CATEGORY_NOT_FOUND")
+    void renameCategory_whenNotFound_returns404() throws Exception {
+        authenticateAs("EMPLOYEE");
+        when(renameCategoryUseCase.execute(eq(CATEGORY_ID), any(RenameCategoryUseCase.RenameCategoryDto.class), any(UUID.class), any()))
+                .thenThrow(new DomainException(ErrorCode.CATEGORY_NOT_FOUND, "categoryId=" + CATEGORY_ID));
 
         mockMvc.perform(patch("/api/v1/categories/{id}", CATEGORY_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Nope\"}"))
-                .andExpect(status().is5xxServerError());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.domainCode").value("CATEGORY_NOT_FOUND"));
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -261,16 +264,30 @@ class CategoryControllerTest {
     // ─────────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("DELETE /api/v1/categories/{id} returns 204 and calls repository.deactivate")
-    void deleteCategory_returns204_andCallsRepositoryDeactivate() throws Exception {
-        doNothing().when(categoryRepository).deactivate(CATEGORY_ID);
+    @DisplayName("v1s-14-15: DELETE /api/v1/categories/{id} returns 204 and delegates to ToggleCategoryUseCase.deactivate with actor + tenant")
+    void deleteCategory_returns204_andDelegatesToUseCaseDeactivate() throws Exception {
+        UUID actor = UUID.randomUUID();
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                actor, null, List.of(new SimpleGrantedAuthority("ROLE_OWNER"))));
 
         mockMvc.perform(delete("/api/v1/categories/{id}", CATEGORY_ID))
                 .andExpect(status().isNoContent())
                 .andExpect(jsonPath("$").doesNotExist());
 
-        verify(categoryRepository).deactivate(CATEGORY_ID);
-        verifyNoInteractions(createCategoryUseCase, getCategoriesUseCase, toggleCategoryUseCase, renameCategoryUseCase);
+        verify(toggleCategoryUseCase).deactivate(eq(CATEGORY_ID), eq(actor), any());
+        verifyNoInteractions(createCategoryUseCase, getCategoriesUseCase, renameCategoryUseCase);
+    }
+
+    @Test
+    @DisplayName("v1s-14-15: DELETE /api/v1/categories/{unknown} returns 404 CATEGORY_NOT_FOUND (not 500)")
+    void deleteCategory_whenNotFound_returns404() throws Exception {
+        authenticateAs("OWNER");
+        doThrow(new DomainException(ErrorCode.CATEGORY_NOT_FOUND, "categoryId=" + CATEGORY_ID))
+                .when(toggleCategoryUseCase).deactivate(eq(CATEGORY_ID), any(UUID.class), any());
+
+        mockMvc.perform(delete("/api/v1/categories/{id}", CATEGORY_ID))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.domainCode").value("CATEGORY_NOT_FOUND"));
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -286,6 +303,6 @@ class CategoryControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.domainCode").value("VALIDATION_ERROR"));
 
-        verifyNoInteractions(toggleCategoryUseCase, categoryRepository);
+        verifyNoInteractions(toggleCategoryUseCase);
     }
 }

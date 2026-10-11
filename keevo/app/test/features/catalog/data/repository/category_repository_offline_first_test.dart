@@ -11,7 +11,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/core/sync/sync_service.dart';
 import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
+import 'package:keevo/core/widget/app_error_widget.dart';
 import 'package:keevo/features/catalog/data/repository/category_repository_impl.dart';
+import 'package:keevo/features/catalog/domain/repository/category_repository.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:sqlite3/open.dart';
 
@@ -227,6 +229,129 @@ void main() {
     // version of this test simulated the pull via a raw db.customStatement()
     // that bypassed that guard entirely, so it could not prove AC3 either
     // way — it has been replaced by the real-path test above.
+  });
+
+  group('v1s-14-15 — typed not-found + atomic writes', () {
+    const missingId = '00000000-0000-4000-8000-000000000000';
+
+    void stubQueueFailure() {
+      when(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).thenThrow(Exception('queue failure'));
+    }
+
+    void resetMocks() {
+      clearInteractions(mockSyncService);
+      clearInteractions(mockDispatcher);
+    }
+
+    test('toggleCategoryStatus_missingRow_throwsCategoryNotFound_queuesNothing',
+        () async {
+      await expectLater(
+        repo.toggleCategoryStatus(missingId),
+        throwsA(isA<CategoryNotFoundException>()),
+      );
+      verifyNever(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          ));
+      verifyNever(() => mockDispatcher.triggerPushIfIdle());
+      expect(await db.select(db.categories).get(), isEmpty);
+    });
+
+    test('renameCategory_missingRow_throwsCategoryNotFound_queuesNothing',
+        () async {
+      await expectLater(
+        repo.renameCategory(missingId, 'Nouveau'),
+        throwsA(isA<CategoryNotFoundException>()),
+      );
+      verifyNever(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          ));
+      verifyNever(() => mockDispatcher.triggerPushIfIdle());
+    });
+
+    test('CategoryNotFoundException_appErrorMessage_isFrenchMessage', () {
+      expect(
+        appErrorMessage(const CategoryNotFoundException(missingId)),
+        'Catégorie introuvable ou supprimée.',
+      );
+    });
+
+    test('deleteCategory_missingRow_isNoOp', () async {
+      await repo.deleteCategory(missingId);
+
+      verifyNever(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          ));
+      verifyNever(() => mockDispatcher.triggerPushIfIdle());
+    });
+
+    test('createCustomCategory_queueFails_rollsBackLocalInsert_noPush',
+        () async {
+      stubQueueFailure();
+
+      await expectLater(
+          repo.createCustomCategory('Fantôme'), throwsA(isA<Exception>()));
+
+      expect(await db.select(db.categories).get(), isEmpty);
+      verifyNever(() => mockDispatcher.triggerPushIfIdle());
+    });
+
+    test('toggleCategoryStatus_queueFails_rollsBackLocalToggle_noPush',
+        () async {
+      final created = await repo.createCustomCategory('Boissons');
+      resetMocks();
+      stubQueueFailure();
+
+      await expectLater(
+          repo.toggleCategoryStatus(created.id), throwsA(isA<Exception>()));
+
+      final row = await (db.select(db.categories)
+            ..where((c) => c.id.equals(created.id)))
+          .getSingle();
+      expect(row.isActive, isTrue);
+      expect(row.updatedAt, created.updatedAt);
+      verifyNever(() => mockDispatcher.triggerPushIfIdle());
+    });
+
+    test('renameCategory_queueFails_rollsBackLocalRename_noPush', () async {
+      final created = await repo.createCustomCategory('Ancien');
+      resetMocks();
+      stubQueueFailure();
+
+      await expectLater(repo.renameCategory(created.id, 'Nouveau'),
+          throwsA(isA<Exception>()));
+
+      final row = await (db.select(db.categories)
+            ..where((c) => c.id.equals(created.id)))
+          .getSingle();
+      expect(row.name, 'Ancien');
+      verifyNever(() => mockDispatcher.triggerPushIfIdle());
+    });
+
+    test('deleteCategory_queueFails_rollsBackLocalDeactivate_noPush',
+        () async {
+      final created = await repo.createCustomCategory('Épicerie');
+      resetMocks();
+      stubQueueFailure();
+
+      await expectLater(
+          repo.deleteCategory(created.id), throwsA(isA<Exception>()));
+
+      final row = await (db.select(db.categories)
+            ..where((c) => c.id.equals(created.id)))
+          .getSingle();
+      expect(row.isActive, isTrue);
+      verifyNever(() => mockDispatcher.triggerPushIfIdle());
+    });
   });
 }
 

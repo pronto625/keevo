@@ -5,7 +5,6 @@ import com.keevo.catalog.category.application.usecase.GetCategoriesUseCase;
 import com.keevo.catalog.category.application.usecase.RenameCategoryUseCase;
 import com.keevo.catalog.category.application.usecase.ToggleCategoryUseCase;
 import com.keevo.catalog.category.domain.model.Category;
-import com.keevo.catalog.category.domain.port.out.CategoryRepository;
 import com.keevo.shared.infrastructure.security.JwtAuthFilter;
 import com.keevo.shared.infrastructure.security.SecurityConfig;
 import jakarta.servlet.FilterChain;
@@ -27,6 +26,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -59,7 +59,6 @@ class CategoryControllerSecurityTest {
     @MockitoBean GetCategoriesUseCase getCategoriesUseCase;
     @MockitoBean ToggleCategoryUseCase toggleCategoryUseCase;
     @MockitoBean RenameCategoryUseCase renameCategoryUseCase;
-    @MockitoBean CategoryRepository categoryRepository;
     @MockitoBean JwtAuthFilter jwtAuthFilter;
 
     @AfterEach
@@ -124,25 +123,25 @@ class CategoryControllerSecurityTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.domainCode").value("FORBIDDEN"));
 
-        verifyNoInteractions(toggleCategoryUseCase, categoryRepository);
+        verifyNoInteractions(toggleCategoryUseCase);
     }
 
     @Test
     @DisplayName("OWNER PATCH /{id}/toggle → 200 and toggles the category")
     void owner_toggle_returns200() throws Exception {
         filterAs("ROLE_OWNER");
-        when(toggleCategoryUseCase.execute(CATEGORY_ID)).thenReturn(
+        when(toggleCategoryUseCase.execute(eq(CATEGORY_ID), any(UUID.class), any())).thenReturn(
                 new Category(CATEGORY_ID, "Boissons", null, false, true, Instant.now(), Instant.now()));
 
         mockMvc.perform(patch("/api/v1/categories/{id}/toggle", CATEGORY_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.isActive").value(false));
 
-        verify(toggleCategoryUseCase).execute(CATEGORY_ID);
+        verify(toggleCategoryUseCase).execute(eq(CATEGORY_ID), any(UUID.class), any());
     }
 
     @Test
-    @DisplayName("EMPLOYEE DELETE /{id} → 403 (method-level hasRole('OWNER')), repository never called")
+    @DisplayName("EMPLOYEE DELETE /{id} → 403 (method-level hasRole('OWNER')), use case never called")
     void employee_delete_returns403() throws Exception {
         filterAs("ROLE_EMPLOYEE");
 
@@ -150,7 +149,7 @@ class CategoryControllerSecurityTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.domainCode").value("FORBIDDEN"));
 
-        verifyNoInteractions(categoryRepository, toggleCategoryUseCase);
+        verifyNoInteractions(toggleCategoryUseCase);
     }
 
     @Test
@@ -161,7 +160,7 @@ class CategoryControllerSecurityTest {
         mockMvc.perform(delete("/api/v1/categories/{id}", CATEGORY_ID))
                 .andExpect(status().isNoContent());
 
-        verify(categoryRepository).deactivate(CATEGORY_ID);
+        verify(toggleCategoryUseCase).deactivate(eq(CATEGORY_ID), any(UUID.class), any());
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
