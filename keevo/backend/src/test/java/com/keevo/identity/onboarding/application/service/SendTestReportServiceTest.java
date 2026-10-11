@@ -1,8 +1,7 @@
 package com.keevo.identity.onboarding.application.service;
 
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
-import com.keevo.identity.auth.domain.model.User;
-import com.keevo.identity.auth.domain.port.out.UserRepository;
+import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
 import com.keevo.identity.onboarding.domain.port.in.SendTestReportUseCase;
 import com.keevo.reporting.report.application.service.DailyReportFormatter;
 import com.keevo.reporting.report.application.service.EndOfDayReportBuilder;
@@ -41,7 +40,7 @@ class SendTestReportServiceTest {
     @Mock private DailyReportFormatter dailyReportFormatter;
     @Mock private WhatsAppPort whatsAppPort;
     @Mock private StoreRepository storeRepository;
-    @Mock private UserRepository userRepository;
+    @Mock private OwnerRecipientResolver ownerRecipientResolver;
 
     @InjectMocks private SendTestReportService service;
 
@@ -75,8 +74,8 @@ class SendTestReportServiceTest {
         when(endOfDayReportBuilder.build(eq(STORE_ID), any(), any(), eq("Boutique Test"), any(), any(), eq(false)))
                 .thenReturn(reportData);
         when(dailyReportFormatter.format(reportData)).thenReturn(FORMATTED_CONTENT);
-        when(userRepository.findOwnerByTenantSchemaName(TENANT_ID))
-                .thenReturn(Optional.of(mockUser(OWNER_PHONE)));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT_ID))
+                .thenReturn(Optional.of(OWNER_PHONE));
 
         // When
         SendTestReportUseCase.TestReportResult result = service.sendTestReport(TENANT_ID);
@@ -96,8 +95,8 @@ class SendTestReportServiceTest {
         when(endOfDayReportBuilder.build(eq(STORE_ID), any(), any(), eq("Boutique Test"), any(), any(), eq(false)))
                 .thenReturn(reportData);
         when(dailyReportFormatter.format(reportData)).thenReturn(FORMATTED_CONTENT);
-        when(userRepository.findOwnerByTenantSchemaName(TENANT_ID))
-                .thenReturn(Optional.of(mockUser(OWNER_PHONE)));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT_ID))
+                .thenReturn(Optional.of(OWNER_PHONE));
 
         // When
         service.sendTestReport(TENANT_ID);
@@ -114,8 +113,8 @@ class SendTestReportServiceTest {
         when(endOfDayReportBuilder.build(eq(STORE_ID), any(), any(), eq("Boutique Test"), any(), any(), eq(false)))
                 .thenReturn(reportData);
         when(dailyReportFormatter.format(reportData)).thenReturn(FORMATTED_CONTENT);
-        when(userRepository.findOwnerByTenantSchemaName(TENANT_ID))
-                .thenReturn(Optional.of(mockUser(OWNER_PHONE)));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT_ID))
+                .thenReturn(Optional.of(OWNER_PHONE));
         doThrow(new RuntimeException("WhatsApp unavailable")).when(whatsAppPort).sendReport(anyString(), anyString());
 
         // When
@@ -128,8 +127,7 @@ class SendTestReportServiceTest {
     @Test
     void sendTestReport_noOwnerPhone_returnsFalse() {
         // Given — no owner found for this tenant
-        when(userRepository.findOwnerByTenantSchemaName(TENANT_ID))
-                .thenReturn(Optional.empty());
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT_ID)).thenReturn(Optional.empty());
 
         // When
         SendTestReportUseCase.TestReportResult result = service.sendTestReport(TENANT_ID);
@@ -137,11 +135,5 @@ class SendTestReportServiceTest {
         // Then
         assertThat(result.testSent()).isFalse();
         verify(whatsAppPort, never()).sendReport(anyString(), anyString());
-    }
-
-    // ── Helper ───────────────────────────────────────────────────────────────
-
-    private User mockUser(String phone) {
-        return User.newOwner(phone, "$2a$10$testhashedpassword123456789012");
     }
 }

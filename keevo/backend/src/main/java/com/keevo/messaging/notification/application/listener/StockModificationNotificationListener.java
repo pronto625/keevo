@@ -2,7 +2,7 @@ package com.keevo.messaging.notification.application.listener;
 
 import com.keevo.catalog.stock.domain.entity.MovementType;
 import com.keevo.catalog.stock.domain.event.StockAdjustedEvent;
-import com.keevo.identity.auth.domain.port.out.UserRepository;
+import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
 import com.keevo.messaging.notification.domain.model.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationPort;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
@@ -51,7 +51,7 @@ public class StockModificationNotificationListener {
 
     private final NotificationPort notificationPort;
     private final WhatsAppPort whatsAppPort;
-    private final UserRepository userRepository;
+    private final OwnerRecipientResolver ownerRecipientResolver;
     private final long windowMin;
     private final Clock clock;
 
@@ -61,22 +61,22 @@ public class StockModificationNotificationListener {
     public StockModificationNotificationListener(
             NotificationPort notificationPort,
             WhatsAppPort whatsAppPort,
-            UserRepository userRepository,
+            OwnerRecipientResolver ownerRecipientResolver,
             @Value("${keevo.notification.employee-action-window-min:" + DEFAULT_WINDOW_MIN + "}")
             long windowMin) {
-        this(notificationPort, whatsAppPort, userRepository, windowMin, Clock.systemUTC());
+        this(notificationPort, whatsAppPort, ownerRecipientResolver, windowMin, Clock.systemUTC());
     }
 
     /** Test-only constructor — injects a controllable {@link Clock} instead of the real one. */
     StockModificationNotificationListener(
             NotificationPort notificationPort,
             WhatsAppPort whatsAppPort,
-            UserRepository userRepository,
+            OwnerRecipientResolver ownerRecipientResolver,
             long windowMin,
             Clock clock) {
         this.notificationPort = notificationPort;
         this.whatsAppPort = whatsAppPort;
-        this.userRepository = userRepository;
+        this.ownerRecipientResolver = ownerRecipientResolver;
         this.windowMin = windowMin;
         this.clock = clock;
     }
@@ -238,8 +238,7 @@ public class StockModificationNotificationListener {
     }
 
     private String resolveOwnerPhone(String tenantId) {
-        return userRepository.findOwnerByTenantSchemaName(tenantId)
-                .map(u -> u.getPhoneNumber())
+        return ownerRecipientResolver.resolveOwnerWhatsAppPhone(tenantId)
                 .orElse(null);
     }
 

@@ -1,7 +1,7 @@
 package com.keevo.reporting.report.application.service;
 
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
-import com.keevo.identity.auth.domain.port.out.UserRepository;
+import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.ReportType;
 import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase.GenerateReportCommand;
@@ -31,18 +31,18 @@ public class MultiStoreSummaryService {
     private final StoreRepository storeRepository;
     private final WhatsAppPort whatsAppPort;
     private final DailyReportFormatter formatter;
-    private final UserRepository userRepository;
+    private final OwnerRecipientResolver ownerRecipientResolver;
 
     public MultiStoreSummaryService(EndOfDayReportRepository reportRepository,
                                     StoreRepository storeRepository,
                                     WhatsAppPort whatsAppPort,
                                     DailyReportFormatter formatter,
-                                    UserRepository userRepository) {
+                                    OwnerRecipientResolver ownerRecipientResolver) {
         this.reportRepository = reportRepository;
         this.storeRepository = storeRepository;
         this.whatsAppPort = whatsAppPort;
         this.formatter = formatter;
-        this.userRepository = userRepository;
+        this.ownerRecipientResolver = ownerRecipientResolver;
     }
 
     /**
@@ -100,8 +100,7 @@ public class MultiStoreSummaryService {
         reportRepository.save(combined);
 
         // Deliver combined summary — skip if owner phone not found to avoid sending to an unknown recipient.
-        userRepository.findOwnerByTenantSchemaName(command.tenantId())
-                .map(u -> u.getPhoneNumber())
+        ownerRecipientResolver.resolveOwnerWhatsAppPhone(command.tenantId())
                 .ifPresentOrElse(
                         ownerPhone -> {
                             try {

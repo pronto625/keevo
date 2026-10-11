@@ -1,6 +1,9 @@
 package com.keevo.reporting.report.application.service;
 
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.identity.auth.adapter.out.persistence.impl.OwnerRecipientResolverAdapter;
+import com.keevo.identity.auth.domain.model.Role;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.onboarding.domain.model.ReportChannel;
@@ -47,7 +50,7 @@ class WeeklyReportGeneratorTest {
     @Mock private WeeklyReportBuilder builder;
     @Mock private WeeklyReportFormatter formatter;
     @Mock private StoreRepository storeRepository;
-    @Mock private UserRepository userRepository;
+    @Mock private OwnerRecipientResolver ownerRecipientResolver;
 
     private WeeklyReportGenerator generator;
     private UUID storeId;
@@ -60,7 +63,7 @@ class WeeklyReportGeneratorTest {
     void setUp() {
         generator = new WeeklyReportGenerator(
                 reportRepository, whatsAppPort, multiStoreSummaryService,
-                builder, formatter, storeRepository, userRepository);
+                builder, formatter, storeRepository, ownerRecipientResolver);
         storeId = UUID.randomUUID();
         command = new WeeklyReportCommand(
                 storeId, "kv_test01", true,
@@ -94,7 +97,7 @@ class WeeklyReportGeneratorTest {
         when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))
                 .thenReturn(sampleWeeklyData());
         when(formatter.format(any(WeeklyReportData.class))).thenReturn("📅 Rapport Hebdomadaire");
-        when(userRepository.findOwnerByTenantSchemaName("kv_test01")).thenReturn(Optional.empty());
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone("kv_test01")).thenReturn(Optional.empty());
 
         generator.generateWeeklyReport(command);
 
@@ -108,7 +111,7 @@ class WeeklyReportGeneratorTest {
         when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))
                 .thenReturn(sampleWeeklyData());
         when(formatter.format(any(WeeklyReportData.class))).thenReturn("📅 Rapport");
-        when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.empty());
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(anyString())).thenReturn(Optional.empty());
 
         EndOfDayReport report = generator.generateWeeklyReport(command);
 
@@ -117,13 +120,11 @@ class WeeklyReportGeneratorTest {
 
     @Test
     void generateWeeklyReport_callsWhatsApp_onWhatsAppChannel() {
-        User owner = mock(User.class);
-        when(owner.getPhoneNumber()).thenReturn("+237600072001");
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
         when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))
                 .thenReturn(sampleWeeklyData());
         when(formatter.format(any(WeeklyReportData.class))).thenReturn("📅 Rapport");
-        when(userRepository.findOwnerByTenantSchemaName("kv_test01")).thenReturn(Optional.of(owner));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone("kv_test01")).thenReturn(Optional.of("+237600072001"));
 
         EndOfDayReport report = generator.generateWeeklyReport(command);
 
@@ -151,13 +152,11 @@ class WeeklyReportGeneratorTest {
 
     @Test
     void generateWeeklyReport_whatsAppFails_setsStatusFailed() {
-        User owner = mock(User.class);
-        when(owner.getPhoneNumber()).thenReturn("+237600072001");
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
         when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))
                 .thenReturn(sampleWeeklyData());
         when(formatter.format(any(WeeklyReportData.class))).thenReturn("📅 Rapport");
-        when(userRepository.findOwnerByTenantSchemaName("kv_test01")).thenReturn(Optional.of(owner));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone("kv_test01")).thenReturn(Optional.of("+237600072001"));
         doThrow(new RuntimeException("WhatsApp unreachable")).when(whatsAppPort).sendReport(anyString(), anyString());
 
         EndOfDayReport report = generator.generateWeeklyReport(command);
@@ -171,7 +170,7 @@ class WeeklyReportGeneratorTest {
         when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))
                 .thenReturn(sampleWeeklyData());
         when(formatter.format(any(WeeklyReportData.class))).thenReturn("Rapport");
-        when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.empty());
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(anyString())).thenReturn(Optional.empty());
 
         EndOfDayReport report = generator.generateWeeklyReport(command);
 
@@ -184,7 +183,7 @@ class WeeklyReportGeneratorTest {
         when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))
                 .thenReturn(sampleWeeklyData());
         when(formatter.format(any(WeeklyReportData.class))).thenReturn("Rapport");
-        when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.empty());
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(anyString())).thenReturn(Optional.empty());
 
         EndOfDayReport report = generator.generateWeeklyReport(command);
 
@@ -226,7 +225,7 @@ class WeeklyReportGeneratorTest {
         when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))
                 .thenReturn(sampleWeeklyData());
         when(formatter.format(any(WeeklyReportData.class))).thenReturn("Rapport");
-        when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.empty());
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(anyString())).thenReturn(Optional.empty());
 
         generator.generateWeeklyReport(command);
 
@@ -237,5 +236,25 @@ class WeeklyReportGeneratorTest {
                 .isEqualTo(com.keevo.commerce.sale.domain.model.ClosureWindow.NEVER);
         assertThat(windowCaptor.getValue().receivedUntil())
                 .isEqualTo(com.keevo.commerce.sale.domain.model.ClosureWindow.NEVER);
+    }
+
+    /** v1s-14-17 — real resolver over a blank owner phone: IN_APP_ONLY, WhatsApp never called. */
+    @Test
+    void generateWeeklyReport_withRealResolver_blankOwnerPhone_marksInAppOnly_neverSends() {
+        UserRepository userRepository = mock(UserRepository.class);
+        when(userRepository.findOwnerByTenantSchemaName("kv_test01")).thenReturn(Optional.of(
+                new User(UUID.randomUUID(), "   ", "hash", Role.OWNER, true, Instant.now())));
+        WeeklyReportGenerator realResolverGenerator = new WeeklyReportGenerator(
+                reportRepository, whatsAppPort, multiStoreSummaryService,
+                builder, formatter, storeRepository, new OwnerRecipientResolverAdapter(userRepository));
+        when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
+        when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))
+                .thenReturn(sampleWeeklyData());
+        when(formatter.format(any(WeeklyReportData.class))).thenReturn("📅 Rapport");
+
+        EndOfDayReport report = realResolverGenerator.generateWeeklyReport(command);
+
+        assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.IN_APP_ONLY);
+        verify(whatsAppPort, never()).sendReport(anyString(), anyString());
     }
 }

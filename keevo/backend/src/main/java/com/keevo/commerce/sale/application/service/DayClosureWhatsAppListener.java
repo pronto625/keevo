@@ -1,8 +1,7 @@
 package com.keevo.commerce.sale.application.service;
 
 import com.keevo.commerce.sale.domain.model.DayClosedEvent;
-import com.keevo.identity.auth.domain.model.User;
-import com.keevo.identity.auth.domain.port.out.UserRepository;
+import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.domain.port.out.StoreRepository;
@@ -42,16 +41,16 @@ public class DayClosureWhatsAppListener {
 
     private final WhatsAppPort whatsAppPort;
     private final StoreRepository storeRepository;
-    private final UserRepository userRepository;
+    private final OwnerRecipientResolver ownerRecipientResolver;
     private final ClosureReportStrategy manualReportStrategy;
     private final ClosureReportStrategy autoReportStrategy;
 
     public DayClosureWhatsAppListener(WhatsAppPort whatsAppPort,
                                       StoreRepository storeRepository,
-                                      UserRepository userRepository) {
+                                      OwnerRecipientResolver ownerRecipientResolver) {
         this.whatsAppPort = whatsAppPort;
         this.storeRepository = storeRepository;
-        this.userRepository = userRepository;
+        this.ownerRecipientResolver = ownerRecipientResolver;
         this.manualReportStrategy = new ManualReportStrategy();
         this.autoReportStrategy = new AutoReportStrategy();
     }
@@ -63,8 +62,9 @@ public class DayClosureWhatsAppListener {
             log.info("DayClosedEvent received: storeId={}, isAutomatic={}",
                     event.storeId(), event.isAutomatic());
 
-            // v1s-14-16: owner check before building the report — never a fallback recipient.
-            Optional<String> ownerPhone = resolveOwnerPhone(event.tenantId());
+            // v1s-14-16 / v1s-14-17: owner check before building the report — never a fallback recipient.
+            // The resolver returns empty for a null/blank tenant, a missing owner or an unusable phone.
+            Optional<String> ownerPhone = ownerRecipientResolver.resolveOwnerWhatsAppPhone(event.tenantId());
             if (ownerPhone.isEmpty()) {
                 log.warn("Day-closure WhatsApp report skipped for tenant={} storeId={}: no owner WhatsApp phone",
                         event.tenantId(), event.storeId());
@@ -94,15 +94,5 @@ public class DayClosureWhatsAppListener {
                 TenantContext.clear();
             }
         }
-    }
-
-    /** Owner phone of the given tenant schema; empty when tenant, owner or phone is missing/blank. */
-    private Optional<String> resolveOwnerPhone(String tenantId) {
-        if (tenantId == null || tenantId.isBlank()) {
-            return Optional.empty();
-        }
-        return userRepository.findOwnerByTenantSchemaName(tenantId)
-                .map(User::getPhoneNumber)
-                .filter(phone -> !phone.isBlank());
     }
 }

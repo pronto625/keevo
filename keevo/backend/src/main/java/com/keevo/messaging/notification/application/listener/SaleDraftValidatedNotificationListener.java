@@ -5,6 +5,7 @@ import com.keevo.commerce.sale.domain.model.SaleDraftProductsUpgradedEvent;
 import com.keevo.commerce.sale.domain.model.SaleManuallyValidatedEvent;
 import com.keevo.commerce.sale.domain.model.SalePendingValidationEvent;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
+import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
@@ -44,6 +45,7 @@ public class SaleDraftValidatedNotificationListener {
     private final EmployeeRepository employeeRepository;
     private final StoreRepository storeRepository;
     private final UserRepository userRepository;
+    private final OwnerRecipientResolver ownerRecipientResolver;
     private final TenantPreferencesRepository tenantPreferencesRepository;
     private final NotificationPort notificationPort;
     private final WhatsAppPort whatsAppPort;
@@ -53,6 +55,7 @@ public class SaleDraftValidatedNotificationListener {
             EmployeeRepository employeeRepository,
             StoreRepository storeRepository,
             UserRepository userRepository,
+            OwnerRecipientResolver ownerRecipientResolver,
             TenantPreferencesRepository tenantPreferencesRepository,
             NotificationPort notificationPort,
             WhatsAppPort whatsAppPort) {
@@ -60,6 +63,7 @@ public class SaleDraftValidatedNotificationListener {
         this.employeeRepository = employeeRepository;
         this.storeRepository = storeRepository;
         this.userRepository = userRepository;
+        this.ownerRecipientResolver = ownerRecipientResolver;
         this.tenantPreferencesRepository = tenantPreferencesRepository;
         this.notificationPort = notificationPort;
         this.whatsAppPort = whatsAppPort;
@@ -131,8 +135,7 @@ public class SaleDraftValidatedNotificationListener {
 
             // ── WhatsApp notification ────────────────────────────────────────
             if (channel == StockAlertChannel.WHATSAPP || channel == StockAlertChannel.BOTH) {
-                String ownerPhone = userRepository.findOwnerByTenantSchemaName(event.tenantId())
-                        .map(u -> u.getPhoneNumber())
+                String ownerPhone = ownerRecipientResolver.resolveOwnerWhatsAppPhone(event.tenantId())
                         .orElse(null);
                 if (ownerPhone != null) {
                     try {
@@ -212,8 +215,7 @@ public class SaleDraftValidatedNotificationListener {
             }
 
             if (channel == StockAlertChannel.WHATSAPP || channel == StockAlertChannel.BOTH) {
-                String ownerPhone = userRepository.findOwnerByTenantSchemaName(event.tenantId())
-                        .map(u -> u.getPhoneNumber())
+                String ownerPhone = ownerRecipientResolver.resolveOwnerWhatsAppPhone(event.tenantId())
                         .orElse(null);
                 if (ownerPhone != null) {
                     try {
@@ -301,8 +303,7 @@ public class SaleDraftValidatedNotificationListener {
             }
 
             if (channel == StockAlertChannel.WHATSAPP || channel == StockAlertChannel.BOTH) {
-                String ownerPhone = userRepository.findOwnerByTenantSchemaName(event.tenantId())
-                        .map(u -> u.getPhoneNumber())
+                String ownerPhone = ownerRecipientResolver.resolveOwnerWhatsAppPhone(event.tenantId())
                         .orElse(null);
                 if (ownerPhone != null) {
                     try {

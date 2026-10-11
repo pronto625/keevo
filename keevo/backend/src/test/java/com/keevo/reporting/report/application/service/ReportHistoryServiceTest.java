@@ -1,8 +1,7 @@
 package com.keevo.reporting.report.application.service;
 
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
-import com.keevo.identity.auth.domain.model.User;
-import com.keevo.identity.auth.domain.port.out.UserRepository;
+import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
 import com.keevo.reporting.report.domain.model.DeliveryStatus;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.ReportType;
@@ -39,7 +38,7 @@ class ReportHistoryServiceTest {
 
     @Mock private EndOfDayReportRepository reportRepository;
     @Mock private WhatsAppPort whatsAppPort;
-    @Mock private UserRepository userRepository;
+    @Mock private OwnerRecipientResolver ownerRecipientResolver;
 
     private ReportHistoryService service;
     private UUID reportId;
@@ -48,7 +47,7 @@ class ReportHistoryServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ReportHistoryService(reportRepository, whatsAppPort, userRepository);
+        service = new ReportHistoryService(reportRepository, whatsAppPort, ownerRecipientResolver);
         reportId = UUID.randomUUID();
         tenantId = "kv_test01";
         sampleReport = EndOfDayReport.createNew(
@@ -142,9 +141,7 @@ class ReportHistoryServiceTest {
     @Test
     void resendReport_whenWhatsAppSucceeds_resetsIncrementsMarksSentAndSavesTwice() {
         when(reportRepository.findById(reportId)).thenReturn(Optional.of(sampleReport));
-        User owner = mock(User.class);
-        when(owner.getPhoneNumber()).thenReturn("+237600000001");
-        when(userRepository.findOwnerByTenantSchemaName(tenantId)).thenReturn(Optional.of(owner));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(tenantId)).thenReturn(Optional.of("+237600000001"));
 
         service.resendReport(new ResendReportCommand(reportId, tenantId));
 
@@ -162,9 +159,7 @@ class ReportHistoryServiceTest {
     @Test
     void resendReport_whenWhatsAppFails_marksFailedSavesAndThrowsDeliveryException() {
         when(reportRepository.findById(reportId)).thenReturn(Optional.of(sampleReport));
-        User owner = mock(User.class);
-        when(owner.getPhoneNumber()).thenReturn("+237600000001");
-        when(userRepository.findOwnerByTenantSchemaName(tenantId)).thenReturn(Optional.of(owner));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(tenantId)).thenReturn(Optional.of("+237600000001"));
         doThrow(new RuntimeException("net error")).when(whatsAppPort).sendReport(anyString(), anyString());
 
         DomainException ex = assertThrows(DomainException.class,
@@ -180,30 +175,11 @@ class ReportHistoryServiceTest {
     // 3.8 — v1s-15-7 D1: no owner phone → refused, nothing sent, report untouched
     // ─────────────────────────────────────────────────────────────────
 
+    /** v1s-14-17: missing owner, null / blank / invalid phone all surface as an empty resolver result. */
     @Test
-    void resendReport_whenOwnerMissing_throwsDeliveryFailed_andNeverSendsOrResets() {
+    void resendReport_whenNoOwnerRecipient_throwsDeliveryFailed_andNeverSendsOrResets() {
         when(reportRepository.findById(reportId)).thenReturn(Optional.of(sampleReport));
-        when(userRepository.findOwnerByTenantSchemaName(tenantId)).thenReturn(Optional.empty());
-
-        assertResendRefusedWithoutTouchingReport();
-    }
-
-    @Test
-    void resendReport_whenOwnerPhoneNull_throwsDeliveryFailed_andNeverSendsOrResets() {
-        when(reportRepository.findById(reportId)).thenReturn(Optional.of(sampleReport));
-        User owner = mock(User.class);
-        when(owner.getPhoneNumber()).thenReturn(null);
-        when(userRepository.findOwnerByTenantSchemaName(tenantId)).thenReturn(Optional.of(owner));
-
-        assertResendRefusedWithoutTouchingReport();
-    }
-
-    @Test
-    void resendReport_whenOwnerPhoneBlank_throwsDeliveryFailed_andNeverSendsOrResets() {
-        when(reportRepository.findById(reportId)).thenReturn(Optional.of(sampleReport));
-        User owner = mock(User.class);
-        when(owner.getPhoneNumber()).thenReturn("   ");
-        when(userRepository.findOwnerByTenantSchemaName(tenantId)).thenReturn(Optional.of(owner));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(tenantId)).thenReturn(Optional.empty());
 
         assertResendRefusedWithoutTouchingReport();
     }
@@ -256,8 +232,6 @@ class ReportHistoryServiceTest {
 
     private void stubOwnerPhone() {
         when(reportRepository.findById(reportId)).thenReturn(Optional.of(sampleReport));
-        User owner = mock(User.class);
-        when(owner.getPhoneNumber()).thenReturn("+237600000001");
-        when(userRepository.findOwnerByTenantSchemaName(tenantId)).thenReturn(Optional.of(owner));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(tenantId)).thenReturn(Optional.of("+237600000001"));
     }
 }

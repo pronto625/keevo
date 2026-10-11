@@ -2,7 +2,7 @@ package com.keevo.reporting.report.application.service;
 
 import com.keevo.commerce.sale.domain.model.ClosureWindow;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
-import com.keevo.identity.auth.domain.port.out.UserRepository;
+import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
 import com.keevo.identity.onboarding.domain.model.ReportChannel;
 import com.keevo.reporting.report.domain.model.DeliveryStatus;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
@@ -44,7 +44,7 @@ public class WeeklyReportGenerator extends AbstractReportGenerator
     private final WeeklyReportBuilder builder;
     private final WeeklyReportFormatter formatter;
     private final StoreRepository storeRepository;
-    private final UserRepository userRepository;
+    private final OwnerRecipientResolver ownerRecipientResolver;
 
     public WeeklyReportGenerator(EndOfDayReportRepository reportRepository,
                                   WhatsAppPort whatsAppPort,
@@ -52,12 +52,12 @@ public class WeeklyReportGenerator extends AbstractReportGenerator
                                   WeeklyReportBuilder builder,
                                   WeeklyReportFormatter formatter,
                                   StoreRepository storeRepository,
-                                  UserRepository userRepository) {
+                                  OwnerRecipientResolver ownerRecipientResolver) {
         super(reportRepository, whatsAppPort, multiStoreSummaryService);
         this.builder = builder;
         this.formatter = formatter;
         this.storeRepository = storeRepository;
-        this.userRepository = userRepository;
+        this.ownerRecipientResolver = ownerRecipientResolver;
     }
 
     // ── GenerateWeeklyReportUseCase ────────────────────────────────────────────
@@ -154,8 +154,7 @@ public class WeeklyReportGenerator extends AbstractReportGenerator
 
     @Override
     protected String resolveOwnerPhone(GenerateEndOfDayReportUseCase.GenerateReportCommand command) {
-        return userRepository.findOwnerByTenantSchemaName(command.tenantId())
-                .map(u -> u.getPhoneNumber())
-                .orElse(null);
+        return ownerRecipientResolver.resolveOwnerWhatsAppPhone(command.tenantId())
+                .orElse(null); // null → AbstractReportGenerator.deliverReport marks IN_APP_ONLY
     }
 }

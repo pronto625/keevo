@@ -1,7 +1,7 @@
 package com.keevo.reporting.report.application.service;
 
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
-import com.keevo.identity.auth.domain.port.out.UserRepository;
+import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
 import com.keevo.reporting.report.domain.model.DeliveryStatus;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.ReportType;
@@ -35,7 +35,7 @@ class MultiStoreSummaryServiceTest {
     @Mock private StoreRepository storeRepository;
     @Mock private WhatsAppPort whatsAppPort;
     @Mock private DailyReportFormatter formatter;
-    @Mock private UserRepository userRepository;
+    @Mock private OwnerRecipientResolver ownerRecipientResolver;
 
     private MultiStoreSummaryService service;
     private GenerateReportCommand command;
@@ -43,7 +43,7 @@ class MultiStoreSummaryServiceTest {
     @BeforeEach
     void setUp() {
         service = new MultiStoreSummaryService(reportRepository, storeRepository,
-                whatsAppPort, formatter, userRepository);
+                whatsAppPort, formatter, ownerRecipientResolver);
         command = new GenerateReportCommand(UUID.randomUUID(), UUID.randomUUID(),
                 "kv_test01", false, Instant.now(), null);
     }
@@ -93,7 +93,7 @@ class MultiStoreSummaryServiceTest {
                         stubReport(UUID.randomUUID(), "Boutique B", 80000, 4)
                 ));
         when(formatter.formatCombinedSummary(anyString(), any(), anyInt(), anyInt())).thenReturn("Résumé combiné");
-        when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.empty());
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(anyString())).thenReturn(Optional.empty());
 
         service.checkAndGenerateCombinedSummary(command);
 
@@ -110,7 +110,7 @@ class MultiStoreSummaryServiceTest {
         when(reportRepository.findByDateAndTenant(any(), anyString(), eq(ReportType.DAILY)))
                 .thenReturn(List.of(stubReport(UUID.randomUUID(), "A", 50000, 3)));
         when(formatter.formatCombinedSummary(anyString(), any(), anyInt(), anyInt())).thenReturn("Résumé");
-        when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.of(owner()));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(anyString())).thenReturn(Optional.of("+237600000999"));
 
         service.checkAndGenerateCombinedSummary(command);
 
@@ -126,7 +126,7 @@ class MultiStoreSummaryServiceTest {
         when(reportRepository.findByDateAndTenant(any(), anyString(), eq(ReportType.DAILY)))
                 .thenReturn(List.of(stubReport(UUID.randomUUID(), "A", 50000, 3)));
         when(formatter.formatCombinedSummary(anyString(), any(), anyInt(), anyInt())).thenReturn("Résumé");
-        when(userRepository.findOwnerByTenantSchemaName(anyString())).thenReturn(Optional.of(owner()));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(anyString())).thenReturn(Optional.of("+237600000999"));
         doThrow(new RuntimeException("WhatsApp error")).when(whatsAppPort).sendReport(anyString(), anyString());
 
         service.checkAndGenerateCombinedSummary(command);
@@ -134,11 +134,5 @@ class MultiStoreSummaryServiceTest {
         // Verify the combined report was saved twice (once before delivery, once after failure)
         verify(reportRepository, times(2)).save(argThat(r ->
                 r.getReportType() == ReportType.DAILY_COMBINED));
-    }
-
-    private com.keevo.identity.auth.domain.model.User owner() {
-        return new com.keevo.identity.auth.domain.model.User(
-                UUID.randomUUID(), "+237600000999", "hash",
-                com.keevo.identity.auth.domain.model.Role.OWNER, true, Instant.now());
     }
 }
