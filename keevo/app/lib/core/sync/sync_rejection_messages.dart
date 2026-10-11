@@ -4,12 +4,15 @@
 /// The backend sends the raw `ErrorCode` enum name (see
 /// `AbstractSyncOperationHandler.mapDomainException` on the Java side) —
 /// this only covers the codes a queued offline operation can realistically
-/// be rejected with. Unrecognised codes fall back to a generic message that
-/// still includes the raw code, so nothing is silently swallowed.
+/// be rejected with. An unrecognised UPPER_SNAKE code falls back to a generic
+/// message that still names the code (so nothing is silently swallowed); free
+/// text (an unmapped server exception message, e.g. "Product not found: …")
+/// is never shown raw.
 String friendlySyncRejectionReason(String? reasonCode) {
   return switch (reasonCode) {
     'PRODUCT_NAME_ALREADY_EXISTS' => 'Un produit avec ce nom existe déjà',
-    'PLAN_LIMIT_EXCEEDED' => 'Limite du plan atteinte',
+    'PLAN_LIMIT_EXCEEDED' =>
+      'Limite de votre forfait atteinte — passez à un forfait supérieur',
     'CATEGORY_NOT_FOUND' => 'Catégorie introuvable',
     'PRODUCT_NOT_FOUND' => 'Produit introuvable',
     'CLIENT_NOT_FOUND' => 'Client introuvable',
@@ -30,19 +33,44 @@ String friendlySyncRejectionReason(String? reasonCode) {
     'INVENTORY_STORE_NOT_FOUND' => 'Boutique de l\'inventaire introuvable',
     'INVENTORY_INVALID_CATEGORIES' => 'Catégories de l\'inventaire invalides',
     'INVENTORY_SESSION_NOT_IN_PROGRESS' => 'Cet inventaire n\'est plus en cours',
+    'INVENTORY_SESSION_NOT_FOUND' => 'Inventaire introuvable sur le serveur',
+    'OPTIMISTIC_LOCK' =>
+      'Modifié en même temps sur un autre appareil — nouvel essai automatique',
+    'INTERNAL_ERROR' ||
+    'TRANSACTION_ROLLED_BACK' =>
+      'Incident temporaire du serveur — nouvel essai automatique',
+    'DATA_INTEGRITY_VIOLATION' =>
+      'Données en conflit avec le serveur — nouvel essai automatique',
+    'UNKNOWN_OPERATION_TYPE' =>
+      'Action non prise en charge — mettez l\'application à jour',
+    'SUBSCRIPTION_NOT_FOUND' => 'Abonnement introuvable',
+    'TENANT_NOT_FOUND' => 'Compte de l\'entreprise introuvable',
+    'WAREHOUSE_ALREADY_EXISTS' => 'Une boutique avec ce nom existe déjà',
+    'USER_ALREADY_EXISTS' => 'Un utilisateur avec ces identifiants existe déjà',
+    'EMPLOYEE_NOT_FOUND' => 'Employé introuvable',
+    'CANNOT_DEMOTE_LAST_OWNER' =>
+      'Impossible de retirer le dernier propriétaire du compte',
     'VALIDATION_ERROR' || 'VALIDATION_FAILED' => 'Données invalides',
     'FORBIDDEN' => 'Action non autorisée',
     'UNAUTHORIZED' => 'Session expirée',
     null => 'Raison inconnue',
-    _ => 'Erreur : $reasonCode',
+    String code when _errorCodePattern.hasMatch(code) =>
+      'Refusé par le serveur ($code)',
+    String text when text.toLowerCase().contains('not found') =>
+      'Élément introuvable sur le serveur',
+    _ => 'Données refusées par le serveur',
   };
 }
+
+/// A backend `ErrorCode` name (UPPER_SNAKE), as opposed to free text.
+final _errorCodePattern = RegExp(r'^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$');
 
 /// Translates a `sync_queue.operation` value into a short French label for
 /// display in rejection notifications and the sync queue screen.
 String friendlySyncOperationLabel(String operation) {
   return switch (operation) {
     'CREATE_PRODUCT' => 'Création de produit',
+    'CREATE_DRAFT_PRODUCT' => 'Création de produit brouillon',
     'UPDATE_PRODUCT' => 'Modification de produit',
     'ARCHIVE_PRODUCT' => 'Archivage de produit',
     'UNARCHIVE_PRODUCT' => 'Restauration de produit',
@@ -72,6 +100,8 @@ String friendlySyncOperationLabel(String operation) {
     'REASSIGN_EMPLOYEE' => 'Réaffectation d\'employé',
     'DEACTIVATE_EMPLOYEE' => 'Désactivation d\'employé',
     'REACTIVATE_EMPLOYEE' => 'Réactivation d\'employé',
+    'CREATE_EMPLOYEE' => 'Création d\'employé',
+    'SUBMIT_FEEDBACK' => 'Envoi d\'un avis',
     _ => operation,
   };
 }

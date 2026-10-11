@@ -16,6 +16,7 @@ import '../../features/inventory/presentation/provider/global_stock_provider.dar
 import '../../features/pos/presentation/provider/day_closure_providers.dart';
 import '../../features/pos/presentation/provider/pos_providers.dart';
 import '../../features/reports/presentation/provider/report_history_providers.dart';
+import '../../features/stores/presentation/provider/active_store_provider.dart';
 import '../../features/stores/presentation/provider/store_provider.dart';
 import '../../features/team/presentation/provider/employee_provider.dart';
 import '../di/providers.dart';
@@ -239,10 +240,14 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
     }
   }
 
-  /// AC6: Called after JWT validation at app startup to pull latest server state.
-  Future<void> onAppStartup() async {
-    if (state is! SyncTriggerIdle) return;
-    triggerSync();
+  /// AC6: Called after JWT validation at app startup (and after login /
+  /// tenant selection) to pull the latest server state. Never dropped: a
+  /// cycle already running may predate the login/tenant switch, so a fresh
+  /// full sync runs after it (v1s-16-12).
+  Future<void> onAppStartup() {
+    final running = _cycle;
+    if (running != null) return running.then((_) => triggerSync());
+    return triggerSync();
   }
 
   /// Push-only trigger — backward compatibility for connectivity restore.
@@ -289,6 +294,11 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
       ref.read(pendingRejectionNotificationsProvider.notifier).state =
           rejections;
     }
+    // A rolled-back store creation may have cleared the active store pref:
+    // refresh it now — _invalidateAllProviders() is skipped if the pull fails.
+    if (rejections.any((r) => r['rolledBack'] == true)) {
+      ref.invalidate(activeStoreIdProvider);
+    }
 
     // Log LWW conflicts silently (LAST_WRITE_WINS — no user notification)
     for (final c in results) {
@@ -313,6 +323,8 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
     ref.invalidate(supplierListNotifierProvider);
     // ── Stores ───────────────────────────────────────────────────────────
     ref.invalidate(storeListNotifierProvider);
+    // A rejected offline store creation may have cleared the active store.
+    ref.invalidate(activeStoreIdProvider);
     // ── Inventory ────────────────────────────────────────────────────────
     ref.invalidate(globalStockOverviewProvider);
     ref.invalidate(storeStockDetailProvider);

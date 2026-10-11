@@ -115,6 +115,23 @@ void main() {
     verify(() => sync.pull()).called(1);
   });
 
+  // v1s-16-12: a login/tenant switch during a running cycle must still get
+  // its own fresh full sync — the running one may predate the switch.
+  test('onAppStartup during a running cycle runs a second full cycle after it',
+      () async {
+    final cycle = notifier().triggerSync();
+    final startup = notifier().onAppStartup();
+    await pumpEventQueue();
+    expect(pushCalls, 1);
+
+    releasePush.complete();
+    await Future.wait([cycle, startup]);
+
+    expect(maxPushesRunning, 1);
+    expect(pushCalls, 2);
+    verify(() => sync.pull()).called(2);
+  });
+
   test('a local write during a sync does not start a concurrent push',
       () async {
     final dispatcherProvider = Provider(

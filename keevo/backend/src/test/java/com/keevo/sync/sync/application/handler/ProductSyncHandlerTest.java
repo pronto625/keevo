@@ -265,6 +265,22 @@ class ProductSyncHandlerTest {
     }
 
     @Test
+    void handle_createProduct_planLimitExceeded_isRejectedWithTheErrorCode() {
+        // v1s-16-12: the mobile client rolls an offline-created product back
+        // (and tells the user to upgrade) on exactly this reason.
+        var productId = UUID.randomUUID();
+        var op = new SyncOperation("op-1", "CREATE_PRODUCT", productId.toString(),
+                Map.of("id", productId.toString(), "name", "Test Product", "price", 5000), Instant.now());
+        when(createProduct.execute(any())).thenThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED,
+                "limit", Map.of("entity", "products")));
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("PLAN_LIMIT_EXCEEDED");
+    }
+
+    @Test
     void handle_updateProduct_byOwner_passesOwnerRole() {
         var productId = UUID.randomUUID();
         when(updateProduct.execute(any())).thenReturn(dummyProduct(productId, "Updated Product"));

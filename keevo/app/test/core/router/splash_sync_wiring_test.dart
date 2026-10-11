@@ -50,9 +50,11 @@ void main() {
           reason: 'onAppStartup() must call triggerSync() when state is idle');
     });
 
-    test('onAppStartup_isNoop_whenAlreadySyncing', () async {
-      // AC3: the existing guard `if (state is! SyncTriggerIdle) return;`
-      // prevents double-trigger. Verify the guard works.
+    // v1s-16-12: the old `state is! SyncTriggerIdle` guard dropped the
+    // login/tenant startup pull. The state no longer gates it: without a
+    // running cycle, a full sync starts right away; with one, it runs after
+    // (covered with the real notifier in sync_trigger_single_flight_test).
+    test('onAppStartup_stillSyncs_whenStateIsSyncing', () async {
       int triggerSyncCallCount = 0;
 
       final container = ProviderContainer(
@@ -66,16 +68,13 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      container.read(syncTriggerNotifierProvider.notifier).onAppStartup();
+      await container.read(syncTriggerNotifierProvider.notifier).onAppStartup();
 
-      expect(triggerSyncCallCount, 0,
-          reason:
-              'onAppStartup() must be a no-op when state is already syncing');
+      expect(triggerSyncCallCount, 1,
+          reason: 'onAppStartup() must never be dropped');
     });
 
-    test('onAppStartup_isNoop_whenCriticalFailure', () async {
-      // The guard is `if (state is! SyncTriggerIdle) return;` — verify it
-      // also holds for the third sealed state, not just SyncTriggerSyncing.
+    test('onAppStartup_stillSyncs_whenCriticalFailure', () async {
       int triggerSyncCallCount = 0;
 
       final container = ProviderContainer(
@@ -89,11 +88,10 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      container.read(syncTriggerNotifierProvider.notifier).onAppStartup();
+      await container.read(syncTriggerNotifierProvider.notifier).onAppStartup();
 
-      expect(triggerSyncCallCount, 0,
-          reason:
-              'onAppStartup() must be a no-op when state is criticalFailure');
+      expect(triggerSyncCallCount, 1,
+          reason: 'criticalFailure must not block the startup pull');
     });
   });
 

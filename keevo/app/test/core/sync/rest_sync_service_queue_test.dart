@@ -77,9 +77,11 @@ void main() {
                   'status': applied(op['operationId'] as String)
                       ? 'APPLIED'
                       : 'REJECTED',
+                  // A transient reason: the op stays queued (v1s-16-12 drops
+                  // non-money ops on a terminal rejection).
                   'reason': applied(op['operationId'] as String)
                       ? null
-                      : 'NETWORKISH',
+                      : 'OPTIMISTIC_LOCK',
                   'serverEntityId': null,
                   'conflictData': null,
                 }
