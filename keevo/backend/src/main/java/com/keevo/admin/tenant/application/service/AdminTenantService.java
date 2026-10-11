@@ -6,6 +6,7 @@ import com.keevo.admin.tenant.domain.port.in.*;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -29,7 +30,7 @@ import java.util.UUID;
  * <ol>
  *   <li>listTenants(): queries public schema via JdbcTemplate ONLY — no TenantContext manipulation.
  *       Cross-schema per-tenant metrics (storeCount, lastActivityAt) use parameterized schema names
- *       from {@code public.tenants.schema_name} (validated at provisioning: pattern {@code kv_[a-z0-9]+}).
+ *       from {@code public.tenants.schema_name} (validated at provisioning and re-checked here with {@code TenantSchema}: pattern {@code ^kv_[a-z0-9]{6}$}).
  *   </li>
  *   <li>getTenantDetail(): switches TenantContext to the target tenant's schema for stores,
  *       employees, and audit log, then restores it — same pattern as ActivatePlanService.
@@ -39,8 +40,9 @@ import java.util.UUID;
  * </ol>
  *
  * <p><b>Schema name safety:</b> schemaName is sourced from {@code public.tenants.schema_name} and
- * was validated at provisioning time to match {@code kv_[a-z0-9]{6}}. It is never taken from
- * user input, so interpolation in SQL is safe here.
+ * was validated at provisioning time to match {@code ^kv_[a-z0-9]{6}$}. It is never taken from
+ * user input, and every interpolation is still gated by {@link TenantSchema} (invalid rows are
+ * skipped in the list, rejected in the detail) — Story v1s-13-12.
  */
 @Service
 public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUseCase {
@@ -222,7 +224,7 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
         // See TenantListRowMapper which reads schema_name into the record's "name" position.
         // We call loadSchemaName separately to avoid complex record reshaping.
         String schemaName = safeLoadSchemaName(item.id());
-        if (schemaName == null) return item;
+        if (!TenantSchema.isValid(schemaName)) return item; // gate before SQL interpolation
 
         int storeCount = safeCount("SELECT COUNT(*) FROM " + schemaName + ".stores WHERE is_active = true");
         Instant lastActivity = safeMaxInstant("SELECT MAX(occurred_at) FROM " + schemaName + ".audit_log");
@@ -254,7 +256,7 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
             throw new DomainException(ErrorCode.TENANT_NOT_FOUND,
                     "Tenant schema not found: " + tenantId);
         }
-        return s;
+        return TenantSchema.validate(s); // gate before SQL interpolation
     }
 
     private int safeCount(String sql) {

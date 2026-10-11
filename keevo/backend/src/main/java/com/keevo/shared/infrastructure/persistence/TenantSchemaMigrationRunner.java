@@ -2,8 +2,7 @@ package com.keevo.shared.infrastructure.persistence;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.ApplicationArguments;
-import org.springframework.boot.ApplicationRunner;
+import org.springframework.context.SmartLifecycle;
 import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
@@ -16,54 +15,131 @@ import java.util.List;
  * tenant schemas on startup, for schema changes that cannot be handled by a simple
  * {@code ADD COLUMN IF NOT EXISTS} (e.g. CHECK constraint modifications).
  *
- * <p>Runs AFTER the Spring context is fully started (ApplicationRunner).
- * A per-schema failure is logged as a warning but never aborts startup.
+ * <p>Story v1s-13-12: after the M1–M6 constraint migrations, each tenant is fully synced
+ * against {@code public} via {@link TenantSchemaSyncService#syncNow(String)}, so per-tenant
+ * columns (e.g. {@code version}) exist before the first request — schedulers never trigger
+ * the request-time sync. A per-schema failure is logged at ERROR (naming the schema) and
+ * counted, but never aborts startup: one broken tenant must not take every tenant down.
+ * DELETED tenants are not loaded; a tenant whose schema no longer exists is skipped (WARN).
+ *
+ * <p>Runs as a {@link SmartLifecycle} with phase {@value #PHASE}, i.e. before the embedded
+ * web server starts accepting requests ({@code WebServerStartStopLifecycle} runs at
+ * {@code DEFAULT_PHASE - 1024}) and before {@code @Scheduled} tasks are registered (the
+ * scheduling post-processor registers them on {@code ContextRefreshedEvent}, which is
+ * published after all lifecycle beans have started).
  *
  * Story 3.3 hotfix: adds IN_TRANSIT to stock_transfers.status CHECK constraint.
  */
 @Component
-public class TenantSchemaMigrationRunner implements ApplicationRunner {
+public class TenantSchemaMigrationRunner implements SmartLifecycle {
 
     private static final Logger log = LoggerFactory.getLogger(TenantSchemaMigrationRunner.class);
 
-    private final DataSource dataSource;
+    /** Low phase: before the web server (DEFAULT_PHASE - 1024) and before scheduler registration. */
+    static final int PHASE = 0;
 
-    public TenantSchemaMigrationRunner(DataSource dataSource) {
+    /** Non-deleted tenants, with whether their schema still exists. */
+    static final String LOAD_TENANTS_SQL =
+            "SELECT t.schema_name, EXISTS (SELECT 1 FROM information_schema.schemata s "
+            + "WHERE s.schema_name = t.schema_name) AS schema_present "
+            + "FROM public.tenants t WHERE t.status <> 'DELETED'";
+
+    private final DataSource dataSource;
+    private final TenantSchemaSyncService syncService;
+    private volatile boolean running;
+
+    public TenantSchemaMigrationRunner(DataSource dataSource, TenantSchemaSyncService syncService) {
         this.dataSource = dataSource;
+        this.syncService = syncService;
+    }
+
+    // ── SmartLifecycle ───────────────────────────────────────────────────────
+
+    @Override
+    public void start() {
+        if (running) return;
+        running = true;
+        runAll();
     }
 
     @Override
-    public void run(ApplicationArguments args) {
-        log.info("TenantSchemaMigrationRunner: starting constraint migrations");
-        List<String> schemas = loadAllTenantSchemas();
+    public void stop() {
+        running = false;
+    }
+
+    @Override
+    public boolean isRunning() {
+        return running;
+    }
+
+    @Override
+    public int getPhase() {
+        return PHASE;
+    }
+
+    // ── Work ─────────────────────────────────────────────────────────────────
+
+    /** Migrates + syncs every non-deleted tenant schema; never throws. */
+    public void runAll() {
+        long startedAt = System.nanoTime();
+        log.info("TenantSchemaMigrationRunner: starting tenant schema migrations + sync");
+        List<TenantRow> tenants = loadTenants();
         int ok = 0, skipped = 0, failed = 0;
-        for (String schema : schemas) {
+        for (TenantRow tenant : tenants) {
+            String schema = tenant.schema();
+            if (!TenantSchema.isValid(schema)) {
+                log.warn("TenantSchemaMigrationRunner: skipping invalid tenant schema name (length={})",
+                        schema == null ? "null" : String.valueOf(schema.length()));
+                skipped++;
+                continue;
+            }
+            if (!tenant.present()) {
+                log.warn("TenantSchemaMigrationRunner: skipping tenant schema '{}' — schema does not exist", schema);
+                skipped++;
+                continue;
+            }
+            boolean tenantFailed = false;
             try {
                 migrateSchema(schema);
-                ok++;
             } catch (Exception e) {
-                log.warn("Migration failed for schema '{}': {}", schema, e.getMessage());
-                failed++;
+                log.error("TenantSchemaMigrationRunner: M1-M6 migrations FAILED for schema '{}'", schema, e);
+                tenantFailed = true;
             }
+            try {
+                syncService.syncNow(schema);
+            } catch (Exception e) {
+                log.error("TenantSchemaMigrationRunner: schema sync FAILED for schema '{}' — "
+                        + "tenant may be missing columns until fixed", schema, e);
+                tenantFailed = true;
+            }
+            if (tenantFailed) failed++; else ok++;
         }
-        log.info("TenantSchemaMigrationRunner: done — ok={} skipped={} failed={} total={}",
-                ok, skipped, failed, schemas.size());
+        long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
+        if (failed > 0) {
+            log.error("TenantSchemaMigrationRunner: done with FAILURES — ok={} skipped={} failed={} total={} elapsedMs={}",
+                    ok, skipped, failed, tenants.size(), elapsedMs);
+        } else {
+            log.info("TenantSchemaMigrationRunner: done — ok={} skipped={} failed={} total={} elapsedMs={}",
+                    ok, skipped, failed, tenants.size(), elapsedMs);
+        }
     }
 
     // ── private helpers ──────────────────────────────────────────────────────
 
-    private List<String> loadAllTenantSchemas() {
-        List<String> schemas = new ArrayList<>();
+    private record TenantRow(String schema, boolean present) {}
+
+    private List<TenantRow> loadTenants() {
+        List<TenantRow> tenants = new ArrayList<>();
         try (Connection conn = dataSource.getConnection();
              Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT schema_name FROM public.tenants")) {
+             ResultSet rs = stmt.executeQuery(LOAD_TENANTS_SQL)) {
             while (rs.next()) {
-                schemas.add(rs.getString("schema_name"));
+                tenants.add(new TenantRow(rs.getString("schema_name"), rs.getBoolean("schema_present")));
             }
         } catch (SQLException e) {
-            log.warn("Could not load tenant schemas — skipping migrations: {}", e.getMessage());
+            log.error("TenantSchemaMigrationRunner: could not load tenant schemas — skipping tenant migrations + sync", e);
         }
-        return schemas;
+        return tenants;
     }
 
     /**
@@ -71,7 +147,7 @@ public class TenantSchemaMigrationRunner implements ApplicationRunner {
      * Each migration is wrapped in a DO $$ block so it never throws on second run.
      */
     private void migrateSchema(String schema) throws SQLException {
-        if (schema == null || !schema.matches("^kv_[a-z0-9]{6}$")) return;
+        TenantSchema.validate(schema); // callers already filter; defence in depth before interpolation
 
         try (Connection conn = dataSource.getConnection();
              Statement stmt = conn.createStatement()) {

@@ -1,6 +1,7 @@
 package com.keevo.subscription.plan.application.service;
 
 import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.subscription.plan.domain.port.in.DowngradeExpiredTrialsCommand;
 import com.keevo.subscription.plan.domain.port.in.DowngradeExpiredTrialsUseCase;
 import org.slf4j.Logger;
@@ -66,7 +67,7 @@ public class SubscriptionExpiryService implements DowngradeExpiredTrialsUseCase 
 
         int totalDowngraded = 0;
         for (String schema : schemas) {
-            if (!schema.matches("^kv_[a-z0-9]{6}$")) continue; // safety guard
+            if (!TenantSchema.isValid(schema)) continue; // safety guard
 
             try {
                 // Schema name validated against regex above — safe to interpolate via format.

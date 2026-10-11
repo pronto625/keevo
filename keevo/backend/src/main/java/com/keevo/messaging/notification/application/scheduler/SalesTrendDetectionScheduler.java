@@ -6,6 +6,7 @@ import com.keevo.messaging.notification.domain.model.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationCooldownRepository;
 import com.keevo.messaging.notification.domain.port.out.NotificationPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
@@ -70,7 +71,7 @@ public class SalesTrendDetectionScheduler {
         List<String> schemas = jdbcTemplate.queryForList(FETCH_ACTIVE_SCHEMAS, String.class);
 
         for (String schema : schemas) {
-            if (!schema.matches("^kv_[a-z0-9]{6}$")) continue;
+            if (!TenantSchema.isValid(schema)) continue;
             try {
                 TenantContext.setCurrentTenant(schema);
                 processTenant(schema);

@@ -24,7 +24,9 @@ import java.util.List;
  * <ol>
  *   <li>No TenantContext manipulation — uses JdbcTemplate with schema-qualified SQL directly.</li>
  *   <li>schemaName is sourced from {@code public.tenants.schema_name}, validated at provisioning
- *       to match {@code kv_[a-z0-9]{6}}. Direct SQL interpolation is safe here.</li>
+ *       to match {@code ^kv_[a-z0-9]{6}$}; rows failing the shared
+ *       {@link com.keevo.shared.infrastructure.persistence.TenantSchema} gate are skipped before any
+ *       SQL interpolation (Story v1s-13-12).</li>
  *   <li>Always excludes system tenant (id = ADMIN_TENANT_ID) from all queries.</li>
  *   <li>Phase 1 pagination: collect all matching rows in memory, then slice. Acceptable for
  *       &lt;200 tenants × avg 250 products = &lt;50k rows.</li>
@@ -120,7 +122,7 @@ public class AdminCatalogService implements ListProductsUseCase, GetCatalogSumma
 
         sql.append(" ORDER BY t.name");
 
-        return jdbc.query(sql.toString(), (rs, rowNum) -> {
+        return onlyValidSchemas(jdbc.query(sql.toString(), (rs, rowNum) -> {
             String planType = rs.getString("plan_type");
             String plan = ("PREMIUM".equals(planType) || "PREMIUM_TRIAL".equals(planType)) ? "PAID" : "FREE";
             return new TenantSchema(
@@ -128,11 +130,11 @@ public class AdminCatalogService implements ListProductsUseCase, GetCatalogSumma
                     rs.getString("name"),
                     rs.getString("schema_name"),
                     plan);
-        }, params.toArray());
+        }, params.toArray()));
     }
 
     private List<TenantSchema> loadAllActiveSchemas() {
-        return jdbc.query(
+        return onlyValidSchemas(jdbc.query(
                 "SELECT t.id::text, t.name, t.schema_name, t.plan_type "
                 + "FROM public.tenants t "
                 + "WHERE t.id <> '" + ADMIN_TENANT_ID + "'::uuid "
@@ -146,7 +148,14 @@ public class AdminCatalogService implements ListProductsUseCase, GetCatalogSumma
                             rs.getString("name"),
                             rs.getString("schema_name"),
                             plan);
-                });
+                }));
+    }
+
+    /** Drops rows whose schema name fails the shared tenant-schema gate (never interpolated). */
+    private static List<TenantSchema> onlyValidSchemas(List<TenantSchema> tenants) {
+        return tenants.stream()
+                .filter(t -> com.keevo.shared.infrastructure.persistence.TenantSchema.isValid(t.schemaName()))
+                .toList();
     }
 
     private List<AdminProductListItem> safeQueryProducts(TenantSchema tenant, ListProductsQuery q) {

@@ -37,9 +37,18 @@ public class TenantSchemaProvisioner {
                 password_hash VARCHAR(255) NOT NULL,
                 role          VARCHAR(20)  NOT NULL CHECK (role IN ('OWNER','EMPLOYEE')),
                 is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
+                failed_attempts INTEGER    NOT NULL DEFAULT 0,
+                locked_until  TIMESTAMPTZ,
                 created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
                 updated_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
             )""";
+
+    // Story v1s-13-12 — login lockout columns for tenants created before DDL_USERS carried them
+    // (previously only added by the request-time public→tenant column sync).
+    static final String DDL_USERS_MIGRATE_FAILED_ATTEMPTS =
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_attempts INTEGER NOT NULL DEFAULT 0";
+    static final String DDL_USERS_MIGRATE_LOCKED_UNTIL =
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ";
 
     private static final String DDL_SUBSCRIPTIONS = """
             CREATE TABLE IF NOT EXISTS subscriptions (
@@ -266,13 +275,34 @@ public class TenantSchemaProvisioner {
     static final String DDL_STOCK_MOVEMENTS_IDX_STORE =
             "CREATE INDEX IF NOT EXISTS idx_stock_movements_store ON stock_movements(store_id, occurred_at DESC)";
 
-    /** Migration DDL: adds SALE_CANCELLED to movement_type CHECK constraint (idempotent — Story v1s-13-5) */
+    /**
+     * Migration DDL: adds SALE_CANCELLED to the movement_type CHECK constraint (Story v1s-13-5).
+     *
+     * <p>Idempotent and safe for existing tenants (Story v1s-13-12, also run by the schema sync):
+     * an inherited {@code stock_movements_movement_type_check} (copied from {@code public} by
+     * {@code LIKE … INCLUDING ALL}) that lacks SALE_CANCELLED is always dropped; when no
+     * {@code ck_movement_type} already accepts SALE_CANCELLED, both constraints are dropped and
+     * {@code ck_movement_type} is re-added with the full list. Unqualified: runs under the
+     * tenant {@code search_path}.
+     */
     static final String DDL_STOCK_MOVEMENTS_MIGRATE_SALE_CANCELLED = """
             DO $$ BEGIN
-                ALTER TABLE stock_movements DROP CONSTRAINT IF EXISTS ck_movement_type;
-                ALTER TABLE stock_movements ADD CONSTRAINT ck_movement_type
-                    CHECK (movement_type IN
-                        ('SALE','STOCK_ENTRY','TRANSFER_IN','TRANSFER_OUT','ADJUSTMENT','SALE_CANCELLED'));
+                IF EXISTS (SELECT 1 FROM pg_constraint
+                           WHERE conrelid = 'stock_movements'::regclass
+                             AND conname = 'stock_movements_movement_type_check'
+                             AND pg_get_constraintdef(oid) NOT LIKE '%SALE_CANCELLED%') THEN
+                    ALTER TABLE stock_movements DROP CONSTRAINT stock_movements_movement_type_check;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                               WHERE conrelid = 'stock_movements'::regclass
+                                 AND conname = 'ck_movement_type'
+                                 AND pg_get_constraintdef(oid) LIKE '%SALE_CANCELLED%') THEN
+                    ALTER TABLE stock_movements DROP CONSTRAINT IF EXISTS ck_movement_type;
+                    ALTER TABLE stock_movements DROP CONSTRAINT IF EXISTS stock_movements_movement_type_check;
+                    ALTER TABLE stock_movements ADD CONSTRAINT ck_movement_type
+                        CHECK (movement_type IN
+                            ('SALE','STOCK_ENTRY','TRANSFER_IN','TRANSFER_OUT','ADJUSTMENT','SALE_CANCELLED'));
+                END IF;
             EXCEPTION WHEN duplicate_object THEN NULL;
             END $$""";
 
@@ -741,9 +771,11 @@ public class TenantSchemaProvisioner {
      * @throws DomainException TENANT_PROVISION_FAILED on any SQL error
      */
     public void provision(String tenantId, String schemaName) {
-        if (!schemaName.matches("^kv_[a-z0-9]{6}$")) {
-            throw new DomainException(ErrorCode.TENANT_PROVISION_FAILED,
-                    "Invalid schema name format: " + schemaName);
+        try {
+            TenantSchema.validate(schemaName);
+        } catch (IllegalArgumentException e) {
+            // Story 12.12 (D5): report the length only, never the raw value
+            throw new DomainException(ErrorCode.TENANT_PROVISION_FAILED, e.getMessage());
         }
         log.info("Provisioning tenant schema: tenantId={} schema={}", tenantId, schemaName);
         try (Connection conn = dataSource.getConnection()) {
@@ -763,7 +795,7 @@ public class TenantSchemaProvisioner {
      * <p>Best-effort: logs but does not throw, to avoid masking the original error.
      */
     public void dropSchemaIfExists(String schemaName) {
-        if (!schemaName.matches("^kv_[a-z0-9]{6}$")) return;
+        if (!TenantSchema.isValid(schemaName)) return;
         try (Connection conn = dataSource.getConnection();
              Statement stmt = conn.createStatement()) {
             stmt.execute("DROP SCHEMA IF EXISTS \"" + schemaName + "\" CASCADE");
@@ -787,9 +819,7 @@ public class TenantSchemaProvisioner {
      * @throws RuntimeException wrapping SQLException if the DROP fails
      */
     public void dropSchemaForDeletion(String schemaName) {
-        if (!schemaName.matches("^kv_[a-z0-9]{6}$")) {
-            throw new IllegalArgumentException("Invalid tenant schema name format: " + schemaName);
-        }
+        TenantSchema.validate(schemaName); // IllegalArgumentException (length only, no raw value)
         try (Connection conn = dataSource.getConnection();
              Statement stmt = conn.createStatement()) {
             stmt.execute("DROP SCHEMA IF EXISTS \"" + schemaName + "\" CASCADE");
@@ -812,6 +842,8 @@ public class TenantSchemaProvisioner {
         try (Statement stmt = conn.createStatement()) {
             stmt.execute("SET search_path TO \"" + schemaName + "\"");
             stmt.execute(DDL_USERS);
+            stmt.execute(DDL_USERS_MIGRATE_FAILED_ATTEMPTS); // idempotent: lockout columns on pre-existing users
+            stmt.execute(DDL_USERS_MIGRATE_LOCKED_UNTIL);
             stmt.execute(DDL_SUBSCRIPTIONS);
             stmt.execute(DDL_ROLES);
             stmt.execute(DDL_USER_ROLES);

@@ -2,6 +2,7 @@ package com.keevo.messaging.notification.adapter.out.persistence.impl;
 
 import com.keevo.messaging.notification.domain.port.out.NotificationCooldownRepository;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -89,8 +90,11 @@ public class JdbcNotificationCooldownAdapter implements NotificationCooldownRepo
     @SuppressWarnings("SqlSourceToSinkFlow")
     private String qualifiedTable() {
         String schema = TenantContext.getCurrentTenant();
-        if (schema == null || !schema.matches("^kv_[a-z0-9]{6}$")) {
-            throw new IllegalStateException("TenantContext not set or invalid schema: " + schema);
+        try {
+            TenantSchema.validate(schema);
+        } catch (IllegalArgumentException e) {
+            // Story 12.12 (D5): report the length only, never the raw value
+            throw new IllegalStateException("TenantContext not set or invalid schema: " + e.getMessage());
         }
         return "\"" + schema + "\".notification_cooldowns";
     }
