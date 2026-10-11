@@ -15,21 +15,6 @@ jobs:
     name: Build & Test (Java 21 / Maven)
     runs-on: ubuntu-latest
 
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: keevo_test
-          POSTGRES_USER: keevo
-          POSTGRES_PASSWORD: ci_password
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,18 +29,14 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
+      # v1s-15-11: no Postgres service — the tests start their own Testcontainer
+      # (postgres:16-alpine) on the runner's Docker, with the `test` profile.
       - name: Build and test
         working-directory: keevo/backend
         run: mvn test --batch-mode --no-transfer-progress
         env:
-          POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5432
-          POSTGRES_DB: keevo_test
-          POSTGRES_USER: keevo
-          POSTGRES_PASSWORD: ci_password
           JWT_SECRET: ci_test_secret_minimum_256_bits_long_for_hmac_sha256_algorithm
           JWT_EXPIRATION_MS: 15552000000
-          SPRING_PROFILES_ACTIVE: dev
 
       - name: Upload test results
         if: always()

@@ -13,7 +13,6 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * TenantIsolationIntegrationTest — AC4 — Validates that audit_log entries are strictly isolated
@@ -26,8 +25,8 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * <p>Design: uses raw JDBC (like TenantMigrationIntegrationTest) — no Spring context needed.
  * The JPA multi-tenancy routing is validated implicitly: schema name is the isolation mechanism.
  *
- * <p>Requires: keevo_postgres Docker container running on localhost:5444/keevo_dev.
- * If DB is unreachable, all tests are skipped gracefully (CI-safe).
+ * <p>Runs on a fresh database of the shared Testcontainers PostgreSQL
+ * ({@link SharedPostgresContainer#freshDatabase}); never skipped, never on a local PostgreSQL.
  */
 @DisplayName("TenantIsolationIntegrationTest (integration — real PostgreSQL, AC4)")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -48,26 +47,16 @@ class TenantIsolationIntegrationTest {
 
     // ── Lifecycle ──────────────────────────────────────────────────────────────
 
+    private static final String DATABASE = "keevo_tenant_isolation";
+
     @BeforeAll
     static void setUpDatabase() throws Exception {
-        String host   = System.getProperty("db.host",      "localhost");
-        String port   = System.getProperty("db.port",      "5444");
-        String dbName = System.getProperty("db.name",      "keevo_dev");
-        String user   = System.getProperty("db.user",      "keevo");
-        String pass   = System.getProperty("db.password",  "keevo_local_pwd");
-
+        // Pristine database on the shared Testcontainers PostgreSQL (Story v1s-15-11).
         PGSimpleDataSource ds = new PGSimpleDataSource();
-        ds.setURL("jdbc:postgresql://" + host + ":" + port + "/" + dbName);
-        ds.setUser(user);
-        ds.setPassword(pass);
-
-        // Graceful skip if DB is unreachable
-        try (Connection ignored = ds.getConnection()) {
-            dataSource = ds;
-        } catch (SQLException e) {
-            assumeTrue(false, "keevo_postgres not reachable — skipping isolation integration tests: "
-                    + e.getMessage());
-        }
+        ds.setURL(SharedPostgresContainer.freshDatabase(DATABASE));
+        ds.setUser(SharedPostgresContainer.username());
+        ds.setPassword(SharedPostgresContainer.password());
+        dataSource = ds;
 
         // Create both schemas and their audit_log tables
         try (Connection conn = dataSource.getConnection();
@@ -116,13 +105,8 @@ class TenantIsolationIntegrationTest {
     }
 
     @AfterAll
-    static void dropTestSchemas() {
-        if (dataSource == null) return;
-        try (Connection conn = dataSource.getConnection();
-             Statement stmt  = conn.createStatement()) {
-            stmt.execute("DROP SCHEMA IF EXISTS \"" + SCHEMA_A + "\" CASCADE");
-            stmt.execute("DROP SCHEMA IF EXISTS \"" + SCHEMA_B + "\" CASCADE");
-        } catch (SQLException ignored) { /* best-effort cleanup */ }
+    static void dropTestDatabase() {
+        SharedPostgresContainer.dropDatabase(DATABASE);
     }
 
     // ── Tests ─────────────────────────────────────────────────────────────────

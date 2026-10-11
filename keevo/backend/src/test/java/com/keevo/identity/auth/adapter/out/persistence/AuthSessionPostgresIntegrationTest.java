@@ -1,5 +1,6 @@
 package com.keevo.identity.auth.adapter.out.persistence;
 
+import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
 import com.keevo.identity.auth.adapter.out.persistence.impl.RefreshTokenRepositoryAdapter;
 import com.keevo.identity.auth.adapter.out.persistence.jpa.PasswordResetTokenSpringRepository;
 import com.keevo.identity.auth.application.service.SessionTokenIssuer;
@@ -14,16 +15,11 @@ import com.keevo.sync.sync.domain.model.UserSyncState;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -32,7 +28,6 @@ import java.security.interfaces.RSAPublicKey;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,16 +38,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * upsert, and the V10 phone normalisation (including the collision skip).
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({UserSyncStateRepositoryAdapter.class, RefreshTokenRepositoryAdapter.class})
-@Testcontainers
 @DisplayName("Auth & session SQL on PostgreSQL (Story 12.12)")
-class AuthSessionPostgresIntegrationTest {
+class AuthSessionPostgresIntegrationTest extends PostgresIntegrationTest {
 
-    @Container
-    @ServiceConnection
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
-            .withTmpFs(Map.of("/var/lib/postgresql/data", "rw"));
 
     @Autowired JdbcTemplate jdbc;
     @Autowired PasswordResetTokenSpringRepository resetTokens;

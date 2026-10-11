@@ -1,0 +1,2034 @@
+diff --git a/_bmad-output/implementation-artifacts/sprint-status.yaml b/_bmad-output/implementation-artifacts/sprint-status.yaml
+index 5a34abc..ba691ae 100644
+--- a/_bmad-output/implementation-artifacts/sprint-status.yaml
++++ b/_bmad-output/implementation-artifacts/sprint-status.yaml
+@@ -376,7 +376,7 @@ development_status:
+   v1s-epic-15-tests-debt-v1: in-progress  # 2026-10-11 : 5 nouvelles stories backlog (v1s-15-6..15-10) issues de la redistribution deferred-work | 2026-10-11 : toutes les stories done — sprint-change-proposal-2026-10-11 / audit-coherence-2026-10-11 | remediation Epic 15 — subset tag C (B exclu = refonte) ; 2026-07-23 — première story créée (v1s-15-3)
+   v1s-15-3-red-tests-missing-classes: done   # investigation 2026-07-23 (bmad-create-story) ; 2026-07-23 → in-progress (bmad-dev-story) ; 2026-07-23 → review (64 tests GREEN, 0 NEW regressions ; count corrected from 55, code review) ; 2026-07-23 → done (bmad-code-review : 5 patches appliqués, 1 decision-needed déféré, 11 findings déférés, 13 rejetés) : AC epic partiellement obsolète — CompleteTransferService/DefaultTransferValidationStrategy/7 stratégies profitability déjà testées (effet de bord Story 13.1/7.4) ; scope réduit à 6 classes réellement à zéro test : CategoryController, TwilioWhatsAppAdapter, FailoverWhatsAppAdapter, NoOpWhatsAppAdapter, ReportHistoryService, EmployeeRepositoryAdapter, JdbcProfitabilityRepository, StockMovementRepositoryAdapter ; découverte D2 : 3 use cases Category lèvent IllegalArgumentException non catchée → 500 au lieu de 404/422 (documenté comme defer, pas corrigé dans cette story — scope test-only)
+   v1s-15-5-reconcile-deferred-dead-code: done      # 2026-07-23 story créée [snip] ; 2026-07-23 → in-progress (bmad-dev-story) ; 2026-07-23 → review (AC1-AC7 satisfaits, deferred-work.md consolidé, UserSyncStateDdlInitializer supprimé, scaffolding products vidé, TODOs Category nettoyés, sprint-status 11-3 réconcilié, Décision D1 Option (b), zéro régression) ; 2026-07-23 → done (bmad-code-review : 3 layers Blind Hunter/Edge Case Hunter/Acceptance Auditor, 7/7 ACs PASS, 1 patch appliqué (stale line refs D2 :81,100→:79,96), 1 defer (D2/D3 naming pre-existing), 4 dismiss, 0 decision-needed)
+-  v1s-15-11-testcontainers-integration-tests: in-progress  # 2026-10-11 deferred-work redistribution — 9 items (+2 routés depuis v1s-12-12 le 2026-10-11)
++  v1s-15-11-testcontainers-integration-tests: done  # 2026-10-11 : 11 items clos — un PostgreSQL 16 Testcontainer partagé par JVM (PostgresIntegrationTest / FullContextIntegrationTest, freshDatabase), H2 retiré, 10 classes rouges corrigées (dont bug réel AccountDeletionScheduler : DROP du schéma avant le passage DELETED), nouveaux tests contexte complet / transferts concurrents + replay / concurrence auth ; mvn test 2223 tests, 0 échec ; spec spec-v1s-15-11-testcontainers-integration-tests.md | 2026-10-11 deferred-work redistribution — 9 items (+2 routés depuis v1s-12-12 le 2026-10-11)
+   v1s-15-7-backend-unit-test-gaps: backlog  # 2026-10-11 deferred-work redistribution — 20 items
+   v1s-15-8-flutter-test-hygiene: backlog  # 2026-10-11 deferred-work redistribution — 10 items
+   v1s-15-9-backend-refactor-hygiene: backlog  # 2026-10-11 +1 item routé depuis v1s-13-8 (intValue truncation autres handlers) | 2026-10-11 deferred-work redistribution — 16 items (+3 routés depuis v1s-14-5)
+diff --git a/_bmad-output/planning-artifacts/epics/epics-remediation-audit.md b/_bmad-output/planning-artifacts/epics/epics-remediation-audit.md
+index 3bb8e5a..f242f24 100644
+--- a/_bmad-output/planning-artifacts/epics/epics-remediation-audit.md
++++ b/_bmad-output/planning-artifacts/epics/epics-remediation-audit.md
+@@ -809,17 +809,17 @@ As a Toor, I want a real-PostgreSQL test base (Testcontainers) and the integrati
+ **Refs:** ARCH12, Story 15.1, Stories 10.1 / 10.2 (refonte), Stories 13.1 / 13.5, spec-stock-transfer-offline-sync-flow-fix. **Refonte absorption:** native — infra de tests posée avec la refonte.
+ 
+ **Items (routed 2026-10-11 from deferred-work):**
+-- [ ] [Deferred-from: CR 10-1, 2026-06-19] docker-java override only pins api+transport [pom.xml:140-150] — check mvn dependency:tree for docker-java-core skew when Testcontainers is wired
+-- [ ] [Deferred-from: CR 10-2, 2026-06-19] v2IsIdempotent asserts migrationsExecuted==0 too broadly [FlywayBaselineIntegrationTest.java:198-201] — V4-V9 now exist; restrict assertion to V2
+-- [ ] [Deferred-from: CR 10-2, 2026-06-19] @BeforeAll DROP DATABASE without pg_terminate_backend [FlywayBaselineIntegrationTest.java] — stale DB after crashed run
+-- [ ] [Deferred-from: CR 10-2, 2026-06-19] @ActiveProfiles(flyway-test) without profile file [FlywayBaselineIntegrationTest.java] — misleading annotation
+-- [ ] [Deferred-from: CR v1s-13-1, 2026-07-21] No real-EntityManager test for @Modifying + @Version [StockTransferSpringRepository.java:31-36] — needs Postgres/Testcontainers
+-- [ ] [Deferred-from: CR v1s-13-1, 2026-07-21] No multi-thread test on CompleteTransferService [CompleteTransferService.java:50-104] — CountDownLatch concurrent complete
+-- [ ] [Deferred-from: CR v1s-13-5, 2026-07-22] JPA merge-in-place test never executed [SaleRepositoryAdapterTest.java] — needs real Postgres (JSONB)
+-- [ ] [Deferred-from: legacy CR 10.1 flyway-baseline, 2026-06-18] FlywayBaselineIntegrationTest uses existing PG, not Testcontainers [FlywayBaselineIntegrationTest.java:32,51] — not CI-portable
+-- [ ] [Deferred-from: CR spec-stock-transfer-offline-sync-flow-fix, 2026-08-11] No persistence-level test of idempotent transfer replay [TransferSyncHandler.java, ExecuteTransferService.java] — real DB test that replay returns same id
+-- [ ] [Deferred-from: CR v1s-12-12, 2026-10-11] Auth/session concurrency only tested sequentially [AuthSessionPostgresIntegrationTest.java] — tryClaimAttempt cap, markConsumed once and the guarded user_sync_state upsert are single-statement atomic UPDATEs verified sequentially on real Postgres; add multi-connection (CountDownLatch) tests: 10 parallel wrong OTPs leave attempts ≤ 5, 2 parallel correct OTPs → one success, concurrent device claim never reassigns user_id
+-- [ ] [Deferred-from: CR v1s-12-12, 2026-10-11] No running context-load test resolves the new `Clock` bean [ClockConfig.java, CachedTokenRevocationAdapter/PasswordResetRateLimiter/AuthTokenCleanupJob constructors] — the only @SpringBootTest classes (SectorTemplateFactoryTest, FlywayBaselineIntegrationTest) fail in the baseline (localhost:5444); once the Testcontainers base exists, a context-load test proves the auth beans wire
++- [x] [Deferred-from: CR 10-1, 2026-06-19] docker-java override only pins api+transport [pom.xml:140-150] — check mvn dependency:tree for docker-java-core skew when Testcontainers is wired — **Resolved (v1s-15-11):** `mvn dependency:tree -Dincludes=com.github.docker-java` shows api, transport-zerodep and transport all at 3.4.1 and no docker-java-core (Testcontainers 1.20 does not use it), so nothing can drift; pins kept, check documented in the pom comment.
++- [x] [Deferred-from: CR 10-2, 2026-06-19] v2IsIdempotent asserts migrationsExecuted==0 too broadly [FlywayBaselineIntegrationTest.java:198-201] — V4-V9 now exist; restrict assertion to V2 — **Resolved (v1s-15-11):** the test now asserts V2 ran exactly once on the fresh DB and is absent from a re-migrate's executed list (one flyway_schema_history row).
++- [x] [Deferred-from: CR 10-2, 2026-06-19] @BeforeAll DROP DATABASE without pg_terminate_backend [FlywayBaselineIntegrationTest.java] — stale DB after crashed run — **Resolved (v1s-15-11):** `SharedPostgresContainer.freshDatabase()` terminates the database's backends before DROP/CREATE.
++- [x] [Deferred-from: CR 10-2, 2026-06-19] @ActiveProfiles(flyway-test) without profile file [FlywayBaselineIntegrationTest.java] — misleading annotation — **Resolved (v1s-15-11):** annotation removed; the test is now plain JUnit on the Flyway API.
++- [x] [Deferred-from: CR v1s-13-1, 2026-07-21] No real-EntityManager test for @Modifying + @Version [StockTransferSpringRepository.java:31-36] — needs Postgres/Testcontainers — **Resolved (v1s-15-11):** `TransferPersistenceIntegrationTest.modifyingClearsContextAndVersionRejectsStaleSave` (same-tx re-read sees COMPLETED/v+1, stale v0 save → ObjectOptimisticLockingFailureException; fails if clearAutomatically is removed).
++- [x] [Deferred-from: CR v1s-13-1, 2026-07-21] No multi-thread test on CompleteTransferService [CompleteTransferService.java:50-104] — CountDownLatch concurrent complete — **Resolved (v1s-15-11):** `TransferPersistenceIntegrationTest.concurrentCompleteCreditsDestinationOnce` (8 threads, CountDownLatch start gate, destination credited once, 1 TRANSFER_IN, version 1).
++- [x] [Deferred-from: CR v1s-13-5, 2026-07-22] JPA merge-in-place test never executed [SaleRepositoryAdapterTest.java] — needs real Postgres (JSONB) — **Resolved (v1s-15-11):** `SaleRepositoryAdapterTest` runs on the shared Testcontainers PostgreSQL (H2 and product-schema.sql removed) and is green.
++- [x] [Deferred-from: legacy CR 10.1 flyway-baseline, 2026-06-18] FlywayBaselineIntegrationTest uses existing PG, not Testcontainers [FlywayBaselineIntegrationTest.java:32,51] — not CI-portable — **Resolved (v1s-15-11):** runs on `freshDatabase("keevo_flyway_baseline")` of the shared container, dropped @AfterAll; Hibernate validate is proven by `KeevoApplicationContextIntegrationTest`.
++- [x] [Deferred-from: CR spec-stock-transfer-offline-sync-flow-fix, 2026-08-11] No persistence-level test of idempotent transfer replay [TransferSyncHandler.java, ExecuteTransferService.java] — real DB test that replay returns same id — **Resolved (v1s-15-11):** `TransferPersistenceIntegrationTest.replayReturnsSameTransferAndDecrementsOnce` (sequential replay + concurrent double-fire through TransferSyncHandler: same id, source decremented once per operation; fails without the advisory lock).
++- [x] [Deferred-from: CR v1s-12-12, 2026-10-11] Auth/session concurrency only tested sequentially [AuthSessionPostgresIntegrationTest.java] — tryClaimAttempt cap, markConsumed once and the guarded user_sync_state upsert are single-statement atomic UPDATEs verified sequentially on real Postgres; add multi-connection (CountDownLatch) tests: 10 parallel wrong OTPs leave attempts ≤ 5, 2 parallel correct OTPs → one success, concurrent device claim never reassigns user_id — **Resolved (v1s-15-11):** `AuthSessionConcurrencyPostgresIntegrationTest` (10 parallel wrong OTPs → exactly 5 claims/attempts=5, 2 parallel correct OTPs → one consume, 8 concurrent device claims → one owner, never reassigned).
++- [x] [Deferred-from: CR v1s-12-12, 2026-10-11] No running context-load test resolves the new `Clock` bean [ClockConfig.java, CachedTokenRevocationAdapter/PasswordResetRateLimiter/AuthTokenCleanupJob constructors] — the only @SpringBootTest classes (SectorTemplateFactoryTest, FlywayBaselineIntegrationTest) fail in the baseline (localhost:5444); once the Testcontainers base exists, a context-load test proves the auth beans wire — **Resolved (v1s-15-11):** `KeevoApplicationContextIntegrationTest` boots the full context on Testcontainers and asserts the Clock bean (injected into AuthTokenCleanupJob), the auth beans, Flyway V1..V13, ShedLock and tenant provisioning.
+ 
+ **AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+ 
+diff --git a/keevo/backend/pom.xml b/keevo/backend/pom.xml
+index ad7d6b4..4b8c291 100644
+--- a/keevo/backend/pom.xml
++++ b/keevo/backend/pom.xml
+@@ -155,7 +155,12 @@
+             <artifactId>spring-boot-testcontainers</artifactId>
+             <scope>test</scope>
+         </dependency>
+-        <!-- Override docker-java for Docker 29.x API compatibility -->
++        <!-- Override docker-java for Docker 29.x API compatibility (api.version in
++             src/test/resources/docker-java.properties).
++             Alignment check (v1s-15-11, `mvn dependency:tree -Dincludes=com.github.docker-java`):
++             docker-java-api, docker-java-transport-zerodep and its transitive docker-java-transport
++             all resolve to ${docker-java.version}; Testcontainers 1.20 does not use docker-java-core,
++             so there is no core artifact to drift. Re-run the check when bumping Testcontainers. -->
+         <dependency>
+             <groupId>com.github.docker-java</groupId>
+             <artifactId>docker-java-api</artifactId>
+@@ -178,11 +183,6 @@
+             <artifactId>junit-jupiter</artifactId>
+             <scope>test</scope>
+         </dependency>
+-        <dependency>
+-            <groupId>com.h2database</groupId>
+-            <artifactId>h2</artifactId>
+-            <scope>test</scope>
+-        </dependency>
+ 
+         <!-- Story 10.6: Spring Modulith — @ApplicationModule annotation (compile scope for package-info.java) -->
+         <dependency>
+diff --git a/keevo/backend/src/main/java/com/keevo/shared/infrastructure/scheduling/AccountDeletionScheduler.java b/keevo/backend/src/main/java/com/keevo/shared/infrastructure/scheduling/AccountDeletionScheduler.java
+index 5655033..4392c5d 100644
+--- a/keevo/backend/src/main/java/com/keevo/shared/infrastructure/scheduling/AccountDeletionScheduler.java
++++ b/keevo/backend/src/main/java/com/keevo/shared/infrastructure/scheduling/AccountDeletionScheduler.java
+@@ -90,7 +90,7 @@ public class AccountDeletionScheduler {
+             } catch (Exception e) {
+                 log.error("[AccountDeletionScheduler] Failed to delete tenant {} ({}): {}",
+                         tenant.getId(), tenant.getSchemaName(), e.getMessage(), e);
+-                // Do not mark DELETED on failure — data must be preserved
++                // Not marked DELETED on failure: still DELETION_PENDING, retried on the next daily run
+             }
+         }
+ 
+@@ -100,16 +100,20 @@ public class AccountDeletionScheduler {
+     /**
+      * Execute complete deletion for a single expired tenant.
+      *
+-     * <p><b>Order is critical</b> (see Dev Notes in story spec):
++     * <p><b>Order is critical</b> (see Dev Notes in story spec; DROP moved first by v1s-15-11):
+      * <ol>
++     *   <li>DROP schema CASCADE — own auto-commit connection, {@code IF EXISTS} so idempotent.
++     *       If it throws, nothing else runs: the tenant stays DELETION_PENDING with its
++     *       memberships/users/tokens intact and the next daily run retries it. (Before v1s-15-11
++     *       the tenant was marked DELETED first; a failed DROP was swallowed per tenant, the
++     *       DELETED status committed, and the schema was never retried.)</li>
+      *   <li>Send final WhatsApp</li>
+      *   <li>Capture affected user IDs</li>
+      *   <li>Delete memberships</li>
+      *   <li>Delete orphaned users</li>
+      *   <li>Delete refresh tokens</li>
+      *   <li>Delete device tokens (orphaned users only)</li>
+-     *   <li>Mark tenant DELETED</li>
+-     *   <li>DROP schema CASCADE</li>
++     *   <li>Mark tenant DELETED — last, so DELETED always means "schema gone"</li>
+      * </ol>
+      */
+     private void executeDeletionForTenant(Tenant tenant) {
+@@ -124,19 +128,23 @@ public class AccountDeletionScheduler {
+         UUID tenantId = fresh.getId();
+         String schemaName = fresh.getSchemaName();
+ 
+-        // 1. Send final WhatsApp to OWNER
++        // 1. DROP schema CASCADE first (non-swallowing — propagates on failure, so no public row
++        //    is touched and the tenant stays DELETION_PENDING for the next daily retry)
++        schemaProvisioner.dropSchemaForDeletion(schemaName);
++
++        // 2. Send final WhatsApp to OWNER
+         sendFinalWhatsApp(fresh);
+ 
+-        // 2. Capture affected user IDs BEFORE any deletion
++        // 3. Capture affected user IDs BEFORE any deletion
+         List<UUID> affectedUserIds = jdbcTemplate.queryForList(
+                 "SELECT user_id FROM public.user_tenant_memberships WHERE tenant_id = ?",
+                 UUID.class, tenantId);
+ 
+-        // 3. Delete memberships for this tenant
++        // 4. Delete memberships for this tenant
+         jdbcTemplate.update("DELETE FROM public.user_tenant_memberships WHERE tenant_id = ?",
+                 (Object) tenantId);
+ 
+-        // 4. Delete ONLY orphaned users (not multi-tenant users)
++        // 5. Delete ONLY orphaned users (not multi-tenant users)
+         List<UUID> orphanedUserIds = new ArrayList<>();
+         if (!affectedUserIds.isEmpty()) {
+             List<UUID> deletedIds = jdbcTemplate.queryForList(
+@@ -148,23 +156,20 @@ public class AccountDeletionScheduler {
+             orphanedUserIds.addAll(deletedIds);
+         }
+ 
+-        // 5. Delete refresh tokens for this tenant
++        // 6. Delete refresh tokens for this tenant
+         jdbcTemplate.update("DELETE FROM public.refresh_tokens WHERE tenant_id = ?",
+                 (Object) schemaName);
+ 
+-        // 6. Delete device tokens for orphaned users only
++        // 7. Delete device tokens for orphaned users only
+         if (!orphanedUserIds.isEmpty()) {
+             jdbcTemplate.update("DELETE FROM public.device_tokens WHERE user_id = ANY(?::uuid[])",
+                     (Object) orphanedUserIds.toArray(new UUID[0]));
+         }
+ 
+-        // 7. Mark tenant DELETED (before DROP — if DROP fails, tenant is marked DELETED and retry is possible)
++        // 8. Mark tenant DELETED — only once the schema is gone
+         Tenant deleted = fresh.withStatus(TenantStatus.DELETED, null);
+         tenantRepository.save(deleted);
+ 
+-        // 8. DROP schema CASCADE (non-swallowing — propagate on failure)
+-        schemaProvisioner.dropSchemaForDeletion(schemaName);
+-
+         log.info("[AccountDeletionScheduler] Tenant {} ({}) fully deleted: {} users orphaned, schema dropped.",
+                 tenantId, schemaName, orphanedUserIds.size());
+     }
+diff --git a/keevo/backend/src/test/java/com/keevo/admin/feedback/adapter/in/rest/AdminFeedbackControllerTest.java b/keevo/backend/src/test/java/com/keevo/admin/feedback/adapter/in/rest/AdminFeedbackControllerTest.java
+index a50fb6f..b366de3 100644
+--- a/keevo/backend/src/test/java/com/keevo/admin/feedback/adapter/in/rest/AdminFeedbackControllerTest.java
++++ b/keevo/backend/src/test/java/com/keevo/admin/feedback/adapter/in/rest/AdminFeedbackControllerTest.java
+@@ -5,17 +5,20 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+ import com.keevo.feedback.feedback.domain.model.Feedback;
+ import com.keevo.feedback.feedback.domain.port.out.FeedbackRepository;
+ import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
++import org.junit.jupiter.api.AfterEach;
+ import org.junit.jupiter.api.BeforeEach;
+ import org.junit.jupiter.api.DisplayName;
+ import org.junit.jupiter.api.Test;
+ import org.junit.jupiter.api.extension.ExtendWith;
+ import org.mockito.Mock;
+ import org.mockito.junit.jupiter.MockitoExtension;
++import org.springframework.aop.framework.ProxyFactory;
+ import org.springframework.data.domain.Page;
+ import org.springframework.data.domain.PageImpl;
+ import org.springframework.data.domain.PageRequest;
+ import org.springframework.data.domain.Pageable;
+ import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
++import org.springframework.security.authorization.method.AuthorizationManagerBeforeMethodInterceptor;
+ import org.springframework.security.core.authority.SimpleGrantedAuthority;
+ import org.springframework.security.core.context.SecurityContextHolder;
+ import org.springframework.test.web.servlet.MockMvc;
+@@ -46,14 +49,31 @@ class AdminFeedbackControllerTest {
+     @BeforeEach
+     void setUp() {
+         mapper.registerModule(new JavaTimeModule());
+-        var controller = new AdminFeedbackController(feedbackRepository);
+-        mockMvc = MockMvcBuilders.standaloneSetup(controller)
++        mockMvc = MockMvcBuilders.standaloneSetup(securedController())
+                 .setControllerAdvice(new GlobalExceptionHandler())
+                 .build();
+ 
+         SecurityContextHolder.clearContext();
+     }
+ 
++    @AfterEach
++    void tearDown() {
++        SecurityContextHolder.clearContext();
++    }
++
++    /**
++     * standaloneSetup mounts no method security, so the class-level {@code @PreAuthorize} would be
++     * ignored. Wrap the controller in the same AOP interceptor {@code @EnableMethodSecurity}
++     * registers: a denied call throws {@code AuthorizationDeniedException}, which
++     * {@link GlobalExceptionHandler} maps to 403.
++     */
++    private Object securedController() {
++        ProxyFactory factory = new ProxyFactory(new AdminFeedbackController(feedbackRepository));
++        factory.setProxyTargetClass(true);
++        factory.addAdvisor(AuthorizationManagerBeforeMethodInterceptor.preAuthorize());
++        return factory.getProxy();
++    }
++
+     private void authenticateAs(String role) {
+         SecurityContextHolder.getContext().setAuthentication(
+                 new UsernamePasswordAuthenticationToken(
+diff --git a/keevo/backend/src/test/java/com/keevo/catalog/product/adapter/out/persistence/ProductRepositoryAdapterTest.java b/keevo/backend/src/test/java/com/keevo/catalog/product/adapter/out/persistence/ProductRepositoryAdapterTest.java
+index a72154b..958a2ad 100644
+--- a/keevo/backend/src/test/java/com/keevo/catalog/product/adapter/out/persistence/ProductRepositoryAdapterTest.java
++++ b/keevo/backend/src/test/java/com/keevo/catalog/product/adapter/out/persistence/ProductRepositoryAdapterTest.java
+@@ -1,16 +1,14 @@
+ package com.keevo.catalog.product.adapter.out.persistence;
+ 
++import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
+ import com.keevo.catalog.product.domain.entity.Product;
+ import com.keevo.catalog.product.domain.entity.ProductStatus;
+ import org.junit.jupiter.api.Test;
+ import org.junit.jupiter.api.DisplayName;
+-import org.junit.jupiter.api.extension.ExtendWith;
+-import org.springframework.test.context.junit.jupiter.SpringExtension;
+ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+ import org.springframework.boot.test.context.TestConfiguration;
+ import org.springframework.context.annotation.Bean;
+ import org.springframework.test.context.ContextConfiguration;
+-import org.springframework.test.context.jdbc.Sql;
+ import org.springframework.beans.factory.annotation.Autowired;
+ 
+ import static org.junit.jupiter.api.Assertions.*;
+@@ -23,11 +21,9 @@ import java.time.Instant;
+  *
+  * Tests that adapter correctly implements CRUD operations
+  */
+-@ExtendWith(SpringExtension.class)
+-@DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=none")
+-@Sql("/product-schema.sql")
++@DataJpaTest
+ @ContextConfiguration(classes = {ProductRepositoryAdapterTest.TestConfig.class})
+-class ProductRepositoryAdapterTest {
++class ProductRepositoryAdapterTest extends PostgresIntegrationTest {
+ 
+     @TestConfiguration
+     static class TestConfig {
+diff --git a/keevo/backend/src/test/java/com/keevo/catalog/stock/adapter/out/persistence/TransferPersistenceIntegrationTest.java b/keevo/backend/src/test/java/com/keevo/catalog/stock/adapter/out/persistence/TransferPersistenceIntegrationTest.java
+new file mode 100644
+index 0000000..e26b2b6
+--- /dev/null
++++ b/keevo/backend/src/test/java/com/keevo/catalog/stock/adapter/out/persistence/TransferPersistenceIntegrationTest.java
+@@ -0,0 +1,293 @@
++package com.keevo.catalog.stock.adapter.out.persistence;
++
++import com.keevo.catalog.stock.domain.model.StockTransfer;
++import com.keevo.catalog.stock.domain.model.StockTransfer.TransferStatus;
++import com.keevo.catalog.stock.domain.port.in.CompleteTransferCommand;
++import com.keevo.catalog.stock.domain.port.in.CompleteTransferUseCase;
++import com.keevo.catalog.stock.domain.port.in.TransferStockCommand;
++import com.keevo.catalog.stock.domain.port.in.TransferStockUseCase;
++import com.keevo.catalog.stock.domain.port.out.StockTransferRepository;
++import com.keevo.identity.auth.application.service.TenantFactory;
++import com.keevo.shared.infrastructure.persistence.FullContextIntegrationTest;
++import com.keevo.shared.infrastructure.persistence.TenantContext;
++import com.keevo.shared.infrastructure.security.AuthDetails;
++import com.keevo.sync.sync.application.handler.TransferSyncHandler;
++import com.keevo.sync.sync.domain.model.SyncOperation;
++import com.keevo.sync.sync.domain.model.SyncOperationResult;
++import com.keevo.sync.sync.domain.model.SyncOperationStatus;
++import org.junit.jupiter.api.AfterEach;
++import org.junit.jupiter.api.BeforeAll;
++import org.junit.jupiter.api.BeforeEach;
++import org.junit.jupiter.api.DisplayName;
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.api.TestInstance;
++import org.springframework.beans.factory.annotation.Autowired;
++import org.springframework.jdbc.core.JdbcTemplate;
++import org.springframework.orm.ObjectOptimisticLockingFailureException;
++import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
++import org.springframework.security.core.authority.SimpleGrantedAuthority;
++import org.springframework.security.core.context.SecurityContextHolder;
++import org.springframework.transaction.annotation.Propagation;
++import org.springframework.transaction.annotation.Transactional;
++import org.springframework.transaction.support.TransactionTemplate;
++
++import java.time.Instant;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Map;
++import java.util.UUID;
++import java.util.concurrent.Callable;
++import java.util.concurrent.CountDownLatch;
++import java.util.concurrent.ExecutorService;
++import java.util.concurrent.Executors;
++import java.util.concurrent.Future;
++import java.util.concurrent.TimeUnit;
++import java.util.function.Supplier;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.assertj.core.api.Assertions.assertThatThrownBy;
++
++/**
++ * Story v1s-15-11 — stock transfer persistence on a real PostgreSQL 16, in a tenant schema
++ * provisioned by the production {@link TenantFactory} and reached through the production
++ * multi-tenant routing ({@link TenantContext} → {@code search_path}).
++ *
++ * <ul>
++ *   <li>{@link CompleteTransferUseCase}: N concurrent completions of the same IN_TRANSIT transfer
++ *       credit the destination exactly once (Story v1s-13-1, atomic conditional UPDATE);</li>
++ *   <li>{@code StockTransferSpringRepository.transitionStatusNative}
++ *       ({@code @Modifying(clearAutomatically = true)}) + {@code StockTransferJpaEntity.version}
++ *       ({@code @Version}): the re-read in the same transaction sees the new status/version and a
++ *       stale domain object can no longer be saved;</li>
++ *   <li>{@link TransferSyncHandler} + {@code ExecuteTransferService}: replaying the same
++ *       {@code STOCK_TRANSFER} operation (sequentially or double-fired concurrently) returns the
++ *       same transfer id and decrements the source once (clientId + transaction advisory lock).</li>
++ * </ul>
++ *
++ * <p>No test-managed transaction: every step commits, like real requests. Each test seeds its
++ * own stores and product; every worker thread sets and clears {@link TenantContext} and the
++ * OWNER {@code SecurityContext}.
++ */
++@TestInstance(TestInstance.Lifecycle.PER_CLASS)
++@Transactional(propagation = Propagation.NOT_SUPPORTED)
++@DisplayName("Stock transfer persistence on PostgreSQL (Story v1s-15-11)")
++class TransferPersistenceIntegrationTest extends FullContextIntegrationTest {
++
++    private static final int SOURCE_STOCK = 100;
++    private static final int TIMEOUT_SECONDS = 30;
++
++    @Autowired TenantFactory tenantFactory;
++    @Autowired TransferStockUseCase executeTransfer;
++    @Autowired CompleteTransferUseCase completeTransfer;
++    @Autowired StockTransferRepository transferRepository;
++    @Autowired TransferSyncHandler transferSyncHandler;
++    @Autowired TransactionTemplate tx;
++    @Autowired JdbcTemplate jdbc;
++
++    private String schema;
++    private final UUID ownerId = UUID.randomUUID();
++
++    private UUID sourceStore;
++    private UUID destinationStore;
++    private UUID product;
++
++    private ExecutorService pool;
++
++    @BeforeAll
++    void provisionTenant() {
++        schema = tx.execute(status -> tenantFactory.create()).getSchemaName();
++    }
++
++    @BeforeEach
++    void seed() {
++        pool = Executors.newFixedThreadPool(8);
++        sourceStore = UUID.randomUUID();
++        destinationStore = UUID.randomUUID();
++        product = UUID.randomUUID();
++        jdbc.update("INSERT INTO " + schema + ".stores (id, name, type) VALUES (?, 'Source', 'STORE'), (?, 'Destination', 'WAREHOUSE')",
++                sourceStore, destinationStore);
++        jdbc.update("INSERT INTO " + schema + ".products (id, name, sku) VALUES (?, ?, ?)",
++                product, "Produit " + product, "KEV-" + product.toString().substring(0, 6).toUpperCase());
++        jdbc.update("INSERT INTO " + schema + ".stock_levels (product_id, store_id, quantity) VALUES (?, ?, ?)",
++                product, sourceStore, SOURCE_STOCK);
++    }
++
++    @AfterEach
++    void tearDown() throws InterruptedException {
++        pool.shutdownNow();
++        assertThat(pool.awaitTermination(TIMEOUT_SECONDS, TimeUnit.SECONDS)).isTrue();
++        TenantContext.clear();
++        SecurityContextHolder.clearContext();
++    }
++
++    // ── CompleteTransferService: concurrent completion ───────────────────────
++
++    @Test
++    @DisplayName("8 concurrent completions of one IN_TRANSIT transfer: all COMPLETED, destination credited once, version 1")
++    void concurrentCompleteCreditsDestinationOnce() throws Exception {
++        StockTransfer transfer = asOwner(() -> executeTransfer.execute(command(10, null)));
++        assertThat(transfer.getStatus()).isEqualTo(TransferStatus.IN_TRANSIT);
++        assertThat(version(transfer.getId())).isZero();
++
++        List<StockTransfer> results = concurrently(8,
++                () -> completeTransfer.execute(new CompleteTransferCommand(transfer.getId(), ownerId, null)));
++
++        assertThat(results).hasSize(8).allSatisfy(r -> {
++            assertThat(r.getId()).isEqualTo(transfer.getId());
++            assertThat(r.getStatus()).isEqualTo(TransferStatus.COMPLETED);
++        });
++        assertThat(quantity(destinationStore)).isEqualTo(10);
++        assertThat(quantity(sourceStore)).isEqualTo(SOURCE_STOCK - 10);
++        assertThat(movements(destinationStore, "TRANSFER_IN")).isEqualTo(1);
++        assertThat(status(transfer.getId())).isEqualTo("COMPLETED");
++        assertThat(version(transfer.getId())).isEqualTo(1L);
++    }
++
++    // ── @Modifying(clearAutomatically) + @Version ────────────────────────────
++
++    @Test
++    @DisplayName("@Modifying + @Version: same-tx re-read sees COMPLETED/v+1; saving the stale v0 object is refused")
++    void modifyingClearsContextAndVersionRejectsStaleSave() {
++        StockTransfer created = asOwner(() -> executeTransfer.execute(command(5, null)));
++
++        StockTransfer stale = inTenant(() -> tx.execute(status -> {
++            StockTransfer loaded = transferRepository.findById(created.getId()).orElseThrow();
++            assertThat(loaded.getVersion()).isZero();
++
++            assertThat(transferRepository.transitionStatus(
++                    created.getId(), TransferStatus.IN_TRANSIT, TransferStatus.COMPLETED)).isTrue();
++
++            // Without clearAutomatically the persistence context would hand back the cached v0 entity.
++            StockTransfer reread = transferRepository.findById(created.getId()).orElseThrow();
++            assertThat(reread.getStatus()).isEqualTo(TransferStatus.COMPLETED);
++            assertThat(reread.getVersion()).isEqualTo(loaded.getVersion() + 1);
++            return loaded;
++        }));
++
++        assertThatThrownBy(() -> inTenant(() -> tx.execute(status ->
++                transferRepository.save(stale.withStatus(TransferStatus.IN_TRANSIT)))))
++                .isInstanceOf(ObjectOptimisticLockingFailureException.class);
++
++        assertThat(status(created.getId())).isEqualTo("COMPLETED");
++        assertThat(version(created.getId())).isEqualTo(1L);
++    }
++
++    // ── TransferSyncHandler / ExecuteTransferService: idempotent replay ──────
++
++    @Test
++    @DisplayName("replayed STOCK_TRANSFER (sequential, then double-fired concurrently): same id, source decremented once per operation")
++    void replayReturnsSameTransferAndDecrementsOnce() throws Exception {
++        SyncOperation op = transferOperation(UUID.randomUUID(), 7);
++
++        SyncOperationResult first = asOwner(() -> transferSyncHandler.handle(op, ownerId, schema));
++        SyncOperationResult replay = asOwner(() -> transferSyncHandler.handle(op, ownerId, schema));
++
++        assertThat(first.status()).isEqualTo(SyncOperationStatus.APPLIED);
++        assertThat(replay.status()).isEqualTo(SyncOperationStatus.APPLIED);
++        assertThat(first.serverEntityId()).isEqualTo(op.entityId());
++        assertThat(replay.serverEntityId()).isEqualTo(op.entityId());
++        assertThat(quantity(sourceStore)).isEqualTo(SOURCE_STOCK - 7);
++        assertThat(transfers()).isEqualTo(1);
++        assertThat(movements(sourceStore, "TRANSFER_OUT")).isEqualTo(1);
++
++        // Double-fire: the same new operation pushed twice at the same time.
++        SyncOperation doubleFired = transferOperation(UUID.randomUUID(), 3);
++        List<SyncOperationResult> results = concurrently(2,
++                () -> transferSyncHandler.handle(doubleFired, ownerId, schema));
++
++        assertThat(results).allSatisfy(r -> {
++            assertThat(r.status()).as(r.reason()).isEqualTo(SyncOperationStatus.APPLIED);
++            assertThat(r.serverEntityId()).isEqualTo(doubleFired.entityId());
++        });
++        assertThat(quantity(sourceStore)).isEqualTo(SOURCE_STOCK - 7 - 3);
++        assertThat(transfers()).isEqualTo(2);
++        assertThat(movements(sourceStore, "TRANSFER_OUT")).isEqualTo(2);
++    }
++
++    // ── Helpers ──────────────────────────────────────────────────────────────
++
++    private TransferStockCommand command(int quantity, UUID clientId) {
++        return new TransferStockCommand(sourceStore, destinationStore, product, null, quantity, ownerId,
++                "it-transfer", clientId);
++    }
++
++    private SyncOperation transferOperation(UUID entityId, int quantity) {
++        return new SyncOperation(UUID.randomUUID().toString(), "STOCK_TRANSFER", entityId.toString(),
++                Map.of("sourceStoreId", sourceStore.toString(),
++                        "destinationStoreId", destinationStore.toString(),
++                        "productId", product.toString(),
++                        "quantity", quantity),
++                Instant.now());
++    }
++
++    /** Runs {@code task} on {@code threads} workers released together by one start gate. */
++    private <T> List<T> concurrently(int threads, Supplier<T> task) throws Exception {
++        CountDownLatch ready = new CountDownLatch(threads);
++        CountDownLatch start = new CountDownLatch(1);
++        List<Future<T>> futures = new ArrayList<>();
++        for (int i = 0; i < threads; i++) {
++            Callable<T> worker = () -> {
++                ready.countDown();
++                if (!start.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
++                    throw new IllegalStateException("start gate never opened");
++                }
++                return asOwner(task);
++            };
++            futures.add(pool.submit(worker));
++        }
++        assertThat(ready.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)).isTrue();
++        start.countDown();
++        List<T> results = new ArrayList<>();
++        for (Future<T> f : futures) {
++            results.add(f.get(TIMEOUT_SECONDS, TimeUnit.SECONDS));
++        }
++        return results;
++    }
++
++    /** Tenant + OWNER security context for the current thread, both cleared afterwards. */
++    private <T> T asOwner(Supplier<T> action) {
++        var auth = new UsernamePasswordAuthenticationToken(ownerId, null,
++                List.of(new SimpleGrantedAuthority("ROLE_OWNER")));
++        auth.setDetails(AuthDetails.owner("Owner"));
++        SecurityContextHolder.getContext().setAuthentication(auth);
++        try {
++            return inTenant(action);
++        } finally {
++            SecurityContextHolder.clearContext();
++        }
++    }
++
++    private <T> T inTenant(Supplier<T> action) {
++        TenantContext.setCurrentTenant(schema);
++        try {
++            return action.get();
++        } finally {
++            TenantContext.clear();
++        }
++    }
++
++    private int quantity(UUID store) {
++        return jdbc.queryForObject("SELECT quantity FROM " + schema + ".stock_levels WHERE product_id = ? AND store_id = ?",
++                Integer.class, product, store);
++    }
++
++    private int movements(UUID store, String type) {
++        return jdbc.queryForObject("SELECT count(*) FROM " + schema + ".stock_movements "
++                + "WHERE product_id = ? AND store_id = ? AND movement_type = ?", Integer.class, product, store, type);
++    }
++
++    private int transfers() {
++        return jdbc.queryForObject("SELECT count(*) FROM " + schema + ".stock_transfers WHERE product_id = ?",
++                Integer.class, product);
++    }
++
++    private String status(UUID transferId) {
++        return jdbc.queryForObject("SELECT status FROM " + schema + ".stock_transfers WHERE id = ?",
++                String.class, transferId);
++    }
++
++    private long version(UUID transferId) {
++        return jdbc.queryForObject("SELECT version FROM " + schema + ".stock_transfers WHERE id = ?",
++                Long.class, transferId);
++    }
++}
+diff --git a/keevo/backend/src/test/java/com/keevo/commerce/sale/adapter/out/persistence/SaleOptimisticLockPostgresIntegrationTest.java b/keevo/backend/src/test/java/com/keevo/commerce/sale/adapter/out/persistence/SaleOptimisticLockPostgresIntegrationTest.java
+index 0e7f5fb..2c52d7b 100644
+--- a/keevo/backend/src/test/java/com/keevo/commerce/sale/adapter/out/persistence/SaleOptimisticLockPostgresIntegrationTest.java
++++ b/keevo/backend/src/test/java/com/keevo/commerce/sale/adapter/out/persistence/SaleOptimisticLockPostgresIntegrationTest.java
+@@ -1,5 +1,6 @@
+ package com.keevo.commerce.sale.adapter.out.persistence;
+ 
++import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
+ import com.keevo.commerce.sale.adapter.out.persistence.impl.SaleRepositoryAdapter;
+ import com.keevo.commerce.sale.domain.model.PaymentMode;
+ import com.keevo.commerce.sale.domain.model.Sale;
+@@ -8,9 +9,7 @@ import com.keevo.commerce.sale.domain.model.SaleStatus;
+ import org.junit.jupiter.api.DisplayName;
+ import org.junit.jupiter.api.Test;
+ import org.springframework.beans.factory.annotation.Autowired;
+-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
+ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+ import org.springframework.context.annotation.Import;
+ import org.springframework.jdbc.core.JdbcTemplate;
+ import org.springframework.orm.ObjectOptimisticLockingFailureException;
+@@ -18,14 +17,10 @@ import org.springframework.transaction.PlatformTransactionManager;
+ import org.springframework.transaction.annotation.Propagation;
+ import org.springframework.transaction.annotation.Transactional;
+ import org.springframework.transaction.support.TransactionTemplate;
+-import org.testcontainers.containers.PostgreSQLContainer;
+-import org.testcontainers.junit.jupiter.Container;
+-import org.testcontainers.junit.jupiter.Testcontainers;
+ 
+ import java.time.Instant;
+ import java.time.temporal.ChronoUnit;
+ import java.util.List;
+-import java.util.Map;
+ import java.util.UUID;
+ import java.util.function.Supplier;
+ 
+@@ -41,17 +36,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
+  * requests that each read the sale before the other one commits.</p>
+  */
+ @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
+-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+ @Import(SaleRepositoryAdapter.class)
+ @Transactional(propagation = Propagation.NOT_SUPPORTED)
+-@Testcontainers
+ @DisplayName("Sale optimistic lock on PostgreSQL (Story v1s-13-10)")
+-class SaleOptimisticLockPostgresIntegrationTest {
++class SaleOptimisticLockPostgresIntegrationTest extends PostgresIntegrationTest {
+ 
+-    @Container
+-    @ServiceConnection
+-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
+-            .withTmpFs(Map.of("/var/lib/postgresql/data", "rw"));
+ 
+     private static final Instant NOW = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+ 
+diff --git a/keevo/backend/src/test/java/com/keevo/commerce/sale/adapter/out/persistence/SaleRepositoryAdapterTest.java b/keevo/backend/src/test/java/com/keevo/commerce/sale/adapter/out/persistence/SaleRepositoryAdapterTest.java
+index 1b87bdc..c990deb 100644
+--- a/keevo/backend/src/test/java/com/keevo/commerce/sale/adapter/out/persistence/SaleRepositoryAdapterTest.java
++++ b/keevo/backend/src/test/java/com/keevo/commerce/sale/adapter/out/persistence/SaleRepositoryAdapterTest.java
+@@ -1,5 +1,6 @@
+ package com.keevo.commerce.sale.adapter.out.persistence;
+ 
++import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
+ import com.keevo.commerce.sale.adapter.out.persistence.entity.SaleItemJpaEntity;
+ import com.keevo.commerce.sale.adapter.out.persistence.entity.SaleJpaEntity;
+ import com.keevo.commerce.sale.adapter.out.persistence.impl.SaleRepositoryAdapter;
+@@ -9,7 +10,6 @@ import org.junit.jupiter.api.BeforeEach;
+ import org.junit.jupiter.api.Test;
+ import org.springframework.beans.factory.annotation.Autowired;
+ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+-import org.springframework.test.context.ActiveProfiles;
+ 
+ import java.time.Instant;
+ import java.util.List;
+@@ -18,8 +18,7 @@ import java.util.UUID;
+ import static org.assertj.core.api.Assertions.assertThat;
+ 
+ @DataJpaTest
+-@ActiveProfiles("test")
+-class SaleRepositoryAdapterTest {
++class SaleRepositoryAdapterTest extends PostgresIntegrationTest {
+ 
+     @Autowired
+     private SaleSpringRepository springRepository;
+diff --git a/keevo/backend/src/test/java/com/keevo/feedback/feedback/adapter/in/rest/FeedbackControllerTest.java b/keevo/backend/src/test/java/com/keevo/feedback/feedback/adapter/in/rest/FeedbackControllerTest.java
+index 4911fdf..062b1ef 100644
+--- a/keevo/backend/src/test/java/com/keevo/feedback/feedback/adapter/in/rest/FeedbackControllerTest.java
++++ b/keevo/backend/src/test/java/com/keevo/feedback/feedback/adapter/in/rest/FeedbackControllerTest.java
+@@ -99,23 +99,23 @@ class FeedbackControllerTest {
+     }
+ 
+     @Test
+-    @DisplayName("POST /feedback returns 400 when description too short")
+-    void submit_returns400_whenDescriptionTooShort() throws Exception {
++    @DisplayName("POST /feedback returns 422 when description too short (9 chars, min 10)")
++    void submit_returns422_whenDescriptionTooShort() throws Exception {
+         authenticateAs("OWNER");
+ 
+         String body = """
+-                {"type":"bug","description":"trop court","appVersion":"1.0","platform":"android","screenContext":"/home"}
++                {"type":"bug","description":"trop cour","appVersion":"1.0","platform":"android","screenContext":"/home"}
+                 """;
+ 
+         mockMvc.perform(post("/api/v1/feedback")
+                         .contentType("application/json")
+                         .content(body))
+-                .andExpect(status().isBadRequest());
++                .andExpect(status().isUnprocessableEntity());
+     }
+ 
+     @Test
+-    @DisplayName("POST /feedback returns 400 when type is blank")
+-    void submit_returns400_whenTypeBlank() throws Exception {
++    @DisplayName("POST /feedback returns 422 when type is blank")
++    void submit_returns422_whenTypeBlank() throws Exception {
+         authenticateAs("OWNER");
+ 
+         String body = """
+@@ -125,6 +125,6 @@ class FeedbackControllerTest {
+         mockMvc.perform(post("/api/v1/feedback")
+                         .contentType("application/json")
+                         .content(body))
+-                .andExpect(status().isBadRequest());
++                .andExpect(status().isUnprocessableEntity());
+     }
+ }
+diff --git a/keevo/backend/src/test/java/com/keevo/identity/auth/adapter/out/persistence/AuthSessionConcurrencyPostgresIntegrationTest.java b/keevo/backend/src/test/java/com/keevo/identity/auth/adapter/out/persistence/AuthSessionConcurrencyPostgresIntegrationTest.java
+new file mode 100644
+index 0000000..af2331e
+--- /dev/null
++++ b/keevo/backend/src/test/java/com/keevo/identity/auth/adapter/out/persistence/AuthSessionConcurrencyPostgresIntegrationTest.java
+@@ -0,0 +1,189 @@
++package com.keevo.identity.auth.adapter.out.persistence;
++
++import com.keevo.identity.auth.adapter.out.persistence.jpa.PasswordResetTokenSpringRepository;
++import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
++import com.keevo.sync.sync.adapter.out.persistence.impl.UserSyncStateRepositoryAdapter;
++import com.keevo.sync.sync.domain.model.UserSyncState;
++import org.junit.jupiter.api.AfterEach;
++import org.junit.jupiter.api.BeforeEach;
++import org.junit.jupiter.api.DisplayName;
++import org.junit.jupiter.api.Test;
++import org.springframework.beans.factory.annotation.Autowired;
++import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
++import org.springframework.context.annotation.Import;
++import org.springframework.jdbc.core.JdbcTemplate;
++import org.springframework.transaction.PlatformTransactionManager;
++import org.springframework.transaction.annotation.Propagation;
++import org.springframework.transaction.annotation.Transactional;
++import org.springframework.transaction.support.TransactionTemplate;
++
++import java.sql.Timestamp;
++import java.time.Instant;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.UUID;
++import java.util.concurrent.Callable;
++import java.util.concurrent.CountDownLatch;
++import java.util.concurrent.ExecutorService;
++import java.util.concurrent.Executors;
++import java.util.concurrent.Future;
++import java.util.concurrent.ThreadLocalRandom;
++import java.util.concurrent.TimeUnit;
++import java.util.function.IntFunction;
++
++import static org.assertj.core.api.Assertions.assertThat;
++
++/**
++ * Story v1s-15-11 — the single-statement atomic auth/session writes of Story 12.12, exercised from
++ * several connections at once on a real PostgreSQL 16 (the sequential checks live in
++ * {@link AuthSessionPostgresIntegrationTest}):
++ * <ul>
++ *   <li>{@code tryClaimAttempt}: 10 parallel wrong OTPs → exactly 5 claims, {@code attempts = 5};</li>
++ *   <li>{@code markConsumed}: 2 parallel correct OTPs → exactly one consumes the token;</li>
++ *   <li>guarded {@code user_sync_state} upsert: N users claiming the same device at once → one
++ *       wins, the device is never reassigned afterwards.</li>
++ * </ul>
++ * Each worker runs its statement in its own {@link TransactionTemplate} transaction (own pooled
++ * connection) and all workers are released by one start gate. Rows use unique ids and phones.
++ */
++@DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
++@Import(UserSyncStateRepositoryAdapter.class)
++@Transactional(propagation = Propagation.NOT_SUPPORTED)
++@DisplayName("Auth & session concurrency on PostgreSQL (Story v1s-15-11)")
++class AuthSessionConcurrencyPostgresIntegrationTest extends PostgresIntegrationTest {
++
++    private static final int TIMEOUT_SECONDS = 30;
++    private static final Instant NOW = Instant.now();
++
++    @Autowired JdbcTemplate jdbc;
++    @Autowired PasswordResetTokenSpringRepository resetTokens;
++    @Autowired UserSyncStateRepositoryAdapter syncState;
++    @Autowired PlatformTransactionManager transactionManager;
++
++    private ExecutorService pool;
++    private TransactionTemplate tx;
++
++    @BeforeEach
++    void setUp() {
++        pool = Executors.newFixedThreadPool(10);
++        tx = new TransactionTemplate(transactionManager);
++    }
++
++    @AfterEach
++    void tearDown() throws InterruptedException {
++        pool.shutdownNow();
++        assertThat(pool.awaitTermination(TIMEOUT_SECONDS, TimeUnit.SECONDS)).isTrue();
++    }
++
++    @Test
++    @DisplayName("10 parallel wrong OTPs: exactly 5 attempt claims succeed, attempts stops at 5")
++    void parallelWrongOtpsCapAttemptsAtFive() throws Exception {
++        String phone = uniquePhone();
++        UUID token = insertResetToken(insertUser(phone), phone);
++
++        List<Integer> claims = concurrently(10, i -> tx.execute(s -> resetTokens.tryClaimAttempt(token, 5)));
++
++        assertThat(claims).containsOnly(0, 1);
++        assertThat(claims.stream().mapToInt(Integer::intValue).sum()).isEqualTo(5);
++        assertThat(jdbc.queryForObject("SELECT attempts FROM public.password_reset_tokens WHERE id = ?",
++                Integer.class, token)).isEqualTo(5);
++    }
++
++    @Test
++    @DisplayName("2 parallel correct OTPs: exactly one markConsumed returns 1")
++    void parallelCorrectOtpsConsumeOnce() throws Exception {
++        String phone = uniquePhone();
++        UUID token = insertResetToken(insertUser(phone), phone);
++
++        List<Integer> consumed = concurrently(2,
++                i -> tx.execute(s -> resetTokens.markConsumed(token, NOW.plusSeconds(i))));
++
++        assertThat(consumed).containsExactlyInAnyOrder(0, 1);
++        assertThat(jdbc.queryForObject("SELECT consumed_at IS NOT NULL FROM public.password_reset_tokens WHERE id = ?",
++                Boolean.class, token)).isTrue();
++    }
++
++    @Test
++    @DisplayName("8 users claiming the same device at once: one success, user_id = that owner, never reassigned")
++    void concurrentDeviceClaimNeverReassigns() throws Exception {
++        String device = UUID.randomUUID().toString();
++        List<UUID> users = new ArrayList<>();
++        for (int i = 0; i < 8; i++) {
++            users.add(UUID.randomUUID());
++        }
++
++        List<Boolean> written = concurrently(8, i -> tx.execute(s -> i % 2 == 0
++                ? syncState.upsert(state(device, users.get(i)))
++                : syncState.upsertOnPull(state(device, users.get(i)))));
++
++        assertThat(written).containsOnlyOnce(true);
++        UUID winner = users.get(written.indexOf(true));
++        assertThat(owner(device)).isEqualTo(winner);
++
++        // Losers retrying later still cannot take the device over; the owner can still write.
++        for (UUID user : users) {
++            if (!user.equals(winner)) {
++                Boolean takenOver = tx.execute(s -> syncState.upsert(state(device, user)));
++                assertThat(takenOver).isFalse();
++            }
++        }
++        Boolean ownerWrite = tx.execute(s -> syncState.upsert(state(device, winner)));
++        assertThat(ownerWrite).isTrue();
++        assertThat(owner(device)).isEqualTo(winner);
++    }
++
++    // ── helpers ──────────────────────────────────────────────────────────────
++
++    /** Runs {@code task(i)} on {@code threads} workers released together by one start gate. */
++    private <T> List<T> concurrently(int threads, IntFunction<T> task) throws Exception {
++        CountDownLatch ready = new CountDownLatch(threads);
++        CountDownLatch start = new CountDownLatch(1);
++        List<Future<T>> futures = new ArrayList<>();
++        for (int i = 0; i < threads; i++) {
++            int index = i;
++            Callable<T> worker = () -> {
++                ready.countDown();
++                if (!start.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
++                    throw new IllegalStateException("start gate never opened");
++                }
++                return task.apply(index);
++            };
++            futures.add(pool.submit(worker));
++        }
++        assertThat(ready.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)).isTrue();
++        start.countDown();
++        List<T> results = new ArrayList<>();
++        for (Future<T> f : futures) {
++            results.add(f.get(TIMEOUT_SECONDS, TimeUnit.SECONDS));
++        }
++        return results;
++    }
++
++    private UUID owner(String device) {
++        return syncState.findByDeviceId(device).map(UserSyncState::userId).orElseThrow();
++    }
++
++    private static UserSyncState state(String device, UUID user) {
++        return new UserSyncState(device, user, "kv_conc15", null, null, null);
++    }
++
++    private static String uniquePhone() {
++        return "+2376" + String.format("%08d", ThreadLocalRandom.current().nextInt(100_000_000));
++    }
++
++    private UUID insertUser(String phone) {
++        UUID id = UUID.randomUUID();
++        jdbc.update("INSERT INTO public.users (id, created_at, updated_at, is_active, failed_attempts, "
++                        + "password_hash, phone_number, role) VALUES (?, ?, ?, true, 0, 'x', ?, 'OWNER')",
++                id, Timestamp.from(NOW), Timestamp.from(NOW), phone);
++        return id;
++    }
++
++    private UUID insertResetToken(UUID userId, String phone) {
++        UUID id = UUID.randomUUID();
++        jdbc.update("INSERT INTO public.password_reset_tokens (id, user_id, phone_number, code_hash, expires_at, "
++                        + "consumed_at, attempts, created_at, updated_at) VALUES (?, ?, ?, 'h', ?, NULL, 0, ?, ?)",
++                id, userId, phone, Timestamp.from(NOW.plusSeconds(600)), Timestamp.from(NOW), Timestamp.from(NOW));
++        return id;
++    }
++}
+diff --git a/keevo/backend/src/test/java/com/keevo/identity/auth/adapter/out/persistence/AuthSessionPostgresIntegrationTest.java b/keevo/backend/src/test/java/com/keevo/identity/auth/adapter/out/persistence/AuthSessionPostgresIntegrationTest.java
+index 09ae0a4..7329fe5 100644
+--- a/keevo/backend/src/test/java/com/keevo/identity/auth/adapter/out/persistence/AuthSessionPostgresIntegrationTest.java
++++ b/keevo/backend/src/test/java/com/keevo/identity/auth/adapter/out/persistence/AuthSessionPostgresIntegrationTest.java
+@@ -1,5 +1,6 @@
+ package com.keevo.identity.auth.adapter.out.persistence;
+ 
++import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
+ import com.keevo.identity.auth.adapter.out.persistence.impl.RefreshTokenRepositoryAdapter;
+ import com.keevo.identity.auth.adapter.out.persistence.jpa.PasswordResetTokenSpringRepository;
+ import com.keevo.identity.auth.application.service.SessionTokenIssuer;
+@@ -14,16 +15,11 @@ import com.keevo.sync.sync.domain.model.UserSyncState;
+ import org.junit.jupiter.api.DisplayName;
+ import org.junit.jupiter.api.Test;
+ import org.springframework.beans.factory.annotation.Autowired;
+-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
+ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+ import org.springframework.context.annotation.Import;
+ import org.springframework.core.io.ClassPathResource;
+ import org.springframework.jdbc.core.JdbcTemplate;
+ import org.springframework.jdbc.datasource.init.ScriptUtils;
+-import org.testcontainers.containers.PostgreSQLContainer;
+-import org.testcontainers.junit.jupiter.Container;
+-import org.testcontainers.junit.jupiter.Testcontainers;
+ 
+ import java.security.KeyPair;
+ import java.security.KeyPairGenerator;
+@@ -32,7 +28,6 @@ import java.security.interfaces.RSAPublicKey;
+ import java.sql.Timestamp;
+ import java.time.Instant;
+ import java.util.List;
+-import java.util.Map;
+ import java.util.UUID;
+ 
+ import static org.assertj.core.api.Assertions.assertThat;
+@@ -43,16 +38,10 @@ import static org.assertj.core.api.Assertions.assertThat;
+  * upsert, and the V10 phone normalisation (including the collision skip).
+  */
+ @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
+-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+ @Import({UserSyncStateRepositoryAdapter.class, RefreshTokenRepositoryAdapter.class})
+-@Testcontainers
+ @DisplayName("Auth & session SQL on PostgreSQL (Story 12.12)")
+-class AuthSessionPostgresIntegrationTest {
++class AuthSessionPostgresIntegrationTest extends PostgresIntegrationTest {
+ 
+-    @Container
+-    @ServiceConnection
+-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
+-            .withTmpFs(Map.of("/var/lib/postgresql/data", "rw"));
+ 
+     @Autowired JdbcTemplate jdbc;
+     @Autowired PasswordResetTokenSpringRepository resetTokens;
+diff --git a/keevo/backend/src/test/java/com/keevo/identity/auth/adapter/out/persistence/JpaBaseEntityPersistTest.java b/keevo/backend/src/test/java/com/keevo/identity/auth/adapter/out/persistence/JpaBaseEntityPersistTest.java
+index edc83df..137bba4 100644
+--- a/keevo/backend/src/test/java/com/keevo/identity/auth/adapter/out/persistence/JpaBaseEntityPersistTest.java
++++ b/keevo/backend/src/test/java/com/keevo/identity/auth/adapter/out/persistence/JpaBaseEntityPersistTest.java
+@@ -1,13 +1,12 @@
+ package com.keevo.identity.auth.adapter.out.persistence;
+ 
++import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
+ import com.keevo.identity.auth.adapter.out.persistence.entity.TenantJpaEntity;
+ import com.keevo.identity.auth.adapter.out.persistence.jpa.TenantSpringRepository;
+ import org.junit.jupiter.api.DisplayName;
+ import org.junit.jupiter.api.Test;
+ import org.springframework.beans.factory.annotation.Autowired;
+-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
+ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+-import org.springframework.test.context.TestPropertySource;
+ 
+ import java.util.Optional;
+ import java.util.UUID;
+@@ -30,16 +29,8 @@ import static org.assertj.core.api.Assertions.assertThatNoException;
+  * forcing persist() for entities with pre-assigned domain UUIDs.
+  */
+ @DataJpaTest
+-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+-@TestPropertySource(properties = {
+-        "spring.datasource.url=jdbc:postgresql://localhost:5444/keevo_dev",
+-        "spring.datasource.username=keevo",
+-        "spring.datasource.password=keevo_local_pwd",
+-        "spring.flyway.enabled=false",
+-        "spring.jpa.hibernate.ddl-auto=update"
+-})
+ @DisplayName("JpaBaseEntity — Persistable<UUID> with domain-assigned IDs")
+-class JpaBaseEntityPersistTest {
++class JpaBaseEntityPersistTest extends PostgresIntegrationTest {
+ 
+     @Autowired
+     private TenantSpringRepository tenantJpaRepository;
+diff --git a/keevo/backend/src/test/java/com/keevo/identity/auth/infrastructure/persistence/TenantMigrationIntegrationTest.java b/keevo/backend/src/test/java/com/keevo/identity/auth/infrastructure/persistence/TenantMigrationIntegrationTest.java
+index 94432a5..7405ff3 100644
+--- a/keevo/backend/src/test/java/com/keevo/identity/auth/infrastructure/persistence/TenantMigrationIntegrationTest.java
++++ b/keevo/backend/src/test/java/com/keevo/identity/auth/infrastructure/persistence/TenantMigrationIntegrationTest.java
+@@ -1,5 +1,6 @@
+ package com.keevo.identity.auth.infrastructure.persistence;
+ 
++import com.keevo.shared.infrastructure.persistence.SharedPostgresContainer;
+ import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
+ import org.junit.jupiter.api.*;
+ import org.postgresql.ds.PGSimpleDataSource;
+@@ -10,7 +11,6 @@ import java.util.HashSet;
+ import java.util.Set;
+ 
+ import static org.assertj.core.api.Assertions.assertThat;
+-import static org.junit.jupiter.api.Assumptions.assumeTrue;
+ 
+ /**
+  * TenantMigrationIntegrationTest — Validates TenantSchemaProvisioner against REAL PostgreSQL.
+@@ -19,9 +19,8 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
+  * missing DDL tables. This integration test is the sole source of truth for what
+  * actually exists after provisioning.
+  *
+- * <p>Uses the existing keevo_postgres container (localhost:5444/keevo_dev) that is part
+- * of the standard dev docker-compose stack — no additional container spin-up required.
+- * Each test class run uses a unique isolated schema (kv_itXXXX) dropped on teardown.
++ * <p>Runs on a fresh database of the shared Testcontainers PostgreSQL
++ * ({@link SharedPostgresContainer#freshDatabase}), dropped on teardown; never skipped.
+  *
+  * <p>AC1: TenantSchemaProvisioner creates all required tables in the tenant schema.
+  */
+@@ -47,36 +46,22 @@ class TenantMigrationIntegrationTest {
+     private static DataSource dataSource;
+     private static TenantSchemaProvisioner schemaProvisioner;
+ 
++    private static final String DATABASE = "keevo_tenant_migration";
++
+     @BeforeAll
+     static void setUpDatabase() {
+-        // Credentials from keevo/.env / docker-compose.yml (keevo_postgres, port 5444)
+-        String host   = System.getProperty("db.host",      "localhost");
+-        String port   = System.getProperty("db.port",      "5444");
+-        String dbName = System.getProperty("db.name",      "keevo_dev");
+-        String user   = System.getProperty("db.user",      "keevo");
+-        String pass   = System.getProperty("db.password",  "keevo_local_pwd");
+-
++        // Pristine database on the shared Testcontainers PostgreSQL (Story v1s-15-11).
+         PGSimpleDataSource ds = new PGSimpleDataSource();
+-        ds.setURL("jdbc:postgresql://" + host + ":" + port + "/" + dbName);
+-        ds.setUser(user);
+-        ds.setPassword(pass);
++        ds.setURL(SharedPostgresContainer.freshDatabase(DATABASE));
++        ds.setUser(SharedPostgresContainer.username());
++        ds.setPassword(SharedPostgresContainer.password());
+         dataSource = ds;
+-
+-        // Skip all tests if the DB is unreachable (CI without dev stack)
+-        try (Connection ignored = ds.getConnection()) {
+-            schemaProvisioner = new TenantSchemaProvisioner(ds);
+-        } catch (SQLException e) {
+-            assumeTrue(false, "keevo_postgres not reachable — skipping integration tests: " + e.getMessage());
+-        }
++        schemaProvisioner = new TenantSchemaProvisioner(ds);
+     }
+ 
+     @AfterAll
+-    static void dropTestSchema() {
+-        if (dataSource == null) return;
+-        try (Connection conn = dataSource.getConnection();
+-             Statement stmt = conn.createStatement()) {
+-            stmt.execute("DROP SCHEMA IF EXISTS \"" + SCHEMA + "\" CASCADE");
+-        } catch (SQLException ignored) { /* best-effort cleanup */ }
++    static void dropTestDatabase() {
++        SharedPostgresContainer.dropDatabase(DATABASE);
+     }
+ 
+     @Test
+diff --git a/keevo/backend/src/test/java/com/keevo/identity/onboarding/application/factory/SectorTemplateFactoryTest.java b/keevo/backend/src/test/java/com/keevo/identity/onboarding/application/factory/SectorTemplateFactoryTest.java
+index ad7a1a0..30572ce 100644
+--- a/keevo/backend/src/test/java/com/keevo/identity/onboarding/application/factory/SectorTemplateFactoryTest.java
++++ b/keevo/backend/src/test/java/com/keevo/identity/onboarding/application/factory/SectorTemplateFactoryTest.java
+@@ -4,18 +4,17 @@ import com.keevo.identity.onboarding.application.strategy.ClothingTemplateStrate
+ import com.keevo.identity.onboarding.domain.model.SectorType;
+ import com.keevo.identity.onboarding.domain.service.SectorTemplateStrategy;
+ import com.keevo.shared.domain.exception.DomainException;
++import com.keevo.shared.infrastructure.persistence.FullContextIntegrationTest;
+ import org.junit.jupiter.api.DisplayName;
+ import org.junit.jupiter.api.Test;
+ import org.springframework.beans.factory.annotation.Autowired;
+-import org.springframework.boot.test.context.SpringBootTest;
+ 
+ import java.util.Arrays;
+ 
+ import static org.assertj.core.api.Assertions.*;
+ 
+-@SpringBootTest
+ @DisplayName("SectorTemplateFactory")
+-class SectorTemplateFactoryTest {
++class SectorTemplateFactoryTest extends FullContextIntegrationTest {
+ 
+     @Autowired
+     SectorTemplateFactory factory;
+diff --git a/keevo/backend/src/test/java/com/keevo/identity/onboarding/application/service/OnboardingServiceTest.java b/keevo/backend/src/test/java/com/keevo/identity/onboarding/application/service/OnboardingServiceTest.java
+index e0f7b09..ce63a0e 100644
+--- a/keevo/backend/src/test/java/com/keevo/identity/onboarding/application/service/OnboardingServiceTest.java
++++ b/keevo/backend/src/test/java/com/keevo/identity/onboarding/application/service/OnboardingServiceTest.java
+@@ -145,7 +145,7 @@ class OnboardingServiceTest {
+     }
+ 
+     @Test
+-    @DisplayName("categories should have distinct UUIDs, isActive=true, and non-null createdAt")
++    @DisplayName("categories have null ids (Hibernate persist path), distinct names, isActive=true and non-null createdAt")
+     void categories_should_have_valid_fields() {
+         when(sectorTemplateFactory.create(any())).thenReturn(new ClothingTemplateStrategy());
+         when(categoryRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+@@ -160,10 +160,13 @@ class OnboardingServiceTest {
+             verify(categoryRepository).saveAll(argThat(cats -> {
+                 @SuppressWarnings("unchecked")
+                 List<Category> categories = (List<Category>) cats;
+-                long distinctIds = categories.stream().map(Category::id).distinct().count();
++                // ids are deliberately null so Hibernate persists (not merges); it generates them
++                boolean allIdsNull = categories.stream().allMatch(c -> c.id() == null);
++                long distinctNames = categories.stream().map(Category::name).distinct().count();
+                 boolean allActive = categories.stream().allMatch(Category::isActive);
+                 boolean allNonNullCreatedAt = categories.stream().allMatch(c -> c.createdAt() != null);
+-                return distinctIds == categories.size() && allActive && allNonNullCreatedAt;
++                return !categories.isEmpty() && allIdsNull && distinctNames == categories.size()
++                        && allActive && allNonNullCreatedAt;
+             }));
+         }
+     }
+diff --git a/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/ConcurrencyPrimitivesPostgresIntegrationTest.java b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/ConcurrencyPrimitivesPostgresIntegrationTest.java
+index edd1ab4..22d3244 100644
+--- a/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/ConcurrencyPrimitivesPostgresIntegrationTest.java
++++ b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/ConcurrencyPrimitivesPostgresIntegrationTest.java
+@@ -10,9 +10,7 @@ import org.junit.jupiter.api.AfterEach;
+ import org.junit.jupiter.api.DisplayName;
+ import org.junit.jupiter.api.Test;
+ import org.springframework.beans.factory.annotation.Autowired;
+-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
+ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+ import org.springframework.context.annotation.Import;
+ import org.springframework.jdbc.core.JdbcTemplate;
+ import org.springframework.transaction.IllegalTransactionStateException;
+@@ -20,16 +18,12 @@ import org.springframework.transaction.PlatformTransactionManager;
+ import org.springframework.transaction.annotation.Propagation;
+ import org.springframework.transaction.annotation.Transactional;
+ import org.springframework.transaction.support.TransactionTemplate;
+-import org.testcontainers.containers.PostgreSQLContainer;
+-import org.testcontainers.junit.jupiter.Container;
+-import org.testcontainers.junit.jupiter.Testcontainers;
+ 
+ import javax.sql.DataSource;
+ import java.time.Duration;
+ import java.time.Instant;
+ import java.util.ArrayList;
+ import java.util.List;
+-import java.util.Map;
+ import java.util.Optional;
+ import java.util.UUID;
+ import java.util.concurrent.CountDownLatch;
+@@ -49,17 +43,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
+  * <p>No test-managed transaction: each scenario opens its own transactions (several threads).</p>
+  */
+ @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
+-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+ @Import({PostgresTransactionLockAdapter.class, JdbcNotificationCooldownAdapter.class})
+ @Transactional(propagation = Propagation.NOT_SUPPORTED)
+-@Testcontainers
+ @DisplayName("Concurrency primitives on PostgreSQL (Story 13.9)")
+-class ConcurrencyPrimitivesPostgresIntegrationTest {
++class ConcurrencyPrimitivesPostgresIntegrationTest extends PostgresIntegrationTest {
+ 
+-    @Container
+-    @ServiceConnection
+-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
+-            .withTmpFs(Map.of("/var/lib/postgresql/data", "rw"));
+ 
+     private static final String SCHEMA = "kv_lock13";
+ 
+diff --git a/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/FlywayBaselineIntegrationTest.java b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/FlywayBaselineIntegrationTest.java
+index cafc704..e0eebb7 100644
+--- a/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/FlywayBaselineIntegrationTest.java
++++ b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/FlywayBaselineIntegrationTest.java
+@@ -3,131 +3,91 @@ package com.keevo.shared.infrastructure.persistence;
+ import org.flywaydb.core.Flyway;
+ import org.flywaydb.core.api.MigrationInfo;
+ import org.flywaydb.core.api.MigrationState;
++import org.flywaydb.core.api.output.MigrateResult;
+ import org.junit.jupiter.api.AfterAll;
+ import org.junit.jupiter.api.BeforeAll;
+ import org.junit.jupiter.api.Test;
+-import org.springframework.beans.factory.annotation.Autowired;
+-import org.springframework.boot.test.context.SpringBootTest;
+-import org.springframework.test.context.ActiveProfiles;
+-import org.springframework.test.context.DynamicPropertyRegistry;
+-import org.springframework.test.context.DynamicPropertySource;
+ 
+-import javax.sql.DataSource;
+ import java.sql.Connection;
++import java.sql.DriverManager;
+ import java.sql.ResultSet;
+ import java.sql.Statement;
++import java.util.Arrays;
+ 
+ import static org.assertj.core.api.Assertions.assertThat;
+ 
+ /**
+- * Integration test for Flyway baseline migration V1.
++ * Integration test for the Flyway public-schema migrations (Stories 10.1 / 10.2, rewritten by
++ * v1s-15-11).
+  *
+- * <p>Verifies (AC1, AC3, AC4, AC5):
++ * <p>Runs the Flyway API, configured exactly like {@code application.yml} (baseline-on-migrate,
++ * baseline version 0, schema {@code public}, {@code classpath:db/migration}), against a pristine
++ * database on the shared Testcontainers PostgreSQL ({@link SharedPostgresContainer#freshDatabase}),
++ * so it is CI-portable and never depends on a local PostgreSQL.
+  * <ul>
+- *   <li>AC3: Fresh DB → Flyway creates entire public schema from V1</li>
+- *   <li>AC4: Re-running migrate is no-op (idempotent)</li>
+- *   <li>AC5: Hibernate ddl-auto=validate passes → V1 and JPA entities are consistent</li>
++ *   <li>AC3: fresh DB, Flyway creates the entire public schema from V1;</li>
++ *   <li>AC4: re-running migrate is a no-op;</li>
++ *   <li>V2 is applied exactly once and never re-executed.</li>
+  * </ul>
+- *
+- * <p>Uses real PostgreSQL 16 (existing container on port 5444 for dev, or Testcontainers in CI).
++ * Hibernate {@code ddl-auto=validate} against the migrated schema is proven by
++ * {@link KeevoApplicationContextIntegrationTest} (the full context boots on the same migrations).
+  */
+-@SpringBootTest(
+-        properties = {
+-                "spring.flyway.enabled=true",
+-                "spring.flyway.baseline-on-migrate=true",
+-                "spring.flyway.baseline-version=0",
+-                "spring.flyway.schemas=public",
+-                "spring.flyway.default-schema=public",
+-                "spring.flyway.locations=classpath:db/migration",
+-                // AC5: Hibernate validates entities against the Flyway-created schema
+-                "spring.jpa.hibernate.ddl-auto=validate"
+-        }
+-)
+-@ActiveProfiles("flyway-test")
+ class FlywayBaselineIntegrationTest {
+ 
+-    private static final String TEST_DB = "keevo_flyway_test";
+-    private static final String HOST = System.getenv().getOrDefault("POSTGRES_HOST", "localhost");
+-    private static final String PORT = System.getenv().getOrDefault("POSTGRES_PORT", "5444");
+-
+-    @DynamicPropertySource
+-    static void configureDataSource(DynamicPropertyRegistry registry) {
+-        // Use a fresh test database to ensure Flyway creates schema from scratch (AC3)
+-        registry.add("spring.datasource.url", 
+-            () -> "jdbc:postgresql://" + HOST + ":" + PORT + "/" + TEST_DB);
+-        registry.add("spring.datasource.username", () -> "keevo");
+-        registry.add("spring.datasource.password", () -> "keevo_local_pwd");
+-    }
++    private static final String TEST_DB = "keevo_flyway_baseline";
++
++    private static String url;
++    private static Flyway flyway;
++    private static MigrateResult firstMigrate;
+ 
+     @BeforeAll
+-    static void createTestDatabase() throws Exception {
+-        // Connect to default 'postgres' database to create test database
+-        String adminUrl = "jdbc:postgresql://" + HOST + ":" + PORT + "/postgres";
+-        try (Connection conn = java.sql.DriverManager.getConnection(adminUrl, "keevo", "keevo_local_pwd");
+-             Statement stmt = conn.createStatement()) {
+-            // Drop and recreate to ensure fresh state
+-            stmt.execute("DROP DATABASE IF EXISTS " + TEST_DB);
+-            stmt.execute("CREATE DATABASE " + TEST_DB);
+-        }
++    static void migrateFreshDatabase() {
++        // freshDatabase terminates any backend left by a crashed run before dropping the database.
++        url = SharedPostgresContainer.freshDatabase(TEST_DB);
++        flyway = Flyway.configure()
++                .dataSource(url, SharedPostgresContainer.username(), SharedPostgresContainer.password())
++                .baselineOnMigrate(true)
++                .baselineVersion("0")
++                .schemas("public")
++                .defaultSchema("public")
++                .locations("classpath:db/migration")
++                .load();
++        firstMigrate = flyway.migrate();
+     }
+ 
+     @AfterAll
+-    static void dropTestDatabase() throws Exception {
+-        String adminUrl = "jdbc:postgresql://" + HOST + ":" + PORT + "/postgres";
+-        try (Connection conn = java.sql.DriverManager.getConnection(adminUrl, "keevo", "keevo_local_pwd");
+-             Statement stmt = conn.createStatement()) {
+-            // Terminate active connections before dropping
+-            stmt.execute("SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+-                    + "WHERE datname = '" + TEST_DB + "' AND pid <> pg_backend_pid()");
+-            stmt.execute("DROP DATABASE IF EXISTS " + TEST_DB);
+-        }
++    static void dropTestDatabase() {
++        SharedPostgresContainer.dropDatabase(TEST_DB);
+     }
+ 
+-    @Autowired
+-    private Flyway flyway;
+-
+-    @Autowired
+-    private DataSource dataSource;
+-
+     @Test
+-    void contextLoadsWithFlywayBaseline() {
+-        // AC3: If the Spring context starts without SchemaManagementException,
+-        // it means Flyway created the schema AND Hibernate validated entities against it.
+-        assertThat(flyway).isNotNull();
++    void freshMigrateSucceeds() {
++        assertThat(firstMigrate.success).isTrue();
++        assertThat(firstMigrate.migrationsExecuted).isPositive();
++        assertThat(flyway.info().pending()).isEmpty();
+     }
+ 
+     @Test
+     void flywayVersion1IsApplied() {
+-        MigrationInfo[] applied = flyway.info().applied();
+-
+-        assertThat(applied).isNotEmpty();
+-
+-        // baseline-version=0 inserts a synthetic baseline at v0, then V1 runs as a real migration
+-        MigrationInfo v1Migration = java.util.Arrays.stream(applied)
++        MigrationInfo v1Migration = Arrays.stream(flyway.info().applied())
+                 .filter(info -> info.getVersion() != null && info.getVersion().getVersion().equals("1"))
+                 .findFirst()
+                 .orElseThrow(() -> new AssertionError("V1 migration not found in applied migrations"));
+ 
+         assertThat(v1Migration.getDescription()).containsIgnoringCase("baseline");
++        assertThat(v1Migration.getState()).isEqualTo(MigrationState.SUCCESS);
+     }
+ 
+     @Test
+     void flywaySchemaHistoryTableExists() throws Exception {
+-        try (Connection conn = dataSource.getConnection();
+-             Statement stmt = conn.createStatement();
+-             ResultSet rs = stmt.executeQuery(
+-                     "SELECT COUNT(*) FROM information_schema.tables " +
+-                     "WHERE table_schema = 'public' AND table_name = 'flyway_schema_history'")) {
+-            rs.next();
+-            assertThat(rs.getInt(1)).isEqualTo(1);
+-        }
++        assertThat(count("SELECT COUNT(*) FROM information_schema.tables "
++                + "WHERE table_schema = 'public' AND table_name = 'flyway_schema_history'")).isEqualTo(1);
+     }
+ 
+     @Test
+     void reRunMigrateIsNoOp() {
+         // AC4: Running migrate again should be a no-op (no new migrations applied)
+-        int migrationsExecuted = flyway.migrate().migrationsExecuted;
+-        assertThat(migrationsExecuted).isZero();
++        assertThat(flyway.migrate().migrationsExecuted).isZero();
+     }
+ 
+     @Test
+@@ -143,19 +103,11 @@ class FlywayBaselineIntegrationTest {
+                 "sync_operations_log", "sync_conflicts_log",
+                 "user_sync_state", "flyway_schema_history"
+         };
+-
+-        try (Connection conn = dataSource.getConnection();
+-             Statement stmt = conn.createStatement()) {
+-            for (String table : expectedTables) {
+-                try (ResultSet rs = stmt.executeQuery(
+-                        "SELECT COUNT(*) FROM information_schema.tables " +
+-                        "WHERE table_schema = 'public' AND table_name = '" + table + "'")) {
+-                    rs.next();
+-                    assertThat(rs.getInt(1))
+-                            .as("Table '%s' should exist in public schema", table)
+-                            .isEqualTo(1);
+-                }
+-            }
++        for (String table : expectedTables) {
++            assertThat(count("SELECT COUNT(*) FROM information_schema.tables "
++                    + "WHERE table_schema = 'public' AND table_name = '" + table + "'"))
++                    .as("Table '%s' should exist in public schema", table)
++                    .isEqualTo(1);
+         }
+     }
+ 
+@@ -163,42 +115,42 @@ class FlywayBaselineIntegrationTest {
+ 
+     @Test
+     void v2DropUsersTenantIdIsApplied() throws Exception {
+-        // AC4: V2 migration drops the dangling tenant_id column from public.users
+-        // AC5: On a fresh DB, V1 creates users with tenant_id, then V2 drops it
+-
+-        // Verify tenant_id column does NOT exist in public.users
+-        try (Connection conn = dataSource.getConnection();
+-             Statement stmt = conn.createStatement();
+-             ResultSet rs = stmt.executeQuery(
+-                     "SELECT COUNT(*) FROM information_schema.columns " +
+-                     "WHERE table_schema = 'public' AND table_name = 'users' " +
+-                     "AND column_name = 'tenant_id'")) {
+-            rs.next();
+-            assertThat(rs.getInt(1))
+-                    .as("Column 'tenant_id' should NOT exist in public.users after V2 migration")
+-                    .isZero();
+-        }
++        // On a fresh DB, V1 creates users with tenant_id, then V2 drops it
++        assertThat(count("SELECT COUNT(*) FROM information_schema.columns "
++                + "WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'tenant_id'"))
++                .as("Column 'tenant_id' should NOT exist in public.users after V2 migration")
++                .isZero();
+ 
+-        // Verify V2 is recorded with success=true and correct description (AC4)
+-        MigrationInfo v2Migration = java.util.Arrays.stream(flyway.info().applied())
++        MigrationInfo v2Migration = Arrays.stream(flyway.info().applied())
+                 .filter(info -> info.getVersion() != null && "2".equals(info.getVersion().getVersion()))
+                 .findFirst()
+                 .orElseThrow(() -> new AssertionError("V2 migration not found in applied migrations"));
+ 
+-        assertThat(v2Migration.getState())
+-                .as("V2 migration should be in SUCCESS state")
+-                .isEqualTo(MigrationState.SUCCESS);
+-        assertThat(v2Migration.getDescription())
+-                .as("V2 migration description should match filename (AC4)")
+-                .containsIgnoringCase("drop users tenant id");
++        assertThat(v2Migration.getState()).isEqualTo(MigrationState.SUCCESS);
++        assertThat(v2Migration.getDescription()).containsIgnoringCase("drop users tenant id");
+     }
+ 
+     @Test
+-    void v2IsIdempotent() {
+-        // AC6: Re-running migrate after V2 is already applied should be a no-op
+-        int migrationsExecuted = flyway.migrate().migrationsExecuted;
+-        assertThat(migrationsExecuted)
+-                .as("Re-running migrate should execute 0 migrations (V2 already applied)")
+-                .isZero();
++    void v2IsIdempotent() throws Exception {
++        // V2 ran once on the fresh database ...
++        assertThat(firstMigrate.migrations).extracting(m -> m.version).containsOnlyOnce("2");
++        assertThat(count("SELECT COUNT(*) FROM public.flyway_schema_history WHERE version = '2'"))
++                .isEqualTo(1);
++
++        // ... and a re-migrate never executes it again (assertion scoped to V2, not to every later Vn).
++        MigrateResult again = flyway.migrate();
++        assertThat(again.migrations).extracting(m -> m.version).doesNotContain("2");
++        assertThat(count("SELECT COUNT(*) FROM public.flyway_schema_history WHERE version = '2'"))
++                .isEqualTo(1);
++    }
++
++    private static int count(String sql) throws Exception {
++        try (Connection conn = DriverManager.getConnection(url, SharedPostgresContainer.username(),
++                SharedPostgresContainer.password());
++             Statement stmt = conn.createStatement();
++             ResultSet rs = stmt.executeQuery(sql)) {
++            rs.next();
++            return rs.getInt(1);
++        }
+     }
+ }
+diff --git a/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/FullContextIntegrationTest.java b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/FullContextIntegrationTest.java
+new file mode 100644
+index 0000000..21b6a99
+--- /dev/null
++++ b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/FullContextIntegrationTest.java
+@@ -0,0 +1,16 @@
++package com.keevo.shared.infrastructure.persistence;
++
++import org.springframework.boot.test.context.SpringBootTest;
++
++/**
++ * FullContextIntegrationTest — base class for tests that boot the complete application context
++ * on the shared Testcontainers PostgreSQL (Story v1s-15-11).
++ *
++ * <p>Every subclass with no further configuration shares one cached context: public Flyway
++ * migrations, the tenant-schema lifecycle runner, ShedLock, schedulers and all adapters are the
++ * production beans. Tenant-scoped tests provision their own {@code kv_xxxxxx} schema with unique
++ * ids and must clear {@link TenantContext} in every thread they use.
++ */
++@SpringBootTest
++public abstract class FullContextIntegrationTest extends PostgresIntegrationTest {
++}
+diff --git a/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/KeevoApplicationContextIntegrationTest.java b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/KeevoApplicationContextIntegrationTest.java
+new file mode 100644
+index 0000000..46e70e3
+--- /dev/null
++++ b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/KeevoApplicationContextIntegrationTest.java
+@@ -0,0 +1,120 @@
++package com.keevo.shared.infrastructure.persistence;
++
++import com.keevo.identity.auth.adapter.out.persistence.impl.CachedTokenRevocationAdapter;
++import com.keevo.identity.auth.application.service.AuthTokenCleanupJob;
++import com.keevo.identity.auth.application.service.PasswordResetRateLimiter;
++import com.keevo.identity.auth.application.service.TenantFactory;
++import com.keevo.identity.auth.domain.model.Tenant;
++import net.javacrumbs.shedlock.core.LockConfiguration;
++import net.javacrumbs.shedlock.core.LockProvider;
++import net.javacrumbs.shedlock.core.SimpleLock;
++import net.javacrumbs.shedlock.provider.jdbctemplate.JdbcTemplateLockProvider;
++import org.flywaydb.core.Flyway;
++import org.flywaydb.core.api.MigrationInfo;
++import org.flywaydb.core.api.MigrationState;
++import org.junit.jupiter.api.DisplayName;
++import org.junit.jupiter.api.Test;
++import org.springframework.beans.factory.annotation.Autowired;
++import org.springframework.context.ApplicationContext;
++import org.springframework.jdbc.core.JdbcTemplate;
++import org.springframework.test.util.ReflectionTestUtils;
++import org.springframework.transaction.support.TransactionTemplate;
++
++import java.time.Clock;
++import java.time.Duration;
++import java.time.Instant;
++import java.util.Arrays;
++import java.util.List;
++import java.util.Optional;
++import java.util.UUID;
++
++import static org.assertj.core.api.Assertions.assertThat;
++
++/**
++ * Story v1s-15-11 (AC B) — the whole application context starts on a real PostgreSQL 16 and the
++ * boot-time wiring of Stories 12.12, 13.9 and 13.12 actually works: public Flyway V1..V13,
++ * {@link TenantSchemaMigrationRunner} (SmartLifecycle), ShedLock ({@code SchedulerLockConfig}),
++ * the shared {@link Clock} ({@code ClockConfig}) and the provisioning of a new tenant.
++ */
++@DisplayName("Application context on PostgreSQL (Story v1s-15-11)")
++class KeevoApplicationContextIntegrationTest extends FullContextIntegrationTest {
++
++    private static final List<String> PUBLIC_MIGRATIONS =
++            List.of("1", "2", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13");
++
++    @Autowired ApplicationContext context;
++    @Autowired Flyway flyway;
++    @Autowired JdbcTemplate jdbc;
++    @Autowired TransactionTemplate tx;
++
++    @Test
++    @DisplayName("Flyway: every public migration V1..V13 is applied successfully, none pending")
++    void publicMigrationsApplied() {
++        MigrationInfo[] applied = flyway.info().applied();
++        List<String> versions = Arrays.stream(applied)
++                .filter(m -> m.getVersion() != null && !"0".equals(m.getVersion().getVersion()))
++                .map(m -> m.getVersion().getVersion())
++                .toList();
++
++        assertThat(versions).containsExactlyElementsOf(PUBLIC_MIGRATIONS);
++        assertThat(applied).allSatisfy(m -> assertThat(m.getState().isFailed()).isFalse());
++        assertThat(Arrays.stream(applied).filter(m -> m.getState() == MigrationState.SUCCESS)).isNotEmpty();
++        assertThat(flyway.info().pending()).isEmpty();
++        assertThat(jdbc.queryForObject("SELECT to_regclass('public.shedlock') IS NOT NULL", Boolean.class)).isTrue();
++        assertThat(jdbc.queryForObject("SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' "
++                + "AND table_name = 'sales' AND column_name = 'version'", Integer.class)).isEqualTo(1);
++    }
++
++    @Test
++    @DisplayName("ClockConfig: one Clock bean, injected into the time-driven auth beans")
++    void clockBeanWired() {
++        Clock clock = context.getBean(Clock.class);
++
++        assertThat(clock.getZone()).isEqualTo(Clock.systemUTC().getZone());
++        assertThat(context.getBean(CachedTokenRevocationAdapter.class)).isNotNull();
++        assertThat(context.getBean(PasswordResetRateLimiter.class)).isNotNull();
++        assertThat(ReflectionTestUtils.getField(context.getBean(AuthTokenCleanupJob.class), "clock")).isSameAs(clock);
++    }
++
++    @Test
++    @DisplayName("SchedulerLockConfig: the JDBC lock provider locks in public.shedlock, a second holder is refused")
++    void shedLockWired() {
++        LockProvider provider = context.getBean(LockProvider.class);
++        assertThat(provider).isInstanceOf(JdbcTemplateLockProvider.class);
++
++        String name = "it-context-" + UUID.randomUUID();
++        LockConfiguration config = new LockConfiguration(Instant.now(), name, Duration.ofMinutes(5), Duration.ZERO);
++        Optional<SimpleLock> first = provider.lock(config);
++        try {
++            assertThat(first).isPresent();
++            assertThat(provider.lock(config)).isEmpty();
++            assertThat(jdbc.queryForObject("SELECT count(*) FROM public.shedlock WHERE name = ?", Integer.class, name))
++                    .isEqualTo(1);
++        } finally {
++            first.ifPresent(SimpleLock::unlock);
++        }
++        Optional<SimpleLock> again = provider.lock(config);
++        assertThat(again).isPresent();
++        again.get().unlock();
++    }
++
++    @Test
++    @DisplayName("TenantSchemaMigrationRunner: started by the lifecycle; a newly provisioned tenant is migrated and synced")
++    void tenantProvisioningAndRunner() {
++        TenantSchemaMigrationRunner runner = context.getBean(TenantSchemaMigrationRunner.class);
++        assertThat(runner.isRunning()).isTrue();
++
++        Tenant tenant = tx.execute(status -> context.getBean(TenantFactory.class).create());
++        String schema = tenant.getSchemaName();
++
++        assertThat(jdbc.queryForObject("SELECT status FROM public.tenants WHERE id = ?", String.class, tenant.getId()))
++                .isEqualTo("ACTIVE");
++        assertThat(jdbc.queryForList("SELECT table_name FROM information_schema.tables WHERE table_schema = ?",
++                String.class, schema))
++                .contains("users", "stores", "products", "stock_levels", "stock_transfers", "sales", "sale_items");
++
++        runner.runAll(); // idempotent on a fresh tenant: nothing to change, nothing fails
++        assertThat(jdbc.queryForObject("SELECT count(*) FROM information_schema.columns WHERE table_schema = ? "
++                + "AND table_name = 'sales' AND column_name = 'version'", Integer.class, schema)).isEqualTo(1);
++    }
++}
+diff --git a/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/NativeSqlPostgresIntegrationTest.java b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/NativeSqlPostgresIntegrationTest.java
+index d7afdb1..d08cdfb 100644
+--- a/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/NativeSqlPostgresIntegrationTest.java
++++ b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/NativeSqlPostgresIntegrationTest.java
+@@ -7,17 +7,11 @@ import com.keevo.sync.sync.adapter.out.persistence.jpa.SyncOperationsLogSpringRe
+ import org.junit.jupiter.api.DisplayName;
+ import org.junit.jupiter.api.Test;
+ import org.springframework.beans.factory.annotation.Autowired;
+-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
+ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+ import org.springframework.jdbc.core.JdbcTemplate;
+-import org.testcontainers.containers.PostgreSQLContainer;
+-import org.testcontainers.junit.jupiter.Container;
+-import org.testcontainers.junit.jupiter.Testcontainers;
+ 
+ import java.sql.Timestamp;
+ import java.time.Instant;
+-import java.util.Map;
+ import java.util.UUID;
+ 
+ import static org.assertj.core.api.Assertions.assertThat;
+@@ -28,15 +22,9 @@ import static org.assertj.core.api.Assertions.assertThat;
+  * (V1–V9). Mocks only see the query text; these tests see what PostgreSQL does with it.
+  */
+ @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
+-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+-@Testcontainers
+ @DisplayName("Native SQL on PostgreSQL")
+-class NativeSqlPostgresIntegrationTest {
++class NativeSqlPostgresIntegrationTest extends PostgresIntegrationTest {
+ 
+-    @Container
+-    @ServiceConnection
+-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
+-            .withTmpFs(Map.of("/var/lib/postgresql/data", "rw"));
+ 
+     @Autowired JdbcTemplate jdbc;
+     @Autowired SyncOperationsLogSpringRepository syncLog;
+diff --git a/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/PostgresIntegrationTest.java b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/PostgresIntegrationTest.java
+new file mode 100644
+index 0000000..bba5209
+--- /dev/null
++++ b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/PostgresIntegrationTest.java
+@@ -0,0 +1,27 @@
++package com.keevo.shared.infrastructure.persistence;
++
++import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
++import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
++import org.springframework.test.context.ActiveProfiles;
++import org.testcontainers.containers.PostgreSQLContainer;
++
++/**
++ * PostgresIntegrationTest — base class of every Spring test that needs a real PostgreSQL
++ * (Story v1s-15-11).
++ *
++ * <p>Binds the context's DataSource to {@link SharedPostgresContainer} through
++ * {@code @ServiceConnection}: all subclasses hit the same container (one per JVM), and two
++ * subclasses with the same slice configuration share one cached Spring context. Flyway migrates
++ * the shared {@code test} database the first time a context starts; later contexts find it
++ * up to date.
++ *
++ * <p>Isolation contract: {@code @DataJpaTest} subclasses roll back each test; tests that commit
++ * (concurrency, full context) must use unique ids/phones/schemas and never assert global counts.
++ */
++@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
++@ActiveProfiles("test")
++public abstract class PostgresIntegrationTest {
++
++    @ServiceConnection
++    protected static final PostgreSQLContainer<?> POSTGRES = SharedPostgresContainer.POSTGRES;
++}
+diff --git a/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/SchemaProvisioningHygienePostgresIntegrationTest.java b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/SchemaProvisioningHygienePostgresIntegrationTest.java
+index 6264a1b..2449629 100644
+--- a/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/SchemaProvisioningHygienePostgresIntegrationTest.java
++++ b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/SchemaProvisioningHygienePostgresIntegrationTest.java
+@@ -5,15 +5,14 @@ import org.junit.jupiter.api.Test;
+ import org.springframework.beans.factory.annotation.Autowired;
+ import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
+ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+ import org.springframework.context.annotation.Import;
+ import org.springframework.core.io.ClassPathResource;
+ import org.springframework.jdbc.core.JdbcTemplate;
+ import org.springframework.transaction.annotation.Propagation;
+ import org.springframework.transaction.annotation.Transactional;
+-import org.testcontainers.containers.PostgreSQLContainer;
+-import org.testcontainers.junit.jupiter.Container;
+-import org.testcontainers.junit.jupiter.Testcontainers;
++import org.springframework.test.context.ActiveProfiles;
++import org.springframework.test.context.DynamicPropertyRegistry;
++import org.springframework.test.context.DynamicPropertySource;
+ 
+ import javax.sql.DataSource;
+ import java.nio.charset.StandardCharsets;
+@@ -36,14 +35,24 @@ import static org.assertj.core.api.Assertions.assertThat;
+ @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+ @Import({TenantSchemaProvisioner.class, TenantSchemaSyncService.class, TenantSchemaMigrationRunner.class})
+ @Transactional(propagation = Propagation.NOT_SUPPORTED)
+-@Testcontainers
++@ActiveProfiles("test")
+ @DisplayName("Tenant schema provisioning hygiene on PostgreSQL (Story v1s-13-12)")
+ class SchemaProvisioningHygienePostgresIntegrationTest {
+ 
+-    @Container
+-    @ServiceConnection
+-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
+-            .withTmpFs(Map.of("/var/lib/postgresql/data", "rw"));
++    /**
++     * This class drops and recreates public CHECK constraints and commits tenants, so it runs on
++     * its own pristine database of the shared container instead of the shared {@code test} one
++     * (no {@code @ServiceConnection}: it would override these URL properties).
++     */
++    private static final String DATABASE = "keevo_schema_hygiene";
++
++    @DynamicPropertySource
++    static void datasource(DynamicPropertyRegistry registry) {
++        String url = SharedPostgresContainer.freshDatabase(DATABASE);
++        registry.add("spring.datasource.url", () -> url);
++        registry.add("spring.datasource.username", SharedPostgresContainer::username);
++        registry.add("spring.datasource.password", SharedPostgresContainer::password);
++    }
+ 
+     private static final String V13 = "db/migration/V13__idempotent_check_constraints.sql";
+ 
+diff --git a/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/SharedPostgresContainer.java b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/SharedPostgresContainer.java
+new file mode 100644
+index 0000000..468f292
+--- /dev/null
++++ b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/SharedPostgresContainer.java
+@@ -0,0 +1,91 @@
++package com.keevo.shared.infrastructure.persistence;
++
++import org.testcontainers.containers.PostgreSQLContainer;
++
++import java.sql.Connection;
++import java.sql.DriverManager;
++import java.sql.SQLException;
++import java.sql.Statement;
++import java.util.Map;
++import java.util.regex.Pattern;
++
++/**
++ * SharedPostgresContainer — one PostgreSQL 16 Testcontainer for the whole test JVM (Story v1s-15-11).
++ *
++ * <p>Started once on first use and stopped by Ryuk when the JVM exits. Its data directory is a
++ * tmpfs (nothing written to disk) and fsync is off. Every Postgres-backed test shares it:
++ * <ul>
++ *   <li>Spring tests extend {@link PostgresIntegrationTest} (default database {@code test},
++ *       migrated by Flyway V1..Vn on first context start, isolated by transaction rollback or
++ *       by unique data);</li>
++ *   <li>tests that need a pristine database (Flyway baseline, tenant DDL) call
++ *       {@link #freshDatabase(String)} to (re)create a dedicated database on the same server.</li>
++ * </ul>
++ * {@code max_connections} is raised because each cached Spring context owns its own Hikari pool.
++ */
++public final class SharedPostgresContainer {
++
++    private static final Pattern DB_NAME = Pattern.compile("[a-z][a-z0-9_]{0,40}");
++
++    public static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
++            .withTmpFs(Map.of("/var/lib/postgresql/data", "rw"))
++            .withCommand("postgres", "-c", "max_connections=300", "-c", "fsync=off",
++                    "-c", "synchronous_commit=off", "-c", "full_page_writes=off");
++
++    static {
++        POSTGRES.start();
++    }
++
++    private SharedPostgresContainer() {}
++
++    /**
++     * Drops (after terminating its sessions) and recreates {@code name} on the shared server.
++     *
++     * @return the JDBC URL of the fresh, empty database
++     */
++    public static String freshDatabase(String name) {
++        if (!DB_NAME.matcher(name).matches()) {
++            throw new IllegalArgumentException("Invalid test database name: " + name);
++        }
++        try (Connection conn = adminConnection(); Statement stmt = conn.createStatement()) {
++            stmt.execute("SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
++                    + "WHERE datname = '" + name + "' AND pid <> pg_backend_pid()");
++            stmt.execute("DROP DATABASE IF EXISTS " + name);
++            stmt.execute("CREATE DATABASE " + name);
++        } catch (SQLException e) {
++            throw new IllegalStateException("Cannot create test database " + name, e);
++        }
++        return jdbcUrl(name);
++    }
++
++    /** Terminates the sessions of {@code name} and drops it (best effort clean-up). */
++    public static void dropDatabase(String name) {
++        if (!DB_NAME.matcher(name).matches()) {
++            throw new IllegalArgumentException("Invalid test database name: " + name);
++        }
++        try (Connection conn = adminConnection(); Statement stmt = conn.createStatement()) {
++            stmt.execute("SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
++                    + "WHERE datname = '" + name + "' AND pid <> pg_backend_pid()");
++            stmt.execute("DROP DATABASE IF EXISTS " + name);
++        } catch (SQLException e) {
++            throw new IllegalStateException("Cannot drop test database " + name, e);
++        }
++    }
++
++    /** JDBC URL of {@code database} on the shared server. */
++    public static String jdbcUrl(String database) {
++        return "jdbc:postgresql://" + POSTGRES.getHost() + ":" + POSTGRES.getFirstMappedPort() + "/" + database;
++    }
++
++    public static String username() {
++        return POSTGRES.getUsername();
++    }
++
++    public static String password() {
++        return POSTGRES.getPassword();
++    }
++
++    private static Connection adminConnection() throws SQLException {
++        return DriverManager.getConnection(jdbcUrl("postgres"), username(), password());
++    }
++}
+diff --git a/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/TenantIsolationIntegrationTest.java b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/TenantIsolationIntegrationTest.java
+index 8e699d0..aa6812c 100644
+--- a/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/TenantIsolationIntegrationTest.java
++++ b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/TenantIsolationIntegrationTest.java
+@@ -13,7 +13,6 @@ import java.util.List;
+ import java.util.UUID;
+ 
+ import static org.assertj.core.api.Assertions.assertThat;
+-import static org.junit.jupiter.api.Assumptions.assumeTrue;
+ 
+ /**
+  * TenantIsolationIntegrationTest — AC4 — Validates that audit_log entries are strictly isolated
+@@ -26,8 +25,8 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
+  * <p>Design: uses raw JDBC (like TenantMigrationIntegrationTest) — no Spring context needed.
+  * The JPA multi-tenancy routing is validated implicitly: schema name is the isolation mechanism.
+  *
+- * <p>Requires: keevo_postgres Docker container running on localhost:5444/keevo_dev.
+- * If DB is unreachable, all tests are skipped gracefully (CI-safe).
++ * <p>Runs on a fresh database of the shared Testcontainers PostgreSQL
++ * ({@link SharedPostgresContainer#freshDatabase}); never skipped, never on a local PostgreSQL.
+  */
+ @DisplayName("TenantIsolationIntegrationTest (integration — real PostgreSQL, AC4)")
+ @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@@ -48,26 +47,16 @@ class TenantIsolationIntegrationTest {
+ 
+     // ── Lifecycle ──────────────────────────────────────────────────────────────
+ 
++    private static final String DATABASE = "keevo_tenant_isolation";
++
+     @BeforeAll
+     static void setUpDatabase() throws Exception {
+-        String host   = System.getProperty("db.host",      "localhost");
+-        String port   = System.getProperty("db.port",      "5444");
+-        String dbName = System.getProperty("db.name",      "keevo_dev");
+-        String user   = System.getProperty("db.user",      "keevo");
+-        String pass   = System.getProperty("db.password",  "keevo_local_pwd");
+-
++        // Pristine database on the shared Testcontainers PostgreSQL (Story v1s-15-11).
+         PGSimpleDataSource ds = new PGSimpleDataSource();
+-        ds.setURL("jdbc:postgresql://" + host + ":" + port + "/" + dbName);
+-        ds.setUser(user);
+-        ds.setPassword(pass);
+-
+-        // Graceful skip if DB is unreachable
+-        try (Connection ignored = ds.getConnection()) {
+-            dataSource = ds;
+-        } catch (SQLException e) {
+-            assumeTrue(false, "keevo_postgres not reachable — skipping isolation integration tests: "
+-                    + e.getMessage());
+-        }
++        ds.setURL(SharedPostgresContainer.freshDatabase(DATABASE));
++        ds.setUser(SharedPostgresContainer.username());
++        ds.setPassword(SharedPostgresContainer.password());
++        dataSource = ds;
+ 
+         // Create both schemas and their audit_log tables
+         try (Connection conn = dataSource.getConnection();
+@@ -116,13 +105,8 @@ class TenantIsolationIntegrationTest {
+     }
+ 
+     @AfterAll
+-    static void dropTestSchemas() {
+-        if (dataSource == null) return;
+-        try (Connection conn = dataSource.getConnection();
+-             Statement stmt  = conn.createStatement()) {
+-            stmt.execute("DROP SCHEMA IF EXISTS \"" + SCHEMA_A + "\" CASCADE");
+-            stmt.execute("DROP SCHEMA IF EXISTS \"" + SCHEMA_B + "\" CASCADE");
+-        } catch (SQLException ignored) { /* best-effort cleanup */ }
++    static void dropTestDatabase() {
++        SharedPostgresContainer.dropDatabase(DATABASE);
+     }
+ 
+     // ── Tests ─────────────────────────────────────────────────────────────────
+diff --git a/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/entity/ProductJpaEntityTest.java b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/entity/ProductJpaEntityTest.java
+index 6251a27..a523d66 100644
+--- a/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/entity/ProductJpaEntityTest.java
++++ b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/entity/ProductJpaEntityTest.java
+@@ -1,12 +1,10 @@
+ package com.keevo.shared.infrastructure.persistence.entity;
+ 
++import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
+ import org.junit.jupiter.api.Test;
+ import org.junit.jupiter.api.DisplayName;
+-import org.junit.jupiter.api.extension.ExtendWith;
+-import org.springframework.test.context.junit.jupiter.SpringExtension;
+ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+ import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
+-import org.springframework.test.context.jdbc.Sql;
+ import org.springframework.beans.factory.annotation.Autowired;
+ import static org.junit.jupiter.api.Assertions.*;
+ 
+@@ -19,10 +17,8 @@ import com.keevo.catalog.product.domain.entity.ProductStatus;
+  *
+  * Tests JPA entity mapping to products table
+  */
+-@ExtendWith(SpringExtension.class)
+ @DataJpaTest
+-@Sql("/product-schema.sql")
+-class ProductJpaEntityTest {
++class ProductJpaEntityTest extends PostgresIntegrationTest {
+ 
+     @Autowired
+     private TestEntityManager entityManager;
+diff --git a/keevo/backend/src/test/java/com/keevo/shared/infrastructure/scheduling/AccountDeletionSchedulerTest.java b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/scheduling/AccountDeletionSchedulerTest.java
+index 0643b16..178cb53 100644
+--- a/keevo/backend/src/test/java/com/keevo/shared/infrastructure/scheduling/AccountDeletionSchedulerTest.java
++++ b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/scheduling/AccountDeletionSchedulerTest.java
+@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
+ import org.junit.jupiter.api.DisplayName;
+ import org.junit.jupiter.api.Test;
+ import org.junit.jupiter.api.extension.ExtendWith;
++import org.mockito.InOrder;
+ import org.mockito.Mock;
+ import org.mockito.junit.jupiter.MockitoExtension;
+ import org.springframework.jdbc.core.JdbcTemplate;
+@@ -67,6 +68,7 @@ class AccountDeletionSchedulerTest {
+         Instant expiredDate = Instant.parse("2026-07-22T00:00:00Z");
+         Tenant tenant = createTenant(TenantStatus.DELETION_PENDING, expiredDate);
+         when(tenantRepository.findAll()).thenReturn(List.of(tenant));
++        when(tenantRepository.findById(tenantId)).thenReturn(Optional.of(tenant)); // v1s-13-9 re-fetch
+ 
+         // Use lenient stubs — all queryForList calls return a default list
+         List<UUID> userIds = List.of(UUID.randomUUID(), UUID.randomUUID());
+@@ -81,8 +83,11 @@ class AccountDeletionSchedulerTest {
+ 
+         scheduler.executeDeletions();
+ 
+-        verify(schemaProvisioner).dropSchemaForDeletion(schemaName);
+-        verify(tenantRepository).save(argThat(t ->
++        // v1s-15-11: the schema is dropped BEFORE any public delete and before the DELETED save
++        InOrder order = inOrder(schemaProvisioner, jdbcTemplate, tenantRepository);
++        order.verify(schemaProvisioner).dropSchemaForDeletion(schemaName);
++        order.verify(jdbcTemplate).update(startsWith("DELETE FROM public.user_tenant_memberships"), any(Object.class));
++        order.verify(tenantRepository).save(argThat(t ->
+                 t.getStatus() == TenantStatus.DELETED && t.getDeletionScheduledAt() == null));
+     }
+ 
+@@ -136,6 +141,7 @@ class AccountDeletionSchedulerTest {
+         Instant expiredDate = Instant.parse("2026-07-22T00:00:00Z");
+         Tenant tenant = createTenant(TenantStatus.DELETION_PENDING, expiredDate);
+         when(tenantRepository.findAll()).thenReturn(List.of(tenant));
++        when(tenantRepository.findById(tenantId)).thenReturn(Optional.of(tenant));
+ 
+         lenient().when(jdbcTemplate.queryForList(anyString(), eq(UUID.class), any()))
+                 .thenReturn(List.of(UUID.randomUUID(), UUID.randomUUID()));
+@@ -151,21 +157,35 @@ class AccountDeletionSchedulerTest {
+     // ── Failure resilience ──────────────────────────────────────────────────
+ 
+     @Test
+-    @DisplayName("DROP schema failure does not mark tenant DELETED")
++    @DisplayName("DROP schema failure: tenant stays DELETION_PENDING, no delete and no save run (retried next day)")
+     void executeDeletions_doesNotMarkDeletedOnSchemaDropFailure() {
+         Instant expiredDate = Instant.parse("2026-07-22T00:00:00Z");
+         Tenant tenant = createTenant(TenantStatus.DELETION_PENDING, expiredDate);
+         when(tenantRepository.findAll()).thenReturn(List.of(tenant));
+-
+-        lenient().when(jdbcTemplate.queryForList(anyString(), eq(UUID.class), any()))
+-                .thenReturn(List.of());
++        when(tenantRepository.findById(tenantId)).thenReturn(Optional.of(tenant));
+ 
+         doThrow(new RuntimeException("DB connection lost"))
+                 .when(schemaProvisioner).dropSchemaForDeletion(schemaName);
+ 
+         scheduler.executeDeletions();
+ 
+-        // Tenant is NOT saved as DELETED
++        verify(schemaProvisioner).dropSchemaForDeletion(schemaName);
++        // Nothing else ran: memberships/users/tokens intact, tenant NOT saved as DELETED
++        verifyNoInteractions(jdbcTemplate, whatsAppPort);
++        verify(tenantRepository, never()).save(any());
++    }
++
++    @Test
++    @DisplayName("tenant cancelled between findAll and the re-fetch is skipped")
++    void executeDeletions_skipsTenantCancelledDuringRun() {
++        Tenant pending = createTenant(TenantStatus.DELETION_PENDING, Instant.parse("2026-07-22T00:00:00Z"));
++        when(tenantRepository.findAll()).thenReturn(List.of(pending));
++        when(tenantRepository.findById(tenantId)).thenReturn(Optional.of(createTenant(TenantStatus.ACTIVE, null)));
++
++        scheduler.executeDeletions();
++
++        verify(schemaProvisioner, never()).dropSchemaForDeletion(anyString());
++        verifyNoInteractions(jdbcTemplate);
+         verify(tenantRepository, never()).save(any());
+     }
+ }
+diff --git a/keevo/backend/src/test/resources/application-test.yml b/keevo/backend/src/test/resources/application-test.yml
+new file mode 100644
+index 0000000..2bfd5f7
+--- /dev/null
++++ b/keevo/backend/src/test/resources/application-test.yml
+@@ -0,0 +1,12 @@
++# Test profile (Story v1s-15-11) — activated by PostgresIntegrationTest / FullContextIntegrationTest.
++# The DataSource comes from the shared Testcontainers PostgreSQL (@ServiceConnection), never from
++# localhost:5444. Quiet logs: the dev profile logs DEBUG to /tmp/keevo-dev.log.
++spring:
++  jpa:
++    show-sql: false
++
++logging:
++  level:
++    root: WARN
++    com.keevo: INFO
++    org.testcontainers: INFO
+diff --git a/keevo/backend/src/test/resources/product-schema.sql b/keevo/backend/src/test/resources/product-schema.sql
+deleted file mode 100644
+index 71f524c..0000000
+--- a/keevo/backend/src/test/resources/product-schema.sql
++++ /dev/null
+@@ -1,23 +0,0 @@
+--- Test schema for products table (H2 database)
+-CREATE TABLE IF NOT EXISTS products (
+-    id           UUID        DEFAULT RANDOM_UUID(),
+-    name         VARCHAR(200) NOT NULL,
+-    description  TEXT,
+-    sku          VARCHAR(20) NOT NULL,
+-    category_id  UUID,
+-    price        INTEGER     NOT NULL DEFAULT 0,
+-    buy_price    INTEGER     NOT NULL DEFAULT 0,
+-    transport_cost INTEGER   NOT NULL DEFAULT 0,
+-    stock_quantity INTEGER   NOT NULL DEFAULT 0,
+-    photo_url    VARCHAR(500),
+-    archived     BOOLEAN     NOT NULL DEFAULT FALSE,
+-    status       VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+-    minimum_threshold INTEGER NOT NULL DEFAULT 0,
+-    created_at   TIMESTAMP   NOT NULL DEFAULT NOW(),
+-    updated_at   TIMESTAMP   NOT NULL DEFAULT NOW(),
+-    
+-    CONSTRAINT ck_products_status CHECK (status IN ('ACTIVE', 'DRAFT'))
+-);
+-
+-CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
+-CREATE INDEX IF NOT EXISTS idx_products_archived ON products(archived);
+\ No newline at end of file

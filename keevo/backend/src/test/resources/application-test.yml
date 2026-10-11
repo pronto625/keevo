@@ -1,0 +1,17 @@
+# Test profile (Story v1s-15-11) — activated by PostgresIntegrationTest / FullContextIntegrationTest.
+# The DataSource comes from the shared Testcontainers PostgreSQL (@ServiceConnection), never from
+# localhost:5444. Quiet logs: the dev profile logs DEBUG to /tmp/keevo-dev.log.
+spring:
+  jpa:
+    show-sql: false
+  datasource:
+    hikari:
+      # 8-thread concurrency tests + async listeners must never wait 20 s for a connection.
+      # 20 x <= 10 cached contexts stays under the container's max_connections=300.
+      maximum-pool-size: 20
+
+logging:
+  level:
+    root: WARN
+    com.keevo: INFO
+    org.testcontainers: INFO

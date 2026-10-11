@@ -4,18 +4,17 @@ import com.keevo.identity.onboarding.application.strategy.ClothingTemplateStrate
 import com.keevo.identity.onboarding.domain.model.SectorType;
 import com.keevo.identity.onboarding.domain.service.SectorTemplateStrategy;
 import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.infrastructure.persistence.FullContextIntegrationTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 
 import java.util.Arrays;
 
 import static org.assertj.core.api.Assertions.*;
 
-@SpringBootTest
 @DisplayName("SectorTemplateFactory")
-class SectorTemplateFactoryTest {
+class SectorTemplateFactoryTest extends FullContextIntegrationTest {
 
     @Autowired
     SectorTemplateFactory factory;

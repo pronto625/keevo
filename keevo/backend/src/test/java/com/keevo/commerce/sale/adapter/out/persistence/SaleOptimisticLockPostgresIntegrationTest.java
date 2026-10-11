@@ -1,5 +1,6 @@
 package com.keevo.commerce.sale.adapter.out.persistence;
 
+import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
 import com.keevo.commerce.sale.adapter.out.persistence.impl.SaleRepositoryAdapter;
 import com.keevo.commerce.sale.domain.model.PaymentMode;
 import com.keevo.commerce.sale.domain.model.Sale;
@@ -8,9 +9,7 @@ import com.keevo.commerce.sale.domain.model.SaleStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -18,14 +17,10 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -41,17 +36,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * requests that each read the sale before the other one commits.</p>
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import(SaleRepositoryAdapter.class)
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
-@Testcontainers
 @DisplayName("Sale optimistic lock on PostgreSQL (Story v1s-13-10)")
-class SaleOptimisticLockPostgresIntegrationTest {
+class SaleOptimisticLockPostgresIntegrationTest extends PostgresIntegrationTest {
 
-    @Container
-    @ServiceConnection
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
-            .withTmpFs(Map.of("/var/lib/postgresql/data", "rw"));
 
     private static final Instant NOW = Instant.now().truncatedTo(ChronoUnit.MILLIS);
 

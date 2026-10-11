@@ -145,7 +145,7 @@ class OnboardingServiceTest {
     }
 
     @Test
-    @DisplayName("categories should have distinct UUIDs, isActive=true, and non-null createdAt")
+    @DisplayName("categories have null ids (Hibernate persist path), distinct names, isActive=true and non-null createdAt")
     void categories_should_have_valid_fields() {
         when(sectorTemplateFactory.create(any())).thenReturn(new ClothingTemplateStrategy());
         when(categoryRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
@@ -160,10 +160,13 @@ class OnboardingServiceTest {
             verify(categoryRepository).saveAll(argThat(cats -> {
                 @SuppressWarnings("unchecked")
                 List<Category> categories = (List<Category>) cats;
-                long distinctIds = categories.stream().map(Category::id).distinct().count();
+                // ids are deliberately null so Hibernate persists (not merges); it generates them
+                boolean allIdsNull = categories.stream().allMatch(c -> c.id() == null);
+                long distinctNames = categories.stream().map(Category::name).distinct().count();
                 boolean allActive = categories.stream().allMatch(Category::isActive);
                 boolean allNonNullCreatedAt = categories.stream().allMatch(c -> c.createdAt() != null);
-                return distinctIds == categories.size() && allActive && allNonNullCreatedAt;
+                return !categories.isEmpty() && allIdsNull && distinctNames == categories.size()
+                        && allActive && allNonNullCreatedAt;
             }));
         }
     }

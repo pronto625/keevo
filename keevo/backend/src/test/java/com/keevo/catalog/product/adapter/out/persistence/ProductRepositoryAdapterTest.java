@@ -1,16 +1,14 @@
 package com.keevo.catalog.product.adapter.out.persistence;
 
+import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.test.context.ContextConfiguration;
-import org.springframework.test.context.jdbc.Sql;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -23,11 +21,9 @@ import java.time.Instant;
  *
  * Tests that adapter correctly implements CRUD operations
  */
-@ExtendWith(SpringExtension.class)
-@DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=none")
-@Sql("/product-schema.sql")
+@DataJpaTest
 @ContextConfiguration(classes = {ProductRepositoryAdapterTest.TestConfig.class})
-class ProductRepositoryAdapterTest {
+class ProductRepositoryAdapterTest extends PostgresIntegrationTest {
 
     @TestConfiguration
     static class TestConfig {
