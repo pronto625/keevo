@@ -181,4 +181,37 @@ class TransferSyncHandlerTest {
         verify(transferStockUseCase).execute(captor.capture());
         assertThat(captor.getValue().clientId()).isEqualTo(UUID.fromString(op.entityId()));
     }
+
+    // ── v1s-15-9: integral guard ──────────────────────────────────────
+
+    private SyncOperation transferWithQuantity(Object quantity) {
+        return new SyncOperation("op-int", "STOCK_TRANSFER", UUID.randomUUID().toString(),
+                Map.of("sourceStoreId", UUID.randomUUID().toString(),
+                        "destinationStoreId", UUID.randomUUID().toString(),
+                        "productId", UUID.randomUUID().toString(),
+                        "quantity", quantity),
+                Instant.now());
+    }
+
+    @Test
+    void handle_fractionalQuantity_isRejectedNotTruncated() {
+        authenticateAsOwner();
+
+        var result = handler.handle(transferWithQuantity(1.5), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).startsWith("Invalid quantity");
+        verifyNoInteractions(transferStockUseCase);
+    }
+
+    @Test
+    void handle_outOfRangeQuantity_isRejected() {
+        authenticateAsOwner();
+
+        var result = handler.handle(transferWithQuantity(3_000_000_000L), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).startsWith("Invalid quantity");
+        verifyNoInteractions(transferStockUseCase);
+    }
 }

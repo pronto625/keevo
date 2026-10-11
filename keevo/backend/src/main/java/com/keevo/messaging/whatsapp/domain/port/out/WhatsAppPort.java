@@ -13,8 +13,11 @@ public interface WhatsAppPort {
     /**
      * Returns true if a real WhatsApp integration is configured.
      * The NoOp stub returns false.
+     *
+     * <p>v1s-15-9: abstract on purpose — a new adapter must state explicitly whether it can
+     * really send, instead of silently inheriting {@code true}.
      */
-    default boolean isConfigured() { return true; }
+    boolean isConfigured();
 
     /**
      * Send a report message to the given phone number.

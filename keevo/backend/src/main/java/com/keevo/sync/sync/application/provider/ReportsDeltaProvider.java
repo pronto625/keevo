@@ -43,21 +43,15 @@ public class ReportsDeltaProvider implements DeltaEntityProvider {
         map.put("reportDate", str(row[7]));
         map.put("content", str(row[8]));
         map.put("deliveryStatus", str(row[9]));
-        map.put("deliveryAttempts", num(row[10]));
+        map.put("deliveryAttempts", DeltaValues.num(row[10]));
         map.put("lastAttemptAt", ts(row[11]));
-        map.put("totalRevenue", num(row[12]));
-        map.put("totalSales", num(row[13]));
-        map.put("isAutomatic", bool(row[14]));
+        map.put("totalRevenue", DeltaValues.num(row[12]));
+        map.put("totalSales", DeltaValues.num(row[13]));
+        map.put("isAutomatic", DeltaValues.bool(row[14]));
         map.put("createdAt", ts(row[15]));
         return map;
     }
 
-    private boolean bool(Object o) {
-        if (o instanceof Boolean b) return b;
-        return o != null && ((Number) o).intValue() != 0;
-    }
-
     private String str(Object o) { return o != null ? o.toString() : null; }
-    private Object num(Object o) { return o != null ? ((Number) o).intValue() : 0; }
     private String ts(Object o) { return o != null ? o.toString() : null; }
 }

@@ -108,6 +108,11 @@ public class AccountDeletionService {
     /**
      * Cancel a pending account deletion — restores tenant to ACTIVE.
      *
+     * <p>v1s-15-9: the write is one conditional UPDATE ({@link TenantRepository#cancelPendingDeletion})
+     * instead of read-then-save, so it can never overwrite a DELETED tenant written by a concurrent
+     * {@code AccountDeletionScheduler} run, never reactivate a tenant whose schema is already
+     * dropped, and never cancel once the grace period is over (the tenant is then due for deletion).
+     *
      * @param actorId   UUID of the authenticated OWNER cancelling deletion
      * @param tenantId  schema name (e.g. "kv_abc123")
      */
@@ -116,13 +121,16 @@ public class AccountDeletionService {
                 .orElseThrow(() -> new DomainException(ErrorCode.TENANT_NOT_FOUND,
                         "Tenant not found: " + tenantId));
 
+        // Pre-check kept for a precise message on the common path; the UPDATE below is the guard.
         if (tenant.getStatus() != TenantStatus.DELETION_PENDING) {
             throw new DomainException(ErrorCode.DELETION_NOT_PENDING,
                     "No pending deletion for tenant: " + tenantId);
         }
 
-        Tenant updated = tenant.withStatus(TenantStatus.ACTIVE, null);
-        tenantRepository.save(updated);
+        if (!tenantRepository.cancelPendingDeletion(tenantId)) {
+            throw new DomainException(ErrorCode.DELETION_NOT_PENDING,
+                    "Deletion already executing, executed or past its grace period for tenant: " + tenantId);
+        }
 
         // Publish audit event
         AccountDeletionCancelledEvent event =

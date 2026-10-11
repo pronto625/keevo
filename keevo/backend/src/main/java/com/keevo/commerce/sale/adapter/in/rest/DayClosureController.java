@@ -1,5 +1,6 @@
 package com.keevo.commerce.sale.adapter.in.rest;
 
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.commerce.sale.adapter.in.rest.dto.*;
 import com.keevo.commerce.sale.domain.model.DayClosure;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase;
@@ -7,7 +8,6 @@ import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase.CloseDayCommand;
 import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.security.AuthDetails;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import io.jsonwebtoken.Claims;
@@ -16,11 +16,8 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
@@ -62,7 +59,7 @@ public class DayClosureController {
 
         // An employee closes only the day of the store they are assigned to (same guard
         // as the sync push, DayClosureSyncHandler).
-        UUID assignedStoreId = extractAssignedStoreId();
+        UUID assignedStoreId = CurrentActor.assignedStoreId();
         if (assignedStoreId != null && !assignedStoreId.equals(request.storeId())) {
             throw new DomainException(ErrorCode.FORBIDDEN, "Employee cannot close another store's day");
         }
@@ -122,7 +119,7 @@ public class DayClosureController {
             HttpServletRequest httpRequest) {
 
         // Defense-in-depth: explicit role check (testable with standaloneSetup)
-        if (!isOwnerRole()) {
+        if (!CurrentActor.isOwner()) {
             throw new DomainException(ErrorCode.FORBIDDEN, "Only OWNER can read day closure history");
         }
 
@@ -175,26 +172,5 @@ public class DayClosureController {
             return jwtTokenProvider.extractTenantId(claims);
         }
         throw new IllegalStateException("No valid JWT token found");
-    }
-
-    /** Assigned store of an EMPLOYEE token; null for an owner. Fails closed without it. */
-    private UUID extractAssignedStoreId() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null) return null;
-        if (auth.getDetails() instanceof AuthDetails ad && ad.storeId() != null) {
-            return ad.storeId();
-        }
-        boolean isEmployee = auth.getAuthorities().stream()
-                .anyMatch(a -> "ROLE_EMPLOYEE".equals(a.getAuthority()));
-        if (isEmployee) {
-            throw new DomainException(ErrorCode.FORBIDDEN, "EMPLOYEE token missing assigned store");
-        }
-        return null;
-    }
-
-    private boolean isOwnerRole() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        return auth != null && auth.getAuthorities().stream()
-                .anyMatch(a -> "ROLE_OWNER".equals(a.getAuthority()));
     }
 }

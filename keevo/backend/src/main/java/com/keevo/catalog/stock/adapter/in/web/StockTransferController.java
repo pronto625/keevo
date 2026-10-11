@@ -1,5 +1,6 @@
 package com.keevo.catalog.stock.adapter.in.web;
 
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.catalog.stock.adapter.in.web.dto.StockTransferResponseDto;
 import com.keevo.catalog.stock.adapter.in.web.dto.TransferStockRequestDto;
 import com.keevo.catalog.stock.application.usecase.CompleteTransferService;
@@ -10,7 +11,6 @@ import com.keevo.catalog.stock.domain.port.in.GetTransferHistoryQuery;
 import com.keevo.catalog.stock.domain.port.in.TransferStockCommand;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.security.AuthDetails;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -18,12 +18,10 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -74,7 +72,7 @@ public class StockTransferController {
             @Valid @RequestBody TransferStockRequestDto request) {
 
         UUID actorId = extractActorId();
-        UUID assignedStoreId = extractAssignedStoreId();
+        UUID assignedStoreId = CurrentActor.assignedStoreId();
         if (assignedStoreId != null && !assignedStoreId.equals(request.sourceStoreId())) {
             throw new DomainException(ErrorCode.FORBIDDEN,
                     "EMPLOYEE can only transfer stock from their assigned store");
@@ -110,7 +108,7 @@ public class StockTransferController {
             @PathVariable UUID id) {
 
         UUID actorId = extractActorId();
-        UUID assignedStoreId = extractAssignedStoreId();
+        UUID assignedStoreId = CurrentActor.assignedStoreId();
         var command  = new CompleteTransferCommand(id, actorId, assignedStoreId);
         var result   = completeTransferService.execute(command);
         return ResponseEntity.ok(ApiResponseWrapper.ok(StockTransferResponseDto.from(result)));
@@ -156,26 +154,5 @@ public class StockTransferController {
                 .getAuthentication()
                 .getPrincipal();
         return UUID.fromString(principal.toString());
-    }
-
-    /**
-     * Story v1s-12-9 — Returns the store UUID embedded in JWT details for EMPLOYEE tokens,
-     * or null for OWNER tokens (OWNER is never scoped).
-     *
-     * <p>Adapted from {@link com.keevo.shared.infrastructure.security.AuthDetails}.
-     * Mirrors the exact same pattern as {@link com.keevo.catalog.stock.adapter.in.web.StockController#extractAssignedStoreId()}.
-     */
-    private UUID extractAssignedStoreId() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        Object details = auth.getDetails();
-        if (details instanceof AuthDetails ad && ad.storeId() != null) {
-            return ad.storeId();
-        }
-        boolean isEmployee = auth.getAuthorities().stream()
-                .anyMatch(a -> "ROLE_EMPLOYEE".equals(a.getAuthority()));
-        if (isEmployee) {
-            throw new DomainException(ErrorCode.FORBIDDEN, "EMPLOYEE token missing assigned store");
-        }
-        return null;
     }
 }

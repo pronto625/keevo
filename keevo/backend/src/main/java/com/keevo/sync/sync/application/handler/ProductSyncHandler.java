@@ -74,10 +74,10 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                         (String) p.get("description"),
                         (String) p.get("sku"),
                         p.get("categoryId") != null ? UUID.fromString((String) p.get("categoryId")) : null,
-                        p.get("price") != null ? ((Number) p.get("price")).intValue() : null,
-                        p.get("buyPrice") != null ? ((Number) p.get("buyPrice")).intValue() : null,
-                        p.get("transportCost") != null ? ((Number) p.get("transportCost")).intValue() : null,
-                        p.get("stockQuantity") != null ? ((Number) p.get("stockQuantity")).intValue() : null,
+                        optionalIntegralInt(p.get("price"), "price"),
+                        optionalIntegralInt(p.get("buyPrice"), "buyPrice"),
+                        optionalIntegralInt(p.get("transportCost"), "transportCost"),
+                        optionalIntegralInt(p.get("stockQuantity"), "stockQuantity"),
                         actorId, 0, null, null, null, null, clientId));
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         product.getId().toString(), null);
@@ -90,10 +90,10 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                         (String) p.get("description"),
                         (String) p.get("sku"),
                         p.get("categoryId") != null ? UUID.fromString((String) p.get("categoryId")) : null,
-                        p.get("price") != null ? ((Number) p.get("price")).intValue() : null,
-                        p.get("buyPrice") != null ? ((Number) p.get("buyPrice")).intValue() : null,
-                        p.get("transportCost") != null ? ((Number) p.get("transportCost")).intValue() : null,
-                        p.get("stockQuantity") != null ? ((Number) p.get("stockQuantity")).intValue() : null,
+                        optionalIntegralInt(p.get("price"), "price"),
+                        optionalIntegralInt(p.get("buyPrice"), "buyPrice"),
+                        optionalIntegralInt(p.get("transportCost"), "transportCost"),
+                        optionalIntegralInt(p.get("stockQuantity"), "stockQuantity"),
                         actorId,
                         actorRole()));  // v1s-12-10: real role → Story 2.4 draft guard fires for EMPLOYEE
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
@@ -122,7 +122,7 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                         (String) p.get("name"),
                         (String) p.get("description"),
                         p.get("categoryId") != null ? UUID.fromString((String) p.get("categoryId")) : null,
-                        p.get("priceVente") != null ? ((Number) p.get("priceVente")).intValue() : null,
+                        optionalIntegralInt(p.get("priceVente"), "priceVente"),
                         null,  // buyPrice
                         null,  // transportCost
                         actorId,
@@ -146,9 +146,9 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                         (String) p.get("description"),
                         null,  // sku — keep existing
                         p.get("categoryId") != null ? UUID.fromString((String) p.get("categoryId")) : null,
-                        p.get("price") != null ? ((Number) p.get("price")).intValue() : null,
-                        p.get("buyPrice") != null ? ((Number) p.get("buyPrice")).intValue() : null,
-                        p.get("transportCost") != null ? ((Number) p.get("transportCost")).intValue() : null,
+                        optionalIntegralInt(p.get("price"), "price"),
+                        optionalIntegralInt(p.get("buyPrice"), "buyPrice"),
+                        optionalIntegralInt(p.get("transportCost"), "transportCost"),
                         null,  // stockQuantity — keep existing
                         actorId,
                         "OWNER"));

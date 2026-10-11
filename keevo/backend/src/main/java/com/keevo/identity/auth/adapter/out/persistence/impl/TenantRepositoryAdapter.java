@@ -53,6 +53,20 @@ public class TenantRepositoryAdapter implements TenantRepository {
         return springRepository.findByCode(tenantCode).map(this::toDomain);
     }
 
+    @Override
+    public java.util.List<Tenant> findDeletionsDueBy(Instant now) {
+        return springRepository
+                .findByStatusAndDeletionScheduledAtLessThanEqual(TenantStatus.DELETION_PENDING.name(), now)
+                .stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
+    public boolean cancelPendingDeletion(String schemaName) {
+        return springRepository.cancelPendingDeletion(schemaName) == 1;
+    }
+
     // ── Mapping ──────────────────────────────────────────────────────────────
 
     private TenantJpaEntity toEntity(Tenant t) {

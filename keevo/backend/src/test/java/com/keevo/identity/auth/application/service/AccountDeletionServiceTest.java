@@ -141,19 +141,17 @@ class AccountDeletionServiceTest {
     // ── cancelDeletion ───────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("cancelDeletion restores tenant to ACTIVE and clears deletionScheduledAt")
+    @DisplayName("cancelDeletion reactivates through the conditional UPDATE (no blind save)")
     void cancelDeletion_restoresActive() {
         Tenant pending = activeTenant.withStatus(TenantStatus.DELETION_PENDING,
                 Instant.now().plus(30, ChronoUnit.DAYS));
         when(tenantRepository.findBySchemaName(schemaName)).thenReturn(Optional.of(pending));
-        when(tenantRepository.save(any(Tenant.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(tenantRepository.cancelPendingDeletion(schemaName)).thenReturn(true);
 
         service.cancelDeletion(actorId, schemaName);
 
-        ArgumentCaptor<Tenant> savedCaptor = ArgumentCaptor.forClass(Tenant.class);
-        verify(tenantRepository).save(savedCaptor.capture());
-        assertThat(savedCaptor.getValue().getStatus()).isEqualTo(TenantStatus.ACTIVE);
-        assertThat(savedCaptor.getValue().getDeletionScheduledAt()).isNull();
+        verify(tenantRepository).cancelPendingDeletion(schemaName);
+        verify(tenantRepository, never()).save(any());
 
         verify(eventPublisher).publishEvent(any(AccountDeletionCancelledEvent.class));
         verify(whatsAppPort, never()).sendReport(anyString(), anyString());
@@ -170,5 +168,22 @@ class AccountDeletionServiceTest {
                 .isEqualTo(ErrorCode.DELETION_NOT_PENDING.name());
 
         verify(tenantRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("v1s-15-9: cancelDeletion — conditional UPDATE matches 0 rows → 409, no event")
+    void cancelDeletion_conditionalUpdateMisses_throwsAndPublishesNothing() {
+        Tenant pending = activeTenant.withStatus(TenantStatus.DELETION_PENDING,
+                Instant.now().plus(30, ChronoUnit.DAYS));
+        when(tenantRepository.findBySchemaName(schemaName)).thenReturn(Optional.of(pending));
+        when(tenantRepository.cancelPendingDeletion(schemaName)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.cancelDeletion(actorId, schemaName))
+                .isInstanceOf(DomainException.class)
+                .extracting(ex -> ((DomainException) ex).getDomainCode())
+                .isEqualTo(ErrorCode.DELETION_NOT_PENDING.name());
+
+        verify(tenantRepository, never()).save(any());
+        verify(eventPublisher, never()).publishEvent(any(AccountDeletionCancelledEvent.class));
     }
 }

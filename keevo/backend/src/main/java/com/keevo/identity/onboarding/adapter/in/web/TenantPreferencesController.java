@@ -1,5 +1,6 @@
 package com.keevo.identity.onboarding.adapter.in.web;
 
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.identity.onboarding.domain.model.ReportChannel;
 import com.keevo.identity.onboarding.domain.model.StockAlertChannel;
 import com.keevo.identity.onboarding.domain.port.in.SendTestReportUseCase;
@@ -15,7 +16,6 @@ import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
@@ -67,7 +67,7 @@ public class TenantPreferencesController {
             @Valid @RequestBody UpdateReportPreferencesRequestDto request) {
 
         requireAuthentication();
-        requireOwnerOrForbid();
+        CurrentActor.requireOwner("OWNER role required");
 
         UpdateReportPreferencesCommand command = new UpdateReportPreferencesCommand(
             request.eodReportEnabled(),
@@ -95,7 +95,7 @@ public class TenantPreferencesController {
     @PostMapping("/report-test")
     public ResponseEntity<ApiResponseWrapper<SendTestReportUseCase.TestReportResult>> sendTestReport() {
         requireAuthentication();
-        requireOwnerOrForbid();
+        CurrentActor.requireOwner("OWNER role required");
         String tenantId = TenantContext.getCurrentTenant();
         SendTestReportUseCase.TestReportResult result = sendTestReportUseCase.sendTestReport(tenantId);
         return ResponseEntity.ok(ApiResponseWrapper.ok(result));
@@ -130,13 +130,5 @@ public class TenantPreferencesController {
             throw new DomainException(ErrorCode.UNAUTHORIZED, "Authentication required");
         }
         return auth;
-    }
-
-    private void requireOwnerOrForbid() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || auth.getAuthorities().stream()
-                .noneMatch(a -> "ROLE_OWNER".equals(a.getAuthority()))) {
-            throw new DomainException(ErrorCode.FORBIDDEN, "OWNER role required");
-        }
     }
 }

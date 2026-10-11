@@ -37,11 +37,14 @@ class AdminTenantServiceTest {
     @Mock
     JdbcTemplate jdbcTemplate;
 
+    @Mock
+    com.keevo.shared.infrastructure.scheduling.AccountDeletionScheduler accountDeletionScheduler;
+
     AdminTenantService service;
 
     @BeforeEach
     void setUp() {
-        service = new AdminTenantService(jdbcTemplate);
+        service = new AdminTenantService(jdbcTemplate, accountDeletionScheduler);
         // Stub schema_name lookup used by enrichWithCrossSchemaMetrics
         lenient().when(jdbcTemplate.queryForObject(anyString(), eq(String.class), any(Object[].class)))
                 .thenReturn("kv_abc123");
@@ -136,5 +139,93 @@ class AdminTenantServiceTest {
                 Instant.now(), null,
                 0, 0, null
         );
+    }
+
+    // ── v1s-15-9: cancel / forceDelete ────────────────────────────────────────
+
+    @Test
+    @DisplayName("cancelDeletion — conditional UPDATE also refuses a dropped schema")
+    void cancelDeletion_refusesDroppedSchema() {
+        UUID id = UUID.randomUUID();
+        when(jdbcTemplate.update(anyString(), eq(id))).thenReturn(1);
+
+        service.cancelDeletion(id);
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate).update(sql.capture(), eq(id));
+        assertThat(sql.getValue())
+                .contains("status = 'DELETION_PENDING'")
+                .contains("to_regnamespace(schema_name) IS NOT NULL");
+    }
+
+    @Test
+    @DisplayName("cancelDeletion — 0 rows → TENANT_NOT_FOUND")
+    void cancelDeletion_noRow_throws() {
+        UUID id = UUID.randomUUID();
+        when(jdbcTemplate.update(anyString(), eq(id))).thenReturn(0);
+
+        assertThatThrownBy(() -> service.cancelDeletion(id))
+                .isInstanceOf(DomainException.class)
+                .satisfies(e -> assertThat(((DomainException) e).getDomainCode()).isEqualTo("TENANT_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("forceDelete — commits a DELETION_PENDING marker then runs the scheduler routine")
+    void forceDelete_marksPendingThenDeletesNow() {
+        UUID id = UUID.randomUUID();
+        when(jdbcTemplate.update(anyString(), eq(id))).thenReturn(1);
+        when(accountDeletionScheduler.deleteNow(id)).thenReturn(true);
+
+        service.forceDelete(id);
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        var order = inOrder(jdbcTemplate, accountDeletionScheduler);
+        order.verify(jdbcTemplate).update(sql.capture(), eq(id));
+        order.verify(accountDeletionScheduler).deleteNow(id);
+        assertThat(sql.getValue())
+                .contains("status = 'DELETION_PENDING', deletion_scheduled_at = now()")
+                .contains("status <> 'DELETED'")
+                .contains("00000000-0000-0000-0000-000000000000")
+                .doesNotContain("SET status = 'DELETED'");
+    }
+
+    @Test
+    @DisplayName("forceDelete — unknown / DELETED / system tenant → TENANT_NOT_FOUND, routine never runs")
+    void forceDelete_invalidTarget_throwsTenantNotFound() {
+        UUID id = UUID.randomUUID();
+        when(jdbcTemplate.update(anyString(), eq(id))).thenReturn(0);
+
+        assertThatThrownBy(() -> service.forceDelete(id))
+                .isInstanceOf(DomainException.class)
+                .satisfies(e -> assertThat(((DomainException) e).getDomainCode()).isEqualTo("TENANT_NOT_FOUND"));
+        verifyNoInteractions(accountDeletionScheduler);
+    }
+
+    @Test
+    @DisplayName("forceDelete — routine skips and tenant is not DELETED (cancelled concurrently) → DELETION_NOT_PENDING")
+    void forceDelete_routineSkipped_throwsDeletionNotPending() {
+        UUID id = UUID.randomUUID();
+        when(jdbcTemplate.update(anyString(), eq(id))).thenReturn(1);
+        when(accountDeletionScheduler.deleteNow(id)).thenReturn(false);
+        when(jdbcTemplate.queryForObject(startsWith("SELECT status FROM public.tenants"), eq(String.class), eq(id)))
+                .thenReturn("ACTIVE");
+
+        assertThatThrownBy(() -> service.forceDelete(id))
+                .isInstanceOf(DomainException.class)
+                .satisfies(e -> assertThat(((DomainException) e).getDomainCode()).isEqualTo("DELETION_NOT_PENDING"));
+    }
+
+    @Test
+    @DisplayName("forceDelete — routine skips because a concurrent daily run already DELETED it → success")
+    void forceDelete_concurrentlyDeletedByDailyRun_returnsNormally() {
+        UUID id = UUID.randomUUID();
+        when(jdbcTemplate.update(anyString(), eq(id))).thenReturn(1);
+        when(accountDeletionScheduler.deleteNow(id)).thenReturn(false);
+        when(jdbcTemplate.queryForObject(startsWith("SELECT status FROM public.tenants"), eq(String.class), eq(id)))
+                .thenReturn("DELETED");
+
+        service.forceDelete(id);
+
+        verify(accountDeletionScheduler).deleteNow(id);
     }
 }

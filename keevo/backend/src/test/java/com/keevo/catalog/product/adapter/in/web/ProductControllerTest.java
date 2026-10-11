@@ -55,6 +55,9 @@ class ProductControllerTest {
     @Mock
     private GetProductPricingUseCase getProductPricingUseCase;
 
+    @Mock
+    private com.keevo.store.store.domain.port.out.StoreRepository storeRepository;
+
     @InjectMocks
     private ProductController productController;
 
@@ -348,4 +351,32 @@ class ProductControllerTest {
                 .andExpect(status().isUnauthorized());
     }
     */
+
+    // ── v1s-15-9: actor label never falls back to the raw UUID ────────────
+
+    @Test
+    @DisplayName("v1s-15-9: POST by EMPLOYEE without firstName claim passes 'Un employé', not the UUID")
+    void create_by_employee_without_firstName_uses_fallback_label() throws Exception {
+        UUID actorId = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+        var auth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                actorId, null,
+                java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_EMPLOYEE")));
+        auth.setDetails(com.keevo.shared.infrastructure.security.AuthDetails.employee(null, storeId));
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
+        when(createProductUseCase.execute(any())).thenReturn(sampleProduct);
+
+        mockMvc.perform(post("/api/v1/products")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\": \"Test Product\"}"))
+                .andExpect(status().isCreated());
+
+        var captor = org.mockito.ArgumentCaptor.forClass(CreateProductUseCase.CreateProductDto.class);
+        verify(createProductUseCase).execute(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().actorName())
+                .isEqualTo("Un employé")
+                .doesNotContain(actorId.toString());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().actorRole()).isEqualTo("EMPLOYEE");
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().actorId()).isEqualTo(actorId);
+    }
 }

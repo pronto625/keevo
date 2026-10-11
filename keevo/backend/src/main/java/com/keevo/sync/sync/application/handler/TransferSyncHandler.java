@@ -58,7 +58,7 @@ public class TransferSyncHandler extends AbstractSyncOperationHandler {
                 UUID.fromString((String) p.get("destinationStoreId")),
                 UUID.fromString((String) p.get("productId")),
                 p.get("variantId") != null ? UUID.fromString((String) p.get("variantId")) : null,
-                ((Number) p.get("quantity")).intValue(),
+                requireIntegralInt(p.get("quantity"), "quantity"),
                 actorId,
                 (String) p.get("notes"),
                 clientId));

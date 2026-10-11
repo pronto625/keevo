@@ -196,4 +196,29 @@ class CreateProductUseCaseTest {
             verify(productRepository, never()).save(any());
         }
     }
+
+    // ── v1s-15-9: plan check at the same position as CreateDraftProductUseCase ──
+
+    @Test
+    @DisplayName("v1s-15-9: plan limit is rejected before the SKU-uniqueness check")
+    void planLimitReached_rejectedBeforeSkuUniquenessCheck() {
+        when(productRepository.existsByName("Produit SKU Pris")).thenReturn(false);
+        var sub = mock(com.keevo.subscription.plan.domain.model.Subscription.class);
+        when(sub.getPlanType()).thenReturn(PlanType.FREE);
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(sub));
+        when(productCountPort.countActiveProducts()).thenReturn(500);
+        doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "Limite de produits atteinte"))
+                .when(planLimitGuard).checkProductLimit(any(), anyInt());
+        // An already-taken SKU would raise IllegalArgumentException if it were checked first.
+        lenient().when(productRepository.findBySku("KEV-TAKEN1")).thenReturn(Optional.of(mock(Product.class)));
+
+        var withTakenSku = new CreateProductUseCase.CreateProductDto(
+                "Produit SKU Pris", null, "KEV-TAKEN1", categoryId, 5000, 0, 0, 10,
+                actorId, 0, null, null, null, null, null);
+
+        var ex = assertThrows(DomainException.class, () -> useCase.execute(withTakenSku));
+        assertEquals(ErrorCode.PLAN_LIMIT_EXCEEDED.name(), ex.getDomainCode());
+        verify(productRepository, never()).findBySku(any());
+        verify(productRepository, never()).save(any());
+    }
 }

@@ -38,7 +38,7 @@ public class StockTransferDeltaProvider implements DeltaEntityProvider {
         map.put("destinationStoreId", str(row[2]));
         map.put("productId", str(row[3]));
         map.put("variantId", str(row[4]));
-        map.put("quantity", num(row[5]));
+        map.put("quantity", DeltaValues.num(row[5]));
         map.put("actorId", str(row[6]));
         map.put("occurredAt", ts(row[7]));
         map.put("status", str(row[8]));
@@ -47,6 +47,5 @@ public class StockTransferDeltaProvider implements DeltaEntityProvider {
     }
 
     private String str(Object o) { return o != null ? o.toString() : null; }
-    private Object num(Object o) { return o != null ? ((Number) o).intValue() : 0; }
     private String ts(Object o) { return o != null ? o.toString() : null; }
 }

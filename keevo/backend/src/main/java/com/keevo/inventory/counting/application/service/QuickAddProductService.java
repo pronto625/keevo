@@ -1,5 +1,7 @@
 package com.keevo.inventory.counting.application.service;
 
+import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.product.domain.event.ProductCreatedEvent;
@@ -44,17 +46,20 @@ public class QuickAddProductService implements QuickAddProductUseCase {
     private final StockLevelRepository stockLevelRepository;
     private final InventoryCountRepository countRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final StoreRepository storeRepository; // v1s-15-9: ProductCreatedEvent.storeName
 
     public QuickAddProductService(InventorySessionRepository sessionRepository,
                                   ProductRepository productRepository,
                                   StockLevelRepository stockLevelRepository,
                                   InventoryCountRepository countRepository,
-                                  ApplicationEventPublisher eventPublisher) {
+                                  ApplicationEventPublisher eventPublisher,
+                                  StoreRepository storeRepository) {
         this.sessionRepository = sessionRepository;
         this.productRepository = productRepository;
         this.stockLevelRepository = stockLevelRepository;
         this.countRepository = countRepository;
         this.eventPublisher = eventPublisher;
+        this.storeRepository = storeRepository;
     }
 
     @Override
@@ -105,31 +110,32 @@ public class QuickAddProductService implements QuickAddProductUseCase {
         InventoryCount savedCount = countRepository.save(count);
 
         // 6. Publish events
-        // Story 14.10: extract actorRole/actorName from SecurityContext
+        // Story 14.10: actorRole/actorName from the authenticated actor.
+        // v1s-15-9: CurrentActor (label never a raw UUID) + storeName from the session's store.
         String actorRole = null;
         String actorName = null;
+        String storeName = null;
         try {
-            var auth = org.springframework.security.core.context.SecurityContextHolder
-                    .getContext().getAuthentication();
-            if (auth != null) {
-                actorRole = auth.getAuthorities().stream()
-                        .findFirst()
-                        .map(org.springframework.security.core.GrantedAuthority::getAuthority)
-                        .map(a -> a.startsWith("ROLE_") ? a.substring(5) : a)
-                        .orElse(null);
-                var details = auth.getDetails();
-                if (details instanceof com.keevo.shared.infrastructure.security.AuthDetails ad) {
-                    actorName = ad.firstName();
-                }
-                if (actorName == null) actorName = cmd.actorId().toString();
+            if (CurrentActor.authentication() != null) {
+                actorRole = CurrentActor.role();
+                actorName = CurrentActor.actorLabel();
             }
         } catch (Exception e) {
             log.warn("[QUICKADD] Actor-context extraction failed for actorId={}: {}", cmd.actorId(), e.getMessage());
         }
+        if (session.getStoreId() != null) {
+            try {
+                storeName = storeRepository.findById(session.getStoreId())
+                        .map(s -> s.name())
+                        .orElse(null);
+            } catch (Exception e) {
+                log.warn("[QUICKADD] Store-name lookup failed for storeId={}: {}", session.getStoreId(), e.getMessage());
+            }
+        }
         eventPublisher.publishEvent(new ProductCreatedEvent(
                 savedProduct.getId(), savedProduct.getName(), savedProduct.getSku(),
                 TenantContext.getCurrentTenant(), cmd.actorId(),
-                actorRole, actorName, null,
+                actorRole, actorName, storeName,
                 now
         ));
         eventPublisher.publishEvent(new InventoryCountSavedEvent(

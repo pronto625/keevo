@@ -70,8 +70,8 @@ public class InventoryCountSyncHandler extends AbstractSyncOperationHandler {
         UUID variantId = p.get("variantId") != null ? UUID.fromString((String) p.get("variantId")) : null;
         String productName = (String) p.get("productName");
         String variantLabel = (String) p.get("variantLabel");
-        int theoretical = ((Number) p.get("theoretical")).intValue();
-        int physical = ((Number) p.get("physical")).intValue();
+        int theoretical = requireIntegralInt(p.get("theoretical"), "theoretical");
+        int physical = requireIntegralInt(p.get("physical"), "physical");
 
         // Keep the device's count id so the pull updates its own row instead of adding one.
         var command = new SaveInventoryCountCommand(

@@ -1,5 +1,6 @@
 package com.keevo.shared.infrastructure.security;
 
+import com.keevo.identity.auth.domain.model.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import org.springframework.context.annotation.Bean;
@@ -112,7 +113,7 @@ public class SecurityConfig {
                                 jakarta.servlet.DispatcherType.ERROR)
                         .permitAll()
                         .requestMatchers(PUBLIC_PATHS).permitAll()
-                        .requestMatchers("/api/v1/admin/**").hasRole("SUPER_ADMIN")
+                        .requestMatchers("/api/v1/admin/**").hasRole(Role.SUPER_ADMIN.name())
                         .anyRequest().authenticated())
 
                 // ── JWT filter: runs before Spring's authentication filter ────

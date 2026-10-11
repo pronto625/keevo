@@ -43,9 +43,9 @@ public class StockMovementDeltaProvider implements DeltaEntityProvider {
         map.put("variantId", str(row[2]));
         map.put("storeId", str(row[3]));
         map.put("movementType", str(row[4]));
-        map.put("quantityBefore", num(row[5]));
-        map.put("quantityChange", num(row[6]));
-        map.put("quantityAfter", num(row[7]));
+        map.put("quantityBefore", DeltaValues.num(row[5]));
+        map.put("quantityChange", DeltaValues.num(row[6]));
+        map.put("quantityAfter", DeltaValues.num(row[7]));
         map.put("actorId", str(row[8]));
         map.put("notes", str(row[9]));
         map.put("occurredAt", ts(row[10]));
@@ -53,6 +53,5 @@ public class StockMovementDeltaProvider implements DeltaEntityProvider {
     }
 
     private String str(Object o) { return o != null ? o.toString() : null; }
-    private Object num(Object o) { return o != null ? ((Number) o).intValue() : 0; }
     private String ts(Object o) { return o != null ? o.toString() : null; }
 }

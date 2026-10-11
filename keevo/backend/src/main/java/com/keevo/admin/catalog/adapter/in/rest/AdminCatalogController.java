@@ -1,12 +1,11 @@
 package com.keevo.admin.catalog.adapter.in.rest;
 
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.admin.catalog.adapter.in.rest.dto.AdminCatalogSummaryDto;
 import com.keevo.admin.catalog.adapter.in.rest.dto.AdminProductPageResponse;
 import com.keevo.admin.catalog.application.service.AdminCatalogService;
 import com.keevo.admin.catalog.domain.model.AdminProductListItem;
 import com.keevo.admin.catalog.domain.port.in.ListProductsQuery;
-import com.keevo.shared.domain.exception.DomainException;
-import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -14,12 +13,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
-import java.util.Collection;
 
 @Tag(name = "Admin — Catalog", description = "Super Admin cross-tenant product catalog monitoring")
 @RestController
@@ -36,7 +32,7 @@ public class AdminCatalogController {
                security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/summary")
     public ResponseEntity<ApiResponseWrapper<AdminCatalogSummaryDto>> getCatalogSummary() {
-        requireSuperAdmin();
+        CurrentActor.requireSuperAdmin();
         return ResponseEntity.ok(ApiResponseWrapper.ok(
                 AdminCatalogSummaryDto.from(adminCatalogService.execute())));
     }
@@ -53,7 +49,7 @@ public class AdminCatalogController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int pageSize) {
 
-        requireSuperAdmin();
+        CurrentActor.requireSuperAdmin();
 
         ListProductsQuery query = new ListProductsQuery(
                 search, tenantId, stockLevel, status, plan,
@@ -73,7 +69,7 @@ public class AdminCatalogController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String plan) {
 
-        requireSuperAdmin();
+        CurrentActor.requireSuperAdmin();
 
         ListProductsQuery query = new ListProductsQuery(
                 search, tenantId, stockLevel, status, plan,
@@ -107,16 +103,6 @@ public class AdminCatalogController {
     }
 
     // ── Private helpers ────────────────────────────────────────────────────────
-
-    private void requireSuperAdmin() {
-        Collection<? extends GrantedAuthority> authorities =
-                SecurityContextHolder.getContext().getAuthentication().getAuthorities();
-        boolean isSuperAdmin = authorities.stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN"));
-        if (!isSuperAdmin) {
-            throw new DomainException(ErrorCode.FORBIDDEN, "SUPER_ADMIN role required");
-        }
-    }
 
     private String escapeCsv(String value) {
         if (value == null) return "";

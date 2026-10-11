@@ -221,4 +221,34 @@ class InventoryCountSyncHandlerTest {
         assertThat(result.reason()).isEqualTo("FORBIDDEN");
         verify(saveInventoryCountUseCase, never()).execute(any());
     }
+
+    // ── v1s-15-9: integral guard ──────────────────────────────────────
+
+    private SyncOperation countWith(Object theoretical, Object physical) {
+        return new SyncOperation("op-int", "SAVE_INVENTORY_COUNT", "entity-1",
+                Map.of("sessionId", UUID.randomUUID().toString(),
+                        "productId", UUID.randomUUID().toString(),
+                        "productName", "Savon",
+                        "theoretical", theoretical,
+                        "physical", physical),
+                Instant.now());
+    }
+
+    @Test
+    void handle_fractionalPhysical_isRejectedNotTruncated() {
+        var result = handler.handle(countWith(50, 47.5), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).startsWith("Invalid physical");
+        verifyNoInteractions(saveInventoryCountUseCase);
+    }
+
+    @Test
+    void handle_outOfRangeTheoretical_isRejected() {
+        var result = handler.handle(countWith(3e10, 47), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).startsWith("Invalid theoretical");
+        verifyNoInteractions(saveInventoryCountUseCase);
+    }
 }

@@ -37,13 +37,12 @@ public class StockLevelDeltaProvider implements DeltaEntityProvider {
         map.put("productId", str(row[1]));
         map.put("variantId", str(row[2]));
         map.put("storeId", str(row[3]));
-        map.put("quantity", num(row[4]));
-        map.put("minimumThreshold", num(row[5]));
+        map.put("quantity", DeltaValues.num(row[4]));
+        map.put("minimumThreshold", DeltaValues.num(row[5]));
         map.put("updatedAt", ts(row[6]));
         return map;
     }
 
     private String str(Object o) { return o != null ? o.toString() : null; }
-    private Object num(Object o) { return o != null ? ((Number) o).intValue() : 0; }
     private String ts(Object o) { return o != null ? o.toString() : null; }
 }

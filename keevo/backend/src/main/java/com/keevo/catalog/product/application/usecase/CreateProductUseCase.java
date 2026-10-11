@@ -128,6 +128,15 @@ public class CreateProductUseCase {
                     "Un produit avec le nom '" + dto.name() + "' existe déjà dans votre catalogue");
         }
 
+        // Plan limit check — all roles — v1s-15-9: same position as
+        // CreateDraftProductUseCase (after name uniqueness, before SKU generation/uniqueness)
+        int currentCount = productCountPort.countActiveProducts();
+        var planType = subscriptionRepository.findActivePlan()
+                .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
+                        "Aucun abonnement actif"))
+                .getPlanType();
+        planLimitGuard.checkProductLimit(planType, currentCount);
+
         // Generate or validate SKU
         String sku = dto.sku() != null ? dto.sku() : generateSku();
         validateSkuUniqueness(sku);
@@ -150,14 +159,6 @@ public class CreateProductUseCase {
             now, // createdAt
             now  // updatedAt
         );
-
-        // Plan limit check — all roles (mirrors CreateDraftProductUseCase AC3)
-        int currentCount = productCountPort.countActiveProducts();
-        var planType = subscriptionRepository.findActivePlan()
-                .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
-                        "Aucun abonnement actif"))
-                .getPlanType();
-        planLimitGuard.checkProductLimit(planType, currentCount);
 
         // Save product
         var saved = productRepository.save(product);

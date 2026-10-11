@@ -41,6 +41,7 @@ class QuickAddProductServiceTest {
     @Mock private StockLevelRepository stockLevelRepository;
     @Mock private InventoryCountRepository countRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private com.keevo.store.store.domain.port.out.StoreRepository storeRepository;
 
     private QuickAddProductService service;
 
@@ -56,7 +57,7 @@ class QuickAddProductServiceTest {
     void setUp() {
         service = new QuickAddProductService(
                 sessionRepository, productRepository, stockLevelRepository,
-                countRepository, eventPublisher);
+                countRepository, eventPublisher, storeRepository);
         TenantContext.setCurrentTenant(TENANT);
 
         inProgressSession = new InventorySession(
@@ -68,6 +69,7 @@ class QuickAddProductServiceTest {
     @AfterEach
     void tearDown() {
         TenantContext.clear();
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -193,5 +195,55 @@ class QuickAddProductServiceTest {
         assertThat(countEvent.theoretical()).isZero();
         assertThat(countEvent.physical()).isEqualTo(2);
         assertThat(countEvent.ecart()).isEqualTo(2);
+    }
+
+    // ── v1s-15-9: storeName + centralised actor extraction ───────────────
+
+    private ProductCreatedEvent quickAddAndCaptureProductEvent() {
+        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
+        when(productRepository.existsByName("Pagne")).thenReturn(false);
+        when(productRepository.save(any(Product.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(stockLevelRepository.save(any(StockLevel.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(countRepository.save(any(InventoryCount.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.execute(new QuickAddProductCommand(SESSION_ID, "Pagne", CATEGORY_ID, 1, null, ACTOR_ID));
+
+        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, times(2)).publishEvent(eventCaptor.capture());
+        return (ProductCreatedEvent) eventCaptor.getAllValues().get(0);
+    }
+
+    private static void authenticateEmployee(String firstName) {
+        var auth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                ACTOR_ID, null,
+                java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_EMPLOYEE")));
+        auth.setDetails(com.keevo.shared.infrastructure.security.AuthDetails.employee(firstName, STORE_ID));
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
+    }
+
+    @Test
+    @DisplayName("v1s-15-9 — ProductCreatedEvent carries the session store's name")
+    void execute_publishesStoreNameOfSessionStore() {
+        authenticateEmployee("Awa");
+        when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(new com.keevo.store.store.domain.model.Store(
+                STORE_ID, "Boutique Akwa", com.keevo.store.store.domain.model.StoreType.STORE,
+                null, null, true, Instant.now(), Instant.now())));
+
+        ProductCreatedEvent event = quickAddAndCaptureProductEvent();
+
+        assertThat(event.storeName()).isEqualTo("Boutique Akwa");
+        assertThat(event.actorRole()).isEqualTo("EMPLOYEE");
+        assertThat(event.actorName()).isEqualTo("Awa");
+    }
+
+    @Test
+    @DisplayName("v1s-15-9 — missing firstName claim falls back to 'Un employé', never the UUID")
+    void execute_missingFirstName_usesFallbackLabel() {
+        authenticateEmployee(null);
+
+        ProductCreatedEvent event = quickAddAndCaptureProductEvent();
+
+        assertThat(event.actorName()).isEqualTo("Un employé");
+        assertThat(event.actorName()).doesNotContain(ACTOR_ID.toString());
     }
 }

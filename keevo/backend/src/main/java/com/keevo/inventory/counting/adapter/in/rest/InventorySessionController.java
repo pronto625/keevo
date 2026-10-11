@@ -1,5 +1,6 @@
 package com.keevo.inventory.counting.adapter.in.rest;
 
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.inventory.counting.adapter.in.rest.dto.CreateInventorySessionRequestDto;
 import com.keevo.inventory.counting.adapter.in.rest.dto.InventorySessionResponseDto;
 import com.keevo.inventory.counting.adapter.in.rest.dto.ValidateInventoryResponseDto;
@@ -7,7 +8,6 @@ import com.keevo.inventory.counting.domain.model.InventorySession;
 import com.keevo.inventory.counting.domain.port.in.*;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.security.AuthDetails;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import io.swagger.v3.oas.annotations.Operation;
@@ -19,7 +19,6 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
@@ -64,7 +63,7 @@ public class InventorySessionController {
             @Valid @RequestBody CreateInventorySessionRequestDto request) {
 
         // Story 12.6 — EMPLOYEE scoped to assigned store (FR36)
-        UUID assignedStoreId = extractAssignedStoreId();
+        UUID assignedStoreId = CurrentActor.assignedStoreId();
         if (assignedStoreId != null && !assignedStoreId.equals(request.storeId())) {
             throw new DomainException(ErrorCode.FORBIDDEN,
                     "EMPLOYEE cannot start inventory session for another store");
@@ -149,12 +148,7 @@ public class InventorySessionController {
     public ResponseEntity<ApiResponseWrapper<ValidateInventoryResponseDto>> validateInventory(
             @PathVariable UUID id) {
         // Defense-in-depth: explicit role check (testable with standaloneSetup)
-        boolean isOwner = SecurityContextHolder.getContext().getAuthentication()
-                .getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_OWNER"));
-        if (!isOwner) {
-            throw new DomainException(ErrorCode.FORBIDDEN, "Only OWNER can validate inventory");
-        }
+        CurrentActor.requireOwner("Only OWNER can validate inventory");
         UUID actorId = extractActorId();
         var result = validateInventoryUseCase.execute(
                 new ValidateInventoryCommand(id, actorId));
@@ -175,25 +169,5 @@ public class InventorySessionController {
         }
         String token = authHeader.substring(7);
         return jwtTokenProvider.extractRole(jwtTokenProvider.parseToken(token));
-    }
-
-    /**
-     * Story 12.6 — Returns the store UUID embedded in JWT details for EMPLOYEE tokens,
-     * or null for OWNER tokens (OWNER is never scoped).
-     *
-     * <p>Story 14.10: adapted to {@link AuthDetails}.
-     */
-    private UUID extractAssignedStoreId() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        Object details = auth.getDetails();
-        if (details instanceof AuthDetails ad && ad.storeId() != null) {
-            return ad.storeId();
-        }
-        boolean isEmployee = auth.getAuthorities().stream()
-                .anyMatch(a -> "ROLE_EMPLOYEE".equals(a.getAuthority()));
-        if (isEmployee) {
-            throw new DomainException(ErrorCode.FORBIDDEN, "EMPLOYEE token missing assigned store");
-        }
-        return null;
     }
 }

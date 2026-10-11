@@ -41,4 +41,18 @@ public interface TenantRepository {
      * Returns all tenants regardless of status (scheduler filters by ACTIVE).
      */
     java.util.List<Tenant> findAll();
+
+    /**
+     * v1s-15-9 — DELETION_PENDING tenants whose {@code deletionScheduledAt} is at or before
+     * {@code now} (replaces loading every tenant in the deletion scheduler).
+     */
+    java.util.List<Tenant> findDeletionsDueBy(java.time.Instant now);
+
+    /**
+     * v1s-15-9 — conditional owner cancel: sets ACTIVE (date cleared) only when the tenant is
+     * still DELETION_PENDING, its grace period has not expired and its schema still exists.
+     *
+     * @return {@code true} when exactly one row was reactivated
+     */
+    boolean cancelPendingDeletion(String schemaName);
 }

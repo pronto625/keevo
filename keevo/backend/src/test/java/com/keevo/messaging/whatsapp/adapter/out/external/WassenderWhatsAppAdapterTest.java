@@ -95,6 +95,14 @@ class WassenderWhatsAppAdapterTest {
     }
 
     @Test
+    void isConfigured_missingOrBlankToken_returnsFalse() {
+        assertFalse(new WassenderWhatsAppAdapter(restTemplate,
+                new WassenderProperties("https://www.wasenderapi.com", null)).isConfigured());
+        assertFalse(new WassenderWhatsAppAdapter(restTemplate,
+                new WassenderProperties("https://www.wasenderapi.com", "   ")).isConfigured());
+    }
+
+    @Test
     void sendReport_setsCorrectHeaders() {
         when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
                 .thenReturn(new ResponseEntity<>("{}", HttpStatus.OK));

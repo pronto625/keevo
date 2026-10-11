@@ -1,5 +1,6 @@
 package com.keevo.shared.infrastructure.config;
 
+import com.keevo.identity.auth.domain.model.Role;
 import com.keevo.shared.domain.PhoneNumbers;
 import com.keevo.identity.auth.adapter.out.persistence.entity.TenantJpaEntity;
 import com.keevo.identity.auth.adapter.out.persistence.entity.UserJpaEntity;
@@ -115,7 +116,7 @@ public class AdminAccountInitializer implements ApplicationRunner {
                     adminUserId,
                     phone,
                     hash,
-                    "SUPER_ADMIN",
+                    Role.SUPER_ADMIN.name(),
                     true,
                     0,
                     null
@@ -136,7 +137,7 @@ public class AdminAccountInitializer implements ApplicationRunner {
                 .findByUserIdAndTenantId(adminUserId, ADMIN_TENANT_ID).isPresent();
         if (!hasMembership) {
             membershipSpringRepository.save(new UserTenantMembershipJpaEntity(
-                    UUID.randomUUID(), adminUserId, ADMIN_TENANT_ID, "SUPER_ADMIN", true));
+                    UUID.randomUUID(), adminUserId, ADMIN_TENANT_ID, Role.SUPER_ADMIN.name(), true));
             log.info("[AdminInit] SUPER_ADMIN membership created for userId={}", adminUserId);
         }
     }

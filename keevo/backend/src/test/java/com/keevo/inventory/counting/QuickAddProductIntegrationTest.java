@@ -41,6 +41,7 @@ class QuickAddProductIntegrationTest {
     @Mock private StockLevelRepository stockLevelRepository;
     @Mock private InventoryCountRepository countRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private com.keevo.store.store.domain.port.out.StoreRepository storeRepository;
 
     private QuickAddProductService service;
 
@@ -53,7 +54,7 @@ class QuickAddProductIntegrationTest {
     void setUp() {
         service = new QuickAddProductService(
                 sessionRepository, productRepository, stockLevelRepository,
-                countRepository, eventPublisher);
+                countRepository, eventPublisher, storeRepository);
         TenantContext.setCurrentTenant("tenant_integration");
     }
 
