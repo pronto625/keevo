@@ -8,7 +8,9 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -30,4 +32,10 @@ public interface RefreshTokenSpringRepository extends JpaRepository<RefreshToken
     @Modifying
     @Query("UPDATE RefreshTokenJpaEntity r SET r.revoked = true WHERE r.userId = :userId")
     void revokeAllByUserId(@Param("userId") UUID userId);
+
+    /** Story 12.12 — purge expired refresh tokens (see port). */
+    @Transactional // own tx when called by the cleanup job
+    @Modifying
+    @Query(value = "DELETE FROM public.refresh_tokens WHERE expires_at < :cutoff", nativeQuery = true)
+    int purgeExpiredBefore(@Param("cutoff") Instant cutoff);
 }

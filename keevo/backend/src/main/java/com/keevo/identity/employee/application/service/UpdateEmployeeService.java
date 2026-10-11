@@ -1,5 +1,6 @@
 package com.keevo.identity.employee.application.service;
 
+import com.keevo.shared.domain.PhoneNumbers;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.employee.domain.event.EmployeeUpdatedEvent;
@@ -80,12 +81,14 @@ public class UpdateEmployeeService implements UpdateEmployeeUseCase {
             if (!PHONE_PATTERN.matcher(command.phoneNumber()).matches()) {
                 throw new DomainException(ErrorCode.VALIDATION_FAILED, "Invalid phone number format");
             }
-            if (!command.phoneNumber().equals(user.getPhoneNumber())) {
+            // Story 12.12 — canonical +<digits> form before comparison, uniqueness check and persist
+            String phone = PhoneNumbers.normalize(command.phoneNumber());
+            if (!phone.equals(user.getPhoneNumber())) {
                 // Check uniqueness cross-tenant
-                if (userRepository.existsByPhoneNumber(command.phoneNumber())) {
+                if (userRepository.existsByPhoneNumber(phone)) {
                     throw new DomainException(ErrorCode.PHONE_ALREADY_REGISTERED);
                 }
-                user = user.withPhoneNumber(command.phoneNumber());
+                user = user.withPhoneNumber(phone);
                 user = userRepository.save(user);
                 phoneChanged = true;
                 fieldsChanged.add("phoneNumber");

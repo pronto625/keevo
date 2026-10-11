@@ -1,5 +1,6 @@
 package com.keevo.identity.employee.application.service;
 
+import com.keevo.shared.domain.PasswordLimits;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
 import com.keevo.identity.auth.domain.port.out.TokenRevocationPort;
@@ -54,7 +55,9 @@ public class SetEmployeePasswordService implements SetEmployeePasswordUseCase {
     public void execute(SetEmployeePasswordCommand command) {
         // 0. Validate password strength (same rule as ChangePasswordService: ≥8 chars, ≥1 digit)
         String newPassword = command.newPassword();
-        if (newPassword == null || newPassword.length() < 8 || !newPassword.matches(".*\\d.*")) {
+        if (newPassword == null || newPassword.length() < 8
+                || PasswordLimits.exceedsBcryptLimit(newPassword) // Story 12.12 — BCrypt 72-byte limit
+                || !newPassword.matches(".*\\d.*")) {
             throw new DomainException(ErrorCode.VALIDATION_FAILED,
                     "Password must be at least 8 characters with at least 1 digit");
         }

@@ -94,6 +94,20 @@ class AdminTenantServiceTest {
     }
 
     @Test
+    @DisplayName("12.12 — phone search matches the raw term and its '+<digits>' form")
+    void listTenants_phoneSearch_matchesNormalisedPhone() {
+        when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(0L);
+        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class)))
+                .thenReturn(List.of());
+
+        service.execute(new ListTenantsQuery("237600000001", null, null, null, null, null, null, 0, 25));
+
+        verify(jdbcTemplate).queryForObject(
+                org.mockito.ArgumentMatchers.contains("owner.phone_number IN (?, ?)"), eq(Long.class),
+                eq("%237600000001%"), eq("237600000001"), eq("+237600000001"));
+    }
+
+    @Test
     @DisplayName("listTenants — with PAID plan filter — filters Premium plans")
     void listTenants_withPlanFilter_filtersCorrectly() {
         UUID id = UUID.randomUUID();

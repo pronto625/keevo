@@ -1,5 +1,7 @@
 package com.keevo.identity.auth.application.service;
 
+import com.keevo.shared.domain.PasswordLimits;
+import com.keevo.shared.domain.PhoneNumbers;
 import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.model.UserRegisteredEvent;
@@ -62,8 +64,16 @@ public class RegistrationService implements RegisterUserUseCase {
     @Override
     @Transactional
     public RegistrationResult register(RegisterUserCommand command) {
+        // Story 12.12 — canonical +<digits> form before uniqueness check and persist
+        String phone = PhoneNumbers.normalize(command.phoneNumber());
+
+        // Story 12.12 — BCrypt rejects > 72 UTF-8 bytes (would be a 500); DTO @Size counts chars
+        if (PasswordLimits.exceedsBcryptLimit(command.password())) {
+            throw new DomainException(ErrorCode.VALIDATION_FAILED, "password must not exceed 72 bytes");
+        }
+
         // 1. Check phone number uniqueness (AC3 — USER_ALREADY_EXISTS)
-        if (userRepository.existsByPhoneNumber(command.phoneNumber())) {
+        if (userRepository.existsByPhoneNumber(phone)) {
             throw new DomainException(ErrorCode.USER_ALREADY_EXISTS);
         }
 
@@ -77,7 +87,7 @@ public class RegistrationService implements RegisterUserUseCase {
         Tenant tenant = tenantFactory.create();
 
         // 4. Create user domain object and persist (AC1 — no tenantId on User, Story 1.7)
-        User user = User.newOwner(command.phoneNumber(), passwordHash);
+        User user = User.newOwner(phone, passwordHash);
         User savedUser = userRepository.save(user);
 
         // 4b. Create OWNER membership in the new tenant (Story 1.7 — AC1)

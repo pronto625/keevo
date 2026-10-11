@@ -1,5 +1,6 @@
 package com.keevo.admin.tenant.application.service;
 
+import com.keevo.shared.domain.PhoneNumbers;
 import com.keevo.admin.tenant.domain.model.*;
 import com.keevo.admin.tenant.domain.port.in.*;
 import com.keevo.shared.domain.exception.DomainException;
@@ -180,10 +181,13 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
                 .append(ADMIN_TENANT_ID).append("'::uuid");
 
         if (q.search() != null && !q.search().isBlank()) {
-            sb.append(" AND (t.name ILIKE ? OR owner.phone_number = ?)");
+            // Story 12.12 — phones are stored as '+<digits>' (V10): match the raw term and its
+            // normalised form so '237…' still finds '+237…'.
+            sb.append(" AND (t.name ILIKE ? OR owner.phone_number IN (?, ?))");
             String like = "%" + q.search().trim() + "%";
             params.add(like);
             params.add(q.search().trim());
+            params.add(PhoneNumbers.normalize(q.search()));
         }
 
         if (q.plan() != null && !q.plan().isBlank() && !q.plan().equals("ALL")) {

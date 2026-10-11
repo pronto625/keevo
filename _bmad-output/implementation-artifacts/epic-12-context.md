@@ -18,9 +18,9 @@ Close the security findings from the 2026-07-20 audit (S1–S9, S12, B-HIGH-5/6/
 - Story 12.7: Flutter hardening: secure storage, Bearer logs, HTTPS (done)
 - Story 12.8: RBAC on `/api/v1/sync/push` handlers (done; tracker-only, no epics heading)
 - Story 12.9: Transfer completion scoped to destination store (done; tracker-only)
-- Story 12.10: Residual sync RBAC (PROMOTE_PRODUCT, TOGGLE_CATEGORY, inventory session) (in progress)
+- Story 12.10: Residual sync RBAC (PROMOTE_PRODUCT, TOGGLE_CATEGORY, inventory session) (done)
 - Story 12.11: Transfers: an employee transfers only from their own store (REST + sync) (done)
-- Story 12.12: Auth & session hardening (JWT filter, revocation cache, password reset, sync device ownership) (backlog)
+- Story 12.12: Auth & session hardening (JWT filter, revocation cache, password reset, refresh tokens, sync device ownership) (done)
 - Story 12.13: Prod secrets & config hardening (ProdSecretsValidator extension) (backlog)
 
 ## Requirements & Constraints
@@ -33,7 +33,7 @@ Close the security findings from the 2026-07-20 audit (S1–S9, S12, B-HIGH-5/6/
 - **Secrets.** Passwords use bcrypt with cost ≥12. The prod private key must not be world-readable. Prod must fail fast on any weak or defaulted secret (DB password, provider tokens, admin password).
 - **Client secrets.** Tokens are stored encrypted on every platform. Authorization headers never reach release logs. HTTPS is the default.
 - **Tests.** Each RBAC change ships tests for: EMPLOYEE own store (allowed), EMPLOYEE other store (403/REJECTED, use case never invoked) and OWNER (unchanged).
-- **Deferred items.** Stories 12.10–12.13 carry routed deferred-work items. Each item must be resolved, or rejected with a reason recorded beside it (box ticked, commit or decision noted). deferred-work stays empty.
+- **Deferred items.** Stories 12.10–12.13 carry routed deferred-work items (12.12 has 24). Each item must be resolved, or rejected with a reason recorded beside it (box ticked, commit or decision noted). deferred-work stays empty.
 
 ## Technical Decisions
 
@@ -49,7 +49,9 @@ Close the security findings from the 2026-07-20 audit (S1–S9, S12, B-HIGH-5/6/
 - **Revocation mechanism.**
   - `tokens_valid_after` on `user_tenant_memberships`, behind `TokenRevocationPort` with Jdbc and cached (≤5 min) adapters. The filter rejects `iat < tokens_valid_after`.
   - EMPLOYEE status is also checked per request (defense-in-depth).
-  - 12.12 hardens the cache (Caffeine bounds, atomic load, injected Clock) and adds a clock-skew policy.
+  - 12.12 hardens the cache: Caffeine `expireAfterWrite` + `maximumSize`, atomic load (no stale re-population, no stampede), injected `Clock` so TTL expiry is testable, debug logs on miss/invalidate. It also adds a clock-skew policy (allowed skew + reject far-future `iat`).
+- **Tokens.** Access JWT plus opaque, hashed refresh token in `public.refresh_tokens` (30 days, rotation). Rotated rows need a purge job and an index.
+- **Passwords.** Passwords are capped at 72 UTF-8 bytes (BCrypt limit; Spring Security 6.5 throws above it): `@Size(max = 72)` on every password DTO field plus a byte check in the services before any encode/matches. Phone numbers are normalised to the canonical `+<digits>` form before lookups and uniqueness checks.
 - **Error contract.**
   - The `ErrorCode` enum is mapped by `GlobalExceptionHandler`: `SESSION_REVOKED` → 401, `FORBIDDEN` → 403.
   - The access-denied handler must return a JSON body, not servlet HTML (12.12).
@@ -66,14 +68,16 @@ Close the security findings from the 2026-07-20 audit (S1–S9, S12, B-HIGH-5/6/
 
 ## Cross-Story Dependencies
 
-- **12.11 (done)** restored the transfer-source rule on REST (`StockTransferController`) and sync (`TransferSyncHandler`) using the 12.6/12.8 helpers, without touching 12.9's destination-scope check on `complete()`. Its two routed items are resolved (sync EMPLOYEE source = JWT store; tenant membership already enforced by the transfer service's store lookup; `_shouldShowReceiveButton` widget tests added). Later stories must not regress it.
-- **12.10** extends the same sync-handler pattern to `ProductSyncHandler`, `CategorySyncHandler` and `InventorySessionSyncHandler`.
-  - It passes the real actor role into `UpdateProductDto` instead of the `"OWNER"` default.
-  - It also makes null-auth fail closed in `AbstractSyncOperationHandler` (today null auth is treated as OWNER). That change affects every sync handler, including 12.11's transfer handler; re-run their tests.
-  - TOGGLE_CATEGORY sync must become OWNER-only, matching the REST delete/toggle.
-- **12.12** follows up on reviews of 12.2, 12.3, 12.5, 13.2, 14.11 and 14.12.
-  - It touches `JwtAuthFilter`, `CachedTokenRevocationAdapter`, password reset, `SyncController` device ownership and `SecurityConfig`.
-  - One item needs a PO decision: whether cancelling a deletion should restore SUSPENDED.
+- **12.11 (done)** restored the EMPLOYEE transfer-source rule on REST and sync without touching 12.9's destination check on `complete()`. Later stories must not regress it.
+- **12.10 (done)** made PROMOTE_PRODUCT and TOGGLE_CATEGORY OWNER-only (sync + REST), scoped inventory session/counts to the employee's store (sync + REST), passed the real actor role into product updates, and made null auth fail closed in `AbstractSyncOperationHandler` (every sync handler, including transfer). Sync handler tests must authenticate explicitly. The InventorySessionSyncHandler use-case bypass is routed to 13.8.
+- **12.12 (done)** closes residual review findings from 12.2, 12.3, 12.5, 13.2, 14.5, 14.11, 14.12 and the UI-3 backend review. Its seams:
+  - `JwtAuthFilter`: OWNER tokens with an invalid tenantId must give 401, not 500. Tenant validation applies to every role. Multiple-row results map to a controlled error. JWT claim values are sanitised before they reach exception messages or logs. Merging the OWNER and EMPLOYEE revocation lookups into one round-trip was rejected: the Caffeine cache already coalesces OWNER lookups to one DB load per (user, tenant) per 5 min.
+  - `CachedTokenRevocationAdapter` (see Technical Decisions).
+  - Password reset: send the WhatsApp OTP after commit, not inside the transaction. Attempt counting is concurrency-safe (`@Version` or atomic UPDATE). Reset tokens get an index and a purge job. The rate limiter is bounded. No raw phone PII in events.
+  - `SessionTokenIssuer` must not swallow a SQL error inside the caller's transaction (Postgres aborts it).
+  - `SecurityConfig`: the 403 body is JSON.
+  - `SyncController` device ownership: no TOCTOU (`device_id` PK + guarded ON CONFLICT that never reassigns the owner), a security log on DEVICE_ID_MISMATCH. The distinct 403 is kept on purpose (client UUIDv4 device ids make enumeration infeasible); the security log makes probing visible.
+  - Suspended tenant deletion (PO decision): a SUSPENDED tenant cannot request deletion (403 `ACCOUNT_SUSPENDED`), so request + cancel can no longer restore ACTIVE; erasure stays available via SUPER_ADMIN `forceDelete`.
 - **12.13** extends Story 10.3's `ProdSecretsValidator` and relates to 12.1.
 - Client-side session revocation spans 12.2, 12.7 and 14.9 (suspension banners).
 - Outside this epic: access-token lifetime (60 days configured vs 24 h specified) is an open audit finding with no story yet. A future roles & privileges module is noted but not planned.

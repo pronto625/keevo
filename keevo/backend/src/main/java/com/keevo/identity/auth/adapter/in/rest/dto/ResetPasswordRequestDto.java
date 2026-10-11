@@ -1,6 +1,7 @@
 package com.keevo.identity.auth.adapter.in.rest.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.Pattern;
 
 /**
@@ -18,5 +19,6 @@ public record ResetPasswordRequestDto(
         String code,
 
         @NotBlank
+        @Size(max = 72) // Story 12.12 — bcrypt 72-byte limit (never a 500); min/digit rule stays in the service (422 VALIDATION_FAILED)
         String newPassword
 ) {}

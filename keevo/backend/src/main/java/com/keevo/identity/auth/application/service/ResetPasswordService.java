@@ -11,6 +11,8 @@ import com.keevo.identity.auth.domain.port.out.TokenRevocationPort;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
+import com.keevo.shared.domain.PasswordLimits;
+import com.keevo.shared.domain.PhoneNumbers;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import org.slf4j.Logger;
@@ -44,6 +46,9 @@ public class ResetPasswordService implements ResetPasswordUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(ResetPasswordService.class);
 
+    static final int MAX_ATTEMPTS = 5;
+    static final int MIN_PASSWORD_LENGTH = 8;
+
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final UserRepository userRepository;
     private final EmployeeRepository employeeRepository;
@@ -69,12 +74,12 @@ public class ResetPasswordService implements ResetPasswordUseCase {
     }
 
     @Override
-    // Wrong codes throw DomainException after saving attempts+1: that write
-    // must commit, or the 5-attempt lock is never reached. Every other
-    // DomainException here is thrown before any write.
+    // Wrong codes throw DomainException after the attempt claim (attempts+1) was written: that
+    // write must commit, or the 5-attempt lock is never reached. Every other DomainException
+    // here is thrown before any write, or after the CAS consumption (which must stick too).
     @Transactional(noRollbackFor = DomainException.class)
     public void execute(ResetPasswordCommand command) {
-        String phone = command.phoneNumber();
+        String phone = PhoneNumbers.normalize(command.phoneNumber()); // Story 12.12
 
         // 1. Find active token for this phone number
         PasswordResetToken token = passwordResetTokenRepository.findActiveByPhoneNumber(phone)
@@ -90,22 +95,35 @@ public class ResetPasswordService implements ResetPasswordUseCase {
             throw new DomainException(ErrorCode.CODE_LOCKED);
         }
 
-        // 4. Verify code hash
+        // 4. Validate new password (same rules as ChangePasswordService, duplicated per convention).
+        // Story 12.12: BEFORE the attempt claim — a correct code with a weak password must not burn
+        // an attempt (and never lock the user out).
+        // Max-length guard BEFORE bcrypt.encode(): Spring Security 6.5 BCrypt rejects > 72 bytes
+        // with IllegalArgumentException (→ 500) — cap on UTF-8 bytes, not chars (Story 12.12).
+        String newPassword = command.newPassword();
+        if (newPassword == null || newPassword.length() < MIN_PASSWORD_LENGTH
+                || PasswordLimits.exceedsBcryptLimit(newPassword)
+                || !newPassword.matches(".*\\d.*")) {
+            throw new DomainException(ErrorCode.VALIDATION_FAILED,
+                    "password length must be 8-72 and contain at least one digit");
+        }
+
+        // 4b. Story 12.12 — claim the attempt ATOMICALLY before the bcrypt compare. The
+        // conditional UPDATE (attempts < max AND consumed_at IS NULL) serialises concurrent
+        // guesses on the row lock: the counter can never exceed the cap; extra guesses → locked.
+        if (!passwordResetTokenRepository.tryClaimAttempt(token.id(), MAX_ATTEMPTS)) {
+            throw new DomainException(ErrorCode.CODE_LOCKED);
+        }
+
+        // 5. Verify code hash (attempt already counted and committed via noRollbackFor)
         if (!passwordEncoder.matches(command.code(), token.codeHash())) {
-            // Increment attempts
-            PasswordResetToken updated = token.withAttempts(token.attempts() + 1);
-            passwordResetTokenRepository.save(updated);
             throw new DomainException(ErrorCode.INVALID_OR_EXPIRED_CODE);
         }
 
-        // 5. Validate new password (same rules as ChangePasswordService, duplicated per convention)
-        // Max-length guard BEFORE bcrypt.encode() — bcrypt cost 12 on very long strings
-        // is CPU-expensive (DoS vector on public endpoint, no rate-limit per IP here).
-        String newPassword = command.newPassword();
-        if (newPassword.length() < 8 || newPassword.length() > 128
-                || !newPassword.matches(".*\\d.*")) {
-            throw new DomainException(ErrorCode.VALIDATION_FAILED,
-                    "password length must be 8-128 and contain at least one digit");
+        // 5b. Story 12.12 — consume the token with a compare-and-set BEFORE any password write:
+        // of two parallel correct submissions only one passes, the other gets INVALID_OR_EXPIRED_CODE.
+        if (!passwordResetTokenRepository.markConsumed(token.id(), Instant.now())) {
+            throw new DomainException(ErrorCode.INVALID_OR_EXPIRED_CODE);
         }
 
         // 6. Update password hash on User
@@ -115,22 +133,18 @@ public class ResetPasswordService implements ResetPasswordUseCase {
         User updatedUser = user.withPasswordHash(newHash);
         userRepository.save(updatedUser);
 
-        // 7. Consume the token
-        PasswordResetToken consumed = token.withConsumed(Instant.now());
-        passwordResetTokenRepository.save(consumed);
-
-        // 8. Clear passwordChangeRequired flag on Employee (if employee record exists)
+        // 7. Clear passwordChangeRequired flag on Employee (if employee record exists)
         // Mirror ChangePasswordService.java L101-107 — user may be OWNER without employee record
         Optional<Employee> employeeOpt = employeeRepository.findByUserId(user.getId());
         employeeOpt.ifPresent(emp ->
                 employeeRepository.updatePasswordChangeRequired(emp.getId(), false));
 
-        // 9. Revoke ALL sessions across all tenants (reuse Story 12.2 — ChangePasswordService L118):
+        // 8. Revoke ALL sessions across all tenants (reuse Story 12.2 — ChangePasswordService L118):
         //    refresh tokens too, otherwise a stolen one keeps renewing the session.
         refreshTokenRepository.revokeAllByUserId(user.getId());
         tokenRevocationPort.revokeAllSessionsEverywhere(user.getId());
 
-        // 10. Publish event (AC3 — after all writes)
+        // 9. Publish event (AC3 — after all writes)
         eventPublisher.publishEvent(new PasswordResetEvent(user.getId(), Instant.now()));
 
         log.info("reset-password: password reset successful for userId={}", user.getId());

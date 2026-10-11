@@ -289,4 +289,72 @@ class SyncControllerPushGateTest {
                         .content(mapper.writeValueAsString(validPushBody("device-legacy"))))
                 .andExpect(status().isOk());
     }
+
+    // ── Story 12.12 — security log helpers ───────────────────────────────────
+
+    private ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> captureSecurityLog() {
+        var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger("SECURITY");
+        var appender = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        appender.start();
+        logger.addAppender(appender);
+        return appender;
+    }
+
+    private void releaseSecurityLog(ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender) {
+        ((ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger("SECURITY")).detachAppender(appender);
+    }
+
+    @Test
+    void mismatchOnPushEmitsSecurityWarnWithActorOwnerTenantPath() throws Exception {
+        mockJwt("OWNER");
+        UUID ownerId = UUID.randomUUID();
+        when(userSyncStateRepository.findByDeviceId("device-A"))
+                .thenReturn(Optional.of(new UserSyncState(
+                        "device-A", ownerId, "kv_abc123", Instant.now(), null, Instant.now())));
+        var appender = captureSecurityLog();
+        try {
+            mockMvc.perform(post("/api/v1/sync/push")
+                            .header("Authorization", "Bearer fake-jwt")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(mapper.writeValueAsString(validPushBody("device-A"))))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.domainCode").value("DEVICE_ID_MISMATCH"));
+
+            org.assertj.core.api.Assertions.assertThat(appender.list).singleElement()
+                    .satisfies(e -> {
+                        org.assertj.core.api.Assertions.assertThat(e.getLevel())
+                                .isEqualTo(ch.qos.logback.classic.Level.WARN);
+                        org.assertj.core.api.Assertions.assertThat(e.getFormattedMessage())
+                                .contains("actorId=" + actorId, "ownerId=" + ownerId,
+                                        "tenantId=kv_abc123", "deviceId=device-A", "/api/v1/sync/push");
+                    });
+        } finally {
+            releaseSecurityLog(appender);
+        }
+        org.mockito.Mockito.verify(syncUseCase, org.mockito.Mockito.never()).pushBatch(any());
+        org.mockito.Mockito.verify(userSyncStateRepository, org.mockito.Mockito.never()).upsert(any());
+    }
+
+    @Test
+    void guardedUpsertWritingNothingOnPushLogsWarn() throws Exception {
+        mockJwt("OWNER");
+        when(userSyncStateRepository.findByDeviceId("device-race")).thenReturn(Optional.empty());
+        when(syncGateCheckService.isStalePush("device-race")).thenReturn(false);
+        when(syncUseCase.pushBatch(any())).thenReturn(new SyncBatchResult(Instant.now(), List.of()));
+        when(userSyncStateRepository.upsert(any())).thenReturn(false);
+        var appender = captureSecurityLog();
+        try {
+            mockMvc.perform(post("/api/v1/sync/push")
+                            .header("Authorization", "Bearer fake-jwt")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(mapper.writeValueAsString(validPushBody("device-race"))))
+                    .andExpect(status().isOk());
+
+            org.assertj.core.api.Assertions.assertThat(appender.list)
+                    .anySatisfy(e -> org.assertj.core.api.Assertions.assertThat(e.getFormattedMessage())
+                            .contains("DEVICE_OWNERSHIP_RACE", "deviceId=device-race"));
+        } finally {
+            releaseSecurityLog(appender);
+        }
+    }
 }

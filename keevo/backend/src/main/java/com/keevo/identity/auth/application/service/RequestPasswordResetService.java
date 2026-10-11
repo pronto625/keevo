@@ -8,17 +8,21 @@ import com.keevo.identity.auth.domain.port.in.RequestPasswordResetUseCase;
 import com.keevo.identity.auth.domain.port.out.PasswordResetTokenRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.shared.domain.PhoneNumbers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * RequestPasswordResetService — Orchestrates the forgot-password flow.
@@ -57,11 +61,12 @@ public class RequestPasswordResetService implements RequestPasswordResetUseCase 
     @Override
     @Transactional
     public void execute(RequestPasswordResetCommand command) {
-        String phone = command.phoneNumber();
+        // Story 12.12 — canonical +<digits> so '237…' and '+237…' resolve to the same user/bucket
+        String phone = PhoneNumbers.normalize(command.phoneNumber());
 
         // Rate-limit check FIRST — if exceeded, silently return (D1)
         if (!rateLimiter.tryAcquire(phone)) {
-            log.debug("forgot-password rate-limited for phone={}", phone);
+            log.debug("forgot-password rate-limited");
             return;
         }
 
@@ -74,7 +79,7 @@ public class RequestPasswordResetService implements RequestPasswordResetUseCase 
             // attacker measuring response times could distinguish existing vs non-existing
             // phone numbers, breaking anti-enumeration.
             passwordEncoder.encode("dummy-otp-timing-pad");
-            log.debug("forgot-password: no user found for phone={}", phone);
+            log.debug("forgot-password: no user found");
             return;
         }
 
@@ -93,13 +98,32 @@ public class RequestPasswordResetService implements RequestPasswordResetUseCase 
                 user.getId(), phone, codeHash, expiresAt);
         passwordResetTokenRepository.save(token);
 
-        // Send OTP via WhatsApp
-        whatsAppPort.sendOtp(phone, code);
+        // Story 12.12 — send the OTP AFTER commit: no DB connection held during the WhatsApp
+        // network call, and no code sent for a token that rolled back. Still runs before the HTTP
+        // response (afterCommit is synchronous on the request thread) → anti-enumeration timing
+        // unchanged. A WhatsApp failure is logged (without the phone) and never fails the request.
+        final UUID userId = user.getId();
+        Runnable send = () -> {
+            try {
+                whatsAppPort.sendOtp(phone, code);
+                log.info("forgot-password: OTP generated and sent for userId={}", userId);
+            } catch (RuntimeException e) {
+                log.error("forgot-password: OTP send failed for userId={}: {}", userId, e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    send.run();
+                }
+            });
+        } else {
+            send.run();
+        }
 
-        // Publish event (only if user exists — anti-enumeration, AC2)
-        eventPublisher.publishEvent(new PasswordResetRequestedEvent(
-                user.getId(), phone, Instant.now()));
+        // Publish event (only if user exists — anti-enumeration, AC2). No phone (PII) — 12.12.
+        eventPublisher.publishEvent(new PasswordResetRequestedEvent(userId, Instant.now()));
 
-        log.info("forgot-password: OTP generated and sent for userId={}", user.getId());
     }
 }

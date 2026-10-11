@@ -6,7 +6,9 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -37,4 +39,32 @@ public interface PasswordResetTokenSpringRepository
            AND t.consumedAt IS NULL
         """)
     void invalidateActiveTokensForUser(@Param("userId") UUID userId);
+
+    /** Story 12.12 — atomic attempt claim (see port). */
+    @Modifying
+    @Query(value = """
+        UPDATE public.password_reset_tokens
+           SET attempts = attempts + 1
+         WHERE id = :id
+           AND consumed_at IS NULL
+           AND attempts < :maxAttempts
+        """, nativeQuery = true)
+    int tryClaimAttempt(@Param("id") UUID id, @Param("maxAttempts") int maxAttempts);
+
+    /** Story 12.12 — CAS consumption (see port). */
+    @Modifying
+    @Query(value = """
+        UPDATE public.password_reset_tokens
+           SET consumed_at = :consumedAt
+         WHERE id = :id
+           AND consumed_at IS NULL
+        """, nativeQuery = true)
+    int markConsumed(@Param("id") UUID id, @Param("consumedAt") Instant consumedAt);
+
+    /** Story 12.12 — purge expired tokens. */
+    @Transactional // own tx when called by the cleanup job
+    @Modifying
+    @Query(value = "DELETE FROM public.password_reset_tokens WHERE expires_at < :cutoff",
+           nativeQuery = true)
+    int purgeExpiredBefore(@Param("cutoff") Instant cutoff);
 }

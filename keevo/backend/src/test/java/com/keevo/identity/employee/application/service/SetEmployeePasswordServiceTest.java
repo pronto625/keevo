@@ -173,4 +173,17 @@ class SetEmployeePasswordServiceTest {
         verify(eventPublisher).publishEvent(
                 any(com.keevo.identity.employee.domain.event.EmployeePasswordSetByOwnerEvent.class));
     }
+
+    @Test
+    @DisplayName("12.12 — password over 72 UTF-8 bytes → VALIDATION_FAILED, never encoded")
+    void shouldRejectMultibytePasswordOver72Bytes() {
+        String multiByte = "é1" + "é".repeat(39); // 41 chars, 82 bytes
+
+        assertThatThrownBy(() -> service.execute(
+                new SetEmployeePasswordCommand(actorId, employeeId, multiByte)))
+                .isInstanceOf(DomainException.class)
+                .extracting("domainCode")
+                .isEqualTo(ErrorCode.VALIDATION_FAILED.name());
+        verify(passwordEncoder, never()).encode(anyString());
+    }
 }

@@ -1,5 +1,6 @@
 package com.keevo.shared.infrastructure.config;
 
+import com.keevo.shared.domain.PhoneNumbers;
 import com.keevo.identity.auth.adapter.out.persistence.entity.TenantJpaEntity;
 import com.keevo.identity.auth.adapter.out.persistence.entity.UserJpaEntity;
 import com.keevo.identity.auth.adapter.out.persistence.entity.UserTenantMembershipJpaEntity;
@@ -101,7 +102,9 @@ public class AdminAccountInitializer implements ApplicationRunner {
     }
 
     private void ensureAdminUser() {
-        String phone = adminProperties.phone();
+        // Story 12.12 — canonical +<digits>: V10 rewrites unprefixed rows, so an unprefixed
+        // ADMIN_PHONE would otherwise miss the existing row and create a second SUPER_ADMIN.
+        String phone = PhoneNumbers.normalize(adminProperties.phone());
         UUID adminUserId;
         var existingUser = userSpringRepository.findByPhoneNumber(phone);
         if (existingUser.isEmpty()) {

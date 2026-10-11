@@ -1,5 +1,7 @@
 package com.keevo.identity.auth.application.service;
 
+import com.keevo.shared.domain.PasswordLimits;
+import com.keevo.shared.domain.PhoneNumbers;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.model.UserMembershipInfo;
 import com.keevo.identity.auth.domain.port.in.AuthenticateUserCommand;
@@ -57,7 +59,8 @@ public class AuthenticationService implements AuthenticateUserUseCase {
     @Transactional(noRollbackFor = DomainException.class)
     public LoginSessionResult authenticate(AuthenticateUserCommand command) {
         // 1. Load user — return INVALID_CREDENTIALS (not USER_NOT_FOUND) to avoid user enumeration
-        User user = userRepository.findByPhoneNumber(command.phoneNumber())
+        // Story 12.12 — canonical +<digits> form (same identity for '237…' and '+237…')
+        User user = userRepository.findByPhoneNumber(PhoneNumbers.normalize(command.phoneNumber()))
                 .orElseThrow(() -> new DomainException(ErrorCode.INVALID_CREDENTIALS));
 
         // 2. Check account lockout BEFORE verifying password
@@ -65,8 +68,11 @@ public class AuthenticationService implements AuthenticateUserUseCase {
             throw new DomainException(ErrorCode.ACCOUNT_LOCKED);
         }
 
-        // 3. Verify password — increment counter on failure
-        if (!passwordEncoder.matches(command.password(), user.getPasswordHash())) {
+        // 3. Verify password — increment counter on failure.
+        // Story 12.12: > 72 UTF-8 bytes can never match (BCrypt would throw → 500) — treat as a
+        // wrong password without calling matches().
+        if (PasswordLimits.exceedsBcryptLimit(command.password())
+                || !passwordEncoder.matches(command.password(), user.getPasswordHash())) {
             user = incrementFailedAttempts(user);
             userRepository.save(user);
             throw new DomainException(ErrorCode.INVALID_CREDENTIALS);

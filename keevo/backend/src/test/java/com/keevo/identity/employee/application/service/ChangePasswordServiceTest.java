@@ -232,4 +232,33 @@ class ChangePasswordServiceTest {
                 any()
         );
     }
+
+    @Test
+    @DisplayName("12.12 — current password over 72 bytes → INVALID_CREDENTIALS, BCrypt never called")
+    void execute_rejectsOversizedCurrentPasswordWithoutBcrypt() {
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        String multiByte = "é1" + "é".repeat(39); // 41 chars, 82 bytes
+
+        assertThatThrownBy(() -> changePasswordService.execute(
+                new ChangePasswordCommand(userId, multiByte, "NewPass1234")))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getDomainCode())
+                .isEqualTo(ErrorCode.INVALID_CREDENTIALS.name());
+        verify(passwordEncoder, never()).matches(any(), any());
+    }
+
+    @Test
+    @DisplayName("12.12 — new password over 72 bytes → VALIDATION_FAILED, never encoded")
+    void execute_rejectsOversizedNewPassword() {
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("tempPass123", "$2a$12$oldHash")).thenReturn(true);
+        String multiByte = "é1" + "é".repeat(39); // 41 chars, 82 bytes
+
+        assertThatThrownBy(() -> changePasswordService.execute(
+                new ChangePasswordCommand(userId, "tempPass123", multiByte)))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getDomainCode())
+                .isEqualTo(ErrorCode.VALIDATION_FAILED.name());
+        verify(passwordEncoder, never()).encode(anyString());
+    }
 }

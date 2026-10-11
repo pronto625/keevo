@@ -1,8 +1,11 @@
 package com.keevo.shared.infrastructure.security;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -57,9 +60,11 @@ public class SecurityConfig {
     };
 
     private final JwtAuthFilter jwtAuthFilter;
+    private final ObjectMapper objectMapper;
 
-    public SecurityConfig(JwtAuthFilter jwtAuthFilter) {
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter, ObjectMapper objectMapper) {
         this.jwtAuthFilter = jwtAuthFilter;
+        this.objectMapper = objectMapper;
     }
 
     @Bean
@@ -83,8 +88,19 @@ public class SecurityConfig {
                 // ── Return 401/403 as JSON status, not HTML redirect ──────────
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
-                        .accessDeniedHandler(
-                                (req, res, e) -> res.sendError(HttpStatus.FORBIDDEN.value(), "Access Denied")))
+                        // Story 12.12: JSON body (ApiResponseWrapper, same shape as
+                        // GlobalExceptionHandler.handleAccessDenied) instead of servlet HTML.
+                        .accessDeniedHandler((req, res, e) -> {
+                            if (res.isCommitted()) {
+                                return; // body already sent — nothing can be written
+                            }
+                            res.setStatus(HttpStatus.FORBIDDEN.value());
+                            res.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                            res.setCharacterEncoding("UTF-8");
+                            objectMapper.writeValue(res.getWriter(), ApiResponseWrapper.error(
+                                    "Vous n'avez pas les droits nécessaires",
+                                    "FORBIDDEN", "FORBIDDEN", null));
+                        }))
 
                 // ── Authorization rules ────────────────────────────────────────
                 // S3 defense-in-depth: /api/v1/admin/** requires SUPER_ADMIN at the

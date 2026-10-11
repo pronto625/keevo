@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -50,7 +51,14 @@ class SessionTokenIssuerTest {
     }
 
     private void onboardingDone(boolean done) {
+        tablePresent(true);
         when(jdbcTemplate.queryForObject(contains("tenant_preferences"), eq(Boolean.class))).thenReturn(done);
+    }
+
+    /** Story 12.12 — to_regclass probe for "schema".tenant_preferences. */
+    private void tablePresent(boolean present) {
+        when(jdbcTemplate.queryForObject(contains("to_regclass"), eq(Boolean.class),
+                eq("\"" + SCHEMA + "\".tenant_preferences"))).thenReturn(present);
     }
 
     @Test
@@ -83,13 +91,29 @@ class SessionTokenIssuerTest {
 
     @Test
     void onboardingClaim_falseWhileTenantTablesAreNotProvisioned() {
-        when(jdbcTemplate.queryForObject(contains("tenant_preferences"), eq(Boolean.class)))
-                .thenThrow(new BadSqlGrammarException("q", "select", new SQLException("missing")));
+        // Story 12.12: missing table is detected by the to_regclass probe — the EXISTS query
+        // (which would abort the caller's Postgres transaction) is never executed.
+        tablePresent(false);
 
         var session = issuer.issue(USER_ID, tenant(TenantStatus.ACTIVE), "OWNER");
 
         assertThat(jwt.parseToken(session.tokens().accessToken()).get("onboardingCompleted"))
                 .isEqualTo(false);
+        verify(jdbcTemplate, never()).queryForObject(contains("EXISTS"), eq(Boolean.class));
+        verify(refreshTokenRepository).save(any());
+    }
+
+    @Test
+    void onboardingQuery_sqlErrorIsNotSwallowed() {
+        // Story 12.12: an SQL error inside the caller tx must surface, not be hidden behind a
+        // "false" claim followed by a failing refresh-token save on an aborted transaction.
+        tablePresent(true);
+        when(jdbcTemplate.queryForObject(contains("tenant_preferences"), eq(Boolean.class)))
+                .thenThrow(new BadSqlGrammarException("q", "select", new SQLException("boom")));
+
+        assertThatThrownBy(() -> issuer.issue(USER_ID, tenant(TenantStatus.ACTIVE), "OWNER"))
+                .isInstanceOf(BadSqlGrammarException.class);
+        verify(refreshTokenRepository, never()).save(any());
     }
 
     @Test

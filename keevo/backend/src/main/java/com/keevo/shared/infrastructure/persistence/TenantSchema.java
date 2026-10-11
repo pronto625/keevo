@@ -62,7 +62,10 @@ public final class TenantSchema {
      */
     public static String validate(String schemaName) {
         if (!isValid(schemaName)) {
-            throw new IllegalArgumentException("Invalid tenant schema name format: " + schemaName);
+            // Story 12.12 (D5): never echo the raw value — it can be an attacker-controlled JWT claim
+            // that would otherwise reach logs / error bodies. Length only.
+            throw new IllegalArgumentException("Invalid tenant schema name format (length="
+                    + (schemaName == null ? "null" : String.valueOf(schemaName.length())) + ")");
         }
         return schemaName;
     }

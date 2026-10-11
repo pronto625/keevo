@@ -22,15 +22,22 @@ public interface UserSyncStateRepository {
 
     /**
      * Inserts or updates the device row.
-     * On conflict (device_id PK), updates last_push_at and updated_at.
+     * On conflict (device_id PK), updates last_push_at and updated_at — only when the existing
+     * row belongs to the same user (Story 12.12 guarded ON CONFLICT).
+     *
+     * @return {@code true} if a row was inserted/updated, {@code false} if the device is owned
+     *         by another user (nothing written)
      */
-    void upsert(UserSyncState state);
+    boolean upsert(UserSyncState state);
 
     /**
      * Inserts or updates the device row on pull.
-     * On conflict (device_id PK), updates last_pull_at and updated_at (does not touch last_push_at).
+     * On conflict (device_id PK), updates last_pull_at and updated_at (does not touch last_push_at)
+     * — only when the existing row belongs to the same user (Story 12.12).
+     *
+     * @return {@code true} if a row was written, {@code false} if owned by another user
      */
-    void upsertOnPull(UserSyncState state);
+    boolean upsertOnPull(UserSyncState state);
 
     /**
      * Returns all device sync states for the given tenant.

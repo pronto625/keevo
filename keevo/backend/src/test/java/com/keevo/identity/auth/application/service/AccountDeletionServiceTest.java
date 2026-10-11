@@ -94,6 +94,21 @@ class AccountDeletionServiceTest {
     }
 
     @Test
+    @DisplayName("12.12 — requestDeletion on a SUSPENDED tenant → 403 ACCOUNT_SUSPENDED, status unchanged")
+    void requestDeletion_rejectsSuspendedTenant() {
+        Tenant suspended = activeTenant.withStatus(TenantStatus.SUSPENDED, null);
+        when(tenantRepository.findBySchemaName(schemaName)).thenReturn(Optional.of(suspended));
+
+        assertThatThrownBy(() -> service.requestDeletion(actorId, schemaName))
+                .isInstanceOf(DomainException.class)
+                .extracting(ex -> ((DomainException) ex).getDomainCode())
+                .isEqualTo(ErrorCode.ACCOUNT_SUSPENDED.name());
+
+        verify(tenantRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher, whatsAppPort);
+    }
+
+    @Test
     @DisplayName("requestDeletion sends WhatsApp confirmation")
     void requestDeletion_sendsWhatsApp() {
         User owner = new User(actorId, "+243812345678", "hash",

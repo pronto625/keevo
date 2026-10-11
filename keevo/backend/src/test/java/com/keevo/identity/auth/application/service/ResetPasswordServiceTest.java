@@ -74,6 +74,7 @@ class ResetPasswordServiceTest {
         when(passwordResetTokenRepository.findActiveByPhoneNumber(phoneNumber))
                 .thenReturn(Optional.of(token));
         when(passwordEncoder.matches(validCode, validCodeHash)).thenReturn(true);
+        stubClaimAndConsume();
         when(userRepository.findById(userId)).thenReturn(Optional.of(
                 new User(userId, phoneNumber, "$2a$12$oldPassword", Role.OWNER, true, Instant.now())));
         when(passwordEncoder.encode(newPassword)).thenReturn("$2a$12$newHash");
@@ -84,7 +85,8 @@ class ResetPasswordServiceTest {
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(userCaptor.capture());
         assertThat(userCaptor.getValue().getPasswordHash()).isEqualTo("$2a$12$newHash");
-        verify(passwordResetTokenRepository).save(argThat(t -> t.isConsumed()));
+        verify(passwordResetTokenRepository).tryClaimAttempt(token.id(), 5);
+        verify(passwordResetTokenRepository).markConsumed(eq(token.id()), any(Instant.class));
         verify(tokenRevocationPort).revokeAllSessionsEverywhere(userId);
         verify(refreshTokenRepository).revokeAllByUserId(userId);
         verify(eventPublisher).publishEvent(any(PasswordResetEvent.class));
@@ -137,6 +139,7 @@ class ResetPasswordServiceTest {
         when(passwordResetTokenRepository.findActiveByPhoneNumber(phoneNumber))
                 .thenReturn(Optional.of(token));
         when(passwordEncoder.matches(validCode, validCodeHash)).thenReturn(true);
+        stubClaimAndConsume();
         when(userRepository.findById(userId)).thenReturn(Optional.of(
                 new User(userId, phoneNumber, "$2a$12$oldPassword", Role.OWNER, true, Instant.now())));
         when(passwordEncoder.encode(newPassword)).thenReturn("$2a$12$newHash");
@@ -147,11 +150,10 @@ class ResetPasswordServiceTest {
     }
 
     @Test
-    @DisplayName("should reject weak password")
+    @DisplayName("should reject weak password — validated BEFORE the attempt claim (12.12: no attempt burnt)")
     void shouldRejectWeakPassword() {
         when(passwordResetTokenRepository.findActiveByPhoneNumber(phoneNumber))
                 .thenReturn(Optional.of(token));
-        when(passwordEncoder.matches(validCode, validCodeHash)).thenReturn(true);
 
         Throwable t1 = catchThrowable(() ->
                 service.execute(new ResetPasswordCommand(phoneNumber, validCode, "short")));
@@ -162,6 +164,9 @@ class ResetPasswordServiceTest {
                 service.execute(new ResetPasswordCommand(phoneNumber, validCode, "abcdefgh")));
         assertThat(t2).isInstanceOf(DomainException.class);
         assertThat(((DomainException) t2).getDomainCode()).isEqualTo(ErrorCode.VALIDATION_FAILED.name());
+
+        verify(passwordResetTokenRepository, never()).tryClaimAttempt(any(), anyInt());
+        verify(passwordEncoder, never()).matches(anyString(), anyString());
     }
 
     @Test
@@ -170,6 +175,7 @@ class ResetPasswordServiceTest {
         when(passwordResetTokenRepository.findActiveByPhoneNumber(phoneNumber))
                 .thenReturn(Optional.of(token));
         when(passwordEncoder.matches(validCode, validCodeHash)).thenReturn(true);
+        stubClaimAndConsume();
         when(userRepository.findById(userId)).thenReturn(Optional.of(
                 new User(userId, phoneNumber, "$2a$12$oldPassword", Role.OWNER, true, Instant.now())));
         when(passwordEncoder.encode(newPassword)).thenReturn("$2a$12$newHash");
@@ -188,6 +194,7 @@ class ResetPasswordServiceTest {
         when(passwordResetTokenRepository.findActiveByPhoneNumber(phoneNumber))
                 .thenReturn(Optional.of(token));
         when(passwordEncoder.matches(validCode, validCodeHash)).thenReturn(true);
+        stubClaimAndConsume();
         User empUser = new User(userId, phoneNumber, "$2a$12$oldPassword", Role.EMPLOYEE, true, Instant.now());
         when(userRepository.findById(userId)).thenReturn(Optional.of(empUser));
         when(passwordEncoder.encode(newPassword)).thenReturn("$2a$12$newHash");
@@ -205,6 +212,7 @@ class ResetPasswordServiceTest {
         when(passwordResetTokenRepository.findActiveByPhoneNumber(phoneNumber))
                 .thenReturn(Optional.of(token));
         when(passwordEncoder.matches(validCode, validCodeHash)).thenReturn(true);
+        stubClaimAndConsume();
         when(userRepository.findById(userId)).thenReturn(Optional.of(
                 new User(userId, phoneNumber, "$2a$12$oldPassword", Role.OWNER, true, Instant.now())));
         when(passwordEncoder.encode(newPassword)).thenReturn("$2a$12$newHash");
@@ -226,5 +234,87 @@ class ResetPasswordServiceTest {
 
         assertThat(tx).isNotNull();
         assertThat(tx.noRollbackFor()).contains(DomainException.class);
+    }
+
+    // ── Story 12.12 — atomic attempts, CAS consumption, 72-byte cap ─────────
+
+    private void stubClaimAndConsume() {
+        lenient().when(passwordResetTokenRepository.tryClaimAttempt(any(UUID.class), eq(5))).thenReturn(true);
+        lenient().when(passwordResetTokenRepository.markConsumed(any(UUID.class), any(Instant.class))).thenReturn(true);
+    }
+
+    @Test
+    @DisplayName("12.12 — wrong code: attempt claimed atomically BEFORE bcrypt, no read-modify-write save")
+    void wrongCodeClaimsAttemptBeforeCompare() {
+        when(passwordResetTokenRepository.findActiveByPhoneNumber(phoneNumber)).thenReturn(Optional.of(token));
+        when(passwordResetTokenRepository.tryClaimAttempt(token.id(), 5)).thenReturn(true);
+        when(passwordEncoder.matches("000000", validCodeHash)).thenReturn(false);
+
+        Throwable thrown = catchThrowable(() ->
+                service.execute(new ResetPasswordCommand(phoneNumber, "000000", newPassword)));
+
+        assertThat(((DomainException) thrown).getDomainCode()).isEqualTo(ErrorCode.INVALID_OR_EXPIRED_CODE.name());
+        var order = inOrder(passwordResetTokenRepository, passwordEncoder);
+        order.verify(passwordResetTokenRepository).tryClaimAttempt(token.id(), 5);
+        order.verify(passwordEncoder).matches("000000", validCodeHash);
+        verify(passwordResetTokenRepository, never()).save(any());
+        verify(passwordResetTokenRepository, never()).markConsumed(any(), any());
+    }
+
+    @Test
+    @DisplayName("12.12 — concurrent guess loses the claim (cap reached) → CODE_LOCKED, bcrypt never run")
+    void claimRefusedMeansLocked() {
+        when(passwordResetTokenRepository.findActiveByPhoneNumber(phoneNumber)).thenReturn(Optional.of(token));
+        when(passwordResetTokenRepository.tryClaimAttempt(token.id(), 5)).thenReturn(false);
+
+        Throwable thrown = catchThrowable(() ->
+                service.execute(new ResetPasswordCommand(phoneNumber, validCode, newPassword)));
+
+        assertThat(((DomainException) thrown).getDomainCode()).isEqualTo(ErrorCode.CODE_LOCKED.name());
+        verify(passwordEncoder, never()).matches(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("12.12 — double reset: CAS consume lost → INVALID_OR_EXPIRED_CODE, password untouched")
+    void lostConsumeRaceRejects() {
+        when(passwordResetTokenRepository.findActiveByPhoneNumber(phoneNumber)).thenReturn(Optional.of(token));
+        when(passwordResetTokenRepository.tryClaimAttempt(token.id(), 5)).thenReturn(true);
+        when(passwordEncoder.matches(validCode, validCodeHash)).thenReturn(true);
+        when(passwordResetTokenRepository.markConsumed(eq(token.id()), any(Instant.class))).thenReturn(false);
+
+        Throwable thrown = catchThrowable(() ->
+                service.execute(new ResetPasswordCommand(phoneNumber, validCode, newPassword)));
+
+        assertThat(((DomainException) thrown).getDomainCode()).isEqualTo(ErrorCode.INVALID_OR_EXPIRED_CODE.name());
+        verify(userRepository, never()).save(any());
+        verify(passwordEncoder, never()).encode(anyString());
+        verify(tokenRevocationPort, never()).revokeAllSessionsEverywhere(any());
+    }
+
+    @Test
+    @DisplayName("12.12 — password over 72 UTF-8 bytes → VALIDATION_FAILED (never reaches bcrypt)")
+    void rejectsPasswordOver72Bytes() {
+        when(passwordResetTokenRepository.findActiveByPhoneNumber(phoneNumber)).thenReturn(Optional.of(token));
+
+        String ascii73 = "a1" + "x".repeat(71);
+        String multiByte = "é1" + "é".repeat(36); // 38 chars, 75 bytes
+        for (String pwd : new String[]{ascii73, multiByte}) {
+            Throwable thrown = catchThrowable(() ->
+                    service.execute(new ResetPasswordCommand(phoneNumber, validCode, pwd)));
+            assertThat(((DomainException) thrown).getDomainCode()).isEqualTo(ErrorCode.VALIDATION_FAILED.name());
+        }
+        verify(passwordEncoder, never()).encode(anyString());
+        verify(passwordResetTokenRepository, never()).tryClaimAttempt(any(), anyInt());
+        verify(passwordResetTokenRepository, never()).markConsumed(any(), any());
+    }
+
+    @Test
+    @DisplayName("12.12 — phone without '+' is normalised before the token lookup")
+    void normalisesPhone() {
+        when(passwordResetTokenRepository.findActiveByPhoneNumber(phoneNumber)).thenReturn(Optional.empty());
+
+        catchThrowable(() -> service.execute(new ResetPasswordCommand("237600000000", validCode, newPassword)));
+
+        verify(passwordResetTokenRepository).findActiveByPhoneNumber(phoneNumber);
     }
 }

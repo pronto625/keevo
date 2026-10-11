@@ -9,15 +9,12 @@ import java.util.UUID;
  * <p>Story 14.12 — Package {@code identity.auth.domain.model} (D7 convention:
  * same package as {@link UserRegisteredEvent} and {@link UserAuthenticatedEvent}).
  *
- * <p>Contains the userId and phoneNumber for the reset request.
- * Audit listener will not log the phone number (anti-PII, AC5).
+ * <p>Story 12.12 — carries no phone number (PII): consumers only need the userId.
  *
  * @param userId      user who requested the reset
- * @param phoneNumber phone number (for audit only — never in payload)
  * @param occurredAt  when the event was published
  */
 public record PasswordResetRequestedEvent(
         UUID userId,
-        String phoneNumber,
         Instant occurredAt
 ) {}

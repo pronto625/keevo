@@ -18,6 +18,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -77,7 +79,6 @@ class RequestPasswordResetServiceTest {
                 ArgumentCaptor.forClass(PasswordResetRequestedEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getValue().userId()).isEqualTo(userId);
-        assertThat(eventCaptor.getValue().phoneNumber()).isEqualTo(phoneNumber);
     }
 
     @Test
@@ -165,5 +166,64 @@ class RequestPasswordResetServiceTest {
         service.execute(new RequestPasswordResetCommand(phoneNumber));
 
         verify(eventPublisher, never()).publishEvent(any(PasswordResetRequestedEvent.class));
+    }
+
+    // ── Story 12.12 ──────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("12.12 — inside a transaction the OTP is sent only after commit")
+    void shouldSendOtpAfterCommitWhenTransactionActive() {
+        when(rateLimiter.tryAcquire(phoneNumber)).thenReturn(true);
+        when(userRepository.findByPhoneNumber(phoneNumber)).thenReturn(Optional.of(user));
+        when(passwordEncoder.encode(anyString())).thenReturn("$2a$12$bcryptHash");
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.execute(new RequestPasswordResetCommand(phoneNumber));
+
+            verify(passwordResetTokenRepository).save(any(PasswordResetToken.class));
+            verify(whatsAppPort, never()).sendOtp(anyString(), anyString());
+
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(TransactionSynchronization::afterCommit);
+            verify(whatsAppPort).sendOtp(eq(phoneNumber), matches("\\d{6}"));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    @DisplayName("12.12 — WhatsApp failure after commit is swallowed (request still succeeds)")
+    void shouldSwallowWhatsAppFailure() {
+        when(rateLimiter.tryAcquire(phoneNumber)).thenReturn(true);
+        when(userRepository.findByPhoneNumber(phoneNumber)).thenReturn(Optional.of(user));
+        when(passwordEncoder.encode(anyString())).thenReturn("$2a$12$bcryptHash");
+        doThrow(new RuntimeException("provider down")).when(whatsAppPort).sendOtp(anyString(), anyString());
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.execute(new RequestPasswordResetCommand(phoneNumber));
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(TransactionSynchronization::afterCommit);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+        verify(whatsAppPort).sendOtp(eq(phoneNumber), anyString());
+        verify(eventPublisher).publishEvent(any(PasswordResetRequestedEvent.class));
+    }
+
+    @Test
+    @DisplayName("12.12 — phone without '+' is normalised before rate-limit, lookup and token")
+    void shouldNormalisePhone() {
+        when(rateLimiter.tryAcquire(phoneNumber)).thenReturn(true);
+        when(userRepository.findByPhoneNumber(phoneNumber)).thenReturn(Optional.of(user));
+        when(passwordEncoder.encode(anyString())).thenReturn("$2a$12$bcryptHash");
+
+        service.execute(new RequestPasswordResetCommand("237 600 000 000"));
+
+        ArgumentCaptor<PasswordResetToken> tokenCaptor = ArgumentCaptor.forClass(PasswordResetToken.class);
+        verify(passwordResetTokenRepository).save(tokenCaptor.capture());
+        assertThat(tokenCaptor.getValue().phoneNumber()).isEqualTo(phoneNumber);
+        verify(whatsAppPort).sendOtp(eq(phoneNumber), anyString());
     }
 }
