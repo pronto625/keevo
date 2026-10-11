@@ -80,7 +80,10 @@ class LocalSaleDataSource {
           }
 
           await _db.into(_db.stockMovements).insert(StockMovementsCompanion.insert(
-            id: const Uuid().v4(),
+            // v1s-13-8: SALE movement id = sale item id (also the CREATE_SALE
+            // payload's itemId, used server-side as the movement id) so the
+            // pull upserts this row instead of adding a second SALE movement.
+            id: item.id,
             productId: item.productId,
             storeId: sale.storeId,
             type: 'SALE',

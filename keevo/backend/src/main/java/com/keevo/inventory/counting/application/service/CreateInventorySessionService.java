@@ -40,6 +40,21 @@ public class CreateInventorySessionService implements CreateInventorySessionUseC
 
     @Override
     public InventorySession execute(CreateInventorySessionCommand command) {
+        // 0. Idempotent replay (v1s-13-8): a client-supplied id that already exists is a
+        //    no-op — no store/active checks, no second event.
+        if (command.sessionId() != null) {
+            var existing = sessionRepository.findById(command.sessionId());
+            if (existing.isPresent()) {
+                // A replayed id must belong to the requested store — otherwise the caller's
+                // store check (made on the payload storeId) would be bypassed.
+                if (!existing.get().getStoreId().equals(command.storeId())) {
+                    throw new DomainException(ErrorCode.FORBIDDEN,
+                            "Session belongs to another store");
+                }
+                return existing.get();
+            }
+        }
+
         // 1. Verify store exists
         storeRepository.findById(command.storeId())
                 .orElseThrow(() -> new DomainException(ErrorCode.INVENTORY_STORE_NOT_FOUND,
@@ -67,7 +82,7 @@ public class CreateInventorySessionService implements CreateInventorySessionUseC
 
         // 4. Create session via factory
         InventorySession session = InventorySession.create(
-                command.storeId(), command.scope(), command.categoryIds(), command.actorId());
+                command.sessionId(), command.storeId(), command.scope(), command.categoryIds(), command.actorId());
 
         // 5. Persist
         InventorySession saved = sessionRepository.save(session);

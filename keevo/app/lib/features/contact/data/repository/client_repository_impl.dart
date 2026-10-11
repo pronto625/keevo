@@ -2,6 +2,7 @@ import 'dart:developer' as dev;
 
 import 'package:uuid/uuid.dart';
 
+import '../../../../core/storage/app_database.dart';
 import '../../../../core/sync/connectivity_service.dart';
 import '../../../../core/sync/sync_service.dart';
 import '../../../../core/sync/sync_trigger_dispatcher.dart';
@@ -20,18 +21,28 @@ class ClientRepositoryImpl implements ClientRepository {
   final ConnectivityService _connectivity;
   final SyncService _syncService;
   final SyncTriggerDispatcher _syncTriggerDispatcher;
+  final AppDatabase? _db;
 
+  /// [db] — when given, each local write and its sync_queue entry commit in
+  /// ONE Drift transaction (v1s-13-8). Null only in tests with mocked sources.
   const ClientRepositoryImpl({
     required LocalClientDataSource local,
     required RemoteClientDataSource remote,
     required ConnectivityService connectivity,
     required SyncService syncService,
     required SyncTriggerDispatcher syncTriggerDispatcher,
+    AppDatabase? db,
   })  : _local = local,
         _remote = remote,
         _connectivity = connectivity,
         _syncService = syncService,
-        _syncTriggerDispatcher = syncTriggerDispatcher;
+        _syncTriggerDispatcher = syncTriggerDispatcher,
+        _db = db;
+
+  Future<T> _atomic<T>(Future<T> Function() action) {
+    final db = _db;
+    return db == null ? action() : db.transaction(action);
+  }
 
   @override
   Future<List<ClientModel>> getAll({bool includeArchived = false}) =>
@@ -52,26 +63,29 @@ class ClientRepositoryImpl implements ClientRepository {
   }) async {
     // Offline-first (Story 5.6): UUID generated client-side, instant return.
     final now = DateTime.now();
-    final model = await _local.upsert(ClientModel(
-      id: const Uuid().v4(),
-      name: name,
-      phone: phone,
-      email: email,
-      notes: notes,
-      createdAt: now,
-      updatedAt: now,
-    ));
-    await _syncService.queueOperation(
-      operation: 'CREATE_CLIENT',
-      payload: {
-        'id': model.id,
-        'name': name,
-        'phone': phone,
-        if (email != null) 'email': email,
-        if (notes != null) 'notes': notes,
-      },
-      entityId: model.id,
-    );
+    final model = await _atomic(() async {
+      final saved = await _local.upsert(ClientModel(
+        id: const Uuid().v4(),
+        name: name,
+        phone: phone,
+        email: email,
+        notes: notes,
+        createdAt: now,
+        updatedAt: now,
+      ));
+      await _syncService.queueOperation(
+        operation: 'CREATE_CLIENT',
+        payload: {
+          'id': saved.id,
+          'name': name,
+          'phone': phone,
+          if (email != null) 'email': email,
+          if (notes != null) 'notes': notes,
+        },
+        entityId: saved.id,
+      );
+      return saved;
+    });
     _syncTriggerDispatcher.triggerPushIfIdle();
     return model;
   }
@@ -100,30 +114,34 @@ class ClientRepositoryImpl implements ClientRepository {
       notes: notes ?? existing?.notes,
       updatedAt: now,
     );
-    await _local.upsert(updated);
-    await _syncService.queueOperation(
-      operation: 'UPDATE_CLIENT',
-      payload: {
-        'clientId': id,
-        if (name != null) 'name': name,
-        if (phone != null) 'phone': phone,
-        if (email != null) 'email': email,
-        if (notes != null) 'notes': notes,
-      },
-      entityId: id,
-    );
+    await _atomic(() async {
+      await _local.upsert(updated);
+      await _syncService.queueOperation(
+        operation: 'UPDATE_CLIENT',
+        payload: {
+          'clientId': id,
+          if (name != null) 'name': name,
+          if (phone != null) 'phone': phone,
+          if (email != null) 'email': email,
+          if (notes != null) 'notes': notes,
+        },
+        entityId: id,
+      );
+    });
     _syncTriggerDispatcher.triggerPushIfIdle();
     return updated;
   }
 
   @override
   Future<void> archive(String id) async {
-    await _local.archive(id);
-    await _syncService.queueOperation(
-      operation: 'ARCHIVE_CLIENT',
-      payload: {'clientId': id},
-      entityId: id,
-    );
+    await _atomic(() async {
+      await _local.archive(id);
+      await _syncService.queueOperation(
+        operation: 'ARCHIVE_CLIENT',
+        payload: {'clientId': id},
+        entityId: id,
+      );
+    });
     _syncTriggerDispatcher.triggerPushIfIdle();
   }
 

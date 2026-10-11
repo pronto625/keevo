@@ -43,7 +43,8 @@ public class CreateSupplierSyncHandler extends AbstractSyncOperationHandler {
             throw new IllegalArgumentException("Missing required field: id");
         if (p.get("name") == null || ((String) p.get("name")).isBlank())
             throw new IllegalArgumentException("Missing required field: name");
-        if (p.get("phone") == null)
+        // v1s-13-8: @NotBlank parity with the REST DTO — a blank phone is rejected.
+        if (!(p.get("phone") instanceof String phone) || phone.isBlank())
             throw new IllegalArgumentException("Missing required field: phone");
     }
 

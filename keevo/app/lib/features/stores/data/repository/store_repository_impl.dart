@@ -2,6 +2,7 @@ import 'dart:developer' as dev;
 
 import 'package:uuid/uuid.dart';
 
+import '../../../../core/storage/app_database.dart';
 import '../../../../core/sync/sync_service.dart';
 import '../../../../core/sync/sync_trigger_dispatcher.dart';
 import '../../domain/exception/store_exception.dart';
@@ -14,22 +15,35 @@ import '../datasource/remote_store_datasource.dart';
 /// StoreRepositoryImpl — write-through offline-first strategy (Story 3.1).
 ///
 /// Reads: always from local Drift DB (background remote refresh via [syncFromRemote]).
-/// Writes: remote-first; on network failure → local optimistic update + sync_queue.
+/// Writes: remote-first; on network failure → local optimistic update + sync_queue
+/// (one Drift transaction when [AppDatabase] is wired).
 class StoreRepositoryImpl implements StoreRepository {
   final LocalStoreDataSource _local;
   final RemoteStoreDataSource _remote;
   final SyncService _syncService;
   final SyncTriggerDispatcher _syncTriggerDispatcher;
+  final AppDatabase? _db;
 
+  /// [db] — when given, every offline local write and its sync_queue entry
+  /// commit in ONE Drift transaction (v1s-13-8). `SyncService.queueOperation`
+  /// writes to the same database, so Drift's zone-scoped transaction covers
+  /// it. Null only in tests that mock the data sources.
   const StoreRepositoryImpl({
     required LocalStoreDataSource local,
     required RemoteStoreDataSource remote,
     required SyncService syncService,
     required SyncTriggerDispatcher syncTriggerDispatcher,
+    AppDatabase? db,
   })  : _local = local,
         _remote = remote,
         _syncService = syncService,
-        _syncTriggerDispatcher = syncTriggerDispatcher;
+        _syncTriggerDispatcher = syncTriggerDispatcher,
+        _db = db;
+
+  Future<T> _atomic<T>(Future<T> Function() action) {
+    final db = _db;
+    return db == null ? action() : db.transaction(action);
+  }
 
   @override
   Future<List<StoreModel>> getStores({bool includeInactive = false}) =>
@@ -68,18 +82,20 @@ class StoreRepositoryImpl implements StoreRepository {
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
-      await _local.upsert(local);
-      await _syncService.queueOperation(
-        operation: 'CREATE_STORE',
-        payload: {
-          'id': local.id,
-          'name': name,
-          'type': type.name.toUpperCase(),
-          if (address != null) 'address': address,
-          if (phone != null) 'phone': phone,
-        },
-        entityId: local.id,
-      );
+      await _atomic(() async {
+        await _local.upsert(local);
+        await _syncService.queueOperation(
+          operation: 'CREATE_STORE',
+          payload: {
+            'id': local.id,
+            'name': name,
+            'type': type.name.toUpperCase(),
+            if (address != null) 'address': address,
+            if (phone != null) 'phone': phone,
+          },
+          entityId: local.id,
+        );
+      });
       _syncTriggerDispatcher.triggerPushIfIdle();
       return local;
     }
@@ -106,32 +122,29 @@ class StoreRepositoryImpl implements StoreRepository {
       rethrow;
     } catch (e) {
       dev.log('StoreRepository.updateStore: offline — local + sync_queue: $e');
+      // v1s-13-8: a store missing from the cache is a stale id — never
+      // fabricate a row (type/isActive would be invented).
       final existing = await _local.getById(storeId);
-      final now = DateTime.now();
-      final updated = (existing ??
-              StoreModel(
-                id: storeId,
-                name: name,
-                createdAt: now,
-                updatedAt: now,
-              ))
-          .copyWith(
+      if (existing == null) throw StoreException.notFound();
+      final updated = existing.copyWith(
         name: name,
-        address: address ?? existing?.address,
-        phone: phone ?? existing?.phone,
-        updatedAt: now,
+        address: address ?? existing.address,
+        phone: phone ?? existing.phone,
+        updatedAt: DateTime.now(),
       );
-      await _local.upsert(updated);
-      await _syncService.queueOperation(
-        operation: 'UPDATE_STORE',
-        payload: {
-          'storeId': storeId,
-          'name': name,
-          if (address != null) 'address': address,
-          if (phone != null) 'phone': phone,
-        },
-        entityId: storeId,
-      );
+      await _atomic(() async {
+        await _local.upsert(updated);
+        await _syncService.queueOperation(
+          operation: 'UPDATE_STORE',
+          payload: {
+            'storeId': storeId,
+            'name': name,
+            if (address != null) 'address': address,
+            if (phone != null) 'phone': phone,
+          },
+          entityId: storeId,
+        );
+      });
       _syncTriggerDispatcher.triggerPushIfIdle();
       return updated;
     }
@@ -148,15 +161,19 @@ class StoreRepositoryImpl implements StoreRepository {
       rethrow;
     } catch (e) {
       dev.log('StoreRepository.deactivateStore: offline — local + sync_queue: $e');
-      await _local.deactivate(storeId);
-      await _syncService.queueOperation(
-        operation: 'DEACTIVATE_STORE',
-        payload: {'storeId': storeId},
-        entityId: storeId,
-      );
-      _syncTriggerDispatcher.triggerPushIfIdle();
+      // v1s-13-8: not cached → notFound before anything is written/queued.
       final existing = await _local.getById(storeId);
-      return existing!.copyWith(isActive: false);
+      if (existing == null) throw StoreException.notFound();
+      await _atomic(() async {
+        await _local.deactivate(storeId);
+        await _syncService.queueOperation(
+          operation: 'DEACTIVATE_STORE',
+          payload: {'storeId': storeId},
+          entityId: storeId,
+        );
+      });
+      _syncTriggerDispatcher.triggerPushIfIdle();
+      return existing.copyWith(isActive: false);
     }
   }
 

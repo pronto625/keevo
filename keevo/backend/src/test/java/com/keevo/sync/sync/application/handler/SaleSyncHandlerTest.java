@@ -256,4 +256,71 @@ class SaleSyncHandlerTest {
                 "appliedUnitPrice", 1000,
                 "quantity", 2));
     }
+
+    // ── v1s-13-8: legacy "status" key fallback for stale CREATE_SALE payloads ──
+
+    @Test
+    void handle_legacyStatusKey_recordsPendingValidation() {
+        var saleId = UUID.randomUUID();
+        var op = new SyncOperation("op-legacy", "CREATE_SALE", saleId.toString(),
+                Map.of("saleId", saleId.toString(), "storeId", UUID.randomUUID().toString(),
+                        "paymentMode", "CASH", "discountAmount", 0,
+                        "status", "PENDING_VALIDATION", "items", validItems()),
+                Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        verify(recordSaleUseCase).recordSale(argThat(c ->
+                c.requestedStatus() == com.keevo.commerce.sale.domain.model.SaleStatus.PENDING_VALIDATION));
+    }
+
+    @Test
+    void handle_legacyStatusKey_unknownValue_isIgnored_recordedWithNullStatus() {
+        var saleId = UUID.randomUUID();
+        var op = new SyncOperation("op-legacy-bad", "CREATE_SALE", saleId.toString(),
+                Map.of("saleId", saleId.toString(), "storeId", UUID.randomUUID().toString(),
+                        "paymentMode", "CASH", "discountAmount", 0,
+                        "status", "NOPE", "items", validItems()),
+                Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        verify(recordSaleUseCase).recordSale(argThat(c -> c.requestedStatus() == null));
+    }
+
+    @Test
+    void handle_requestedStatusCancelled_isRejected() {
+        var saleId = UUID.randomUUID();
+        var op = new SyncOperation("op-cancelled", "CREATE_SALE", saleId.toString(),
+                Map.of("saleId", saleId.toString(), "storeId", UUID.randomUUID().toString(),
+                        "paymentMode", "CASH", "discountAmount", 0,
+                        "requestedStatus", "CANCELLED", "items", validItems()),
+                Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        verifyNoInteractions(recordSaleUseCase);
+    }
+
+    @Test
+    void handle_itemId_isPassedToRecordSaleCommand() {
+        var saleId = UUID.randomUUID();
+        var itemId = UUID.randomUUID();
+        var item = new java.util.HashMap<String, Object>(validItems().get(0));
+        item.put("itemId", itemId.toString());
+        var op = new SyncOperation("op-itemid", "CREATE_SALE", saleId.toString(),
+                Map.of("saleId", saleId.toString(), "storeId", UUID.randomUUID().toString(),
+                        "paymentMode", "CASH", "discountAmount", 0, "items", List.of(item)),
+                Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        var captor = org.mockito.ArgumentCaptor.forClass(RecordSaleUseCase.RecordSaleCommand.class);
+        verify(recordSaleUseCase).recordSale(captor.capture());
+        assertThat(captor.getValue().items().get(0).itemId()).isEqualTo(itemId);
+    }
 }

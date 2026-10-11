@@ -10,6 +10,17 @@ void main() {
           'Limite du plan atteinte');
     });
 
+    test('v1s-13-8: maps the inventory session codes', () {
+      expect(friendlySyncRejectionReason('INVENTORY_SESSION_ALREADY_ACTIVE'),
+          'Un autre inventaire est déjà en cours dans cette boutique');
+      expect(friendlySyncRejectionReason('INVENTORY_STORE_NOT_FOUND'),
+          'Boutique de l\'inventaire introuvable');
+      expect(friendlySyncRejectionReason('INVENTORY_INVALID_CATEGORIES'),
+          'Catégories de l\'inventaire invalides');
+      expect(friendlySyncRejectionReason('INVENTORY_SESSION_NOT_IN_PROGRESS'),
+          'Cet inventaire n\'est plus en cours');
+    });
+
     test('falls back to a generic message carrying the raw code', () {
       expect(friendlySyncRejectionReason('SOME_UNKNOWN_CODE'),
           contains('SOME_UNKNOWN_CODE'));

@@ -61,8 +61,7 @@ public class SaleSyncHandler extends AbstractSyncOperationHandler {
         String mobileMoneyRef = (String) p.get("mobileMoneyRef");
         int discountAmount = p.get("discountAmount") != null ? ((Number) p.get("discountAmount")).intValue() : 0;
 
-        String requestedStatusStr = (String) p.get("requestedStatus");
-        SaleStatus requestedStatus = requestedStatusStr != null ? SaleStatus.valueOf(requestedStatusStr) : null;
+        SaleStatus requestedStatus = resolveRequestedStatus(p);
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> items = (List<Map<String, Object>>) p.get("items");
@@ -99,6 +98,25 @@ public class SaleSyncHandler extends AbstractSyncOperationHandler {
 
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                 saleId.toString(), null);
+    }
+
+    /**
+     * v1s-13-8: explicit {@code requestedStatus} must be COMPLETED or PENDING_VALIDATION
+     * (anything else → REJECTED). Payloads queued before the key was renamed (commit e694ae3)
+     * carry {@code status}: used only when it is exactly one of those two values, otherwise
+     * ignored (null → COMPLETED by default) so a stale sale is not rejected.
+     */
+    private static SaleStatus resolveRequestedStatus(Map<String, Object> p) {
+        Object explicit = p.get("requestedStatus");
+        if (explicit != null) {
+            if ("COMPLETED".equals(explicit)) return SaleStatus.COMPLETED;
+            if ("PENDING_VALIDATION".equals(explicit)) return SaleStatus.PENDING_VALIDATION;
+            throw new IllegalArgumentException("Invalid requestedStatus: " + explicit);
+        }
+        Object legacy = p.get("status");
+        if ("COMPLETED".equals(legacy)) return SaleStatus.COMPLETED;
+        if ("PENDING_VALIDATION".equals(legacy)) return SaleStatus.PENDING_VALIDATION;
+        return null;
     }
 
     private void requireNonNull(Map<String, Object> payload, String key) {

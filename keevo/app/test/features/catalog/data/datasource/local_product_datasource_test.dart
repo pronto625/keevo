@@ -61,6 +61,20 @@ class _RecordingSyncService extends _NoOpSyncService {
   }
 }
 
+/// Fails every queueOperation — proves the local insert rolls back with it.
+class _ThrowingSyncService extends _NoOpSyncService {
+  _ThrowingSyncService(super.db);
+
+  @override
+  Future<void> queueOperation({
+    required String operation,
+    required Map<String, dynamic> payload,
+    String? entityId,
+  }) async {
+    throw Exception('queue failure');
+  }
+}
+
 void main() {
   setUpAll(() {
     _overrideSqlite3ForLinuxTesting();
@@ -268,6 +282,31 @@ void main() {
 
       expect(sync.queued.single.operation, 'CREATE_DRAFT_PRODUCT');
       expect(sync.queued.single.entityId, product.id);
+    });
+  });
+
+  // v1s-13-8: insert + queue entry commit in one Drift transaction.
+  group('product creations are atomic with their queue entry', () {
+    setUp(() {
+      sut = LocalProductDataSource(db, _ThrowingSyncService(db));
+    });
+
+    Future<int> productCount() async =>
+        (await db.select(db.products).get()).length;
+
+    test('insert(): queue failure leaves no product row', () async {
+      final before = await productCount();
+      await expectLater(sut.insert(name: 'Orphelin'), throwsA(isA<Exception>()));
+      expect(await productCount(), before);
+    });
+
+    test('insertDraft(): queue failure leaves no product row', () async {
+      final before = await productCount();
+      await expectLater(
+        sut.insertDraft(name: 'Brouillon', priceVente: 1000, categoryId: 'cat-1'),
+        throwsA(isA<Exception>()),
+      );
+      expect(await productCount(), before);
     });
   });
 }

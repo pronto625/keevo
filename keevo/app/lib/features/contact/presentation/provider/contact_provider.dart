@@ -43,6 +43,7 @@ final clientRepositoryProvider = Provider<ClientRepository>((ref) {
     connectivity: ref.watch(connectivityServiceProvider),
     syncService: ref.watch(syncServiceProvider),
     syncTriggerDispatcher: ref.watch(syncTriggerDispatcherProvider),
+    db: ref.watch(appDatabaseProvider),
   );
 });
 
@@ -53,6 +54,7 @@ final supplierRepositoryProvider = Provider<SupplierRepository>((ref) {
     connectivity: ref.watch(connectivityServiceProvider),
     syncService: ref.watch(syncServiceProvider),
     syncTriggerDispatcher: ref.watch(syncTriggerDispatcherProvider),
+    db: ref.watch(appDatabaseProvider),
   );
 });
 

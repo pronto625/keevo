@@ -396,21 +396,21 @@ As a Toor, I want every offline write path to be atomic and every sync handler t
 **Refs:** B-CRIT-3, F-CRIT-1/2, FR27/FR30, Stories 13.4 / 13.6 / 13.7 / 16.6, UI-3 reviews. **Refonte absorption:** re-appliquer (Flutter Drift + handlers `sync`).
 
 **Items (routed 2026-10-11 from deferred-work):**
-- [ ] [Deferred-from: CR v1s-13-6, 2026-07-22] Stale draftInitialStocksProvider entries [record_sale_notifier.dart:66-67] — item removed from cart keeps its initial-stock entry which is still applied
-- [ ] [Deferred-from: CR v1s-13-4, 2026-07-22] Initial stock applied twice on retry after recordSale failure [record_sale_notifier.dart:70-83,124] — idempotency guard or move into recordSale transaction
-- [ ] [Deferred-from: CR v1s-13-7, 2026-07-22] UNIQUE violation on variant mismatch in offline inventory [validate_inventory_provider.dart:91-131, stock_levels_table.dart:31-33] — unique index lacks variant_id; extend when variants land
-- [ ] [Deferred-from: CR v1s-13-7, 2026-07-22] Session with zero counts silently VALIDATED [validate_inventory_provider.dart:214-220] — guard empty session
-- [ ] [Deferred-from: CR v1s-13-7, 2026-07-22] Re-validation overwrites completedAt [validate_inventory_provider.dart:214-220] — guard already-VALIDATED session
-- [ ] [Deferred-from: legacy cart UI session, 2026-04-07] Stale sync_queue CREATE_SALE payloads with 'status' key [sync_queue / _buildPayload] — one-off migration to rename status->requestedStatus or confirm none remain in prod
-- [ ] [Deferred-from: CR v1s-12-8, 2026-07-24] D3 StockAdjust quantity truncated via intValue [StockAdjustSyncHandler.java:47] — validate range before intValue
-- [ ] [Deferred-from: CR v1s-16-6, 2026-07-27] deactivateStore() crashes on existing! when not cached [store_repository_impl.dart:152-153] — null-safe path; queue op already committed before crash
-- [ ] [Deferred-from: CR v1s-16-6, 2026-07-27] Store offline write + queueOperation not atomic [store_repository_impl.dart:71-83,121-132,145-151] — single Drift transaction (also clients/suppliers)
-- [ ] [Deferred-from: CR v1s-16-6, 2026-07-27] updateStore() fallback fabricates type/isActive [store_repository_impl.dart:108-114] — mislabelled cache until next sync
-- [ ] [Deferred-from: CR v1s-16-6, 2026-07-27] CreateStoreSyncHandler skips 2-100 name length [CreateStoreSyncHandler.java:49-52] — sync handlers bypass DTO validation (clients too); align
-- [ ] [Deferred-from: CR v1s-16-6, 2026-07-27] StoreSyncHandler no idempotency guard [StoreSyncHandler.java] — retried UPDATE/DEACTIVATE re-executes use case
-- [ ] [Deferred-from: CR UI-3 lot 1 backend, 2026-10-11] Offline sales create a 2nd SALE stock movement on pull [RecordSaleService.java:89] — send movement ids in CREATE_SALE payload (app + backend)
-- [ ] [Deferred-from: CR UI-3 lots 2-5 app, 2026-10-11] QuickAdd offline path / LocalProductDataSource insert without transaction [quick_add_product_notifier.dart, local_product_datasource.dart] — write + queue in one Drift transaction
-- [ ] [Deferred-from: build-auto v1s-12-10, 2026-10-11] InventorySessionSyncHandler bypasses CreateInventorySessionUseCase [InventorySessionSyncHandler.java:apply] — writes via repository.save: no store-existence check, no single-active-session check, no InventorySessionCreatedEvent; route through the use case with the client session id (idempotent replay, offline conflict policy)
+- [x] [Deferred-from: CR v1s-13-6, 2026-07-22] Stale draftInitialStocksProvider entries [record_sale_notifier.dart:66-67] — item removed from cart keeps its initial-stock entry which is still applied — **fixed v1s-13-8: entries filtered to draft items in the cart, map cleared after every successful sale**
+- [x] [Deferred-from: CR v1s-13-4, 2026-07-22] Initial stock applied twice on retry after recordSale failure [record_sale_notifier.dart:70-83,124] — idempotency guard or move into recordSale transaction — **already resolved by UI-3 (commit 1041827): entries applied in the recordSale Drift transaction; covered by record_sale_notifier_test rollback tests**
+- [x] [Deferred-from: CR v1s-13-7, 2026-07-22] UNIQUE violation on variant mismatch in offline inventory [validate_inventory_provider.dart:91-131, stock_levels_table.dart:31-33] — unique index lacks variant_id; extend when variants land — **fixed v1s-13-8: fallback to the (product, store) row; unique-key extension routed to Story 14.1**
+- [x] [Deferred-from: CR v1s-13-7, 2026-07-22] Session with zero counts silently VALIDATED [validate_inventory_provider.dart:214-220] — guard empty session — **fixed v1s-13-8: offline validation refuses a session with no counted line**
+- [x] [Deferred-from: CR v1s-13-7, 2026-07-22] Re-validation overwrites completedAt [validate_inventory_provider.dart:214-220] — guard already-VALIDATED session — **fixed v1s-13-8: VALIDATED session is a no-op (re-checked inside the transaction)**
+- [x] [Deferred-from: legacy cart UI session, 2026-04-07] Stale sync_queue CREATE_SALE payloads with 'status' key [sync_queue / _buildPayload] — one-off migration to rename status->requestedStatus or confirm none remain in prod — **fixed v1s-13-8: SaleSyncHandler reads legacy `status` (COMPLETED/PENDING_VALIDATION only) when `requestedStatus` is absent — no client migration needed**
+- [x] [Deferred-from: CR v1s-12-8, 2026-07-24] D3 StockAdjust quantity truncated via intValue [StockAdjustSyncHandler.java:47] — validate range before intValue — **fixed v1s-13-8: integral int-range validation before use (other handlers → v1s-15-9)**
+- [x] [Deferred-from: CR v1s-16-6, 2026-07-27] deactivateStore() crashes on existing! when not cached [store_repository_impl.dart:152-153] — null-safe path; queue op already committed before crash — **fixed v1s-13-8: not-cached store → StoreException.notFound before any write/queue**
+- [x] [Deferred-from: CR v1s-16-6, 2026-07-27] Store offline write + queueOperation not atomic [store_repository_impl.dart:71-83,121-132,145-151] — single Drift transaction (also clients/suppliers) — **fixed v1s-13-8: single Drift transaction for stores, clients, suppliers**
+- [x] [Deferred-from: CR v1s-16-6, 2026-07-27] updateStore() fallback fabricates type/isActive [store_repository_impl.dart:108-114] — mislabelled cache until next sync — **fixed v1s-13-8: not-cached store → notFound, no fabricated row**
+- [x] [Deferred-from: CR v1s-16-6, 2026-07-27] CreateStoreSyncHandler skips 2-100 name length [CreateStoreSyncHandler.java:49-52] — sync handlers bypass DTO validation (clients too); align — **fixed v1s-13-8: StoreFactory.validateName shared; client/supplier blank phone rejected**
+- [x] [Deferred-from: CR v1s-16-6, 2026-07-27] StoreSyncHandler no idempotency guard [StoreSyncHandler.java] — retried UPDATE/DEACTIVATE re-executes use case — **fixed v1s-13-8: state-based no-op (inactive store / unchanged values); op-id dedup already in SyncPushService**
+- [x] [Deferred-from: CR UI-3 lot 1 backend, 2026-10-11] Offline sales create a 2nd SALE stock movement on pull [RecordSaleService.java:89] — send movement ids in CREATE_SALE payload (app + backend) — **fixed v1s-13-8: SALE movement id = client sale item id (payload itemId) on both sides; validate/cascade paths → v1s-13-10**
+- [x] [Deferred-from: CR UI-3 lots 2-5 app, 2026-10-11] QuickAdd offline path / LocalProductDataSource insert without transaction [quick_add_product_notifier.dart, local_product_datasource.dart] — write + queue in one Drift transaction — **fixed v1s-13-8: Drift transaction in quick-add and LocalProductDataSource.insert/insertDraft**
+- [x] [Deferred-from: build-auto v1s-12-10, 2026-10-11] InventorySessionSyncHandler bypasses CreateInventorySessionUseCase [InventorySessionSyncHandler.java:apply] — writes via repository.save: no store-existence check, no single-active-session check, no InventorySessionCreatedEvent; route through the use case with the client session id (idempotent replay, offline conflict policy) — **fixed v1s-13-8: routed through CreateInventorySessionUseCase with client id (idempotent replay, store mismatch FORBIDDEN, active conflict REJECTED); 12-10 store rule kept; local reconciliation → v1s-16-12**
 
 **AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
 
@@ -449,6 +449,7 @@ As a Toor, I want concurrent cancel/correct on the same sale to conflict instead
 **Items (routed 2026-10-11 from deferred-work):**
 - [ ] [Deferred-from: CR v1s-13-5, 2026-07-22] No optimistic lock on Sale (double cancel / correct overwrites cancel) [CorrectSaleService.java:91-95,115; ValidateSaleService.java] — @Version on SaleJpaEntity + 409 mapping (mirror v1s-13-1)
 - [ ] [Deferred-from: CR UI-3 lot 1 backend, 2026-10-11] CorrectSaleService race with concurrent cancel (dup) [CorrectSaleService.java:115] — same as v1s-13-5 item; @Version on Sale
+- [ ] [Deferred-from: build-auto v1s-13-8, 2026-10-11] ValidateSaleService / SaleValidationCascadeService (and app validatePendingSale / cascade in local_sale_datasource.dart) still write SALE movements with server-random ids [ValidateSaleService.java:115, SaleValidationCascadeService.java:100] — a PENDING sale validated later gets a 2nd SALE movement on pull; reuse the sale item id as movement id on both sides (as v1s-13-8 did for RecordSaleService)
 
 **AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
 
@@ -505,6 +506,9 @@ As a proprietor, I want product variants with distinct stock per combination (FR
 **And** card shows "X variantes" from real count; Flutter `ProductFormPage` variant toggle + axis editors
 
 **Doc:** Story 2.1 AC4 (confirm scope Vêtements-first vs all). **TDD:** `shouldCreateDistinctStockPerVariant()`, `shouldEnforceUniqueConstraintWithVariant()`; Flutter `shouldShowVariantBadgeFromRealCount()`.
+
+**Items routed:**
+- [ ] [Deferred-from: build-auto v1s-13-8, 2026-10-11] Flutter Drift `stock_levels` unique key is (product_id, store_id) only [keevo/app/lib/core/storage/stock_levels_table.dart:31-33] — extend to (product_id, variant_id, store_id) with a Drift migration when variants land; v1s-13-8 made offline inventory validation fall back to the (product, store) row meanwhile
 
 ## Story 14.2: FR44 — Leaderboard vendeurs — **[C]**
 
@@ -898,6 +902,7 @@ As a Toor, I want duplicated auth helpers, magic strings and unsafe casts factor
 - [ ] [Deferred-from: CR v1s-14-5, 2026-07-23] AdminFeedbackController bypasses application layer [AdminFeedbackController.java] — inject a use case instead of FeedbackRepository
 - [ ] [Deferred-from: CR v1s-14-5, 2026-07-23] AccountDeletionScheduler.findAll() loads every tenant [AccountDeletionScheduler.java] — findByStatusAndDeletionScheduledAtBefore
 - [ ] [Deferred-from: CR v1s-14-5, 2026-07-23] Feedback domain model has no null-safety [Feedback.java] — requireNonNull like Tenant/User
+- [ ] [Deferred-from: build-auto v1s-13-8, 2026-10-11] Silent `((Number) x).intValue()` truncation left in SaleSyncHandler (quantity, prices, discountAmount), TransferSyncHandler, InventoryCountSyncHandler, ValidateSaleSyncHandler, ProductSyncHandler — hoist StockAdjustSyncHandler.requireIntegralInt into AbstractSyncOperationHandler and apply it everywhere
 
 **AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
 
@@ -1026,6 +1031,7 @@ As a Toor, I want REJECTED push operations surfaced to the user (and their ghost
 - [ ] [Deferred-from: CR v1s-14-13, 2026-07-24] ProductSyncHandler now rejects with PLAN_LIMIT_EXCEEDED, undocumented [ProductSyncHandler.java] — sync protocol has no handling for plan-limit rejection; define + test expected client behaviour
 - [ ] [Deferred-from: CR v1s-16-6, 2026-07-27] No rollback/notice for REJECTED offline CREATE_STORE (all entity types) [rest_sync_service.dart:106-113] — push->UI rejection channel; ghost local rows
 - [ ] [Deferred-from: CR v1s-16-8, 2026-07-27] onAppStartup() silently no-op if a sync is running [sync_trigger_notifier.dart:205] — queue a follow-up pull instead of dropping
+- [ ] [Deferred-from: build-auto v1s-13-8, 2026-10-11] CREATE_INVENTORY_SESSION can now be REJECTED (INVENTORY_SESSION_ALREADY_ACTIVE / INVENTORY_STORE_NOT_FOUND) [InventorySessionSyncHandler.java] — the local session stays IN_PROGRESS and its queued SAVE_INVENTORY_COUNT / VALIDATE_INVENTORY fail in cascade; cancel/flag the local session and its dependent ops on rejection
 
 **AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
 

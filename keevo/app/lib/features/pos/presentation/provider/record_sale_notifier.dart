@@ -65,8 +65,14 @@ class RecordSaleNotifier extends Notifier<RecordSaleState> {
 
       // Collect draft items and their initial stocks BEFORE any mutations.
       final draftItems = cart.where((c) => c.isDraft).toList();
-      final initialStockEntries =
-          Map<String, int>.from(ref.read(draftInitialStocksProvider));
+      // v1s-13-8: only entries for draft products still in THIS cart — a stale
+      // entry (product removed from the cart, or no longer a draft) must be
+      // neither applied locally nor queued.
+      final draftProductIds = draftItems.map((c) => c.productId).toSet();
+      final initialStockEntries = <String, int>{
+        for (final e in ref.read(draftInitialStocksProvider).entries)
+          if (draftProductIds.contains(e.key)) e.key: e.value,
+      };
 
       // Local stock check for ALL items BEFORE any local mutation: a draft
       // product's initial stock entry counts toward what is available, so a
@@ -132,8 +138,9 @@ class RecordSaleNotifier extends Notifier<RecordSaleState> {
           }
           return record();
         });
-        ref.read(draftInitialStocksProvider.notifier).state = {};
       }
+      // Cleared after every successful sale (stale entries included).
+      ref.read(draftInitialStocksProvider.notifier).state = {};
 
       ref.read(cartProvider.notifier).clearCart();
       ref.invalidate(frequentProductsProvider);

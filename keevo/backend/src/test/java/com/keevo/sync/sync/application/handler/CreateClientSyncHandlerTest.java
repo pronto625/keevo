@@ -116,4 +116,18 @@ class CreateClientSyncHandlerTest {
     void supportedTypes_containsCreateClient() {
         assertThat(handler.supportedTypes()).containsExactly("CREATE_CLIENT");
     }
+
+    // ── v1s-13-8: @NotBlank phone parity with the REST DTO ─────────────────
+
+    @Test
+    void handle_blankPhone_returnsRejected() {
+        var op = new SyncOperation("op-blank", "CREATE_CLIENT", null,
+                Map.of("id", UUID.randomUUID().toString(), "name", "Alice", "phone", "  "),
+                Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        verifyNoInteractions(clientRepository);
+    }
 }

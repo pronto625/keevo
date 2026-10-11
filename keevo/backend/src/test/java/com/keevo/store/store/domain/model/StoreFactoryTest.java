@@ -84,4 +84,14 @@ class StoreFactoryTest {
         Store store = StoreFactory.create("  Ma Boutique  ", StoreType.STORE, null, null);
         assertThat(store.name()).isEqualTo("Ma Boutique");
     }
+
+    @Test
+    @DisplayName("v1s-13-8: validateName returns the trimmed name and rejects invalid lengths")
+    void validateName_trimsAndValidates() {
+        assertThat(StoreFactory.validateName("  Shop  ")).isEqualTo("Shop");
+        assertThatThrownBy(() -> StoreFactory.validateName(" a "))
+                .isInstanceOf(DomainException.class);
+        assertThatThrownBy(() -> StoreFactory.validateName("x".repeat(101)))
+                .isInstanceOf(DomainException.class);
+    }
 }

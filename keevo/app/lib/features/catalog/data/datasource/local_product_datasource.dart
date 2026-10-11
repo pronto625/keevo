@@ -138,19 +138,22 @@ class LocalProductDataSource {
       createdAt: now,
       updatedAt: now,
     );
-    await _db.into(_db.products).insert(companion);
+    // v1s-13-8: insert + queue entry in one Drift transaction.
+    await _db.transaction(() async {
+      await _db.into(_db.products).insert(companion);
 
-    // Enqueue sync operation.
-    await _enqueueSync('CREATE_PRODUCT', {
-      'id': id,
-      'name': name,
-      'description': description,
-      'sku': effectiveSku,
-      'categoryId': categoryId,
-      'price': price,
-      'buyPrice': buyPrice,
-      'transportCost': transportCost,
-      'photoUrl': photoUrl,
+      // Enqueue sync operation.
+      await _enqueueSync('CREATE_PRODUCT', {
+        'id': id,
+        'name': name,
+        'description': description,
+        'sku': effectiveSku,
+        'categoryId': categoryId,
+        'price': price,
+        'buyPrice': buyPrice,
+        'transportCost': transportCost,
+        'photoUrl': photoUrl,
+      });
     });
 
     return _toModel(await (_db.select(_db.products)
@@ -296,14 +299,17 @@ class LocalProductDataSource {
       createdAt: now,
       updatedAt: now,
     );
-    await _db.into(_db.products).insert(companion);
+    // v1s-13-8: insert + queue entry in one Drift transaction.
+    await _db.transaction(() async {
+      await _db.into(_db.products).insert(companion);
 
-    await _enqueueSync('CREATE_DRAFT_PRODUCT', {
-      'id': id,
-      'name': name,
-      'priceVente': priceVente,
-      'categoryId': categoryId,
-      if (stockQuantity > 0) 'stockQuantity': stockQuantity,
+      await _enqueueSync('CREATE_DRAFT_PRODUCT', {
+        'id': id,
+        'name': name,
+        'priceVente': priceVente,
+        'categoryId': categoryId,
+        if (stockQuantity > 0) 'stockQuantity': stockQuantity,
+      });
     });
 
     return _toModel(
