@@ -166,23 +166,79 @@ class StockTransferControllerTest {
             .andExpect(status().isOk());
     }
 
-    // ── POST /transfers — OWNER and EMPLOYEE (any store) can initiate ──────
-    // Story 12.6's original OWNER-only governance was superseded: employees
-    // are the ones performing this action in practice.
+    // ── Story v1s-12-11 — POST /transfers: EMPLOYEE scoped to own source store ──
+    // PO decision 2026-10-11 (FR36): OWNER transfers from any store; EMPLOYEE only
+    // when sourceStoreId equals their JWT-assigned store.
+
+    private String transferBody(UUID source) throws Exception {
+        return mapper.writeValueAsString(Map.of(
+            "sourceStoreId", source,
+            "destinationStoreId", destId,
+            "productId", prodId,
+            "quantity", 5
+        ));
+    }
 
     @Test
-    void POST_stock_transfers_employeeAllowed_shouldReturn201() throws Exception {
-        authenticateAs("EMPLOYEE");
+    void POST_stock_transfers_employeeOwnStore_shouldReturn201() throws Exception {
+        authenticateAsEmployeeWithStore(srcId);
         when(executeTransferService.execute(any())).thenReturn(completedTransfer());
 
         mockMvc.perform(post("/api/v1/stock/transfers")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(mapper.writeValueAsString(Map.of(
-                    "sourceStoreId", srcId,
-                    "destinationStoreId", destId,
-                    "productId", prodId,
-                    "quantity", 5
-                ))))
+                .content(transferBody(srcId)))
+            .andExpect(status().isCreated());
+
+        verify(executeTransferService).execute(any());
+    }
+
+    @Test
+    void POST_stock_transfers_employeeOtherStore_shouldReturn403() throws Exception {
+        authenticateAsEmployeeWithStore(srcId);
+        UUID otherStore = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/v1/stock/transfers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(transferBody(otherStore)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.domainCode").value("FORBIDDEN"));
+
+        verify(executeTransferService, never()).execute(any());
+    }
+
+    @Test
+    void POST_stock_transfers_employeeWithoutStoreClaim_shouldReturn403() throws Exception {
+        authenticateAs("EMPLOYEE"); // no AuthDetails → fails closed
+
+        mockMvc.perform(post("/api/v1/stock/transfers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(transferBody(srcId)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.domainCode").value("FORBIDDEN"));
+
+        verify(executeTransferService, never()).execute(any());
+    }
+
+    @Test
+    void POST_stock_transfers_employeeNullStoreId_shouldReturn403() throws Exception {
+        authenticateAsEmployeeWithStore(null);
+
+        mockMvc.perform(post("/api/v1/stock/transfers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(transferBody(srcId)))
+            .andExpect(status().isForbidden());
+
+        verify(executeTransferService, never()).execute(any());
+    }
+
+    @Test
+    void POST_stock_transfers_ownerOtherStore_shouldReturn201() throws Exception {
+        authenticateAs("OWNER");
+        when(executeTransferService.execute(any())).thenReturn(completedTransfer());
+
+        mockMvc.perform(post("/api/v1/stock/transfers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(transferBody(UUID.randomUUID())))
             .andExpect(status().isCreated());
 
         verify(executeTransferService).execute(any());

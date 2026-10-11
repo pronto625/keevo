@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/catalog/presentation/provider/product_provider.dart';
 import 'package:keevo/features/inventory/domain/model/stock_transfer_model.dart';
 import 'package:keevo/features/inventory/domain/repository/stock_transfer_repository.dart';
@@ -20,6 +21,13 @@ class _MockTransferRepo extends Mock implements StockTransferRepository {}
 class _FixedActiveStore extends ActiveStoreNotifier {
   @override
   String? build() => 'store-1';
+}
+
+class _ActiveStore extends ActiveStoreNotifier {
+  _ActiveStore(this._id);
+  final String? _id;
+  @override
+  String? build() => _id;
 }
 
 /// Store list still loading (never completes during the test).
@@ -117,5 +125,57 @@ void main() {
     expect(find.byKey(const Key('new_transfer_fab')), findsOneWidget);
     expect(find.byKey(const Key('new_transfer_fab_bottom')), findsOneWidget);
     expect(find.text('Effectué'), findsOneWidget);
+  });
+
+  // ── Story v1s-12-11 (routed from CR v1s-12-9) — "Réceptionner" visibility ──
+  group('_shouldShowReceiveButton', () {
+    const inTransitKey = Key('receive_transfer_t-it');
+
+    Future<void> pumpWith(WidgetTester tester,
+        {required String role, String? activeStoreId}) async {
+      when(() => repo.getHistory(
+            sourceStoreId: any(named: 'sourceStoreId'),
+            destinationStoreId: any(named: 'destinationStoreId'),
+            page: any(named: 'page'),
+            pageSize: any(named: 'pageSize'),
+          )).thenAnswer((_) async => [
+            // store-1 → store-2, in transit
+            _transfer('t-it').copyWith(status: 'IN_TRANSIT'),
+          ]);
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          stockTransferRepositoryProvider.overrideWithValue(repo),
+          activeStoreIdProvider.overrideWith(() => _ActiveStore(activeStoreId)),
+          currentUserRoleProvider.overrideWithValue(role),
+          storeListNotifierProvider.overrideWith(_LoadedStoreList.new),
+          productListForPickerProvider.overrideWith((_) async => []),
+        ],
+        child: const MaterialApp(home: TransferHistoryPage()),
+      ));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('EMPLOYEE, active == destination → visible', (tester) async {
+      await pumpWith(tester, role: 'EMPLOYEE', activeStoreId: 'store-2');
+      expect(find.byKey(inTransitKey), findsOneWidget);
+    });
+
+    testWidgets('EMPLOYEE, active != destination → hidden', (tester) async {
+      // active == source: the tile is listed (outgoing) but not receivable.
+      await pumpWith(tester, role: 'EMPLOYEE', activeStoreId: 'store-1');
+      expect(find.text('Riz'), findsWidgets);
+      expect(find.byKey(inTransitKey), findsNothing);
+    });
+
+    testWidgets('EMPLOYEE, active == null → hidden', (tester) async {
+      await pumpWith(tester, role: 'EMPLOYEE', activeStoreId: null);
+      expect(find.text('Riz'), findsWidgets);
+      expect(find.byKey(inTransitKey), findsNothing);
+    });
+
+    testWidgets('OWNER, active == null → visible', (tester) async {
+      await pumpWith(tester, role: 'OWNER', activeStoreId: null);
+      expect(find.byKey(inTransitKey), findsOneWidget);
+    });
   });
 }
