@@ -22,7 +22,7 @@ export function Sidebar() {
   const monitoringItems = [
     { href: "/monitoring/products", label: "Catalogue Produits", comingSoon: false },
     { href: "/monitoring/activity", label: "Activité", comingSoon: true },
-    { href: "/monitoring/sync", label: "Synchronisation", comingSoon: true },
+    { href: "/monitoring/sync", label: "Synchronisation", comingSoon: false },
   ];
 
   const isMonitoringActive = monitoringItems.some((item) =>

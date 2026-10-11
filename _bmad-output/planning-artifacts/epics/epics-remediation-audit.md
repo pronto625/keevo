@@ -1105,6 +1105,23 @@ As a Toor, I want the catalog list to search safely, deduplicate by id/SKU and s
 
 ---
 
+# Suivi audit 2026-10-11 — Dashboard Super Admin
+
+## Story 17.1: Rétablir le build du dashboard + CI dashboard (`v1s-17-1-dashboard-build-ci`) — **[A]**
+
+As a Toor, I want the Next.js Super Admin dashboard to build and to be guarded by CI, so that it can be deployed again.
+
+**Refs:** audit-coherence-2026-10-11 C1 ; sprint-change-proposal-2026-10-11. **Scope:** les pages `monitoring/activity` (9-7) et `monitoring/sync` (9-8) importaient 10 modules inexistants et cassaient `next build`. Réparer plutôt que retirer : livrer le frontend 9-8 (backend `AdminSyncMonitoringController` prêt), masquer proprement la page 9-7 (pas de backend) et router le reste vers 9-7 ; ajouter un workflow GitHub Actions dashboard (lint + typecheck + build).
+
+- [x] Frontend 9-8 livré (types, client API, `useSyncMonitoring`, `SyncOverviewCards` / `SyncHealthTable` / `SyncTenantDetailDrawer`, sidebar active) — spec-v1s-17-1-dashboard-build-ci.md
+- [x] Page 9-7 remplacée par un placeholder « bientôt disponible » ; restauration + backend routés dans la story 9-7
+- [x] Erreur lint `react-hooks/set-state-in-effect` corrigée (`lib/auth/auth-context.tsx`)
+- [x] `.github/workflows/dashboard-ci.yml` (npm ci, lint, tsc --noEmit, build)
+
+**AC (interim):** `npm run lint`, `npx tsc --noEmit` et `npm run build` passent dans `keevo/dashboard` ; la CI dashboard existe ; les éléments reportés sont routés dans les story files 9-7/9-8 sous `### Deferred items routed 2026-10-11`. ✅ 2026-10-11
+
+---
+
 # Epic 18: Export de données & Audit détaillé (Piste V1, tag C)
 
 Le propriétaire peut récupérer toutes ses données dans le format de son choix et comprendre chaque action tracée.

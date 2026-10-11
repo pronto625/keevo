@@ -4,7 +4,6 @@ import React, {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useState,
 } from "react";
 
@@ -27,16 +26,20 @@ const AuthContext = createContext<AuthContextValue>({
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [token, setToken] = useState<string | null>(null);
-
-  // Restore token from sessionStorage on mount (page refresh)
-  useEffect(() => {
-    const stored = sessionStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      _token = stored;
-      setToken(stored);
+  // Restore token from sessionStorage on first client render (page refresh).
+  // Lazy initializer + synchronous `_token` assignment: the axios interceptor
+  // sees the token before any child query fires, and no setState-in-effect.
+  const [token, setToken] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    let stored: string | null = null;
+    try {
+      stored = sessionStorage.getItem(STORAGE_KEY);
+    } catch {
+      return null; // storage blocked (privacy mode / SecurityError)
     }
-  }, []);
+    if (stored) _token = stored;
+    return stored;
+  });
 
   const login = useCallback((newToken: string) => {
     _token = newToken;

@@ -64,6 +64,15 @@ Status: ready-for-dev
 - [ ] **Task 6 — Documentation rétroactive**
   - [ ] 6.1 Ajouter "Story 9.7" à `epic-9-super-admin-dashboard-toor.md` (elle n'y figure pas aujourd'hui) pour fermer le gap de traçabilité identifié par l'audit.
 
+### Deferred items routed 2026-10-11
+
+Pour rétablir le build du dashboard (audit-coherence-2026-10-11 C1), la story v1s-17-1 a **remplacé** `app/monitoring/activity/page.tsx` par un placeholder « bientôt disponible » (aucun appel API). Le contrat figé ci-dessous (Dev Notes) reste la spec ; le fichier d'origine est récupérable via `git show e1f91c6:keevo/dashboard/src/app/monitoring/activity/page.tsx`. Travail additionnel à la reprise de cette story :
+
+- [ ] [Deferred-from: v1s-17-1-dashboard-build-ci, 2026-10-11] Restaurer `activity/page.tsx` depuis e1f91c6 (contrat ci-dessous) à la place du placeholder. Attention : la ligne `if (overviewQuery.isSuccess && !lastUpdated) setLastUpdated(...)` appelle setState pendant le rendu — à corriger (lint `Dashboard CI`) sans changer les props des composants.
+- [ ] [Deferred-from: v1s-17-1-dashboard-build-ci, 2026-10-11] Repasser l'entrée sidebar « Activité » à `comingSoon: false` (`components/layout/Sidebar.tsx`).
+- [ ] [Deferred-from: v1s-17-1-dashboard-build-ci, 2026-10-11] La CI `Dashboard CI` (`.github/workflows/dashboard-ci.yml` : lint + tsc + build) doit rester verte.
+- [ ] [Deferred-from: v1s-17-1-dashboard-build-ci, 2026-10-11] Décisions produit à confirmer avant de coder : définition du GMV, seuil d'inactivité (14 j par défaut).
+
 ## Dev Notes
 
 - **Contrat figé extrait de `page.tsx` (ne pas modifier ce fichier, il est déjà correct)** :
