@@ -23,12 +23,13 @@ Deliver on the V1 production line (`deploy`) the functional requirements that we
 - Story 14.13: Enforcing the Free plan limits. Done. This story is in the tracker only.
 - Story 14.14: Category delete sync gap. Done. This story is in the tracker only.
 - Story 14.15: Category hardening (404 instead of 500, audit events, Flutter atomicity). Backlog.
-- Story 14.16: Day-closure WhatsApp report sent to the real owner. In progress.
-- Story 14.17: Single, reliable owner-recipient resolution (shared resolver). Backlog.
+- Story 14.16: Day-closure WhatsApp report sent to the real owner. Done.
+- Story 14.17: Single, reliable owner-recipient resolution (shared resolver). In progress.
 
 ## Requirements & Constraints
 
 - **Tenant isolation is absolute.** A report, notification or message must never go to a hardcoded or guessed recipient. Resolve the owner's phone per tenant. If no phone exists, skip the send and log it instead of using a fallback number.
+- **Owner-recipient rule (one rule, applied everywhere):** the recipient is the WhatsApp phone of the tenant's active OWNER. The choice must be deterministic when several OWNER memberships exist (role promotion makes this possible), must skip deactivated users (user inactive, not only membership inactive), and must trim the phone and treat blank as missing. A blank phone on the end-of-day path falls back to in-app only, never a send to an empty number.
 - **WhatsApp and other external sends are best-effort.** A failure in WhatsApp, FCM or another external service must never roll back or block the business operation that triggered it.
 - **Owner-only features:**
   - The leaderboard ranks employees by revenue, number of sales and average basket. Employees get 403 and never see it. In the UI, the owner turns it on with a toggle.
@@ -56,7 +57,8 @@ Deliver on the V1 production line (`deploy`) the functional requirements that we
   - Before creating an event, check the domain event registry and extend an existing event rather than duplicating it.
 - **WhatsApp:**
   - All sends go through `WhatsAppPort`, which is provider-agnostic and currently implemented by the Wassender adapter.
-  - Day-closure and report recipients come from an owner lookup per tenant. `ReportHistoryService` already uses this pattern since v1s-15-7: it refuses and logs when there is no owner phone. `DayClosureWhatsAppListener` must follow the same pattern.
+  - Day-closure and report recipients come from an owner lookup per tenant; when there is no owner phone the send is refused and logged (`ReportHistoryService` since v1s-15-7, `DayClosureWhatsAppListener` since v1s-14-16, which also sends after commit and restores the tenant context).
+  - The owner-phone rule is currently duplicated across about nine call sites (messaging notification listeners, reporting services such as `DailyReportGenerator` and `MultiStoreSummaryService`). It must be centralised in one shared resolver (a `UserRepository` default method or a small `OwnerPhoneResolver`) so the rules cannot drift; it lives with identity data and is consumed through ports, respecting the no-cross-domain-import rule. Changes to the owner lookup query need a database-level test.
 - **Notifications:**
   - Owner notifications use FCM plus WhatsApp (`channel=BOTH`).
   - Bursts are batched in a time window per employee, using the `ConcurrentHashMap` pattern from `StockAlertNotificationListener`.
@@ -80,8 +82,8 @@ Deliver on the V1 production line (`deploy`) the functional requirements that we
 
 ## Cross-Story Dependencies
 
-- **14.16** comes from v1s-15-7 (D1, owner lookup in `ReportHistoryService`) and relates to Story 13.11. The refactor re-applies it in `messaging`.
-- **14.17** comes from the 14.16 review: one shared owner-recipient resolver (deterministic, active owner only, trimmed non-blank phone) for every owner-directed WhatsApp send.
+- **14.16** (done) comes from v1s-15-7 (D1, owner lookup in `ReportHistoryService`) and relates to Story 13.11. The refactor re-applies it in `messaging`.
+- **14.17** comes from the 14.16 review and builds on it; it depends on 14.11 (role promotion creating several OWNER memberships). The refactor re-applies it in `identity`/`messaging`.
 - **14.15** builds on 14.14 (deletion through `TOGGLE_CATEGORY`) and on 15.3, 15.5 and 13.4 (atomicity of Drift write plus queue).
 - The audit flags that `TOGGLE_CATEGORY` has no role check, while the REST `DELETE` is owner-only.
 - **14.6:** the FR67 activity part overlaps refactor Story 17-3.
