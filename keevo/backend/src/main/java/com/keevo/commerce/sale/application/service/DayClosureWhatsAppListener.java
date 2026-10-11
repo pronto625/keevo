@@ -1,26 +1,35 @@
 package com.keevo.commerce.sale.application.service;
 
 import com.keevo.commerce.sale.domain.model.DayClosedEvent;
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
+import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.util.Locale;
+import java.util.Optional;
 
 /**
  * DayClosureWhatsAppListener — GoF Observer pattern, listens to DayClosedEvent.
  * Story 4.4 — Clôture Journalière & Historique des Ventes
  *
- * <p>Builds and sends WhatsApp report to owner using ClosureReportStrategy.
+ * <p>Builds and sends WhatsApp report to the closing tenant's owner using ClosureReportStrategy.
  *
- * <p>MVP: Uses NoOpWhatsAppAdapter (logs only, no real sending).
+ * <p>v1s-14-16: the recipient is only ever the phone of the OWNER of {@code event.tenantId()}
+ * (same rule as ReportHistoryService, v1s-15-7 D1). No owner / no phone → no send, warn only.
+ * Runs AFTER_COMMIT of CloseDayService's transaction: no report for a rolled-back closure, and
+ * nothing here (lookup, store read, send) can poison or roll back the closure. Every runtime
+ * exception is caught and logged. TenantContext is set to {@code event.tenantId()} around the
+ * store lookup (other AFTER_COMMIT listeners may have cleared it) and restored afterwards.
+ *
+ * <p>Note: with keevo.reporting.legacy-listener=true the owner receives this legacy report IN
+ * ADDITION to the EndOfDayReportListener report (double send).
  *
  * <p>DEPRECATED by story 7.2 — replaced by EndOfDayReportListener.
  * Disabled by default; re-enable with keevo.reporting.legacy-listener=true.
@@ -30,49 +39,70 @@ import java.util.Locale;
 public class DayClosureWhatsAppListener {
 
     private static final Logger log = LoggerFactory.getLogger(DayClosureWhatsAppListener.class);
-    private static final ZoneId WAT_ZONE = ZoneId.of("Africa/Lagos");
-    private static final DateTimeFormatter FR_DATE = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.FRENCH);
-    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH'h'mm");
 
     private final WhatsAppPort whatsAppPort;
     private final StoreRepository storeRepository;
+    private final UserRepository userRepository;
     private final ClosureReportStrategy manualReportStrategy;
     private final ClosureReportStrategy autoReportStrategy;
 
-    // MVP: owner phone from system property or default
-    private static final String DEFAULT_OWNER_PHONE = "+243000000000";
-
     public DayClosureWhatsAppListener(WhatsAppPort whatsAppPort,
-                                      StoreRepository storeRepository) {
+                                      StoreRepository storeRepository,
+                                      UserRepository userRepository) {
         this.whatsAppPort = whatsAppPort;
         this.storeRepository = storeRepository;
+        this.userRepository = userRepository;
         this.manualReportStrategy = new ManualReportStrategy();
         this.autoReportStrategy = new AutoReportStrategy();
     }
 
-    @EventListener
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onDayClosed(DayClosedEvent event) {
-        log.info("DayClosedEvent received: storeId={}, isAutomatic={}",
-                event.storeId(), event.isAutomatic());
+        String previousTenant = TenantContext.getCurrentTenant();
+        try {
+            log.info("DayClosedEvent received: storeId={}, isAutomatic={}",
+                    event.storeId(), event.isAutomatic());
 
-        // Get store name
-        String storeName = storeRepository.findById(event.storeId())
-                .map(s -> s.name())
-                .orElse("Boutique #" + event.storeId().toString().substring(0, 8));
+            // v1s-14-16: owner check before building the report — never a fallback recipient.
+            Optional<String> ownerPhone = resolveOwnerPhone(event.tenantId());
+            if (ownerPhone.isEmpty()) {
+                log.warn("Day-closure WhatsApp report skipped for tenant={} storeId={}: no owner WhatsApp phone",
+                        event.tenantId(), event.storeId());
+                return;
+            }
 
-        // MVP: employee name from phone (User.fullName not available in this story)
-        String employeeName = "Employé";
+            TenantContext.setCurrentTenant(event.tenantId());
+            String storeName = storeRepository.findById(event.storeId())
+                    .map(s -> s.name())
+                    .orElse("Boutique #" + event.storeId().toString().substring(0, 8));
 
-        // Choose strategy based on isAutomatic
-        ClosureReportStrategy strategy = event.isAutomatic() ? autoReportStrategy : manualReportStrategy;
+            // MVP: employee name from phone (User.fullName not available in this story)
+            String employeeName = "Employé";
 
-        // Build report
-        String report = strategy.buildReport(event, storeName, employeeName);
+            ClosureReportStrategy strategy = event.isAutomatic() ? autoReportStrategy : manualReportStrategy;
+            String report = strategy.buildReport(event, storeName, employeeName);
 
-        // Get owner phone (MVP: system property or default)
-        String ownerPhone = System.getProperty("keevo.owner.whatsapp", DEFAULT_OWNER_PHONE);
+            whatsAppPort.sendReport(ownerPhone.get(), report);
+        } catch (RuntimeException e) {
+            // Closure is already committed (AFTER_COMMIT): log and skip, never propagate.
+            log.warn("Day-closure WhatsApp report failed for tenant={} storeId={}: {}: {}",
+                    event.tenantId(), event.storeId(), e.getClass().getSimpleName(), e.getMessage(), e);
+        } finally {
+            if (previousTenant != null) {
+                TenantContext.setCurrentTenant(previousTenant);
+            } else {
+                TenantContext.clear();
+            }
+        }
+    }
 
-        // Send via WhatsAppPort (NoOp for MVP — logs only)
-        whatsAppPort.sendReport(ownerPhone, report);
+    /** Owner phone of the given tenant schema; empty when tenant, owner or phone is missing/blank. */
+    private Optional<String> resolveOwnerPhone(String tenantId) {
+        if (tenantId == null || tenantId.isBlank()) {
+            return Optional.empty();
+        }
+        return userRepository.findOwnerByTenantSchemaName(tenantId)
+                .map(User::getPhoneNumber)
+                .filter(phone -> !phone.isBlank());
     }
 }
