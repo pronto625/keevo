@@ -32,6 +32,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -48,6 +49,7 @@ class ReportControllerTest {
     @Mock private ResendReportUseCase resendReportUseCase;
     @Mock private GenerateWeeklyReportUseCase weeklyReportGenerator;
     @Mock private StoreRepository storeRepository;
+    @Mock private com.keevo.reporting.report.application.service.WeeklyReportWindowResolver weeklyWindowResolver;
     @InjectMocks private ReportController controller;
 
     private MockMvc mockMvc;
@@ -186,18 +188,31 @@ class ReportControllerTest {
                 com.keevo.store.store.domain.model.StoreType.STORE, "Yaoundé", null, true,
                 Instant.now(), Instant.now());
         when(storeRepository.findAllActive()).thenReturn(List.of(store));
+        var window = new com.keevo.reporting.report.application.service.WeeklyReportWindowResolver.Window(
+                Instant.parse("2026-03-22T19:00:00.000001Z"), Instant.parse("2026-03-29T19:00:00Z"),
+                Instant.parse("2026-03-22T19:00:00Z"), Instant.parse("2026-03-29T19:00:00Z"));
+        when(weeklyWindowResolver.resolve(eq(store.id()), any(), any(LocalDate.class), any(Instant.class)))
+                .thenReturn(window);
+        Instant before = Instant.now();
 
         mockMvc.perform(post("/api/v1/reports/trigger-weekly"))
                 .andExpect(status().isOk());
 
-        var captor = org.mockito.ArgumentCaptor.forClass(GenerateWeeklyReportUseCase.WeeklyReportCommand.class);
-        verify(weeklyReportGenerator).generateWeeklyReport(captor.capture());
+        // Same resolver as the scheduler (v1s-13-11 D2), for the Sunday of the last completed week.
         LocalDate today = LocalDate.now(wat);
         LocalDate expectedSunday = today.with(java.time.temporal.TemporalAdjusters
                 .previousOrSame(java.time.DayOfWeek.SUNDAY));
-        org.assertj.core.api.Assertions.assertThat(captor.getValue().weekEnd())
-                .isEqualTo(expectedSunday.atTime(23, 59, 59).atZone(wat).toInstant());
-        org.assertj.core.api.Assertions.assertThat(captor.getValue().weekStart())
-                .isEqualTo(expectedSunday.minusDays(6).atStartOfDay(wat).toInstant());
+        var nowCaptor = org.mockito.ArgumentCaptor.forClass(Instant.class);
+        verify(weeklyWindowResolver).resolve(eq(store.id()), any(), eq(expectedSunday), nowCaptor.capture());
+        org.assertj.core.api.Assertions.assertThat(nowCaptor.getValue()).isBetween(before, Instant.now());
+
+        var captor = org.mockito.ArgumentCaptor.forClass(GenerateWeeklyReportUseCase.WeeklyReportCommand.class);
+        verify(weeklyReportGenerator).generateWeeklyReport(captor.capture());
+        var cmd = captor.getValue();
+        org.assertj.core.api.Assertions.assertThat(cmd.weekStart()).isEqualTo(window.start());
+        org.assertj.core.api.Assertions.assertThat(cmd.weekEnd()).isEqualTo(window.end());
+        org.assertj.core.api.Assertions.assertThat(cmd.lateFrom()).isEqualTo(window.lateFrom());
+        org.assertj.core.api.Assertions.assertThat(cmd.receivedUntil()).isEqualTo(window.receivedUntil());
+        org.assertj.core.api.Assertions.assertThat(cmd.isAutomatic()).isFalse();
     }
 }

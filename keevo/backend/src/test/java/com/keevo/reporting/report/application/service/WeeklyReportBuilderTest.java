@@ -1,5 +1,6 @@
 package com.keevo.reporting.report.application.service;
 
+import com.keevo.commerce.sale.domain.model.ClosureWindow;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.ReportType;
 import com.keevo.reporting.report.domain.model.WeeklyReportData;
@@ -79,7 +80,7 @@ class WeeklyReportBuilderTest {
                 .thenReturn(List.of());
 
         WeeklyReportData data = builder.build(
-                storeId, weekStart, weekEnd, "Store A", weekEndDate, "kv_test01", false);
+                storeId, ClosureWindow.between(weekStart, weekEnd), "Store A", weekEndDate, "kv_test01", false);
 
         assertThat(data.totalSales()).isEqualTo(15);
         assertThat(data.totalRevenue()).isEqualTo(375_000);
@@ -92,7 +93,7 @@ class WeeklyReportBuilderTest {
                 .thenReturn(List.of());
 
         WeeklyReportData data = builder.build(
-                storeId, weekStart, weekEnd, "Store Empty", weekEndDate, "kv_test01", true);
+                storeId, ClosureWindow.between(weekStart, weekEnd), "Store Empty", weekEndDate, "kv_test01", true);
 
         assertThat(data.totalSales()).isZero();
         assertThat(data.totalRevenue()).isZero();
@@ -106,7 +107,7 @@ class WeeklyReportBuilderTest {
                 .thenReturn(List.of());
 
         WeeklyReportData data = builder.build(
-                storeId, weekStart, weekEnd, "Store B", weekEndDate, "kv_test01", false);
+                storeId, ClosureWindow.between(weekStart, weekEnd), "Store B", weekEndDate, "kv_test01", false);
 
         assertThat(data.cashAmount()).isEqualTo(180_000);
         assertThat(data.momoAmount()).isEqualTo(120_000);
@@ -128,7 +129,7 @@ class WeeklyReportBuilderTest {
                 .thenReturn(List.of());
 
         WeeklyReportData data = builder.build(
-                storeId, weekStart, weekEnd, "Store C", weekEndDate, "kv_test01", false);
+                storeId, ClosureWindow.between(weekStart, weekEnd), "Store C", weekEndDate, "kv_test01", false);
 
         assertThat(data.topProductsByRevenue()).hasSize(5);
         assertThat(data.topProductsByRevenue().get(0).name()).isEqualTo("P1");
@@ -150,7 +151,7 @@ class WeeklyReportBuilderTest {
                 .thenReturn(List.of());
 
         WeeklyReportData data = builder.build(
-                storeId, weekStart, weekEnd, "Store D", weekEndDate, "kv_test01", false);
+                storeId, ClosureWindow.between(weekStart, weekEnd), "Store D", weekEndDate, "kv_test01", false);
 
         assertThat(data.topProductsByQty()).hasSize(5);
         assertThat(data.topProductsByQty().get(0).qty()).isEqualTo(50);
@@ -168,7 +169,7 @@ class WeeklyReportBuilderTest {
                 .thenReturn(List.of());
 
         WeeklyReportData data = builder.build(
-                storeId, weekStart, weekEnd, "Store E", weekEndDate, "kv_test01", false);
+                storeId, ClosureWindow.between(weekStart, weekEnd), "Store E", weekEndDate, "kv_test01", false);
 
         assertThat(data.employeeBreakdown()).hasSize(2);
         assertThat(data.employeeBreakdown().get(0).name()).isEqualTo("Alice");
@@ -190,7 +191,7 @@ class WeeklyReportBuilderTest {
                 .thenReturn(List.of(prevReport));
 
         WeeklyReportData data = builder.build(
-                storeId, weekStart, weekEnd, "Store A", weekEndDate, "kv_test01", true);
+                storeId, ClosureWindow.between(weekStart, weekEnd), "Store A", weekEndDate, "kv_test01", true);
 
         assertThat(data.previousWeekRevenue()).isEqualTo(100_000);
         assertThat(data.weekOverWeekDelta()).isEqualTo(20_000); // 120000 - 100000
@@ -204,7 +205,7 @@ class WeeklyReportBuilderTest {
                 .thenReturn(List.of());
 
         WeeklyReportData data = builder.build(
-                storeId, weekStart, weekEnd, "Store F", weekEndDate, "kv_test01", false);
+                storeId, ClosureWindow.between(weekStart, weekEnd), "Store F", weekEndDate, "kv_test01", false);
 
         assertThat(data.previousWeekRevenue()).isZero();
         assertThat(data.weekOverWeekDelta()).isEqualTo(80_000); // 80000 - 0
@@ -218,8 +219,44 @@ class WeeklyReportBuilderTest {
                 .thenReturn(List.of());
 
         WeeklyReportData data = builder.build(
-                storeId, weekStart, weekEnd, "Store G", weekEndDate, "kv_test01", false);
+                storeId, ClosureWindow.between(weekStart, weekEnd), "Store G", weekEndDate, "kv_test01", false);
 
         assertThat(data.lowStockCount()).isEqualTo(5);
+    }
+
+    // ── v1s-13-11 (D2): every sales aggregation carries the ClosureWindow predicate ──
+
+    @Test
+    void windowPredicates_matchTheClosureWindowRule() {
+        assertThat(WeeklyReportBuilder.WINDOW).isEqualTo(
+                "occurred_at <= :end AND created_at <= :until AND (occurred_at >= :start OR created_at > :lateFrom)");
+        assertThat(WeeklyReportBuilder.WINDOW_S).isEqualTo(
+                "s.occurred_at <= :end AND s.created_at <= :until AND (s.occurred_at >= :start OR s.created_at > :lateFrom)");
+    }
+
+    @Test
+    void build_everySalesQuery_carriesClosureWindowPredicateAndParameters() {
+        Instant lateFrom = Instant.parse("2026-03-22T19:00:00.500Z");
+        Instant until    = Instant.parse("2026-03-29T19:00:00Z");
+        ClosureWindow window = new ClosureWindow(lateFrom.plusNanos(1000), until, lateFrom, until);
+        when(reportRepository.findByDateAndTenant(any(), anyString(), eq(ReportType.WEEKLY)))
+                .thenReturn(List.of());
+
+        builder.build(storeId, window, "Store W", weekEndDate, "kv_test01", true);
+
+        var sqlCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(entityManager, atLeastOnce()).createNativeQuery(sqlCaptor.capture());
+        List<String> salesQueries = sqlCaptor.getAllValues().stream()
+                .filter(sql -> sql.contains("FROM sales") || sql.contains("JOIN sales"))
+                .toList();
+        assertThat(salesQueries).hasSize(7); // count, revenue, cash, momo, top5 x2, employees
+        assertThat(salesQueries).allSatisfy(sql -> {
+            assertThat(sql).containsAnyOf(WeeklyReportBuilder.WINDOW, WeeklyReportBuilder.WINDOW_S);
+            assertThat(sql).doesNotContain("occurred_at >= :start AND");
+        });
+        verify(query, times(7)).setParameter("start", java.sql.Timestamp.from(window.start()));
+        verify(query, times(7)).setParameter("end", java.sql.Timestamp.from(until));
+        verify(query, times(7)).setParameter("lateFrom", java.sql.Timestamp.from(lateFrom));
+        verify(query, times(7)).setParameter("until", java.sql.Timestamp.from(until));
     }
 }

@@ -161,6 +161,27 @@ class _SaleDetailContentState extends ConsumerState<_SaleDetailContent> {
           // Story v1s-13-5 (AC8) — OWNER-only Annuler/Corriger on COMPLETED sales.
           if (isOwner && sale.status == 'COMPLETED') ...[
             const SizedBox(height: 16),
+            // v1s-13-11 (D3): allowed after closure, but the sent report stays as is.
+            if (_isInClosedDay(ref.watch(lastClosureAtProvider(sale.storeId)).valueOrNull))
+              Padding(
+                key: const Key('closed-day-warning'),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.info_outline_rounded,
+                        size: 20, color: AppTheme.warning),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Cette vente fait partie d\'une journée déjà clôturée : '
+                        'le rapport déjà envoyé ne sera pas modifié.',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
@@ -197,6 +218,10 @@ class _SaleDetailContentState extends ConsumerState<_SaleDetailContent> {
       ),
     );
   }
+
+  /// Whether the sale was made at or before the store's last closure.
+  bool _isInClosedDay(DateTime? lastClosedAt) =>
+      lastClosedAt != null && !sale.occurredAt.isAfter(lastClosedAt);
 
   void _refreshAfterOwnerAction() {
     ref.invalidate(saleByIdProvider(sale.id));

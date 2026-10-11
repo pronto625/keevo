@@ -397,7 +397,9 @@ Keevo est une application hybride Mobile (Flutter) + Desktop (Tauri 2.0) avec un
 
 - **FR50:** Un propriétaire peut consulter un dashboard temps réel : stock global, ventes du jour, alertes actives, top produits
 - **FR51:** Le système peut générer un rapport end-of-day à heure fixe configurable OU sur clôture manuelle
+  - *Décision PO D1 (v1s-13-11, 2026-10-11) — fenêtre de clôture :* une clôture (auto à `eodReportTime` ou manuelle) couvre toutes les ventes depuis la clôture précédente de la boutique, plus les ventes hors-ligne synchronisées en retard (règle occurrence/arrivée `ClosureWindow`). Les ventes faites après la clôture appartiennent à la clôture suivante : aucune vente n'est exclue. La coupure à 23:59 est rejetée (elle imposerait une seconde clôture le même jour, contraire à « une clôture par boutique et par jour »). `eodReportTime` et `weeklyReportTime` sont validés à l'écriture (HH:mm:ss, 422 sinon).
 - **FR52:** Le système peut générer un rapport hebdomadaire automatique (dimanche soir)
+  - *Décision PO D2 (v1s-13-11, 2026-10-11) — fenêtre hebdomadaire :* le rapport hebdomadaire couvre les ventes depuis le rapport hebdomadaire précédent de la boutique (même règle occurrence/arrivée que les clôtures). Il se termine à son heure de génération, ou au dimanche 23:59:59 s'il est généré après la semaine ; premier rapport : depuis le lundi 00:00. Le chaînage s'appuie sur le `created_at` du rapport précédent (= sa borne d'arrivée) : pas de migration, et les ventes du dimanche 20:00–23:59 ou synchronisées après un rapport tombent dans la semaine suivante.
 - **FR53:** Les rapports incluent : CA, bénéfices, marges, top/flop produits, ventes par boutique, ventes par employé
 - **FR54:** Un propriétaire peut consulter la rentabilité par produit (prix achat + transport + prix vente = marge nette)
 - **FR55:** Un propriétaire peut exporter ses données et rapports dans le format de son choix : CSV *(tous plans)*, Excel et PDF *(Plan Payant)*
@@ -465,6 +467,7 @@ Keevo est une application hybride Mobile (Flutter) + Desktop (Tauri 2.0) avec un
 ### Gestion des Erreurs & Lifecycle
 
 - **FR90:** Un propriétaire peut annuler ou corriger une vente avec justification obligatoire (stock automatiquement réajusté)
+  - *Décision PO D3 (v1s-13-11, 2026-10-11) — après clôture :* annuler/corriger une vente d'une journée déjà clôturée reste autorisé (pas de limite de temps, pas de `SALE_DAY_CLOSED`). Clôtures et rapports envoyés sont des instantanés immuables, jamais régénérés ; l'application avertit le propriétaire (« le rapport déjà envoyé ne sera pas modifié ») et l'action reste auditée (SALE_CANCELLED / SaleCorrectedEvent).
 - **FR91:** Un propriétaire peut demander la suppression complète de son compte et de toutes ses données
 - **FR92:** Un utilisateur peut soumettre un feedback ou signaler un problème directement depuis l'application
 - **FR93:** Le système peut appliquer des limites de débit par tenant pour protéger les performances de la plateforme

@@ -5,6 +5,7 @@ import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
 import com.keevo.identity.onboarding.domain.model.ReportChannel;
 import com.keevo.reporting.report.adapter.in.rest.dto.ReportListResponseDto;
 import com.keevo.reporting.report.adapter.in.rest.dto.ReportResponseDto;
+import com.keevo.reporting.report.application.service.WeeklyReportWindowResolver;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.ReportType;
 import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase;
@@ -69,19 +70,22 @@ public class ReportController {
     private final GenerateEndOfDayReportUseCase dailyReportGenerator;
     private final StoreRepository storeRepository;
     private final DayClosureRepository dayClosureRepository;
+    private final WeeklyReportWindowResolver weeklyWindowResolver;
 
     public ReportController(GetReportHistoryUseCase getReportHistoryUseCase,
                              ResendReportUseCase resendReportUseCase,
                              GenerateWeeklyReportUseCase weeklyReportGenerator,
                              GenerateEndOfDayReportUseCase dailyReportGenerator,
                              StoreRepository storeRepository,
-                             DayClosureRepository dayClosureRepository) {
+                             DayClosureRepository dayClosureRepository,
+                             WeeklyReportWindowResolver weeklyWindowResolver) {
         this.getReportHistoryUseCase = getReportHistoryUseCase;
         this.resendReportUseCase = resendReportUseCase;
         this.weeklyReportGenerator = weeklyReportGenerator;
         this.dailyReportGenerator = dailyReportGenerator;
         this.storeRepository = storeRepository;
         this.dayClosureRepository = dayClosureRepository;
+        this.weeklyWindowResolver = weeklyWindowResolver;
     }
 
     @Operation(summary = "Get paginated report history. OWNER: all or filtered. EMPLOYEE: own only.")
@@ -168,17 +172,18 @@ public class ReportController {
     public ResponseEntity<ApiResponseWrapper<Void>> triggerWeekly() {
         requireOwnerOrForbid();
         String tenantId = TenantContext.getCurrentTenant();
-        LocalDate todayWAT = LocalDate.now(WAT);
+        Instant now = Instant.now();
+        LocalDate todayWAT = now.atZone(WAT).toLocalDate();
         // Last completed ISO Mon–Sun week (its Sunday is today or the one before), regardless
-        // of the trigger day. Mirror WeeklyReportScheduler.
-        LocalDate weekEndDate   = todayWAT.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY));
-        LocalDate weekStartDate = weekEndDate.minusDays(6);
-        Instant weekStart  = weekStartDate.atStartOfDay(WAT).toInstant();
-        Instant weekEnd    = weekEndDate.atTime(23, 59, 59).atZone(WAT).toInstant();
+        // of the trigger day; window chained on the previous weekly report (v1s-13-11 D2).
+        // Mirror WeeklyReportScheduler.
+        LocalDate weekEndDate = todayWAT.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY));
 
         storeRepository.findAllActive().forEach(store -> {
+            var window = weeklyWindowResolver.resolve(store.id(), tenantId, weekEndDate, now);
             var cmd = new WeeklyReportCommand(
-                    store.id(), tenantId, false, weekStart, weekEnd, null);
+                    store.id(), tenantId, false, window.start(), window.end(), null,
+                    window.lateFrom(), window.receivedUntil());
             weeklyReportGenerator.generateWeeklyReport(cmd);
         });
         return ResponseEntity.ok(ApiResponseWrapper.ok(null));

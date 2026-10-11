@@ -138,6 +138,36 @@ class ReportPreferencesControllerTest {
                 .andExpect(status().isUnprocessableEntity());
     }
 
+    // v1s-13-11: both report times are validated on write (422), so the schedulers'
+    // 20:00 fallback never applies to stored data.
+    @Test
+    void PUT_reportPreferences_returns422_forInvalidWeeklyTime_andStoresNothing() throws Exception {
+        authenticateAs("OWNER");
+
+        mockMvc.perform(put("/api/v1/tenant/report-preferences")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validPutBody().replace("\"weeklyReportTime\": \"20:00:00\"",
+                                "\"weeklyReportTime\": \"25:99:00\"")))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.domainCode").value("VALIDATION_ERROR"));
+
+        verifyNoInteractions(updateReportPreferencesUseCase);
+    }
+
+    @Test
+    void PUT_reportPreferences_invalidEodTime_isValidationError_andStoresNothing() throws Exception {
+        authenticateAs("OWNER");
+
+        mockMvc.perform(put("/api/v1/tenant/report-preferences")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validPutBody().replace("\"eodReportTime\": \"22:00:00\"",
+                                "\"eodReportTime\": \"25:99:00\"")))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.domainCode").value("VALIDATION_ERROR"));
+
+        verifyNoInteractions(updateReportPreferencesUseCase);
+    }
+
     // ── POST /api/v1/tenant/report-test ───────────────────────────────────────
 
     @Test

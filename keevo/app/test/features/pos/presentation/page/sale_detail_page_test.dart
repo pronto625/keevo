@@ -231,11 +231,14 @@ void main() {
     Future<void> pump(WidgetTester tester,
         {required String role,
         required String status,
+        DateTime? lastClosedAt,
         List<Override> extra = const []}) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
             ...extra,
+            lastClosureAtProvider
+                .overrideWith((ref, storeId) async => lastClosedAt),
             saleByIdProvider('sale-999').overrideWith(
               (ref) => Future.value(saleWithStatus(status)),
             ),
@@ -337,6 +340,7 @@ void main() {
             currentUserRoleProvider.overrideWithValue('OWNER'),
             saleRepositoryProvider.overrideWithValue(mockRepo),
             syncServiceProvider.overrideWithValue(sync),
+            lastClosureAtProvider.overrideWith((ref, storeId) async => null),
           ],
           child: const MaterialApp(
             home: SaleDetailPage(saleId: 'sale-999'),
@@ -495,6 +499,83 @@ void main() {
       expect(find.text('3'), findsOneWidget);
       expect(find.text('5'), findsNothing);
       expect(find.textContaining(RegExp(r'^5\D000')), findsNothing);
+    });
+
+    // v1s-13-11 (D3): cancel/correct after closure stays allowed, with a warning.
+    const closedDayWarning = Key('closed-day-warning');
+
+    testWidgets('closed day: warning shown above Annuler/Corriger, still enabled',
+        (tester) async {
+      // Sale at 14:30, closed at 20:00 the same day.
+      await pump(tester,
+          role: 'OWNER',
+          status: 'COMPLETED',
+          lastClosedAt: DateTime(2026, 3, 19, 20, 0));
+
+      expect(find.byKey(closedDayWarning), findsOneWidget);
+      expect(
+          find.text("Cette vente fait partie d'une journée déjà clôturée : "
+              'le rapport déjà envoyé ne sera pas modifié.'),
+          findsOneWidget);
+      expect(
+          tester.getTopLeft(find.byKey(closedDayWarning)).dy,
+          lessThan(tester.getTopLeft(find.text('Annuler entièrement')).dy));
+      expect(
+          tester
+              .widget<OutlinedButton>(find.ancestor(
+                  of: find.text('Annuler entièrement'),
+                  matching: find.byWidgetPredicate((w) => w is OutlinedButton)))
+              .onPressed,
+          isNotNull);
+      expect(
+          tester
+              .widget<FilledButton>(find.ancestor(
+                  of: find.text('Corriger un article'),
+                  matching: find.byWidgetPredicate((w) => w is FilledButton)))
+              .onPressed,
+          isNotNull);
+    });
+
+    testWidgets('sale made exactly at the closure is in the closed day',
+        (tester) async {
+      await pump(tester,
+          role: 'OWNER',
+          status: 'COMPLETED',
+          lastClosedAt: DateTime(2026, 3, 19, 14, 30));
+
+      expect(find.byKey(closedDayWarning), findsOneWidget);
+    });
+
+    testWidgets('sale after the last closure: no warning', (tester) async {
+      await pump(tester,
+          role: 'OWNER',
+          status: 'COMPLETED',
+          lastClosedAt: DateTime(2026, 3, 18, 20, 0));
+
+      expect(find.byKey(closedDayWarning), findsNothing);
+      expect(find.text('Annuler entièrement'), findsOneWidget);
+    });
+
+    testWidgets('no closure yet: no warning', (tester) async {
+      await pump(tester, role: 'OWNER', status: 'COMPLETED');
+
+      expect(find.byKey(closedDayWarning), findsNothing);
+    });
+
+    testWidgets('closed day but EMPLOYEE: no warning', (tester) async {
+      await pump(tester,
+          role: 'EMPLOYEE',
+          status: 'COMPLETED',
+          lastClosedAt: DateTime(2026, 3, 19, 20, 0));
+      expect(find.byKey(closedDayWarning), findsNothing);
+    });
+
+    testWidgets('closed day but CANCELLED sale: no warning', (tester) async {
+      await pump(tester,
+          role: 'OWNER',
+          status: 'CANCELLED',
+          lastClosedAt: DateTime(2026, 3, 19, 20, 0));
+      expect(find.byKey(closedDayWarning), findsNothing);
     });
 
     testWidgets('shows the client name, not its id', (tester) async {
