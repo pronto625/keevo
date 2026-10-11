@@ -5,6 +5,10 @@ import com.keevo.inventory.counting.domain.model.InventoryCount;
 import com.keevo.inventory.counting.domain.model.InventoryProductRow;
 import com.keevo.inventory.counting.domain.model.QuickAddProductResult;
 import com.keevo.inventory.counting.domain.port.in.*;
+import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.security.AuthDetails;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -13,6 +17,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
@@ -29,15 +34,18 @@ public class InventoryCountController {
     private final SaveInventoryCountUseCase saveInventoryCountUseCase;
     private final GetSessionCountsUseCase getSessionCountsUseCase;
     private final QuickAddProductUseCase quickAddProductUseCase;
+    private final InventorySessionRepository sessionRepository;
 
     public InventoryCountController(GetCountingProductsUseCase getCountingProductsUseCase,
                                     SaveInventoryCountUseCase saveInventoryCountUseCase,
                                     GetSessionCountsUseCase getSessionCountsUseCase,
-                                    QuickAddProductUseCase quickAddProductUseCase) {
+                                    QuickAddProductUseCase quickAddProductUseCase,
+                                    InventorySessionRepository sessionRepository) {
         this.getCountingProductsUseCase = getCountingProductsUseCase;
         this.saveInventoryCountUseCase = saveInventoryCountUseCase;
         this.getSessionCountsUseCase = getSessionCountsUseCase;
         this.quickAddProductUseCase = quickAddProductUseCase;
+        this.sessionRepository = sessionRepository;
     }
 
     @Operation(summary = "List products in scope with counting status")
@@ -69,6 +77,7 @@ public class InventoryCountController {
             @PathVariable UUID sessionId,
             @Valid @RequestBody SaveInventoryCountRequestDto request) {
 
+        requireSessionInEmployeeStore(sessionId);
         UUID actorId = extractActorId();
         var command = new SaveInventoryCountCommand(
                 sessionId, request.productId(), request.variantId(),
@@ -91,6 +100,7 @@ public class InventoryCountController {
             @PathVariable UUID sessionId,
             @Valid @RequestBody BulkSaveCountsRequestDto request) {
 
+        requireSessionInEmployeeStore(sessionId);
         UUID actorId = extractActorId();
         List<InventoryCountResponseDto> results = new ArrayList<>();
 
@@ -134,6 +144,7 @@ public class InventoryCountController {
             @PathVariable UUID sessionId,
             @Valid @RequestBody QuickAddProductRequestDto request) {
 
+        requireSessionInEmployeeStore(sessionId);  // v1s-12-10: writes stock + count into the session
         UUID actorId = extractActorId();
         var command = new QuickAddProductCommand(
                 sessionId, request.name(), request.categoryId(),
@@ -144,6 +155,38 @@ public class InventoryCountController {
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponseWrapper.ok(QuickAddProductResponseDto.fromDomain(result)));
+    }
+
+    /**
+     * v1s-12-10: an EMPLOYEE only writes counts (POST/PUT /counts, POST /quick-add) into a
+     * session of their assigned store
+     * (the session scope enforced by InventorySessionController.createSession). OWNER is
+     * unscoped. Unknown session → left to the use case (existing not-found error).
+     */
+    private void requireSessionInEmployeeStore(UUID sessionId) {
+        UUID assignedStoreId = extractAssignedStoreId();
+        if (assignedStoreId == null) return;
+        sessionRepository.findById(sessionId).ifPresent(session -> {
+            if (!assignedStoreId.equals(session.getStoreId())) {
+                throw new DomainException(ErrorCode.FORBIDDEN,
+                        "EMPLOYEE cannot write counts into another store's inventory session");
+            }
+        });
+    }
+
+    /** Mirror of {@code InventorySessionController.extractAssignedStoreId()}. */
+    private UUID extractAssignedStoreId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        Object details = auth.getDetails();
+        if (details instanceof AuthDetails ad && ad.storeId() != null) {
+            return ad.storeId();
+        }
+        boolean isEmployee = auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_EMPLOYEE".equals(a.getAuthority()));
+        if (isEmployee) {
+            throw new DomainException(ErrorCode.FORBIDDEN, "EMPLOYEE token missing assigned store");
+        }
+        return null;
     }
 
     private UUID extractActorId() {

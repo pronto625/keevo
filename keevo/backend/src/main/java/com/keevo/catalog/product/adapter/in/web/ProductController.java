@@ -154,7 +154,8 @@ public class ProductController {
                 request.buyPrice(),
                 request.transportCost(),
                 request.stockQuantity(),
-                actorId
+                actorId,
+                extractRole()  // v1s-12-10: real role → Story 2.4 draft guard (FORBIDDEN → 403)
         );
         
         try {

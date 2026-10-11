@@ -3,6 +3,7 @@ package com.keevo.catalog.product.adapter.in.web;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.InjectMocks;
@@ -59,6 +60,12 @@ class ProductControllerTest {
 
     private MockMvc mockMvc;
     private Product sampleProduct;
+
+    @AfterEach
+    void tearDown() {
+        // v1s-12-10: do not leak the (OWNER/EMPLOYEE) authentication into other test classes.
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
+    }
 
     @BeforeEach
     void setUp() {
@@ -212,6 +219,64 @@ class ProductControllerTest {
                 .andExpect(jsonPath("$.data.name").exists());
 
         verify(updateProductUseCase).execute(any());
+    }
+
+    // ── v1s-12-10: real actor role reaches the Story 2.4 draft guard ─────────
+
+    private MockMvc mockMvcAs(String role) {
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+            new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                UUID.randomUUID(), null,
+                java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_" + role))));
+        return MockMvcBuilders.standaloneSetup(productController)
+                .setControllerAdvice(new com.keevo.shared.infrastructure.web.GlobalExceptionHandler())
+                .build();
+    }
+
+    @Test
+    @DisplayName("v1s-12-10: PATCH by EMPLOYEE on a DRAFT product returns 403 (role passed to use case)")
+    void update_draft_by_employee_returns_403() throws Exception {
+        MockMvc mvc = mockMvcAs("EMPLOYEE");
+        when(updateProductUseCase.execute(any())).thenThrow(new com.keevo.shared.domain.exception.DomainException(
+                com.keevo.shared.domain.exception.ErrorCode.FORBIDDEN,
+                "Seul le propriétaire peut valider un produit en brouillon"));
+
+        mvc.perform(patch("/api/v1/products/{id}", UUID.randomUUID())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\": \"Draft\"}"))
+                .andExpect(status().isForbidden());
+
+        var captor = org.mockito.ArgumentCaptor.forClass(UpdateProductUseCase.UpdateProductDto.class);
+        verify(updateProductUseCase).execute(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().actorRole()).isEqualTo("EMPLOYEE");
+    }
+
+    @Test
+    @DisplayName("v1s-12-10: PATCH by EMPLOYEE on an ACTIVE product returns 200")
+    void update_active_by_employee_returns_200() throws Exception {
+        MockMvc mvc = mockMvcAs("EMPLOYEE");
+        when(updateProductUseCase.execute(any())).thenReturn(sampleProduct);
+
+        mvc.perform(patch("/api/v1/products/{id}", sampleProduct.getId())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\": \"Updated\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("v1s-12-10: PATCH by OWNER passes OWNER role")
+    void update_by_owner_passes_owner_role() throws Exception {
+        MockMvc mvc = mockMvcAs("OWNER");
+        when(updateProductUseCase.execute(any())).thenReturn(sampleProduct);
+
+        mvc.perform(patch("/api/v1/products/{id}", sampleProduct.getId())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\": \"Updated\"}"))
+                .andExpect(status().isOk());
+
+        var captor = org.mockito.ArgumentCaptor.forClass(UpdateProductUseCase.UpdateProductDto.class);
+        verify(updateProductUseCase).execute(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().actorRole()).isEqualTo("OWNER");
     }
 
     @Test

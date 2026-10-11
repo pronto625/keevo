@@ -4,6 +4,8 @@ import com.keevo.inventory.counting.domain.model.InventoryScope;
 import com.keevo.inventory.counting.domain.model.InventorySession;
 import com.keevo.inventory.counting.domain.model.InventorySessionStatus;
 import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
@@ -45,6 +47,16 @@ public class InventorySessionSyncHandler extends AbstractSyncOperationHandler {
         Map<String, Object> p = operation.payload();
 
         UUID sessionId = UUID.fromString((String) p.get("sessionId"));
+        UUID storeId = UUID.fromString((String) p.get("storeId"));
+
+        // v1s-12-10: an EMPLOYEE only opens sessions in their assigned store (mirror of
+        // InventorySessionController.createSession). OWNER (null) stays unscoped; null auth
+        // fails closed. Checked before the idempotency lookup — no read-back of foreign data.
+        UUID assignedStoreId = extractAssignedStoreId();
+        if (assignedStoreId != null && !assignedStoreId.equals(storeId)) {
+            throw new DomainException(ErrorCode.FORBIDDEN,
+                    "Vous ne pouvez démarrer un inventaire que dans votre boutique");
+        }
 
         // Idempotency guard: if session already exists, skip
         if (repository.findById(sessionId).isPresent()) {
@@ -52,7 +64,6 @@ public class InventorySessionSyncHandler extends AbstractSyncOperationHandler {
                     sessionId.toString(), null);
         }
 
-        UUID storeId = UUID.fromString((String) p.get("storeId"));
         InventoryScope scope = InventoryScope.valueOf((String) p.get("scope"));
 
         @SuppressWarnings("unchecked")

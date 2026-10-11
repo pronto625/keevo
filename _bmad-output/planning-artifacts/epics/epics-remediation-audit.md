@@ -197,8 +197,10 @@ As a Toor, I want the remaining sync operations (PROMOTE_PRODUCT, TOGGLE_CATEGOR
 **Given** an EMPLOYEE pushing PROMOTE_PRODUCT / TOGGLE_CATEGORY / inventory-session operations **When** the operation targets another store or an OWNER-only action **Then** it is REJECTED with the same rule as the REST endpoint (403 / store scope)
 
 **Items (routed 2026-10-11 from deferred-work):**
-- [ ] [Deferred-from: CR v1s-12-8, 2026-07-24] D2 extractAssignedStoreId fail-open when auth==null [AbstractSyncOperationHandler.java:50-51] — null auth is treated as OWNER; fail closed
-- [ ] [Deferred-from: CR v1s-14-14, 2026-07-24] TOGGLE_CATEGORY sync has no OWNER-only check [CategorySyncHandler.java:104-120] — named in 12-10 scope; REST DELETE is OWNER-only
+- [x] [Deferred-from: CR v1s-12-8, 2026-07-24] D2 extractAssignedStoreId fail-open when auth==null [AbstractSyncOperationHandler.java:50-51] — null auth is treated as OWNER; fail closed — **Resolved 2026-10-11 (v1s-12-10):** `extractAssignedStoreId()` throws `DomainException(FORBIDDEN)` when there is no Authentication → REJECTED `FORBIDDEN`; sale/day-closure/count handler tests now authenticate explicitly; `AbstractSyncOperationHandlerTest` covers it.
+- [x] [Deferred-from: CR v1s-14-14, 2026-07-24] TOGGLE_CATEGORY sync has no OWNER-only check [CategorySyncHandler.java:104-120] — named in 12-10 scope; REST DELETE is OWNER-only — **Resolved 2026-10-11 (v1s-12-10):** TOGGLE_CATEGORY (both directions) is OWNER-only, checked before any repository read; REST `PATCH /categories/{id}/toggle` aligned (`@PreAuthorize` OWNER + explicit check → 403).
+
+**Also resolved in v1s-12-10 (2026-10-11, spec-v1s-12-10-sync-rbac-residual.md, audit I1 a/b/c):** PROMOTE_PRODUCT OWNER-only on sync; UPDATE_PRODUCT / CREATE_DRAFT_PRODUCT (sync) and PATCH /products/{id} (REST) pass the real role (10-arg `UpdateProductDto` defaulting to OWNER removed); CREATE_INVENTORY_SESSION, SAVE_INVENTORY_COUNT and REST POST/PUT /counts + POST /quick-add scoped to the employee's store; app: an EMPLOYEE checkout no longer promotes drafts (no PROMOTE_PRODUCT), a stocked draft is not re-prompted for initial stock, EMPLOYEE cannot open edit on a DRAFT; owner notification wording driven by `SaleDraftProductsUpgradedEvent.draftsPromoted`. Routed: InventorySessionSyncHandler use-case bypass → v1s-13-8.
 
 **AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
 
@@ -408,6 +410,7 @@ As a Toor, I want every offline write path to be atomic and every sync handler t
 - [ ] [Deferred-from: CR v1s-16-6, 2026-07-27] StoreSyncHandler no idempotency guard [StoreSyncHandler.java] — retried UPDATE/DEACTIVATE re-executes use case
 - [ ] [Deferred-from: CR UI-3 lot 1 backend, 2026-10-11] Offline sales create a 2nd SALE stock movement on pull [RecordSaleService.java:89] — send movement ids in CREATE_SALE payload (app + backend)
 - [ ] [Deferred-from: CR UI-3 lots 2-5 app, 2026-10-11] QuickAdd offline path / LocalProductDataSource insert without transaction [quick_add_product_notifier.dart, local_product_datasource.dart] — write + queue in one Drift transaction
+- [ ] [Deferred-from: build-auto v1s-12-10, 2026-10-11] InventorySessionSyncHandler bypasses CreateInventorySessionUseCase [InventorySessionSyncHandler.java:apply] — writes via repository.save: no store-existence check, no single-active-session check, no InventorySessionCreatedEvent; route through the use case with the client session id (idempotent replay, offline conflict policy)
 
 **AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
 

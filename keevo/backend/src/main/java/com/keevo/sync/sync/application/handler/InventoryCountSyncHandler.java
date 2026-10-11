@@ -3,6 +3,9 @@ package com.keevo.sync.sync.application.handler;
 import com.keevo.inventory.counting.domain.model.InventoryCount;
 import com.keevo.inventory.counting.domain.port.in.SaveInventoryCountCommand;
 import com.keevo.inventory.counting.domain.port.in.SaveInventoryCountUseCase;
+import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
@@ -22,9 +25,12 @@ import java.util.UUID;
 public class InventoryCountSyncHandler extends AbstractSyncOperationHandler {
 
     private final SaveInventoryCountUseCase saveInventoryCountUseCase;
+    private final InventorySessionRepository sessionRepository;
 
-    public InventoryCountSyncHandler(SaveInventoryCountUseCase saveInventoryCountUseCase) {
+    public InventoryCountSyncHandler(SaveInventoryCountUseCase saveInventoryCountUseCase,
+                                     InventorySessionRepository sessionRepository) {
         this.saveInventoryCountUseCase = saveInventoryCountUseCase;
+        this.sessionRepository = sessionRepository;
     }
 
     @Override
@@ -47,6 +53,19 @@ public class InventoryCountSyncHandler extends AbstractSyncOperationHandler {
         Map<String, Object> p = operation.payload();
 
         UUID sessionId = UUID.fromString((String) p.get("sessionId"));
+
+        // v1s-12-10: an EMPLOYEE only counts in a session of their assigned store.
+        // Unknown session → left to the use case (existing not-found error).
+        UUID assignedStoreId = extractAssignedStoreId();
+        if (assignedStoreId != null) {
+            sessionRepository.findById(sessionId).ifPresent(session -> {
+                if (!assignedStoreId.equals(session.getStoreId())) {
+                    throw new DomainException(ErrorCode.FORBIDDEN,
+                            "Vous ne pouvez compter que dans un inventaire de votre boutique");
+                }
+            });
+        }
+
         UUID productId = UUID.fromString((String) p.get("productId"));
         UUID variantId = p.get("variantId") != null ? UUID.fromString((String) p.get("variantId")) : null;
         String productName = (String) p.get("productName");

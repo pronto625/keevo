@@ -56,7 +56,7 @@ class ProductCard extends ConsumerWidget {
         borderRadius: BorderRadius.circular(AppTheme.radiusL),
         child: InkWell(
           borderRadius: BorderRadius.circular(AppTheme.radiusL),
-          onTap: () => context.push('/products/${product.id}/edit', extra: product),
+          onTap: () => _openEdit(context, ref),
           onLongPress: () => _showContextMenu(context, ref, actions),
           child: Padding(
               padding: const EdgeInsets.all(16),
@@ -351,7 +351,7 @@ class ProductCard extends ConsumerWidget {
                 color: Theme.of(context).colorScheme.primary,
                 onTap: () {
                   Navigator.pop(context);
-                  context.push('/products/${product.id}/edit', extra: product);
+                  _openEdit(context, ref);
                 },
               ),
               _buildMenuOption(
@@ -399,6 +399,25 @@ class ProductCard extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  /// Opens the edit form — except for an EMPLOYEE on a DRAFT product
+  /// (v1s-12-10): any EMPLOYEE update of a draft is rejected server-side
+  /// (Story 2.4 guard), so the form is not offered rather than letting the
+  /// edit diverge locally and fail in sync.
+  void _openEdit(BuildContext context, WidgetRef ref) {
+    if (product.status == ProductStatus.draft &&
+        ref.read(currentUserRoleProvider) != 'OWNER') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('Seul le propriétaire peut modifier un produit brouillon'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    context.push('/products/${product.id}/edit', extra: product);
   }
 
   Widget _buildMenuOption(
@@ -476,11 +495,12 @@ class ProductCard extends ConsumerWidget {
                   onChanged: (v) => stockText = v,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
-                    labelText: 'Stock initial',
+                    // v1s-12-10: additive (recordEntry) — an employee may
+                    // already have entered stock when selling the draft.
+                    labelText: 'Stock à ajouter',
                     hintText: '0',
                     suffixText: 'unités',
-                    helperText:
-                        'Entrez la quantité disponible (doit couvrir les ventes en attente)',
+                    helperText: 'S\'ajoute au stock déjà saisi en boutique',
                   ),
                 ),
               ],

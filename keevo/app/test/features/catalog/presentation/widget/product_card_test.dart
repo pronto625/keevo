@@ -145,8 +145,7 @@ void main() {
     expect(find.text('Stock bas'), findsNothing);
   });
 
-  testWidgets('draft + low stock badges fit on a 360dp screen',
-      (tester) async {
+  testWidgets('draft + low stock badges fit on a 360dp screen', (tester) async {
     tester.view.physicalSize = const Size(360, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -179,12 +178,54 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Valider ce produit'));
     await tester.pumpAndSettle();
+    // v1s-12-10: the entry is additive — the dialog says so.
+    expect(find.text('Stock à ajouter'), findsOneWidget);
+    expect(
+        find.text("S'ajoute au stock déjà saisi en boutique"), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Valider'));
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
     expect(find.byType(ProductCard), findsNothing);
     expect(find.text('Produit validé avec succès'), findsOneWidget);
+  });
+
+  // v1s-12-10: an EMPLOYEE update of a DRAFT is rejected server-side, so the
+  // app does not open the edit form (no GoRouter here: a push would throw).
+  // Fail closed: an unknown (null) role is treated like an EMPLOYEE.
+  for (final role in <String?>['EMPLOYEE', null]) {
+    testWidgets('$role tapping a draft card is told only the owner edits it',
+        (tester) async {
+      await _pump(tester,
+          product: _product(status: ProductStatus.draft), role: role);
+
+      await tester.tap(find.byType(ProductCard));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(
+          find.text('Seul le propriétaire peut modifier un produit brouillon'),
+          findsOneWidget);
+    });
+  }
+
+  testWidgets('employee "Modifier" on a draft does not open the edit form',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _pump(tester,
+        product: _product(status: ProductStatus.draft), role: 'EMPLOYEE');
+
+    await tester.longPress(find.byType(ProductCard));
+    await tester.pumpAndSettle();
+    expect(find.text('Valider ce produit'), findsNothing);
+    await tester.tap(find.text('Modifier'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Seul le propriétaire peut modifier un produit brouillon'),
+        findsOneWidget);
   });
 
   for (final archived in [false, true]) {

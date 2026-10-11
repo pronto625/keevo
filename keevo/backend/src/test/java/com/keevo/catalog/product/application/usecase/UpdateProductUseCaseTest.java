@@ -80,7 +80,8 @@ class UpdateProductUseCaseTest {
             null, // buyPrice
             null, // transportCost
             null, // stockQuantity
-            UUID.randomUUID() // actorId
+            UUID.randomUUID(), // actorId
+            "OWNER"
         );
 
         when(productRepository.findById(productId)).thenReturn(Optional.of(existingProduct));
@@ -110,7 +111,8 @@ class UpdateProductUseCaseTest {
             null, // buyPrice
             null, // transportCost
             null, // stockQuantity
-            UUID.randomUUID() // actorId
+            UUID.randomUUID(), // actorId
+            "OWNER"
         );
 
         when(productRepository.findById(productId)).thenReturn(Optional.empty());

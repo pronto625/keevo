@@ -1,11 +1,16 @@
 package com.keevo.sync.sync.application.handler;
 
 import com.keevo.inventory.counting.domain.model.InventoryCount;
+import com.keevo.inventory.counting.domain.model.InventoryScope;
+import com.keevo.inventory.counting.domain.model.InventorySession;
+import com.keevo.inventory.counting.domain.model.InventorySessionStatus;
 import com.keevo.inventory.counting.domain.port.in.SaveInventoryCountUseCase;
+import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -14,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -24,6 +30,7 @@ import static org.mockito.Mockito.*;
 class InventoryCountSyncHandlerTest {
 
     @Mock private SaveInventoryCountUseCase saveInventoryCountUseCase;
+    @Mock private InventorySessionRepository sessionRepository;
 
     private InventoryCountSyncHandler handler;
 
@@ -32,7 +39,13 @@ class InventoryCountSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new InventoryCountSyncHandler(saveInventoryCountUseCase);
+        handler = new InventoryCountSyncHandler(saveInventoryCountUseCase, sessionRepository);
+        SyncTestAuth.owner();
+    }
+
+    @AfterEach
+    void tearDown() {
+        SyncTestAuth.clear();
     }
 
     @Test
@@ -122,5 +135,90 @@ class InventoryCountSyncHandlerTest {
         verify(saveInventoryCountUseCase).execute(captor.capture());
         assertThat(captor.getValue().countId()).isEqualTo(countId);
         assertThat(result.serverEntityId()).isEqualTo(countId.toString());
+    }
+
+    // ── v1s-12-10: counts scoped to the employee's store ────────────────────
+
+    private static final UUID STORE_A = UUID.randomUUID();
+    private static final UUID STORE_C = UUID.randomUUID();
+
+    private InventorySession sessionOf(UUID sessionId, UUID storeId) {
+        return new InventorySession(sessionId, storeId, InventoryScope.FULL, null,
+                InventorySessionStatus.IN_PROGRESS, ACTOR_ID, Instant.now(),
+                null, null, null, Instant.now());
+    }
+
+    private SyncOperation countOp(UUID sessionId) {
+        return new SyncOperation("op-s", "SAVE_INVENTORY_COUNT", "entity-1",
+                Map.of("sessionId", sessionId.toString(),
+                        "productId", UUID.randomUUID().toString(),
+                        "productName", "Savon",
+                        "theoretical", 50,
+                        "physical", 47),
+                Instant.now());
+    }
+
+    @Test
+    void handle_employeeCountInForeignStoreSession_isRejectedForbidden_andUseCaseNeverCalled() {
+        SyncTestAuth.employee(STORE_A);
+        UUID sessionId = UUID.randomUUID();
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(sessionOf(sessionId, STORE_C)));
+
+        var result = handler.handle(countOp(sessionId), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("FORBIDDEN");
+        verify(saveInventoryCountUseCase, never()).execute(any());
+    }
+
+    @Test
+    void handle_employeeCountInOwnStoreSession_isApplied() {
+        SyncTestAuth.employee(STORE_A);
+        UUID sessionId = UUID.randomUUID();
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(sessionOf(sessionId, STORE_A)));
+        when(saveInventoryCountUseCase.execute(any())).thenReturn(
+                InventoryCount.create(sessionId, UUID.randomUUID(), null, "Savon", null, 50, 47, ACTOR_ID));
+
+        var result = handler.handle(countOp(sessionId), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+    }
+
+    @Test
+    void handle_employeeCountUnknownSession_isDelegatedToUseCase() {
+        SyncTestAuth.employee(STORE_A);
+        UUID sessionId = UUID.randomUUID();
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.empty());
+        when(saveInventoryCountUseCase.execute(any()))
+                .thenThrow(new DomainException(ErrorCode.INVENTORY_SESSION_NOT_FOUND, "not found"));
+
+        var result = handler.handle(countOp(sessionId), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("INVENTORY_SESSION_NOT_FOUND");
+        verify(saveInventoryCountUseCase).execute(any());
+    }
+
+    @Test
+    void handle_ownerCount_isUnscoped_noSessionLookup() {
+        UUID sessionId = UUID.randomUUID();
+        when(saveInventoryCountUseCase.execute(any())).thenReturn(
+                InventoryCount.create(sessionId, UUID.randomUUID(), null, "Savon", null, 50, 47, ACTOR_ID));
+
+        var result = handler.handle(countOp(sessionId), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        verifyNoInteractions(sessionRepository);
+    }
+
+    @Test
+    void handle_countWithoutAuthentication_isRejectedForbidden() {
+        SyncTestAuth.clear();
+
+        var result = handler.handle(countOp(UUID.randomUUID()), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("FORBIDDEN");
+        verify(saveInventoryCountUseCase, never()).execute(any());
     }
 }

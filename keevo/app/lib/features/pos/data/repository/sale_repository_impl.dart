@@ -62,7 +62,11 @@ class SaleRepositoryImpl implements SaleRepository {
         );
       }
 
-      for (final productId in sale.originalDraftProductIds) {
+      // v1s-12-10: PROMOTE_PRODUCT is OWNER-only server-side; an EMPLOYEE sale
+      // does not queue it (the drafts stay DRAFT for the owner to validate).
+      for (final productId in sale.promoteDraftProducts
+          ? sale.originalDraftProductIds
+          : const <String>[]) {
         String? productName;
         int? price;
         for (final item in sale.items) {

@@ -86,6 +86,12 @@ class RecordSaleNotifier extends Notifier<RecordSaleState> {
 
       final originalDraftProductIds =
           draftItems.map((c) => c.productId).toList();
+      // v1s-12-10: draft promotion is OWNER-only. An EMPLOYEE sale still
+      // records the initial stock and notifies the owner, who validates the
+      // drafts from the catalog. Fail closed: an unknown (null) role does not
+      // promote either — the backend rejects non-owner promotion anyway.
+      final promoteDraftProducts =
+          ref.read(currentUserRoleProvider) == 'OWNER';
       final useCase = ref.read(recordSaleUseCaseProvider);
       final discountAmount = cartNotifier.discountAmount;
       final movementIds = {
@@ -105,21 +111,24 @@ class RecordSaleNotifier extends Notifier<RecordSaleState> {
             originalDraftProductIds: originalDraftProductIds,
             initialStockEntries: initialStockEntries,
             initialStockMovementIds: movementIds,
+            promoteDraftProducts: promoteDraftProducts,
           );
 
       final Sale sale;
       if (draftItems.isEmpty) {
         sale = await record();
       } else {
-        // Initial stock + promotion + sale (and its queued sync ops) commit
+        // Initial stock + promotion (OWNER only) + sale (and its queued sync ops) commit
         // together: if the sale fails, the entries are not credited locally.
         final localProductDs = ref.read(localProductDataSourceProvider);
         sale = await ref.read(appDatabaseProvider).transaction(() async {
           await localDs.applyInitialStockEntries(
               initialStockEntries, storeId, employeeId,
               movementIds: movementIds);
-          for (final item in draftItems) {
-            await localProductDs.promoteToActive(item.productId);
+          if (promoteDraftProducts) {
+            for (final item in draftItems) {
+              await localProductDs.promoteToActive(item.productId);
+            }
           }
           return record();
         });

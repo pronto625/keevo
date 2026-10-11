@@ -64,13 +64,8 @@ public class UpdateProductUseCase {
         UUID    actorId,
         String  actorRole     // "OWNER" or "EMPLOYEE" — Story 2.4 draft promotion guard
     ) {
-        /** Backward-compatible constructor: actorRole defaults to "OWNER". */
-        public UpdateProductDto(UUID id, String name, String description, String sku,
-                                UUID categoryId, Integer price, Integer buyPrice,
-                                Integer transportCost, Integer stockQuantity, UUID actorId) {
-            this(id, name, description, sku, categoryId, price, buyPrice,
-                 transportCost, stockQuantity, actorId, "OWNER");
-        }
+        // v1s-12-10: the 10-arg constructor defaulting actorRole to "OWNER" was removed
+        // (fail open — any caller skipped the draft guard). Callers pass the real role.
     }
 
     public Product execute(UpdateProductDto dto) {

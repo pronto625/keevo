@@ -47,6 +47,11 @@ class Sale {
   /// (productId → movement id), reused as the sync entityId so the server
   /// movement carries the same id as the local one.
   final Map<String, String> initialStockMovementIds;
+  /// Whether the originally-draft products are promoted to ACTIVE with this
+  /// sale (local promotion + queued PROMOTE_PRODUCT). Promotion is OWNER-only
+  /// (v1s-12-10): an EMPLOYEE checkout leaves the drafts for the owner to
+  /// validate from the catalog.
+  final bool promoteDraftProducts;
 
   const Sale({
     required this.id,
@@ -64,5 +69,6 @@ class Sale {
     this.originalDraftProductIds = const [],
     this.initialStockEntries = const {},
     this.initialStockMovementIds = const {},
+    this.promoteDraftProducts = true,
   });
 }

@@ -38,6 +38,7 @@ class DayClosureSyncHandlerTest {
     @BeforeEach
     void setUp() {
         handler = new DayClosureSyncHandler(closeDayUseCase);
+        SyncTestAuth.owner(); // v1s-12-10: null auth now fails closed
     }
 
     @AfterEach

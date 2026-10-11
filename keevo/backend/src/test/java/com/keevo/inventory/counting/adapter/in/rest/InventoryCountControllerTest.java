@@ -3,10 +3,16 @@ package com.keevo.inventory.counting.adapter.in.rest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.inventory.counting.domain.model.InventoryCount;
 import com.keevo.inventory.counting.domain.model.InventoryProductRow;
+import com.keevo.inventory.counting.domain.model.InventoryScope;
+import com.keevo.inventory.counting.domain.model.InventorySession;
+import com.keevo.inventory.counting.domain.model.InventorySessionStatus;
 import com.keevo.inventory.counting.domain.port.in.*;
+import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
+import com.keevo.shared.infrastructure.security.AuthDetails;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,12 +26,15 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.Optional;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -38,6 +47,7 @@ class InventoryCountControllerTest {
     @Mock private SaveInventoryCountUseCase saveInventoryCountUseCase;
     @Mock private GetSessionCountsUseCase getSessionCountsUseCase;
     @Mock private QuickAddProductUseCase quickAddProductUseCase;
+    @Mock private InventorySessionRepository sessionRepository;
 
     private MockMvc mockMvc;
     private final ObjectMapper mapper = new ObjectMapper();
@@ -50,7 +60,7 @@ class InventoryCountControllerTest {
     void setUp() {
         var controller = new InventoryCountController(
                 getCountingProductsUseCase, saveInventoryCountUseCase, getSessionCountsUseCase,
-                quickAddProductUseCase);
+                quickAddProductUseCase, sessionRepository);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -59,11 +69,148 @@ class InventoryCountControllerTest {
         mapper.findAndRegisterModules();
     }
 
+    private static final UUID STORE_A = UUID.randomUUID();
+    private static final UUID STORE_C = UUID.randomUUID();
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
+
+    /** EMPLOYEE tokens carry their assigned store (STORE_A), as JwtAuthFilter sets it. */
     private void authenticateAs(String role) {
+        var auth = new UsernamePasswordAuthenticationToken(
+                actorId, null,
+                List.of(new SimpleGrantedAuthority("ROLE_" + role)));
+        if ("EMPLOYEE".equals(role)) {
+            auth.setDetails(new AuthDetails("Loïc", STORE_A));
+        }
+        SecurityContextHolder.getContext().setAuthentication(auth);
+    }
+
+    private InventorySession sessionOf(UUID storeId) {
+        return new InventorySession(sessionId, storeId, InventoryScope.FULL, null,
+                InventorySessionStatus.IN_PROGRESS, actorId, Instant.now(),
+                null, null, null, Instant.now());
+    }
+
+    private String singleCountBody() throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("productId", UUID.randomUUID());
+        body.put("productName", "Produit A");
+        body.put("theoretical", 50);
+        body.put("physical", 47);
+        return objectMapper.writeValueAsString(body);
+    }
+
+    private String bulkCountBody() throws Exception {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("productId", UUID.randomUUID());
+        item.put("productName", "P");
+        item.put("theoretical", 10);
+        item.put("physical", 8);
+        return objectMapper.writeValueAsString(Map.of("counts", List.of(item)));
+    }
+
+    // ── v1s-12-10: counts scoped to the employee's store ─────
+
+    @Test
+    void POST_counts_employeeForeignStoreSession_shouldReturn403() throws Exception {
+        authenticateAs("EMPLOYEE");
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(sessionOf(STORE_C)));
+
+        mockMvc.perform(post("/api/v1/inventory/sessions/{sessionId}/counts", sessionId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(singleCountBody()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(saveInventoryCountUseCase);
+    }
+
+    @Test
+    void PUT_counts_employeeForeignStoreSession_shouldReturn403() throws Exception {
+        authenticateAs("EMPLOYEE");
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(sessionOf(STORE_C)));
+
+        mockMvc.perform(put("/api/v1/inventory/sessions/{sessionId}/counts", sessionId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bulkCountBody()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(saveInventoryCountUseCase);
+    }
+
+    @Test
+    void POST_counts_employeeOwnStoreSession_shouldReturn201() throws Exception {
+        authenticateAs("EMPLOYEE");
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(sessionOf(STORE_A)));
+        when(saveInventoryCountUseCase.execute(any())).thenReturn(InventoryCount.create(
+                sessionId, UUID.randomUUID(), null, "Produit A", null, 50, 47, actorId));
+
+        mockMvc.perform(post("/api/v1/inventory/sessions/{sessionId}/counts", sessionId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(singleCountBody()))
+                .andExpect(status().isCreated());
+    }
+
+    /** EMPLOYEE token without an assigned store (no AuthDetails storeId) — fails closed. */
+    private void authenticateAsEmployeeWithoutStore() {
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(
-                        actorId, null,
-                        List.of(new SimpleGrantedAuthority("ROLE_" + role))));
+                new UsernamePasswordAuthenticationToken(actorId, null,
+                        List.of(new SimpleGrantedAuthority("ROLE_EMPLOYEE"))));
+    }
+
+    @Test
+    void POST_counts_employeeWithoutAssignedStore_shouldReturn403() throws Exception {
+        authenticateAsEmployeeWithoutStore();
+
+        mockMvc.perform(post("/api/v1/inventory/sessions/{sessionId}/counts", sessionId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(singleCountBody()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(saveInventoryCountUseCase);
+        verifyNoInteractions(sessionRepository);
+    }
+
+    @Test
+    void PUT_counts_employeeWithoutAssignedStore_shouldReturn403() throws Exception {
+        authenticateAsEmployeeWithoutStore();
+
+        mockMvc.perform(put("/api/v1/inventory/sessions/{sessionId}/counts", sessionId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bulkCountBody()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(saveInventoryCountUseCase);
+        verifyNoInteractions(sessionRepository);
+    }
+
+    @Test
+    void PUT_counts_ownerAnyStore_isUnscoped() throws Exception {
+        authenticateAs("OWNER");
+        when(saveInventoryCountUseCase.execute(any())).thenReturn(InventoryCount.create(
+                sessionId, UUID.randomUUID(), null, "P", null, 10, 8, actorId));
+
+        mockMvc.perform(put("/api/v1/inventory/sessions/{sessionId}/counts", sessionId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bulkCountBody()))
+                .andExpect(status().isOk());
+
+        verifyNoInteractions(sessionRepository);
+    }
+
+    @Test
+    void POST_counts_employeeUnknownSession_isDelegatedToUseCase() throws Exception {
+        authenticateAs("EMPLOYEE");
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.empty());
+        when(saveInventoryCountUseCase.execute(any())).thenThrow(
+                new DomainException(ErrorCode.INVENTORY_SESSION_NOT_FOUND, "Not found"));
+
+        mockMvc.perform(post("/api/v1/inventory/sessions/{sessionId}/counts", sessionId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(singleCountBody()))
+                .andExpect(status().isNotFound());
     }
 
     // ── GET /products ────────────────────────────────────────

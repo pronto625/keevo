@@ -145,6 +145,78 @@ void main() {
           )).called(1);
     });
 
+    // v1s-12-10: PROMOTE_PRODUCT is OWNER-only; an EMPLOYEE sale (flag false)
+    // still queues the initial stock and the sale, but never the promotion.
+    Sale draftSale({required bool promote}) => Sale(
+          id: 'sale-draft',
+          storeId: 'store-1',
+          employeeId: 'emp-1',
+          paymentMode: PaymentModeEnum.cash,
+          totalAmount: 2500,
+          items: [
+            const SaleItemModel(
+              id: 'item-d',
+              productId: 'prod-draft',
+              productName: 'Brouillon',
+              catalogueUnitPrice: 2500,
+              appliedUnitPrice: 2500,
+              quantity: 1,
+              subtotal: 2500,
+            ),
+          ],
+          occurredAt: DateTime(2026, 4, 22),
+          createdAt: DateTime(2026, 4, 22),
+          originalDraftProductIds: const ['prod-draft'],
+          initialStockEntries: const {'prod-draft': 5},
+          promoteDraftProducts: promote,
+        );
+
+    void stubQueue() {
+      when(() => mockLocal.insertAll(any(), synced: false))
+          .thenAnswer((_) async {});
+      when(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).thenAnswer((_) async {});
+      when(() => mockDispatcher.triggerPushIfIdle()).thenReturn(null);
+    }
+
+    test('recordSale_employeeDraftSale_doesNotQueuePromoteProduct', () async {
+      stubQueue();
+
+      await repo.recordSale(draftSale(promote: false));
+
+      verifyNever(() => mockSyncService.queueOperation(
+            operation: 'PROMOTE_PRODUCT',
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          ));
+      verify(() => mockSyncService.queueOperation(
+            operation: 'RECORD_STOCK_ENTRY',
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).called(1);
+      final payload = verify(() => mockSyncService.queueOperation(
+            operation: 'CREATE_SALE',
+            payload: captureAny(named: 'payload'),
+            entityId: 'sale-draft',
+          )).captured.single as Map<String, dynamic>;
+      expect(payload['originalDraftProductIds'], ['prod-draft']);
+    });
+
+    test('recordSale_ownerDraftSale_queuesPromoteProduct', () async {
+      stubQueue();
+
+      await repo.recordSale(draftSale(promote: true));
+
+      verify(() => mockSyncService.queueOperation(
+            operation: 'PROMOTE_PRODUCT',
+            payload: any(named: 'payload'),
+            entityId: 'prod-draft',
+          )).called(1);
+    });
+
     // The server dates the sale with this value: an offline sale pushed the
     // next day must still belong to the day it was made.
     test('recordSale_payloadCarriesOccurredAtInUtc', () async {

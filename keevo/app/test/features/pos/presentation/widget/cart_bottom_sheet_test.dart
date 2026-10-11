@@ -2,9 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/theme/app_theme.dart';
+import 'package:keevo/features/pos/data/datasource/local_sale_datasource.dart';
 import 'package:keevo/features/pos/domain/model/cart_item.dart';
 import 'package:keevo/features/pos/presentation/provider/cart_provider.dart';
+import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
 import 'package:keevo/features/pos/presentation/widget/cart_bottom_sheet.dart';
+import 'package:keevo/features/stores/presentation/provider/active_store_provider.dart';
+import 'package:mocktail/mocktail.dart';
+
+class _MockLocalSaleDs extends Mock implements LocalSaleDataSource {}
+
+class _FixedActiveStore extends ActiveStoreNotifier {
+  @override
+  String? build() => 's1';
+}
 
 CartItem _item({
   String id = 'p1',
@@ -51,7 +62,72 @@ Future<void> pumpSheet(
   await tester.pumpAndSettle();
 }
 
+/// v1s-12-10: opens the sheet with a single DRAFT item in store 's1' and taps
+/// "Encaisser". [hasStockRecord] = whether the draft already has a stock row.
+Future<_MockLocalSaleDs> _encaisserDraft(WidgetTester tester,
+    {required bool hasStockRecord, required VoidCallback onEncaisser}) async {
+  final ds = _MockLocalSaleDs();
+  when(() => ds.hasStockRecord('d1', 's1'))
+      .thenAnswer((_) async => hasStockRecord);
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        localSaleDataSourceProvider.overrideWithValue(ds),
+        activeStoreIdProvider.overrideWith(_FixedActiveStore.new),
+      ],
+      child: MaterialApp(
+        home: Scaffold(
+          body: Consumer(builder: (context, ref, _) {
+            return ElevatedButton(
+              onPressed: () {
+                ref.read(cartProvider.notifier).addItem(CartItem(
+                      id: 'd1',
+                      productId: 'd1',
+                      productName: 'Brouillon',
+                      unitPrice: 500,
+                      appliedUnitPrice: 500,
+                      quantity: 1,
+                      productStatus: 'DRAFT',
+                    ));
+                CartBottomSheet.show(context, onEncaisser: onEncaisser);
+              },
+              child: const Text('Open'),
+            );
+          }),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('Open'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Encaisser'));
+  await tester.pumpAndSettle();
+  return ds;
+}
+
 void main() {
+  group('CartBottomSheet draft initial stock (v1s-12-10)', () {
+    testWidgets('a draft already stocked in the store is not prompted',
+        (tester) async {
+      var encaissed = false;
+      await _encaisserDraft(tester,
+          hasStockRecord: true, onEncaisser: () => encaissed = true);
+
+      expect(find.text('Stock initial'), findsNothing);
+      expect(encaissed, isTrue);
+    });
+
+    testWidgets('a draft never stocked in the store is prompted',
+        (tester) async {
+      var encaissed = false;
+      await _encaisserDraft(tester,
+          hasStockRecord: false, onEncaisser: () => encaissed = true);
+
+      expect(find.text('Stock initial'), findsOneWidget);
+      expect(encaissed, isFalse);
+    });
+  });
+
   group('CartBottomSheet', () {
     testWidgets('shows Réduction button when cart is not empty',
         (tester) async {

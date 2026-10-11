@@ -69,11 +69,13 @@ void main() {
     mockProductDs = MockLocalProductDataSource();
   });
 
-  ProviderContainer createContainer({List<CartItem> cart = const []}) {
+  ProviderContainer createContainer(
+      {List<CartItem> cart = const [], String? role = 'OWNER'}) {
     final container = ProviderContainer(
       overrides: [
         // Gate is open (0 days — no sync required)
         daysSinceLastSyncProvider.overrideWithValue(0),
+        currentUserRoleProvider.overrideWithValue(role),
         appDatabaseProvider.overrideWith((ref) {
           final db = AppDatabase.forTesting();
           ref.onDispose(db.close);
@@ -176,11 +178,11 @@ void main() {
       container.read(cartProvider.notifier).addItem(_item());
 
       await container.read(recordSaleNotifierProvider.notifier).submit(
-            cart: [_item()],
-            mode: PaymentModeEnum.cash,
-            storeId: 'store-1',
-            employeeId: 'emp-1',
-          );
+        cart: [_item()],
+        mode: PaymentModeEnum.cash,
+        storeId: 'store-1',
+        employeeId: 'emp-1',
+      );
 
       expect(
         container.read(recordSaleNotifierProvider),
@@ -213,10 +215,8 @@ void main() {
 
       // Stub local datasources
       when(() => mockLocalDs.applyInitialStockEntries(any(), any(), any(),
-              movementIds: any(named: 'movementIds')))
-          .thenAnswer((_) async {});
-      when(() => mockProductDs.promoteToActive(any()))
-          .thenAnswer((_) async {});
+          movementIds: any(named: 'movementIds'))).thenAnswer((_) async {});
+      when(() => mockProductDs.promoteToActive(any())).thenAnswer((_) async {});
       // After stock applied, draft product has 5 stock
       when(() => mockLocalDs.getAvailableStock('d1', any()))
           .thenAnswer((_) async => 5);
@@ -236,8 +236,8 @@ void main() {
 
       // AC3: applyInitialStockEntries called with exact map
       verify(() => mockLocalDs.applyInitialStockEntries(
-            {'d1': 5}, 'store-1', 'emp-1',
-            movementIds: any(named: 'movementIds'))).called(1);
+          {'d1': 5}, 'store-1', 'emp-1',
+          movementIds: any(named: 'movementIds'))).called(1);
 
       // AC3: promoteToActive called for each draft product
       verify(() => mockProductDs.promoteToActive('d1')).called(1);
@@ -251,6 +251,88 @@ void main() {
 
       // AC3: draftInitialStocksProvider cleared after submit
       expect(container.read(draftInitialStocksProvider), isEmpty);
+    });
+
+    // ── v1s-12-10: promotion is OWNER-only ─────────────────────────────────
+
+    // Fail closed: an unknown (null) role does not promote either.
+    for (final role in <String?>['EMPLOYEE', null]) {
+      test('submit_withDraftItem_as${role}_appliesInitialStockButNeverPromotes',
+          () async {
+        final draftItem = CartItem(
+          id: 'd1',
+          productId: 'd1',
+          productName: 'Brouillon',
+          unitPrice: 3000,
+          appliedUnitPrice: 3000,
+          quantity: 1,
+          productStatus: 'DRAFT',
+        );
+        final container = createContainer(cart: [draftItem], role: role);
+        container
+            .read(draftInitialStocksProvider.notifier)
+            .update((_) => {'d1': 5});
+        when(() => mockLocalDs.applyInitialStockEntries(any(), any(), any(),
+            movementIds: any(named: 'movementIds'))).thenAnswer((_) async {});
+        when(() => mockLocalDs.getAvailableStock('d1', any()))
+            .thenAnswer((_) async => 0);
+        when(() => mockRepo.recordSale(any())).thenAnswer((_) async {});
+
+        await container.read(recordSaleNotifierProvider.notifier).submit(
+          cart: [draftItem],
+          mode: PaymentModeEnum.cash,
+          storeId: 'store-1',
+          employeeId: 'emp-1',
+        );
+
+        expect(container.read(recordSaleNotifierProvider),
+            isA<RecordSaleSuccess>());
+        verify(() => mockLocalDs.applyInitialStockEntries(
+            {'d1': 5}, 'store-1', 'emp-1',
+            movementIds: any(named: 'movementIds'))).called(1);
+        verifyNever(() => mockProductDs.promoteToActive(any()));
+        final captured = verify(() => mockRepo.recordSale(captureAny()))
+            .captured
+            .single as Sale;
+        // The owner is still notified about the sold drafts.
+        expect(captured.originalDraftProductIds, ['d1']);
+        expect(captured.promoteDraftProducts, isFalse);
+      });
+    }
+
+    test('submit_withDraftItem_asOwner_flagsPromotion', () async {
+      final draftItem = CartItem(
+        id: 'd1',
+        productId: 'd1',
+        productName: 'Brouillon',
+        unitPrice: 3000,
+        appliedUnitPrice: 3000,
+        quantity: 1,
+        productStatus: 'DRAFT',
+      );
+      final container = createContainer(cart: [draftItem]);
+      container
+          .read(draftInitialStocksProvider.notifier)
+          .update((_) => {'d1': 5});
+      when(() => mockLocalDs.applyInitialStockEntries(any(), any(), any(),
+          movementIds: any(named: 'movementIds'))).thenAnswer((_) async {});
+      when(() => mockProductDs.promoteToActive(any())).thenAnswer((_) async {});
+      when(() => mockLocalDs.getAvailableStock('d1', any()))
+          .thenAnswer((_) async => 0);
+      when(() => mockRepo.recordSale(any())).thenAnswer((_) async {});
+
+      await container.read(recordSaleNotifierProvider.notifier).submit(
+        cart: [draftItem],
+        mode: PaymentModeEnum.cash,
+        storeId: 'store-1',
+        employeeId: 'emp-1',
+      );
+
+      verify(() => mockProductDs.promoteToActive('d1')).called(1);
+      final captured = verify(() => mockRepo.recordSale(captureAny()))
+          .captured
+          .single as Sale;
+      expect(captured.promoteDraftProducts, isTrue);
     });
 
     // ── AC4: No-draft cart — never applies stock or promotes ───────────────
@@ -275,12 +357,12 @@ void main() {
       expect(state, isA<RecordSaleSuccess>());
 
       // AC4: Never called when no draft items
-      verifyNever(
-          () => mockLocalDs.applyInitialStockEntries(any(), any(), any(),
-              movementIds: any(named: 'movementIds')));
+      verifyNever(() => mockLocalDs.applyInitialStockEntries(
+          any(), any(), any(),
+          movementIds: any(named: 'movementIds')));
       verifyNever(() => mockProductDs.promoteToActive(any()));
     });
-      // ── Draft checkout: stock check must run BEFORE any local mutation ────
+    // ── Draft checkout: stock check must run BEFORE any local mutation ────
 
     CartItem draft({int qty = 2}) => CartItem(
           id: 'd1',
@@ -300,17 +382,17 @@ void main() {
           .thenAnswer((_) async => 0);
 
       await container.read(recordSaleNotifierProvider.notifier).submit(
-            cart: [draft()],
-            mode: PaymentModeEnum.cash,
-            storeId: 'store-1',
-            employeeId: 'emp-1',
-          );
+        cart: [draft()],
+        mode: PaymentModeEnum.cash,
+        storeId: 'store-1',
+        employeeId: 'emp-1',
+      );
 
       final state = container.read(recordSaleNotifierProvider);
       expect((state as RecordSaleError).message, 'INSUFFICIENT_STOCK');
-      verifyNever(
-          () => mockLocalDs.applyInitialStockEntries(any(), any(), any(),
-              movementIds: any(named: 'movementIds')));
+      verifyNever(() => mockLocalDs.applyInitialStockEntries(
+          any(), any(), any(),
+          movementIds: any(named: 'movementIds')));
       verifyNever(() => mockProductDs.promoteToActive(any()));
       verifyNever(() => mockRepo.recordSale(any()));
       expect(container.read(draftInitialStocksProvider), {'d1': 1});
@@ -322,21 +404,19 @@ void main() {
       when(() => mockLocalDs.getAvailableStock('d1', any()))
           .thenAnswer((_) async => 0);
       when(() => mockLocalDs.applyInitialStockEntries(any(), any(), any(),
-              movementIds: any(named: 'movementIds')))
-          .thenAnswer((_) async {});
-      when(() => mockProductDs.promoteToActive(any()))
-          .thenAnswer((_) async {});
+          movementIds: any(named: 'movementIds'))).thenAnswer((_) async {});
+      when(() => mockProductDs.promoteToActive(any())).thenAnswer((_) async {});
       when(() => mockRepo.recordSale(any())).thenAnswer((_) async {});
 
       await container.read(recordSaleNotifierProvider.notifier).submit(
-            cart: [draft()],
-            mode: PaymentModeEnum.cash,
-            storeId: 'store-1',
-            employeeId: 'emp-1',
-          );
+        cart: [draft()],
+        mode: PaymentModeEnum.cash,
+        storeId: 'store-1',
+        employeeId: 'emp-1',
+      );
 
-      expect(container.read(recordSaleNotifierProvider),
-          isA<RecordSaleSuccess>());
+      expect(
+          container.read(recordSaleNotifierProvider), isA<RecordSaleSuccess>());
       verify(() => mockLocalDs.applyInitialStockEntries(
           {'d1': 2}, 'store-1', 'emp-1',
           movementIds: any(named: 'movementIds'))).called(1);
@@ -349,26 +429,24 @@ void main() {
       when(() => mockLocalDs.getAvailableStock('d1', any()))
           .thenAnswer((_) async => 0);
       when(() => mockLocalDs.applyInitialStockEntries(any(), any(), any(),
-              movementIds: any(named: 'movementIds')))
-          .thenAnswer((_) async {});
-      when(() => mockProductDs.promoteToActive(any()))
-          .thenAnswer((_) async {});
+          movementIds: any(named: 'movementIds'))).thenAnswer((_) async {});
+      when(() => mockProductDs.promoteToActive(any())).thenAnswer((_) async {});
       when(() => mockRepo.recordSale(any())).thenAnswer((_) async {});
 
       await container.read(recordSaleNotifierProvider.notifier).submit(
-            cart: [draft()],
-            mode: PaymentModeEnum.cash,
-            storeId: 'store-1',
-            employeeId: 'emp-1',
-          );
+        cart: [draft()],
+        mode: PaymentModeEnum.cash,
+        storeId: 'store-1',
+        employeeId: 'emp-1',
+      );
 
       final ids = verify(() => mockLocalDs.applyInitialStockEntries(
               any(), any(), any(),
-              movementIds: captureAny(named: 'movementIds')))
+              movementIds: captureAny(named: 'movementIds'))).captured.single
+          as Map<String, String>;
+      final sale = verify(() => mockRepo.recordSale(captureAny()))
           .captured
-          .single as Map<String, String>;
-      final sale =
-          verify(() => mockRepo.recordSale(captureAny())).captured.single as Sale;
+          .single as Sale;
       expect(ids.keys, ['d1']);
       expect(sale.initialStockMovementIds, ids);
     });
@@ -390,12 +468,12 @@ void main() {
           updatedAt: now));
       final container = ProviderContainer(overrides: [
         daysSinceLastSyncProvider.overrideWithValue(0),
+        currentUserRoleProvider.overrideWithValue('OWNER'),
         appDatabaseProvider.overrideWithValue(db),
         saleRepositoryProvider.overrideWithValue(mockRepo),
-        localSaleDataSourceProvider
-            .overrideWithValue(LocalSaleDataSource(db)),
-        localProductDataSourceProvider.overrideWithValue(
-            LocalProductDataSource(db, _NoopSyncService())),
+        localSaleDataSourceProvider.overrideWithValue(LocalSaleDataSource(db)),
+        localProductDataSourceProvider
+            .overrideWithValue(LocalProductDataSource(db, _NoopSyncService())),
         recordSaleUseCaseProvider
             .overrideWithValue(RecordSaleUseCase(mockRepo)),
       ]);
@@ -405,14 +483,14 @@ void main() {
       when(() => mockRepo.recordSale(any())).thenThrow(Exception('disk'));
 
       await container.read(recordSaleNotifierProvider.notifier).submit(
-            cart: [draft()],
-            mode: PaymentModeEnum.cash,
-            storeId: 'store-1',
-            employeeId: 'emp-1',
-          );
+        cart: [draft()],
+        mode: PaymentModeEnum.cash,
+        storeId: 'store-1',
+        employeeId: 'emp-1',
+      );
 
-      expect(container.read(recordSaleNotifierProvider),
-          isA<RecordSaleError>());
+      expect(
+          container.read(recordSaleNotifierProvider), isA<RecordSaleError>());
       expect(await db.select(db.stockLevels).get(), isEmpty);
       expect(await db.select(db.stockMovements).get(), isEmpty);
       final product = await (db.select(db.products)
@@ -427,21 +505,19 @@ void main() {
       when(() => mockLocalDs.getAvailableStock('d1', any()))
           .thenAnswer((_) async => 0);
       when(() => mockLocalDs.applyInitialStockEntries(any(), any(), any(),
-              movementIds: any(named: 'movementIds')))
-          .thenAnswer((_) async {});
-      when(() => mockProductDs.promoteToActive(any()))
-          .thenAnswer((_) async {});
+          movementIds: any(named: 'movementIds'))).thenAnswer((_) async {});
+      when(() => mockProductDs.promoteToActive(any())).thenAnswer((_) async {});
       when(() => mockRepo.recordSale(any())).thenThrow(Exception('disk'));
 
       await container.read(recordSaleNotifierProvider.notifier).submit(
-            cart: [draft()],
-            mode: PaymentModeEnum.cash,
-            storeId: 'store-1',
-            employeeId: 'emp-1',
-          );
+        cart: [draft()],
+        mode: PaymentModeEnum.cash,
+        storeId: 'store-1',
+        employeeId: 'emp-1',
+      );
 
-      expect(container.read(recordSaleNotifierProvider),
-          isA<RecordSaleError>());
+      expect(
+          container.read(recordSaleNotifierProvider), isA<RecordSaleError>());
       expect(container.read(draftInitialStocksProvider), {'d1': 5});
     });
   });

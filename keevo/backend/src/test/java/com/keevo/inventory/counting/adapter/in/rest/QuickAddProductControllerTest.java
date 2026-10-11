@@ -5,11 +5,17 @@ import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.stock.domain.entity.StockLevel;
 import com.keevo.inventory.counting.domain.model.InventoryCount;
+import com.keevo.inventory.counting.domain.model.InventoryScope;
+import com.keevo.inventory.counting.domain.model.InventorySession;
+import com.keevo.inventory.counting.domain.model.InventorySessionStatus;
 import com.keevo.inventory.counting.domain.model.QuickAddProductResult;
 import com.keevo.inventory.counting.domain.port.in.*;
+import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
+import com.keevo.shared.infrastructure.security.AuthDetails;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,6 +33,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -42,6 +49,10 @@ class QuickAddProductControllerTest {
     @Mock private SaveInventoryCountUseCase saveInventoryCountUseCase;
     @Mock private GetSessionCountsUseCase getSessionCountsUseCase;
     @Mock private QuickAddProductUseCase quickAddProductUseCase;
+    @Mock private InventorySessionRepository sessionRepository;
+
+    private static final UUID STORE_A = UUID.randomUUID();
+    private static final UUID STORE_C = UUID.randomUUID();
 
     private MockMvc mockMvc;
     private final ObjectMapper mapper = new ObjectMapper();
@@ -53,7 +64,7 @@ class QuickAddProductControllerTest {
     void setUp() {
         var controller = new InventoryCountController(
                 getCountingProductsUseCase, saveInventoryCountUseCase,
-                getSessionCountsUseCase, quickAddProductUseCase);
+                getSessionCountsUseCase, quickAddProductUseCase, sessionRepository);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -62,11 +73,62 @@ class QuickAddProductControllerTest {
         mapper.findAndRegisterModules();
     }
 
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
+
+    /** EMPLOYEE tokens carry their assigned store (STORE_A), as JwtAuthFilter sets it. */
     private void authenticateAs(String role) {
+        var auth = new UsernamePasswordAuthenticationToken(
+                actorId, null,
+                List.of(new SimpleGrantedAuthority("ROLE_" + role)));
+        if ("EMPLOYEE".equals(role)) {
+            auth.setDetails(new AuthDetails("Loïc", STORE_A));
+        }
+        SecurityContextHolder.getContext().setAuthentication(auth);
+    }
+
+    @Test
+    @DisplayName("POST /quick-add → 403 when the EMPLOYEE token has no assigned store (v1s-12-10)")
+    void quickAdd_employeeWithoutAssignedStore_returns403() throws Exception {
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(
-                        actorId, null,
-                        List.of(new SimpleGrantedAuthority("ROLE_" + role))));
+                new UsernamePasswordAuthenticationToken(actorId, null,
+                        List.of(new SimpleGrantedAuthority("ROLE_EMPLOYEE"))));
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("name", "Robe Wax L");
+        body.put("categoryId", UUID.randomUUID());
+        body.put("physicalQty", 5);
+
+        mockMvc.perform(post("/api/v1/inventory/sessions/{sessionId}/quick-add", sessionId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(body)))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(quickAddProductUseCase);
+        verifyNoInteractions(sessionRepository);
+    }
+
+    @Test
+    @DisplayName("POST /quick-add → 403 when an EMPLOYEE targets another store's session (v1s-12-10)")
+    void quickAdd_employeeForeignStoreSession_returns403() throws Exception {
+        authenticateAs("EMPLOYEE");
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(new InventorySession(
+                sessionId, STORE_C, InventoryScope.FULL, null, InventorySessionStatus.IN_PROGRESS,
+                actorId, Instant.now(), null, null, null, Instant.now())));
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("name", "Robe Wax L");
+        body.put("categoryId", UUID.randomUUID());
+        body.put("physicalQty", 5);
+
+        mockMvc.perform(post("/api/v1/inventory/sessions/{sessionId}/quick-add", sessionId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(body)))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(quickAddProductUseCase);
     }
 
     @Test
