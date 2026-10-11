@@ -63,101 +63,114 @@ class CategoryRepositoryImpl implements CategoryRepository {
   @override
   Future<CategoryModel> createCustomCategory(String name, {String? parentId}) async {
     // Offline-first (Story 5.6): generate UUID locally, write to Drift, queue sync.
+    // v1s-14-15: the Drift write and its sync_queue entry commit in ONE transaction.
     final id = const Uuid().v4();
     final now = DateTime.now();
-    await _database.into(_database.categories).insertOnConflictUpdate(
-      CategoriesCompanion.insert(
-        id: id,
-        name: name,
-        parentId: Value(parentId),
-        isActive: const Value(true),
-        isCustom: const Value(true),
-        createdAt: now,
-        updatedAt: now,
-      ),
-    );
-    await _syncService.queueOperation(
-      operation: 'CREATE_CATEGORY',
-      payload: {
-        'id': id,
-        'name': name,
-        if (parentId != null) 'parentId': parentId,
-      },
-      entityId: id,
-    );
+    final model = await _database.transaction(() async {
+      await _database.into(_database.categories).insertOnConflictUpdate(
+        CategoriesCompanion.insert(
+          id: id,
+          name: name,
+          parentId: Value(parentId),
+          isActive: const Value(true),
+          isCustom: const Value(true),
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      await _syncService.queueOperation(
+        operation: 'CREATE_CATEGORY',
+        payload: {
+          'id': id,
+          'name': name,
+          if (parentId != null) 'parentId': parentId,
+        },
+        entityId: id,
+      );
+      return _mapToModel(await _requireRow(id));
+    });
     _syncTriggerDispatcher.triggerPushIfIdle();
-    final row = await (_database.select(_database.categories)
-          ..where((c) => c.id.equals(id)))
-        .getSingle();
-    return _mapToModel(row);
+    return model;
   }
 
   @override
   Future<CategoryModel> toggleCategoryStatus(String categoryId) async {
     // Offline-first (Story 5.6): toggle locally, queue TOGGLE_CATEGORY.
-    final category = await (_database.select(_database.categories)
-          ..where((c) => c.id.equals(categoryId)))
-        .getSingle();
-    final now = DateTime.now();
-    final newActive = !category.isActive;
-    await (_database.update(_database.categories)
-          ..where((c) => c.id.equals(categoryId)))
-        .write(CategoriesCompanion(
-      isActive: Value(newActive),
-      updatedAt: Value(now),
-    ));
-    await _syncService.queueOperation(
-      operation: 'TOGGLE_CATEGORY',
-      payload: {'categoryId': categoryId, 'isActive': newActive},
-      entityId: categoryId,
-    );
+    // v1s-14-15: read + check + write + queue are atomic (no lost op, no double toggle).
+    final model = await _database.transaction(() async {
+      final category = await _requireRow(categoryId);
+      final newActive = !category.isActive;
+      await (_database.update(_database.categories)
+            ..where((c) => c.id.equals(categoryId)))
+          .write(CategoriesCompanion(
+        isActive: Value(newActive),
+        updatedAt: Value(DateTime.now()),
+      ));
+      await _syncService.queueOperation(
+        operation: 'TOGGLE_CATEGORY',
+        payload: {'categoryId': categoryId, 'isActive': newActive},
+        entityId: categoryId,
+      );
+      return _mapToModel(await _requireRow(categoryId));
+    });
     _syncTriggerDispatcher.triggerPushIfIdle();
-    final updated = await (_database.select(_database.categories)
-          ..where((c) => c.id.equals(categoryId)))
-        .getSingle();
-    return _mapToModel(updated);
+    return model;
   }
 
   @override
   Future<CategoryModel> renameCategory(String categoryId, String newName) async {
     // Offline-first (Story 5.6): rename locally, queue RENAME_CATEGORY.
-    final now = DateTime.now();
-    await (_database.update(_database.categories)
-          ..where((c) => c.id.equals(categoryId)))
-        .write(CategoriesCompanion(name: Value(newName), updatedAt: Value(now)));
-    await _syncService.queueOperation(
-      operation: 'RENAME_CATEGORY',
-      payload: {'categoryId': categoryId, 'name': newName},
-      entityId: categoryId,
-    );
+    // v1s-14-15: atomic; a missing row raises CategoryNotFoundException.
+    final model = await _database.transaction(() async {
+      await _requireRow(categoryId);
+      await (_database.update(_database.categories)
+            ..where((c) => c.id.equals(categoryId)))
+          .write(CategoriesCompanion(
+              name: Value(newName), updatedAt: Value(DateTime.now())));
+      await _syncService.queueOperation(
+        operation: 'RENAME_CATEGORY',
+        payload: {'categoryId': categoryId, 'name': newName},
+        entityId: categoryId,
+      );
+      return _mapToModel(await _requireRow(categoryId));
+    });
     _syncTriggerDispatcher.triggerPushIfIdle();
-    final row = await (_database.select(_database.categories)
-          ..where((c) => c.id.equals(categoryId)))
-        .getSingle();
-    return _mapToModel(row);
+    return model;
   }
 
   @override
   Future<void> deleteCategory(String categoryId) async {
     // Offline-first: soft-deactivate via TOGGLE_CATEGORY (set-based, idempotent).
-    // Mirrors toggleCategoryStatus() but forces isActive=false (idempotent if already false).
-    final category = await (_database.select(_database.categories)
+    // Mirrors toggleCategoryStatus() but forces isActive=false.
+    // v1s-14-15: atomic; no-op when the row is missing or already inactive (D4).
+    final queued = await _database.transaction(() async {
+      final category = await (_database.select(_database.categories)
+            ..where((c) => c.id.equals(categoryId)))
+          .getSingleOrNull();
+      if (category == null || !category.isActive) return false;
+      await (_database.update(_database.categories)
+            ..where((c) => c.id.equals(categoryId)))
+          .write(CategoriesCompanion(
+        isActive: const Value(false),
+        updatedAt: Value(DateTime.now()),
+      ));
+      await _syncService.queueOperation(
+        operation: 'TOGGLE_CATEGORY',
+        payload: {'categoryId': categoryId, 'isActive': false},
+        entityId: categoryId,
+      );
+      return true;
+    });
+    if (queued) _syncTriggerDispatcher.triggerPushIfIdle();
+  }
+
+  /// Reads a category row or throws [CategoryNotFoundException].
+  Future<Category> _requireRow(String categoryId) async {
+    final row = await (_database.select(_database.categories)
           ..where((c) => c.id.equals(categoryId)))
-        .getSingle();
-    if (!category.isActive) return; // already inactive — no-op
-    final now = DateTime.now();
-    await (_database.update(_database.categories)
-          ..where((c) => c.id.equals(categoryId)))
-        .write(CategoriesCompanion(
-      isActive: const Value(false),
-      updatedAt: Value(now),
-    ));
-    await _syncService.queueOperation(
-      operation: 'TOGGLE_CATEGORY',
-      payload: {'categoryId': categoryId, 'isActive': false},
-      entityId: categoryId,
-    );
-    _syncTriggerDispatcher.triggerPushIfIdle();
+        .getSingleOrNull();
+    if (row == null) throw CategoryNotFoundException(categoryId);
+    return row;
   }
 
   /// Map Drift Category to CategoryModel

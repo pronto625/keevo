@@ -2,6 +2,8 @@ package com.keevo.catalog.category.adapter.out.persistence;
 
 import com.keevo.catalog.category.domain.model.Category;
 import com.keevo.catalog.category.domain.port.out.CategoryRepository;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -71,7 +73,7 @@ public class JpaCategoryRepository implements CategoryRepository {
     public Category toggleActive(UUID id) {
         // Load entity, flip isActive, save, return domain object
         CategoryJpaEntity entity = jpaRepository.findById(id)
-            .orElseThrow(() -> new IllegalArgumentException("Category not found: " + id));
+            .orElseThrow(() -> new DomainException(ErrorCode.CATEGORY_NOT_FOUND, "categoryId=" + id));
         
         entity.setActive(!entity.isActive());
         entity.setUpdatedAt(Instant.now());
@@ -101,7 +103,7 @@ public class JpaCategoryRepository implements CategoryRepository {
     @Override
     public Category rename(UUID id, String name) {
         CategoryJpaEntity entity = jpaRepository.findById(id)
-            .orElseThrow(() -> new IllegalArgumentException("Category not found: " + id));
+            .orElseThrow(() -> new DomainException(ErrorCode.CATEGORY_NOT_FOUND, "categoryId=" + id));
         entity.setName(name);
         entity.setUpdatedAt(Instant.now());
         return toDomain(jpaRepository.save(entity));
@@ -115,7 +117,7 @@ public class JpaCategoryRepository implements CategoryRepository {
     @Override
     public void deactivate(UUID id) {
         CategoryJpaEntity entity = jpaRepository.findById(id)
-            .orElseThrow(() -> new IllegalArgumentException("Category not found: " + id));
+            .orElseThrow(() -> new DomainException(ErrorCode.CATEGORY_NOT_FOUND, "categoryId=" + id));
         entity.setActive(false);
         entity.setUpdatedAt(Instant.now());
         jpaRepository.save(entity);

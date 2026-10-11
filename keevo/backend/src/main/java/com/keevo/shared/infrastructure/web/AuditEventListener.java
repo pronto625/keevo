@@ -11,6 +11,9 @@ import com.keevo.identity.auth.domain.model.PasswordResetEvent;
 import com.keevo.identity.auth.domain.model.UserMembershipInfo;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.onboarding.domain.model.OnboardingCompletedEvent;
+import com.keevo.catalog.category.domain.event.CategoryActiveChangedEvent;
+import com.keevo.catalog.category.domain.event.CategoryCreatedEvent;
+import com.keevo.catalog.category.domain.event.CategoryRenamedEvent;
 import com.keevo.catalog.contact.domain.event.ClientArchivedEvent;
 import com.keevo.catalog.contact.domain.event.ClientCreatedEvent;
 import com.keevo.catalog.contact.domain.event.SupplierArchivedEvent;
@@ -373,6 +376,70 @@ public class AuditEventListener {
         );
         log.info("AUDIT: client_archived clientId={} tenantId={} actorId={}",
                 event.clientId(), event.tenantId(), event.actorId());
+    }
+
+    /**
+     * Handle category created event (v1s-14-15) — REST create or sync CREATE_CATEGORY.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management.
+     */
+    @EventListener
+    public void on(CategoryCreatedEvent event) {
+        Map<String, Object> after = new java.util.LinkedHashMap<>();
+        after.put("name", event.name());
+        after.put("parentId", event.parentId() != null ? event.parentId().toString() : null);
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "CATEGORY_CREATED",
+                "Category",
+                event.categoryId(),
+                null,
+                toJson(after)
+        );
+        log.info("AUDIT: category_created categoryId={} tenantId={} actorId={}",
+                event.categoryId(), event.tenantId(), event.actorId());
+    }
+
+    /**
+     * Handle category active-flag change (v1s-14-15) — toggle (REST/sync) or REST delete.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management.
+     */
+    @EventListener
+    public void on(CategoryActiveChangedEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                event.active() ? "CATEGORY_ACTIVATED" : "CATEGORY_DEACTIVATED",
+                "Category",
+                event.categoryId(),
+                toJson(Map.of("active", !event.active())),
+                toJson(Map.of("name", event.name(), "active", event.active()))
+        );
+        log.info("AUDIT: category_{} categoryId={} tenantId={} actorId={}",
+                event.active() ? "activated" : "deactivated",
+                event.categoryId(), event.tenantId(), event.actorId());
+    }
+
+    /**
+     * Handle category renamed event (v1s-14-15) — REST rename or sync RENAME_CATEGORY.
+     *
+     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management.
+     */
+    @EventListener
+    public void on(CategoryRenamedEvent event) {
+        auditPort.record(
+                event.actorId(),
+                event.tenantId(),
+                "CATEGORY_RENAMED",
+                "Category",
+                event.categoryId(),
+                toJson(Map.of("name", event.oldName())),
+                toJson(Map.of("name", event.newName()))
+        );
+        log.info("AUDIT: category_renamed categoryId={} tenantId={} actorId={}",
+                event.categoryId(), event.tenantId(), event.actorId());
     }
 
     /**

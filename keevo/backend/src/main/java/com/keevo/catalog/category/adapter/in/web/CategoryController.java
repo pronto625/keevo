@@ -9,9 +9,9 @@ import com.keevo.catalog.category.application.usecase.GetCategoriesUseCase;
 import com.keevo.catalog.category.application.usecase.RenameCategoryUseCase;
 import com.keevo.catalog.category.application.usecase.ToggleCategoryUseCase;
 import com.keevo.catalog.category.domain.model.Category;
-import com.keevo.catalog.category.domain.port.out.CategoryRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 
 import org.springframework.http.HttpStatus;
@@ -41,18 +41,15 @@ public class CategoryController {
     private final GetCategoriesUseCase getCategoriesUseCase;
     private final ToggleCategoryUseCase toggleCategoryUseCase;
     private final RenameCategoryUseCase renameCategoryUseCase;
-    private final CategoryRepository categoryRepository;
 
     public CategoryController(CreateCategoryUseCase createCategoryUseCase,
                             GetCategoriesUseCase getCategoriesUseCase,
                             ToggleCategoryUseCase toggleCategoryUseCase,
-                            RenameCategoryUseCase renameCategoryUseCase,
-                            CategoryRepository categoryRepository) {
+                            RenameCategoryUseCase renameCategoryUseCase) {
         this.createCategoryUseCase = createCategoryUseCase;
         this.getCategoriesUseCase = getCategoriesUseCase;
         this.toggleCategoryUseCase = toggleCategoryUseCase;
         this.renameCategoryUseCase = renameCategoryUseCase;
-        this.categoryRepository = categoryRepository;
     }
 
     /**
@@ -110,7 +107,8 @@ public class CategoryController {
             request.parentId()
         );
         
-        Category category = createCategoryUseCase.execute(dto);
+        Category category = createCategoryUseCase.execute(dto,
+            CurrentActor.actorId(), TenantContext.getCurrentTenant());
         CategoryResponseDto response = CategoryResponseDto.fromDomain(category);
         
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -129,7 +127,8 @@ public class CategoryController {
             throw new DomainException(ErrorCode.FORBIDDEN,
                     "Seul le propriétaire peut activer ou supprimer une catégorie");
         }
-        Category category = toggleCategoryUseCase.execute(id);
+        Category category = toggleCategoryUseCase.execute(id,
+                CurrentActor.actorId(), TenantContext.getCurrentTenant());
         CategoryResponseDto response = CategoryResponseDto.fromDomain(category);
 
         return ResponseEntity.ok(ApiResponseWrapper.ok(response));
@@ -144,18 +143,20 @@ public class CategoryController {
             @PathVariable UUID id,
             @Valid @RequestBody RenameCategoryRequestDto request) {
         var dto = new RenameCategoryUseCase.RenameCategoryDto(request.name());
-        Category category = renameCategoryUseCase.execute(id, dto);
+        Category category = renameCategoryUseCase.execute(id, dto,
+                CurrentActor.actorId(), TenantContext.getCurrentTenant());
         return ResponseEntity.ok(ApiResponseWrapper.ok(CategoryResponseDto.fromDomain(category)));
     }
 
     /**
-     * Soft-delete a category (always sets isActive = false).
-     * DELETE /api/v1/categories/{id}
+     * Soft-delete a category (sets isActive = false; no-op when already inactive).
+     * DELETE /api/v1/categories/{id} — 404 CATEGORY_NOT_FOUND on an unknown id (v1s-14-15).
      */
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<Void> deleteCategory(@PathVariable UUID id) {
-        categoryRepository.deactivate(id);
+        toggleCategoryUseCase.deactivate(id,
+                CurrentActor.actorId(), TenantContext.getCurrentTenant());
         return ResponseEntity.noContent().build();
     }
 }

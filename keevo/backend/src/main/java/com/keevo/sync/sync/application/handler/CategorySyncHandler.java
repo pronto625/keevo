@@ -1,5 +1,6 @@
 package com.keevo.sync.sync.application.handler;
 
+import com.keevo.catalog.category.application.usecase.CreateCategoryUseCase;
 import com.keevo.catalog.category.application.usecase.RenameCategoryUseCase;
 import com.keevo.catalog.category.application.usecase.RenameCategoryUseCase.RenameCategoryDto;
 import com.keevo.catalog.category.application.usecase.ToggleCategoryUseCase;
@@ -12,7 +13,6 @@ import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import org.springframework.stereotype.Component;
 
-import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -35,11 +35,14 @@ public class CategorySyncHandler extends AbstractSyncOperationHandler {
     private final CategoryRepository categoryRepository;
     private final ToggleCategoryUseCase toggleCategory;
     private final RenameCategoryUseCase renameCategory;
+    private final CreateCategoryUseCase createCategory;
 
     public CategorySyncHandler(CategoryRepository categoryRepository,
                                ToggleCategoryUseCase toggleCategory,
-                               RenameCategoryUseCase renameCategory) {
+                               RenameCategoryUseCase renameCategory,
+                               CreateCategoryUseCase createCategory) {
         this.categoryRepository = categoryRepository;
+        this.createCategory = createCategory;
         this.toggleCategory = toggleCategory;
         this.renameCategory = renameCategory;
     }
@@ -98,9 +101,8 @@ public class CategorySyncHandler extends AbstractSyncOperationHandler {
                     yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                             existingByName.get().id().toString(), null);
                 }
-                Instant now = Instant.now();
-                Category category = new Category(clientId, name, parentId, true, true, now, now);
-                Category saved = categoryRepository.save(category);
+                // v1s-14-15: a genuinely new category goes through the use case (audit CATEGORY_CREATED).
+                Category saved = createCategory.createWithId(clientId, name, parentId, actorId, tenantId);
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         saved.id().toString(), null);
             }
@@ -122,7 +124,7 @@ public class CategorySyncHandler extends AbstractSyncOperationHandler {
                 }
                 Category current = existing.get();
                 Category result = (current.isActive() != targetActive)
-                        ? toggleCategory.execute(categoryId)
+                        ? toggleCategory.execute(categoryId, actorId, tenantId)
                         : current;
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         result.id().toString(), null);
@@ -130,7 +132,7 @@ public class CategorySyncHandler extends AbstractSyncOperationHandler {
             case "RENAME_CATEGORY" -> {
                 UUID categoryId = UUID.fromString((String) p.get("categoryId"));
                 String name = (String) p.get("name");
-                var category = renameCategory.execute(categoryId, new RenameCategoryDto(name));
+                var category = renameCategory.execute(categoryId, new RenameCategoryDto(name), actorId, tenantId);
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         category.id().toString(), null);
             }
