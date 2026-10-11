@@ -79,8 +79,7 @@ public class EmployeeController {
                 request.lastName(), request.storeId());
         CreateEmployeeResult result = createEmployeeUseCase.execute(command);
         TempPasswordResponseDto dto = new TempPasswordResponseDto(
-                EmployeeResponseDto.fromDomain(result.employee(),
-                        employeeRoleResolver.resolveRole(result.employee().getUserId())),
+                toDto(result.employee()),
                 result.temporaryPassword());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponseWrapper.ok(dto));
@@ -94,8 +93,7 @@ public class EmployeeController {
         UUID actorId = extractActorId();
         List<EmployeeResponseDto> dtos = listEmployeesUseCase
                 .execute(new ListEmployeesQuery(actorId))
-                .stream().map(e -> EmployeeResponseDto.fromDomain(e,
-                        employeeRoleResolver.resolveRole(e.getUserId()))).toList();
+                .stream().map(e -> toDto(e)).toList();
         return ResponseEntity.ok(ApiResponseWrapper.ok(dtos));
     }
 
@@ -113,8 +111,7 @@ public class EmployeeController {
         Employee updated = reassignStoreUseCase.execute(
                 new ReassignStoreCommand(actorId, employeeId, request.storeId()));
         return ResponseEntity.ok(ApiResponseWrapper.ok(
-                EmployeeResponseDto.fromDomain(updated,
-                        employeeRoleResolver.resolveRole(updated.getUserId()))));
+                toDto(updated)));
     }
 
     @Operation(summary = "Deactivate employee access")
@@ -158,8 +155,7 @@ public class EmployeeController {
         CreateEmployeeResult result = regeneratePasswordUseCase.execute(
                 new RegeneratePasswordCommand(actorId, employeeId));
         TempPasswordResponseDto dto = new TempPasswordResponseDto(
-                EmployeeResponseDto.fromDomain(result.employee(),
-                        employeeRoleResolver.resolveRole(result.employee().getUserId())),
+                toDto(result.employee()),
                 result.temporaryPassword());
         return ResponseEntity.ok(ApiResponseWrapper.ok(dto));
     }
@@ -188,8 +184,7 @@ public class EmployeeController {
                         request.firstName(), request.lastName(),
                         request.phoneNumber(), request.storeId()));
         return ResponseEntity.ok(ApiResponseWrapper.ok(
-                EmployeeResponseDto.fromDomain(updated,
-                        employeeRoleResolver.resolveRole(updated.getUserId()))));
+                toDto(updated)));
     }
 
     @Operation(summary = "Change employee role (OWNER ↔ EMPLOYEE)")
@@ -225,6 +220,18 @@ public class EmployeeController {
         setEmployeePasswordUseCase.execute(
                 new SetEmployeePasswordCommand(actorId, employeeId, request.newPassword()));
         return ResponseEntity.ok(ApiResponseWrapper.ok(null));
+    }
+
+    /**
+     * Enriches the aggregate with what lives outside it (membership role,
+     * {@code public.users} phone) — Story 14.11 AC5/AC6. One lookup each per
+     * employee; lists are bounded by {@code PlanLimitGuard}.
+     */
+    private EmployeeResponseDto toDto(Employee e) {
+        UUID userId = e.getUserId();
+        return EmployeeResponseDto.fromDomain(e,
+                employeeRoleResolver.resolveRole(userId),
+                employeeRoleResolver.resolvePhone(userId));
     }
 
     /**

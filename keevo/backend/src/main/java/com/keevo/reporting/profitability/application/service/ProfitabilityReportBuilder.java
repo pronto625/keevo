@@ -64,6 +64,13 @@ public class ProfitabilityReportBuilder {
                 .map(r -> new DailyMarginEntry(r.date(), r.dailyMargin()))
                 .toList();
 
+        // Store that sold the most units in the period (AC4) — empty when no sales.
+        var topStore = repo.findTopStoreByUnits(
+                query.tenantId(), productId, query.from(), query.to(), query.storeId());
+        UUID topStoreId = topStore.map(RawTopStoreRow::storeId).orElse(null);
+        String topStoreName = topStore.map(RawTopStoreRow::storeName).orElse(null);
+        int topStoreUnits = topStore.map(RawTopStoreRow::unitsSold).orElse(0);
+
         // Look for sales data in the requested period.
         var rows = repo.findRawByPeriod(
                 query.tenantId(), query.from(), query.to(), query.storeId());
@@ -81,7 +88,7 @@ public class ProfitabilityReportBuilder {
                     costs.cataloguePrice(), costs.buyPrice(), costs.transportCost(),
                     costs.minAppliedPrice(), costs.maxAppliedPrice(), costs.avgAppliedPrice(),
                     sparkline,
-                    null, null, 0
+                    topStoreId, topStoreName, topStoreUnits
             );
         } else {
             // Product exists but no completed sales in this period: return zero metrics.
@@ -91,7 +98,7 @@ public class ProfitabilityReportBuilder {
                     costs.cataloguePrice(), costs.buyPrice(), costs.transportCost(),
                     costs.minAppliedPrice(), costs.maxAppliedPrice(), costs.avgAppliedPrice(),
                     sparkline,
-                    null, null, 0
+                    topStoreId, topStoreName, topStoreUnits
             );
         }
     }

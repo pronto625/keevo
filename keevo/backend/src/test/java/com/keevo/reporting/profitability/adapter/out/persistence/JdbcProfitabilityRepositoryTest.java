@@ -5,6 +5,7 @@ import com.keevo.reporting.profitability.domain.port.out.ProfitabilityRepository
 import com.keevo.reporting.profitability.domain.port.out.ProfitabilityRepository.RawProductCostRow;
 import com.keevo.reporting.profitability.domain.port.out.ProfitabilityRepository.RawProfitabilityRow;
 import com.keevo.reporting.profitability.domain.port.out.ProfitabilityRepository.RawStorePerformanceRow;
+import com.keevo.reporting.profitability.domain.port.out.ProfitabilityRepository.RawTopStoreRow;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,7 +21,7 @@ import org.springframework.jdbc.core.RowMapper;
 import java.sql.ResultSet;
 import java.sql.Timestamp;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -219,10 +220,12 @@ class JdbcProfitabilityRepositoryTest {
 
         List<Timestamp> captured = tsCaptor.getAllValues();
         assertThat(captured).hasSize(2);
-        // tsFrom = endDate.minusDays(6) = 2026-07-17 00:00 UTC
-        Timestamp expectedFrom = Timestamp.from(endDate.minusDays(6).atStartOfDay().toInstant(ZoneOffset.UTC));
-        // tsTo = endDate.plusDays(1) = 2026-07-24 00:00 UTC
-        Timestamp expectedTo = Timestamp.from(endDate.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC));
+        // Day boundaries are the shop's local midnight (WAT), like DashboardService.
+        ZoneId wat = ZoneId.of("Africa/Lagos");
+        // tsFrom = endDate.minusDays(6) = 2026-07-17 00:00 WAT
+        Timestamp expectedFrom = Timestamp.from(endDate.minusDays(6).atStartOfDay(wat).toInstant());
+        // tsTo = endDate.plusDays(1) = 2026-07-24 00:00 WAT
+        Timestamp expectedTo = Timestamp.from(endDate.plusDays(1).atStartOfDay(wat).toInstant());
         assertThat(captured.get(0)).isEqualTo(expectedFrom);
         assertThat(captured.get(1)).isEqualTo(expectedTo);
     }
@@ -252,5 +255,84 @@ class JdbcProfitabilityRepositoryTest {
 
         assertThat(sqlCaptor.getValue()).contains("store_id");
         verify(jdbc).query(anyString(), any(RowMapper.class), eq(storeId.toString()), eq(productId.toString()));
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Period window: "Aujourd'hui" is the shop's local day (WAT), not UTC
+    // ─────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("findRawByPeriod bounds the window on WAT midnights (same convention as the dashboard)")
+    void findRawByPeriod_usesShopTimeZoneForDayBoundaries() {
+        ArgumentCaptor<Timestamp> tsCaptor = ArgumentCaptor.forClass(Timestamp.class);
+        doReturn(Collections.emptyList()).when(jdbc)
+                .query(anyString(), any(RowMapper.class), tsCaptor.capture(), tsCaptor.capture());
+
+        repository.findRawByPeriod(tenantId, from, to, null);
+
+        ZoneId wat = ZoneId.of("Africa/Lagos");
+        List<Timestamp> captured = tsCaptor.getAllValues();
+        assertThat(captured.get(0)).isEqualTo(Timestamp.from(from.atStartOfDay(wat).toInstant()));
+        assertThat(captured.get(1)).isEqualTo(Timestamp.from(to.plusDays(1).atStartOfDay(wat).toInstant()));
+        // 2026-07-01 00:00 WAT == 2026-06-30 23:00 UTC — not the UTC midnight.
+        assertThat(captured.get(0).toInstant())
+                .isEqualTo(java.time.Instant.parse("2026-06-30T23:00:00Z"));
+    }
+
+    @Test
+    @DisplayName("findDailyMarginLast7 groups days in the shop time zone")
+    void findDailyMarginLast7_groupsByShopLocalDay() {
+        ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+        doReturn(Collections.emptyList()).when(jdbc)
+                .query(sqlCaptor.capture(), any(RowMapper.class), any(), any(), any());
+
+        repository.findDailyMarginLast7(tenantId, productId, LocalDate.of(2026, 7, 23));
+
+        assertThat(sqlCaptor.getValue()).contains("AT TIME ZONE 'Africa/Lagos'");
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // findTopStoreByUnits (AC4 "Meilleure boutique")
+    // ─────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("findTopStoreByUnits maps the best store row and ranks by units sold")
+    void findTopStoreByUnits_mapsRow_andOrdersByUnitsDesc() throws Exception {
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<RowMapper<RawTopStoreRow>> mapperCaptor = ArgumentCaptor.forClass(RowMapper.class);
+        ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+        doAnswer(inv -> {
+                    RowMapper<RawTopStoreRow> m = mapperCaptor.getValue();
+                    when(rs.getString("store_id")).thenReturn(storeId.toString());
+                    when(rs.getString("store_name")).thenReturn("Boutique Centrale");
+                    when(rs.getInt("units_sold")).thenReturn(17);
+                    return List.of(m.mapRow(rs, 0));
+                }).when(jdbc).query(sqlCaptor.capture(), mapperCaptor.capture(), any(), any(), any());
+
+        Optional<RawTopStoreRow> result = repository.findTopStoreByUnits(tenantId, productId, from, to, null);
+
+        assertTrue(result.isPresent());
+        assertThat(result.get().storeId()).isEqualTo(storeId);
+        assertThat(result.get().storeName()).isEqualTo("Boutique Centrale");
+        assertThat(result.get().unitsSold()).isEqualTo(17);
+        assertThat(sqlCaptor.getValue())
+                .contains("s.status = 'COMPLETED'")
+                .contains("ORDER BY units_sold DESC LIMIT 1")
+                .doesNotContain("s.store_id = ?");
+    }
+
+    @Test
+    @DisplayName("findTopStoreByUnits with store filter restricts to that store; empty → Optional.empty")
+    void findTopStoreByUnits_withStoreFilter_passesStoreId() {
+        ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+        doReturn(Collections.emptyList()).when(jdbc)
+                .query(sqlCaptor.capture(), any(RowMapper.class), any(), any(), any(), any());
+
+        Optional<RawTopStoreRow> result = repository.findTopStoreByUnits(tenantId, productId, from, to, storeId);
+
+        assertTrue(result.isEmpty());
+        assertThat(sqlCaptor.getValue()).contains("s.store_id = ?");
+        verify(jdbc).query(anyString(), any(RowMapper.class),
+                eq(productId.toString()), any(Timestamp.class), any(Timestamp.class), eq(storeId.toString()));
     }
 }

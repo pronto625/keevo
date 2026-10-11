@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.Timestamp;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -20,10 +20,17 @@ import java.util.UUID;
  * Tenant isolation is handled automatically by the JWT filter setting the
  * PostgreSQL search_path to the tenant schema before each request.
  *
+ * <p>Day boundaries use the shop's time zone (WAT, Africa/Lagos) like
+ * {@code DashboardService} and {@code ReportController}: "Aujourd'hui" is the
+ * local calendar day, not the UTC one.
+ *
  * Story 7.4, Task 8.1.
  */
 @Repository
 public class JdbcProfitabilityRepository implements ProfitabilityRepository {
+
+    /** Shop time zone — same convention as DashboardService / ReportController. */
+    static final ZoneId WAT = ZoneId.of("Africa/Lagos");
 
     private static final String PRODUCT_PROFITABILITY_SQL =
             "SELECT si.product_id, p.name AS product_name, c.name AS category_name, " +
@@ -51,8 +58,8 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
     @Override
     public List<RawProfitabilityRow> findRawByPeriod(
             String tenantId, LocalDate from, LocalDate to, UUID storeId) {
-        Timestamp tsFrom = Timestamp.from(from.atStartOfDay().toInstant(ZoneOffset.UTC));
-        Timestamp tsTo   = Timestamp.from(to.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC));
+        Timestamp tsFrom = Timestamp.from(from.atStartOfDay(WAT).toInstant());
+        Timestamp tsTo   = Timestamp.from(to.plusDays(1).atStartOfDay(WAT).toInstant());
 
         if (storeId == null) {
             String sql = PRODUCT_PROFITABILITY_SQL + PRODUCT_PROFITABILITY_GROUP;
@@ -69,8 +76,8 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
     @Override
     public List<RawStorePerformanceRow> findRawStoreByPeriod(
             String tenantId, LocalDate from, LocalDate to) {
-        Timestamp tsFrom = Timestamp.from(from.atStartOfDay().toInstant(ZoneOffset.UTC));
-        Timestamp tsTo   = Timestamp.from(to.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC));
+        Timestamp tsFrom = Timestamp.from(from.atStartOfDay(WAT).toInstant());
+        Timestamp tsTo   = Timestamp.from(to.plusDays(1).atStartOfDay(WAT).toInstant());
 
         String sql =
             "SELECT " +
@@ -145,12 +152,12 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
     public List<RawDailyMarginRow> findDailyMarginLast7(
             String tenantId, UUID productId, LocalDate endDate, UUID storeId) {
         LocalDate startDate = endDate.minusDays(6);
-        Timestamp tsFrom = Timestamp.from(startDate.atStartOfDay().toInstant(ZoneOffset.UTC));
-        Timestamp tsTo   = Timestamp.from(endDate.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC));
+        Timestamp tsFrom = Timestamp.from(startDate.atStartOfDay(WAT).toInstant());
+        Timestamp tsTo   = Timestamp.from(endDate.plusDays(1).atStartOfDay(WAT).toInstant());
 
         String sql =
             "SELECT " +
-            "  DATE(s.occurred_at) AS day, " +
+            "  DATE(s.occurred_at AT TIME ZONE 'Africa/Lagos') AS day, " +
             "  COALESCE(SUM((si.applied_unit_price - p.buy_price - p.transport_cost) * si.quantity), 0) AS daily_margin " +
             "FROM sale_items si " +
             "JOIN sales s ON s.id = si.sale_id " +
@@ -159,7 +166,7 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
             "  AND si.product_id = ?::uuid " +
             "  AND s.occurred_at >= ? AND s.occurred_at < ? " +
             (storeId != null ? "  AND s.store_id = ?::uuid " : "") +
-            "GROUP BY DATE(s.occurred_at) " +
+            "GROUP BY DATE(s.occurred_at AT TIME ZONE 'Africa/Lagos') " +
             "ORDER BY day ASC";
 
         RowMapper<RawDailyMarginRow> mapper = (rs, rowNum) -> new RawDailyMarginRow(
@@ -168,6 +175,34 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
         return storeId == null
             ? jdbc.query(sql, mapper, productId.toString(), tsFrom, tsTo)
             : jdbc.query(sql, mapper, productId.toString(), tsFrom, tsTo, storeId.toString());
+    }
+
+    @Override
+    public Optional<RawTopStoreRow> findTopStoreByUnits(
+            String tenantId, UUID productId, LocalDate from, LocalDate to, UUID storeId) {
+        Timestamp tsFrom = Timestamp.from(from.atStartOfDay(WAT).toInstant());
+        Timestamp tsTo   = Timestamp.from(to.plusDays(1).atStartOfDay(WAT).toInstant());
+
+        String sql =
+            "SELECT s.store_id, st.name AS store_name, SUM(si.quantity)::int AS units_sold " +
+            "FROM sale_items si " +
+            "JOIN sales s ON s.id = si.sale_id " +
+            "JOIN stores st ON st.id = s.store_id " +
+            "WHERE s.status = 'COMPLETED' " +
+            "  AND si.product_id = ?::uuid " +
+            "  AND s.occurred_at >= ? AND s.occurred_at < ? " +
+            (storeId != null ? "  AND s.store_id = ?::uuid " : "") +
+            "GROUP BY s.store_id, st.name " +
+            "ORDER BY units_sold DESC LIMIT 1";
+
+        RowMapper<RawTopStoreRow> mapper = (rs, rowNum) -> new RawTopStoreRow(
+                UUID.fromString(rs.getString("store_id")),
+                rs.getString("store_name"),
+                rs.getInt("units_sold"));
+        List<RawTopStoreRow> result = storeId == null
+            ? jdbc.query(sql, mapper, productId.toString(), tsFrom, tsTo)
+            : jdbc.query(sql, mapper, productId.toString(), tsFrom, tsTo, storeId.toString());
+        return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
     }
 
     // ── private helpers ──────────────────────────────────────────────────────

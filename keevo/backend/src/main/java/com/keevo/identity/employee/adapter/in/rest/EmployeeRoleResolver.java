@@ -1,8 +1,10 @@
 package com.keevo.identity.employee.adapter.in.rest;
 
+import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.model.UserTenantMembership;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserMembershipRepository;
+import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -25,11 +27,29 @@ public class EmployeeRoleResolver {
 
     private final UserMembershipRepository membershipRepository;
     private final TenantRepository tenantRepository;
+    private final UserRepository userRepository;
 
     public EmployeeRoleResolver(UserMembershipRepository membershipRepository,
-                                 TenantRepository tenantRepository) {
+                                 TenantRepository tenantRepository,
+                                 UserRepository userRepository) {
         this.membershipRepository = membershipRepository;
         this.tenantRepository = tenantRepository;
+        this.userRepository = userRepository;
+    }
+
+    /**
+     * Resolve the phone number of a given user ({@code public.users}), so the
+     * employee edit form can be pre-filled (Story 14.11, AC6).
+     *
+     * <p>One lookup per employee, like {@link #resolveRole(UUID)}: lists are
+     * bounded by {@code PlanLimitGuard} and the port offers no bulk finder.
+     *
+     * @return the E.164 phone number, or {@code null} if the user is unknown
+     */
+    public String resolvePhone(UUID userId) {
+        return userRepository.findById(userId)
+                .map(User::getPhoneNumber)
+                .orElse(null);
     }
 
     /**

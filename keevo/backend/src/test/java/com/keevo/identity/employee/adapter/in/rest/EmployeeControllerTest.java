@@ -69,6 +69,8 @@ class EmployeeControllerTest {
                         List.of(new SimpleGrantedAuthority("ROLE_OWNER"))));
         sampleEmployee = new Employee(employeeId, UUID.randomUUID(), storeId,
                 "Loïc", "Nkoulou", EmployeeStatus.ACTIVE, true, Instant.now());
+        lenient().when(employeeRoleResolver.resolveRole(any())).thenReturn("EMPLOYEE");
+        lenient().when(employeeRoleResolver.resolvePhone(any())).thenReturn("+237690000001");
     }
 
     @Test
@@ -140,7 +142,9 @@ class EmployeeControllerTest {
         mockMvc.perform(get("/api/v1/employees"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray())
-                .andExpect(jsonPath("$.data[0].firstName").value("Loïc"));
+                .andExpect(jsonPath("$.data[0].firstName").value("Loïc"))
+                .andExpect(jsonPath("$.data[0].role").value("EMPLOYEE"))
+                .andExpect(jsonPath("$.data[0].phoneNumber").value("+237690000001"));
     }
 
     @Test
@@ -260,7 +264,8 @@ class EmployeeControllerTest {
                                 {"firstName":"NewName","phoneNumber":"+237690000001"}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.firstName").value("Loïc"));
+                .andExpect(jsonPath("$.data.firstName").value("Loïc"))
+                .andExpect(jsonPath("$.data.phoneNumber").value("+237690000001"));
     }
 
     @Test

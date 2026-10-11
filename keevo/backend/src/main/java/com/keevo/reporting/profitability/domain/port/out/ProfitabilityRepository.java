@@ -48,6 +48,9 @@ public interface ProfitabilityRepository {
     /** Daily margin aggregation for the 7-day sparkline. */
     record RawDailyMarginRow(String date, long dailyMargin) {}
 
+    /** Store that sold the most units of a product over a period (AC4 "top store"). */
+    record RawTopStoreRow(UUID storeId, String storeName, int unitsSold) {}
+
     /**
      * Aggregate profitability by product for the given period.
      * If {@code storeId} is null, aggregates across all stores.
@@ -86,4 +89,11 @@ public interface ProfitabilityRepository {
     /** Same as above, limited to {@code storeId}'s sales when not null. */
     List<RawDailyMarginRow> findDailyMarginLast7(
             String tenantId, UUID productId, LocalDate endDate, UUID storeId);
+
+    /**
+     * Store with the most units sold for {@code productId} in [from, to].
+     * {@code storeId} (nullable) restricts the search to that store, like the other queries.
+     */
+    Optional<RawTopStoreRow> findTopStoreByUnits(
+            String tenantId, UUID productId, LocalDate from, LocalDate to, UUID storeId);
 }

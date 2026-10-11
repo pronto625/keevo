@@ -155,4 +155,41 @@ class ProfitabilityReportBuilderTest {
         assertThat(detail.dailyMarginLast7()).hasSize(1);
         assertThat(detail.minAppliedPrice()).isEqualTo(4000);
     }
+
+    // AC4: the detail names the store that sold the most units in the period.
+    @Test
+    void buildDetail_fillsTopStore_fromRepository() {
+        UUID productId = UUID.randomUUID();
+        UUID bestStore = UUID.randomUUID();
+        when(repo.findProductCosts(productId, null)).thenReturn(Optional.of(
+                new RawProductCostRow("ProductA", "Cat", 5000, 1000, 500, 4000, 5000, 4500.0)));
+        when(repo.findRawByPeriod(TENANT, FROM, TO, null)).thenReturn(List.of(
+                new RawProfitabilityRow(productId, "ProductA", "Cat", 1000, 500, 5, 25000L, 7500L)));
+        when(repo.findTopStoreByUnits(TENANT, productId, FROM, TO, null)).thenReturn(Optional.of(
+                new RawTopStoreRow(bestStore, "Boutique Nord", 3)));
+
+        var detail = builder.buildDetail(
+                new ProfitabilityQuery(TENANT, FROM, TO, SortOption.MARGIN_PCT_DESC, null), productId);
+
+        assertThat(detail.topStoreId()).isEqualTo(bestStore);
+        assertThat(detail.topStoreName()).isEqualTo("Boutique Nord");
+        assertThat(detail.topStoreUnitsSold()).isEqualTo(3);
+    }
+
+    @Test
+    void buildDetail_noSalesInPeriod_hasNoTopStore() {
+        UUID productId = UUID.randomUUID();
+        when(repo.findProductCosts(productId, null)).thenReturn(Optional.of(
+                new RawProductCostRow("ProductA", "Cat", 5000, 1000, 500, 0, 0, 0.0)));
+        when(repo.findRawByPeriod(TENANT, FROM, TO, null)).thenReturn(List.of());
+        when(repo.findTopStoreByUnits(TENANT, productId, FROM, TO, null)).thenReturn(Optional.empty());
+
+        var detail = builder.buildDetail(
+                new ProfitabilityQuery(TENANT, FROM, TO, SortOption.MARGIN_PCT_DESC, null), productId);
+
+        assertThat(detail.unitsSold()).isZero();
+        assertThat(detail.topStoreId()).isNull();
+        assertThat(detail.topStoreName()).isNull();
+        assertThat(detail.topStoreUnitsSold()).isZero();
+    }
 }

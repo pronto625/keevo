@@ -15,6 +15,7 @@
 7. [Rollback production](#7-rollback-production)
 8. [Politique de cycle de vie S3](#8-politique-de-cycle-de-vie-s3)
 9. [Dépannage](#9-dépannage)
+10. [Smoke test de restauration exécuté le 2026-10-11](#10-smoke-test-de-restauration-exécuté-le-2026-10-11)
 
 ---
 
@@ -61,10 +62,12 @@
 
 | Outil | Version min. | Installation |
 |---|---|---|
-| `pg_restore` | 16.x | `sudo apt install postgresql-client-16` |
-| `psql` | 16.x | (inclus dans postgresql-client) |
+| `pg_restore` | **16.x exactement** (même majeure que le serveur) | `sudo apt install postgresql-client-16` |
+| `psql` / `createdb` | 16.x | (inclus dans postgresql-client-16) |
 | AWS CLI v2 | 2.x | [Guide AWS](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) |
 | `curl` | 7.x | Pré-installé |
+
+> **⚠️ Version du client :** un `pg_restore` **plus récent** que le serveur (17.x/18.x contre PostgreSQL 16) émet `SET transaction_timeout = 0;` à l'initialisation, que PostgreSQL 16 rejette (`unrecognized configuration parameter "transaction_timeout"`). La restauration se termine quand même (`errors ignored on restore: 1`) mais **le code de sortie est 1**, ce qui casse tout script qui vérifie `$?`. Vérifié le 2026-10-11 (§10). Deux options sûres : installer `postgresql-client-16`, ou restaurer **depuis le conteneur** avec le `pg_restore` embarqué (`docker exec`, voir §5.2 et §7) — c'est la méthode recommandée.
 
 ### Accès requis
 
@@ -213,9 +216,16 @@ STAGING_HOST=<staging_host>
 STAGING_PORT=5432
 RESTORE_DB=keevo_restore
 
-# Créer la DB vide
-createdb -h "${STAGING_HOST}" -p "${STAGING_PORT}" -U "${POSTGRES_USER}" "${RESTORE_DB}"
+# Créer la DB vide (PGPASSWORD obligatoire : sans lui createdb bloque sur un prompt "Password:")
+PGPASSWORD="${POSTGRES_PASSWORD}" createdb \
+  -h "${STAGING_HOST}" -p "${STAGING_PORT}" -U "${POSTGRES_USER}" "${RESTORE_DB}"
 ```
+
+> **Variante conteneur (sans client PostgreSQL sur l'hôte) :**
+> ```bash
+> docker exec <conteneur_postgres> psql -U "${POSTGRES_USER}" -d postgres \
+>   -c "CREATE DATABASE ${RESTORE_DB} OWNER ${POSTGRES_USER};"
+> ```
 
 ### 5.2 Restaurer le dump
 
@@ -231,6 +241,15 @@ PGPASSWORD="${POSTGRES_PASSWORD}" pg_restore \
 ```
 
 > **Note :** Des erreurs `role "xxx" does not exist` sont normales avec `--no-owner` et peuvent être ignorées.
+
+> **Note (vérifié 2026-10-11) :** si `pg_restore` est plus récent que le serveur, la commande ci-dessus renvoie `exit 1` à cause de `SET transaction_timeout` (voir §2) bien que toutes les tables soient restaurées. Pour une restauration propre (`exit 0`), utiliser le `pg_restore` du conteneur :
+> ```bash
+> docker cp keevo_backup_YYYY-MM-DDTHH-MM-SSZ.dump <conteneur_postgres>:/tmp/restore.dump
+> docker exec <conteneur_postgres> pg_restore \
+>   -U "${POSTGRES_USER}" -d "${RESTORE_DB}" --no-owner --no-acl --verbose /tmp/restore.dump 2>&1 | tee restore.log
+> docker exec <conteneur_postgres> rm -f /tmp/restore.dump
+> ```
+> Vérifier ensuite : `grep -c '^pg_restore: \(error\|warning\)' restore.log` doit renvoyer `0` (ne pas grepper `error` seul : les tables `sync_error_log` matchent).
 
 ### 5.3 Vérifier les schémas restaurés
 
@@ -278,14 +297,14 @@ curl -sk https://${STAGING_APP_DOMAIN}:8443/actuator/health | python3 -m json.to
 
 | Champ | Valeur |
 |---|---|
-| **Date du test** | 2026-06-19 |
-| **Dump testé** | `keevo_backup_2026-06-19T02-00-00Z.dump` (local dev test) |
-| **Environnement** | Développement local (docker-compose, port 5444) |
-| **Commande pg_restore** | `pg_restore --list keevo_backup_2026-06-19T...dump` |
-| **Résultat `/actuator/health`** | `{"status":"UP"}` |
-| **Statut** | ✅ Validé |
+| **Date du test** | 2026-10-11 |
+| **Dump testé** | `keevo_backup_2026-10-11T02-42-33Z.dump` (produit par `backup-db.sh`, mode `docker-exec`) |
+| **Environnement** | Local : deux conteneurs `postgres:16-alpine` distincts (source → dump → cible vierge), backend jar `keevo-backend-1.0.0-SNAPSHOT` |
+| **Commande pg_restore** | `docker exec keevo_smoke_restore pg_restore -U keevo -d keevo_restore --no-owner --no-acl --verbose /tmp/restore.dump` → `exit 0` |
+| **Résultat `/actuator/health`** | `HTTP 200 {"status":"UP"}` après 12 s, backend démarré sur la DB restaurée |
+| **Statut** | ✅ Validé — détail complet, durées et écarts de procédure en §10 |
 
-> **Note :** Ce smoke test a été exécuté en environnement de développement local. L'environnement staging dédié est disponible depuis la Story 10.5 — voir `STAGING.md` pour la procédure de déploiement et le smoke test sur staging réel (`https://${STAGING_APP_DOMAIN}:8443/actuator/health`).
+> **Note :** Le 2026-06-19 un premier test "DB-only" avait restauré le dump sans démarrer le backend. Le test du 2026-10-11 couvre le chemin complet restauration → backend booté → `/actuator/health UP` → login d'un utilisateur créé avant la sauvegarde. L'environnement staging dédié est disponible depuis la Story 10.5 — voir `STAGING.md` pour le smoke test sur staging réel (`https://${STAGING_APP_DOMAIN}:8443/actuator/health`).
 
 ---
 
@@ -468,3 +487,121 @@ docker exec keevo_postgres psql -U keevo -d keevo_prod -c "SELECT count(*) FROM 
 # Vérifier l'espace disque
 df -h /var/backups/
 ```
+
+---
+
+## 10. Smoke test de restauration exécuté le 2026-10-11
+
+Exécution complète du chemin **backup → restauration dans une DB vierge → backend démarré sur la DB restaurée → `GET /actuator/health` UP** (AC4 Story 10.4). Environnement : poste local, Docker, `postgres:16-alpine` (PostgreSQL 16.15), jar `keevo-backend-1.0.0-SNAPSHOT` (`mvn -DskipTests package`), profil `dev`, FCM désactivé et WhatsApp `noop` via variables d'environnement. Les conteneurs utilisaient `--tmpfs /var/lib/postgresql/data` (aucun volume créé) et ont été supprimés à la fin.
+
+### 10.1 Produire une sauvegarde réaliste (Phase A)
+
+```bash
+# 1. PostgreSQL source (même image que la prod)
+docker run -d --name keevo_smoke_src --tmpfs /var/lib/postgresql/data \
+  -e POSTGRES_DB=keevo_dev -e POSTGRES_USER=keevo -e POSTGRES_PASSWORD=keevo_local_pwd \
+  -p 127.0.0.1:5444:5432 postgres:16-alpine          # pg_isready OK après 2 s
+
+# 2. Backend sur la DB vide → Flyway crée le schéma public
+SPRING_PROFILES_ACTIVE=dev POSTGRES_HOST=localhost POSTGRES_PORT=5444 POSTGRES_DB=keevo_dev \
+POSTGRES_USER=keevo POSTGRES_PASSWORD=keevo_local_pwd APP_PORT=4500 \
+KEEVO_FCM_ENABLED=false KEEVO_WHATSAPP_PROVIDER=noop \
+java -jar target/keevo-backend-1.0.0-SNAPSHOT.jar     # /actuator/health UP après 10 s
+
+# 3. Un tenant réel → schéma kv_3zt60w provisionné
+curl -s -X POST http://localhost:4500/api/v1/auth/register -H 'Content-Type: application/json' \
+  -d '{"phoneNumber":"+237690000011","password":"Smoke2026!"}'
+# → {"tenantCode":"KV-3ZT60W", "tenantId":"4f5d…", ...}
+# État DB source : schémas public + kv_3zt60w, 31 tables public, 8 migrations Flyway (V1→V9)
+
+# 4. Backup avec LE script de prod (mode docker-exec par défaut), backend toujours démarré
+POSTGRES_USER=keevo POSTGRES_DB=keevo_dev DOCKER_CONTAINER=keevo_smoke_src \
+BACKUP_LOCAL_DIR=./backups BACKUP_LOCK_FILE=./backup.lock bash keevo/backend/scripts/backup-db.sh
+# [BACKUP][INFO] Starting backup at 2026-10-11T02-42-33Z (mode: docker-exec)...
+# [BACKUP][INFO] Dump validated: 108K
+# [BACKUP][WARN] BACKUP_S3_BUCKET not set — local backup only (not production-safe)
+# [BACKUP][INFO] Rotation done: 0 file(s) older than 30 days removed
+# [BACKUP][INFO] Backup complete: keevo_backup_2026-10-11T02-42-33Z.dump   (exit 0, < 1 s)
+
+pg_restore --list backups/keevo_backup_2026-10-11T02-42-33Z.dump | head
+# ;     TOC Entries: 258 / Format: CUSTOM / Dumped from database version: 16.15 / Dumped by pg_dump version: 16.15
+# 1 SCHEMA kv_3zt60w, 118 entrées TABLE
+
+# 5. Arrêt backend + suppression du conteneur source (la cible ne partage rien avec lui)
+docker rm -f keevo_smoke_src
+```
+
+### 10.2 Restaurer dans un conteneur vierge (Phase B, §5 suivi à la lettre)
+
+```bash
+docker run -d --name keevo_smoke_restore --tmpfs /var/lib/postgresql/data \
+  -e POSTGRES_DB=keevo_staging -e POSTGRES_USER=keevo -e POSTGRES_PASSWORD=keevo_local_pwd \
+  -p 127.0.0.1:5445:5432 postgres:16-alpine
+export STAGING_HOST=localhost STAGING_PORT=5445 RESTORE_DB=keevo_restore POSTGRES_USER=keevo POSTGRES_PASSWORD=keevo_local_pwd
+
+# §5.1 tel qu'écrit avant correction (sans PGPASSWORD) → BLOQUE sur "Password:" (tué au bout de 2 min, exit 143)
+createdb -h "${STAGING_HOST}" -p "${STAGING_PORT}" -U "${POSTGRES_USER}" "${RESTORE_DB}"
+# §5.1 corrigé
+PGPASSWORD="${POSTGRES_PASSWORD}" createdb -h "${STAGING_HOST}" -p "${STAGING_PORT}" -U "${POSTGRES_USER}" "${RESTORE_DB}"   # exit 0
+
+# §5.2 avec le pg_restore de l'hôte (18.6 — plus récent que le serveur 16.15)
+PGPASSWORD="${POSTGRES_PASSWORD}" pg_restore -h "${STAGING_HOST}" -p "${STAGING_PORT}" -U "${POSTGRES_USER}" \
+  -d "${RESTORE_DB}" --no-owner --no-acl --verbose backups/keevo_backup_2026-10-11T02-42-33Z.dump 2>&1 | tee restore.log
+# pg_restore: while INITIALIZING:
+# pg_restore: error: could not execute query: ERROR:  unrecognized configuration parameter "transaction_timeout"
+# Command was: SET transaction_timeout = 0;
+# ... 258 entrées restaurées ...
+# pg_restore: warning: errors ignored on restore: 1          → exit 1, < 1 s, contenu pourtant complet
+
+# §5.2 refait proprement avec le pg_restore du conteneur (16.15) — méthode recommandée désormais
+docker exec keevo_smoke_restore psql -U keevo -d keevo_staging \
+  -c "DROP DATABASE keevo_restore;" -c "CREATE DATABASE keevo_restore OWNER keevo;"
+docker cp backups/keevo_backup_2026-10-11T02-42-33Z.dump keevo_smoke_restore:/tmp/restore.dump
+docker exec keevo_smoke_restore pg_restore -U keevo -d keevo_restore --no-owner --no-acl --verbose /tmp/restore.dump
+# exit 0, < 1 s, 0 ligne "pg_restore: error|warning"
+
+# §5.3 vérification
+docker exec keevo_smoke_restore psql -U keevo -d keevo_restore -Atc \
+  "SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'kv_%';"
+# kv_3zt60w
+# public tables=31 | tenant tables=28 | flyway rows=8 | users=2 | tenants=2   (identique à la source)
+```
+
+### 10.3 Démarrer le backend sur la DB restaurée et vérifier (§6)
+
+```bash
+SPRING_PROFILES_ACTIVE=dev POSTGRES_HOST=localhost POSTGRES_PORT=5445 POSTGRES_DB=keevo_restore \
+POSTGRES_USER=keevo POSTGRES_PASSWORD=keevo_local_pwd APP_PORT=4500 \
+KEEVO_FCM_ENABLED=false KEEVO_WHATSAPP_PROVIDER=noop \
+java -jar target/keevo-backend-1.0.0-SNAPSHOT.jar
+
+curl -s -w ' HTTP %{http_code}\n' http://localhost:4500/actuator/health
+# {"status":"UP"} HTTP 200        ← après 12 s
+# Log Flyway : Current version of schema "public": 9 — Schema "public" is up to date. No migration necessary
+#              Successfully validated 8 migrations   (flyway_schema_history restauré, rien ré-appliqué)
+
+# Endpoints publics sur les données restaurées
+curl -s -X POST http://localhost:4500/api/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"phoneNumber":"+237690000011","password":"Smoke2026!"}'      # HTTP 200, memberships [KV-3ZT60W / OWNER]
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:4500/v3/api-docs   # 200
+# Endpoint authentifié (select-tenant → Bearer, tenantId=kv_3zt60w)
+curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer <accessToken>" http://localhost:4500/api/v1/auth/profile   # 200
+
+# Nettoyage
+kill <pid backend>; docker rm -f -v keevo_smoke_restore
+```
+
+### 10.4 Résultat
+
+| Étape | Durée | Résultat |
+|---|---|---|
+| Démarrage postgres (×2) | 2 s chacun | OK |
+| Boot backend sur DB vide (Flyway V1→V9) | 10 s | UP |
+| `backup-db.sh` (docker-exec) + `pg_restore --list` | < 1 s | 104 Ko, 258 entrées TOC, exit 0 |
+| `createdb` §5.1 sans `PGPASSWORD` | — | **Bloque** (corrigé dans ce doc) |
+| `pg_restore` hôte 18.6 → serveur 16.15 | < 1 s | contenu complet mais **exit 1** (`transaction_timeout`) |
+| `pg_restore` 16.15 dans le conteneur | < 1 s | **exit 0**, 0 erreur |
+| Boot backend sur `keevo_restore` → `/actuator/health` | 12 s | **`HTTP 200 {"status":"UP"}`** |
+| Login utilisateur créé avant le backup / `/v3/api-docs` / `/auth/profile` | — | 200 / 200 / 200 |
+
+**Verdict : ✅ AC4 validée.** Écarts trouvés dans la procédure et corrigés ci-dessus : (1) `PGPASSWORD` manquant sur `createdb` en §5.1 ; (2) la version du client `pg_restore` doit être **égale** à la majeure du serveur (un client plus récent renvoie `exit 1`), d'où la recommandation `docker exec` ajoutée en §2 et §5.2 ; (3) le filtre `grep error` sur `restore.log` est trompeur à cause des tables `sync_error_log`.

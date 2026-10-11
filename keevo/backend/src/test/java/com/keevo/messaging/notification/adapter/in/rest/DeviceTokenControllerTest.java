@@ -45,8 +45,10 @@ class DeviceTokenControllerTest {
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 
+    private UUID userId;
+
     private void setAuth(String role) {
-        UUID userId = UUID.randomUUID();
+        userId = UUID.randomUUID();
         var auth = new UsernamePasswordAuthenticationToken(
                 userId, null, List.of(new SimpleGrantedAuthority("ROLE_" + role)));
         SecurityContextHolder.getContext().setAuthentication(auth);
@@ -89,7 +91,7 @@ class DeviceTokenControllerTest {
     @Test
     void deleteToken_validToken_returns200WithDeletedTrue() throws Exception {
         setAuth("OWNER");
-        when(deleteUseCase.delete("fcm-token-to-delete")).thenReturn(true);
+        when(deleteUseCase.delete(userId, "fcm-token-to-delete")).thenReturn(true);
 
         mockMvc.perform(delete("/api/v1/devices/token")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -101,7 +103,7 @@ class DeviceTokenControllerTest {
     @Test
     void deleteToken_nonExistentToken_returns200WithDeletedFalse() throws Exception {
         setAuth("OWNER");
-        when(deleteUseCase.delete("non-existent")).thenReturn(false);
+        when(deleteUseCase.delete(userId, "non-existent")).thenReturn(false);
 
         mockMvc.perform(delete("/api/v1/devices/token")
                         .contentType(MediaType.APPLICATION_JSON)

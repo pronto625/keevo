@@ -51,6 +51,11 @@ public class DeviceTokenRepositoryAdapter implements DeviceTokenRepository {
     }
 
     @Override
+    public int deleteByTokenAndUserId(String token, UUID userId) {
+        return springRepo.deleteByTokenValueAndUserId(token, userId);
+    }
+
+    @Override
     public DeviceToken upsert(DeviceToken deviceToken) {
         // Upsert: find existing by token, update fields
         Optional<DeviceTokenJpaEntity> existing = springRepo.findByToken(deviceToken.token());

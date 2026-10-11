@@ -58,7 +58,9 @@ public class DeviceTokenController {
     public ResponseEntity<ApiResponseWrapper<Map<String, Boolean>>> deleteToken(
             @Valid @RequestBody DeleteDeviceTokenRequestDto request) {
 
-        boolean deleted = deleteUseCase.delete(request.token());
+        // Scoped to the caller: a token can only be removed by the user it was registered to.
+        UUID actorId = (UUID) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        boolean deleted = deleteUseCase.delete(actorId, request.token());
 
         return ResponseEntity.ok(ApiResponseWrapper.ok(Map.of("deleted", deleted)));
     }

@@ -18,6 +18,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 
@@ -39,6 +40,8 @@ import java.util.UUID;
 public class ProfitabilityController {
 
     private static final int DEFAULT_PERIOD_DAYS = 30;
+    /** Shop time zone for the default "today" — same as ReportController. */
+    private static final ZoneId WAT = ZoneId.of("Africa/Lagos");
 
     private final GetProductProfitabilityUseCase profitabilityUseCase;
     private final GetStorePerformanceUseCase storePerformanceUseCase;
@@ -59,7 +62,7 @@ public class ProfitabilityController {
             @RequestParam(required = false, defaultValue = "MARGIN_PCT_DESC") String sort,
             @RequestParam(required = false) UUID storeId) {
 
-        LocalDate dateTo   = to   != null ? LocalDate.parse(to)   : LocalDate.now();
+        LocalDate dateTo   = to   != null ? LocalDate.parse(to)   : LocalDate.now(WAT);
         LocalDate dateFrom = from != null ? LocalDate.parse(from)  : dateTo.minusDays(DEFAULT_PERIOD_DAYS - 1);
 
         var query = new ProfitabilityQuery(
@@ -83,7 +86,7 @@ public class ProfitabilityController {
             @RequestParam(required = false) String to,
             @RequestParam(required = false) UUID storeId) {
 
-        LocalDate dateTo   = to   != null ? LocalDate.parse(to)   : LocalDate.now();
+        LocalDate dateTo   = to   != null ? LocalDate.parse(to)   : LocalDate.now(WAT);
         LocalDate dateFrom = from != null ? LocalDate.parse(from)  : dateTo.minusDays(DEFAULT_PERIOD_DAYS - 1);
 
         // Same store scope as the list (null → all stores).
@@ -104,7 +107,7 @@ public class ProfitabilityController {
             @RequestParam(required = false) String to,
             @RequestParam(required = false, defaultValue = "CA") String metric) {
 
-        LocalDate dateTo   = to   != null ? LocalDate.parse(to)   : LocalDate.now();
+        LocalDate dateTo   = to   != null ? LocalDate.parse(to)   : LocalDate.now(WAT);
         LocalDate dateFrom = from != null ? LocalDate.parse(from)  : dateTo.minusDays(DEFAULT_PERIOD_DAYS - 1);
 
         var query = new StorePerformanceQuery(

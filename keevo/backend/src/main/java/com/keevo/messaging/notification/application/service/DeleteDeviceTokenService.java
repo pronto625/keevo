@@ -4,6 +4,8 @@ import com.keevo.messaging.notification.domain.port.in.DeleteDeviceTokenUseCase;
 import com.keevo.messaging.notification.domain.port.out.DeviceTokenRepository;
 import org.springframework.stereotype.Service;
 
+import java.util.UUID;
+
 @Service
 public class DeleteDeviceTokenService implements DeleteDeviceTokenUseCase {
 
@@ -14,7 +16,7 @@ public class DeleteDeviceTokenService implements DeleteDeviceTokenUseCase {
     }
 
     @Override
-    public boolean delete(String token) {
-        return deviceTokenRepository.deleteByToken(token) > 0;
+    public boolean delete(UUID userId, String token) {
+        return deviceTokenRepository.deleteByTokenAndUserId(token, userId) > 0;
     }
 }

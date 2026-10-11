@@ -12,6 +12,9 @@ public interface DeviceTokenRepository {
     List<DeviceToken> findByUserIdAndRole(UUID userId, String role);
     List<DeviceToken> findOwnerTokens();
     int deleteByToken(String token);
+
+    /** Deletes the token only when it is registered to {@code userId}; 0 otherwise. */
+    int deleteByTokenAndUserId(String token, UUID userId);
     DeviceToken upsert(DeviceToken deviceToken);
     /** HF-2 AC2: retrieve tokens for a set of specific user IDs (owner + destination employees). */
     List<DeviceToken> findByUserIds(List<UUID> userIds);
