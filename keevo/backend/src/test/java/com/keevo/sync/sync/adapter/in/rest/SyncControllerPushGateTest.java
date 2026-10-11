@@ -13,6 +13,7 @@ import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,6 +43,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @ExtendWith(MockitoExtension.class)
 class SyncControllerPushGateTest {
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
 
     @Mock private SyncUseCase syncUseCase;
     @Mock private JwtTokenProvider jwtTokenProvider;

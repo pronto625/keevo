@@ -7,16 +7,17 @@ import com.keevo.shared.infrastructure.security.JwtAuthFilter;
 import com.keevo.subscription.plan.adapter.in.rest.dto.SubscriptionResponse;
 import com.keevo.subscription.plan.domain.port.in.GetSubscriptionUseCase;
 import jakarta.servlet.FilterChain;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.Import;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
@@ -35,11 +36,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("SubscriptionController")
 class SubscriptionControllerTest {
 
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
+
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
 
-    @MockBean GetSubscriptionUseCase getSubscriptionUseCase;
-    @MockBean JwtAuthFilter jwtAuthFilter;
+    @MockitoBean GetSubscriptionUseCase getSubscriptionUseCase;
+    @MockitoBean JwtAuthFilter jwtAuthFilter;
 
     private static final UUID ACTOR_ID = UUID.randomUUID();
 
@@ -97,5 +103,57 @@ class SubscriptionControllerTest {
 
         mockMvc.perform(get("/api/v1/subscription/me"))
                 .andExpect(status().isForbidden()); // FORBIDDEN = 403 (authenticated SUPER_ADMIN, wrong role)
+    }
+
+    // ── v1s-15-7: CurrentActor follow-up (requireTenantRole) ─────────────────
+
+    @Test
+    @DisplayName("v1s-15-7: anonymous GET /subscription/me → 401, use case never called")
+    void getMySubscription_returns401_whenAnonymous() throws Exception {
+        filterWith(null);
+
+        mockMvc.perform(get("/api/v1/subscription/me"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(getSubscriptionUseCase);
+    }
+
+    @Test
+    @DisplayName("v1s-15-7: EMPLOYEE GET /subscription/me → 200")
+    void getMySubscription_returns200_whenEmployee() throws Exception {
+        filterWith(List.of(new SimpleGrantedAuthority("ROLE_EMPLOYEE")));
+        when(getSubscriptionUseCase.execute(any())).thenReturn(new SubscriptionResponse(
+                "FREE", "ACTIVE", null, 1, 500, 3, 0, 0, 0));
+
+        mockMvc.perform(get("/api/v1/subscription/me"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.planType").value("FREE"));
+
+        verify(getSubscriptionUseCase).execute(any());
+    }
+
+    @Test
+    @DisplayName("v1s-15-7: authenticated token without authority GET /subscription/me → 403 FORBIDDEN")
+    void getMySubscription_returns403_whenNoAuthority() throws Exception {
+        filterWith(List.of());
+
+        mockMvc.perform(get("/api/v1/subscription/me"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.domainCode").value("FORBIDDEN"));
+
+        verifyNoInteractions(getSubscriptionUseCase);
+    }
+
+    /** {@code authorities == null} → anonymous (chain proceeds without authentication). */
+    private void filterWith(List<SimpleGrantedAuthority> authorities) throws Exception {
+        doAnswer(inv -> {
+            if (authorities != null) {
+                SecurityContextHolder.getContext().setAuthentication(
+                        new UsernamePasswordAuthenticationToken(ACTOR_ID, null, authorities));
+            }
+            FilterChain chain = inv.getArgument(2);
+            chain.doFilter(inv.getArgument(0), inv.getArgument(1));
+            return null;
+        }).when(jwtAuthFilter).doFilter(any(), any(), any());
     }
 }

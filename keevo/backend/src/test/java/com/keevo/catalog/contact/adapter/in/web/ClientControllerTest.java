@@ -4,6 +4,7 @@ import com.keevo.catalog.contact.application.usecase.*;
 import com.keevo.catalog.contact.domain.entity.Client;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,6 +33,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ExtendWith(MockitoExtension.class)
 @DisplayName("ClientController")
 class ClientControllerTest {
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
 
     @Mock CreateClientUseCase createClientUseCase;
     @Mock GetClientsUseCase getClientsUseCase;

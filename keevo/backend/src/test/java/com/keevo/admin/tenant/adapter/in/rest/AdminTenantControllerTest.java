@@ -7,17 +7,18 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.JwtAuthFilter;
 import jakarta.servlet.FilterChain;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
@@ -38,11 +39,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("AdminTenantController")
 class AdminTenantControllerTest {
 
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
+
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
 
-    @MockBean AdminTenantService adminTenantService;
-    @MockBean JwtAuthFilter jwtAuthFilter;
+    @MockitoBean AdminTenantService adminTenantService;
+    @MockitoBean JwtAuthFilter jwtAuthFilter;
 
     private static final UUID ADMIN_ID  = UUID.randomUUID();
     private static final UUID TENANT_ID = UUID.randomUUID();

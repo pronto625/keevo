@@ -17,9 +17,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -271,5 +271,21 @@ class CategoryControllerTest {
 
         verify(categoryRepository).deactivate(CATEGORY_ID);
         verifyNoInteractions(createCategoryUseCase, getCategoriesUseCase, toggleCategoryUseCase, renameCategoryUseCase);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // v1s-15-7 — malformed UUID path parameter → 400, not 500
+    // ─────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("v1s-15-7: PATCH /api/v1/categories/not-a-uuid/toggle returns 400 VALIDATION_ERROR, use case never called")
+    void toggleCategory_withMalformedUuid_returns400ValidationError() throws Exception {
+        authenticateAs("OWNER");
+
+        mockMvc.perform(patch("/api/v1/categories/{id}/toggle", "not-a-uuid"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.domainCode").value("VALIDATION_ERROR"));
+
+        verifyNoInteractions(toggleCategoryUseCase, categoryRepository);
     }
 }

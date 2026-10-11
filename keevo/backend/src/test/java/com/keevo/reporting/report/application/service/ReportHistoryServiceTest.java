@@ -177,16 +177,87 @@ class ReportHistoryServiceTest {
     }
 
     // ─────────────────────────────────────────────────────────────────
-    // 3.8 — resendReport uses default phone when owner not resolved
+    // 3.8 — v1s-15-7 D1: no owner phone → refused, nothing sent, report untouched
     // ─────────────────────────────────────────────────────────────────
 
     @Test
-    void resendReport_whenOwnerPhoneNotResolved_usesDefaultPhoneConstant() {
+    void resendReport_whenOwnerMissing_throwsDeliveryFailed_andNeverSendsOrResets() {
         when(reportRepository.findById(reportId)).thenReturn(Optional.of(sampleReport));
         when(userRepository.findOwnerByTenantSchemaName(tenantId)).thenReturn(Optional.empty());
 
+        assertResendRefusedWithoutTouchingReport();
+    }
+
+    @Test
+    void resendReport_whenOwnerPhoneNull_throwsDeliveryFailed_andNeverSendsOrResets() {
+        when(reportRepository.findById(reportId)).thenReturn(Optional.of(sampleReport));
+        User owner = mock(User.class);
+        when(owner.getPhoneNumber()).thenReturn(null);
+        when(userRepository.findOwnerByTenantSchemaName(tenantId)).thenReturn(Optional.of(owner));
+
+        assertResendRefusedWithoutTouchingReport();
+    }
+
+    @Test
+    void resendReport_whenOwnerPhoneBlank_throwsDeliveryFailed_andNeverSendsOrResets() {
+        when(reportRepository.findById(reportId)).thenReturn(Optional.of(sampleReport));
+        User owner = mock(User.class);
+        when(owner.getPhoneNumber()).thenReturn("   ");
+        when(userRepository.findOwnerByTenantSchemaName(tenantId)).thenReturn(Optional.of(owner));
+
+        assertResendRefusedWithoutTouchingReport();
+    }
+
+    private void assertResendRefusedWithoutTouchingReport() {
+        sampleReport.incrementAttempt();
+        sampleReport.markFailed();
+
+        DomainException ex = assertThrows(DomainException.class,
+                () -> service.resendReport(new ResendReportCommand(reportId, tenantId)));
+
+        assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.WHATSAPP_DELIVERY_FAILED);
+        verifyNoInteractions(whatsAppPort);
+        verify(reportRepository, never()).save(any());
+        assertThat(sampleReport.getDeliveryStatus()).isEqualTo(DeliveryStatus.FAILED);
+        assertThat(sampleReport.getDeliveryAttempts()).isEqualTo(1);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // 3.9 — v1s-15-7 item 10: resend of an already SENT / FAILED report is allowed
+    // ─────────────────────────────────────────────────────────────────
+
+    @Test
+    void resendReport_whenAlreadySent_resendsAndResetsAttemptsToOne() {
+        sampleReport.incrementAttempt();
+        sampleReport.markSent();
+        stubOwnerPhone();
+
         service.resendReport(new ResendReportCommand(reportId, tenantId));
 
-        verify(whatsAppPort).sendReport("+243000000000", "Contenu");
+        verify(whatsAppPort).sendReport("+237600000001", "Contenu");
+        assertThat(sampleReport.getDeliveryAttempts()).isEqualTo(1);
+        assertThat(sampleReport.getDeliveryStatus()).isEqualTo(DeliveryStatus.SENT);
+    }
+
+    @Test
+    void resendReport_whenFailedAfterThreeAttempts_resendsAndResetsAttemptsToOne() {
+        for (int i = 0; i < 3; i++) {
+            sampleReport.incrementAttempt();
+        }
+        sampleReport.markFailed();
+        stubOwnerPhone();
+
+        service.resendReport(new ResendReportCommand(reportId, tenantId));
+
+        verify(whatsAppPort).sendReport("+237600000001", "Contenu");
+        assertThat(sampleReport.getDeliveryAttempts()).isEqualTo(1);
+        assertThat(sampleReport.getDeliveryStatus()).isEqualTo(DeliveryStatus.SENT);
+    }
+
+    private void stubOwnerPhone() {
+        when(reportRepository.findById(reportId)).thenReturn(Optional.of(sampleReport));
+        User owner = mock(User.class);
+        when(owner.getPhoneNumber()).thenReturn("+237600000001");
+        when(userRepository.findOwnerByTenantSchemaName(tenantId)).thenReturn(Optional.of(owner));
     }
 }

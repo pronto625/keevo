@@ -2,6 +2,7 @@ package com.keevo.messaging.notification.adapter.in.rest;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,6 +25,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @ExtendWith(MockitoExtension.class)
 class MessagingStatusControllerTest {
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
 
     @Mock
     private WhatsAppPort whatsAppPort;

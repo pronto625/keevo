@@ -1,5 +1,6 @@
 package com.keevo.shared.infrastructure.security;
 
+import org.springframework.security.core.context.SecurityContextHolder;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.identity.auth.domain.port.out.TokenRevocationPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -10,6 +11,7 @@ import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -41,6 +43,11 @@ import static org.mockito.Mockito.*;
 @DisplayName("JwtAuthFilter (TenantJwtFilter)")
 class JwtAuthFilterTest {
 
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
+
     @Mock JwtTokenProvider jwtTokenProvider;
     @Mock FilterChain filterChain;
     @Mock TenantSchemaSyncService tenantSchemaSyncService;
@@ -51,17 +58,9 @@ class JwtAuthFilterTest {
 
     @BeforeEach
     void setUp() {
+        // v1s-15-7 item 13: the default filter carries the mocked JdbcTemplate (no null trap
+        // for EMPLOYEE-branch tests).
         filter = new JwtAuthFilter(jwtTokenProvider, new ObjectMapper(),
-                tenantSchemaSyncService, null, tokenRevocationPort);
-    }
-
-    /**
-     * Constructs a filter with a mocked {@link JdbcTemplate} for EMPLOYEE-branch tests
-     * that exercise the {@code jdbcTemplate.queryForMap} call. OWNER tests use the
-     * default {@link #setUp()} (jdbcTemplate=null) and are unaffected.
-     */
-    private JwtAuthFilter filterWithJdbc() {
-        return new JwtAuthFilter(jwtTokenProvider, new ObjectMapper(),
                 tenantSchemaSyncService, jdbcTemplate, tokenRevocationPort);
     }
 
@@ -344,7 +343,7 @@ class JwtAuthFilterTest {
         when(jwtTokenProvider.extractUserId(claims)).thenReturn(userId);
         when(jwtTokenProvider.extractTenantStatus(claims)).thenReturn("ACTIVE");
 
-        filterWithJdbc().doFilterInternal(request, response, filterChain);
+        filter.doFilterInternal(request, response, filterChain);
 
         assertThat(response.getStatus()).isEqualTo(401);
         assertThat(response.getContentAsString()).contains("TOKEN_INVALID");
@@ -377,7 +376,7 @@ class JwtAuthFilterTest {
         when(jdbcTemplate.queryForMap(contains("\"kv_abc123\"."), eq(userId)))
                 .thenReturn(empRow);
 
-        filterWithJdbc().doFilterInternal(request, response, filterChain);
+        filter.doFilterInternal(request, response, filterChain);
 
         verify(jdbcTemplate).queryForMap(contains("\"kv_abc123\"."), eq(userId));
         verify(filterChain).doFilter(request, response);
@@ -407,7 +406,7 @@ class JwtAuthFilterTest {
         when(jwtTokenProvider.extractIssuedAt(claims))
                 .thenReturn(Instant.now().minus(10, ChronoUnit.MINUTES));
 
-        filterWithJdbc().doFilterInternal(request, response, filterChain);
+        filter.doFilterInternal(request, response, filterChain);
 
         assertThat(response.getStatus()).isEqualTo(401);
         assertThat(response.getContentAsString()).contains("SESSION_REVOKED");
@@ -436,10 +435,114 @@ class JwtAuthFilterTest {
         when(jwtTokenProvider.extractIssuedAt(claims))
                 .thenReturn(Instant.now().minus(1, ChronoUnit.MINUTES));
 
-        filterWithJdbc().doFilterInternal(request, response, filterChain);
+        filter.doFilterInternal(request, response, filterChain);
 
         verify(filterChain).doFilter(request, response);
         assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    // ── v1s-15-7 item 20: tva null and iat == tva boundary (AC2 '>=' contract) ──
+
+    @Test
+    @DisplayName("v1s-15-7: tokens_valid_after null → chain proceeds, iat never read")
+    void shouldProceedWhenNoRevocationCutoff() throws Exception {
+        MockHttpServletRequest request = ownerRequest("owner.notva.jwt");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        UUID userId = UUID.randomUUID();
+        stubOwnerToken("owner.notva.jwt", userId);
+        when(tokenRevocationPort.getTokensValidAfter(userId, "kv_abc123")).thenReturn(null);
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+        verify(jwtTokenProvider, never()).extractIssuedAt(any());
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    @DisplayName("v1s-15-7: iat == tokens_valid_after (to the second) → accepted")
+    void shouldAcceptTokenIssuedExactlyAtCutoff() throws Exception {
+        MockHttpServletRequest request = ownerRequest("owner.eq.jwt");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        UUID userId = UUID.randomUUID();
+        Claims claims = stubOwnerToken("owner.eq.jwt", userId);
+        Instant cutoff = Instant.parse("2026-10-11T10:00:00Z");
+        when(tokenRevocationPort.getTokensValidAfter(userId, "kv_abc123")).thenReturn(cutoff);
+        when(jwtTokenProvider.extractIssuedAt(claims)).thenReturn(cutoff);
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    @DisplayName("v1s-15-7: sub-second tokens_valid_after in the same second as iat → accepted (tva truncated)")
+    void shouldAcceptTokenIssuedInSameSecondAsSubSecondCutoff() throws Exception {
+        MockHttpServletRequest request = ownerRequest("owner.subsec.jwt");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        UUID userId = UUID.randomUUID();
+        Claims claims = stubOwnerToken("owner.subsec.jwt", userId);
+        when(tokenRevocationPort.getTokensValidAfter(userId, "kv_abc123"))
+                .thenReturn(Instant.parse("2026-10-11T10:00:00.987654Z"));
+        when(jwtTokenProvider.extractIssuedAt(claims)).thenReturn(Instant.parse("2026-10-11T10:00:00Z"));
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    @DisplayName("v1s-15-7: iat one second before the truncated cutoff → 401 SESSION_REVOKED")
+    void shouldRejectTokenIssuedOneSecondBeforeCutoff() throws Exception {
+        MockHttpServletRequest request = ownerRequest("owner.before.jwt");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        UUID userId = UUID.randomUUID();
+        Claims claims = stubOwnerToken("owner.before.jwt", userId);
+        when(tokenRevocationPort.getTokensValidAfter(userId, "kv_abc123"))
+                .thenReturn(Instant.parse("2026-10-11T10:00:00.500Z"));
+        when(jwtTokenProvider.extractIssuedAt(claims)).thenReturn(Instant.parse("2026-10-11T09:59:59Z"));
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("SESSION_REVOKED");
+        verify(filterChain, never()).doFilter(any(), any());
+    }
+
+    // ── v1s-15-7 item 14: EMPLOYEE INACTIVE through the validated schema ────
+
+    @Test
+    @DisplayName("v1s-15-7: EMPLOYEE row INACTIVE on validated kv_ schema → 401 ACCOUNT_INACTIVE, no filterChain")
+    void shouldRejectInactiveEmployeeOnValidatedSchema() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/products");
+        request.addHeader("Authorization", "Bearer emp.inactive.jwt");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        UUID userId = UUID.randomUUID();
+        Claims claims = buildClaims(userId, "kv_abc123", "EMPLOYEE");
+        when(jwtTokenProvider.parseToken("emp.inactive.jwt")).thenReturn(claims);
+        when(jwtTokenProvider.extractScope(claims)).thenReturn("access");
+        when(jwtTokenProvider.extractTenantId(claims)).thenReturn("kv_abc123");
+        when(jwtTokenProvider.extractRole(claims)).thenReturn("EMPLOYEE");
+        when(jwtTokenProvider.extractUserId(claims)).thenReturn(userId);
+        when(jwtTokenProvider.extractTenantStatus(claims)).thenReturn("ACTIVE");
+
+        Map<String, Object> empRow = new HashMap<>();
+        empRow.put("store_id", UUID.randomUUID());
+        empRow.put("status", "INACTIVE");
+        empRow.put("password_change_required", false);
+        when(jdbcTemplate.queryForMap(contains("\"kv_abc123\".employees"), eq(userId)))
+                .thenReturn(empRow);
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("ACCOUNT_INACTIVE");
+        verify(filterChain, never()).doFilter(any(), any());
+        verify(jdbcTemplate).queryForMap(contains("\"kv_abc123\".employees"), eq(userId));
+        verify(jwtTokenProvider, never()).extractStoreId(any());
     }
 
     // ── Story 12.12 — D3 / D10 / clock skew ──────────────────────────────────
@@ -460,7 +563,7 @@ class JwtAuthFilterTest {
         when(jwtTokenProvider.extractUserId(claims)).thenReturn(userId);
         when(jwtTokenProvider.extractTenantStatus(claims)).thenReturn("ACTIVE");
 
-        filterWithJdbc().doFilterInternal(request, response, filterChain);
+        filter.doFilterInternal(request, response, filterChain);
 
         assertThat(response.getStatus()).isEqualTo(401);
         assertThat(response.getContentAsString()).contains("TOKEN_INVALID");
@@ -486,7 +589,7 @@ class JwtAuthFilterTest {
         when(jdbcTemplate.queryForMap(anyString(), eq(userId)))
                 .thenThrow(new org.springframework.dao.IncorrectResultSizeDataAccessException(1, 2));
 
-        filterWithJdbc().doFilterInternal(request, response, filterChain);
+        filter.doFilterInternal(request, response, filterChain);
 
         assertThat(response.getStatus()).isEqualTo(500);
         assertThat(response.getContentType()).startsWith("application/json");
@@ -512,6 +615,24 @@ class JwtAuthFilterTest {
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
+
+    private MockHttpServletRequest ownerRequest(String token) {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/products");
+        request.addHeader("Authorization", "Bearer " + token);
+        return request;
+    }
+
+    /** Stubs a valid OWNER access token on tenant {@code kv_abc123}. */
+    private Claims stubOwnerToken(String token, UUID userId) {
+        Claims claims = buildClaims(userId, "kv_abc123", "OWNER");
+        when(jwtTokenProvider.parseToken(token)).thenReturn(claims);
+        when(jwtTokenProvider.extractScope(claims)).thenReturn("access");
+        when(jwtTokenProvider.extractTenantId(claims)).thenReturn("kv_abc123");
+        when(jwtTokenProvider.extractRole(claims)).thenReturn("OWNER");
+        when(jwtTokenProvider.extractUserId(claims)).thenReturn(userId);
+        when(jwtTokenProvider.extractTenantStatus(claims)).thenReturn("ACTIVE");
+        return claims;
+    }
 
     private Claims buildClaims(UUID userId, String tenantId, String role) {
         return io.jsonwebtoken.Jwts.claims()

@@ -231,6 +231,27 @@ class JdbcProfitabilityRepositoryTest {
     }
 
     @Test
+    @DisplayName("v1s-15-7: findDailyMarginLast7 RowMapper maps day and daily_margin")
+    void findDailyMarginLast7_rowMapper_mapsDayAndDailyMargin() throws Exception {
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<RowMapper<RawDailyMarginRow>> mapperCaptor = ArgumentCaptor.forClass(RowMapper.class);
+        doReturn(Collections.emptyList()).when(jdbc)
+                .query(anyString(), mapperCaptor.capture(), any(), any(), any());
+
+        repository.findDailyMarginLast7(tenantId, productId, LocalDate.of(2026, 7, 23));
+
+        RowMapper<RawDailyMarginRow> mapper = mapperCaptor.getValue();
+        assertNotNull(mapper);
+        when(rs.getString("day")).thenReturn("2026-07-20");
+        when(rs.getLong("daily_margin")).thenReturn(4_250L);
+
+        RawDailyMarginRow row = mapper.mapRow(rs, 0);
+
+        assertThat(row.date()).isEqualTo("2026-07-20");
+        assertThat(row.dailyMargin()).isEqualTo(4_250L);
+    }
+
+    @Test
     @DisplayName("findDailyMarginLast7 with store filter adds the store predicate and param")
     void findDailyMarginLast7_withStoreFilter_passesStoreId() {
         ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);

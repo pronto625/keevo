@@ -16,6 +16,7 @@ import com.keevo.sync.sync.domain.port.out.SyncConflictsLogRepository;
 import com.keevo.sync.sync.domain.port.out.UserSyncStateRepository;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,6 +45,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @ExtendWith(MockitoExtension.class)
 class SyncControllerTest {
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
 
     @Mock private SyncUseCase syncUseCase;
     @Mock private JwtTokenProvider jwtTokenProvider;

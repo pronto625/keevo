@@ -5,15 +5,16 @@ import com.keevo.admin.sync_monitoring.application.service.AdminSyncMonitoringSe
 import com.keevo.admin.sync_monitoring.domain.model.*;
 import com.keevo.shared.infrastructure.security.JwtAuthFilter;
 import jakarta.servlet.FilterChain;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.Import;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
@@ -30,11 +31,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("AdminSyncMonitoringController")
 class AdminSyncMonitoringControllerTest {
 
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
+
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
 
-    @MockBean AdminSyncMonitoringService adminSyncMonitoringService;
-    @MockBean JwtAuthFilter jwtAuthFilter;
+    @MockitoBean AdminSyncMonitoringService adminSyncMonitoringService;
+    @MockitoBean JwtAuthFilter jwtAuthFilter;
 
     private static final UUID ADMIN_ID  = UUID.randomUUID();
     private static final UUID TENANT_ID = UUID.randomUUID();
