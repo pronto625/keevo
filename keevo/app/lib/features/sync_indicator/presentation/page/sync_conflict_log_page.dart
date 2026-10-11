@@ -37,7 +37,10 @@ class SyncConflictLogPage extends ConsumerWidget {
             ? _buildEmptyState(context)
             : _buildConflictList(conflicts),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => AppErrorWidget(error: e),
+        error: (e, _) => AppErrorWidget(
+          error: e,
+          onRetry: () => ref.invalidate(syncConflictsProvider),
+        ),
       ),
     );
   }

@@ -217,7 +217,11 @@ class _ClientListPageState extends ConsumerState<ClientListPage> {
               child: Center(child: CircularProgressIndicator()),
             ),
             error: (e, _) => SliverFillRemaining(
-              child: _ErrorState(error: e.toString(), onRetry: _syncWithFeedback),
+              child: AppErrorWidget(
+                error: e,
+                title: 'Erreur de chargement',
+                onRetry: () => ref.read(clientListNotifierProvider.notifier).refresh(),
+              ),
             ),
             data: (clients) => clients.isEmpty
                 ? SliverFillRemaining(
@@ -298,46 +302,6 @@ class _EmptyState extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Error state ────────────────────────────────────────────────────────────────
-
-class _ErrorState extends StatelessWidget {
-  final String error;
-  final VoidCallback onRetry;
-  const _ErrorState({required this.error, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.error_outline_rounded, size: 64, color: theme.colorScheme.error),
-            const SizedBox(height: 16),
-            Text('Erreur de chargement', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(
-              error,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            OutlinedButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Réessayer'),
             ),
           ],
         ),

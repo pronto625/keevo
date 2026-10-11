@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import '../provider/profitability_providers.dart';
 import '../widget/margin_sparkline.dart';
@@ -80,7 +81,12 @@ class ProductProfitabilityDetailPage extends ConsumerWidget {
               child: Center(child: CircularProgressIndicator()),
             ),
             error: (e, _) => SliverFillRemaining(
-              child: _ErrorState(error: e),
+              child: AppErrorWidget(
+                error: e,
+                message: _errorMessage(e),
+                onRetry: () =>
+                    ref.invalidate(productProfitabilityDetailProvider(args)),
+              ),
             ),
             data: (detail) => SliverList(
               delegate: SliverChildListDelegate([
@@ -279,41 +285,16 @@ class _MetricItem extends StatelessWidget {
       );
 }
 
-class _ErrorState extends StatelessWidget {
-  final Object error;
-  const _ErrorState({required this.error});
-
-  String _message() {
-    final msg = error.toString();
-    if (msg.contains('PRODUCT_NOT_FOUND') || msg.contains('introuvable')) {
-      return 'Ce produit est introuvable ou a été supprimé.';
-    }
-    if (msg.contains('hors ligne') || msg.contains('offline') || msg.contains('SocketException')) {
-      return 'Pas de connexion — données indisponibles hors ligne.';
-    }
-    return 'Impossible de charger les données. Réessayez plus tard.';
+/// Context-specific French copy for a failed profitability detail load.
+String _errorMessage(Object error) {
+  final msg = error.toString();
+  if (msg.contains('PRODUCT_NOT_FOUND') || msg.contains('introuvable')) {
+    return 'Ce produit est introuvable ou a été supprimé.';
   }
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SoftIconBadge(
-                icon: Icons.error_outline_rounded, color: cs.error, size: 72),
-            const SizedBox(height: 16),
-            Text(
-              _message(),
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 15, color: cs.onSurfaceVariant),
-            ),
-          ],
-        ),
-      ),
-    );
+  if (msg.contains('hors ligne') ||
+      msg.contains('offline') ||
+      msg.contains('SocketException')) {
+    return 'Pas de connexion — données indisponibles hors ligne.';
   }
+  return 'Impossible de charger les données. Réessayez plus tard.';
 }

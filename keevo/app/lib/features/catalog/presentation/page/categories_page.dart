@@ -206,7 +206,10 @@ class _CategoriesPageState extends ConsumerState<CategoriesPage> {
             child: categoriesAsync.when(
               loading: () =>
                   const Center(child: CircularProgressIndicator()),
-              error: (e, _) => AppErrorWidget(error: e),
+              error: (e, _) => AppErrorWidget(
+                error: e,
+                onRetry: () => ref.invalidate(categoriesProvider),
+              ),
               data: (categories) {
                 if (categories.isEmpty) {
                   return Center(

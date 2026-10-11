@@ -257,7 +257,10 @@ class _HistoryTab extends ConsumerWidget {
               itemBuilder: (_, i) => _EventTile(event: events[i]),
             ),
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => AppErrorWidget(error: e),
+      error: (e, _) => AppErrorWidget(
+        error: e,
+        onRetry: () => ref.invalidate(syncHistoryProvider),
+      ),
     );
   }
 }
@@ -335,7 +338,10 @@ class _ConflitsTab extends ConsumerWidget {
               itemBuilder: (_, i) => _ConflictTile(conflict: conflicts[i]),
             ),
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => AppErrorWidget(error: e),
+      error: (e, _) => AppErrorWidget(
+        error: e,
+        onRetry: () => ref.invalidate(syncConflictsProvider),
+      ),
     );
   }
 }
@@ -453,7 +459,10 @@ class _QueueTab extends ConsumerWidget {
               itemBuilder: (_, i) => _QueueTile(op: ops[i]),
             ),
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => AppErrorWidget(error: e),
+      error: (e, _) => AppErrorWidget(
+        error: e,
+        onRetry: () => ref.invalidate(pendingSyncQueueProvider),
+      ),
     );
   }
 }

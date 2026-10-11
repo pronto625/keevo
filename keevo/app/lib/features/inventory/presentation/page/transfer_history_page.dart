@@ -1,5 +1,6 @@
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/di/providers.dart';
+import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import '../../../../core/widget/soft_icon_button.dart';
 import 'package:dio/dio.dart';
@@ -161,9 +162,9 @@ class _TransferHistoryPageState extends ConsumerState<TransferHistoryPage> {
                     padding: EdgeInsets.symmetric(vertical: 80),
                     child: Center(child: CircularProgressIndicator()),
                   ),
-              error: (e, _) => Padding(
-                padding: const EdgeInsets.all(24),
-                child: _ErrorCard(message: e.toString()),
+              error: (e, _) => AppErrorWidget(
+                error: e,
+                onRetry: () => ref.invalidate(transferHistoryProvider()),
               ),
               data: (transfers) {
                 // 1. Restrict to active store if set:
@@ -255,33 +256,6 @@ class _EmptyState extends StatelessWidget {
             style: theme.textTheme.titleMedium
                 ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ErrorCard extends StatelessWidget {
-  final String message;
-  const _ErrorCard({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cs.errorContainer,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.error_outline, color: cs.onErrorContainer),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(message,
-                style: TextStyle(color: cs.onErrorContainer)),
           ),
         ],
       ),

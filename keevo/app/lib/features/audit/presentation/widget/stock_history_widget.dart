@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/widget/app_error_widget.dart';
 import '../../domain/model/audit_entry_dto.dart';
 import '../provider/audit_provider.dart';
 
@@ -104,12 +105,14 @@ class _StockHistoryWidgetState extends ConsumerState<StockHistoryWidget> {
 
     return historyAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, _) => Center(
-        child: Text(
-          'Erreur lors du chargement de l\'historique',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.error,
-              ),
+      error: (err, _) => AppErrorWidget(
+        error: err,
+        title: 'Historique indisponible',
+        onRetry: () => ref.invalidate(
+          auditHistoryNotifierProvider(
+            entityType: widget.entityType,
+            entityId: widget.entityId,
+          ),
         ),
       ),
       data: (entries) {

@@ -136,7 +136,10 @@ class InventoryLaunchPage extends ConsumerWidget {
               child: Center(child: CircularProgressIndicator()),
             ),
             error: (e, _) => SliverFillRemaining(
-              child: AppErrorWidget(error: e),
+              child: AppErrorWidget(
+                error: e,
+                onRetry: () => ref.invalidate(sessionHistoryProvider()),
+              ),
             ),
           ),
         ],

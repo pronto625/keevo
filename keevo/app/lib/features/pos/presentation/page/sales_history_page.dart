@@ -82,7 +82,10 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
           return _buildContent(effectiveStoreId, userId);
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => AppErrorWidget(error: e),
+        error: (e, _) => AppErrorWidget(
+          error: e,
+          onRetry: () => ref.invalidate(currentUserIdProvider),
+        ),
       ),
     );
   }
@@ -113,7 +116,10 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
                 ? _buildEmptyState()
                 : _buildSalesList(sales),
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => AppErrorWidget(error: e),
+            error: (e, _) => AppErrorWidget(
+              error: e,
+              onRetry: () => ref.invalidate(salesHistoryProvider(filter)),
+            ),
           ),
         ),
       ],

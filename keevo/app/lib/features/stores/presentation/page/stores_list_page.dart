@@ -231,7 +231,11 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
               child: Center(child: CircularProgressIndicator()),
             ),
             error: (err, _) => SliverFillRemaining(
-              child: AppErrorWidget(error: err),
+              child: AppErrorWidget(
+                error: err,
+                onRetry: () =>
+                    ref.invalidate(managedStoresProvider(_includeInactive)),
+              ),
             ),
             data: (stores) {
               if (stores.isEmpty) {

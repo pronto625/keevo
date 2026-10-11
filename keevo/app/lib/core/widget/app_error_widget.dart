@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
+import 'soft_icon_badge.dart';
+
 /// Extracts a human-readable error message from any exception type.
 ///
 /// Priority:
@@ -64,47 +66,70 @@ String _domainMessage(String code, Map<dynamic, dynamic> body) {
 
 // ── Full-page / section error widget ─────────────────────────────────────────
 
-/// A centered error state with icon, message, and optional retry button.
+/// The single full-page / section error state (UI-3 Soft): a diluted error
+/// badge, a title, a human French message and a mandatory "Réessayer" button.
 ///
-/// Use inside `SliverFillRemaining`, `Expanded`, or `Center` contexts.
+/// [onRetry] is required — a screen-level error must never be a dead end.
+/// It should invalidate (or refresh) the exact provider, with the same family
+/// args, whose `AsyncValue` is in error. [title] and [message] override the
+/// defaults ('Un problème est survenu' / [appErrorMessage]).
+///
+/// Safe inside `SliverFillRemaining`, `Expanded` or `Center`: the content
+/// scrolls instead of overflowing in short slots.
 ///
 /// ```dart
-/// error: (e, _) => SliverFillRemaining(child: AppErrorWidget(error: e)),
-/// error: (e, _) => Center(child: AppErrorWidget(error: e, onRetry: () => ref.invalidate(myProvider))),
+/// error: (e, _) => SliverFillRemaining(
+///   child: AppErrorWidget(error: e, onRetry: () => ref.invalidate(myProvider)),
+/// ),
 /// ```
 class AppErrorWidget extends StatelessWidget {
   final Object error;
-  final VoidCallback? onRetry;
+  final VoidCallback onRetry;
+  final String? title;
+  final String? message;
 
-  const AppErrorWidget({super.key, required this.error, this.onRetry});
+  const AppErrorWidget({
+    super.key,
+    required this.error,
+    required this.onRetry,
+    this.title,
+    this.message,
+  });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.error_outline_rounded, size: 56, color: cs.error),
-            const SizedBox(height: 16),
-            Text('Un problème est survenu',
-                style: tt.titleMedium, textAlign: TextAlign.center),
-            const SizedBox(height: 8),
-            Text(appErrorMessage(error),
-                style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                textAlign: TextAlign.center),
-            if (onRetry != null) ...[
-              const SizedBox(height: 24),
-              OutlinedButton.icon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text('Réessayer'),
-              ),
-            ],
-          ],
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Semantics(
+            liveRegion: true,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SoftIconBadge(
+                  icon: Icons.error_outline_rounded,
+                  color: cs.error,
+                  size: 72,
+                ),
+                const SizedBox(height: 16),
+                Text(title ?? 'Un problème est survenu',
+                    style: tt.titleMedium, textAlign: TextAlign.center),
+                const SizedBox(height: 8),
+                Text(message ?? appErrorMessage(error),
+                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                    textAlign: TextAlign.center),
+                const SizedBox(height: 24),
+                FilledButton.tonalIcon(
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Réessayer'),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

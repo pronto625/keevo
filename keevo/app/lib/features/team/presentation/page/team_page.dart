@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import '../provider/employee_provider.dart';
 import '../widget/employee_card.dart';
@@ -78,23 +79,11 @@ class _TeamPageState extends ConsumerState<TeamPage> {
               child: Center(child: CircularProgressIndicator()),
             ),
             error: (err, _) => SliverFillRemaining(
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.error_outline,
-                        size: 48, color: theme.colorScheme.error),
-                    const SizedBox(height: 12),
-                    Text('Erreur de chargement',
-                        style: theme.textTheme.titleMedium),
-                    const SizedBox(height: 8),
-                    FilledButton.tonal(
-                      onPressed: () =>
-                          ref.read(employeeListProvider.notifier).refresh(),
-                      child: const Text('Réessayer'),
-                    ),
-                  ],
-                ),
+              child: AppErrorWidget(
+                error: err,
+                title: 'Erreur de chargement',
+                onRetry: () =>
+                    ref.read(employeeListProvider.notifier).refresh(),
               ),
             ),
             data: (employees) {
