@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 
 import '../../../../core/sync/connectivity_service.dart';
 import '../../../../core/sync/sync_service.dart';
+import '../../domain/exception/employee_action_requires_connection_exception.dart';
 import '../../domain/model/create_employee_result.dart';
 import '../../domain/model/employee_model.dart';
 import '../../domain/repository/employee_repository.dart';
@@ -157,6 +158,10 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
       _remote.regeneratePassword(employeeId);
 
   // ── Story 14.11 ───────────────────────────────────────────────────────
+  //
+  // The backend sync handler only replays REASSIGN / (DE)ACTIVATE, so a
+  // profile edit limited to the store goes through [reassignStore] (offline
+  // queue available); anything else needs the server and says so.
 
   @override
   Future<EmployeeModel> updateEmployee(String employeeId, {
@@ -165,24 +170,56 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
     String? phoneNumber,
     String? storeId,
   }) async {
-    final result = await _remote.updateEmployee(
-      employeeId,
-      firstName: firstName,
-      lastName: lastName,
-      phoneNumber: phoneNumber,
-      storeId: storeId,
-    );
-    await _local.upsert(result);
-    return result;
+    final storeOnly = firstName == null &&
+        lastName == null &&
+        phoneNumber == null &&
+        storeId != null;
+    if (storeOnly) return reassignStore(employeeId, storeId);
+
+    if (!await _connectivity.isOnline()) {
+      throw const EmployeeActionRequiresConnectionException();
+    }
+    try {
+      final result = await _remote.updateEmployee(
+        employeeId,
+        firstName: firstName,
+        lastName: lastName,
+        phoneNumber: phoneNumber,
+        storeId: storeId,
+      );
+      await _local.upsert(result);
+      return result;
+    } on DioException catch (e) {
+      if (_isRefusal(e)) rethrow;
+      dev.log('EmployeeRepository.updateEmployee: backend unreachable: $e');
+      throw const EmployeeActionRequiresConnectionException();
+    }
   }
 
   @override
   Future<void> changeRole(String employeeId, String role) =>
-      _remote.changeRole(employeeId, role);
+      _onlineOnly(() => _remote.changeRole(employeeId, role), 'changeRole');
 
   @override
   Future<void> setPassword(String employeeId, String newPassword) =>
-      _remote.setPassword(employeeId, newPassword);
+      _onlineOnly(
+          () => _remote.setPassword(employeeId, newPassword), 'setPassword');
+
+  /// Runs a server-only action: a refusal (4xx) reaches the caller as-is, an
+  /// unreachable server (offline, no answer, 5xx) becomes
+  /// [EmployeeActionRequiresConnectionException].
+  Future<void> _onlineOnly(Future<void> Function() call, String name) async {
+    if (!await _connectivity.isOnline()) {
+      throw const EmployeeActionRequiresConnectionException();
+    }
+    try {
+      await call();
+    } on DioException catch (e) {
+      if (_isRefusal(e)) rethrow;
+      dev.log('EmployeeRepository.$name: backend unreachable: $e');
+      throw const EmployeeActionRequiresConnectionException();
+    }
+  }
 
   /// A 4xx answer is a refusal to show the user. No answer, or a 5xx
   /// (server or gateway down), means the server is unreachable: queue it.

@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -143,6 +144,102 @@ void main() {
             sort: 'MARGIN_XAF_DESC',
             storeId: null,
           )).called(1);
+    });
+  });
+
+  // ── getProductProfitabilityDetail ────────────────────────────────────────
+
+  group('getProductProfitabilityDetail', () {
+    final params = ProfitabilityParams(from: from, to: to);
+
+    ProductProfitabilityDetail _detail(String id) => ProductProfitabilityDetail(
+          productId: id,
+          productName: 'Produit Test',
+          categoryName: null,
+          unitsSold: 1,
+          totalRevenue: 1000,
+          totalCost: 700,
+          grossMarginXaf: 300,
+          marginPercent: 42.8,
+          isLoss: false,
+          storeId: null,
+          marginLevel: 'PROFITABLE',
+          currentCataloguePrice: 1000,
+          currentBuyPrice: 600,
+          currentTransportCost: 100,
+          minAppliedPrice: 1000,
+          maxAppliedPrice: 1000,
+          avgAppliedPrice: 1000,
+          dailyMarginLast7: const [],
+          topStoreId: null,
+          topStoreName: null,
+          topStoreUnitsSold: null,
+        );
+
+    test('online_transportFailure_fallsBackToLocal', () async {
+      when(() => connectivity.isOnline()).thenAnswer((_) async => true);
+      when(() => remote.fetchProductDetail(
+            productId: any(named: 'productId'),
+            from: any(named: 'from'),
+            to: any(named: 'to'),
+            storeId: any(named: 'storeId'),
+          )).thenThrow(DioException(
+        requestOptions: RequestOptions(path: '/products/p1'),
+        type: DioExceptionType.connectionTimeout,
+      ));
+      when(() => local.getProductProfitabilityDetail(
+            productId: any(named: 'productId'),
+            from: any(named: 'from'),
+            to: any(named: 'to'),
+            storeId: any(named: 'storeId'),
+          )).thenAnswer((_) async => _detail('p_local'));
+
+      final result =
+          await sut.getProductProfitabilityDetail(productId: 'p1', params: params);
+
+      expect(result.productId, 'p_local');
+    });
+
+    test('online_apiError_isRethrown_notMaskedByLocal', () async {
+      when(() => connectivity.isOnline()).thenAnswer((_) async => true);
+      when(() => remote.fetchProductDetail(
+            productId: any(named: 'productId'),
+            from: any(named: 'from'),
+            to: any(named: 'to'),
+            storeId: any(named: 'storeId'),
+          )).thenThrow(DioException(
+        requestOptions: RequestOptions(path: '/products/p1'),
+        response: Response(
+            requestOptions: RequestOptions(path: '/products/p1'),
+            statusCode: 404),
+        type: DioExceptionType.badResponse,
+      ));
+
+      expect(
+        () => sut.getProductProfitabilityDetail(productId: 'p1', params: params),
+        throwsA(isA<DioException>()),
+      );
+      verifyNever(() => local.getProductProfitabilityDetail(
+            productId: any(named: 'productId'),
+            from: any(named: 'from'),
+            to: any(named: 'to'),
+            storeId: any(named: 'storeId'),
+          ));
+    });
+
+    test('offline_usesLocal_andFailsWhenNoLocalData', () async {
+      when(() => connectivity.isOnline()).thenAnswer((_) async => false);
+      when(() => local.getProductProfitabilityDetail(
+            productId: any(named: 'productId'),
+            from: any(named: 'from'),
+            to: any(named: 'to'),
+            storeId: any(named: 'storeId'),
+          )).thenAnswer((_) async => null);
+
+      expect(
+        () => sut.getProductProfitabilityDetail(productId: 'p1', params: params),
+        throwsA(isA<Exception>()),
+      );
     });
   });
 

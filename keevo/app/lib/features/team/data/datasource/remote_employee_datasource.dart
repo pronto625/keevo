@@ -89,6 +89,7 @@ class RemoteEmployeeDataSource {
       passwordChangeRequired: json['passwordChangeRequired'] as bool? ?? false,
       createdAt: DateTime.parse(json['createdAt'] as String),
       role: json['role'] as String? ?? 'EMPLOYEE',
+      phoneNumber: json['phoneNumber'] as String?,
     );
   }
 

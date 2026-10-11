@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:keevo/features/account/domain/model/deletion_pending_status.dart';
+import 'package:keevo/features/account/presentation/provider/account_deletion_provider.dart';
 import 'package:keevo/features/auth/domain/model/account_profile.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 import 'package:keevo/features/settings/presentation/page/account_page.dart';
@@ -13,9 +15,11 @@ import 'package:keevo/features/settings/presentation/page/account_page.dart';
 ///
 /// [profile] = null means loading (Completer-based, no pending timer).
 /// [error] = non-null means error state.
+/// [deletionStatus] = non-null means a deletion is pending (banner shown).
 Widget _buildPage({
   required AccountProfile? profile,
   Object? error,
+  DeletionPendingStatus? deletionStatus,
 }) {
   return ProviderScope(
     overrides: [
@@ -25,6 +29,7 @@ Widget _buildPage({
         // Loading state: Completer future never fires — no pending timer.
         return Completer<AccountProfile>().future;
       }),
+      deletionPendingStatusProvider.overrideWith((_) async => deletionStatus),
     ],
     child: MaterialApp.router(
       routerConfig: GoRouter(routes: [
@@ -35,10 +40,36 @@ Widget _buildPage({
             body: Center(child: Text('ChangePasswordPage')),
           ),
         ),
+        GoRoute(
+          path: '/settings/account/delete',
+          builder: (_, __) => const Scaffold(
+            body: Center(child: Text('DeleteAccountPage')),
+          ),
+        ),
       ]),
     ),
   );
 }
+
+const _owner = AccountProfile(
+  userId: 'u2',
+  phoneNumber: '+237600000002',
+  role: 'OWNER',
+);
+
+const _employee = AccountProfile(
+  userId: 'u1',
+  phoneNumber: '+237600000001',
+  role: 'EMPLOYEE',
+  firstName: 'Jean',
+  lastName: 'Dupont',
+  storeId: 's1',
+  storeName: 'Boutique Centrale',
+);
+
+Future<void> _scrollTo(WidgetTester tester, Finder finder) =>
+    tester.scrollUntilVisible(finder, 200,
+        scrollable: find.byType(Scrollable).first);
 
 void main() {
   group('AccountPage (Story 8.6 AC2)', () {
@@ -114,6 +145,89 @@ void main() {
 
       expect(find.text('Impossible de charger le profil'), findsOneWidget);
       expect(find.text('Réessayer'), findsOneWidget);
+    });
+  });
+
+  group('AccountPage — Zone dangereuse (Story 14.5 AC7/AC8/AC9)', () {
+    testWidgets('OWNER sees the "Zone dangereuse" with the delete tile',
+        (tester) async {
+      await tester.pumpWidget(_buildPage(profile: _owner));
+      await tester.pumpAndSettle();
+      await _scrollTo(tester, find.text('Supprimer mon compte'));
+
+      expect(find.text('ZONE DANGEREUSE'), findsOneWidget);
+      expect(find.text('Supprimer mon compte'), findsOneWidget);
+      expect(find.textContaining('Votre compte est lié à'), findsNothing);
+    });
+
+    testWidgets('EMPLOYEE sees the explanation and no delete action',
+        (tester) async {
+      await tester.pumpWidget(_buildPage(profile: _employee));
+      await tester.pumpAndSettle();
+      await _scrollTo(tester, find.textContaining('Votre compte est lié à'));
+
+      expect(
+        find.text('Votre compte est lié à Boutique Centrale. Pour supprimer '
+            'vos données, demandez à votre propriétaire de vous retirer de '
+            'l\'équipe.'),
+        findsOneWidget,
+      );
+      expect(find.text('Supprimer mon compte'), findsNothing);
+      expect(find.text('ZONE DANGEREUSE'), findsNothing);
+    });
+
+    testWidgets('delete tile → warning dialog → "Continuer" opens step 2',
+        (tester) async {
+      await tester.pumpWidget(_buildPage(profile: _owner));
+      await tester.pumpAndSettle();
+      await _scrollTo(tester, find.text('Supprimer mon compte'));
+      await tester.tap(find.text('Supprimer mon compte'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Supprimer mon compte ?'), findsOneWidget);
+      expect(find.text('Toutes vos ventes et clôtures'), findsOneWidget);
+      expect(find.text('Vos employés et leurs accès'), findsOneWidget);
+
+      await tester.tap(find.text('Continuer'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('DeleteAccountPage'), findsOneWidget);
+    });
+
+    testWidgets('warning dialog "Annuler" stays on the profile',
+        (tester) async {
+      await tester.pumpWidget(_buildPage(profile: _owner));
+      await tester.pumpAndSettle();
+      await _scrollTo(tester, find.text('Supprimer mon compte'));
+      await tester.tap(find.text('Supprimer mon compte'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Annuler'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Supprimer mon compte ?'), findsNothing);
+      expect(find.text('DeleteAccountPage'), findsNothing);
+      expect(find.text('Mon Compte'), findsOneWidget);
+    });
+
+    testWidgets('no banner when nothing is pending', (tester) async {
+      await tester.pumpWidget(_buildPage(profile: _owner));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Annuler la suppression'), findsNothing);
+    });
+
+    testWidgets('the DeletionPendingBanner shows above the profile when pending',
+        (tester) async {
+      await tester.pumpWidget(_buildPage(
+        profile: _owner,
+        deletionStatus: DeletionPendingStatus(
+            scheduledAt: DateTime.now().add(const Duration(days: 30))),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Suppression programmée le'), findsOneWidget);
+      expect(find.textContaining('30 jours restants'), findsOneWidget);
+      expect(find.text('Annuler la suppression'), findsOneWidget);
     });
   });
 }

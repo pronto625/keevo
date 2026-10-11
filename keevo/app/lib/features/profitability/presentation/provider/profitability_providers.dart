@@ -66,17 +66,17 @@ final selectedMetricProvider = StateProvider<RankingMetric>(
 
 // ── Reactive data providers ───────────────────────────────────────────────────
 
-/// Product profitability list provider (family by params).
-///
-/// Client-side sort is applied after retrieving data so that mock-based
-/// tests (which return unsorted data) and the UI both behave consistently.
-final productProfitabilityProvider = FutureProvider.autoDispose
-    .family<List<ProductProfitabilityEntry>, ProfitabilityParams>(
-        (ref, params) async {
-  final repo = ref.watch(profitabilityRepositoryProvider);
-  final raw = await repo.getProductProfitability(params: params);
-  final sorted = List<ProductProfitabilityEntry>.from(raw);
-  switch (params.sort) {
+// ── Local sort / ranking (Strategy mirror of the backend) ────────────────────
+
+/// Sorts [entries] by [sort] without touching the data source (AC2: a sort
+/// chip tap is local, no API call). Mirrors the backend strategies:
+/// `marginPctDesc` keeps loss-making products last (AC1).
+List<ProductProfitabilityEntry> applyProductSort(
+  List<ProductProfitabilityEntry> entries,
+  SortOption sort,
+) {
+  final sorted = List<ProductProfitabilityEntry>.from(entries);
+  switch (sort) {
     case SortOption.marginXafDesc:
       sorted.sort((a, b) => b.grossMarginXaf.compareTo(a.grossMarginXaf));
     case SortOption.caDesc:
@@ -84,9 +84,57 @@ final productProfitabilityProvider = FutureProvider.autoDispose
     case SortOption.unitsDesc:
       sorted.sort((a, b) => b.unitsSold.compareTo(a.unitsSold));
     case SortOption.marginPctDesc:
-      sorted.sort((a, b) => b.marginPercent.compareTo(a.marginPercent));
+      sorted.sort((a, b) {
+        final byLoss = (a.isLoss ? 1 : 0).compareTo(b.isLoss ? 1 : 0);
+        if (byLoss != 0) return byLoss;
+        return b.marginPercent.compareTo(a.marginPercent);
+      });
   }
   return sorted;
+}
+
+/// Re-ranks [stores] by [metric] locally (AC5: the metric toggle re-ranks
+/// immediately, no API call) and renumbers `rank` from 1.
+List<StorePerformanceEntry> rankStoresBy(
+  List<StorePerformanceEntry> stores,
+  RankingMetric metric,
+) {
+  final sorted = List<StorePerformanceEntry>.from(stores);
+  switch (metric) {
+    case RankingMetric.salesCount:
+      sorted.sort((a, b) => b.salesCount.compareTo(a.salesCount));
+    case RankingMetric.avgBasket:
+      sorted.sort((a, b) => b.averageBasket.compareTo(a.averageBasket));
+    case RankingMetric.ca:
+      sorted.sort((a, b) => b.totalRevenue.compareTo(a.totalRevenue));
+  }
+  return [
+    for (final (i, s) in sorted.indexed)
+      StorePerformanceEntry(
+        rank: i + 1,
+        storeId: s.storeId,
+        storeName: s.storeName,
+        totalRevenue: s.totalRevenue,
+        salesCount: s.salesCount,
+        averageBasket: s.averageBasket,
+        topProductName: s.topProductName,
+        deltaPercent: s.deltaPercent,
+      ),
+  ];
+}
+
+/// Product profitability list provider (family by params).
+///
+/// Client-side sort is applied after retrieving data so that mock-based
+/// tests (which return unsorted data) and the UI both behave consistently.
+/// The pages fetch with the default sort and re-sort locally with
+/// [applyProductSort] so that a sort change never re-fetches.
+final productProfitabilityProvider = FutureProvider.autoDispose
+    .family<List<ProductProfitabilityEntry>, ProfitabilityParams>(
+        (ref, params) async {
+  final repo = ref.watch(profitabilityRepositoryProvider);
+  final raw = await repo.getProductProfitability(params: params);
+  return applyProductSort(raw, params.sort);
 });
 
 /// Product profitability detail provider (family by productId + params).

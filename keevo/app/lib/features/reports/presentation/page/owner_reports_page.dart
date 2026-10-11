@@ -23,7 +23,14 @@ import 'reports_page.dart';
 ///
 /// EMPLOYEE route `/reports` points to [EmployeeReportsPage] (Jour + Brouillons).
 class OwnerReportsPage extends ConsumerStatefulWidget {
-  const OwnerReportsPage({super.key});
+  /// Tab opened first (AC7 deep links): 0 Jour, 1 Historique,
+  /// 2 Rentabilité (`/reports/rentabilite`), 3 Boutiques (`/reports/boutiques`).
+  final int initialTab;
+
+  const OwnerReportsPage({super.key, this.initialTab = 0});
+
+  static const tabRentabilite = 2;
+  static const tabBoutiques = 3;
 
   @override
   ConsumerState<OwnerReportsPage> createState() => _OwnerReportsPageState();
@@ -36,7 +43,11 @@ class _OwnerReportsPageState extends ConsumerState<OwnerReportsPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(
+      length: 4,
+      vsync: this,
+      initialIndex: widget.initialTab.clamp(0, 3),
+    );
   }
 
   @override

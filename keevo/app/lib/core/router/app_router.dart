@@ -42,6 +42,8 @@ import '../../features/reports/presentation/page/owner_reports_page.dart';
 import '../../features/reports/domain/model/report_history_model.dart';
 import '../../features/profitability/presentation/page/product_profitability_detail_page.dart';
 import '../../features/auth/presentation/page/user_password_change_page.dart';
+import '../../features/account/presentation/page/delete_account_page.dart';
+import '../../features/feedback/presentation/page/feedback_form_page.dart';
 import '../../features/settings/presentation/page/account_page.dart';
 import '../../features/settings/presentation/page/settings_page.dart';
 import '../../features/settings/presentation/page/subscription_page.dart';
@@ -60,7 +62,9 @@ import '../../features/audit/presentation/page/audit_page.dart';
 import '../../features/notifications/presentation/page/notifications_page.dart';
 import '../../features/dashboard/presentation/page/dashboard_page.dart';
 import '../../features/dashboard/presentation/page/store_dashboard_page.dart';
+import '../../features/team/domain/model/employee_model.dart';
 import '../../features/team/presentation/page/create_employee_page.dart';
+import '../../features/team/presentation/page/edit_employee_page.dart';
 import '../di/providers.dart';
 import '../scaffold/main_shell.dart';
 import '../storage/app_constants.dart';
@@ -401,6 +405,19 @@ final GoRouter appRouter = GoRouter(
       },
     ),
 
+    // ── Profitability deep links (AC7, Story 7.4) — open the Rapports hub on
+    // the right tab. OWNER-only via _ownerOnlyPrefixes.
+    GoRoute(
+      path: '/reports/rentabilite',
+      builder: (_, __) => const OwnerReportsPage(
+          initialTab: OwnerReportsPage.tabRentabilite),
+    ),
+    GoRoute(
+      path: '/reports/boutiques',
+      builder: (_, __) => const OwnerReportsPage(
+          initialTab: OwnerReportsPage.tabBoutiques),
+    ),
+
     // ── Profitability detail (full-screen, no nav bar) — Story 7.4 ────────
     GoRoute(
       path: '/reports/rentabilite/:productId',
@@ -542,6 +559,16 @@ final GoRouter appRouter = GoRouter(
       path: '/settings/team/new',
       builder: (_, __) => const CreateEmployeePage(),
     ),
+    // ── Settings > Team > Edit (Story 14.11, FR66 — OWNER only) ──────────
+    GoRoute(
+      path: '/settings/team/:employeeId/edit',
+      builder: (_, state) {
+        final employee = state.extra as EmployeeModel?;
+        // Deep link without the employee in `extra`: back to the list.
+        if (employee == null) return const TeamPage();
+        return EditEmployeePage(employee: employee);
+      },
+    ),
     // ── Settings > Sync Conflicts (Story 5.3 — OWNER only) ────────────────
     GoRoute(
       path: '/settings/sync/conflicts',
@@ -566,6 +593,19 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/settings/change-password',
       builder: (_, __) => const UserPasswordChangePage(),
+    ),
+    // ── Settings > Mon Compte > Suppression (Story 14.5 FR91 — OWNER) ────
+    GoRoute(
+      path: '/settings/account/delete',
+      builder: (_, __) => const DeleteAccountPage(),
+    ),
+    // ── Settings > Feedback (Story 14.5 FR92 — OWNER + EMPLOYEE) ─────────
+    // `from` = path of the screen the user was on when tapping the tile.
+    GoRoute(
+      path: '/settings/feedback',
+      builder: (_, state) => FeedbackFormPage(
+        screenContext: state.uri.queryParameters['from'],
+      ),
     ),
     // ── Audit trail (OWNER only — full-screen, no nav bar) ────────────────
     GoRoute(

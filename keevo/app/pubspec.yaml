@@ -1,7 +1,7 @@
 name: keevo
 description: Keevo — Gestion d'inventaire et de ventes pour commerçants au Cameroun.
 publish_to: 'none'
-version: 1.1.13+12
+version: 1.1.14+13
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -52,6 +52,7 @@ dependencies:
 
   # Native share sheet (download template, export)
   share_plus: ^10.1.0
+  package_info_plus: ^8.3.0
 
   # Network connectivity detection (v6+ returns List<ConnectivityResult>)
   connectivity_plus: ^6.0.5

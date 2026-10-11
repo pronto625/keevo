@@ -4,13 +4,20 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
+import '../../../account/presentation/page/delete_account_page.dart';
+import '../../../account/presentation/widget/delete_account_warning_dialog.dart';
+import '../../../account/presentation/widget/deletion_pending_banner.dart';
 import '../../../auth/domain/model/account_profile.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
 
 /// AccountPage — "Mon Compte" full-page profile view (Story 8.6 AC2).
 ///
 /// Route: /settings/account
-/// Shows: avatar, personal info, optional store section, security (change password).
+/// Shows: avatar, personal info, optional store section, security (change
+/// password), and — Story 14.5 FR91 — the "Zone dangereuse" (OWNER: delete
+/// my account, AC7) or the EMPLOYEE explanation (AC9). The
+/// [DeletionPendingBanner] (AC8) sits above the profile: this page is where
+/// the WhatsApp confirmation sends the owner to cancel.
 /// Loads: accountProfileProvider (GET /api/v1/auth/profile).
 class AccountPage extends ConsumerWidget {
   const AccountPage({super.key});
@@ -42,7 +49,12 @@ class AccountPage extends ConsumerWidget {
       body: profileAsync.when(
         loading: () => const _ProfileSkeleton(),
         error: (error, _) => _ErrorBanner(onRetry: () => ref.invalidate(accountProfileProvider)),
-        data: (profile) => _ProfileBody(profile: profile),
+        data: (profile) => Column(
+          children: [
+            const DeletionPendingBanner(),
+            Expanded(child: _ProfileBody(profile: profile)),
+          ],
+        ),
       ),
     );
   }
@@ -66,7 +78,7 @@ class _ProfileBody extends StatelessWidget {
           const SizedBox(height: 24),
 
           // ── Section Informations personnelles ──────────────────────────
-          _SectionLabel('Informations personnelles'),
+          const _SectionLabel('Informations personnelles'),
           const SizedBox(height: 8),
           _ProfileCard(
             children: [
@@ -83,7 +95,7 @@ class _ProfileBody extends StatelessWidget {
 
           // ── Section Boutique (EMPLOYEE only) ──────────────────────────
           if (profile.storeId != null) ...[
-            _SectionLabel('Boutique'),
+            const _SectionLabel('Boutique'),
             const SizedBox(height: 8),
             _ProfileCard(
               children: [
@@ -97,7 +109,7 @@ class _ProfileBody extends StatelessWidget {
           ],
 
           // ── Section Sécurité ───────────────────────────────────────────
-          _SectionLabel('Sécurité'),
+          const _SectionLabel('Sécurité'),
           const SizedBox(height: 8),
           _ProfileCard(
             children: [
@@ -107,6 +119,120 @@ class _ProfileBody extends StatelessWidget {
                 onTap: () => context.push('/settings/change-password'),
               ),
             ],
+          ),
+          const SizedBox(height: 20),
+
+          // ── Zone dangereuse (Story 14.5 — FR91) ────────────────────────
+          if (profile.role == 'OWNER') ...[
+            const _SectionLabel('Zone dangereuse'),
+            const SizedBox(height: 8),
+            _ProfileCard(
+              children: [
+                _DangerTile(
+                  icon: Icons.delete_forever_outlined,
+                  title: 'Supprimer mon compte',
+                  subtitle: 'Suppression définitive sous 30 jours',
+                  onTap: () => _startDeletion(context),
+                ),
+              ],
+            ),
+          ] else ...[
+            const _SectionLabel('Suppression des données'),
+            const SizedBox(height: 8),
+            _ProfileCard(
+              children: [_EmployeeDeletionNotice(profile: profile)],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// AC7 — step 1 (warning dialog) then step 2 (phone confirmation page).
+  Future<void> _startDeletion(BuildContext context) async {
+    final proceed = await showDeleteAccountWarningDialog(context);
+    if (!proceed || !context.mounted) return;
+    context.push('/settings/account/delete');
+  }
+}
+
+// ── Danger tile (OWNER) ───────────────────────────────────────────────────────
+
+class _DangerTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  const _DangerTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              SoftIconBadge(icon: icon, color: cs.error),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: cs.error,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(fontSize: 12, color: cs.muted),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: cs.muted, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Employee notice (AC9) ─────────────────────────────────────────────────────
+
+class _EmployeeDeletionNotice extends StatelessWidget {
+  final AccountProfile profile;
+  const _EmployeeDeletionNotice({required this.profile});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SoftIconBadge(icon: Icons.info_outline_rounded),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              employeeDeletionNotice(profile),
+              style: TextStyle(fontSize: 13, color: cs.onSurface, height: 1.4),
+            ),
           ),
         ],
       ),

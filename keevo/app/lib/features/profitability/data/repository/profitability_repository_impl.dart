@@ -1,5 +1,7 @@
 import 'dart:developer' as dev;
 
+import 'package:dio/dio.dart';
+
 import '../../../../core/sync/connectivity_service.dart';
 import '../../domain/model/product_profitability_model.dart';
 import '../../domain/repository/profitability_repository.dart';
@@ -61,14 +63,21 @@ class ProfitabilityRepositoryImpl implements ProfitabilityRepository {
     required ProfitabilityParams params,
   }) async {
     if (await _connectivity.isOnline()) {
-      // Re-throw API errors (4xx) — they are intentional domain responses.
-      // Only fall back to local for network/connectivity errors.
-      return await _remote.fetchProductDetail(
-        productId: productId,
-        from: _fmt(params.from),
-        to: _fmt(params.to),
-        storeId: params.storeId,
-      );
+      try {
+        return await _remote.fetchProductDetail(
+          productId: productId,
+          from: _fmt(params.from),
+          to: _fmt(params.to),
+          storeId: params.storeId,
+        );
+      } on DioException catch (e) {
+        // Re-throw API errors (4xx/5xx) — they are intentional domain
+        // responses (e.g. 404 PRODUCT_NOT_FOUND). Only a transport failure
+        // (timeout, unreachable host) falls back to the local Drift data.
+        if (e.response != null) rethrow;
+        dev.log('Remote profitability detail unreachable, using local: $e',
+            name: 'ProfitabilityRepository');
+      }
     }
     final detail = await _local.getProductProfitabilityDetail(
       productId: productId,

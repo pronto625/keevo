@@ -40,10 +40,11 @@ class ProductProfitabilityListPage extends ConsumerWidget {
       _ => false,
     };
 
+    // AC2: the sort is applied locally — the fetch key never carries it, so
+    // tapping a sort chip re-sorts without a new Drift/API query.
     final params = ProfitabilityParams(
       from: period.from,
       to: period.to,
-      sort: sort,
       storeId: storeId,
     );
 
@@ -129,7 +130,8 @@ class ProductProfitabilityListPage extends ConsumerWidget {
                 ),
               ),
             ),
-            data: (entries) {
+            data: (fetched) {
+              final entries = applyProductSort(fetched, sort);
               if (entries.isEmpty) {
                 return SliverFillRemaining(
                   child: Center(

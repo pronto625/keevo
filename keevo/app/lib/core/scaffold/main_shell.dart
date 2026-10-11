@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../features/account/presentation/widget/deletion_pending_banner.dart';
 import '../../features/catalog/presentation/provider/product_provider.dart';
 import '../../features/inventory/presentation/provider/global_stock_provider.dart';
 import '../../features/notifications/presentation/provider/notification_provider.dart';
@@ -354,6 +355,8 @@ class _MainShellState extends ConsumerState<MainShell> {
       body: Column(
         children: [
           const SuspensionBanner(),
+          // v1s-14-5 AC8 — account deletion scheduled: visible on every shell page.
+          const DeletionPendingBanner(),
           const SyncWarningBanner(),
           const OfflineGateBanner(),
           Expanded(child: widget.child),

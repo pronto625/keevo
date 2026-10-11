@@ -35,10 +35,11 @@ class StorePerformancePage extends ConsumerWidget {
       _ => false,
     };
 
+    // AC5: the ranking metric is applied locally — the fetch key never
+    // carries it, so the toggle re-ranks without a new Drift/API query.
     final params = StorePerformanceParams(
       from: period.from,
       to: period.to,
-      metric: metric,
     );
 
     final dataAsync = ref.watch(storePerformanceProvider(params));
@@ -122,7 +123,8 @@ class StorePerformancePage extends ConsumerWidget {
                 ),
               ),
             ),
-            data: (entries) {
+            data: (fetched) {
+              final entries = rankStoresBy(fetched, metric);
               if (entries.isEmpty) {
                 return SliverFillRemaining(
                   child: Center(

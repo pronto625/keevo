@@ -1,11 +1,14 @@
-import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../../core/di/providers.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
 import '../../../stores/presentation/provider/store_provider.dart';
 import '../../domain/model/employee_model.dart';
 import '../provider/employee_provider.dart';
+import 'set_password_bottom_sheet.dart';
 import 'temp_password_bottom_sheet.dart';
 
 /// EmployeeCard — Story 3.5, AC8.
@@ -26,6 +29,8 @@ class EmployeeCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isActive = employee.status == 'ACTIVE';
     final storesAsync = ref.watch(storeListNotifierProvider);
+    // Resolved here so the "self" check in the action sheet has a value.
+    ref.watch(currentUserIdProvider);
 
     // Resolve store name from the loaded stores list
     final storeName = storesAsync.maybeWhen(
@@ -138,15 +143,42 @@ class EmployeeCard extends ConsumerWidget {
     onActionComplete();
   }
 
+  void _openEditPage(BuildContext context) {
+    context
+        .push<bool>('/settings/team/${employee.id}/edit', extra: employee)
+        .then((changed) {
+      if (changed == true) onActionComplete();
+    });
+  }
+
+  Future<void> _setPassword(BuildContext context) async {
+    final done = await showSetPasswordBottomSheet(
+      context: context,
+      employee: employee,
+    );
+    if (done == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Mot de passe défini')),
+      );
+      onActionComplete();
+    }
+  }
+
   void _showActions(BuildContext context, WidgetRef ref, String storeName) {
     final isActive = employee.status == 'ACTIVE';
+    final isOwner = ref.read(currentUserRoleProvider) == 'OWNER';
+    // Already watched in build(), so the future has resolved by now.
+    final isSelf =
+        ref.read(currentUserIdProvider).valueOrNull == employee.userId;
 
     showModalBottomSheet<void>(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
+      // Up to six rows: scroll rather than overflow on small screens.
       builder: (sheetCtx) => SafeArea(
+        child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -175,6 +207,21 @@ class EmployeeCard extends ConsumerWidget {
             ),
             const Divider(height: 1),
 
+            if (isActive && isOwner) ...[
+              // ── Edit profile (Story 14.11, FR66) ────────────────────
+              ListTile(
+                leading: Icon(Icons.edit_outlined,
+                    color: Theme.of(context).colorScheme.primary),
+                title: const Text('Modifier les informations'),
+                subtitle: const Text('Nom, téléphone, boutique, rôle'),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _openEditPage(context);
+                },
+              ),
+              const Divider(indent: 56, height: 1),
+            ],
+
             if (isActive) ...[
               // ── Reassign store ──────────────────────────────────────
               ListTile(
@@ -201,6 +248,21 @@ class EmployeeCard extends ConsumerWidget {
                 },
               ),
               const Divider(indent: 56, height: 1),
+
+              // ── Set password (Story 14.11) — not for oneself ────────
+              if (isOwner && !isSelf) ...[
+                ListTile(
+                  leading: Icon(Icons.password_rounded,
+                      color: Theme.of(context).colorScheme.primary),
+                  title: const Text('Définir le mot de passe'),
+                  subtitle: const Text('Choisir un mot de passe vous-même'),
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    _setPassword(context);
+                  },
+                ),
+                const Divider(indent: 56, height: 1),
+              ],
 
               // ── Deactivate ──────────────────────────────────────────
               ListTile(
@@ -243,6 +305,7 @@ class EmployeeCard extends ConsumerWidget {
             ],
             const SizedBox(height: 8),
           ],
+        ),
         ),
       ),
     );

@@ -16,6 +16,9 @@ class EmployeeModel with _$EmployeeModel {
     required bool passwordChangeRequired,
     required DateTime createdAt,
     @Default('EMPLOYEE') String role,
+    /// E.164 number of the underlying user (Story 14.11, AC6) — null when
+    /// the row comes from the local cache, which does not store it.
+    String? phoneNumber,
   }) = _EmployeeModel;
 
   factory EmployeeModel.fromJson(Map<String, dynamic> json) =>

@@ -102,6 +102,52 @@ void main() {
       expect(find.text('Ventes'), findsOneWidget);
     });
 
+    // AC5: the metric toggle re-ranks locally — the repository is queried once
+    // and the rank badges are renumbered.
+    testWidgets('tapMetricToggle_reranksLocally_withoutRefetching',
+        (tester) async {
+      final mockRepo = MockProfitabilityRepository();
+      when(() => mockRepo.getStorePerformance(params: any(named: 'params')))
+          .thenAnswer((_) async => [
+                const StorePerformanceEntry(
+                  rank: 1,
+                  storeId: 's1',
+                  storeName: 'Magasin Central',
+                  totalRevenue: 500000,
+                  salesCount: 10,
+                  averageBasket: 50000,
+                  topProductName: null,
+                  deltaPercent: 0,
+                ),
+                const StorePerformanceEntry(
+                  rank: 2,
+                  storeId: 's2',
+                  storeName: 'Boutique Nord',
+                  totalRevenue: 300000,
+                  salesCount: 60,
+                  averageBasket: 5000,
+                  topProductName: null,
+                  deltaPercent: 0,
+                ),
+              ]);
+
+      await tester.pumpWidget(buildUnderTest(mockRepo));
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(find.text('Magasin Central')).dy,
+          lessThan(tester.getTopLeft(find.text('Boutique Nord')).dy));
+
+      await tester.tap(find.text('Ventes'));
+      await tester.pumpAndSettle();
+
+      // Boutique Nord has more sales → now #1, listed first.
+      expect(tester.getTopLeft(find.text('Boutique Nord')).dy,
+          lessThan(tester.getTopLeft(find.text('Magasin Central')).dy));
+      expect(tester.getTopLeft(find.text('#1')).dy,
+          lessThan(tester.getTopLeft(find.text('#2')).dy));
+      verify(() => mockRepo.getStorePerformance(params: any(named: 'params')))
+          .called(1);
+    });
+
     testWidgets('tapPeriodChip_30days_refreshesList', (tester) async {
       final mockRepo = MockProfitabilityRepository();
       when(() => mockRepo.getStorePerformance(params: any(named: 'params')))

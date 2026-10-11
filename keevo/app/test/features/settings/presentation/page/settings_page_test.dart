@@ -100,6 +100,15 @@ Widget _buildPage({
               body: Center(child: Text('Login Page')),
             ),
           ),
+          GoRoute(
+            path: '/settings/feedback',
+            builder: (_, state) => Scaffold(
+              body: Center(
+                child: Text(
+                    'FeedbackPage from=${state.uri.queryParameters['from']}'),
+              ),
+            ),
+          ),
         ],
       ),
     ),
@@ -167,6 +176,32 @@ void main() {
     when(() => mockFcm.getToken()).thenAnswer((_) async => null);
     when(() => mockFcm.deleteToken()).thenAnswer((_) async {});
     when(() => mockTokenDs.deleteToken(any())).thenAnswer((_) async {});
+  });
+
+  group('SettingsPage — Signaler un problème (Story 14.5 AC14)', () {
+    for (final role in ['OWNER', 'EMPLOYEE']) {
+      testWidgets(
+          '$role: the tile is active and opens the feedback form with the '
+          'current path as context', (tester) async {
+        await tester.pumpWidget(_buildPage(
+          mockFcmService: mockFcm,
+          mockTokenDataSource: mockTokenDs,
+          prefs: prefs,
+          role: role,
+        ));
+        await tester.pumpAndSettle();
+
+        await tester.scrollUntilVisible(
+          find.text('Signaler un problème'),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.tap(find.text('Signaler un problème'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('FeedbackPage from=/'), findsOneWidget);
+      });
+    }
   });
 
   group('SettingsPage — Logout FCM cleanup (Story 16.1)', () {

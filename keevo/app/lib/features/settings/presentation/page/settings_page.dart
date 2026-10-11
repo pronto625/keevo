@@ -312,8 +312,15 @@ class SettingsPage extends ConsumerWidget {
                       iconColor: AppTheme.iconGrey,
                       title: 'Signaler un problème',
                       subtitle: 'Envoyer un retour à l\'équipe Keevo',
-                      onTap: () {},
-                      badge: 'Bientôt',
+                      // Story 14.5 (FR92): the screen the user is on at the
+                      // tap travels as `from` — `uri.path`, never `.name`
+                      // (no route is named in this router).
+                      onTap: () {
+                        final from = GoRouterState.of(context).uri.path;
+                        context.push(
+                          '/settings/feedback?from=${Uri.encodeQueryComponent(from)}',
+                        );
+                      },
                     ),
                   ],
                 ),

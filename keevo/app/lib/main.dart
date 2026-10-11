@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3/open.dart';
 
@@ -14,6 +15,7 @@ import 'core/router/app_router.dart';
 import 'core/storage/db_encryption_key_service.dart';
 import 'core/storage/secure_storage_provider.dart';
 import 'core/theme/app_theme.dart';
+import 'features/feedback/presentation/provider/feedback_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -53,10 +55,16 @@ void main() async {
   );
 
   // ── 3. Bootstrap app with providers ────────────────────────────────────────
+  // v1s-14-5 AC14 — app version sent with each feedback (null if unavailable).
+  final appVersion = await PackageInfo.fromPlatform()
+      .then<String?>((info) => info.version)
+      .catchError((Object _) => null);
+
   runApp(
     ProviderScope(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
+        appVersionProvider.overrideWithValue(appVersion),
         // Pass the hex key so appDatabaseProvider can open the encrypted DB.
         dbEncryptionKeyProvider.overrideWithValue(hexKey),
       ],

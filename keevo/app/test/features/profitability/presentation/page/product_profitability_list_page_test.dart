@@ -123,6 +123,67 @@ void main() {
       expect(find.text('Marge XAF'), findsOneWidget);
     });
 
+    // AC2: a sort chip re-sorts locally — the repository is queried once.
+    testWidgets('tapSortChip_reordersRows_withoutRefetching', (tester) async {
+      final mockRepo = MockProfitabilityRepository();
+      when(() => mockRepo.getProductProfitability(params: any(named: 'params')))
+          .thenAnswer((_) async => [
+                makeEntry(
+                    productId: 'p1',
+                    productName: 'Haute marge',
+                    marginPercent: 80,
+                    grossMarginXaf: 1000),
+                makeEntry(
+                    productId: 'p2',
+                    productName: 'Gros volume',
+                    marginPercent: 20,
+                    grossMarginXaf: 90000),
+              ]);
+
+      await tester.pumpWidget(buildUnderTest(mockRepo));
+      await tester.pumpAndSettle();
+
+      // Default Marge % → 'Haute marge' above 'Gros volume'.
+      expect(tester.getTopLeft(find.text('Haute marge')).dy,
+          lessThan(tester.getTopLeft(find.text('Gros volume')).dy));
+
+      await tester.tap(find.text('Marge XAF'));
+      await tester.pumpAndSettle();
+
+      expect(tester.getTopLeft(find.text('Gros volume')).dy,
+          lessThan(tester.getTopLeft(find.text('Haute marge')).dy));
+      verify(() => mockRepo.getProductProfitability(
+          params: any(named: 'params'))).called(1);
+    });
+
+    // AC1: loss-making products are listed last on the default sort.
+    testWidgets('defaultSort_putsLossProductsLast', (tester) async {
+      final mockRepo = MockProfitabilityRepository();
+      when(() => mockRepo.getProductProfitability(params: any(named: 'params')))
+          .thenAnswer((_) async => [
+                makeEntry(
+                    productId: 'p1',
+                    productName: 'Produit perte',
+                    marginPercent: -5,
+                    grossMarginXaf: -500,
+                    isLoss: true,
+                    marginLevel: 'LOSS'),
+                makeEntry(
+                    productId: 'p2',
+                    productName: 'Produit faible',
+                    marginPercent: 5,
+                    grossMarginXaf: 200,
+                    marginLevel: 'LOW'),
+              ]);
+
+      await tester.pumpWidget(buildUnderTest(mockRepo));
+      await tester.pumpAndSettle();
+
+      expect(tester.getTopLeft(find.text('Produit faible')).dy,
+          lessThan(tester.getTopLeft(find.text('Produit perte')).dy));
+      expect(find.text('PERTE'), findsOneWidget);
+    });
+
     testWidgets('tapPeriodChip_7days_refreshesData', (tester) async {
       final mockRepo = MockProfitabilityRepository();
       when(() => mockRepo.getProductProfitability(params: any(named: 'params')))
