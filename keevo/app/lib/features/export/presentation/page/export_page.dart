@@ -4,13 +4,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
-import '../../../../core/widget/date_range_clamp.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import '../../../settings/presentation/widget/plan_limit_bottom_sheet.dart';
 import '../../domain/exception/export_exception.dart';
 import '../../domain/model/export_models.dart';
-import '../export_presenter.dart';
 import '../provider/export_providers.dart';
+import '../widget/export_form_widgets.dart';
 
 /// ExportPage — « Exporter mes données » (v1s-18-4, OWNER only).
 ///
@@ -31,14 +30,12 @@ class ExportPage extends ConsumerStatefulWidget {
   ConsumerState<ExportPage> createState() => _ExportPageState();
 }
 
-enum _Period { today, week, month, custom }
-
 class _ExportPageState extends ConsumerState<ExportPage> {
   late Set<String> _selected;
   late String? _storeId;
   late DateTime? _from;
   late DateTime? _to;
-  late _Period? _period;
+  late ExportPeriod? _period;
 
   /// Audit log criteria from the prefill — kept even when not sent.
   late Map<String, String> _criteria;
@@ -62,7 +59,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
     _storeId = p?.storeId;
     _from = p?.from;
     _to = p?.to;
-    _period = (_from != null || _to != null) ? _Period.custom : null;
+    _period = (_from != null || _to != null) ? ExportPeriod.custom : null;
     _criteria = {
       for (final e in (p?.criteria ?? const <String, String>{}).entries)
         if (e.value.trim().isNotEmpty) e.key: e.value.trim(),
@@ -213,75 +210,20 @@ class _ExportPageState extends ConsumerState<ExportPage> {
   }
 
   Future<void> _pickPeriod() async {
-    final choice = await _pickOption<_Period>(
-      title: 'Période',
-      selected: _period,
-      allLabel: 'Toutes les dates',
-      options: const [
-        (_Period.today, 'Aujourd\'hui'),
-        (_Period.week, '7 jours'),
-        (_Period.month, 'Mois (30 derniers jours)'),
-        (_Period.custom, 'Personnalisé…'),
-      ],
-    );
-    if (choice == null || !mounted) return;
-    setState(_clearError);
-    final now = DateTime.now();
-    final startOfToday = DateTime(now.year, now.month, now.day);
-    final endOfToday = startOfToday
-        .add(const Duration(days: 1))
-        .subtract(const Duration(milliseconds: 1));
-    switch (choice.value) {
-      case null:
-        setState(() {
-          _period = null;
-          _from = null;
-          _to = null;
-        });
-      case _Period.today:
-        setState(() {
-          _period = _Period.today;
-          _from = startOfToday;
-          _to = endOfToday;
-        });
-      case _Period.week:
-        setState(() {
-          _period = _Period.week;
-          _from = startOfToday.subtract(const Duration(days: 6));
-          _to = endOfToday;
-        });
-      case _Period.month:
-        setState(() {
-          _period = _Period.month;
-          _from = startOfToday.subtract(const Duration(days: 29));
-          _to = endOfToday;
-        });
-      case _Period.custom:
-        final first = DateTime(2020);
-        final current = _from != null && _to != null
-            ? DateTimeRange(start: _from!, end: _to!)
-            : null;
-        final range = await showDateRangePicker(
-          context: context,
-          firstDate: first,
-          lastDate: now,
-          initialDateRange: clampDateRange(current, first, now),
-          helpText: 'Choisir une période',
-        );
-        if (range == null || !mounted) return;
-        final end = DateTime(range.end.year, range.end.month, range.end.day)
-            .add(const Duration(days: 1))
-            .subtract(const Duration(milliseconds: 1));
-        setState(() {
-          _period = _Period.custom;
-          _from = range.start;
-          _to = end;
-        });
-    }
+    final picked = await pickExportPeriod(context,
+        current: _period, from: _from, to: _to);
+    if (picked == null || !mounted) return;
+    setState(() {
+      _clearError();
+      _period = picked.period;
+      _from = picked.from;
+      _to = picked.to;
+    });
   }
 
   Future<void> _pickStore(List<ExportStoreOption> stores) async {
-    final choice = await _pickOption<String>(
+    final choice = await showExportOptionSheet<String>(
+      context,
       title: 'Boutique',
       selected: _storeId,
       allLabel: 'Toutes les boutiques',
@@ -293,58 +235,6 @@ class _ExportPageState extends ConsumerState<ExportPage> {
         _clearError();
       });
     }
-  }
-
-  /// Bottom sheet with « all » + options (same pattern as the audit
-  /// filters). `null` when dismissed, a [_Choice] with a `null` value for
-  /// « all ».
-  Future<_Choice<T>?> _pickOption<T>({
-    required String title,
-    required T? selected,
-    required String allLabel,
-    required List<(T, String)> options,
-  }) {
-    return showModalBottomSheet<_Choice<T>>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) {
-        final cs = Theme.of(context).colorScheme;
-        Widget tile(T? value, String label) => ListTile(
-              title: Text(label),
-              trailing: value == selected
-                  ? Icon(Icons.check_rounded, color: cs.primary)
-                  : null,
-              onTap: () => Navigator.of(context).pop(_Choice<T>(value)),
-            );
-        return SafeArea(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-                maxHeight: MediaQuery.sizeOf(context).height * 0.7),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: Text(title,
-                      style: Theme.of(context).textTheme.titleMedium),
-                ),
-                Flexible(
-                  child: ListView(
-                    shrinkWrap: true,
-                    children: [
-                      tile(null, allLabel),
-                      for (final o in options) tile(o.$1, o.$2),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────
@@ -425,7 +315,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
         padding: const EdgeInsets.only(bottom: 24),
         children: [
           if (offline) ...[
-            _Banner(
+            ExportInfoBanner(
               key: const Key('export-offline-banner'),
               icon: Icons.cloud_off_rounded,
               text: 'Hors ligne — l\'export complet nécessite une connexion',
@@ -438,13 +328,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
                 child: const Text('Réessayer'),
               ),
             ),
-            const ListTile(
-              key: Key('export-local-csv-entry'),
-              enabled: false,
-              leading: SoftIconBadge(icon: Icons.phone_android_rounded),
-              title: Text('CSV — données de cet appareil'),
-              subtitle: Text('Bientôt disponible'),
-            ),
+            _localCsvTile(),
           ],
           if (_error != null)
             _ErrorCard(
@@ -453,8 +337,10 @@ class _ExportPageState extends ConsumerState<ExportPage> {
                   ? null
                   : () => _launch(datasets, replay: _lastRequest),
             ),
+          // Server unreachable: the on-device CSV is the way out (v1s-18-5).
+          if (!offline && _error != null && _error!.isNetwork) _localCsvTile(),
           if (_queued != null) const _QueuedCard(),
-          _SectionTitle(pdf ? 'Modèle' : 'Quoi'),
+          ExportSectionTitle(pdf ? 'Modèle' : 'Quoi'),
           ...datasetsAsync.when(
             skipLoadingOnRefresh: true,
             loading: () => const [
@@ -477,14 +363,35 @@ class _ExportPageState extends ConsumerState<ExportPage> {
               _criteria.isNotEmpty &&
               _selected.contains(kAuditLogDatasetKey))
             _criteriaHint(context),
-          const _SectionTitle('Filtres'),
+          const ExportSectionTitle('Filtres'),
           ..._filterTiles(datasets, stores),
-          const _SectionTitle('Format'),
+          const ExportSectionTitle('Format'),
           ..._formatTiles(premium, datasets),
         ],
       ),
     );
   }
+
+  /// « CSV — données de cet appareil » (v1s-18-5): opens the on-device
+  /// export with the current selection, store and period.
+  Widget _localCsvTile() => ListTile(
+        key: const Key('export-local-csv-entry'),
+        leading: const SoftIconBadge(icon: Icons.phone_android_rounded),
+        title: const Text('CSV — données de cet appareil'),
+        subtitle: const Text(
+            'Contient uniquement les données synchronisées sur cet appareil'),
+        trailing: const Icon(Icons.chevron_right_rounded),
+        onTap: () => context.push(
+          '/exports/local',
+          extra: ExportPrefill(
+            datasets: {..._selected},
+            storeId: _storeId,
+            from: _from,
+            to: _to,
+            criteria: _criteria,
+          ),
+        ),
+      );
 
   List<Widget> _datasetTiles(List<ExportDataset> list) {
     final allSelected =
@@ -553,7 +460,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
 
   Widget _criteriaHint(BuildContext context) {
     final applies = exportCriteriaApply(_selected);
-    return _Banner(
+    return ExportInfoBanner(
       key: Key(applies ? 'export-criteria-applied' : 'export-criteria-note'),
       icon: applies ? Icons.filter_alt_outlined : Icons.info_outline_rounded,
       text: applies
@@ -580,13 +487,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
     for (final s in stores) {
       if (s.id == _storeId) storeLabel = s.label;
     }
-    final periodLabel = switch (_period) {
-      _Period.today => 'Aujourd\'hui',
-      _Period.week => '7 jours',
-      _Period.month => 'Mois (30 derniers jours)',
-      _Period.custom => ExportPresenter.period(_from, _to),
-      null => 'Toutes les dates',
-    };
+    final periodLabel = exportPeriodLabel(_period, _from, _to);
     return [
       ListTile(
         key: const Key('export-store'),
@@ -650,70 +551,6 @@ class _ExportPageState extends ConsumerState<ExportPage> {
           ExportFormat.pdf, 'Fin de journée, inventaire, état de stock, ventes',
           badge: premiumBadge),
     ];
-  }
-}
-
-class _Choice<T> {
-  final T? value;
-  const _Choice(this.value);
-}
-
-class _SectionTitle extends StatelessWidget {
-  final String text;
-  const _SectionTitle(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
-      child: Text(
-        text,
-        style: theme.textTheme.labelLarge?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-}
-
-class _Banner extends StatelessWidget {
-  final IconData icon;
-  final String text;
-  final Widget? action;
-
-  const _Banner(
-      {super.key, required this.icon, required this.text, this.action});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(AppTheme.radiusS),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: cs.onSurfaceVariant),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: cs.onSurfaceVariant),
-            ),
-          ),
-          if (action != null) action!,
-        ],
-      ),
-    );
   }
 }
 

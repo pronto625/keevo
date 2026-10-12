@@ -239,6 +239,11 @@ class ExportDatasetCatalogTest {
                 valueAfter:Après:TEXT""");
     }
 
+    /** Dataset keys in the documented order (also the order of the 18-5 contract file). */
+    static List<String> goldenKeys() {
+        return List.copyOf(GOLDEN.keySet());
+    }
+
     /** Instantiates every {@code @Component} provider of the main code with mocked collaborators. */
     public static List<ExportDatasetProvider> allProviders() throws Exception {
         ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(false);

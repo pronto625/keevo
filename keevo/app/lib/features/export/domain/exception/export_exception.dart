@@ -27,6 +27,12 @@ class ExportException implements Exception {
         '(espace insuffisant ?)',
   );
 
+  /// On-device export (v1s-18-5): the file could not be generated.
+  static const localFailed = ExportException(
+    domainCode: 'LOCAL_EXPORT_FAILED',
+    message: 'Impossible de générer le fichier',
+  );
+
   static const unexpected = ExportException(
     domainCode: 'UNKNOWN',
     message: 'L\'export a échoué. Réessayez.',
@@ -84,6 +90,8 @@ class ExportException implements Exception {
   bool get isExpired => domainCode == 'EXPORT_EXPIRED' || statusCode == 410;
 
   bool get isNetwork => domainCode == 'NETWORK_ERROR';
+
+  bool get isStorage => domainCode == 'STORAGE_ERROR';
 
   @override
   String toString() => 'ExportException($domainCode, $statusCode): $message';

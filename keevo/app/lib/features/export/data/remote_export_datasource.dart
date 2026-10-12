@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 
 import '../domain/exception/export_exception.dart';
 import '../domain/model/export_models.dart';
+import 'export_temp_files.dart';
 
 /// RemoteExportDataSource — HTTP adapter to `/api/v1/exports` (v1s-18-4).
 ///
@@ -136,7 +137,7 @@ class RemoteExportDataSource {
     IOSink? sink;
     try {
       await target.create(recursive: true);
-      await _purgeOld(exportsDir, keep: target.path);
+      await purgeOldExports(exportsDir, keep: target.path);
       sink = file.openWrite();
       await sink.addStream(body.stream);
       await sink.flush();
@@ -153,22 +154,6 @@ class RemoteExportDataSource {
       if (e is FileSystemException) throw ExportException.storage;
       throw ExportException.network;
     }
-  }
-
-  /// Best effort: removes exports older than 24 h (files are sensitive and
-  /// the server keeps them 24 h too). Errors are ignored.
-  static Future<void> _purgeOld(Directory exportsDir,
-      {required String keep}) async {
-    final limit = DateTime.now().subtract(const Duration(hours: 24));
-    try {
-      await for (final entry in exportsDir.list(followLinks: false)) {
-        if (entry.path == keep) continue;
-        try {
-          final modified = (await entry.stat()).modified;
-          if (modified.isBefore(limit)) await entry.delete(recursive: true);
-        } catch (_) {}
-      }
-    } catch (_) {}
   }
 
   // ── Error decoding ─────────────────────────────────────────────────────────
