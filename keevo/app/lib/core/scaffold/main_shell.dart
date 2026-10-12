@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -85,28 +83,12 @@ class _MainShellState extends ConsumerState<MainShell> {
           }
         },
       );
-      debugPrint('[FCM] Getting FCM token...');
-      final token = await fcmService.getToken();
-      if (token == null) {
-        debugPrint('[FCM] getToken() returned null — skipping registration (no GMS or permission denied)');
-        return;
-      }
-      debugPrint('[FCM] Token obtained (${token.length} chars)');
-      await ref.read(remoteDeviceTokenDataSourceProvider).registerToken(
-        token: token,
-        platform: _fcmPlatform(),
-      );
-      debugPrint('[FCM] Token registered with backend ✅');
+      // v1s-16-2: single registration path (records the accepted token
+      // so sign-out can revoke it).
+      await fcmService.registerCurrentToken();
     } catch (e, st) {
-      debugPrint('[FCM] Token registration failed: $e\n$st');
+      debugPrint('[FCM] Initialization failed: $e\n$st');
     }
-  }
-
-  String _fcmPlatform() {
-    if (Platform.isAndroid) return 'ANDROID';
-    if (Platform.isIOS) return 'IOS';
-    if (Platform.isWindows) return 'WINDOWS';
-    return 'LINUX';
   }
 
   // MainShell sits under a plain ShellRoute and can be disposed/recreated

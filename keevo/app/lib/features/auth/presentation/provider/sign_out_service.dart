@@ -61,6 +61,18 @@ class SignOutService {
         debugPrint('[FCM] Remote token deletion on logout failed: $e');
       }
     }
+    // v1s-16-2: the backend may still hold an older token (a refresh whose
+    // re-registration failed) — revoke it too.
+    final registeredToken = fcm.lastRegisteredToken;
+    if (registeredToken != null && registeredToken != fcmToken) {
+      try {
+        await _ref
+            .read(remoteDeviceTokenDataSourceProvider)
+            .deleteToken(registeredToken);
+      } catch (e) {
+        debugPrint('[FCM] Remote deletion of the registered token failed: $e');
+      }
+    }
     // Unconditional: local unsubscribe must happen even if the remote delete failed.
     try {
       await fcm.deleteToken();

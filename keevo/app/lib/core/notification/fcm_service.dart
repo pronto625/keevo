@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -13,10 +11,95 @@ import '../../features/notifications/data/datasource/remote_device_token_datasou
 const _kChannelId = 'keevo_notifications';
 const _kChannelName = 'Keevo Notifications';
 
+/// Thin seam over the static Firebase / FirebaseMessaging APIs so
+/// [FcmService] can be unit-tested (v1s-16-2).
+abstract class FcmMessagingGateway {
+  /// Initialises the default Firebase app unless it already exists.
+  Future<void> ensureInitialized();
+
+  /// FCM permission request (Android 13 runtime permission, FCM status).
+  Future<void> requestPermission();
+
+  Future<void> setForegroundNotificationPresentationOptions({
+    required bool alert,
+    required bool badge,
+    required bool sound,
+  });
+
+  Stream<RemoteMessage> get onMessage;
+  Stream<RemoteMessage> get onMessageOpenedApp;
+  Future<RemoteMessage?> getInitialMessage();
+  Stream<String> get onTokenRefresh;
+  Future<String?> getAPNSToken();
+  Future<String?> getToken();
+  Future<void> deleteToken();
+}
+
+/// Default gateway: the real Firebase plugins.
+class FirebaseFcmMessagingGateway implements FcmMessagingGateway {
+  const FirebaseFcmMessagingGateway();
+
+  // Lazy: FirebaseMessaging.instance needs an initialised Firebase app.
+  FirebaseMessaging get _messaging => FirebaseMessaging.instance;
+
+  @override
+  Future<void> ensureInitialized() async {
+    // Guard: Firebase.initializeApp() throws if called twice.
+    if (Firebase.apps.isNotEmpty) {
+      debugPrint('[FCM] Firebase already initialized — re-using existing app');
+      return;
+    }
+    debugPrint('[FCM] Calling Firebase.initializeApp()...');
+    await Firebase.initializeApp();
+    debugPrint('[FCM] Firebase.initializeApp() done');
+  }
+
+  @override
+  Future<void> requestPermission() async {
+    final settings = await _messaging.requestPermission();
+    debugPrint('[FCM] permission: ${settings.authorizationStatus}');
+  }
+
+  @override
+  Future<void> setForegroundNotificationPresentationOptions({
+    required bool alert,
+    required bool badge,
+    required bool sound,
+  }) =>
+      _messaging.setForegroundNotificationPresentationOptions(
+        alert: alert,
+        badge: badge,
+        sound: sound,
+      );
+
+  @override
+  Stream<RemoteMessage> get onMessage => FirebaseMessaging.onMessage;
+
+  @override
+  Stream<RemoteMessage> get onMessageOpenedApp =>
+      FirebaseMessaging.onMessageOpenedApp;
+
+  @override
+  Future<RemoteMessage?> getInitialMessage() => _messaging.getInitialMessage();
+
+  @override
+  Stream<String> get onTokenRefresh => _messaging.onTokenRefresh;
+
+  @override
+  Future<String?> getAPNSToken() => _messaging.getAPNSToken();
+
+  @override
+  Future<String?> getToken() => _messaging.getToken();
+
+  @override
+  Future<void> deleteToken() => _messaging.deleteToken();
+}
+
 class FcmService {
   final LocalNotificationDataSource _localNotifications;
   final RemoteDeviceTokenDataSource? _remoteTokenDataSource;
   final FlutterLocalNotificationsPlugin _flutterLocalNotifications;
+  final FcmMessagingGateway _messaging;
 
   /// Optional callback invoked on every foreground FCM message (after local
   /// storage and OS notification).  Callers with a Riverpod [Ref] can use this
@@ -29,36 +112,68 @@ class FcmService {
   /// as many times. Only [_onMessage] is refreshed on later calls.
   bool _listenersAttached = false;
 
+  /// Last token the backend accepted in this process (v1s-16-2). It can
+  /// differ from [getToken] when a refreshed token failed to re-register;
+  /// sign-out revokes both.
+  String? _lastRegisteredToken;
+
+  /// Set by [deleteToken] (sign-out): a token FCM generates afterwards must
+  /// not be registered until the next sign-in calls [registerCurrentToken].
+  bool _signedOut = false;
+
+  /// On a fresh iOS install the APNs token usually arrives after
+  /// [initialize]: [registerCurrentToken] polls for it this many times.
+  static const apnsMaxAttempts = 5;
+  final Duration _apnsRetryDelay;
+
   FcmService({
     required LocalNotificationDataSource localNotifications,
     RemoteDeviceTokenDataSource? remoteTokenDataSource,
     FlutterLocalNotificationsPlugin? flutterLocalNotifications,
+    FcmMessagingGateway? messaging,
+    Duration apnsRetryDelay = const Duration(seconds: 2),
   })  : _localNotifications = localNotifications,
+        _apnsRetryDelay = apnsRetryDelay,
         _remoteTokenDataSource = remoteTokenDataSource,
         _flutterLocalNotifications =
-            flutterLocalNotifications ?? FlutterLocalNotificationsPlugin();
+            flutterLocalNotifications ?? FlutterLocalNotificationsPlugin(),
+        _messaging = messaging ?? const FirebaseFcmMessagingGateway();
 
-  bool get _isDesktop => Platform.isLinux || Platform.isWindows;
+  String? get lastRegisteredToken => _lastRegisteredToken;
+
+  /// FCM is unavailable on web and on Linux/Windows desktop.
+  bool get _isUnsupported =>
+      kIsWeb ||
+      defaultTargetPlatform == TargetPlatform.linux ||
+      defaultTargetPlatform == TargetPlatform.windows;
+
+  bool get _isIos => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+
+  /// Device platform value sent to the backend.
+  String get platformName {
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return 'ANDROID';
+      case TargetPlatform.iOS:
+        return 'IOS';
+      case TargetPlatform.windows:
+        return 'WINDOWS';
+      default:
+        return 'LINUX';
+    }
+  }
 
   Future<void> initialize(
     GoRouter router, {
     void Function(RemoteMessage message)? onMessage,
   }) async {
     _onMessage = onMessage;
-    if (_isDesktop) {
-      debugPrint('[FCM] Desktop platform — skipping FCM initialization');
+    if (_isUnsupported) {
+      debugPrint('[FCM] Unsupported platform — skipping FCM initialization');
       return;
     }
 
-    // Guard: Firebase.initializeApp() throws if called twice.
-    if (Firebase.apps.isNotEmpty) {
-      debugPrint('[FCM] Firebase already initialized — re-using existing app');
-      // Still need to set up listeners even if Firebase was already inited
-    } else {
-      debugPrint('[FCM] Calling Firebase.initializeApp()...');
-      await Firebase.initializeApp();
-      debugPrint('[FCM] Firebase.initializeApp() done ✅');
-    }
+    await _messaging.ensureInitialized();
 
     // Set before the awaits so a concurrent call does not attach the
     // listeners twice; reset if setup fails before they are attached, so the
@@ -69,67 +184,112 @@ class FcmService {
     try {
       await _initLocalNotifications(router);
 
-      final settings =
-          await FirebaseMessaging.instance.requestPermission();
-      debugPrint('[FCM] permission: ${settings.authorizationStatus}');
+      if (_isIos) {
+        // The local plugin shows foreground pushes (single tap path): FCM's
+        // native foreground presentation would show each push a second time.
+        await _messaging.setForegroundNotificationPresentationOptions(
+          alert: false,
+          badge: false,
+          sound: false,
+        );
+      }
+
+      await _messaging.requestPermission();
     } catch (_) {
       _listenersAttached = false;
       rethrow;
     }
 
     // Foreground message handler
-    FirebaseMessaging.onMessage.listen((message) {
-      _onForegroundMessage(message);
-    });
+    _messaging.onMessage.listen(_onForegroundMessage);
 
     // Background → foreground tap handler
-    FirebaseMessaging.onMessageOpenedApp.listen((message) {
+    _messaging.onMessageOpenedApp.listen((message) {
       _onTap(message, router);
     });
 
-    // Cold start tap
-    final initial = await FirebaseMessaging.instance.getInitialMessage();
-    if (initial != null) _onTap(initial, router);
-
-    // Token refresh — re-register with backend (AC2)
-    FirebaseMessaging.instance.onTokenRefresh.listen((token) {
+    // Token refresh — re-register with backend (AC2). Attached before the
+    // cold-start read so a failure there cannot leave it off.
+    _messaging.onTokenRefresh.listen((token) {
+      if (_signedOut) {
+        debugPrint('[FCM] Token refreshed while signed out — not registered');
+        return;
+      }
       debugPrint('[FCM] Token refreshed — re-registering with backend');
-      _onTokenRefresh(token);
+      _registerWithBackend(token);
     });
-  }
 
-  Future<void> _onTokenRefresh(String token) async {
+    // Cold start tap
     try {
-      await _remoteTokenDataSource?.registerToken(
-        token: token,
-        platform: _getPlatform(),
-      );
+      final initial = await _messaging.getInitialMessage();
+      if (initial != null) _onTap(initial, router);
     } catch (e) {
-      debugPrint('[FCM] Failed to re-register refreshed FCM token: $e');
+      debugPrint('[FCM] getInitialMessage() failed: $e');
     }
   }
 
-  String _getPlatform() {
-    if (Platform.isAndroid) return 'ANDROID';
-    if (Platform.isIOS) return 'IOS';
-    if (Platform.isWindows) return 'WINDOWS';
-    return 'LINUX';
+  /// Registers the current FCM token with the backend. Best-effort: never
+  /// throws. On iOS, [FirebaseMessaging.getToken] fails until APNs has
+  /// delivered its own token, so it is polled [apnsMaxAttempts] times; if it
+  /// never comes, registration is skipped and only
+  /// [FirebaseMessaging.onTokenRefresh] (or the next sign-in) registers.
+  Future<void> registerCurrentToken() async {
+    if (_isUnsupported || _remoteTokenDataSource == null) return;
+    _signedOut = false;
+    try {
+      if (_isIos && !await _waitForApnsToken()) {
+        debugPrint('[FCM] APNs token not available — skipping registration');
+        return;
+      }
+      final token = await _messaging.getToken();
+      if (token == null) {
+        debugPrint('[FCM] getToken() returned null — skipping registration');
+        return;
+      }
+      await _registerWithBackend(token);
+    } catch (e) {
+      debugPrint('[FCM] Token registration failed: $e');
+    }
+  }
+
+  Future<bool> _waitForApnsToken() async {
+    for (var attempt = 1; attempt <= apnsMaxAttempts; attempt++) {
+      if (await _messaging.getAPNSToken() != null) return true;
+      if (attempt < apnsMaxAttempts) await Future<void>.delayed(_apnsRetryDelay);
+    }
+    return false;
+  }
+
+  Future<void> _registerWithBackend(String token) async {
+    final remote = _remoteTokenDataSource;
+    if (remote == null) return;
+    try {
+      await remote.registerToken(token: token, platform: platformName);
+      _lastRegisteredToken = token;
+      debugPrint('[FCM] Token registered with backend');
+    } catch (e) {
+      debugPrint('[FCM] Failed to register FCM token with backend: $e');
+    }
   }
 
   Future<String?> getToken() async {
-    if (_isDesktop) return null;
+    if (_isUnsupported) return null;
     try {
-      return await FirebaseMessaging.instance.getToken();
+      return await _messaging.getToken();
     } catch (e) {
       debugPrint('[FCM] Failed to get FCM token: $e');
       return null;
     }
   }
 
+  /// Sign-out only (called after the backend deletions): forgets the
+  /// registered token and stops refreshed tokens from being registered.
   Future<void> deleteToken() async {
-    if (_isDesktop) return;
+    _lastRegisteredToken = null;
+    _signedOut = true;
+    if (_isUnsupported) return;
     try {
-      await FirebaseMessaging.instance.deleteToken();
+      await _messaging.deleteToken();
     } catch (e) {
       debugPrint('[FCM] Failed to delete FCM token: $e');
     }
@@ -138,7 +298,16 @@ class FcmService {
   Future<void> _initLocalNotifications(GoRouter router) async {
     const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
-    const initSettings = InitializationSettings(android: androidSettings);
+    // No prompt from initialize(): permissions are requested explicitly below.
+    const darwinSettings = DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+    );
+    const initSettings = InitializationSettings(
+      android: androidSettings,
+      iOS: darwinSettings,
+    );
 
     await _flutterLocalNotifications.initialize(
       initSettings,
@@ -150,6 +319,29 @@ class FcmService {
         }
       },
     );
+
+    // A local notification tapped after the app was killed only reaches
+    // the app through the launch details.
+    try {
+      final launch =
+          await _flutterLocalNotifications.getNotificationAppLaunchDetails();
+      final payload = launch?.notificationResponse?.payload;
+      if ((launch?.didNotificationLaunchApp ?? false) &&
+          payload != null &&
+          payload.isNotEmpty) {
+        router.push(payload);
+      }
+    } catch (e) {
+      debugPrint('[FCM] getNotificationAppLaunchDetails() failed: $e');
+    }
+
+    if (_isIos) {
+      await _flutterLocalNotifications
+          .resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin>()
+          ?.requestPermissions(alert: true, badge: true, sound: true);
+      return;
+    }
 
     // Create notification channel
     const channel = AndroidNotificationChannel(
@@ -183,6 +375,12 @@ class FcmService {
             _kChannelName,
             importance: Importance.high,
             priority: Priority.high,
+          ),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBanner: true,
+            presentList: true,
+            presentSound: true,
           ),
         ),
         payload: message.data['deepLink'] as String?,

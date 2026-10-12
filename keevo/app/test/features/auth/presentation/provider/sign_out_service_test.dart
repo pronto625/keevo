@@ -30,6 +30,7 @@ void main() {
   late _MockSync sync;
   late _MockAuthRepository auth;
   late _MockFcm fcm;
+  late _MockDeviceTokens deviceTokens;
   late SharedPreferences prefs;
   late ProviderContainer container;
   const storage = FlutterSecureStorage();
@@ -48,6 +49,8 @@ void main() {
     sync = _MockSync();
     auth = _MockAuthRepository();
     fcm = _MockFcm();
+    deviceTokens = _MockDeviceTokens();
+    when(() => deviceTokens.deleteToken(any())).thenAnswer((_) async {});
     when(() => fcm.getToken()).thenAnswer((_) async => null);
     when(() => fcm.deleteToken()).thenAnswer((_) async {});
     when(() => auth.logout(any())).thenAnswer((_) async {});
@@ -57,7 +60,7 @@ void main() {
       syncServiceProvider.overrideWithValue(sync),
       authRepositoryProvider.overrideWithValue(auth),
       fcmServiceProvider.overrideWithValue(fcm),
-      remoteDeviceTokenDataSourceProvider.overrideWithValue(_MockDeviceTokens()),
+      remoteDeviceTokenDataSourceProvider.overrideWithValue(deviceTokens),
     ]);
     addTearDown(container.dispose);
   });
@@ -133,6 +136,53 @@ void main() {
       expect(await storage.read(key: 'jwt_token'), isNull);
       expect(await storage.read(key: 'refresh_token'), isNull);
       expect(prefs.getString(kUserRoleKey), isNull);
+    });
+
+    // v1s-16-2: a refresh whose re-registration failed leaves the backend
+    // with the older token — both are revoked.
+    test('stale registered token is deleted on the backend too', () async {
+      when(() => fcm.getToken()).thenAnswer((_) async => 'token-B');
+      when(() => fcm.lastRegisteredToken).thenReturn('token-A');
+
+      await service().signOut();
+
+      verify(() => deviceTokens.deleteToken('token-B')).called(1);
+      verify(() => deviceTokens.deleteToken('token-A')).called(1);
+      verify(() => fcm.deleteToken()).called(1);
+    });
+
+    test('same current and registered token is deleted once', () async {
+      when(() => fcm.getToken()).thenAnswer((_) async => 'token-A');
+      when(() => fcm.lastRegisteredToken).thenReturn('token-A');
+
+      await service().signOut();
+
+      verify(() => deviceTokens.deleteToken('token-A')).called(1);
+      verify(() => fcm.deleteToken()).called(1);
+    });
+
+    test('no current token (iOS without APNs): the registered one is still deleted',
+        () async {
+      when(() => fcm.getToken()).thenAnswer((_) async => null);
+      when(() => fcm.lastRegisteredToken).thenReturn('token-A');
+
+      await service().signOut();
+
+      verify(() => deviceTokens.deleteToken('token-A')).called(1);
+      verify(() => fcm.deleteToken()).called(1);
+    });
+
+    test('remote delete of the current token failing still revokes the registered one',
+        () async {
+      when(() => fcm.getToken()).thenAnswer((_) async => 'token-B');
+      when(() => fcm.lastRegisteredToken).thenReturn('token-A');
+      when(() => deviceTokens.deleteToken('token-B'))
+          .thenThrow(Exception('offline'));
+
+      await service().signOut();
+
+      verify(() => deviceTokens.deleteToken('token-A')).called(1);
+      verify(() => fcm.deleteToken()).called(1);
     });
 
     // v1s-16-13: the next account must not see this tenant's plan.

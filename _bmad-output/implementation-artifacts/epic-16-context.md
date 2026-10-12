@@ -4,12 +4,12 @@
 
 ## Goal
 
-Fix the mobile (Flutter) defects found by the V1 conformity and coherence audits so the V1 app on `deploy` is solid and shippable while the modular rewrite continues elsewhere. The epic covers push-notification hygiene, dark mode and colour contrast, catalog search and list quality, sync-state feedback, client behaviour when the server rejects queued offline operations, error-state recovery, and a sweep of residual UX bugs. It is a V1 release blocker. Most stories are tag A (patch V1 now); a few are tag C (patch V1 now, the rewrite re-applies the fix later).
+Fix the mobile (Flutter) defects found by the V1 conformity and coherence audits so the V1 app on `deploy` is solid and shippable while the modular rewrite continues elsewhere. The epic covers push-notification hygiene and iOS display, dark mode and colour contrast, catalog search and list quality, sync-state feedback, client behaviour when the server rejects queued offline operations, error-state recovery, and a sweep of residual UX bugs. It is a V1 release blocker. Most stories are tag A (patch V1 now); a few are tag C (patch V1 now, the rewrite re-applies the fix later).
 
 ## Stories
 
 - Story 16.1: FCM token cleanup on logout (done)
-- Story 16.2: iOS notifications (Darwin settings) and foreground display (backlog)
+- Story 16.2: iOS notifications (Darwin settings) and foreground FCM display (in progress)
 - Story 16.3: Dark mode — hard-coded colours to theme tokens, readable offline banner (done)
 - Story 16.4: Catalog search debounce and wider matching (done)
 - Story 16.5: SyncIndicator online-stale state (done)
@@ -21,38 +21,39 @@ Fix the mobile (Flutter) defects found by the V1 conformity and coherence audits
 - Story 16.14: Catalog list quality (done)
 - Story 16.15: Offline sales stuck in the sync queue — quarantine (done)
 - Story 16.16: Unicode case/accent-insensitive local search (done)
-- Story 16.17: Contrast of feedback fills — success SnackBars, POS speed-dial, disabled CTAs, dark error colour (in progress)
+- Story 16.17: Contrast of feedback fills — SnackBars, speed-dial, disabled CTAs, dark error colour (done)
 
 ## Requirements & Constraints
 
-- **Contrast (WCAG 2.1 AA), light AND dark.** All text ≥ 4.5:1 against its background; large text / icons ≥ 3:1. Alerts are always colour + icon + text, never colour alone. Touch targets ≥ 48 dp; supports 200% font scaling. Dark mode follows the system.
-- **Feedback must stay legible on every fill.** A foreground (icon *and* text) must match its own fill, not inherit a theme colour meant for another background (e.g. SnackBar text from `onInverseSurface` on a custom success fill). Icon and text on the same fill must agree.
+- **Push notifications (FCM).** Every push the backend sends (stock alerts, sales trends, end-of-day report, employee-action notices to the owner, Super Admin global announcement `GLOBAL_ANNOUNCEMENT`) must be visible on Android **and iOS**, in foreground and background. Background: the OS tray shows the FCM `notification` payload natively. Foreground: FCM shows nothing by itself, so the app must display a local notification (title/body from `message.notification`) via `flutter_local_notifications`. On iOS this requires Darwin initialization settings and alert/badge/sound permission.
+- **Permission is never a blocker.** Notification permission is requested at first login; if denied, the app continues normally ("Sérénité par défaut" — calm by default, no aggressive notifications).
+- **Desktop guard.** On Linux/Windows FCM is unavailable: skip all Firebase/FCM calls (init, token, delete) gracefully, no crash.
+- **Tap → deep link.** Tapping a notification (foreground local notification, background `onMessageOpenedApp`, cold start `getInitialMessage()`) navigates to `data['deepLink']` via GoRouter when non-empty. Every received message is also stored in the local `notifications` Drift table (bell badge, notifications page, 30-day retention).
+- **Token hygiene.** On logout the device token is deleted on the backend (`DELETE /api/v1/devices/token`) and locally, each step best-effort and independent (16.1). Open item routed to 16.2: the token read at logout may differ from the one registered with the backend — settle it when FcmService registration is reworked, or reject with a recorded reason.
+- **Contrast (WCAG 2.1 AA), light AND dark.** Text ≥ 4.5:1, large text/icons ≥ 3:1; alerts are colour + icon + text; touch targets ≥ 48 dp; 200% font scaling; dark mode follows the system.
 - **Routed-items rule.** A story with an item list is done only when every item is resolved or explicitly rejected with the reason recorded next to it in the epics file. Nothing goes to `deferred-work.md`.
-- **Zero lost sales / offline-first.** Sync never silently drops an operation; money/stock-ledger operations refused for good go to quarantine (16.15), never deleted. Offline gate: day 5 warning (amber), day 6 critical (red), day 7+ writes blocked.
-- **Local search** goes through the shared fold (`core/storage/search_fold.dart`) and LIKE escaping (`core/storage/sql_like.dart`); < 500 ms on 500 products.
-- **Error states** offer "Réessayer" (invalidates the failed provider). UI text is French, human, non-technical. Destructive actions need a confirmation dialog.
-- **Process.** Flutter-first; a backend change needs a justification in the story. Every commit touching `keevo/app/` bumps `pubspec.yaml`.
+- **Zero lost sales / offline-first.** Sync never silently drops an operation; refused money/stock operations go to quarantine (16.15). Offline gate: day 5 warning, day 6 critical, day 7+ writes blocked.
+- **Process.** Flutter-first; a backend change needs a justification in the story. Every commit touching `keevo/app/` bumps `pubspec.yaml`. UI text is French, human, non-technical.
 
 ## Technical Decisions
 
-- **Colour tokens only.** Every colour outside `lib/core/theme/app_theme.dart` resolves through `Theme.of(context).colorScheme`, the `KeevoColors` theme extension, or a named `AppTheme` token. New tokens are added only in the theme file. A guard test (`test/core/theme/no_hardcoded_colors_test.dart`) forbids colour literals elsewhere; new token pairs get AA tests in `app_theme_test.dart`.
-- **Foreground follows its fill (16.3 rule).** `cs.primary` → `cs.onPrimary`; `cs.error` → `cs.onError`; `cs.secondary` → `cs.onSecondary`; fixed brand fills that do not change with brightness (`AppTheme.primary`, gradients, `AppTheme.success`/`errorColor` fills, `darkSurface`) → `AppTheme.onBrand` (white). Translucent variants use `.withValues(alpha:)`, never `withOpacity`. On a theme surface use the brightness-aware `cs.successStrong`/`cs.warningStrong`; fixed `AppTheme.successStrong` (`#2B7A3B`, AA under `onBrand`) / `warningStrong` (`#A85500`) are for fixed fills. Container pairs: `warningContainer`/`onWarningContainer`, `errorContainer_`/`onErrorContainer_` (AA light and dark).
-- **Disabled controls.** Disabled-fill foregrounds use the disabled/variant token, not white (16.3 already switched loading spinners on disabled FilledButtons to `cs.onSurfaceVariant`).
-- **Dark `colorError`.** Spec says `#FF6B6B`; the theme keeps `#FA5252` because `errorColor` is also used as a fixed fill under white. Any change must be settled together with those fixed fills and their foreground (16.17 decides).
-- **Write/sync strategy.** Online: backend first then local cache; offline: Drift + `sync_queue` in one transaction (repository layer). Rejection policy single source: `core/sync/sync_rejection_policy.dart`.
-- **Stack/testing.** Flutter, Riverpod 3 (codegen), Drift (encrypted), go_router; feature-first layout; shared widgets in `core/widget/`. Widget tests pump both `AppTheme.light()` and `AppTheme.dark()` when asserting colours; `GoogleFonts.config.allowRuntimeFetching = false` in tests.
+- **FCM wiring.** `FcmService` (`fcm_service.dart`) owns init, token get/refresh/delete, the `onMessage` foreground handler, tap handling and local-notification setup; it currently builds only `AndroidInitializationSettings`. 16.2 adds `DarwinInitializationSettings` into `InitializationSettings(iOS: …)` and requests alert/badge/sound permissions through `flutter_local_notifications`. Android channel stays `keevo_notifications`, importance HIGH, LED `#3B5BDB`. Expected TDD names: `shouldInitializeDarwinSettingsOnIos()`, `shouldRequestAlertBadgeSoundPermissions()`.
+- **Payload contract.** Backend `NotificationPayload` maps `title`/`body` to the FCM `notification` block and `type`, `deepLink` + all metadata to the `data` block. The `type` drives the icon in the notification list; employee-action types are `EMPLOYEE_PRODUCT_CREATED(_BATCH)` / `EMPLOYEE_STOCK_MODIFIED(_BATCH)`.
+- **iOS project config.** `GoogleService-Info.plist` and the push-notifications capability are added manually per deployment (not committed secrets); device platform values are `ANDROID`, `IOS`, `LINUX`, `WINDOWS`.
+- **Providers.** `fcmServiceProvider` and `remoteDeviceTokenDataSourceProvider` already exist; tests drive them through a `ProviderContainer` with Mocktail overrides.
+- **Colour tokens only.** Colours outside `lib/core/theme/app_theme.dart` come from `colorScheme`, the `KeevoColors` extension or named `AppTheme` tokens; guard tests forbid literals and weak feedback fills. Foreground follows its fill (`onPrimary`, `onError`, `onBrand` on fixed brand/strong fills). SnackBars use fixed fills with `onBrand` content; success/error/warning feedback uses `successStrong`/`errorStrong`/`warningStrong`.
+- **Write/sync strategy.** Online: backend first then local cache; offline: Drift + `sync_queue` in one transaction (repository layer). Rejection policy single source: `core/sync/sync_rejection_policy.dart`. Local search uses the shared fold and LIKE escaping helpers.
+- **Stack/testing.** Flutter, Riverpod 3 (codegen), Drift (encrypted), go_router, Firebase Messaging, flutter_local_notifications; feature-first layout, shared widgets in `core/widget/`. Colour widget tests pump both `AppTheme.light()` and `AppTheme.dark()`; `GoogleFonts.config.allowRuntimeFetching = false` in tests.
 
 ## UX & Interaction Patterns
 
-- **Colour system "Indigo Sky" (light / dark):** primary `#3B5BDB`/`#4DABF7`; onPrimary `#FFFFFF`/`#0D1B2A`; primaryContainer `#D0EBFF`/`#1B3A5C`; secondary `#FF6B6B`/`#FF8787`; success `#51CF66`/`#69DB7C`; warning `#FCC419`/`#FFD43B`; error `#FA5252`/`#FF6B6B`; surface `#FFFFFF`/`#0D1B2A`; surfaceVariant `#F8F9FA`/`#1B2838`; onSurface `#212529`/`#F0F4F8`; onSurfaceVariant `#868E96`/`#ADB5BD`. Spec-verified ratios: body text 15.4:1 (light) / 14.8:1 (dark); primary on white 5.2:1; success `#51CF66` on white only 2.8:1 (acceptable solely as large icon + text, not as a fill under small white text).
-- **Feedback patterns.** Transactional success: SnackBar on the success colour with ✅ icon + light haptic, auto-dismiss 3 s. System error: SnackBar on the error colour with ❌ and "Réessayer", never auto-dismissed. Attention: in-page banner on warning at ~15% (token `warningContainer`) with ⚠️, persistent. Contextual info: SnackBar on primary with ℹ️, 4 s. Offline: persistent top banner on warning. Messages French, positive tone. The *colour family* is fixed by the spec; the exact shade/foreground may be darkened (e.g. a strong success fill) to reach AA.
-- **Buttons.** One primary (gradient, white text, 48 dp) per screen; danger = error fill + light text, always behind a dialog; FAB = gradient + icon. A disabled primary/CTA must keep a readable (disabled-token) label.
-- **POS components.** Cart pill: item count, XAF total, "Encaisser". Speed-dial options sit on per-option fills (warning, primary, onSurfaceVariant when the day is closed) — each needs its own matching foreground.
+- **Notifications.** Calm by default; push reserved for real events (critical stock, reports, employee actions, admin announcements). Tap on a notification lands directly on the relevant screen. AppBar bell with unread badge; notifications page with type icon, title, body, relative time, bold-when-unread, "Tout marquer comme lu".
+- **Feedback.** Success SnackBar with ✅ + haptic, 3 s; error SnackBar with ❌ and "Réessayer", not auto-dismissed; attention = persistent in-page warning banner; offline = persistent top banner. Error states offer "Réessayer"; destructive actions need confirmation.
 - **Sync indicator:** green "Mis à jour", amber "En ligne (sync J-X)" day 5, red "⚠ Sync urgente" day 6, with Semantics labels.
 
 ## Cross-Story Dependencies
 
-- 16.17 is the direct follow-up of 16.3: it inherits the token rules, `onBrand`, the strong success/warning tokens, the container pairs and the no-hardcoded-colours guard, and must not reintroduce literals. Its four items (success SnackBar fill/foreground, speed-dial foregrounds, disabled checkout/cart CTA label, dark `colorError`) were routed from the 16.3 review.
-- 16.11's `AppErrorWidget`, 16.12's rejection SnackBars and 16.13's banner precedence / SnackBar throttling share the same feedback surfaces; colour changes must not alter their behaviour or precedence.
-- 16.15 builds on 16.12; 16.16 on 16.14 and 16.4.
+- 16.2 builds on Story 8-0 (FCM integration, notifications table, bell, deep links) and on 16.1 (token cleanup on logout); it inherits 16.1's open token-freshness item.
+- Remediation stories 14.4 (FR82 global push) and 14.10 (owner notified of employee product/stock actions) rely on 16.2 for their notifications to appear on iOS and in foreground.
+- 16.17 followed 16.3 (token rules, `onBrand`, strong tokens, colour guards); 16.11/16.12/16.13 share the feedback surfaces; 16.15 builds on 16.12; 16.16 on 16.14 and 16.4.
 - The modular rewrite must re-apply every fix in this epic.
