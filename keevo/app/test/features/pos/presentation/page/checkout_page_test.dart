@@ -191,6 +191,39 @@ void main() {
       expect(find.text('Valider la vente'), findsNothing);
     });
 
+    // v1s-15-8 (deferred from CR v1s-13-6): one draft item is enough.
+    testWidgets('mixed DRAFT + ACTIVE cart shows Vente brouillon',
+        (tester) async {
+      await tester.pumpWidget(_buildApp(items: [
+        _item(id: 'a1', price: 2000, qty: 1),
+        _item(id: 'd1', price: 3000, qty: 1, productStatus: 'DRAFT'),
+      ]));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Vente brouillon'), findsOneWidget);
+      expect(find.text('Valider la vente'), findsNothing);
+    });
+
+    // v1s-15-8 (deferred from CR v1s-13-6): an empty cart cannot be sold,
+    // even once a payment mode is chosen.
+    testWidgets('empty cart: Valider la vente label, button stays disabled',
+        (tester) async {
+      await tester.pumpWidget(_buildApp(items: const []));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Valider la vente'), findsOneWidget);
+      expect(find.text('Vente brouillon'), findsNothing);
+
+      await tester.tap(find.text('Espèces'));
+      await tester.pumpAndSettle();
+
+      final inkWell = tester.widget<InkWell>(find.ancestor(
+        of: find.text('Valider la vente'),
+        matching: find.byType(InkWell),
+      ));
+      expect(inkWell.onTap, isNull);
+    });
+
     // ── AC2: No-draft cart → "Valider la vente" (non-regression) ───────────
 
     testWidgets('keeps Valider la vente label when cart has no draft item',
@@ -204,6 +237,8 @@ void main() {
       testWidgets('Mobile Money ref typed then Espèces chosen: no ref is sent',
         (tester) async {
       _CapturingRecordSale.called = false;
+      _CapturingRecordSale.mode = null;
+      _CapturingRecordSale.mobileRef = null;
       await tester.pumpWidget(_buildApp(
         items: [_item(price: 10000, qty: 1)],
         overrides: [

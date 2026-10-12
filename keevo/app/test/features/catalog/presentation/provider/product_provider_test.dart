@@ -29,28 +29,9 @@ void _overrideSqlite3ForLinuxTesting() {
   });
 }
 
-/// No-op [SyncService] stub — these tests only read via [LocalProductDataSource],
-/// never via the sync queue.
-class _NoOpSyncService implements SyncService {
-  @override
-  Future<List<Map<String, dynamic>>> push() async => [];
-
-  @override
-  Future<bool> hasPendingOperations() async => false;
-
-  @override
-  Future<int> quarantinedOperationCount() async => 0;
-
-  @override
-  Future<void> pull() async {}
-
-  @override
-  Future<void> queueOperation({
-    required String operation,
-    required Map<String, dynamic> payload,
-    String? entityId,
-  }) async {}
-}
+/// mocktail [SyncService] — these tests only read via
+/// [LocalProductDataSource], never via the sync queue (unstubbed calls fail).
+class _MockSyncService extends Mock implements SyncService {}
 
 /// Pins [activeStoreIdProvider] to a fixed store without touching SharedPreferences.
 class _FixedActiveStoreNotifier extends ActiveStoreNotifier {
@@ -129,7 +110,7 @@ void main() {
       mockRepo = _MockProductRepository();
       when(() => mockRepo.getAll()).thenAnswer((_) async => [activeProduct]);
       db = AppDatabase.forTesting();
-      localDataSource = LocalProductDataSource(db, _NoOpSyncService());
+      localDataSource = LocalProductDataSource(db, _MockSyncService());
     });
 
     tearDown(() async {
@@ -224,7 +205,7 @@ void main() {
     ProviderContainer buildContainer() => ProviderContainer(overrides: [
           productRepositoryProvider.overrideWithValue(mockRepo),
           localProductDataSourceProvider.overrideWithValue(
-              LocalProductDataSource(db, _NoOpSyncService())),
+              LocalProductDataSource(db, _MockSyncService())),
           activeStoreIdProvider
               .overrideWith(() => _FixedActiveStoreNotifier('store-a')),
         ]);

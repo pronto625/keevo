@@ -1,7 +1,7 @@
 import 'dart:ffi';
 import 'dart:io';
 
-import 'package:drift/drift.dart' show Value;
+import 'package:drift/drift.dart' show Value, Variable;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/features/dashboard/data/datasource/local_dashboard_datasource.dart';
@@ -29,11 +29,17 @@ void main() {
   });
 
   late AppDatabase db;
-  setUp(() => db = AppDatabase.forTesting());
+  // v1s-15-8: "today" is taken per test, not once when the file loads. The
+  // midnight window shrinks from the whole file run to the gap between this
+  // now() and the datasource's own DateTime.now() (lib reads the clock itself).
+  late DateTime today;
+  late String todayStr;
+  setUp(() {
+    db = AppDatabase.forTesting();
+    today = DateTime.now();
+    todayStr = _d(today);
+  });
   tearDown(() => db.close());
-
-  final today = DateTime.now();
-  final todayStr = _d(today);
 
   Future<void> insertSale(String id, String occurredAtRaw,
       {int total = 1000}) async {
@@ -159,5 +165,30 @@ void main() {
 
     // current 1000 vs previous 500 → +100 %
     expect(perf.single.deltaPercent, closeTo(100.0, 0.01));
+  });
+
+  // v1s-15-8: the Dart week key must equal SQLite's strftime('%W') for every
+  // day — including years starting on a Monday (2029) or a Sunday (2034).
+  test('sqliteWeekW matches SQLite strftime(%W) for every day 2024-2035',
+      () async {
+    final mismatches = <String>[];
+    for (var year = 2024; year <= 2035; year++) {
+      final rows = await db.customSelect(
+        'WITH RECURSIVE d(x) AS (SELECT date(?) UNION ALL '
+        "SELECT date(x, '+1 day') FROM d WHERE x < date(?)) "
+        "SELECT x, strftime('%W', x) AS w FROM d",
+        variables: [
+          Variable.withString('$year-01-01'),
+          Variable.withString('$year-12-31'),
+        ],
+      ).get();
+      for (final r in rows) {
+        final day = DateTime.parse(r.read<String>('x'));
+        final expected = int.parse(r.read<String>('w'));
+        final actual = LocalDashboardDatasource.sqliteWeekW(day);
+        if (actual != expected) mismatches.add('$day: $actual != $expected');
+      }
+    }
+    expect(mismatches, isEmpty);
   });
 }

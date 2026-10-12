@@ -897,18 +897,20 @@ As a Toor, I want the remaining red Flutter tests fixed and the missing widget/p
 **Refs:** ARCH14, Story 15.2, Stories 13.5 / 13.6 / 16.1 / 16.4 / 16.8 / 16.9, HF-2. **Refonte absorption:** re-appliquer Flutter.
 
 **Items (routed 2026-10-11 from deferred-work):**
-- [ ] [Deferred-from: CR v1s-16-9, 2026-07-27] No guard against duplicate GoRoute paths [app_router.dart] — only one instance fixed; add a test walking appRouter routes asserting unique full paths
-- [ ] [Deferred-from: CR v1s-16-4, 2026-07-25] Hand-rolled _NoOpSyncService in tests [local_product_datasource_test.dart, product_provider_test.dart] — replace with mocktail MockSyncService
-- [ ] [Deferred-from: CR v1s-16-1, 2026-07-25] No OWNER logout widget test [settings_page_test.dart] — add OWNER variant of FCM-cleanup logout test
-- [ ] [Deferred-from: CR v1s-13-6, 2026-07-22] Missing test: mixed DRAFT+ACTIVE cart label [checkout_page_test.dart] — assert 'Vente brouillon' label
-- [ ] [Deferred-from: CR v1s-13-6, 2026-07-22] Missing failure-path tests for draft flow [record_sale_notifier_test.dart] — applyInitialStockEntries/promoteToActive throw -> rollback/consistency
-- [ ] [Deferred-from: CR v1s-13-6, 2026-07-22] addTearDown(container.dispose) missing [record_sale_notifier_test.dart:182,235] — dispose containers
-- [ ] [Deferred-from: CR v1s-13-6, 2026-07-22] Missing test: empty cart on CheckoutPage [checkout_page_test.dart] — label + disabled button
-- [ ] [Deferred-from: dev-story v1s-13-5, 2026-07-22] 12 unmasked pre-existing Flutter test failures [test/core/sync/offline_gate_banner_test.dart:56; test/features/catalog/provider/category_provider_test.dart] — backend_first contact/product/transfer files were deleted (612539b, 1041827); remaining: banner test still expects #FFF3BF after rebrand, category_provider_test
-- [ ] [Deferred-from: legacy bugfix HF-2 ghost-badge, 2026-04-28] No test for EMPLOYEE-scoped todaySummaryProvider [day_summary_bottom_sheet_test.dart] — only employeeId:null covered (day_close_button_test removed in v1s-16-10)
-- [ ] [Deferred-from: CR v1s-16-8, 2026-07-27] ResetPassword build() type fix bundled without test [auth_provider.dart:443] — add regression test
+- [x] [Deferred-from: CR v1s-16-9, 2026-07-27] No guard against duplicate GoRoute paths [app_router.dart] — only one instance fixed; add a test walking appRouter routes asserting unique full paths — **Resolved v1s-15-8: `test/core/router/app_router_routes_test.dart` walks `appRouter.configuration.routes` (GoRoute paths joined to their parent, ShellRoute transparent) and asserts unique absolute full paths, with a self-check that the walker flags a duplicate.**
+- [x] [Deferred-from: CR v1s-16-4, 2026-07-25] Hand-rolled _NoOpSyncService in tests [local_product_datasource_test.dart, product_provider_test.dart] — replace with mocktail MockSyncService — **Resolved v1s-15-8: mocktail `_MockSyncService` in both files; recording/throwing fakes replaced by `verify(...captureAny...)` and `thenThrow` (also removes the `override_on_non_overriding_member` warning).**
+- [x] [Deferred-from: CR v1s-16-1, 2026-07-25] No OWNER logout widget test [settings_page_test.dart] — add OWNER variant of FCM-cleanup logout test — **Resolved v1s-15-8: OWNER variant of the FCM-cleanup logout test (remote + local token deleted, lands on /auth/login).**
+- [x] [Deferred-from: CR v1s-13-6, 2026-07-22] Missing test: mixed DRAFT+ACTIVE cart label [checkout_page_test.dart] — assert 'Vente brouillon' label — **Resolved v1s-15-8: checkout_page_test asserts 'Vente brouillon' for a DRAFT + ACTIVE cart.**
+- [x] [Deferred-from: CR v1s-13-6, 2026-07-22] Missing failure-path tests for draft flow [record_sale_notifier_test.dart] — applyInitialStockEntries/promoteToActive throw -> rollback/consistency — **Resolved v1s-15-8: applyInitialStockEntries throws → RecordSaleError, nothing recorded/promoted, cart and initial entries kept; promoteToActive throws on a real Drift DB → credited stock and movement rolled back, sale never recorded.**
+- [x] [Deferred-from: CR v1s-13-6, 2026-07-22] addTearDown(container.dispose) missing [record_sale_notifier_test.dart:182,235] — dispose containers — **Resolved v1s-15-8: `createContainer` registers `addTearDown(container.dispose)` for every test.**
+- [x] [Deferred-from: CR v1s-13-6, 2026-07-22] Missing test: empty cart on CheckoutPage [checkout_page_test.dart] — label + disabled button — **Resolved v1s-15-8: the test exposed a bug — an empty cart could be submitted once a payment mode was chosen; `submitDisabled` now includes `cart.isEmpty` and `RecordSaleNotifier.submit` refuses an empty cart (`EMPTY_CART`); test asserts the 'Valider la vente' label and a null onTap even after Espèces.**
+- [x] [Deferred-from: dev-story v1s-13-5, 2026-07-22] 12 unmasked pre-existing Flutter test failures [test/core/sync/offline_gate_banner_test.dart:56; test/features/catalog/provider/category_provider_test.dart] — backend_first contact/product/transfer files were deleted (612539b, 1041827); remaining: banner test still expects #FFF3BF after rebrand, category_provider_test — **Already resolved before v1s-15-8: offline_gate_banner_test expects the token colour since v1s-16-3 (8bf311d, line 100); category_provider_test green in the catalog batch (baseline 2026-10-12: test/core 441 and every test/features/* batch 0 failure). The only red batch left was test/widget_test.dart (empty main → "No tests were found"), now a real light/dark smoke test.**
+- [x] [Deferred-from: legacy bugfix HF-2 ghost-badge, 2026-04-28] No test for EMPLOYEE-scoped todaySummaryProvider [day_summary_bottom_sheet_test.dart] — only employeeId:null covered (day_close_button_test removed in v1s-16-10) — **Resolved v1s-15-8: `today_summary_provider_test.dart` (employeeId forwarded to the repository, employee and store-wide entries distinct) + day_summary_bottom_sheet_test EMPLOYEE sheet requests only `(store, 'emp-1')`. ReportsPage EMPLOYEE path was already covered by reports_page_test.**
+- [x] [Deferred-from: CR v1s-16-8, 2026-07-27] ResetPassword build() type fix bundled without test [auth_provider.dart:443] — add regression test — **Resolved v1s-15-8: `reset_password_provider_test.dart` (idle AsyncData(null), success, AsyncError<AuthException>). The page test exposed a bug: `reset()` never throws (AsyncValue.guard), so a refused code showed the success SnackBar and went to login — the page now reads the provider state; also the OTP field filters digits before maxLength 6 (a pasted "123 456" was cut to "123 45").**
 
 **AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
+**AC (stability, added v1s-15-8):** every app batch of `run-tests-chunked.sh app` (test/core, test/widget_test.dart, each test/features/*) passes with 0 failures, and tests do not depend on the real clock or on execution order — **met v1s-15-8** (real waits replaced by injected clocks / fake timers / completers; dashboard `sqliteWeekW` fixed against SQLite `%W`; see spec-v1s-15-8-flutter-test-hygiene.md).
 
 ## Story 15.9: Hygiène de refactor backend (helpers dupliqués, constantes, casts) — **[C]**
 
@@ -1207,6 +1209,22 @@ As a Toor, I want the iOS app to carry a real store identity, so that it can be 
 - [ ] [Deferred-from: build-auto v1s-16-2 review, 2026-10-12] Bundle id `com.example.keevo` cannot be registered on App Store Connect [ios/Runner.xcodeproj/project.pbxproj PRODUCT_BUNDLE_IDENTIFIER, android/app/build.gradle.kts:39] — settle with a product decision on the reverse-DNS id, applied to both platforms before the Firebase iOS app is registered
 - [ ] [Deferred-from: build-auto v1s-16-2 review, 2026-10-12] iOS keeps the Flutter default icons/launch image and allows iPhone landscape [ios/Runner/Assets.xcassets, ios/Runner/Info.plist UISupportedInterfaceOrientations] — settle by generating the brand icons and matching Android orientation
 - [ ] [Deferred-from: build-auto v1s-16-2 review, 2026-10-12] `aps-environment=development` for Release/Profile [ios/Runner/Runner.entitlements] — confirm on the first TestFlight archive that export rewrites it to production, else add a per-configuration entitlements file
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
+---
+
+## Story 16.19: Seaux hebdomadaires du dashboard mobile (fin d'année, heure d'été) — **[C]**
+
+As an owner, I want the 12-week revenue chart to count every sale of every week, so that the week around New Year (and, in DST time zones, summer weeks) is not under-reported.
+
+**Scope:** `LocalDashboardDatasource.getWeeklyCA` / `getStoreWeeklyCA` group sales in SQL by `strftime('%Y-%W', local day)` but look the slots up with `'<Monday's year>-<sqliteWeekW(Monday)>'`. A week that straddles 1 January splits into `Y-52/53` and `Y+1-00`; the January part matches no slot and disappears from the chart. The slots' Mondays are built with `Duration` subtraction, which shifts by an hour across a DST change. Story 15.8 fixed `sqliteWeekW` itself (SQLite parity for every day 2024-2035, UTC day-of-year). Settle by keying both sides by the week's Monday date (SQL `date(day, '-N days')` with N = (strftime('%w')+6)%7, Dart `DateTime(y, m, d - k*7)`), with a test summing a week across 31 Dec / 1 Jan. Tracker key: `v1s-16-19-dashboard-weekly-buckets`.
+
+**Refs:** Story 15.8 (`spec-v1s-15-8-flutter-test-hygiene.md`, review triage), Story 7-x dashboard charts.
+
+**Items (routed 2026-10-12 from build-auto v1s-15-8 review):**
+- [ ] [Deferred-from: build-auto v1s-15-8 review, 2026-10-12] Sales from 1 January onward in a week that starts in December vanish from the weekly chart [lib/features/dashboard/data/datasource/local_dashboard_datasource.dart getWeeklyCA ~L364, getStoreWeeklyCA ~L476] — pre-existing; key both SQL and slots by the Monday date, test a week spanning the year end
+- [ ] [Deferred-from: build-auto v1s-15-8 review, 2026-10-12] Slot Mondays built with `monday.subtract(Duration(days: k*7))` land on Sunday 23:00 after a DST change [same lines] — no impact in Cameroon (no DST); build with calendar fields `DateTime(y, m, d - k*7)`, test under a DST time zone if CI allows
 
 **AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
 

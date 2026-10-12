@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../../../../core/storage/app_database.dart';
 import '../../domain/model/dashboard_snapshot.dart';
@@ -363,17 +364,28 @@ class LocalDashboardDatasource {
     return List.generate(12, (i) {
       final weekStart = monday.subtract(Duration(days: (11 - i) * 7));
       // Match strftime('%Y-%W') format used by SQLite
-      final weekNum = _sqliteWeekW(weekStart);
+      final weekNum = sqliteWeekW(weekStart);
       final key = '${weekStart.year}-${weekNum.toString().padLeft(2, '0')}';
       return DailyCA(date: weekStart, amount: dataMap[key] ?? 0);
     });
   }
 
-  /// Week number matching SQLite's strftime('%W') — Monday-based, 00-53.
-  static int _sqliteWeekW(DateTime date) {
-    final dayOfYear = date.difference(DateTime(date.year, 1, 1)).inDays + 1;
-    final wd = date.weekday % 7; // 0=Sun, 1=Mon, ..., 6=Sat
-    return (dayOfYear + 6 - wd) ~/ 7;
+  /// Week number matching SQLite's strftime('%W') — Monday-based, 00-53:
+  /// `(yday + 7 - wd) / 7` with a 0-based day of year and 0 = Monday.
+  ///
+  /// v1s-15-8: the former formula was off by one for Mondays in years whose
+  /// 1 January is a Monday (next: 2029), and counted days with a local
+  /// `difference().inDays`, which loses a day after a DST change. Only this
+  /// day-of-year computation is now DST-safe (calendar fields compared as UTC
+  /// dates); callers still build `weekStart` by local `Duration` subtraction,
+  /// and caller-side DST / year-crossing weeks are tracked separately.
+  @visibleForTesting
+  static int sqliteWeekW(DateTime date) {
+    final yday = DateTime.utc(date.year, date.month, date.day)
+        .difference(DateTime.utc(date.year, 1, 1))
+        .inDays;
+    final wd = date.weekday - 1; // 0=Mon, ..., 6=Sun
+    return (yday + 7 - wd) ~/ 7;
   }
 
   /// Monthly CA for the last 12 months.
@@ -466,7 +478,7 @@ class LocalDashboardDatasource {
     final monday = today.subtract(Duration(days: today.weekday - 1));
     return List.generate(12, (i) {
       final weekStart = monday.subtract(Duration(days: (11 - i) * 7));
-      final weekNum = _sqliteWeekW(weekStart);
+      final weekNum = sqliteWeekW(weekStart);
       final key = '${weekStart.year}-${weekNum.toString().padLeft(2, '0')}';
       return DailyCA(date: weekStart, amount: dataMap[key] ?? 0);
     });

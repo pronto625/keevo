@@ -123,6 +123,36 @@ void main() {
       expect(find.textContaining('Réessayez'), findsOneWidget);
     });
 
+    // v1s-15-8 (deferred from HF-2 ghost-badge): an employee-scoped sheet
+    // asks for that employee's figures only, never the store-wide (null) ones.
+    testWidgets('EMPLOYEE-scoped sheet requests only that employee summary',
+        (tester) async {
+      final requested = <({String storeId, String? employeeId})>[];
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            todaySummaryProvider.overrideWith((ref, args) async {
+              requested.add(args);
+              return mockSummary;
+            }),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: DaySummaryBottomSheet(
+                storeId: testStoreId,
+                actorId: testActorId,
+                employeeId: 'emp-1',
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(requested, [(storeId: testStoreId, employeeId: 'emp-1')]);
+    });
+
     testWidgets('show() draws a single drag handle (theme handle off)',
         (tester) async {
       await tester.pumpWidget(

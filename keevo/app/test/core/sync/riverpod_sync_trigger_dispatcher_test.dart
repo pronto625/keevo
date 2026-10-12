@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ffi';
 import 'dart:io';
 
@@ -23,6 +24,7 @@ class _ReadingPushNotifier extends SyncTriggerNotifier {
   static AppDatabase? db;
   static int? queuedRowsSeen;
   static Object? error;
+  static Completer<void> done = Completer<void>();
 
   @override
   SyncTriggerState build() => const SyncTriggerState.idle();
@@ -33,6 +35,8 @@ class _ReadingPushNotifier extends SyncTriggerNotifier {
       queuedRowsSeen = (await db!.select(db!.syncQueue).get()).length;
     } catch (e) {
       error = e;
+    } finally {
+      if (!done.isCompleted) done.complete();
     }
   }
 }
@@ -60,6 +64,7 @@ void main() {
     _ReadingPushNotifier.db = db;
     _ReadingPushNotifier.queuedRowsSeen = null;
     _ReadingPushNotifier.error = null;
+    _ReadingPushNotifier.done = Completer<void>();
 
     final container = ProviderContainer(overrides: [
       syncTriggerNotifierProvider.overrideWith(_ReadingPushNotifier.new),
@@ -78,7 +83,9 @@ void main() {
           ));
       dispatcher.triggerPushIfIdle();
     });
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    // v1s-15-8: wait for the push itself, not a real 50 ms delay.
+    await _ReadingPushNotifier.done.future
+        .timeout(const Duration(seconds: 5));
 
     expect(_ReadingPushNotifier.error, isNull);
     expect(_ReadingPushNotifier.queuedRowsSeen, 1);

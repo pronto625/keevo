@@ -11,7 +11,11 @@ const kSyncEventAbandon = 'ABANDON';
 class SyncEventLogger {
   final AppDatabase _db;
 
-  SyncEventLogger(this._db);
+  /// Timestamp source, injectable so tests never wait on the real clock.
+  final DateTime Function() _now;
+
+  SyncEventLogger(this._db, {DateTime Function()? now})
+      : _now = now ?? DateTime.now;
 
   Future<void> logPushSuccess(int operationCount) =>
       _log('PUSH', 'SUCCESS', operationCount, null);
@@ -41,7 +45,7 @@ class SyncEventLogger {
           status: status,
           operationCount: Value(opCount),
           errorMessage: Value(error),
-          createdAt: DateTime.now(),
+          createdAt: _now(),
         ));
     // Prune: keep only last 50 entries
     await _db.customStatement(

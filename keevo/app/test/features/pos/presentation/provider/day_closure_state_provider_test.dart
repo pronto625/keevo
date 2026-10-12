@@ -34,7 +34,10 @@ void main() {
   test(
       'stays closed after a closure today even with new sales — the backend '
       'accepts only one closure per day', () async {
-    final closedAt = DateTime.now().subtract(const Duration(seconds: 1));
+    // v1s-15-8: "now", not "now - 1 s" — the midnight window shrinks from the
+    // first second after midnight to the gap between this now() and the
+    // provider's own DateTime.now() (lib reads the clock itself).
+    final closedAt = DateTime.now();
     when(() => repo.getLastClosure('store-1'))
         .thenAnswer((_) async => _closure(closedAt));
     when(() => repo.getTodaySalesCount('store-1')).thenAnswer((_) async => 5);
