@@ -55,7 +55,8 @@ class _SupplierListPageState extends ConsumerState<SupplierListPage> {
             ]),
             backgroundColor: AppTheme.primary,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             margin: const EdgeInsets.all(16),
           ),
         );
@@ -99,6 +100,32 @@ class _SupplierListPageState extends ConsumerState<SupplierListPage> {
                   color: theme.colorScheme.onSurface, size: 20),
               onPressed: () => Navigator.of(context).pop(),
             ),
+            // v1s-16-13: pinned with the app bar — they no longer scroll
+            // away with the expanded header.
+            actions: [
+              SoftIconButton(
+                icon: _includeArchived
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+                tooltip: _includeArchived
+                    ? 'Masquer les archivés'
+                    : 'Voir les archivés',
+                onPressed: () {
+                  setState(() => _includeArchived = !_includeArchived);
+                  ref
+                      .read(supplierListNotifierProvider.notifier)
+                      .refresh(includeArchived: _includeArchived);
+                },
+              ),
+              const SizedBox(width: 6),
+              SoftIconButton(
+                icon: Icons.sync_rounded,
+                tooltip: 'Synchroniser',
+                loading: _isSyncing,
+                onPressed: _syncWithFeedback,
+              ),
+              const SizedBox(width: 12),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               background: SafeArea(
                 bottom: false,
@@ -108,51 +135,24 @@ class _SupplierListPageState extends ConsumerState<SupplierListPage> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Fournisseurs',
-                                  style: theme.textTheme.headlineMedium?.copyWith(
-                                    color: theme.colorScheme.onSurface,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: -0.3,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Gérez vos approvisionnements',
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
+                          Text(
+                            'Fournisseurs',
+                            style: theme.textTheme.headlineMedium?.copyWith(
+                              color: theme.colorScheme.onSurface,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.3,
                             ),
                           ),
-                          SoftIconButton(
-                            icon: _includeArchived
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                            tooltip: _includeArchived
-                                ? 'Masquer les archivés'
-                                : 'Voir les archivés',
-                            onPressed: () {
-                              setState(() => _includeArchived = !_includeArchived);
-                              ref
-                                  .read(supplierListNotifierProvider.notifier)
-                                  .refresh(includeArchived: _includeArchived);
-                            },
+                          const SizedBox(height: 4),
+                          Text(
+                            'Gérez vos approvisionnements',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
                           ),
-                          const SizedBox(width: 6),
-                          SoftIconButton(
-                icon: Icons.sync_rounded,
-                tooltip: 'Synchroniser',
-                loading: _isSyncing,
-                onPressed: _syncWithFeedback,
-              ),
                         ],
                       ),
                     ],
@@ -177,7 +177,8 @@ class _SupplierListPageState extends ConsumerState<SupplierListPage> {
                   decoration: InputDecoration(
                     hintText: 'Rechercher un fournisseur…',
                     hintStyle: TextStyle(
-                      color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                      color: theme.colorScheme.onSurfaceVariant
+                          .withValues(alpha: 0.7),
                     ),
                     prefixIcon: Icon(Icons.search_rounded,
                         color: theme.colorScheme.onSurfaceVariant),
@@ -189,7 +190,7 @@ class _SupplierListPageState extends ConsumerState<SupplierListPage> {
                               setState(() {});
                               ref
                                   .read(supplierListNotifierProvider.notifier)
-                                  .refresh(includeArchived: _includeArchived);
+                                  .search('');
                             },
                           )
                         : null,
@@ -200,7 +201,8 @@ class _SupplierListPageState extends ConsumerState<SupplierListPage> {
                     enabledBorder: InputBorder.none,
                     focusedBorder: InputBorder.none,
                     filled: false,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
                   ),
                   onChanged: (q) {
                     setState(() {});
@@ -220,12 +222,14 @@ class _SupplierListPageState extends ConsumerState<SupplierListPage> {
               child: AppErrorWidget(
                 error: e,
                 title: 'Erreur de chargement',
-                onRetry: () => ref.read(supplierListNotifierProvider.notifier).refresh(),
+                onRetry: () =>
+                    ref.read(supplierListNotifierProvider.notifier).refresh(),
               ),
             ),
             data: (suppliers) => suppliers.isEmpty
                 ? SliverFillRemaining(
-                    child: _EmptyState(onAdd: () => context.push('/suppliers/new')),
+                    child: _EmptyState(
+                        onAdd: () => context.push('/suppliers/new')),
                   )
                 : SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
@@ -246,7 +250,8 @@ class _SupplierListPageState extends ConsumerState<SupplierListPage> {
         heroTag: 'supplier_fab',
         onPressed: () => context.push('/suppliers/new'),
         icon: const Icon(Icons.add_business_rounded),
-        label: const Text('Nouveau fournisseur', style: TextStyle(fontWeight: FontWeight.w600)),
+        label: const Text('Nouveau fournisseur',
+            style: TextStyle(fontWeight: FontWeight.w600)),
       ),
     );
   }
@@ -282,7 +287,8 @@ class _EmptyState extends StatelessWidget {
             const SizedBox(height: 24),
             Text(
               'Aucun fournisseur pour l\'instant',
-              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              style: theme.textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w700),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
@@ -299,8 +305,10 @@ class _EmptyState extends StatelessWidget {
               icon: const Icon(Icons.add_business_rounded),
               label: const Text('Ajouter un fournisseur'),
               style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
               ),
             ),
           ],
@@ -325,7 +333,8 @@ class _SupplierCard extends ConsumerWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: () => context.push('/suppliers/${supplier.id}', extra: supplier),
-        onLongPress: supplier.archived ? null : () => _confirmArchive(context, ref),
+        onLongPress:
+            supplier.archived ? null : () => _confirmArchive(context, ref),
         borderRadius: BorderRadius.circular(AppTheme.radiusL),
         // Rangée de liste : bordure fine plutôt qu'une ombre portée.
         child: Ink(
@@ -342,7 +351,8 @@ class _SupplierCard extends ConsumerWidget {
               children: [
                 // Avatar initiale — pastille pâle plutôt qu'un dégradé saturé.
                 Container(
-                  width: 52, height: 52,
+                  width: 52,
+                  height: 52,
                   decoration: BoxDecoration(
                     color: supplier.archived
                         ? theme.colorScheme.surfaceContainerHighest
@@ -351,7 +361,9 @@ class _SupplierCard extends ConsumerWidget {
                   ),
                   child: Center(
                     child: Text(
-                      supplier.name.isNotEmpty ? supplier.name[0].toUpperCase() : '?',
+                      supplier.name.isNotEmpty
+                          ? supplier.name[0].toUpperCase()
+                          : '?',
                       style: TextStyle(
                         color: supplier.archived
                             ? theme.colorScheme.onSurfaceVariant
@@ -383,9 +395,11 @@ class _SupplierCard extends ConsumerWidget {
                           ),
                           if (supplier.archived)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: theme.colorScheme.surfaceContainerHighest,
+                                color:
+                                    theme.colorScheme.surfaceContainerHighest,
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Text(
@@ -397,7 +411,8 @@ class _SupplierCard extends ConsumerWidget {
                             )
                           else if (supplier.productIds.isNotEmpty)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
                                 color: AppTheme.softTint(theme.brightness),
                                 borderRadius: BorderRadius.circular(20),
@@ -415,7 +430,8 @@ class _SupplierCard extends ConsumerWidget {
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          Icon(Icons.phone_outlined, size: 14,
+                          Icon(Icons.phone_outlined,
+                              size: 14,
                               color: theme.colorScheme.onSurfaceVariant),
                           const SizedBox(width: 4),
                           Text(
@@ -426,11 +442,13 @@ class _SupplierCard extends ConsumerWidget {
                           ),
                         ],
                       ),
-                      if (supplier.email != null && supplier.email!.isNotEmpty) ...[
+                      if (supplier.email != null &&
+                          supplier.email!.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Row(
                           children: [
-                            Icon(Icons.email_outlined, size: 14,
+                            Icon(Icons.email_outlined,
+                                size: 14,
                                 color: theme.colorScheme.onSurfaceVariant),
                             const SizedBox(width: 4),
                             Expanded(
@@ -450,7 +468,8 @@ class _SupplierCard extends ConsumerWidget {
                 ),
                 Icon(
                   Icons.chevron_right_rounded,
-                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                  color:
+                      theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
                 ),
               ],
             ),
@@ -468,11 +487,15 @@ class _SupplierCard extends ConsumerWidget {
         title: const Text('Archiver le fournisseur ?'),
         content: Text('${supplier.name} sera masqué de la liste active.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Annuler')),
+          TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Annuler')),
           FilledButton(
             onPressed: () {
               Navigator.pop(dialogCtx);
-              ref.read(supplierListNotifierProvider.notifier).archive(supplier.id);
+              ref
+                  .read(supplierListNotifierProvider.notifier)
+                  .archive(supplier.id);
             },
             child: const Text('Archiver'),
           ),

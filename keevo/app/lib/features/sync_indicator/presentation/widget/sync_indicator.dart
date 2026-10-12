@@ -26,7 +26,8 @@ class SyncIndicator extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // AC8: Listen for stock conflict notifications and show amber SnackBar
-    ref.listen<List<Map<String, dynamic>>>(pendingConflictNotificationsProvider, (prev, conflicts) {
+    ref.listen<List<Map<String, dynamic>>>(pendingConflictNotificationsProvider,
+        (prev, conflicts) {
       if (conflicts.isEmpty) return;
       for (final c in conflicts) {
         final data = c['conflictData'] as Map<String, dynamic>?;
@@ -65,12 +66,12 @@ class SyncIndicator extends ConsumerWidget {
 
     // Notify when a queued offline operation is rejected by the server
     // (duplicate name, plan limit, etc.) — previously silent, retried forever.
-    ref.listen<List<Map<String, dynamic>>>(pendingRejectionNotificationsProvider,
-        (prev, rejections) {
+    ref.listen<List<Map<String, dynamic>>>(
+        pendingRejectionNotificationsProvider, (prev, rejections) {
       if (rejections.isEmpty) return;
       for (final r in rejections) {
-        final operation = friendlySyncOperationLabel(
-            r['operation'] as String? ?? '');
+        final operation =
+            friendlySyncOperationLabel(r['operation'] as String? ?? '');
         final reason = friendlySyncRejectionReason(r['reason'] as String?);
         // v1s-16-12: the local change was undone (ghost row removed,
         // inventory adjustments reverted) — say so.
@@ -122,26 +123,33 @@ class SyncIndicator extends ConsumerWidget {
     if (gateState == SyncGateState.blocked) {
       return GestureDetector(
         onTap: () => SyncRequiredModal.show(context),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                key: const Key('sync_dot'),
-                width: 10,
-                height: 10,
-                decoration: const BoxDecoration(
-                  color: AppTheme.errorColor,
-                  shape: BoxShape.circle,
+        child: Semantics(
+          // v1s-16-13: the red dot alone says nothing to a screen reader.
+          button: true,
+          excludeSemantics: true,
+          label: 'Accès limité : synchronisation requise. '
+              'Touchez pour synchroniser.',
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  key: const Key('sync_dot'),
+                  width: 10,
+                  height: 10,
+                  decoration: const BoxDecoration(
+                    color: AppTheme.errorColor,
+                    shape: BoxShape.circle,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 6),
-              const Text(
-                'Accès limité — Sync requise',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-              ),
-            ],
+                const SizedBox(width: 6),
+                const Text(
+                  'Accès limité — Sync requise',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -156,15 +164,22 @@ class SyncIndicator extends ConsumerWidget {
           final isSyncing = triggerState is SyncTriggerSyncing;
           if (isSyncing) {
             return _buildIndicator(SyncStatus.syncing,
-                days: 0, gateState: gateState, daysSinceLastSync: daysSinceLastSync);
+                days: 0,
+                gateState: gateState,
+                daysSinceLastSync: daysSinceLastSync);
           }
           return asyncStatus.when(
             data: (status) => _buildIndicator(status,
-                days: days, gateState: gateState, daysSinceLastSync: daysSinceLastSync),
-            loading: () => _buildIndicator(SyncStatus.online,
-                days: 0, gateState: gateState, daysSinceLastSync: daysSinceLastSync),
+                days: days,
+                gateState: gateState,
+                daysSinceLastSync: daysSinceLastSync),
+            // v1s-16-13: neutral while the first status loads — never a
+            // green/amber "online" flash.
+            loading: () => _buildLoading(context),
             error: (_, __) => _buildIndicator(SyncStatus.offlineCritical,
-                days: 0, gateState: gateState, daysSinceLastSync: daysSinceLastSync),
+                days: 0,
+                gateState: gateState,
+                daysSinceLastSync: daysSinceLastSync),
           );
         }),
       ),
@@ -180,7 +195,7 @@ class SyncIndicator extends ConsumerWidget {
     final isOnlineStaleCritical =
         status == SyncStatus.online && gateState == SyncGateState.critical;
 
-    return Row(
+    final row = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         _buildStatusDot(status,
@@ -194,6 +209,42 @@ class SyncIndicator extends ConsumerWidget {
                   ? 'En ligne (sync J-$daysSinceLastSync)'
                   : _label(status, days),
           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+        ),
+      ],
+    );
+    if (!isOnlineStaleCritical) return row;
+    // v1s-16-13: spell the urgency out for screen readers.
+    return Semantics(
+      excludeSemantics: true,
+      label: 'Synchronisation urgente : dernière synchronisation il y a '
+          '$daysSinceLastSync jour${daysSinceLastSync > 1 ? 's' : ''}',
+      child: row,
+    );
+  }
+
+  /// Neutral state while the sync status is not known yet (v1s-16-13).
+  Widget _buildLoading(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          key: const Key('sync_dot'),
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: cs.outline, width: 1.5),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          'Vérification…',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: cs.onSurfaceVariant,
+          ),
         ),
       ],
     );

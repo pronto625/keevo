@@ -55,7 +55,8 @@ class _ClientListPageState extends ConsumerState<ClientListPage> {
             ]),
             backgroundColor: AppTheme.primary,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             margin: const EdgeInsets.all(16),
           ),
         );
@@ -99,6 +100,32 @@ class _ClientListPageState extends ConsumerState<ClientListPage> {
                   color: theme.colorScheme.onSurface, size: 20),
               onPressed: () => Navigator.of(context).pop(),
             ),
+            // v1s-16-13: pinned with the app bar — they no longer scroll
+            // away with the expanded header.
+            actions: [
+              SoftIconButton(
+                icon: _includeArchived
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+                tooltip: _includeArchived
+                    ? 'Masquer les archivés'
+                    : 'Voir les archivés',
+                onPressed: () {
+                  setState(() => _includeArchived = !_includeArchived);
+                  ref
+                      .read(clientListNotifierProvider.notifier)
+                      .refresh(includeArchived: _includeArchived);
+                },
+              ),
+              const SizedBox(width: 6),
+              SoftIconButton(
+                icon: Icons.sync_rounded,
+                tooltip: 'Synchroniser',
+                loading: _isSyncing,
+                onPressed: _syncWithFeedback,
+              ),
+              const SizedBox(width: 12),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               background: SafeArea(
                 bottom: false,
@@ -108,51 +135,24 @@ class _ClientListPageState extends ConsumerState<ClientListPage> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Clients',
-                                  style: theme.textTheme.headlineMedium?.copyWith(
-                                    color: theme.colorScheme.onSurface,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: -0.3,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Gérez votre carnet de clients',
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
+                          Text(
+                            'Clients',
+                            style: theme.textTheme.headlineMedium?.copyWith(
+                              color: theme.colorScheme.onSurface,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.3,
                             ),
                           ),
-                          SoftIconButton(
-                            icon: _includeArchived
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                            tooltip: _includeArchived
-                                ? 'Masquer les archivés'
-                                : 'Voir les archivés',
-                            onPressed: () {
-                              setState(() => _includeArchived = !_includeArchived);
-                              ref
-                                  .read(clientListNotifierProvider.notifier)
-                                  .refresh(includeArchived: _includeArchived);
-                            },
+                          const SizedBox(height: 4),
+                          Text(
+                            'Gérez votre carnet de clients',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
                           ),
-                          const SizedBox(width: 6),
-                          SoftIconButton(
-                icon: Icons.sync_rounded,
-                tooltip: 'Synchroniser',
-                loading: _isSyncing,
-                onPressed: _syncWithFeedback,
-              ),
                         ],
                       ),
                     ],
@@ -177,7 +177,8 @@ class _ClientListPageState extends ConsumerState<ClientListPage> {
                   decoration: InputDecoration(
                     hintText: 'Rechercher un client…',
                     hintStyle: TextStyle(
-                      color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                      color: theme.colorScheme.onSurfaceVariant
+                          .withValues(alpha: 0.7),
                     ),
                     prefixIcon: Icon(Icons.search_rounded,
                         color: theme.colorScheme.onSurfaceVariant),
@@ -189,7 +190,7 @@ class _ClientListPageState extends ConsumerState<ClientListPage> {
                               setState(() {});
                               ref
                                   .read(clientListNotifierProvider.notifier)
-                                  .refresh(includeArchived: _includeArchived);
+                                  .search('');
                             },
                           )
                         : null,
@@ -200,7 +201,8 @@ class _ClientListPageState extends ConsumerState<ClientListPage> {
                     enabledBorder: InputBorder.none,
                     focusedBorder: InputBorder.none,
                     filled: false,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
                   ),
                   onChanged: (q) {
                     setState(() {});
@@ -220,12 +222,14 @@ class _ClientListPageState extends ConsumerState<ClientListPage> {
               child: AppErrorWidget(
                 error: e,
                 title: 'Erreur de chargement',
-                onRetry: () => ref.read(clientListNotifierProvider.notifier).refresh(),
+                onRetry: () =>
+                    ref.read(clientListNotifierProvider.notifier).refresh(),
               ),
             ),
             data: (clients) => clients.isEmpty
                 ? SliverFillRemaining(
-                    child: _EmptyState(onAdd: () => context.push('/clients/new')),
+                    child:
+                        _EmptyState(onAdd: () => context.push('/clients/new')),
                   )
                 : SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
@@ -246,7 +250,8 @@ class _ClientListPageState extends ConsumerState<ClientListPage> {
         heroTag: 'client_fab',
         onPressed: () => context.push('/clients/new'),
         icon: const Icon(Icons.person_add_rounded),
-        label: const Text('Nouveau client', style: TextStyle(fontWeight: FontWeight.w600)),
+        label: const Text('Nouveau client',
+            style: TextStyle(fontWeight: FontWeight.w600)),
       ),
     );
   }
@@ -282,7 +287,8 @@ class _EmptyState extends StatelessWidget {
             const SizedBox(height: 24),
             Text(
               'Aucun client pour l\'instant',
-              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              style: theme.textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w700),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
@@ -299,8 +305,10 @@ class _EmptyState extends StatelessWidget {
               icon: const Icon(Icons.person_add_rounded),
               label: const Text('Ajouter un client'),
               style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
               ),
             ),
           ],
@@ -325,7 +333,8 @@ class _ClientCard extends ConsumerWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: () => context.push('/clients/${client.id}', extra: client),
-        onLongPress: client.archived ? null : () => _confirmArchive(context, ref),
+        onLongPress:
+            client.archived ? null : () => _confirmArchive(context, ref),
         borderRadius: BorderRadius.circular(AppTheme.radiusL),
         // Rangée de liste : bordure fine plutôt qu'une ombre portée.
         child: Ink(
@@ -342,7 +351,8 @@ class _ClientCard extends ConsumerWidget {
               children: [
                 // Avatar initiale — pastille pâle plutôt qu'un dégradé saturé.
                 Container(
-                  width: 52, height: 52,
+                  width: 52,
+                  height: 52,
                   decoration: BoxDecoration(
                     color: client.archived
                         ? theme.colorScheme.surfaceContainerHighest
@@ -351,7 +361,9 @@ class _ClientCard extends ConsumerWidget {
                   ),
                   child: Center(
                     child: Text(
-                      client.name.isNotEmpty ? client.name[0].toUpperCase() : '?',
+                      client.name.isNotEmpty
+                          ? client.name[0].toUpperCase()
+                          : '?',
                       style: TextStyle(
                         color: client.archived
                             ? theme.colorScheme.onSurfaceVariant
@@ -383,9 +395,11 @@ class _ClientCard extends ConsumerWidget {
                           ),
                           if (client.archived)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: theme.colorScheme.surfaceContainerHighest,
+                                color:
+                                    theme.colorScheme.surfaceContainerHighest,
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Text(
@@ -400,7 +414,8 @@ class _ClientCard extends ConsumerWidget {
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          Icon(Icons.phone_outlined, size: 14,
+                          Icon(Icons.phone_outlined,
+                              size: 14,
                               color: theme.colorScheme.onSurfaceVariant),
                           const SizedBox(width: 4),
                           Text(
@@ -415,7 +430,8 @@ class _ClientCard extends ConsumerWidget {
                         const SizedBox(height: 2),
                         Row(
                           children: [
-                            Icon(Icons.email_outlined, size: 14,
+                            Icon(Icons.email_outlined,
+                                size: 14,
                                 color: theme.colorScheme.onSurfaceVariant),
                             const SizedBox(width: 4),
                             Expanded(
@@ -435,7 +451,8 @@ class _ClientCard extends ConsumerWidget {
                 ),
                 Icon(
                   Icons.chevron_right_rounded,
-                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                  color:
+                      theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
                 ),
               ],
             ),
@@ -453,7 +470,9 @@ class _ClientCard extends ConsumerWidget {
         title: const Text('Archiver le client ?'),
         content: Text('${client.name} sera masqué de la liste active.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Annuler')),
+          TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Annuler')),
           FilledButton(
             onPressed: () {
               Navigator.pop(dialogCtx);

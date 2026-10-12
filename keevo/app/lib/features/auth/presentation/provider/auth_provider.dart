@@ -15,6 +15,7 @@ import '../../../../core/network/retry_interceptor.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/storage/secure_storage_provider.dart';
 import '../../../../core/sync/sync_trigger_notifier.dart';
+import '../../../../core/widget/notice_throttle.dart';
 import '../../data/datasource/remote_auth_datasource.dart';
 import '../../data/repository/auth_repository_impl.dart';
 import '../../data/repository/secure_token_storage.dart';
@@ -87,6 +88,24 @@ final sessionRefresherProvider = Provider<SessionRefresher>((ref) {
   );
 });
 
+/// Shows the "accès suspendu" SnackBar unless [throttle] already let one
+/// through in its window (v1s-16-13: N concurrent SESSION_REVOKED → one).
+@visibleForTesting
+void showSuspendedSessionNotice(
+    NoticeThrottle throttle, ScaffoldMessengerState? messenger) {
+  if (!throttle.tryAcquire()) return;
+  messenger?.showSnackBar(
+    const SnackBar(
+      content: Text('Votre accès a été suspendu, veuillez vous reconnecter.'),
+    ),
+  );
+}
+
+/// One "accès suspendu" SnackBar per 10 s window (v1s-16-13): concurrent
+/// requests refused with SESSION_REVOKED each report it.
+final suspendedSessionNoticeThrottleProvider =
+    Provider<NoticeThrottle>((ref) => NoticeThrottle());
+
 /// Dio HTTP client — singleton for connection pooling.
 /// Includes AuthInterceptor for automatic token injection + refresh (AC3).
 final dioProvider = Provider<Dio>((ref) {
@@ -111,6 +130,8 @@ final dioProvider = Provider<Dio>((ref) {
   // Retry once on HTTP keep-alive connection-closed errors before giving up.
   dio.interceptors.add(RetryOnConnectionClosedInterceptor(dio));
 
+  final suspendedNotice = ref.read(suspendedSessionNoticeThrottleProvider);
+
   // AC3: JWT interceptor — injects token + handles 401 TOKEN_EXPIRED refresh
   dio.interceptors.add(AuthInterceptor(
     storage: ref.read(tokenStorageProvider),
@@ -121,15 +142,8 @@ final dioProvider = Provider<Dio>((ref) {
       // Clear tokens (already done in interceptor) + navigate to login
       appRouter.go('/auth/login');
     },
-    onAccountSuspended: () {
-      rootScaffoldMessengerKey.currentState?.showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Votre accès a été suspendu, veuillez vous reconnecter.',
-          ),
-        ),
-      );
-    },
+    onAccountSuspended: () => showSuspendedSessionNotice(
+        suspendedNotice, rootScaffoldMessengerKey.currentState),
   ));
 
   // LogInterceptor — debug-only; redacts Authorization header even in debug

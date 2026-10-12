@@ -6,51 +6,44 @@ import '../../../../core/sync/sync_gate_provider.dart';
 import '../../../../core/sync/sync_gate_state.dart';
 import '../../../../core/theme/app_theme.dart';
 
+const _kOfflineGateDismissedKey = 'offline_gate_banner_dismissed_date';
+
+String _todayKey() {
+  final now = DateTime.now();
+  return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+}
+
+/// Whether the day-5 warning banner was dismissed today (v1s-16-13: shared
+/// with [ShellBanners], which must know it to pick the next banner).
+class OfflineGateDismissedToday extends Notifier<bool> {
+  @override
+  bool build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    return prefs.getString(_kOfflineGateDismissedKey) == _todayKey();
+  }
+
+  Future<void> dismiss() async {
+    state = true;
+    await ref
+        .read(sharedPreferencesProvider)
+        .setString(_kOfflineGateDismissedKey, _todayKey());
+  }
+}
+
+final offlineGateDismissedTodayProvider =
+    NotifierProvider<OfflineGateDismissedToday, bool>(
+        OfflineGateDismissedToday.new);
+
 /// OfflineGateBanner — persistent banner shown in MainShell when gate is warning or critical.
 ///
 /// - [SyncGateState.warning] (day 5): amber banner, dismissable once per day.
 /// - [SyncGateState.critical] (day 6): red banner, NOT dismissable.
 /// - [SyncGateState.open] or [SyncGateState.blocked]: nothing rendered.
-class OfflineGateBanner extends ConsumerStatefulWidget {
+class OfflineGateBanner extends ConsumerWidget {
   const OfflineGateBanner({super.key});
 
   @override
-  ConsumerState<OfflineGateBanner> createState() => _OfflineGateBannerState();
-}
-
-class _OfflineGateBannerState extends ConsumerState<OfflineGateBanner> {
-  static const _dismissedKey = 'offline_gate_banner_dismissed_date';
-  bool _dismissedToday = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _restoreDismissState();
-  }
-
-  void _restoreDismissState() {
-    final prefs = ref.read(sharedPreferencesProvider);
-    final dismissed = prefs.getString(_dismissedKey);
-    if (dismissed == null) return;
-    final today = _today();
-    if (dismissed == today) {
-      setState(() => _dismissedToday = true);
-    }
-  }
-
-  String _today() {
-    final now = DateTime.now();
-    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-  }
-
-  Future<void> _dismiss() async {
-    final prefs = ref.read(sharedPreferencesProvider);
-    await prefs.setString(_dismissedKey, _today());
-    setState(() => _dismissedToday = true);
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final gate = ref.watch(syncGateStateProvider);
     final days = ref.watch(daysSinceLastSyncProvider);
 
@@ -59,7 +52,7 @@ class _OfflineGateBannerState extends ConsumerState<OfflineGateBanner> {
     // Warning state is dismissable; critical is not
     final isCritical = gate == SyncGateState.critical;
 
-    if (!isCritical && _dismissedToday) return const SizedBox.shrink();
+    if (!isCritical && ref.watch(offlineGateDismissedTodayProvider)) return const SizedBox.shrink();
 
     final cs = Theme.of(context).colorScheme;
     final isDark = cs.brightness == Brightness.dark;
@@ -104,7 +97,9 @@ class _OfflineGateBannerState extends ConsumerState<OfflineGateBanner> {
             ),
             if (!isCritical)
               GestureDetector(
-                onTap: _dismiss,
+                onTap: () => ref
+                    .read(offlineGateDismissedTodayProvider.notifier)
+                    .dismiss(),
                 child: Icon(Icons.close, size: 16, color: textColor),
               ),
           ],

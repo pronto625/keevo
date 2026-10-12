@@ -70,3 +70,8 @@ const String kUserFirstNameKey = 'user_first_name';
 /// (`ActiveStoreNotifier`). Cleared by sync when that store's offline
 /// creation is rejected by the server (v1s-16-12).
 const String kActiveStoreIdKey = 'active_store_id';
+
+/// Country pre-selected in phone fields (v1s-16-13). Keevo targets Cameroon;
+/// locale detection was rejected (Cameroonian devices often report fr_FR,
+/// which would pre-select France) — the picker lets the user change it.
+const String kDefaultPhoneCountryCode = 'CM';

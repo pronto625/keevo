@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:intl_phone_field/phone_number.dart';
 
+import '../../../../core/storage/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../provider/auth_provider.dart';
 import '../../../../core/widget/phone_validation.dart';
@@ -154,7 +155,7 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
                     enabledBorder: _outlinedBorder(cs.outlineVariant),
                     focusedBorder: _outlinedBorder(cs.primary, width: 1.5),
                   ),
-                  initialCountryCode: 'CM',
+                  initialCountryCode: kDefaultPhoneCountryCode,
                   languageCode: 'fr',
                   keyboardType: TextInputType.phone,
                   invalidNumberMessage: 'Numéro invalide pour ce pays',

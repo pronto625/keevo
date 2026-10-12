@@ -525,15 +525,21 @@ class ProductCard extends ConsumerWidget {
               if (storeId != null) ...[
                 const SizedBox(height: 16),
                 TextField(
-                  onChanged: (v) => stockText = v,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
+                  key: const Key('promote_stock_field'),
+                  onChanged: (v) => setState(() => stockText = v),
+                  keyboardType: const TextInputType.numberWithOptions(
+                      signed: false, decimal: false),
+                  decoration: InputDecoration(
                     // v1s-12-10: additive (recordEntry) — an employee may
                     // already have entered stock when selling the draft.
                     labelText: 'Stock à ajouter',
                     hintText: '0',
                     suffixText: 'unités',
                     helperText: 'S\'ajoute au stock déjà saisi en boutique',
+                    // v1s-16-13: an invalid entry is no longer read as 0.
+                    errorText: parsePromotionStock(stockText) == null
+                        ? 'Entrez un nombre entier positif'
+                        : null,
                   ),
                 ),
               ],
@@ -550,8 +556,10 @@ class ProductCard extends ConsumerWidget {
               ),
             ),
             FilledButton(
-              onPressed: () async {
-                final initialStock = int.tryParse(stockText.trim()) ?? 0;
+              onPressed: parsePromotionStock(stockText) == null
+                  ? null
+                  : () async {
+                final initialStock = parsePromotionStock(stockText)!;
                 // Capture all provider reads BEFORE async gap —
                 // the ProductCard will be disposed once productListProvider
                 // is invalidated (draft removed from list).
@@ -863,4 +871,15 @@ class ProductCard extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Stock entered when a draft is promoted (v1s-16-13): empty → 0, a whole
+/// non-negative number → its value, anything else (letters, sign, decimals)
+/// → null (invalid).
+@visibleForTesting
+int? parsePromotionStock(String text) {
+  final t = text.trim();
+  if (t.isEmpty) return 0;
+  if (!RegExp(r'^\d{1,9}$').hasMatch(t)) return null;
+  return int.parse(t);
 }

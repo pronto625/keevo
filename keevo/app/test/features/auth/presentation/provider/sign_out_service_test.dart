@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo/features/settings/domain/model/subscription_info.dart';
+import 'package:keevo/features/settings/presentation/provider/subscription_info_provider.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -119,6 +121,47 @@ void main() {
       await service().signOut();
 
       expect(await storage.read(key: 'refresh_token'), isNull);
+    });
+
+    // v1s-16-13: offline, FCM can throw — the session still ends.
+    test('an FCM failure still clears the session', () async {
+      when(() => fcm.getToken()).thenThrow(Exception('offline'));
+      when(() => fcm.deleteToken()).thenThrow(Exception('offline'));
+
+      await service().signOut();
+
+      expect(await storage.read(key: 'jwt_token'), isNull);
+      expect(await storage.read(key: 'refresh_token'), isNull);
+      expect(prefs.getString(kUserRoleKey), isNull);
+    });
+
+    // v1s-16-13: the next account must not see this tenant's plan.
+    test('invalidates the subscription', () async {
+      var fetches = 0;
+      final c = ProviderContainer(overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        syncServiceProvider.overrideWithValue(sync),
+        authRepositoryProvider.overrideWithValue(auth),
+        fcmServiceProvider.overrideWithValue(fcm),
+        remoteDeviceTokenDataSourceProvider
+            .overrideWithValue(_MockDeviceTokens()),
+        subscriptionInfoProvider.overrideWith((ref) async {
+          fetches++;
+          return const SubscriptionInfo(
+                planType: 'FREE',
+                status: 'ACTIVE',
+                currentStores: 1,
+                currentProducts: 0,
+                currentEmployees: 0);
+        }),
+      ]);
+      addTearDown(c.dispose);
+      await c.read(subscriptionInfoProvider.future);
+
+      await c.read(signOutServiceProvider).signOut();
+      await c.read(subscriptionInfoProvider.future);
+
+      expect(fetches, 2);
     });
   });
 }

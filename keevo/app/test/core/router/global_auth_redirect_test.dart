@@ -27,6 +27,7 @@ void main() {
         '/auth/forgot-password',
         '/auth/reset-password',
         '/tenant-picker',
+        '/terms/view',
         '/onboarding',
         '/onboarding/sector',
       ]) {
@@ -57,6 +58,64 @@ void main() {
 
     test('an owner reaches owner-only routes', () async {
       expect(await redirect('/dashboard', session: true, role: 'OWNER'), isNull);
+    });
+
+    // v1s-16-13: a missing role is not a pass; the splash re-applies the
+    // JWT claims.
+    test('a missing role is sent to the splash on owner-only routes',
+        () async {
+      expect(await redirect('/dashboard', session: true), '/splash');
+      expect(await redirect('/settings/team', session: true), '/splash');
+      expect(await redirect('/pos', session: true), isNull);
+    });
+
+    test('an unknown role is kept out of owner-only routes', () async {
+      expect(await redirect('/dashboard', session: true, role: 'MANAGER'),
+          '/pos');
+    });
+  });
+
+  group('loginRouteRedirect (v1s-16-13)', () {
+    test('a session goes through the splash (wizard, forced change, role)',
+        () async {
+      expect(await loginRouteRedirect(hasSession: () async => true),
+          '/splash');
+    });
+
+    test('no session shows the login form', () async {
+      expect(await loginRouteRedirect(hasSession: () async => false), isNull);
+    });
+
+    test('a failed splash shows the login form even with a session',
+        () async {
+      expect(
+          await loginRouteRedirect(
+              hasSession: () async => true, extra: kSplashFailedExtra),
+          isNull);
+    });
+
+    test('unreadable storage shows the login form', () async {
+      expect(
+          await loginRouteRedirect(
+              hasSession: () async => throw StateError('keystore')),
+          isNull);
+    });
+  });
+
+  group('resetPasswordRedirect (v1s-16-13)', () {
+    test('a deep link without phone restarts from forgot-password', () {
+      expect(resetPasswordRedirect(null), '/auth/forgot-password');
+      expect(resetPasswordRedirect(<String, dynamic>{}),
+          '/auth/forgot-password');
+      expect(resetPasswordRedirect({'phoneNumber': ''}),
+          '/auth/forgot-password');
+      expect(resetPasswordRedirect({'phoneNumber': '   '}),
+          '/auth/forgot-password');
+      expect(resetPasswordRedirect('junk'), '/auth/forgot-password');
+    });
+
+    test('the phone extra opens the reset page', () {
+      expect(resetPasswordRedirect({'phoneNumber': '+237600000000'}), isNull);
     });
   });
 

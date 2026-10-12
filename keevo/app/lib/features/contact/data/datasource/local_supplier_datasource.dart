@@ -28,11 +28,15 @@ class LocalSupplierDataSource {
         .toList();
   }
 
-  Future<List<SupplierModel>> search(String query) async {
+  /// v1s-16-13: [includeArchived] mirrors « Voir les archivés ».
+  Future<List<SupplierModel>> search(String query,
+      {bool includeArchived = false}) async {
     final q = likeContainsFolded(query); // v1s-16-16
     final rows = await (_db.select(_db.suppliers)
           ..where((s) =>
-              s.archived.equals(false) &
+              (includeArchived
+                  ? const Constant(true)
+                  : s.archived.equals(false)) &
               foldedSqlExpr(s.name).like(q, escapeChar: likeEscapeChar))
           ..orderBy([(s) => OrderingTerm.asc(s.name)]))
         .get();

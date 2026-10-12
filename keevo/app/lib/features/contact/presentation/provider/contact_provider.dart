@@ -68,26 +68,29 @@ class ClientListNotifier extends _$ClientListNotifier {
 
   @override
   Future<List<ClientModel>> build() async {
-    return ref
-        .watch(clientRepositoryProvider)
-        .getAll(includeArchived: _includeArchived);
+    final repo = ref.watch(clientRepositoryProvider);
+    return _query.isEmpty
+        ? repo.getAll(includeArchived: _includeArchived)
+        : repo.search(_query, includeArchived: _includeArchived);
   }
 
+  // v1s-16-13: la recherche en cours survit au rafraîchissement (sync,
+  // création, archivage, bascule « Voir les archivés »).
+  String _query = '';
+
+  /// Reloads the list, keeping the current search and archive filter.
   Future<void> refresh({bool? includeArchived}) async {
     if (includeArchived != null) _includeArchived = includeArchived;
     state = const AsyncLoading();
-    state = await AsyncValue.guard(
-        () => ref.read(clientRepositoryProvider).getAll(includeArchived: _includeArchived));
+    final repo = ref.read(clientRepositoryProvider);
+    state = await AsyncValue.guard(() => _query.isEmpty
+        ? repo.getAll(includeArchived: _includeArchived)
+        : repo.search(_query, includeArchived: _includeArchived));
   }
 
   Future<void> search(String query) async {
-    if (query.isEmpty) {
-      await refresh();
-      return;
-    }
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(
-        () => ref.read(clientRepositoryProvider).search(query));
+    _query = query.trim();
+    await refresh();
   }
 
   Future<ClientModel> create({
@@ -148,26 +151,29 @@ class SupplierListNotifier extends _$SupplierListNotifier {
 
   @override
   Future<List<SupplierModel>> build() async {
-    return ref
-        .watch(supplierRepositoryProvider)
-        .getAll(includeArchived: _includeArchived);
+    final repo = ref.watch(supplierRepositoryProvider);
+    return _query.isEmpty
+        ? repo.getAll(includeArchived: _includeArchived)
+        : repo.search(_query, includeArchived: _includeArchived);
   }
 
+  // v1s-16-13: la recherche en cours survit au rafraîchissement (sync,
+  // création, archivage, bascule « Voir les archivés »).
+  String _query = '';
+
+  /// Reloads the list, keeping the current search and archive filter.
   Future<void> refresh({bool? includeArchived}) async {
     if (includeArchived != null) _includeArchived = includeArchived;
     state = const AsyncLoading();
-    state = await AsyncValue.guard(
-        () => ref.read(supplierRepositoryProvider).getAll(includeArchived: _includeArchived));
+    final repo = ref.read(supplierRepositoryProvider);
+    state = await AsyncValue.guard(() => _query.isEmpty
+        ? repo.getAll(includeArchived: _includeArchived)
+        : repo.search(_query, includeArchived: _includeArchived));
   }
 
   Future<void> search(String query) async {
-    if (query.isEmpty) {
-      await refresh();
-      return;
-    }
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(
-        () => ref.read(supplierRepositoryProvider).search(query));
+    _query = query.trim();
+    await refresh();
   }
 
   Future<SupplierModel> create({

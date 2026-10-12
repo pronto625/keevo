@@ -3,7 +3,7 @@ import '../model/supplier_model.dart';
 /// SupplierRepository — abstract port for supplier persistence (Story 2.5).
 abstract class SupplierRepository {
   Future<List<SupplierModel>> getAll({bool includeArchived = false});
-  Future<List<SupplierModel>> search(String query);
+  Future<List<SupplierModel>> search(String query, {bool includeArchived = false});
   Future<SupplierModel?> getById(String id);
   Future<SupplierModel> create({
     required String name,

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:intl_phone_field/phone_number.dart';
 
+import '../../../../core/storage/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../settings/presentation/widget/plan_limit_bottom_sheet.dart';
 import '../../../stores/domain/model/store_model.dart';
@@ -110,7 +111,6 @@ class _CreateEmployeePageState extends ConsumerState<CreateEmployeePage> {
             showPlanLimitBottomSheet(
               context: context,
               entity: 'employees',
-              limit: 5,
             );
           }
         },
@@ -164,7 +164,7 @@ class _CreateEmployeePageState extends ConsumerState<CreateEmployeePage> {
                 decoration: const InputDecoration(
                   labelText: 'Numéro de téléphone',
                 ),
-                initialCountryCode: 'CM',
+                initialCountryCode: kDefaultPhoneCountryCode,
                 languageCode: 'fr',
                 keyboardType: TextInputType.phone,
                 onChanged: (PhoneNumber phone) {

@@ -98,6 +98,7 @@ class _SplashRedirectPageState extends ConsumerState<_SplashRedirectPage> {
 
   Future<void> _redirect() async {
     String route;
+    Object? extra;
     try {
       route = await resolveStartupRoute(
         storage: ref.read(flutterSecureStorageProvider),
@@ -108,7 +109,10 @@ class _SplashRedirectPageState extends ConsumerState<_SplashRedirectPage> {
       );
     } catch (_) {
       // Storage or local DB failure: never leave the user on the spinner.
+      // The marker stops /auth/login from sending a session back here
+      // (v1s-16-13: that looped splash → login → splash).
       route = '/auth/login';
+      extra = kSplashFailedExtra;
     }
     if (!mounted) return;
 
@@ -122,7 +126,7 @@ class _SplashRedirectPageState extends ConsumerState<_SplashRedirectPage> {
       // Storage unreadable: the startup pull simply does not run.
     }
     if (!mounted) return;
-    context.go(route);
+    context.go(route, extra: extra);
   }
 
   @override
@@ -173,6 +177,7 @@ Future<String?> globalAuthRedirect(
   const publicPaths = {
     '/splash',
     '/terms',
+    '/terms/view',
     '/auth/login',
     '/auth/register',
     '/auth/forgot-password',
@@ -188,13 +193,57 @@ Future<String?> globalAuthRedirect(
     final isOwnerOnlyPath =
         _ownerOnlyPrefixes.any((prefix) => path.startsWith(prefix));
     if (!isOwnerOnlyPath) return null;
-    if (await readRole() == 'EMPLOYEE') return '/pos';
-    return null;
+    final role = await readRole();
+    if (role == 'OWNER') return null;
+    // v1s-16-13: a missing role is not a pass. The splash re-applies the JWT
+    // claims (rewrites the role) or falls back to login when signed out.
+    if (role == null) return '/splash';
+    return '/pos';
   } catch (_) {
     // Storage unreadable: let the splash decide (it falls back to login).
     return path == '/splash' ? null : '/splash';
   }
 }
+
+/// Route extra the splash passes to `/auth/login` when it failed.
+const kSplashFailedExtra = {'splashFailed': true};
+
+/// v1s-16-13: `/auth/login` with a session goes through the splash, which
+/// decides between the setup wizard, the forced password change and the
+/// role's home — never straight to the dashboard.
+///
+/// [extra] carrying [kSplashFailedExtra] means the splash itself failed:
+/// the login form is shown, otherwise splash and login would loop.
+@visibleForTesting
+Future<String?> loginRouteRedirect({
+  required Future<bool> Function() hasSession,
+  Object? extra,
+}) async {
+  if (extra is Map && extra['splashFailed'] == true) return null;
+  try {
+    return await hasSession() ? '/splash' : null;
+  } catch (_) {
+    return null; // storage unreadable: show the login form
+  }
+}
+
+/// v1s-16-13: the reset page needs the phone the code was sent to. A deep
+/// link without it (no extra, or no non-empty `phoneNumber`) restarts the
+/// flow from the forgot-password page.
+@visibleForTesting
+String? resetPasswordRedirect(Object? extra) {
+  final phone = extra is Map ? extra['phoneNumber'] : null;
+  if (phone is String && phone.trim().isNotEmpty) return null;
+  return '/auth/forgot-password';
+}
+
+/// v1s-16-13: builder of `/terms/view` — read-only CGU, opened at the
+/// privacy policy with `?section=privacy`.
+@visibleForTesting
+Widget termsViewPage(Uri uri) => TermsPage(
+      readOnly: true,
+      scrollToPrivacy: uri.queryParameters['section'] == 'privacy',
+    );
 
 /// Application router — all feature routes registered here.
 /// Each route points to a placeholder until the feature story is implemented.
@@ -238,18 +287,17 @@ final GoRouter appRouter = GoRouter(
     // ── Auth ────────────────────────────────────────────────
     GoRoute(
       path: '/auth/login',
-      redirect: (context, state) async {
+      redirect: (context, state) {
         // AC3: skip login while the device holds a session (renewable through
-        // the refresh token even when the access token has expired).
+        // the refresh token even when the access token has expired). The
+        // splash picks the destination (v1s-16-13): wizard, forced password
+        // change, then OWNER → /dashboard, EMPLOYEE → /pos.
         final storage = ProviderScope.containerOf(context, listen: false)
             .read(flutterSecureStorageProvider);
-        if (await hasSession(storage)) {
-          // Story 7.1: OWNER → /dashboard, EMPLOYEE → /pos
-          final prefs = await SharedPreferences.getInstance();
-          final role = prefs.getString(kUserRoleKey);
-          return (role == 'OWNER') ? '/dashboard' : '/pos';
-        }
-        return null; // proceed to AuthPage in login mode
+        return loginRouteRedirect(
+          hasSession: () => hasSession(storage),
+          extra: state.extra,
+        );
       },
       builder: (_, __) => const AuthPage(initialMode: AuthMode.login),
     ),
@@ -271,9 +319,10 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: '/auth/reset-password',
+      redirect: (_, state) => resetPasswordRedirect(state.extra),
       builder: (_, state) => ResetPasswordPage(
         phoneNumber:
-            (state.extra as Map<String, dynamic>?)?['phoneNumber'] as String?,
+            (state.extra as Map?)?['phoneNumber'] as String?,
       ),
     ),
 
@@ -306,6 +355,11 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/terms',
       builder: (_, __) => const TermsPage(),
+    ),
+    // v1s-16-13: read-only CGU / privacy view opened from the register form.
+    GoRoute(
+      path: '/terms/view',
+      builder: (_, state) => termsViewPage(state.uri),
     ),
 
     // ── Onboarding wizard ──────────────────────────────────────────

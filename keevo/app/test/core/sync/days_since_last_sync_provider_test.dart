@@ -71,5 +71,57 @@ void main() {
 
       expect(container.read(daysSinceLastSyncProvider), 7);
     });
+
+    // v1s-16-13
+    test('last_sync_in_the_future_returns_0', () async {
+      final future = DateTime.now()
+          .add(const Duration(days: 2))
+          .millisecondsSinceEpoch;
+      SharedPreferences.setMockInitialValues({kLastSyncAtKey: future});
+      final prefs = await SharedPreferences.getInstance();
+      final container = ProviderContainer(
+        overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+      );
+      addTearDown(container.dispose);
+
+      expect(container.read(daysSinceLastSyncProvider), 0);
+    });
+
+    test('re_evaluates_at_the_next_day_boundary_without_a_sync', () async {
+      // Last sync 1 day minus 150 ms ago: the provider must move to 1 on its
+      // own once the 24 h boundary is crossed.
+      final lastSync = DateTime.now()
+          .subtract(const Duration(days: 1) - const Duration(milliseconds: 150));
+      SharedPreferences.setMockInitialValues(
+          {kLastSyncAtKey: lastSync.millisecondsSinceEpoch});
+      final prefs = await SharedPreferences.getInstance();
+      final container = ProviderContainer(
+        overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+      );
+      addTearDown(container.dispose);
+
+      final seen = <int>[];
+      container.listen<int>(daysSinceLastSyncProvider, (_, next) => seen.add(next),
+          fireImmediately: true);
+      expect(seen, [0]);
+
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      expect(seen.last, 1);
+    });
+
+    test('uses_the_injected_clock', () async {
+      final lastSync = DateTime(2026, 1, 1, 12);
+      SharedPreferences.setMockInitialValues(
+          {kLastSyncAtKey: lastSync.millisecondsSinceEpoch});
+      final prefs = await SharedPreferences.getInstance();
+      final container = ProviderContainer(overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        syncGateClockProvider
+            .overrideWithValue(() => DateTime(2026, 1, 6, 13)),
+      ]);
+      addTearDown(container.dispose);
+
+      expect(container.read(daysSinceLastSyncProvider), 5);
+    });
   });
 }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:keevo/features/contact/domain/model/client_model.dart';
 import 'package:keevo/features/contact/domain/repository/client_repository.dart';
 import 'package:keevo/features/contact/domain/repository/supplier_repository.dart';
 import 'package:keevo/features/contact/presentation/page/client_form_page.dart';
@@ -37,6 +38,105 @@ void main() {
 
     expect(find.textContaining('Synchronisation impossible'), findsOneWidget);
     expect(find.text('Clients synchronisés'), findsNothing);
+  });
+
+  // v1s-16-13: the archived / sync buttons stay reachable once the header
+  // collapses, and a search with « Voir les archivés » includes archived.
+  testWidgets('ClientListPage: header actions stay pinned while scrolling',
+      (tester) async {
+    final repo = _MockClientRepository();
+    final now = DateTime(2026, 1, 1);
+    final clients = [
+      for (var i = 0; i < 30; i++)
+        ClientModel(
+            id: 'c$i',
+            name: 'Client $i',
+            phone: '+2376900000${i.toString().padLeft(2, '0')}',
+            createdAt: now,
+            updatedAt: now),
+    ];
+    when(() => repo.getAll(includeArchived: any(named: 'includeArchived')))
+        .thenAnswer((_) async => clients);
+    when(() => repo.search(any(),
+            includeArchived: any(named: 'includeArchived')))
+        .thenAnswer((_) async => clients);
+    when(() => repo.syncFromRemote()).thenAnswer((_) async {});
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [clientRepositoryProvider.overrideWithValue(repo)],
+      child: const MaterialApp(home: ClientListPage()),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -1500));
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Voir les archivés').hitTestable(), findsOneWidget);
+    expect(find.byTooltip('Synchroniser').hitTestable(), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Voir les archivés'));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, 1500));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'cli');
+    await tester.pumpAndSettle();
+
+    verify(() => repo.search('cli', includeArchived: true)).called(1);
+  });
+
+  // v1s-16-13: clearing the search lists everything again.
+  testWidgets('ClientListPage: the clear button reloads the full list',
+      (tester) async {
+    final repo = _MockClientRepository();
+    when(() => repo.getAll(includeArchived: any(named: 'includeArchived')))
+        .thenAnswer((_) async => []);
+    when(() => repo.search(any(),
+            includeArchived: any(named: 'includeArchived')))
+        .thenAnswer((_) async => []);
+    when(() => repo.syncFromRemote()).thenAnswer((_) async {});
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [clientRepositoryProvider.overrideWithValue(repo)],
+      child: const MaterialApp(home: ClientListPage()),
+    ));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'ali');
+    await tester.pumpAndSettle();
+    clearInteractions(repo);
+
+    await tester.tap(find.byIcon(Icons.clear_rounded));
+    await tester.pumpAndSettle();
+
+    verify(() => repo.getAll(includeArchived: false)).called(1);
+    verifyNever(() =>
+        repo.search(any(), includeArchived: any(named: 'includeArchived')));
+  });
+
+  testWidgets('SupplierListPage: the clear button reloads the full list',
+      (tester) async {
+    final repo = _MockSupplierRepository();
+    when(() => repo.getAll(includeArchived: any(named: 'includeArchived')))
+        .thenAnswer((_) async => []);
+    when(() => repo.search(any(),
+            includeArchived: any(named: 'includeArchived')))
+        .thenAnswer((_) async => []);
+    when(() => repo.syncFromRemote()).thenAnswer((_) async {});
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [supplierRepositoryProvider.overrideWithValue(repo)],
+      child: const MaterialApp(home: SupplierListPage()),
+    ));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'gros');
+    await tester.pumpAndSettle();
+    clearInteractions(repo);
+
+    await tester.tap(find.byIcon(Icons.clear_rounded));
+    await tester.pumpAndSettle();
+
+    verify(() => repo.getAll(includeArchived: false)).called(1);
+    verifyNever(() =>
+        repo.search(any(), includeArchived: any(named: 'includeArchived')));
   });
 
   testWidgets('SupplierListPage: sync failure shows an error, not success',

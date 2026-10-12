@@ -109,4 +109,101 @@ void main() {
       verify(() => repo.getAll(includeArchived: true)).called(1);
     });
   });
+
+  // v1s-16-13: the query survives refreshes and follows the archive toggle.
+  group('ClientListNotifier keeps the search', () {
+    late MockClientRepository repo;
+    late ProviderContainer container;
+
+    setUp(() {
+      repo = MockClientRepository();
+      when(() => repo.getAll(includeArchived: any(named: 'includeArchived')))
+          .thenAnswer((_) async => []);
+      when(() => repo.search(any(),
+              includeArchived: any(named: 'includeArchived')))
+          .thenAnswer((_) async => []);
+      when(() => repo.syncFromRemote()).thenAnswer((_) async {});
+      when(() => repo.archive(any())).thenAnswer((_) async {});
+      container = ProviderContainer(
+          overrides: [clientRepositoryProvider.overrideWithValue(repo)]);
+      container.listen(clientListNotifierProvider, (_, __) {});
+    });
+
+    tearDown(() => container.dispose());
+
+    test('search with archived shown includes archived matches', () async {
+      await container.read(clientListNotifierProvider.future);
+      final notifier = container.read(clientListNotifierProvider.notifier);
+      await notifier.refresh(includeArchived: true);
+      clearInteractions(repo);
+
+      await notifier.search('ali');
+
+      verify(() => repo.search('ali', includeArchived: true)).called(1);
+      verifyNever(() =>
+          repo.getAll(includeArchived: any(named: 'includeArchived')));
+    });
+
+    test('toggling archived re-runs the current search', () async {
+      await container.read(clientListNotifierProvider.future);
+      final notifier = container.read(clientListNotifierProvider.notifier);
+      await notifier.search('ali');
+      clearInteractions(repo);
+
+      await notifier.refresh(includeArchived: true);
+
+      verify(() => repo.search('ali', includeArchived: true)).called(1);
+    });
+
+    test('sync and archive keep the query', () async {
+      await container.read(clientListNotifierProvider.future);
+      final notifier = container.read(clientListNotifierProvider.notifier);
+      await notifier.search('ali');
+      clearInteractions(repo);
+
+      await notifier.syncFromRemote();
+      await notifier.archive('c1');
+
+      verify(() => repo.search('ali', includeArchived: false)).called(2);
+      verifyNever(() =>
+          repo.getAll(includeArchived: any(named: 'includeArchived')));
+    });
+
+    test('clearing the search lists everything again', () async {
+      await container.read(clientListNotifierProvider.future);
+      final notifier = container.read(clientListNotifierProvider.notifier);
+      await notifier.search('ali');
+      clearInteractions(repo);
+
+      await notifier.search('');
+      await notifier.refresh();
+
+      verify(() => repo.getAll(includeArchived: false)).called(2);
+    });
+  });
+
+  group('SupplierListNotifier keeps the search', () {
+    test('sync refresh keeps the query and the archived toggle', () async {
+      final repo = MockSupplierRepository();
+      when(() => repo.getAll(includeArchived: any(named: 'includeArchived')))
+          .thenAnswer((_) async => []);
+      when(() => repo.search(any(),
+              includeArchived: any(named: 'includeArchived')))
+          .thenAnswer((_) async => []);
+      when(() => repo.syncFromRemote()).thenAnswer((_) async {});
+      final container = ProviderContainer(
+          overrides: [supplierRepositoryProvider.overrideWithValue(repo)]);
+      addTearDown(container.dispose);
+      container.listen(supplierListNotifierProvider, (_, __) {});
+      await container.read(supplierListNotifierProvider.future);
+      final notifier = container.read(supplierListNotifierProvider.notifier);
+      await notifier.refresh(includeArchived: true);
+      await notifier.search('gros');
+      clearInteractions(repo);
+
+      await notifier.syncFromRemote();
+
+      verify(() => repo.search('gros', includeArchived: true)).called(1);
+    });
+  });
 }

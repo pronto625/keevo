@@ -7,6 +7,7 @@ library;
 import 'dart:ffi';
 import 'dart:io';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/core/sync/connectivity_service.dart';
@@ -276,6 +277,22 @@ void main() {
           ));
       final results = await local.search('societe');
       expect(results.map((s) => s.name), ['Société Générale']);
+    });
+
+    // v1s-16-13: search respects « Voir les archivés ».
+    test('archived suppliers match only with includeArchived', () async {
+      final now = DateTime.now();
+      await db.into(db.suppliers).insert(SuppliersCompanion.insert(
+            id: 's4',
+            name: 'Ancien Grossiste',
+            phone: '+237690000004',
+            archived: const Value(true),
+            createdAt: now,
+            updatedAt: now,
+          ));
+      expect(await local.search('grossiste'), isEmpty);
+      final all = await local.search('grossiste', includeArchived: true);
+      expect(all.map((s) => s.name), ['Ancien Grossiste']);
     });
   });
 }

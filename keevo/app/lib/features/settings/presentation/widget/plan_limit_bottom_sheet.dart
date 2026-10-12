@@ -3,6 +3,15 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 
+/// FREE plan limits per entity — mirror of the backend `PlanType.FREE(1, 500,
+/// 3)` (stores, products, employees). v1s-16-13: the single source for the
+/// app, so callers no longer pass wrong literals.
+const Map<String, int> kFreePlanLimits = {
+  'stores': 1,
+  'products': 500,
+  'employees': 3,
+};
+
 /// Returns a localised label for [entity] with [limit].
 ///
 /// [entity] is one of: 'stores', 'products', 'employees'.
@@ -19,17 +28,19 @@ String _entityLabel(String entity, int limit) {
 /// limit for [entity] and prompting them to upgrade to Premium.
 ///
 /// [entity] — one of: 'stores', 'products', 'employees'
-/// [limit]  — the maximum allowed count for the current plan
+/// [limit]  — the maximum allowed count for the current plan; defaults to the
+///            FREE value of [entity] ([kFreePlanLimits])
 ///
 /// Usage:
 /// ```dart
-/// showPlanLimitBottomSheet(context: context, entity: 'stores', limit: 1);
+/// showPlanLimitBottomSheet(context: context, entity: 'stores');
 /// ```
 Future<void> showPlanLimitBottomSheet({
   required BuildContext context,
   required String entity,
-  required int limit,
+  int? limit,
 }) {
+  final max = limit ?? kFreePlanLimits[entity] ?? 0;
   return showModalBottomSheet<void>(
     context: context,
     shape: const RoundedRectangleBorder(
@@ -54,7 +65,7 @@ Future<void> showPlanLimitBottomSheet({
           const SoftIconBadge(icon: Icons.lock_outline_rounded, size: 72),
           const SizedBox(height: 16),
           Text(
-            'Vous avez atteint la limite de ${_entityLabel(entity, limit)} '
+            'Vous avez atteint la limite de ${_entityLabel(entity, max)} '
             'sur votre plan gratuit',
             textAlign: TextAlign.center,
             style: Theme.of(ctx).textTheme.bodyLarge,
