@@ -64,6 +64,14 @@ public interface AuditPort {
      */
     AuditSlice search(AuditQuery query, String cursor, Integer page, int size);
 
+    /**
+     * Number of entries matching {@code query} — same filters as {@link #search} (Story v1s-18-2,
+     * audit-log export). Implementations that back the export must override it.
+     */
+    default long count(AuditQuery query) {
+        throw new UnsupportedOperationException("count is not supported by this AuditPort");
+    }
+
     /** One entry of the current tenant by id, with resolved actor and store names. */
     Optional<AuditEntryRecord> findById(UUID id);
 
@@ -205,6 +213,8 @@ public interface AuditPort {
      * <p>Returned by query methods; mapped to response DTOs by the controller layer.
      * Enrichment fields (Story v1s-18-6) are null for rows written before V14, except
      * {@code actorName}, which is resolved at read time. {@code metadata} is raw JSON text.
+     * {@code actorRole} (Story v1s-18-2) is the actor's {@code public.users.role}
+     * ({@code OWNER} / {@code EMPLOYEE}), null when unknown.
      */
     record AuditEntryRecord(
             UUID id,
@@ -222,14 +232,26 @@ public interface AuditPort {
             String deviceId,
             String source,
             String metadata,
-            String actorName
+            String actorName,
+            String actorRole
     ) {
+        /** v1s-18-6 shape — without the actor's platform role. */
+        public AuditEntryRecord(UUID id, String entityType, UUID entityId, String action,
+                                String valueBefore, String valueAfter, UUID userId,
+                                String actorPhone, Instant occurredAt, UUID storeId,
+                                String storeName, String entityLabel, String deviceId,
+                                String source, String metadata, String actorName) {
+            this(id, entityType, entityId, action, valueBefore, valueAfter, userId, actorPhone,
+                    occurredAt, storeId, storeName, entityLabel, deviceId, source, metadata,
+                    actorName, null);
+        }
+
         /** Legacy shape (pre v1s-18-6) — enrichment fields null. */
         public AuditEntryRecord(UUID id, String entityType, UUID entityId, String action,
                                 String valueBefore, String valueAfter, UUID userId,
                                 String actorPhone, Instant occurredAt) {
             this(id, entityType, entityId, action, valueBefore, valueAfter, userId, actorPhone,
-                    occurredAt, null, null, null, null, null, null, null);
+                    occurredAt, null, null, null, null, null, null, null, null);
         }
     }
 }

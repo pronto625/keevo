@@ -189,7 +189,7 @@ class ExportPostgresIntegrationTest extends FullContextIntegrationTest {
     }
 
     @Test
-    @DisplayName("store and period filters apply to the stores dataset")
+    @DisplayName("store filter applies to the stores dataset; the period is ignored (reference dataset, v1s-18-2)")
     void filters() throws Exception {
         String a = newTenant();
         String tag = "F" + UUID.randomUUID().toString().substring(0, 8);
@@ -200,7 +200,7 @@ class ExportPostgresIntegrationTest extends FullContextIntegrationTest {
                 .singleElement().satisfies(l -> assertThat(l).startsWith(third.toString()).contains(tag + "-3"));
         assertThat(dataLines(directCsv(a, new ExportFilter(null,
                 Instant.parse("2026-01-01T00:00:02Z"), Instant.parse("2026-01-01T00:00:05Z")))))
-                .hasSize(4);
+                .hasSize(11); // the 10 stores + the seeded « Ma Boutique », whatever their creation date
     }
 
     @Test

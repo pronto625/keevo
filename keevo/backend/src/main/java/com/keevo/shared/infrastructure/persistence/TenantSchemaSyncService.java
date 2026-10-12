@@ -310,7 +310,8 @@ public class TenantSchemaSyncService {
             for (String ddl : TenantSchemaProvisioner.DDL_AUDIT_LOG_ENRICHMENT) {
                 stmt.execute(ddl);
             }
-            // Story v1s-18-1 — export_jobs indexes
+            // Story v1s-18-1 — export_jobs indexes; v1s-18-2 — criteria column
+            stmt.execute(TenantSchemaProvisioner.DDL_EXPORT_JOBS_MIGRATE_CRITERIA);
             stmt.execute(TenantSchemaProvisioner.DDL_EXPORT_JOBS_IDX_CREATED);
             stmt.execute(TenantSchemaProvisioner.DDL_EXPORT_JOBS_IDX_STATUS_EXPIRES);
             stmt.execute("SET search_path TO public");

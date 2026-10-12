@@ -142,8 +142,64 @@ public class AuditLogRepositoryAdapter implements AuditPort {
         AuditQuery query = q != null ? q : AuditQuery.none();
         AuditCursor after = cursor != null ? AuditCursor.decode(cursor) : null;
 
-        List<String> where = new ArrayList<>();
         Map<String, Object> params = new LinkedHashMap<>();
+        List<String> where = where(query, params);
+        if (after != null) {
+            where.add("(a.occurred_at, a.id) < (CAST(:cursorAt AS timestamptz), CAST(:cursorId AS uuid))");
+            params.put("cursorAt", after.occurredAt());
+            params.put("cursorId", after.id());
+        }
+
+        StringBuilder sql = new StringBuilder(SELECT_ENRICHED);
+        if (!where.isEmpty()) {
+            sql.append("WHERE ").append(String.join(" AND ", where));
+        }
+        sql.append(ORDER_BY);
+
+        Query nq = entityManager.createNativeQuery(sql.toString());
+        params.forEach(nq::setParameter);
+        if (after == null) {
+            int p = page != null ? Math.max(page, 0) : 0;
+            nq.setFirstResult(p * size);
+        }
+        nq.setMaxResults(size + 1);
+
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = nq.getResultList();
+        boolean hasMore = rows.size() > size;
+        List<AuditEntryRecord> entries = mapRows(hasMore ? rows.subList(0, size) : rows);
+        String nextCursor = null;
+        if (hasMore && !entries.isEmpty()) {
+            AuditEntryRecord last = entries.get(entries.size() - 1);
+            nextCursor = new AuditCursor(last.occurredAt(), last.id()).encode();
+        }
+        return new AuditSlice(entries, hasMore, nextCursor);
+    }
+
+    /**
+     * Story v1s-18-2 — count for the audit-log export, with the same WHERE builder as
+     * {@link #search}. Joins only what the filters need (the object-label search uses the
+     * Employee-target join; the actor/store joins never change the row count).
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public long count(AuditQuery q) {
+        AuditQuery query = q != null ? q : AuditQuery.none();
+        Map<String, Object> params = new LinkedHashMap<>();
+        List<String> where = where(query, params);
+        StringBuilder sql = new StringBuilder("SELECT COUNT(*) FROM audit_log a"
+                + " LEFT JOIN employees te ON a.entity_type = 'Employee' AND te.id = a.entity_id ");
+        if (!where.isEmpty()) {
+            sql.append("WHERE ").append(String.join(" AND ", where));
+        }
+        Query nq = entityManager.createNativeQuery(sql.toString());
+        params.forEach(nq::setParameter);
+        return ((Number) nq.getSingleResult()).longValue();
+    }
+
+    /** Filters shared by {@link #search} and {@link #count} (alias {@code a}, label join {@code te}). */
+    private static List<String> where(AuditQuery query, Map<String, Object> params) {
+        List<String> where = new ArrayList<>();
         if (query.from() != null) {
             where.add("a.occurred_at >= :fromTs");
             params.put("fromTs", query.from());
@@ -177,36 +233,7 @@ public class AuditLogRepositoryAdapter implements AuditPort {
             where.add(LABEL_EXPR + " ILIKE :q ESCAPE '\\'");
             params.put("q", "%" + escapeLike(query.q().trim()) + "%");
         }
-        if (after != null) {
-            where.add("(a.occurred_at, a.id) < (CAST(:cursorAt AS timestamptz), CAST(:cursorId AS uuid))");
-            params.put("cursorAt", after.occurredAt());
-            params.put("cursorId", after.id());
-        }
-
-        StringBuilder sql = new StringBuilder(SELECT_ENRICHED);
-        if (!where.isEmpty()) {
-            sql.append("WHERE ").append(String.join(" AND ", where));
-        }
-        sql.append(ORDER_BY);
-
-        Query nq = entityManager.createNativeQuery(sql.toString());
-        params.forEach(nq::setParameter);
-        if (after == null) {
-            int p = page != null ? Math.max(page, 0) : 0;
-            nq.setFirstResult(p * size);
-        }
-        nq.setMaxResults(size + 1);
-
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = nq.getResultList();
-        boolean hasMore = rows.size() > size;
-        List<AuditEntryRecord> entries = mapRows(hasMore ? rows.subList(0, size) : rows);
-        String nextCursor = null;
-        if (hasMore && !entries.isEmpty()) {
-            AuditEntryRecord last = entries.get(entries.size() - 1);
-            nextCursor = new AuditCursor(last.occurredAt(), last.id()).encode();
-        }
-        return new AuditSlice(entries, hasMore, nextCursor);
+        return where;
     }
 
     @Override
@@ -239,7 +266,8 @@ public class AuditLogRepositoryAdapter implements AuditPort {
                 (String) r[12],                   // deviceId
                 (String) r[13],                   // source
                 (String) r[14],                   // metadata (raw JSON text)
-                actorName((String) r[15], (String) r[16], (String) r[17])
+                actorName((String) r[15], (String) r[16], (String) r[17]),
+                (String) r[17]                    // actorRole (public.users.role)
         )).toList();
     }
 

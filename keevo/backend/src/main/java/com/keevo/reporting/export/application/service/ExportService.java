@@ -118,6 +118,7 @@ public class ExportService implements RequestExportUseCase, ListExportsUseCase, 
     public ExportOutcome request(String tenantSchema, UUID actorId, ExportRequest request, DirectOutput direct)
             throws IOException {
         List<ExportDatasetProvider> providers = validate(request);
+        request = withNormalizedCriteria(request);
 
         boolean premium = isPremium();
         String feature = request.format().premiumFeature();
@@ -211,7 +212,22 @@ public class ExportService implements RequestExportUseCase, ListExportsUseCase, 
         if (f.from() != null && f.to() != null && f.from().isAfter(f.to())) {
             throw new DomainException(ErrorCode.VALIDATION_ERROR, "from must not be after to");
         }
-        return request.datasets().stream().map(datasetRegistry::require).toList();
+        List<ExportDatasetProvider> providers = request.datasets().stream().map(datasetRegistry::require).toList();
+        // Story v1s-18-2 — every criterion must be accepted by every requested dataset (never
+        // silently ignored), and its value well-formed; all before any rate-limit slot is used.
+        try {
+            ExportCriteria.checkApplicable(ExportCriteria.normalize(f.criteria()), providers);
+        } catch (ExportCriteria.InvalidCriterionException e) {
+            throw new DomainException(ErrorCode.VALIDATION_ERROR, e.getMessage(),
+                    Map.of("field", e.getField()));
+        }
+        return providers;
+    }
+
+    private static ExportRequest withNormalizedCriteria(ExportRequest request) {
+        ExportFilter f = request.filter();
+        return new ExportRequest(request.datasets(), request.format(),
+                new ExportFilter(f.storeId(), f.from(), f.to(), ExportCriteria.normalize(f.criteria())));
     }
 
     private boolean isPremium() {
@@ -236,7 +252,7 @@ public class ExportService implements RequestExportUseCase, ListExportsUseCase, 
         eventPublisher.publishEvent(new DataExportedEvent(exportId, actorId, tenantSchema,
                 request.format().name(), request.datasets(),
                 providers.stream().map(ExportDatasetProvider::label).toList(), f.storeId(), f.from(), f.to(),
-                rows, mode, Instant.now(clock)));
+                f.criteria(), rows, mode, Instant.now(clock)));
     }
 
     // ── ListExportsUseCase ──────────────────────────────────────────────────────

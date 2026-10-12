@@ -793,6 +793,7 @@ public class TenantSchemaProvisioner {
                 store_id      UUID,
                 period_from   TIMESTAMPTZ,
                 period_to     TIMESTAMPTZ,
+                criteria      TEXT,
                 row_count     BIGINT,
                 file_name     VARCHAR(255) NOT NULL,
                 file_size     BIGINT,
@@ -804,6 +805,10 @@ public class TenantSchemaProvisioner {
                 completed_at  TIMESTAMPTZ,
                 expires_at    TIMESTAMPTZ
             )""";
+
+    /** Story v1s-18-2 — dataset criteria of background jobs (idempotent; public template V16). */
+    static final String DDL_EXPORT_JOBS_MIGRATE_CRITERIA =
+            "ALTER TABLE export_jobs ADD COLUMN IF NOT EXISTS criteria TEXT";
 
     static final String DDL_EXPORT_JOBS_IDX_CREATED =
             "CREATE INDEX IF NOT EXISTS idx_export_jobs_created ON export_jobs (created_at DESC)";
@@ -1083,6 +1088,7 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_TENANT_PREFS_MIGRATE_TREND_NOTIFICATION);
             // Story v1s-18-1 — background export jobs
             stmt.execute(DDL_EXPORT_JOBS);
+            stmt.execute(DDL_EXPORT_JOBS_MIGRATE_CRITERIA); // Story v1s-18-2
             stmt.execute(DDL_EXPORT_JOBS_IDX_CREATED);
             stmt.execute(DDL_EXPORT_JOBS_IDX_STATUS_EXPIRES);
             stmt.execute("SET search_path TO public");
