@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,6 +7,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:keevo/core/di/providers.dart';
+import 'package:keevo/core/theme/app_theme.dart';
 import 'package:keevo/features/catalog/domain/model/product_model.dart';
 import 'package:keevo/features/catalog/domain/model/product_status.dart';
 import 'package:keevo/features/catalog/domain/model/stock_level_model.dart';
@@ -22,6 +25,27 @@ class _FakeStockRepository implements StockRepository {
 
   @override
   Future<List<StockLevelModel>> getLevels(String productId) async => levels;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// Stock levels never finish loading.
+class _PendingStockRepository implements StockRepository {
+  final _never = Completer<List<StockLevelModel>>();
+
+  @override
+  Future<List<StockLevelModel>> getLevels(String productId) => _never.future;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// Stock levels fail to load.
+class _ThrowingStockRepository implements StockRepository {
+  @override
+  Future<List<StockLevelModel>> getLevels(String productId) async =>
+      throw Exception('Base locale indisponible');
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -90,13 +114,14 @@ Future<void> _pump(
   String? activeStoreId,
   String? role,
   ValueNotifier<bool>? visible,
+  StockRepository? stockRepository,
 }) async {
   SharedPreferences.setMockInitialValues({
     if (activeStoreId != null) 'active_store_id': activeStoreId,
     if (role != null) kUserRoleKey: role,
   });
   final prefs = await SharedPreferences.getInstance();
-  final repo = _FakeStockRepository(levels);
+  final repo = stockRepository ?? _FakeStockRepository(levels);
   final shown = visible ?? ValueNotifier(true);
   final saleDs = _MockLocalSaleDs();
   when(() => saleDs.cascadeValidatePendingSales(any(), any(), any()))
@@ -143,6 +168,65 @@ void main() {
     );
     expect(find.text('10'), findsOneWidget);
     expect(find.text('Stock bas'), findsNothing);
+  });
+
+  // v1s-16-14: never stocked here ≠ sold out.
+  testWidgets('no stock row in the active store shows a neutral "Jamais stocké"',
+      (tester) async {
+    await _pump(
+      tester,
+      product: _product(),
+      levels: [_level('s2', 7, 5)],
+      activeStoreId: 's1',
+    );
+    expect(find.text('Jamais stocké'), findsOneWidget);
+    expect(find.text('0'), findsNothing);
+    final text = tester.widget<Text>(find.text('Jamais stocké'));
+    final cs = Theme.of(tester.element(find.text('Jamais stocké'))).colorScheme;
+    expect(text.style?.color, cs.onSurfaceVariant);
+  });
+
+  testWidgets('no stock row at all (no active store) shows "Jamais stocké"',
+      (tester) async {
+    await _pump(tester, product: _product());
+    expect(find.text('Jamais stocké'), findsOneWidget);
+  });
+
+  testWidgets('a stock row with quantity 0 keeps the red "0" badge',
+      (tester) async {
+    await _pump(
+      tester,
+      product: _product(),
+      levels: [_level('s1', 0, 5)],
+      activeStoreId: 's1',
+    );
+    expect(find.text('Jamais stocké'), findsNothing);
+    final text = tester.widget<Text>(find.text('0'));
+    expect(text.style?.color, AppTheme.errorColor);
+  });
+
+  testWidgets('when stock levels fail to load, no stock badge is shown',
+      (tester) async {
+    await _pump(
+      tester,
+      product: _product(),
+      activeStoreId: 's1',
+      stockRepository: _ThrowingStockRepository(),
+    );
+    expect(find.text('Jamais stocké'), findsNothing);
+    expect(find.byIcon(Icons.inventory_2_outlined), findsNothing);
+  });
+
+  testWidgets('while stock levels load, no stock badge is shown',
+      (tester) async {
+    await _pump(
+      tester,
+      product: _product(),
+      activeStoreId: 's1',
+      stockRepository: _PendingStockRepository(),
+    );
+    expect(find.text('Jamais stocké'), findsNothing);
+    expect(find.byIcon(Icons.inventory_2_outlined), findsNothing);
   });
 
   testWidgets('draft + low stock badges fit on a 360dp screen', (tester) async {

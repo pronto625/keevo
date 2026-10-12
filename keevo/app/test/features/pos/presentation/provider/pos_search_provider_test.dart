@@ -1,3 +1,6 @@
+import 'dart:ffi';
+import 'dart:io';
+
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,6 +8,18 @@ import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/features/pos/presentation/provider/pos_search_provider.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:sqlite3/open.dart';
+
+void _overrideSqlite3ForLinuxTesting() {
+  if (!Platform.isLinux) return;
+  open.overrideFor(OperatingSystem.linux, () {
+    try {
+      return DynamicLibrary.open('libsqlite3.so');
+    } catch (_) {
+      return DynamicLibrary.open('libsqlite3.so.0');
+    }
+  });
+}
 
 class _MockAppDatabase extends Mock implements AppDatabase {}
 
@@ -84,6 +99,56 @@ void main() {
       final state = container.read(posSearchProvider);
       expect(state.hasError, isFalse);
       expect(state.value, isEmpty);
+    });
+
+    // v1s-16-14: user-typed `%` / `_` are literal, not LIKE wildcards.
+    group('literal LIKE wildcards (in-memory DB)', () {
+      late AppDatabase db;
+      late ProviderContainer container;
+
+      setUpAll(_overrideSqlite3ForLinuxTesting);
+
+      setUp(() async {
+        db = AppDatabase.forTesting();
+        final now = DateTime.now();
+        for (final (id, name) in [
+          ('p1', 'Remise 50%'),
+          ('p2', 'Riz 500g'),
+        ]) {
+          await db.into(db.products).insert(ProductsCompanion.insert(
+                id: id,
+                name: name,
+                createdAt: now,
+                updatedAt: now,
+              ));
+        }
+        container = ProviderContainer(
+          overrides: [appDatabaseProvider.overrideWithValue(db)],
+        );
+      });
+
+      tearDown(() async {
+        container.dispose();
+        await db.close();
+      });
+
+      for (final storeId in ['store-1', null]) {
+        test('"50%" only matches "Remise 50%" (storeId: $storeId)', () async {
+          final notifier = container.read(posSearchProvider.notifier);
+          await notifier.search('50%', storeId);
+          final names =
+              container.read(posSearchProvider).value!.map((r) => r.name);
+          expect(names, ['Remise 50%']);
+        });
+      }
+
+      test('plain text still matches as a substring', () async {
+        final notifier = container.read(posSearchProvider.notifier);
+        await notifier.search('50', 'store-1');
+        final names =
+            container.read(posSearchProvider).value!.map((r) => r.name);
+        expect(names, containsAll(['Remise 50%', 'Riz 500g']));
+      });
     });
   });
 }

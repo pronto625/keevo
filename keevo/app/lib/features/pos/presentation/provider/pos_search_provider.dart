@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' show Variable;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/storage/sql_like.dart';
 
 /// Product search result for POS display.
 class PosProductResult {
@@ -47,7 +48,7 @@ class PosSearchNotifier extends Notifier<AsyncValue<List<PosProductResult>>> {
     state = const AsyncLoading();
     try {
       final db = ref.read(appDatabaseProvider);
-      final lowerQuery = '%${query.toLowerCase()}%';
+      final lowerQuery = likeContains(query.toLowerCase());
       final List<dynamic> rows;
 
       if (storeId != null) {
@@ -61,7 +62,7 @@ class PosSearchNotifier extends Notifier<AsyncValue<List<PosProductResult>>> {
           '  WHERE sl.store_id = ? '
           '  GROUP BY sl.product_id'
           ') d ON d.product_id = p.id '
-          "WHERE p.archived = 0 AND p.status IN ('ACTIVE', 'DRAFT') AND LOWER(p.name) LIKE ? "
+          "WHERE p.archived = 0 AND p.status IN ('ACTIVE', 'DRAFT') AND LOWER(p.name) LIKE ? ESCAPE '\\' "
           'ORDER BY (CASE WHEN COALESCE(d.quantity, 0) > 0 THEN 0 ELSE 1 END) ASC, p.name ASC '
           'LIMIT 50',
           variables: [
@@ -83,7 +84,7 @@ class PosSearchNotifier extends Notifier<AsyncValue<List<PosProductResult>>> {
           '  ) d '
           '  GROUP BY d.product_id'
           ') agg ON agg.product_id = p.id '
-          "WHERE p.archived = 0 AND p.status IN ('ACTIVE', 'DRAFT') AND LOWER(p.name) LIKE ? "
+          "WHERE p.archived = 0 AND p.status IN ('ACTIVE', 'DRAFT') AND LOWER(p.name) LIKE ? ESCAPE '\\' "
           'ORDER BY (CASE WHEN COALESCE(agg.total_stock, 0) > 0 THEN 0 ELSE 1 END) ASC, p.name ASC '
           'LIMIT 50',
           variables: [
