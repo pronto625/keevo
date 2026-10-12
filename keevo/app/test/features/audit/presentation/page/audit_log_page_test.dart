@@ -12,6 +12,7 @@ import 'package:keevo/features/audit/domain/model/audit_filter.dart';
 import 'package:keevo/features/audit/presentation/page/audit_log_page.dart';
 import 'package:keevo/features/audit/presentation/provider/audit_log_provider.dart';
 import 'package:keevo/features/audit/presentation/provider/audit_provider.dart';
+import 'package:keevo/features/export/domain/model/export_models.dart';
 
 import 'audit_test_helpers.dart';
 
@@ -19,15 +20,20 @@ import 'audit_test_helpers.dart';
 void main() {
   late FakeAuditRepository repo;
   AuditEntryDto? opened;
+  ExportPrefill? exportPrefill;
+  late String role;
 
   setUp(() {
     repo = FakeAuditRepository();
     opened = null;
+    exportPrefill = null;
+    role = 'OWNER';
   });
 
   Widget app() => ProviderScope(
         overrides: [
           auditRepositoryProvider.overrideWithValue(repo),
+          currentUserRoleProvider.overrideWithValue(role),
           currentUserIdProvider.overrideWith((_) async => 'owner-1'),
           auditStoreOptionsProvider.overrideWith((_) async => const [
                 AuditFilterOption('store-1', 'Boutique Centre'),
@@ -42,6 +48,13 @@ void main() {
             initialLocation: '/audit',
             routes: [
               GoRoute(path: '/audit', builder: (_, __) => const AuditLogPage()),
+              GoRoute(
+                path: '/exports/new',
+                builder: (_, state) {
+                  exportPrefill = state.extra as ExportPrefill?;
+                  return const Scaffold(body: Text('EXPORTER'));
+                },
+              ),
               GoRoute(
                 path: '/audit/entry/:id',
                 builder: (_, state) {
@@ -288,5 +301,50 @@ void main() {
     expect(find.text('Awa a créé le produit P19', findRichText: true),
         findsOneWidget);
     expect(find.text('Réessayer'), findsOneWidget, reason: 'footer retry');
+  });
+
+  // v1s-18-4 — « Exporter » pre-filled with the audit log and the filters.
+  testWidgets('« Exporter » opens the export screen with the current filters',
+      (tester) async {
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Boutique'));
+    await tester.tap(find.text('Boutique'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Boutique Marché'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Employé'));
+    await tester.tap(find.text('Employé'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Awa Diallo'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Période'));
+    await tester.tap(find.text('Période'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('7 derniers jours'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('audit-search')), ' pagne ');
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    final filter = repo.sliceCalls.last.$1;
+
+    await tester.tap(find.byKey(const Key('audit-export')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('EXPORTER'), findsOneWidget);
+    final p = exportPrefill!;
+    expect(p.datasets, {'audit_log'});
+    expect(p.storeId, 'store-2');
+    expect(p.from, filter.from);
+    expect(p.to, filter.to);
+    expect(p.criteria, {'userId': 'user-awa', 'q': 'pagne'});
+  });
+
+  testWidgets('no « Exporter » button for an employee', (tester) async {
+    role = 'EMPLOYEE';
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Exporter'), findsNothing);
   });
 }

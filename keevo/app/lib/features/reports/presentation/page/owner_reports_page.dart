@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../export/domain/model/export_models.dart';
+import '../../../export/presentation/widget/export_entry_button.dart';
 import '../../../profitability/presentation/page/product_profitability_list_page.dart';
 import '../../../profitability/presentation/page/store_performance_page.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
@@ -81,6 +83,21 @@ class _OwnerReportsPageState extends ConsumerState<OwnerReportsPage>
             letterSpacing: -0.2,
           ),
         ),
+        actions: [
+          // v1s-18-4 — « Exporter » sales, closures and reports.
+          ExportEntryButton(
+            key: const Key('reports-export'),
+            prefill: ExportPrefill(
+              datasets: const {
+                'sales',
+                'sale_items',
+                'day_closures',
+                'reports',
+              },
+              storeId: activeStoreId,
+            ),
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           labelColor: cs.primary,

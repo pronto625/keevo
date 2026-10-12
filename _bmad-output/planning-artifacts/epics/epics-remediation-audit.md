@@ -1299,6 +1299,9 @@ As an owner, I want branded PDF documents, so that I can share or print clean re
 **Given** a closure **When** generating its end-of-day PDF **Then** its figures equal the EOD report of the same closure (same `ClosureWindow`)
 **And** accents render correctly, multi-page documents repeat headers and number pages, format A4
 
+**Items (routed 2026-10-12 from build-auto v1s-18-4):**
+- [ ] [Deferred-from: build-auto v1s-18-4, 2026-10-12] Enable PDF in the app « Exporter » screen [keevo/app/lib/features/export/presentation/page/export_page.dart `_selectFormat` / `_formatTiles`, keevo/app/lib/features/export/domain/model/export_models.dart `buildExportRequest`, keevo/app/lib/features/export/data/remote_export_datasource.dart `requestExport` PDF guard] — PDF is a disabled « Bientôt » tile for every plan until the renderer exists; once it does, remove the three PDF guards, open the Premium offer sheet on Free + PDF (AC 18.4 « Excel or PDF »), and add the template choice (Fin de journée, Inventaire, État de stock, Ventes) from the UX journey
+
 ## Story 18.4: Écran « Exporter » (app) — **[C]**
 
 As an owner, I want to pick what, which period and which format to export, then share the file.
@@ -1311,10 +1314,10 @@ As an owner, I want to pick what, which period and which format to export, then 
 **And** an export error shows a clear message with a retry
 
 **Items (routed 2026-10-12 from build-auto v1s-18-7):**
-- [ ] [Deferred-from: build-auto v1s-18-7, 2026-10-12] « Exporter » button on « Historique des actions » (app bar of `keevo/app/lib/features/audit/presentation/page/audit_log_page.dart`) opening the export flow pre-filled with the « Journal d'audit » dataset and the current `AuditFilter` (period, store, employee, action, object type, `q`) — the export flow does not exist before 18.4; the filter model is `keevo/app/lib/features/audit/domain/model/audit_filter.dart`
+- [x] [Deferred-from: build-auto v1s-18-7, 2026-10-12] « Exporter » button on « Historique des actions » (app bar of `keevo/app/lib/features/audit/presentation/page/audit_log_page.dart`) opening the export flow pre-filled with the « Journal d'audit » dataset and the current `AuditFilter` (period, store, employee, action, object type, `q`) — the export flow does not exist before 18.4; the filter model is `keevo/app/lib/features/audit/domain/model/audit_filter.dart` — ✅ v1s-18-4: app-bar `audit-export` button pushes `/exports/new` with `auditExportPrefill(AuditFilter)` (Journal d'audit + store, period, userId/action/entityType/q)
 
 **Items (routed 2026-10-12 from build-auto v1s-18-2 review):**
-- [ ] [Deferred-from: review v1s-18-2, 2026-10-12] Export criteria (`userId`, `action`, `entityType`, `entityId`, `q`) are request-global: `POST /api/v1/exports` answers 400 `VALIDATION_ERROR` when a requested dataset does not declare a criterion [keevo/backend/src/main/java/com/keevo/reporting/export/application/service/ExportCriteria.java] — the screen must send `criteria` only when « Journal d'audit » is the sole dataset (read `GET /api/v1/exports/datasets` → `criteria`), or drop them when the user adds other datasets
+- [x] [Deferred-from: review v1s-18-2, 2026-10-12] Export criteria (`userId`, `action`, `entityType`, `entityId`, `q`) are request-global: `POST /api/v1/exports` answers 400 `VALIDATION_ERROR` when a requested dataset does not declare a criterion [keevo/backend/src/main/java/com/keevo/reporting/export/application/service/ExportCriteria.java] — the screen must send `criteria` only when « Journal d'audit » is the sole dataset (read `GET /api/v1/exports/datasets` → `criteria`), or drop them when the user adds other datasets — ✅ v1s-18-4: `buildExportRequest` sends `criteria` only for exactly `{audit_log}`, restricted to its declared `criteria` keys; with other datasets they are kept in memory, not sent, and a note is shown
 
 ## Story 18.5: Export local hors ligne (CSV) — **[C]**
 
@@ -1329,6 +1332,7 @@ As a user without network, I want to export what is on my device as CSV.
 
 **Items (routed 2026-10-12 from build-auto v1s-18-2 review):**
 - [ ] [Deferred-from: review v1s-18-2, 2026-10-12] Reuse the server column schema verbatim (keys, French labels, types pinned by `keevo/backend/src/test/java/com/keevo/reporting/export/ExportDatasetCatalogTest.java`) and the code→French label maps of each provider (`keevo/backend/src/main/java/com/keevo/*/**/adapter/out/export/*ExportDatasetProvider.java`, e.g. movement types, sale status, payment mode, report type incl. `DAILY_COMBINED`, delivery status) — the golden test pins columns but not the label maps
+- [ ] [Deferred-from: build-auto v1s-18-4, 2026-10-12] Wire the offline entry point of the « Exporter » screen: the disabled tile « CSV — données de cet appareil » (key `export-local-csv-entry`, « Bientôt disponible ») shown under the offline banner [keevo/app/lib/features/export/presentation/page/export_page.dart] — enable it and route it to the on-device CSV flow, keeping the note « Contient uniquement les données synchronisées sur cet appareil »
 
 ## Story 18.6: Audit enrichi (backend) — **[C]**
 

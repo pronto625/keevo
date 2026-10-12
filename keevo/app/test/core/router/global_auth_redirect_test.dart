@@ -71,6 +71,16 @@ void main() {
       }
     });
 
+    // v1s-18-4: the export screens are owner-only.
+    test('an employee is kept out of the export routes', () async {
+      for (final path in ['/exports', '/exports/new', '/exports/x']) {
+        expect(await redirect(path, session: true, role: 'EMPLOYEE'), '/pos',
+            reason: path);
+        expect(await redirect(path, session: true, role: 'OWNER'), isNull,
+            reason: path);
+      }
+    });
+
     test('an owner reaches owner-only routes', () async {
       expect(await redirect('/dashboard', session: true, role: 'OWNER'), isNull);
     });

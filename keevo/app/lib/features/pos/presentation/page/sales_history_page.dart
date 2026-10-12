@@ -8,6 +8,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../export/domain/model/export_models.dart';
+import '../../../export/presentation/widget/export_entry_button.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../../team/presentation/provider/employee_provider.dart';
 import '../../domain/model/payment_mode_enum.dart';
@@ -62,6 +64,14 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
     return Scaffold(
       appBar: PosAppBar(
         title: widget.adminMode ? 'Ventes de la boutique' : 'Mes Ventes',
+        actions: [
+          // v1s-18-4 — « Exporter » the sales of the shown store and period
+          // (OWNER only — the button hides itself otherwise).
+          ExportEntryButton(
+            key: const Key('sales-export'),
+            prefill: _exportPrefill(effectiveStoreId),
+          ),
+        ],
       ),
       body: userIdAsync.when(
         data: (userId) {
@@ -291,6 +301,16 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
         _customRange = range;
       });
     }
+  }
+
+  ExportPrefill _exportPrefill(String? storeId) {
+    final filter = _buildFilter(storeId ?? '', null);
+    return ExportPrefill(
+      datasets: const {'sales', 'sale_items'},
+      storeId: storeId,
+      from: filter.from,
+      to: filter.to,
+    );
   }
 
   SalesHistoryFilter _buildFilter(String storeId, String? employeeId) {

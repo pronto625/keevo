@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
@@ -86,6 +87,78 @@ Future<void> showPlanLimitBottomSheet({
             child: const Text('Plus tard'),
           ),
         ],
+      ),
+    ),
+  );
+}
+
+/// Offer sheet for a Premium-only feature (v1s-18-4: Excel / PDF exports,
+/// server `PLAN_FEATURE_REQUIRED`). The CTA opens the subscription screen.
+Future<void> showPremiumFeatureSheet({
+  required BuildContext context,
+  required String title,
+  required String message,
+}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius:
+          BorderRadius.vertical(top: Radius.circular(AppTheme.radiusXL)),
+    ),
+    builder: (ctx) => SafeArea(
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx).colorScheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const SoftIconBadge(
+                  icon: Icons.workspace_premium_rounded, size: 72),
+              const SizedBox(height: 16),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: Theme.of(ctx)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                key: const Key('premium_feature_cta'),
+                icon: const Icon(Icons.star_rounded),
+                label: const Text('Passer au plan Premium'),
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  context.push('/settings/subscription');
+                },
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Plus tard'),
+              ),
+            ],
+          ),
+        ),
       ),
     ),
   );

@@ -63,6 +63,9 @@ import '../../features/audit/domain/model/audit_entry_dto.dart';
 import '../../features/audit/presentation/page/audit_entry_detail_page.dart';
 import '../../features/audit/presentation/page/audit_log_page.dart';
 import '../../features/audit/presentation/page/stock_movements_page.dart';
+import '../../features/export/domain/model/export_models.dart';
+import '../../features/export/presentation/page/export_page.dart';
+import '../../features/export/presentation/page/my_exports_page.dart';
 import '../../features/notifications/presentation/page/notifications_page.dart';
 import '../../features/dashboard/presentation/page/dashboard_page.dart';
 import '../../features/dashboard/presentation/page/store_dashboard_page.dart';
@@ -157,6 +160,7 @@ const _ownerOnlyPrefixes = [
   '/settings/sync',
   '/settings/categories',
   '/audit',
+  '/exports',
   '/reports/rentabilite',
   '/reports/boutiques',
   '/settings/reports',
@@ -687,6 +691,25 @@ final GoRouter appRouter = GoRouter(
         initialEntry:
             state.extra is AuditEntryDto ? state.extra as AuditEntryDto : null,
       ),
+    ),
+    // ── Data export (v1s-18-4 — OWNER only via the `/exports` prefix) ────
+    // `/exports/new` is declared before `/exports/:id`.
+    GoRoute(
+      path: '/exports/new',
+      builder: (_, state) => ExportPage(
+        prefill: state.extra is ExportPrefill
+            ? state.extra as ExportPrefill
+            : null,
+      ),
+    ),
+    GoRoute(
+      path: '/exports',
+      builder: (_, __) => const MyExportsPage(),
+    ),
+    GoRoute(
+      path: '/exports/:id',
+      builder: (_, state) =>
+          MyExportsPage(highlightId: state.pathParameters['id']),
     ),
     // ── Notifications (Story 8.0 — full-screen, no nav bar) ──────────────
     GoRoute(

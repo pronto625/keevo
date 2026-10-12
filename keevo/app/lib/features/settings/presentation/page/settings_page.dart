@@ -187,6 +187,24 @@ class SettingsPage extends ConsumerWidget {
                     ),
                     const _Divider(),
                     _SettingsTile(
+                      key: const Key('settings-export-new'),
+                      icon: Icons.ios_share_rounded,
+                      iconColor: AppTheme.iconTeal,
+                      title: 'Exporter mes données',
+                      subtitle: 'CSV ou Excel, toutes vos données',
+                      onTap: () => context.push('/exports/new'),
+                    ),
+                    const _Divider(),
+                    _SettingsTile(
+                      key: const Key('settings-exports'),
+                      icon: Icons.folder_zip_outlined,
+                      iconColor: AppTheme.iconBlue,
+                      title: 'Mes exports',
+                      subtitle: 'Exports préparés en arrière-plan',
+                      onTap: () => context.push('/exports'),
+                    ),
+                    const _Divider(),
+                    _SettingsTile(
                       icon: Icons.swap_vert_rounded,
                       iconColor: AppTheme.iconTeal,
                       title: 'Mouvements de stock',
@@ -581,6 +599,7 @@ class _SettingsTile extends StatelessWidget {
   final String? badge;
 
   const _SettingsTile({
+    super.key,
     required this.icon,
     required this.iconColor,
     required this.title,
