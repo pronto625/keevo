@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import 'dart:developer' as dev;
 
 import '../../../../core/storage/app_database.dart';
+import '../../../../core/storage/sql_like.dart';
 import '../../../../core/sync/sync_service.dart';
 import '../../domain/model/product_model.dart';
 import '../../domain/model/product_status.dart';
@@ -45,10 +46,10 @@ class LocalProductDataSource {
   }
 
   Future<List<ProductModel>> search(String query) async {
-    final q = '%${query.toLowerCase()}%';
+    final q = likeContains(query.toLowerCase());
     final matchingCategoryIds = await (_db.selectOnly(_db.categories)
           ..addColumns([_db.categories.id])
-          ..where(_db.categories.name.lower().like(q) &
+          ..where(_db.categories.name.lower().like(q, escapeChar: likeEscapeChar) &
               _db.categories.isActive.equals(true)))
         .map((row) => row.read(_db.categories.id)!)
         .get();
@@ -56,8 +57,8 @@ class LocalProductDataSource {
           ..where(
             (p) =>
                 p.archived.equals(false) &
-                (p.name.lower().like(q) |
-                    p.sku.lower().like(q) |
+                (p.name.lower().like(q, escapeChar: likeEscapeChar) |
+                    p.sku.lower().like(q, escapeChar: likeEscapeChar) |
                     (matchingCategoryIds.isEmpty
                         ? const Constant(false)
                         : p.categoryId.isIn(matchingCategoryIds))),

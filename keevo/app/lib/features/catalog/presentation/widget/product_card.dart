@@ -39,7 +39,13 @@ class ProductCard extends ConsumerWidget {
     // Same scope as the displayed quantity.
     final isLowStock = visibleLevels.any((l) => l.isLow);
     final totalStock = visibleLevels.fold<int>(0, (sum, l) => sum + l.quantity);
-    final hasStockData = stockState.levels.isNotEmpty;
+    // Story 16.14: no stock_levels row in the displayed scope means the
+    // product was never stocked here — not a stock-out. Show a neutral
+    // badge instead of a red "0" (red is reserved for real stock-outs).
+    final hasStockData = visibleLevels.isNotEmpty;
+    final neverStocked = !hasStockData &&
+        !stockState.isLoading &&
+        stockState.error == null;
 
     final cs = theme.colorScheme;
     final stockColor = totalStock == 0
@@ -144,6 +150,33 @@ class ProductCard extends ConsumerWidget {
                                       style: theme.textTheme.labelSmall?.copyWith(
                                         color: stockColor,
                                         fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else if (neverStocked)
+                              Container(
+                                key: const ValueKey('product-card-never-stocked'),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: cs.onSurfaceVariant.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.inventory_2_outlined,
+                                      size: 12,
+                                      color: cs.onSurfaceVariant,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Jamais stocké',
+                                      style: theme.textTheme.labelSmall?.copyWith(
+                                        color: cs.onSurfaceVariant,
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
                                   ],

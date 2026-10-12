@@ -10,7 +10,7 @@ Fix the mobile (Flutter) defects found by the V1 conformity and coherence audits
 
 - Story 16.1: FCM token cleanup on logout (done)
 - Story 16.2: iOS notifications (Darwin settings) and foreground display
-- Story 16.3: Dark mode: replace hard-coded `Colors.white` and fix offline banner contrast
+- Story 16.3: Dark mode: replace hard-coded `Colors.white` (recount first: ~95 after UI-3) and fix offline banner contrast
 - Story 16.4: Catalog search: 300 ms debounce and wider matching (done)
 - Story 16.5: SyncIndicator online-stale state and daysSinceLastSync (done)
 - Story 16.6: `ADJUSTMENT` movement type and offline store sync_queue (done)
@@ -18,7 +18,7 @@ Fix the mobile (Flutter) defects found by the V1 conformity and coherence audits
 - Story 16.11: "Réessayer" buttons on app error screens (done)
 - Story 16.12: User feedback on sync rejections (done)
 - Story 16.13: Residual app UX bugs (auth/router, banners, lists, pickers)
-- Story 16.14: Catalog list quality (search escaping, dedup, pagination)
+- Story 16.14: Catalog list quality (search escaping, dedup, never-stocked vs out-of-stock, pagination) (in progress)
 - Story 16.15: Offline sales stuck in the sync queue (done — quarantine)
 
 ## Requirements & Constraints
@@ -31,6 +31,7 @@ Fix the mobile (Flutter) defects found by the V1 conformity and coherence audits
   - Money and stock-ledger operations (`CREATE_SALE`, `VALIDATE_SALE`, `CANCEL_SALE` except when already cancelled, `CREATE_DAY_CLOSURE`, plus stock ledger operations except the ghost product/store cascade) are never auto-deleted by a rejection. Since 16.15, a terminal refusal (or `DATA_INTEGRITY_VIOLATION`) puts them in **quarantine** (`sync_queue.quarantined_at`): kept, never pushed, not counted by `hasPendingOperations()`, surfaced once; a quarantined `CREATE_SALE` carries its `VALIDATE_SALE`/`CANCEL_SALE` along (chain). Transient refusals keep the retry behaviour.
   - Every notice is French and non-technical. It ends with "— annulé sur cet appareil" when something was undone.
 - **The 16.15 decision (PRD FR73a).** A money operation refused for good is quarantined on the device and listed under "Bloquées" (Paramètres › Synchronisation › File for the OWNER, `/sync/blocked` for every role). Actions: *Renvoyer* and *Exporter* (all roles), *Rattacher* a sale to existing products/store and *Abandonner* after a non-dismissed export (OWNER, logged as an `ABANDON` sync event that is never pruned). Server-side ad-hoc sale lines were rejected (no stock movement, breaks FR27). The server refuses a sale or day closure for an unknown store with `STORE_NOT_FOUND`.
+- **Catalog list and search.** Product search runs on local SQLite, returns in under 500 ms on a 500-product catalog, matches name, SKU and category with a plain substring match (no fuzzy library), is debounced 300 ms, and offers "Aucun résultat → Créer" (OWNER) when nothing matches. User-typed `%`/`_` must match literally (escape plus an `ESCAPE` clause). The catalog of each store lists every active/draft product of the tenant, not only products with a `stock_levels` row in that store; stock is computed per store (0 when there is no row), and "stock faible" is scoped to the active store. Distinct products must never be hidden: dedup by sync id/SKU, never by name. A never-stocked product and an out-of-stock product look the same today; any visual difference is a PO/UX decision to record in the story. The UX spec shows an out-of-stock product card greyed out with a ⚠️ badge, using the error color.
 - **OWNER-only surfaces.** Governance actions are OWNER-only, and the navigation hides OWNER-only sections for `role: EMPLOYEE`. The router must not let a null role through. Sale cancel/correct, pending sales, rejected-payload recovery and data export are owner actions, and the backend enforces the same rule (HTTP 403 for EMPLOYEE). The audit log is immutable. Exports are owner-only, tenant-isolated and audited.
 - **Error states.** Every full-page error state offers "Réessayer", which invalidates the failed provider. Messages are human French. Destructive actions need a confirmation dialog.
 - **Accessibility and UI rules.** Tech literacy is 4/10. Critical actions take 3 taps or fewer. Touch targets are at least 48 dp. Contrast meets WCAG AA in light and dark mode. UI text is French.
@@ -76,7 +77,7 @@ Fix the mobile (Flutter) defects found by the V1 conformity and coherence audits
 
 - 16.15 builds directly on 16.12 (rejection policy, `_reconcileRejection`, ghost rollback that strips the ghost `clientId` from queued sales). It also builds on epic 5 (`sync_error_log` with 30-day payload retention, and the Synchronisation settings screen). Any "export then remove" action can reuse Epic 18's owner export conventions. Any server-side ad-hoc sale line touches the backend `CREATE_SALE` sync handler and needs a justified backend change.
 - 16.12 depends on 16.6 (store queue), 16.8 (startup pull), 14.13 (`PLAN_LIMIT_EXCEEDED`) and 13.8 (inventory session rejection).
-- 16.13 collects leftovers from 16.1, 16.5, 14.9, 14.12 and 12.7, and owns banner precedence and the SnackBar flood fix.
-- 16.14 extends 16.4.
+- 16.13 collects leftovers from 16.1, 16.5, 14.9, 14.12 and 12.7, and owns banner precedence and the SnackBar flood fix. The OTP requirement was amended: a single 6-digit field is enough.
+- 16.14 extends 16.4 (debounce, category match, empty-state create) and the earlier fix that made products visible in every store's catalog; keep that visibility and the per-store low-stock scope intact.
 - 16.11 and 16.3 touch the same screens, so coordinate to avoid reintroducing `Colors.white`.
 - The modular rewrite must re-apply every fix in this epic, including the sync protocol behaviour.

@@ -207,6 +207,101 @@ void main() {
     });
   });
 
+  group('LocalProductDataSource.search() — literal LIKE wildcards (16.14)', () {
+    Future<void> seed(String id, String name, {String? sku}) async {
+      final now = DateTime.now();
+      await db.into(db.products).insert(ProductsCompanion.insert(
+        id: id,
+        name: name,
+        sku: Value(sku ?? 'SKU-$id'),
+        archived: const Value(false),
+        createdAt: now,
+        updatedAt: now,
+      ));
+    }
+
+    test('"%" matches literally', () async {
+      await seed('w-1', 'Remise 50%');
+      await seed('w-2', 'Riz 500g');
+      final results = await sut.search('50%');
+      expect(results.map((p) => p.name), ['Remise 50%']);
+    });
+
+    test('"_" matches literally', () async {
+      await seed('w-3', 'a_b');
+      await seed('w-4', 'axb');
+      final results = await sut.search('a_b');
+      expect(results.map((p) => p.name), ['a_b']);
+    });
+
+    test('backslash matches literally', () async {
+      await seed('w-5', r'C:\x');
+      await seed('w-6', 'Cx');
+      final results = await sut.search(r'\x');
+      expect(results.map((p) => p.name), [r'C:\x']);
+    });
+
+    test('SKU "_" matches literally', () async {
+      await seed('w-8', 'Article un', sku: 'KEV_01');
+      await seed('w-9', 'Article deux', sku: 'KEVX01');
+      final results = await sut.search('kev_01');
+      expect(results.map((p) => p.sku), ['KEV_01']);
+    });
+
+    test('category name "%" matches literally', () async {
+      final now = DateTime.now();
+      for (final (id, name) in [('cat-pct', '50% off'), ('cat-g', '500g')]) {
+        await db.into(db.categories).insert(CategoriesCompanion.insert(
+          id: id,
+          name: name,
+          createdAt: now,
+          updatedAt: now,
+        ));
+      }
+      for (final (id, cat) in [('w-10', 'cat-pct'), ('w-11', 'cat-g')]) {
+        await db.into(db.products).insert(ProductsCompanion.insert(
+          id: id,
+          name: 'Produit $id',
+          sku: Value('SKU-$id'),
+          categoryId: Value(cat),
+          createdAt: now,
+          updatedAt: now,
+        ));
+      }
+      final results = await sut.search('50%');
+      expect(results.map((p) => p.id), ['w-10']);
+    });
+
+    test('plain text keeps case-insensitive substring match', () async {
+      await seed('w-7', 'Riz parfumé');
+      final results = await sut.search('RIZ');
+      expect(results.map((p) => p.name), ['Riz parfumé']);
+    });
+
+    test('NFR5: search over 500 products returns in under 500 ms', () async {
+      final now = DateTime.now();
+      await db.batch((b) {
+        b.insertAll(db.products, [
+          for (var i = 0; i < 500; i++)
+            ProductsCompanion.insert(
+              id: 'nfr-$i',
+              name: 'Produit $i',
+              sku: Value('NFR-$i'),
+              archived: const Value(false),
+              createdAt: now,
+              updatedAt: now,
+            ),
+        ]);
+      });
+      await sut.search('warmup');
+      final sw = Stopwatch()..start();
+      final results = await sut.search('produit');
+      sw.stop();
+      expect(results.length, 500);
+      expect(sw.elapsedMilliseconds, lessThan(500));
+    });
+  });
+
   group('LocalProductDataSource.getLowStockProductIds() — per-store scoping', () {
     setUp(() async {
       final now = DateTime.now();

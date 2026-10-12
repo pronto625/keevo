@@ -234,4 +234,34 @@ void main() {
       expect(row!.name, 'Original');
     });
   });
+
+  // v1s-16-14: user-typed `%` / `_` match literally in local search.
+  group('LocalSupplierDataSource.search — literal LIKE wildcards', () {
+    late AppDatabase db;
+    late LocalSupplierDataSource local;
+
+    setUpAll(_overrideSqlite3ForLinuxTesting);
+
+    setUp(() async {
+      db = AppDatabase.forTesting();
+      local = LocalSupplierDataSource(db);
+      final now = DateTime.now();
+      for (final (id, name) in [('s1', 'a_b'), ('s2', 'axb')]) {
+        await db.into(db.suppliers).insert(SuppliersCompanion.insert(
+              id: id,
+              name: name,
+              phone: '+23769000000$id',
+              createdAt: now,
+              updatedAt: now,
+            ));
+      }
+    });
+
+    tearDown(() async => db.close());
+
+    test('"a_b" returns only "a_b"', () async {
+      final results = await local.search('a_b');
+      expect(results.map((s) => s.name), ['a_b']);
+    });
+  });
 }

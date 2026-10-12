@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../../../core/storage/app_database.dart';
+import '../../../../core/storage/sql_like.dart';
 import '../../domain/model/client_model.dart';
 
 /// LocalClientDataSource — Drift-backed offline-first client store (Story 2.5).
@@ -20,11 +21,12 @@ class LocalClientDataSource {
   }
 
   Future<List<ClientModel>> search(String query) async {
-    final q = '%${query.toLowerCase()}%';
+    final q = likeContains(query.toLowerCase());
     final rows = await (_db.select(_db.clients)
           ..where((c) =>
               c.archived.equals(false) &
-              (c.name.lower().like(q) | c.phone.lower().like(q)))
+              (c.name.lower().like(q, escapeChar: likeEscapeChar) |
+                  c.phone.lower().like(q, escapeChar: likeEscapeChar)))
           ..orderBy([(c) => OrderingTerm.asc(c.name)]))
         .get();
     return rows.map(_toModel).toList();

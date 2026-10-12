@@ -112,6 +112,26 @@ void main() {
       expect(result, isEmpty);
     });
 
+    test('searchAcrossStores treats "_" literally (16.14)', () async {
+      for (final (id, name) in [('p-ab', 'a_b'), ('p-axb', 'axb')]) {
+        await db.into(db.products).insert(ProductsCompanion.insert(
+          id: id,
+          name: name,
+          createdAt: DateTime(2025, 1, 1),
+          updatedAt: DateTime(2025, 1, 1),
+        ));
+        await db.into(db.stockLevels).insert(StockLevelsCompanion.insert(
+          id: 'sl-$id',
+          productId: id,
+          storeId: storeId,
+          quantity: 3,
+          updatedAt: DateTime(2025, 1, 1),
+        ));
+      }
+      final result = await datasource.searchAcrossStores('a_b');
+      expect(result.map((e) => e.productName), ['a_b']);
+    });
+
     test('upsertStockLevels writes remote entries into stock_levels', () async {
       final entries = [
         _buildEntry(productId: productId, storeId: storeId, quantity: 25, threshold: 5),

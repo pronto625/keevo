@@ -233,4 +233,42 @@ void main() {
       expect(row!.name, 'Original');
     });
   });
+
+  // v1s-16-14: user-typed `%` / `_` match literally in local search.
+  group('LocalClientDataSource.search — literal LIKE wildcards', () {
+    late AppDatabase db;
+    late LocalClientDataSource local;
+
+    setUpAll(_overrideSqlite3ForLinuxTesting);
+
+    setUp(() async {
+      db = AppDatabase.forTesting();
+      local = LocalClientDataSource(db);
+      final now = DateTime.now();
+      for (final (id, name, phone) in [
+        ('c1', 'Remise 50%', '+237690000001'),
+        ('c2', 'Client 500', '+237690000002'),
+      ]) {
+        await db.into(db.clients).insert(ClientsCompanion.insert(
+              id: id,
+              name: name,
+              phone: phone,
+              createdAt: now,
+              updatedAt: now,
+            ));
+      }
+    });
+
+    tearDown(() async => db.close());
+
+    test('"50%" returns only "Remise 50%"', () async {
+      final results = await local.search('50%');
+      expect(results.map((c) => c.name), ['Remise 50%']);
+    });
+
+    test('phone match is literal too', () async {
+      final results = await local.search('0_01');
+      expect(results, isEmpty);
+    });
+  });
 }

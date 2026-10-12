@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../../../core/storage/app_database.dart';
+import '../../../../core/storage/sql_like.dart';
 import '../../domain/model/store_product_stock_model.dart';
 import '../../domain/model/store_stock_summary_model.dart';
 
@@ -94,13 +95,13 @@ class LocalMultiStoreStockDataSource {
       FROM stock_levels sl
       JOIN products p ON p.id = sl.product_id
       JOIN stores   s ON s.id = sl.store_id AND s.is_active = 1
-      WHERE p.name LIKE ? AND p.archived = 0
+      WHERE p.name LIKE ? ESCAPE '\\' AND p.archived = 0
       GROUP BY p.id, p.name, sl.variant_id, sl.store_id
       ORDER BY p.name ASC, s.name ASC
     ''';
     final rows = await _db.customSelect(
       sql,
-      variables: [Variable.withString('%$query%')],
+      variables: [Variable.withString(likeContains(query))],
     ).get();
     return rows.map(_mapEntry).toList();
   }

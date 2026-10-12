@@ -201,4 +201,55 @@ void main() {
       expect(result.map((p) => p.id), isNot(contains('prod-1')));
     });
   });
+
+  group('productList dedup (16.14) — by id, never by name', () {
+    late _MockProductRepository mockRepo;
+    late AppDatabase db;
+
+    ProductModel product(String id, String name) => ProductModel(
+          id: id,
+          name: name,
+          status: ProductStatus.active,
+          createdAt: DateTime(2026, 3, 14),
+          updatedAt: DateTime(2026, 3, 14),
+        );
+
+    setUp(() {
+      mockRepo = _MockProductRepository();
+      db = AppDatabase.forTesting();
+    });
+
+    tearDown(() async => db.close());
+
+    ProviderContainer buildContainer() => ProviderContainer(overrides: [
+          productRepositoryProvider.overrideWithValue(mockRepo),
+          localProductDataSourceProvider.overrideWithValue(
+              LocalProductDataSource(db, _NoOpSyncService())),
+          activeStoreIdProvider
+              .overrideWith(() => _FixedActiveStoreNotifier('store-a')),
+        ]);
+
+    test('two distinct products whose names differ only by case both appear',
+        () async {
+      when(() => mockRepo.getAll()).thenAnswer(
+          (_) async => [product('p1', 'Coca'), product('p2', 'coca')]);
+      final container = buildContainer();
+      addTearDown(container.dispose);
+
+      final result = await container.read(productListProvider.future);
+
+      expect(result.map((p) => p.id), unorderedEquals(['p1', 'p2']));
+    });
+
+    test('a row repeated with the same id is listed once', () async {
+      when(() => mockRepo.getAll()).thenAnswer(
+          (_) async => [product('p1', 'Coca'), product('p1', 'Coca')]);
+      final container = buildContainer();
+      addTearDown(container.dispose);
+
+      final result = await container.read(productListProvider.future);
+
+      expect(result.map((p) => p.id), ['p1']);
+    });
+  });
 }

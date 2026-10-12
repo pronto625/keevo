@@ -1134,10 +1134,10 @@ As a Toor, I want the catalog list to search safely, deduplicate by id/SKU and s
 **Refs:** UX9, Story 16.4, spec-catalog-product-visibility-other-stores. **Refonte absorption:** re-appliquer Flutter (`catalog`).
 
 **Items (routed 2026-10-11 from deferred-work):**
-- [ ] [Deferred-from: CR v1s-16-4, 2026-07-25] LIKE %/_ not escaped in catalog search [local_product_datasource.dart:51-60] — user typing % or _ gets over-broad matches; escape + ESCAPE clause
-- [ ] [Deferred-from: CR spec-catalog-product-visibility-other-stores, 2026-09-08] Product dedup by name can hide distinct products [product_provider.dart (seenNames)] — dedup by sync id/SKU instead of name
-- [ ] [Deferred-from: CR spec-catalog-product-visibility-other-stores, 2026-09-08] No UI difference 'never stocked' vs 'out of stock' [catalog / out-of-stock tabs] — PO/UX decision
-- [ ] [Deferred-from: CR spec-catalog-product-visibility-other-stores, 2026-09-08] Whole tenant catalog loaded client-side, no pagination [product list use case] — perf at scale
+- [x] [Deferred-from: CR v1s-16-4, 2026-07-25] LIKE %/_ not escaped in catalog search [local_product_datasource.dart:51-60] — user typing % or _ gets over-broad matches; escape + ESCAPE clause — **resolved v1s-16-14**: shared `core/storage/sql_like.dart` (`likeContains` + `ESCAPE '\'`) applied to catalog name/SKU/category, POS, clients, suppliers, multi-store search — spec-v1s-16-14-catalog-list-quality.md
+- [x] [Deferred-from: CR spec-catalog-product-visibility-other-stores, 2026-09-08] Product dedup by name can hide distinct products [product_provider.dart (seenNames)] — dedup by sync id/SKU instead of name — **resolved v1s-16-14**: dedup by id (sync identity); SKU not used (local/offline SKUs may collide → would hide rows); name collisions are rejected/merged server-side (`uq_products_name`, `_dropMergedLocalProduct`)
+- [x] [Deferred-from: CR spec-catalog-product-visibility-other-stores, 2026-09-08] No UI difference 'never stocked' vs 'out of stock' [catalog / out-of-stock tabs] — PO/UX decision — **resolved v1s-16-14** (decision from UX spec: red = rupture totale): ProductCard shows a neutral « Jamais stocké » badge when no stock row exists in the displayed scope, red « 0 » for real stock-outs; Rupture tab membership unchanged (visibility spec)
+- [x] [Deferred-from: CR spec-catalog-product-visibility-other-stores, 2026-09-08] Whole tenant catalog loaded client-side, no pagination [product list use case] — perf at scale — **rejected v1s-16-14 with reason**: offline-first keeps the full catalog local (POS offline), NFR5/FR16 size it at 500 products, list is a lazy `ListView.builder`; NFR5 regression test added (search over 500 products < 500 ms)
 
 **AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
 
@@ -1152,6 +1152,20 @@ As a Toor, I want an offline sale that the server refuses for good (unknown prod
 **Items (routed 2026-10-11 from build-auto v1s-16-12):**
 - [x] [Deferred-from: build-auto v1s-16-12, 2026-10-11] Queued CREATE_SALE referencing a rolled-back product/store is refused forever [rest_sync_service.dart `_reconcileRejection`] — pins `hasPendingOperations()`; needs a PO decision on the end state (ad-hoc sale lines server-side or discard/export action) — **resolved v1s-16-15** (decision PRD FR73a): terminal refusal → quarantine (`sync_queue.quarantined_at`), excluded from push/`hasPendingOperations()`; « Bloquées » list (Paramètres › Synchronisation › File, `/sync/blocked`) with Renvoyer/Exporter (all roles), Rattacher/Abandonner après export (OWNER); server-side ad-hoc lines rejected (no stock movement, FR27); backend refuses unknown store `STORE_NOT_FOUND` — spec-v1s-16-15-sync-stuck-money-ops.md
 - [x] [Deferred-from: build-auto v1s-16-12 residual risks, 2026-10-11] Local `stock_transfers` rows of a rolled-back store are not cleaned [rest_sync_service.dart `_rollbackGhostEntity`] — **resolved v1s-16-15**: CREATE_STORE rollback deletes transfers whose source or destination is the ghost store
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
+
+## Story 16.16: Recherche locale insensible à la casse et aux accents (Unicode) — **[C]**
+
+As a Toor, I want local searches to ignore case and accents beyond ASCII, so that typing "epicerie" or "épicerie" finds "Épicerie" in Catalogue, POS and Contacts.
+
+**Scope:** Local SQLite searches lower-case the query in Dart (Unicode) but compare it with SQLite `LOWER()`/drift `.lower()`, which only fold ASCII; the multi-store stock search does not lower-case at all. Introduce one normalization (e.g. a normalized search column maintained on write, or a registered SQLite function) shared by catalog (name/SKU/category), POS, clients/suppliers and multi-store search, and reuse it for the local duplicate-name check. Keep NFR5 (<500 ms on 500 products) and the 16.14 LIKE escaping. Tracker key: `v1s-16-16-search-unicode-folding`.
+
+**Refs:** UX9, NFR5, Story 16.4 (fuzzy scoped out), Story 16.14 (`core/storage/sql_like.dart`).
+
+**Items (routed 2026-10-12 from build-auto v1s-16-14 review):**
+- [ ] [Deferred-from: build-auto v1s-16-14 review, 2026-10-12] Non-ASCII case-insensitive search fails ("épicerie" vs "Épicerie") [local_product_datasource.dart search(), pos_search_provider.dart, local_client/supplier_datasource.dart, local_multi_store_stock_datasource.dart] — SQLite LOWER folds ASCII only; also weakens the local duplicate-name check in ProductRepositoryImpl.create/createDraft
 
 **AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
 

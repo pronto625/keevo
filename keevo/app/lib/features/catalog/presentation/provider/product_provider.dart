@@ -124,11 +124,17 @@ Future<List<ProductModel>> productList(ProductListRef ref) async {
     return b.updatedAt.compareTo(a.updatedAt);
   });
 
-  // Guard against duplicate names introduced by sync (e.g. local draft + remote
-  // active for the same product).  After sorting, the "best" entry (most stock,
-  // then most recent) is already first; keep it and discard later duplicates.
-  final seenNames = <String>{};
-  products = products.where((p) => seenNames.add(p.name.toLowerCase())).toList();
+  // Dedup by id only — never by name (Story 16.14). Two local rows with the
+  // same name can still exist: an offline rename (update() has no local name
+  // check), a non-ASCII case variant (the local create check uses SQLite's
+  // ASCII-only LOWER), or a same-name server row pulled before this device's
+  // CREATE_PRODUCT push is confirmed. They are shown on purpose: two local
+  // rows are two reachable products, and hiding one was the bug. The server
+  // (unique index `uq_products_name` on lower(name)) rejects or merges them on
+  // sync, and `RestSyncService._dropMergedLocalProduct` then removes the local
+  // duplicate. After sorting, keep the first row per id.
+  final seenIds = <String>{};
+  products = products.where((p) => seenIds.add(p.id)).toList();
 
   return products;
 }
