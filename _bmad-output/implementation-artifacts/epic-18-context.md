@@ -57,10 +57,8 @@ Let the owner take all of their business data out of Keevo, in the format they c
   - `GET /api/v1/audit` accepts filters (period, store, user, action, entity), uses cursor paging and resolves the actor name.
   - `GET /api/v1/audit/{id}` returns the detail view.
 - **Audit immutability (delivered in 18.6):** a Flyway migration (V14) plus the tenant DDL add BEFORE UPDATE/DELETE row triggers and a BEFORE TRUNCATE trigger on `audit_log`, and REVOKE write rights from PUBLIC. The triggers block the owner role too. Sale audit snapshots no longer fall back silently to `'[]'`: a serialization failure logs `AUDIT_SNAPSHOT_SERIALIZATION_FAILED` at ERROR and writes a marker snapshot.
-- **Offline audit data:** the sync pull already ships the tenant audit log (`auditEntries`) to devices and is the natural source for the offline owner list. Today it ships it to every role, including employees, while `/api/v1/audit` is OWNER-only.
-- **Items routed into 18.7 (each must be resolved or rejected, with the reason recorded next to it):**
-  - When the offline owner list is built, make the sync pull role-aware so non-OWNER devices do not receive `auditEntries` (which include metadata such as IP and justification). `DeltaEntityProvider` has no role input today, so this needs one.
-  - `entityLabel` is generic for sales (« Vente »), closures and inventory, and null for employee events. Using the detail screen, decide whether events must carry a richer label (receipt number, date, employee name).
+- **Audit app screen (delivered in 18.7):** the sync pull of `auditEntries` is OWNER-only (`DeltaEntityProvider.ownerOnly()`, role from the authenticated principal), so employee devices receive no audit rows and purge local ones. `GET /api/v1/audit` also accepts a `q` filter on the displayed label. Employee labels are resolved at read time (this also fixes legacy rows). Sales have no receipt number, so the app shows « Vente de X XAF »; closures and inventories keep generic labels next to store and date. Events were not changed. The app keeps enriched audit rows in Drift (schema v29) for the offline list, and the filter model is `AuditFilter` (period, store, employee, action, object type, `q`).
+- **Item routed into 18.4 (must be resolved or rejected, with the reason recorded next to it):** add the « Exporter » button to the app bar of « Historique des actions » (`audit_log_page.dart`). It opens the export flow pre-filled with the « Journal d'audit » dataset and the current `AuditFilter`.
 
 ## UX & Interaction Patterns
 
@@ -82,11 +80,11 @@ Let the owner take all of their business data out of Keevo, in the format they c
 ## Cross-Story Dependencies
 
 - **Order:** 18.6 → 18.7 first (immediate value, no export dependency), then 18.1 → 18.2 → 18.4 → 18.3 → 18.5.
-- 18.7 uses the enriched audit API from 18.6 (list, filters, cursor paging, detail) and the synced `auditEntries` for its offline view; its routed items touch the sync engine and the audit event producers.
+- 18.6 and 18.7 are done. 18.7 uses the enriched audit API from 18.6 and the owner-only synced `auditEntries` for its offline view.
 - 18.2 builds on the ports and registry from 18.1.
 - 18.3 builds on the renderer registry from 18.1 and must reuse the same `ClosureWindow` as the existing end-of-day report.
 - 18.4 uses the 18.1 endpoints and FCM notification, the 18.2 datasets and the 18.3 templates.
-- 18.4's Exporter button on the audit screen depends on 18.7.
+- 18.4 owns the Exporter button on the audit screen built in 18.7; the « Journal d'audit » export must map the 18.7 `AuditFilter` to export filters.
 - 18.5 uses the 18.2 column schema.
 - The audit-log dataset in 18.2 depends on the enriched columns from 18.6.
 - **Outside this epic:** relies on the existing plan gating (`PlanGuard`), FCM notifications, and per-tenant rate limiting. Employee activity reporting (FR67, refonte 17-3) can later build on the enriched audit log.

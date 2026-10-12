@@ -31,6 +31,7 @@ import com.keevo.inventory.counting.domain.event.InventoryReportGeneratedEvent;
 import com.keevo.inventory.counting.domain.event.InventorySessionCancelledEvent;
 import com.keevo.inventory.counting.domain.event.InventorySessionCreatedEvent;
 import com.keevo.inventory.counting.domain.event.InventoryValidatedEvent;
+import com.keevo.reporting.export.domain.event.DataExportedEvent;
 import com.keevo.store.store.domain.event.StoreCreatedEvent;
 import com.keevo.store.store.domain.event.StoreDeactivatedEvent;
 import com.keevo.store.store.domain.event.StoreUpdatedEvent;
@@ -617,6 +618,34 @@ public class AuditEventListener {
                 null);
         log.info("AUDIT: inventory_validated sessionId={} adjustments={} tenantId={} actorId={}",
                 event.sessionId(), event.adjustmentCount(), event.tenantId(), event.actorId());
+    }
+
+    // ── Export (Story v1s-18-1) ──────────────────────────────────────────────
+
+    /**
+     * Every accepted export (direct or background), published on the request thread so the entry
+     * keeps source ONLINE, the actor label and the device.
+     */
+    @EventListener
+    public void on(DataExportedEvent event) {
+        List<String> names = event.datasetLabels().size() == event.datasets().size()
+                ? event.datasetLabels() : event.datasets(); // French labels, keys as fallback
+        String label = "Export " + event.format() + " — " + String.join(", ", names);
+        write(event.actorId(), event.tenantId(), "DATA_EXPORTED", "Export", event.exportId(),
+                null,
+                map("format", event.format(),
+                        "datasets", event.datasets(),
+                        "storeId", str(event.storeId()),
+                        "from", str(event.from()),
+                        "to", str(event.to()),
+                        "rowCount", event.rowCount(),
+                        "mode", event.mode()),
+                event.storeId(), label,
+                map("occurredAt", str(event.occurredAt())),
+                null);
+        log.info("AUDIT: data_exported exportId={} format={} datasets={} rows={} mode={} tenantId={} actorId={}",
+                event.exportId(), event.format(), event.datasets(), event.rowCount(), event.mode(),
+                event.tenantId(), event.actorId());
     }
 
     // ── Password reset (Story 14.12) — cross-tenant, best-effort ────────────

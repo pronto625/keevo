@@ -1,5 +1,6 @@
 package com.keevo.shared.infrastructure.config;
 
+import com.keevo.reporting.export.application.service.ExportPurgeScheduler;
 import com.keevo.commerce.sale.application.service.DayClosureAutoScheduler;
 import com.keevo.identity.auth.application.service.AuthTokenCleanupJob;
 import com.keevo.messaging.notification.application.listener.ProductCreationNotificationListener;
@@ -54,7 +55,8 @@ class SchedulerLockCoverageTest {
             SubscriptionExpiryScheduler.class, Duration.ofDays(1),
             WeeklyReportScheduler.class, Duration.ofHours(1),
             ReportDeliveryRetryService.class, Duration.ofMinutes(20),
-            SyncErrorLogCleanupJob.class, Duration.ofDays(1));
+            SyncErrorLogCleanupJob.class, Duration.ofDays(1),
+            ExportPurgeScheduler.class, Duration.ofHours(1)); // v1s-18-1
 
     /** In-memory sweeps: must run on every instance → never locked. */
     private static final List<Class<?>> IN_MEMORY_SWEEPS = List.of(

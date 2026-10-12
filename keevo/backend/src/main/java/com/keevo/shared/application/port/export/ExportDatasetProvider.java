@@ -1,0 +1,50 @@
+package com.keevo.shared.application.port.export;
+
+import java.util.List;
+
+/**
+ * ExportDatasetProvider — port through which a domain contributes one exportable dataset to the
+ * export module (Story v1s-18-1, FR55/FR94/FR96). Mirrors the sync {@code DeltaEntityProvider}.
+ *
+ * <p>Lives in the OPEN {@code shared} module so that catalog, commerce, store, inventory… can
+ * implement it without depending on {@code reporting} (which already depends on them — a port
+ * owned by reporting would create Modulith cycles). A new domain adds a provider bean; the export
+ * module discovers it by {@link #key()} without being changed.
+ *
+ * <p><b>Contract</b>
+ * <ul>
+ *   <li><b>Tenant scoping</b> comes from the tenant-routed JPA {@code EntityManager}
+ *       ({@code search_path} set from {@code TenantContext}). Implementations must never read
+ *       through {@code JdbcTemplate} or a raw {@code DataSource}.</li>
+ *   <li><b>Bounded memory</b>: {@link #readPage} returns at most {@code limit} rows, read by
+ *       keyset in a stable order, each call in its own read-only transaction.</li>
+ *   <li><b>Row values</b> match {@link #columns()} order and types: {@code String},
+ *       {@code Long}/{@code Integer}, {@code BigDecimal}, {@code Boolean}, {@code LocalDate},
+ *       {@code Instant}; {@code null} is allowed. Amounts are integer XAF.</li>
+ * </ul>
+ */
+public interface ExportDatasetProvider {
+
+    /** Stable dataset key used in requests ({@code [a-z][a-z0-9_]*}, e.g. {@code stores}). */
+    String key();
+
+    /** French label (sheet name, audit label). */
+    String label();
+
+    /** Column schema, in row order. */
+    List<ExportColumn> columns();
+
+    /** Number of rows matching {@code filter} (decides direct vs background export). */
+    long count(ExportFilter filter);
+
+    /**
+     * Read one page.
+     *
+     * @param filter filters
+     * @param cursor opaque cursor from a previous page's {@link ExportPage#nextCursor()},
+     *               {@code null} for the first page
+     * @param limit  maximum number of rows to return
+     * @return the page; {@code nextCursor == null} when there is no further row
+     */
+    ExportPage readPage(ExportFilter filter, String cursor, int limit);
+}

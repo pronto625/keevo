@@ -1267,6 +1267,12 @@ As an owner, I want to export my data as CSV or Excel, so that I can use it outs
 **And** a 50,000-row export completes without exhausting memory (streaming)
 **And** downloading an expired export returns 410
 
+**Delivered 2026-10-12 (v1s-18-1, spec-v1s-18-1-export-module-foundation.md):**
+- [x] Libraries confirmed: XLSX = Apache POI `poi-ooxml` 5.4.1 (SXSSF); PDF (18.3) = Thymeleaf + `io.github.openhtmltopdf:openhtmltopdf-pdfbox` 1.1.22; storage = local disk behind `ExportFileStorage` (24 h, hourly purge)
+- [x] `ExportDatasetProvider` port lives in `shared/application/port/export` (avoids Modulith cycles); demo dataset `stores`; 18.2 adds one provider per domain (keys `[a-z][a-z0-9_]{0,39}`)
+- [x] Endpoints `POST/GET /api/v1/exports`, `/{id}`, `/{id}/file`, `/datasets`, public signed `/download?token=`; FCM `EXPORT_READY` / `EXPORT_FAILED` (deep link `/exports/{id}`) for 18.4
+- [x] Decisions: OWNER-only (EMPLOYEE 403); FREE large CSV streamed directly (background is Premium); « Mes exports » lists background jobs only; CSV cell formats `dd/MM/yyyy`, `dd/MM/yyyy HH:mm:ss` WAT, decimal comma, Oui/Non — 18.5 must reuse them
+
 ## Story 18.2: Jeux de données exportables — **[C]**
 
 As an owner, I want every business dataset exportable, so that nothing stays locked in the app.
