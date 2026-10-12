@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../features/catalog/data/datasource/remote_product_datasource.dart';
+import '../di/providers.dart' show kUserRoleKey;
 import '../storage/app_constants.dart';
 import '../storage/app_database.dart';
 import 'sync_rejection_policy.dart';
@@ -841,6 +842,13 @@ class RestSyncService implements SyncService {
   /// e.g. `2026-03-22T00:30:00.000 +01:00`). Pulled rows then sort and compare
   /// like locally-created ones, and read back through Drift as the same
   /// instant — local time without the offset would be read as UTC.
+  /// Metadata arrives as JSON text from the pull delta; a map is re-encoded.
+  static String? _jsonText(dynamic value) {
+    if (value == null) return null;
+    if (value is String) return value;
+    return jsonEncode(value);
+  }
+
   String? _toLocalIso(dynamic utcIso) {
     if (utcIso == null) return null;
     return _database.typeMapping
@@ -1407,14 +1415,22 @@ class RestSyncService implements SyncService {
   }
 
   Future<void> _upsertAuditEntries(List<dynamic> entries) async {
+    // v1s-18-7 (FR98): the audit log is owner-only. A non-owner device drops
+    // any rows pulled before the server-side gate (they carry justification
+    // context) and never stores new ones.
+    if (_prefs.getString(kUserRoleKey) != 'OWNER') {
+      await _database.delete(_database.auditEntries).go();
+      return;
+    }
     if (entries.isEmpty) return;
     for (final e in entries) {
       final map = e as Map<String, dynamic>;
       // INSERT OR IGNORE — audit entries are immutable
       await _database.customStatement(
         'INSERT OR IGNORE INTO audit_entries (id, user_id, entity_type, '
-        'entity_id, action, value_before, value_after, occurred_at) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        'entity_id, action, value_before, value_after, occurred_at, '
+        'store_id, entity_label, device_id, source, metadata) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
           map['id'],
           map['userId'],
@@ -1424,6 +1440,12 @@ class RestSyncService implements SyncService {
           map['valueBefore'],
           map['valueAfter'],
           _toLocalIso(map['occurredAt']),
+          // v1s-18-7 — enrichment keys (absent from older servers → null)
+          map['storeId'],
+          map['entityLabel'],
+          map['deviceId'],
+          map['source'],
+          _jsonText(map['metadata']),
         ],
       );
     }

@@ -28,10 +28,16 @@ public interface SyncUseCase {
     /**
      * @param cursor opaque {@link SyncPullResult#nextCursor()} of the previous page, null for
      *               the first page; {@code since} stays the same on every page of a pull
+     * @param owner  true when the actor is the tenant OWNER; owner-only deltas (audit log) are
+     *               sent only then (Story v1s-18-7). Legacy constructors fail closed (false).
      */
-    record PullCommand(UUID actorId, String tenantId, Instant since, String cursor) {
+    record PullCommand(UUID actorId, String tenantId, Instant since, String cursor, boolean owner) {
+        public PullCommand(UUID actorId, String tenantId, Instant since, String cursor) {
+            this(actorId, tenantId, since, cursor, false);
+        }
+
         public PullCommand(UUID actorId, String tenantId, Instant since) {
-            this(actorId, tenantId, since, null);
+            this(actorId, tenantId, since, null, false);
         }
     }
 

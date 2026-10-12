@@ -400,6 +400,37 @@ class AuditControllerTest {
         }
 
         @Test
+        @DisplayName("v1s-18-7 — q is trimmed and bound into the AuditQuery")
+        void q_bound() throws Exception {
+            var expected = new AuditPort.AuditQuery(null, null, null, null, null, "Product", null, "pagne");
+            when(auditPort.search(eq(expected), isNull(), eq(0), eq(20))).thenReturn(slice(List.of()));
+
+            mockMvc.perform(get("/api/v1/audit").param("entityType", "Product").param("q", "  pagne "))
+                    .andExpect(status().isOk());
+            verify(auditPort).search(eq(expected), isNull(), eq(0), eq(20));
+        }
+
+        @Test
+        @DisplayName("v1s-18-7 — blank q is ignored")
+        void q_blank_ignored() throws Exception {
+            when(auditPort.search(eq(AuditPort.AuditQuery.none()), isNull(), eq(0), eq(20)))
+                    .thenReturn(slice(List.of()));
+
+            mockMvc.perform(get("/api/v1/audit").param("q", "   "))
+                    .andExpect(status().isOk());
+            verify(auditPort).search(eq(AuditPort.AuditQuery.none()), isNull(), eq(0), eq(20));
+        }
+
+        @Test
+        @DisplayName("v1s-18-7 — q longer than 100 chars → 400 VALIDATION_ERROR")
+        void q_tooLong_400() throws Exception {
+            mockMvc.perform(get("/api/v1/audit").param("q", "x".repeat(101)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.domainCode").value("VALIDATION_ERROR"));
+            verify(auditPort, never()).search(any(), any(), any(), anyInt());
+        }
+
+        @Test
         @DisplayName("page * size beyond the int range → 400 VALIDATION_ERROR (no negative offset / 500)")
         void pageOffsetOverflow_400() throws Exception {
             mockMvc.perform(get("/api/v1/audit").param("page", "50000000").param("size", "100"))

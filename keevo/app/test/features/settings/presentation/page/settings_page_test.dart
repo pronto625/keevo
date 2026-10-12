@@ -199,12 +199,55 @@ void main() {
           200,
           scrollable: find.byType(Scrollable).first,
         );
+        // The tile can stop at the very bottom edge: bring it fully in view.
+        await tester.ensureVisible(find.text('Signaler un problème'));
+        await tester.pumpAndSettle();
         await tester.tap(find.text('Signaler un problème'));
         await tester.pumpAndSettle();
 
         expect(find.text('FeedbackPage from=/'), findsOneWidget);
       });
     }
+  });
+
+  group('SettingsPage — Historique des actions (v1s-18-7)', () {
+    testWidgets('OWNER sees « Historique des actions » and « Mouvements de stock »',
+        (tester) async {
+      await tester.pumpWidget(_buildPage(
+        mockFcmService: mockFcm,
+        mockTokenDataSource: mockTokenDs,
+        prefs: prefs,
+        role: 'OWNER',
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.text('Mouvements de stock'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('Historique des actions'), findsOneWidget);
+      expect(find.text('Qui a fait quoi, où et quand'), findsOneWidget);
+      expect(find.text('Mouvements de stock'), findsOneWidget);
+      expect(find.text('Journal d\'audit'), findsNothing);
+    });
+
+    testWidgets('EMPLOYEE sees neither tile', (tester) async {
+      await tester.pumpWidget(_buildPage(
+        mockFcmService: mockFcm,
+        mockTokenDataSource: mockTokenDs,
+        prefs: prefs,
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.text('Se déconnecter'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('Historique des actions'), findsNothing);
+      expect(find.text('Mouvements de stock'), findsNothing);
+    });
   });
 
   group('SettingsPage — Logout FCM cleanup (Story 16.1)', () {

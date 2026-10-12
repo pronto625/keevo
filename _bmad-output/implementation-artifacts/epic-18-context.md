@@ -56,10 +56,11 @@ Let the owner take all of their business data out of Keevo, in the format they c
 - **Audit API:**
   - `GET /api/v1/audit` accepts filters (period, store, user, action, entity), uses cursor paging and resolves the actor name.
   - `GET /api/v1/audit/{id}` returns the detail view.
-- **Items routed into 18.6:**
-  - Audit snapshots silently become `'[]'` when JSON serialization fails in the sale services (`ValidateSaleService`, `CorrectSaleService`, `RecordSaleService`). Log and alert on that failure instead.
-  - `audit_log` has no database-level immutability. Add a BEFORE UPDATE/DELETE trigger and a REVOKE through Flyway (V10). The owner decided this protection is delivered here.
-  - Each item must be resolved or rejected, with the reason recorded next to it.
+- **Audit immutability (delivered in 18.6):** a Flyway migration (V14) plus the tenant DDL add BEFORE UPDATE/DELETE row triggers and a BEFORE TRUNCATE trigger on `audit_log`, and REVOKE write rights from PUBLIC. The triggers block the owner role too. Sale audit snapshots no longer fall back silently to `'[]'`: a serialization failure logs `AUDIT_SNAPSHOT_SERIALIZATION_FAILED` at ERROR and writes a marker snapshot.
+- **Offline audit data:** the sync pull already ships the tenant audit log (`auditEntries`) to devices and is the natural source for the offline owner list. Today it ships it to every role, including employees, while `/api/v1/audit` is OWNER-only.
+- **Items routed into 18.7 (each must be resolved or rejected, with the reason recorded next to it):**
+  - When the offline owner list is built, make the sync pull role-aware so non-OWNER devices do not receive `auditEntries` (which include metadata such as IP and justification). `DeltaEntityProvider` has no role input today, so this needs one.
+  - `entityLabel` is generic for sales (« Vente »), closures and inventory, and null for employee events. Using the detail screen, decide whether events must carry a richer label (receipt number, date, employee name).
 
 ## UX & Interaction Patterns
 
@@ -73,14 +74,15 @@ Let the owner take all of their business data out of Keevo, in the format they c
 - **"Historique des actions" screen (owner-only):**
   - Wording frames traceability as protection ("historique", "protection").
   - **List:** one line per action, with a type icon, a readable sentence (« **Awa** a modifié le prix de **Pagne wax 6 yards** »), store and time. Lines are grouped by day with infinite scroll. Filter chips: period, store, employee, action type, object search.
-  - **Detail:** Qui (name, role, device), Quoi, Sur quoi (links to the product, sale or employee if it still exists), Quand et où (exact time, store, source « En ligne » or « Synchronisé depuis l'appareil le… »), Changements (Avant → Après table, XAF amounts, quantities in units), Contexte.
-  - Has an Exporter button. Offline, it shows the last known state. Unknown action types get a generic rendering.
+  - **Detail** (bottom sheet or page), opened by tapping a line: Qui (name, role, device), Quoi (the action), Sur quoi (the object, linking to the product, sale or employee record if it still exists), Quand et où (exact date and time, store, source « En ligne » or « Synchronisé depuis l'appareil le… »), Changements (field-by-field Avant → Après table, amounts in XAF, quantities in units), Contexte (reason, justification).
+  - **Exporter** opens the export flow pre-filled with the « Journal d'audit » dataset and the current filters.
+  - Offline, it shows the last known state. Unknown action types get a generic rendering. Employees never see the screen.
 - **Rename:** the current app "Audit" screen (stock movement history) stays and is renamed **Mouvements de stock**.
 
 ## Cross-Story Dependencies
 
 - **Order:** 18.6 → 18.7 first (immediate value, no export dependency), then 18.1 → 18.2 → 18.4 → 18.3 → 18.5.
-- 18.7 uses the enriched audit API from 18.6.
+- 18.7 uses the enriched audit API from 18.6 (list, filters, cursor paging, detail) and the synced `auditEntries` for its offline view; its routed items touch the sync engine and the audit event producers.
 - 18.2 builds on the ports and registry from 18.1.
 - 18.3 builds on the renderer registry from 18.1 and must reuse the same `ClosureWindow` as the existing end-of-day report.
 - 18.4 uses the 18.1 endpoints and FCM notification, the 18.2 datasets and the 18.3 templates.

@@ -47,13 +47,24 @@ public class AuditLogRepositoryAdapter implements AuditPort {
      * Story v1s-18-6 — enriched read projection. {@code public.users} is the only cross-schema
      * join; {@code stores}/{@code employees} resolve to the tenant schema via search_path.
      * The employee lookup is LATERAL + LIMIT 1 so a user with several employee rows never
-     * duplicates an audit row.
+     * duplicates an audit row. Story v1s-18-7 — {@code te} gives Employee targets without a
+     * stored label (legacy rows, events carrying no name) the employee's current name.
      */
+    /**
+     * Displayed object label: stored label, else the target employee's name (v1s-18-7).
+     * Must stay identical to the label column of {@link #SELECT_ENRICHED}.
+     */
+    private static final String LABEL_EXPR =
+            "COALESCE(a.entity_label, NULLIF(TRIM(CONCAT_WS(' ', te.first_name, te.last_name)), ''))";
+
     private static final String SELECT_ENRICHED = """
             SELECT CAST(a.id AS text), a.entity_type, CAST(a.entity_id AS text), a.action,
                    a.value_before, a.value_after, CAST(a.user_id AS text), a.occurred_at,
                    u.phone_number,
-                   CAST(a.store_id AS text), st.name, a.entity_label, a.device_id, a.source,
+                   CAST(a.store_id AS text), st.name,
+                   COALESCE(a.entity_label,
+                            NULLIF(TRIM(CONCAT_WS(' ', te.first_name, te.last_name)), '')),
+                   a.device_id, a.source,
                    CAST(a.metadata AS text),
                    NULLIF(TRIM(COALESCE(e.first_name, '') || ' ' || COALESCE(e.last_name, '')), ''),
                    a.metadata ->> 'actorLabel',
@@ -61,6 +72,7 @@ public class AuditLogRepositoryAdapter implements AuditPort {
             FROM audit_log a
             LEFT JOIN public.users u ON a.user_id = u.id
             LEFT JOIN stores st ON st.id = a.store_id
+            LEFT JOIN employees te ON a.entity_type = 'Employee' AND te.id = a.entity_id
             LEFT JOIN LATERAL (
                 SELECT emp.first_name, emp.last_name FROM employees emp
                 WHERE emp.user_id = a.user_id
@@ -160,6 +172,11 @@ public class AuditLogRepositoryAdapter implements AuditPort {
             where.add("a.entity_id = :entityId");
             params.put("entityId", query.entityId());
         }
+        if (query.q() != null && !query.q().isBlank()) {
+            // Same expression as the displayed label (employee-name fallback included).
+            where.add(LABEL_EXPR + " ILIKE :q ESCAPE '\\'");
+            params.put("q", "%" + escapeLike(query.q().trim()) + "%");
+        }
         if (after != null) {
             where.add("(a.occurred_at, a.id) < (CAST(:cursorAt AS timestamptz), CAST(:cursorId AS uuid))");
             params.put("cursorAt", after.occurredAt());
@@ -231,6 +248,11 @@ public class AuditLogRepositoryAdapter implements AuditPort {
         if (employeeName != null && !employeeName.isBlank()) return employeeName;
         if (storedLabel != null && !storedLabel.isBlank()) return storedLabel;
         return CurrentActor.fallbackLabel(role);
+    }
+
+    /** Escapes LIKE wildcards so {@code %} and {@code _} in the search text match literally. */
+    static String escapeLike(String text) {
+        return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 
     private static Instant toInstant(Object o) {

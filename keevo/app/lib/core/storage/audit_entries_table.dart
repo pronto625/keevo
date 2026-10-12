@@ -14,6 +14,17 @@ class AuditEntries extends Table {
   TextColumn get valueAfter => text().nullable()();
   DateTimeColumn get occurredAt => dateTime()();
 
+  // v1s-18-7 — enrichment from v1s-18-6 (null on rows written before it).
+  TextColumn get storeId => text().nullable()();
+  TextColumn get entityLabel => text().nullable()();
+  TextColumn get deviceId => text().nullable()();
+
+  /// ONLINE | SYNC | SYSTEM.
+  TextColumn get source => text().nullable()();
+
+  /// JSON object text (justification, motif, scope, actorLabel…).
+  TextColumn get metadata => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

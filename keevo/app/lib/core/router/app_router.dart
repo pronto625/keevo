@@ -59,7 +59,10 @@ import '../../features/inventory/presentation/page/inventory_gap_report_page.dar
 import '../../features/inventory/presentation/page/inventory_launch_page.dart';
 import '../../features/inventory/presentation/page/transfer_history_page.dart';
 import '../../features/team/presentation/page/team_page.dart';
-import '../../features/audit/presentation/page/audit_page.dart';
+import '../../features/audit/domain/model/audit_entry_dto.dart';
+import '../../features/audit/presentation/page/audit_entry_detail_page.dart';
+import '../../features/audit/presentation/page/audit_log_page.dart';
+import '../../features/audit/presentation/page/stock_movements_page.dart';
 import '../../features/notifications/presentation/page/notifications_page.dart';
 import '../../features/dashboard/presentation/page/dashboard_page.dart';
 import '../../features/dashboard/presentation/page/store_dashboard_page.dart';
@@ -668,10 +671,22 @@ final GoRouter appRouter = GoRouter(
         screenContext: state.uri.queryParameters['from'],
       ),
     ),
-    // ── Audit trail (OWNER only — full-screen, no nav bar) ────────────────
+    // ── Action history (v1s-18-7 — OWNER only via the `/audit` prefix) ───
     GoRoute(
       path: '/audit',
-      builder: (_, __) => const AuditPage(),
+      builder: (_, __) => const AuditLogPage(),
+    ),
+    GoRoute(
+      path: '/audit/stock-movements',
+      builder: (_, __) => const StockMovementsPage(),
+    ),
+    GoRoute(
+      path: '/audit/entry/:id',
+      builder: (_, state) => AuditEntryDetailPage(
+        entryId: state.pathParameters['id'] ?? '',
+        initialEntry:
+            state.extra is AuditEntryDto ? state.extra as AuditEntryDto : null,
+      ),
     ),
     // ── Notifications (Story 8.0 — full-screen, no nav bar) ──────────────
     GoRoute(

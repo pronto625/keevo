@@ -56,6 +56,21 @@ void main() {
           '/pos');
     });
 
+    // v1s-18-7: the action history, its detail and the stock movements
+    // screen are owner-only.
+    test('an employee is kept out of the action history routes', () async {
+      for (final path in [
+        '/audit',
+        '/audit/entry/abc',
+        '/audit/stock-movements',
+      ]) {
+        expect(await redirect(path, session: true, role: 'EMPLOYEE'), '/pos',
+            reason: path);
+        expect(await redirect(path, session: true, role: 'OWNER'), isNull,
+            reason: path);
+      }
+    });
+
     test('an owner reaches owner-only routes', () async {
       expect(await redirect('/dashboard', session: true, role: 'OWNER'), isNull);
     });

@@ -243,6 +243,61 @@ class AuditLogEnrichmentPostgresIntegrationTest extends PostgresIntegrationTest 
     }
 
     @Test
+    @DisplayName("v1s-18-7 — Employee target without stored label gets the employee name at read time; stored label wins")
+    void employeeLabelFallback() {
+        UUID storeId = insertStore("S");
+        UUID owner = insertUser("OWNER");
+        UUID employeeId = insertEmployee(insertUser("EMPLOYEE"), storeId, "Awa", "Diallo");
+        Instant at = Instant.parse("2026-05-01T10:00:00Z");
+
+        UUID unlabelled = insertLabelled(owner, "Employee", employeeId, null, at);
+        UUID labelled = insertLabelled(owner, "Employee", employeeId, "Ancien nom", at.plusSeconds(1));
+        UUID gone = insertLabelled(owner, "Employee", UUID.randomUUID(), null, at.plusSeconds(2));
+        UUID otherType = insertLabelled(owner, "Product", employeeId, null, at.plusSeconds(3));
+
+        assertThat(adapter.findById(unlabelled).orElseThrow().entityLabel()).isEqualTo("Awa Diallo");
+        assertThat(adapter.findById(labelled).orElseThrow().entityLabel()).isEqualTo("Ancien nom");
+        assertThat(adapter.findById(gone).orElseThrow().entityLabel()).isNull();
+        assertThat(adapter.findById(otherType).orElseThrow().entityLabel()).isNull();
+        assertThat(adapter.search(new AuditQuery(null, null, null, owner, null, "Employee", null), null, 0, 10)
+                .entries()).hasSize(3);
+    }
+
+    @Test
+    @DisplayName("v1s-18-7 — q filters on the label, case-insensitive, with % and _ matched literally")
+    void q_labelSearch_escapesWildcards() {
+        UUID user = insertUser("OWNER");
+        Instant at = Instant.parse("2026-06-01T10:00:00Z");
+        UUID pagne = insertLabelled(user, "Product", UUID.randomUUID(), "Pagne wax 6 yards", at);
+        UUID promo = insertLabelled(user, "Product", UUID.randomUUID(), "Remise 10% pagne", at.plusSeconds(1));
+        insertLabelled(user, "Product", UUID.randomUUID(), "Remise 100 FCFA", at.plusSeconds(2));
+        insertLabelled(user, "Product", UUID.randomUUID(), "Savon", at.plusSeconds(3));
+        UUID underscore = insertLabelled(user, "Product", UUID.randomUUID(), "code_a", at.plusSeconds(4));
+        insertLabelled(user, "Product", UUID.randomUUID(), "codeXa", at.plusSeconds(5));
+
+        assertThat(search(user, "PAGNE")).containsExactlyInAnyOrder(pagne, promo);
+        assertThat(search(user, "10%")).containsExactly(promo);
+        assertThat(search(user, "e_a")).containsExactly(underscore);
+    }
+
+    @Test
+    @DisplayName("v1s-18-7 — q also finds an Employee row labelled by the employee-name fallback")
+    void q_matchesEmployeeNameFallback() {
+        UUID storeId = insertStore("S");
+        UUID owner = insertUser("OWNER");
+        UUID employeeId = insertEmployee(insertUser("EMPLOYEE"), storeId, "Mariam", "Kouassi");
+        UUID row = insertLabelled(owner, "Employee", employeeId, null, Instant.parse("2026-07-01T10:00:00Z"));
+        insertLabelled(owner, "Employee", UUID.randomUUID(), null, Instant.parse("2026-07-01T10:00:01Z"));
+
+        assertThat(search(owner, "kouassi")).containsExactly(row);
+    }
+
+    private List<UUID> search(UUID user, String q) {
+        return adapter.search(new AuditQuery(null, null, null, user, null, null, null, q), null, 0, 20)
+                .entries().stream().map(AuditEntryRecord::id).toList();
+    }
+
+    @Test
     @DisplayName("record(AuditEntry) persists the enrichment with metadata as jsonb")
     void record_persistsEnrichment() {
         UUID entityId = UUID.randomUUID();
@@ -345,11 +400,20 @@ class AuditLogEnrichmentPostgresIntegrationTest extends PostgresIntegrationTest 
         return id;
     }
 
-    private void insertEmployee(UUID userId, UUID storeId, String first, String last) {
+    private UUID insertEmployee(UUID userId, UUID storeId, String first, String last) {
+        UUID id = UUID.randomUUID();
         Timestamp now = Timestamp.from(Instant.now());
         jdbc.update("INSERT INTO employees (id, created_at, updated_at, first_name, last_name, "
                         + "password_change_required, status, store_id, user_id) VALUES (?, ?, ?, ?, ?, FALSE, 'ACTIVE', ?, ?)",
-                UUID.randomUUID(), now, now, first, last, storeId, userId);
+                id, now, now, first, last, storeId, userId);
+        return id;
+    }
+
+    private UUID insertLabelled(UUID userId, String entityType, UUID entityId, String label, Instant at) {
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO audit_log (id, user_id, entity_type, entity_id, action, occurred_at, entity_label) "
+                + "VALUES (?, ?, ?, ?, 'X_ACTION', ?, ?)", id, userId, entityType, entityId, Timestamp.from(at), label);
+        return id;
     }
 
     private UUID insertLegacy(UUID userId, UUID entityId, Instant at) {

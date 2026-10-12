@@ -39,6 +39,9 @@ public class AuditController {
 
     static final int MAX_SIZE = 100;
 
+    /** Story v1s-18-7 — max length of the object label search text. */
+    static final int MAX_QUERY_LENGTH = 100;
+
     private final AuditPort auditPort;
 
     public AuditController(AuditPort auditPort) {
@@ -50,7 +53,8 @@ public class AuditController {
      *
      * <p>Filters (all optional, Story v1s-18-6): {@code from}/{@code to} (ISO-8601 instants,
      * inclusive), {@code storeId}, {@code userId}, {@code action}, {@code entityType},
-     * {@code entityId}. Paging: keyset {@code cursor} (from {@code nextCursor}) or legacy
+     * {@code entityId}, {@code q} (object label search, trimmed, max 100 chars — Story v1s-18-7).
+     * Paging: keyset {@code cursor} (from {@code nextCursor}) or legacy
      * {@code page} (0-based offset, used only without cursor). {@code size} 1..100, default 20.
      *
      * @return HTTP 200 with entries, {@code hasMore}, {@code page}, {@code size}, {@code nextCursor};
@@ -65,6 +69,7 @@ public class AuditController {
             @RequestParam(required = false) String action,
             @RequestParam(required = false) String entityType,
             @RequestParam(required = false) UUID entityId,
+            @RequestParam(required = false) String q,
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "0")  int page,
             @RequestParam(defaultValue = "20") int size) {
@@ -83,6 +88,11 @@ public class AuditController {
         if (from != null && to != null && from.isAfter(to)) {
             throw new InvalidRequestParameterException("from", "from must not be after to");
         }
+        String search = blankToNull(q == null ? null : q.trim());
+        if (search != null && search.length() > MAX_QUERY_LENGTH) {
+            throw new InvalidRequestParameterException("q",
+                    "q must be at most " + MAX_QUERY_LENGTH + " characters");
+        }
         String effectiveCursor = cursor == null || cursor.isBlank() ? null : cursor;
         if (effectiveCursor != null) {
             try {
@@ -94,7 +104,7 @@ public class AuditController {
         }
 
         AuditPort.AuditQuery query = new AuditPort.AuditQuery(
-                from, to, storeId, userId, blankToNull(action), blankToNull(entityType), entityId);
+                from, to, storeId, userId, blankToNull(action), blankToNull(entityType), entityId, search);
         AuditPort.AuditSlice slice = auditPort.search(query, effectiveCursor, page, size);
 
         AuditPageResponse response = new AuditPageResponse(
