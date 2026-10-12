@@ -366,7 +366,10 @@ public class SyncPushService implements SyncUseCase {
         for (DeltaEntityProvider provider : deltaProviders) {
             String key = provider.entityKey();
             List<Map<String, Object>> rows = List.of();
-            if (!state.isDone(key)) {
+            if (provider.ownerOnly() && !command.owner()) {
+                // Story v1s-18-7 — owner-only delta: never queried for other roles (FR98).
+                state.positions().put(key, PullCursor.DONE);
+            } else if (!state.isDone(key)) {
                 DeltaEntityProvider.Position after = state.positions().get(key);
                 try {
                     DeltaEntityProvider.Page page = readOnlyTx.execute(status ->

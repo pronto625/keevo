@@ -142,7 +142,11 @@ public interface AuditPort {
             String metadataJson
     ) {}
 
-    /** Read filters — every field is optional; {@code from} and {@code to} are both inclusive. */
+    /**
+     * Read filters — every field is optional; {@code from} and {@code to} are both inclusive.
+     * {@code q} (Story v1s-18-7) is a case-insensitive substring of the object label
+     * (wildcards matched literally).
+     */
     record AuditQuery(
             Instant from,
             Instant to,
@@ -150,10 +154,17 @@ public interface AuditPort {
             UUID userId,
             String action,
             String entityType,
-            UUID entityId
+            UUID entityId,
+            String q
     ) {
+        /** Pre v1s-18-7 shape — no object search. */
+        public AuditQuery(Instant from, Instant to, UUID storeId, UUID userId,
+                          String action, String entityType, UUID entityId) {
+            this(from, to, storeId, userId, action, entityType, entityId, null);
+        }
+
         public static AuditQuery none() {
-            return new AuditQuery(null, null, null, null, null, null, null);
+            return new AuditQuery(null, null, null, null, null, null, null, null);
         }
     }
 

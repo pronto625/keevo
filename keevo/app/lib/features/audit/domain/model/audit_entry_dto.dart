@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'audit_entry_dto.freezed.dart';
@@ -38,10 +40,40 @@ class AuditEntryDto with _$AuditEntryDto {
 
     /// Timestamp of the audit entry (UTC).
     required DateTime occurredAt,
+
+    // ── v1s-18-6 enrichment (null on rows written before it) ──────────────
+
+    /// Store the action happened in.
+    String? storeId,
+
+    /// Store name resolved by the backend (or the local `stores` table).
+    String? storeName,
+
+    /// Readable object label at action time (product, client, employee name…).
+    String? entityLabel,
+
+    /// Originating device id.
+    String? deviceId,
+
+    /// `ONLINE` | `SYNC` | `SYSTEM`.
+    String? source,
+
+    /// Actor display name resolved by the backend (or local `employees`).
+    String? actorName,
+
+    /// Context JSON object as text (REST sends an object, Drift stores text).
+    @JsonKey(fromJson: metadataFromJson) String? metadata,
   }) = _AuditEntryDto;
 
   factory AuditEntryDto.fromJson(Map<String, dynamic> json) =>
       _$AuditEntryDtoFromJson(json);
+}
+
+/// Accepts the REST JSON object or the Drift/sync JSON text.
+String? metadataFromJson(Object? value) {
+  if (value == null) return null;
+  if (value is String) return value;
+  return jsonEncode(value);
 }
 
 /// AuditPageResult — result of a paginated audit history request.

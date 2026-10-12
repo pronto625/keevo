@@ -3,6 +3,7 @@ package com.keevo.sync.sync.adapter.in.rest;
 import com.keevo.shared.application.port.AuditContext;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.sync.sync.adapter.in.rest.dto.SyncOperationDto;
@@ -213,7 +214,8 @@ public class SyncController {
 
         SyncPullResult result = syncUseCase.pull(
                 new SyncUseCase.PullCommand(actorId, tenantId, sinceInstant,
-                        cursor != null && !cursor.isBlank() ? cursor : null));
+                        cursor != null && !cursor.isBlank() ? cursor : null,
+                        CurrentActor.isOwner()));
 
         return ResponseEntity.ok(ApiResponseWrapper.ok(SyncPullResponseDto.from(result)));
     }

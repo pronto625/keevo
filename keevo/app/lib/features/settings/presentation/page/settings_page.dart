@@ -181,9 +181,17 @@ class SettingsPage extends ConsumerWidget {
                     _SettingsTile(
                       icon: Icons.history_rounded,
                       iconColor: AppTheme.iconIndigo,
-                      title: 'Journal d\'audit',
-                      subtitle: 'Historique complet des opérations',
+                      title: 'Historique des actions',
+                      subtitle: 'Qui a fait quoi, où et quand',
                       onTap: () => context.push('/audit'),
+                    ),
+                    const _Divider(),
+                    _SettingsTile(
+                      icon: Icons.swap_vert_rounded,
+                      iconColor: AppTheme.iconTeal,
+                      title: 'Mouvements de stock',
+                      subtitle: 'Entrées, sorties et ajustements de stock',
+                      onTap: () => context.push('/audit/stock-movements'),
                     ),
                     const _Divider(),
                     _SettingsTile(

@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../widget/stock_history_widget.dart';
 
-/// AuditPage — Journal d'audit complet du tenant (OWNER uniquement).
+/// StockMovementsPage — « Mouvements de stock » (OWNER uniquement).
 ///
-/// Wraps [StockHistoryWidget] without entity filters to display the full
-/// tenant-wide audit log. Route: /audit (owner-only via router guard).
-class AuditPage extends StatelessWidget {
-  const AuditPage({super.key});
+/// The former « Journal d'audit » screen, renamed in v1s-18-7: it wraps
+/// [StockHistoryWidget] filtered on stock movements. The full action history
+/// lives in [AuditLogPage]. Route: /audit/stock-movements (owner-only prefix).
+class StockMovementsPage extends StatelessWidget {
+  const StockMovementsPage({super.key});
+
+  /// Entity type of the `STOCK_ADJUSTED` audit entries.
+  static const stockMovementEntityType = 'StockMovement';
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +31,7 @@ class AuditPage extends StatelessWidget {
               )
             : null,
         title: Text(
-          'Journal d\'audit',
+          'Mouvements de stock',
           style: TextStyle(
             color: cs.onSurface,
             fontWeight: FontWeight.w700,
@@ -35,7 +39,7 @@ class AuditPage extends StatelessWidget {
           ),
         ),
       ),
-      body: const StockHistoryWidget(),
+      body: const StockHistoryWidget(entityType: stockMovementEntityType),
     );
   }
 }

@@ -144,7 +144,7 @@ void main() {
   });
 
   test('schema 28: sync_queue has quarantined_at', () async {
-    expect(db.schemaVersion, 28);
+    expect(db.schemaVersion, greaterThanOrEqualTo(28));
     final columns = await db
         .customSelect("SELECT name FROM pragma_table_info('sync_queue')")
         .get();

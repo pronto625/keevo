@@ -37,6 +37,15 @@ public interface DeltaEntityProvider {
      */
     Page queryDeltaPage(Instant since, Position after, int limit);
 
+    /**
+     * Story v1s-18-7 — true when only OWNER devices may receive this delta (FR98: e.g. the
+     * audit log). For any other role the pull returns an empty list for {@link #entityKey()}
+     * and never queries the provider.
+     */
+    default boolean ownerOnly() {
+        return false;
+    }
+
     /** First page of the delta since the given timestamp. */
     default List<Map<String, Object>> queryDelta(Instant since) {
         return queryDeltaPage(since, null, PAGE_SIZE).rows();

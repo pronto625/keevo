@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/audit/domain/model/audit_entry_dto.dart';
+import 'package:keevo/features/audit/domain/model/audit_filter.dart';
 import 'package:keevo/features/audit/domain/repository/audit_repository.dart';
 import 'package:keevo/features/audit/presentation/provider/audit_provider.dart';
 import 'package:keevo/features/audit/presentation/widget/stock_history_widget.dart';
@@ -23,7 +24,16 @@ class _FakeAuditRepository implements AuditRepository {
     required int size,
     String? entityType,
     String? entityId,
-  }) async => AuditPageResult(entries: entries, hasMore: false);
+  }) async =>
+      AuditPageResult(entries: entries, hasMore: false);
+
+  @override
+  Future<AuditSlice> getAuditSlice(AuditFilter filter,
+          {String? cursor, int size = 20}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<AuditEntryDto> getAuditEntry(String id) => throw UnimplementedError();
 }
 
 class _NeverCompleteAuditRepository implements AuditRepository {
@@ -36,7 +46,16 @@ class _NeverCompleteAuditRepository implements AuditRepository {
     required int size,
     String? entityType,
     String? entityId,
-  }) => _future;
+  }) =>
+      _future;
+
+  @override
+  Future<AuditSlice> getAuditSlice(AuditFilter filter,
+          {String? cursor, int size = 20}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<AuditEntryDto> getAuditEntry(String id) => throw UnimplementedError();
 }
 
 // ── Helper ─────────────────────────────────────────────────────────────────
@@ -45,7 +64,8 @@ late SharedPreferences _prefs;
 
 List<Override> _baseOverrides(List<AuditEntryDto> entries) => [
       sharedPreferencesProvider.overrideWithValue(_prefs),
-      currentUserIdProvider.overrideWith((_) => Future.value('user-uuid-ABCDEF01')),
+      currentUserIdProvider
+          .overrideWith((_) => Future.value('user-uuid-ABCDEF01')),
       auditRepositoryProvider.overrideWith(
         (_) => _FakeAuditRepository(entries),
       ),
@@ -77,7 +97,8 @@ final _stockEntry = AuditEntryDto(
   entityId: 'product-uuid-001',
   action: 'STOCK_ADJUSTED',
   valueBefore: '{"qty":5}',
-  valueAfter: '{"movementType":"ADJUSTMENT","quantityChange":5,"quantityAfter":10}',
+  valueAfter:
+      '{"movementType":"ADJUSTMENT","quantityChange":5,"quantityAfter":10}',
   userId: 'user-uuid-ABCDEF01',
   occurredAt: DateTime.utc(2026, 3, 1, 10, 0, 0),
 );
@@ -119,6 +140,14 @@ class _ScriptedAuditRepository implements AuditRepository {
     }
     return const AuditPageResult(entries: [], hasMore: false);
   }
+
+  @override
+  Future<AuditSlice> getAuditSlice(AuditFilter filter,
+          {String? cursor, int size = 20}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<AuditEntryDto> getAuditEntry(String id) => throw UnimplementedError();
 }
 
 Widget _buildWithRepo(AuditRepository repo) => ProviderScope(
@@ -162,7 +191,8 @@ void main() {
       expect(find.textContaining('Vous'), findsWidgets);
     });
 
-    testWidgets('empty list → shows "Aucun historique disponible"', (tester) async {
+    testWidgets('empty list → shows "Aucun historique disponible"',
+        (tester) async {
       await tester.pumpWidget(_buildWidget([]));
       await tester.pumpAndSettle();
 
@@ -170,7 +200,8 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsNothing);
     });
 
-    testWidgets('loading state → shows CircularProgressIndicator', (tester) async {
+    testWidgets('loading state → shows CircularProgressIndicator',
+        (tester) async {
       // Override repository with one that never completes,
       // keeping the notifier in AsyncLoading.
       final completer = Completer<AuditPageResult>();
@@ -179,7 +210,8 @@ void main() {
         ProviderScope(
           overrides: [
             sharedPreferencesProvider.overrideWithValue(_prefs),
-            currentUserIdProvider.overrideWith((_) => Future.value('test-user')),
+            currentUserIdProvider
+                .overrideWith((_) => Future.value('test-user')),
             auditRepositoryProvider.overrideWith(
               (_) => _NeverCompleteAuditRepository(completer.future),
             ),
@@ -208,8 +240,8 @@ void main() {
     });
 
     testWidgets('short actor id without phone does not throw', (tester) async {
-      await tester.pumpWidget(
-          _buildWithRepo(_ScriptedAuditRepository([_entry(1, userId: 'system')])));
+      await tester.pumpWidget(_buildWithRepo(
+          _ScriptedAuditRepository([_entry(1, userId: 'system')])));
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);

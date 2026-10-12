@@ -5,12 +5,16 @@ import 'package:keevo/core/sync/connectivity_service.dart';
 import 'package:keevo/features/audit/data/datasource/local_audit_datasource.dart';
 import 'package:keevo/features/audit/data/datasource/remote_audit_datasource.dart';
 import 'package:keevo/features/audit/data/repository/audit_repository_impl.dart';
+import 'package:keevo/features/audit/domain/exception/audit_exception.dart';
 import 'package:keevo/features/audit/domain/model/audit_entry_dto.dart';
+import 'package:keevo/features/audit/domain/model/audit_filter.dart';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
 class MockRemoteAuditDataSource extends Mock implements RemoteAuditDataSource {}
+
 class MockLocalAuditDataSource extends Mock implements LocalAuditDataSource {}
+
 class MockConnectivityService extends Mock implements ConnectivityService {}
 
 // ── Test data ──────────────────────────────────────────────────────────────
@@ -153,6 +157,135 @@ void main() {
             entityType: null,
             entityId: null,
           )).called(1);
+    });
+  });
+
+  // ── v1s-18-7 — history slice + detail ─────────────────────────────────────
+
+  group('AuditRepositoryImpl.getAuditSlice()', () {
+    const filter = AuditFilter(storeId: 'store-1', query: 'pagne');
+    final remoteSlice = AuditSlice(entries: [_productEntry], nextCursor: 'c1');
+    final localSlice =
+        AuditSlice(entries: [_userEntry], nextCursor: null, isOffline: true);
+
+    setUpAll(() => registerFallbackValue(AuditFilter.empty));
+
+    test('online → remote slice with the server cursor', () async {
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
+      when(() => mockRemote.getAuditSlice(filter, cursor: 'c0', size: 20))
+          .thenAnswer((_) async => remoteSlice);
+
+      final r = await repository.getAuditSlice(filter, cursor: 'c0');
+
+      expect(r.isOffline, isFalse);
+      expect(r.nextCursor, 'c1');
+      verifyNever(() => mockLocal.getAuditSlice(any(),
+          cursor: any(named: 'cursor'), size: any(named: 'size')));
+    });
+
+    test('offline → local slice, flagged offline', () async {
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => false);
+      when(() => mockLocal.getAuditSlice(filter, cursor: null, size: 20))
+          .thenAnswer((_) async => localSlice);
+
+      final r = await repository.getAuditSlice(filter);
+
+      expect(r.isOffline, isTrue);
+      verifyNever(() => mockRemote.getAuditSlice(any(),
+          cursor: any(named: 'cursor'), size: any(named: 'size')));
+    });
+
+    test('first page: connection failure → local slice', () async {
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
+      when(() => mockRemote.getAuditSlice(filter, cursor: null, size: 20))
+          .thenThrow(const AuditException(
+              domainCode: 'NETWORK_ERROR', message: 'x'));
+      when(() => mockLocal.getAuditSlice(filter, cursor: null, size: 20))
+          .thenAnswer((_) async => localSlice);
+
+      final r = await repository.getAuditSlice(filter);
+
+      expect(r.isOffline, isTrue);
+      expect(r.entries.single.id, _userEntry.id);
+    });
+
+    test('server-cursor page: connection failure is rethrown, no local mix',
+        () async {
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
+      when(() => mockRemote.getAuditSlice(filter, cursor: 'c0', size: 20))
+          .thenThrow(const AuditException(
+              domainCode: 'NETWORK_ERROR', message: 'x'));
+
+      await expectLater(repository.getAuditSlice(filter, cursor: 'c0'),
+          throwsA(isA<AuditException>()));
+      verifyNever(() => mockLocal.getAuditSlice(any(),
+          cursor: any(named: 'cursor'), size: any(named: 'size')));
+    });
+
+    test('server error (500) is rethrown, no local fallback', () async {
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
+      when(() => mockRemote.getAuditSlice(filter, cursor: null, size: 20))
+          .thenThrow(const AuditException(
+              domainCode: 'INTERNAL_ERROR', message: 'boom', statusCode: 500));
+
+      await expectLater(
+          repository.getAuditSlice(filter), throwsA(isA<AuditException>()));
+      verifyNever(() => mockLocal.getAuditSlice(any(),
+          cursor: any(named: 'cursor'), size: any(named: 'size')));
+    });
+
+    test('a local cursor keeps paging the local copy even online', () async {
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
+      when(() => mockLocal.getAuditSlice(filter, cursor: 'local:20', size: 20))
+          .thenAnswer((_) async => localSlice);
+
+      final r = await repository.getAuditSlice(filter, cursor: 'local:20');
+
+      expect(r.isOffline, isTrue);
+      verifyNever(() => mockRemote.getAuditSlice(any(),
+          cursor: any(named: 'cursor'), size: any(named: 'size')));
+    });
+  });
+
+  group('AuditRepositoryImpl.getAuditEntry()', () {
+    test('online → remote detail', () async {
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
+      when(() => mockRemote.getById('e1')).thenAnswer((_) async => _userEntry);
+
+      expect(await repository.getAuditEntry('e1'), _userEntry);
+      verifyNever(() => mockLocal.getById(any()));
+    });
+
+    test('remote failure → local row', () async {
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
+      when(() => mockRemote.getById('e1')).thenThrow(
+          const AuditException(domainCode: 'NETWORK_ERROR', message: 'x'));
+      when(() => mockLocal.getById('e1'))
+          .thenAnswer((_) async => _productEntry);
+
+      expect(await repository.getAuditEntry('e1'), _productEntry);
+    });
+
+    test('404 and no local row → AUDIT_ENTRY_NOT_FOUND rethrown', () async {
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
+      when(() => mockRemote.getById('e1')).thenThrow(const AuditException(
+          domainCode: 'AUDIT_ENTRY_NOT_FOUND', message: 'x', statusCode: 404));
+      when(() => mockLocal.getById('e1')).thenAnswer((_) async => null);
+
+      await expectLater(
+        repository.getAuditEntry('e1'),
+        throwsA(isA<AuditException>().having(
+            (e) => e.domainCode, 'domainCode', 'AUDIT_ENTRY_NOT_FOUND')),
+      );
+    });
+
+    test('offline and unknown locally → not found', () async {
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => false);
+      when(() => mockLocal.getById('e1')).thenAnswer((_) async => null);
+
+      await expectLater(
+          repository.getAuditEntry('e1'), throwsA(isA<AuditException>()));
+      verifyNever(() => mockRemote.getById(any()));
     });
   });
 }

@@ -175,6 +175,38 @@ class SyncControllerPullGateTest {
                 .andExpect(status().isOk());
     }
 
+    // ── Story v1s-18-7 — role-aware pull (owner-only deltas) ─────────────────
+
+    @Test
+    void ownerPull_passesOwnerFlagTrue() throws Exception {
+        mockJwt("OWNER");
+        when(syncUseCase.pull(any())).thenReturn(new SyncPullResult(Instant.now(), Map.of(), Map.of()));
+
+        mockMvc.perform(get("/api/v1/sync/pull")
+                        .header("Authorization", "Bearer fake-jwt")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
+        var captor = org.mockito.ArgumentCaptor.forClass(SyncUseCase.PullCommand.class);
+        org.mockito.Mockito.verify(syncUseCase).pull(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().owner()).isTrue();
+    }
+
+    @Test
+    void employeePull_passesOwnerFlagFalse() throws Exception {
+        mockJwt("EMPLOYEE");
+        when(syncUseCase.pull(any())).thenReturn(new SyncPullResult(Instant.now(), Map.of(), Map.of()));
+
+        mockMvc.perform(get("/api/v1/sync/pull")
+                        .header("Authorization", "Bearer fake-jwt")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
+        var captor = org.mockito.ArgumentCaptor.forClass(SyncUseCase.PullCommand.class);
+        org.mockito.Mockito.verify(syncUseCase).pull(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().owner()).isFalse();
+    }
+
     // ── Story 12.12 — security log helpers ───────────────────────────────────
 
     private ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> captureSecurityLog() {

@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo/core/di/providers.dart' show kUserRoleKey;
 import 'package:keevo/core/storage/app_constants.dart';
 import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/core/sync/rest_sync_service.dart';
@@ -46,7 +47,8 @@ void main() {
     secureStorage = const FlutterSecureStorage();
     FlutterSecureStorage.setMockInitialValues({});
     // The one-shot date-format re-pull already happened (tested on its own).
-    SharedPreferences.setMockInitialValues({kPullTzFixDoneKey: true});
+    SharedPreferences.setMockInitialValues(
+        {kPullTzFixDoneKey: true, kUserRoleKey: 'OWNER'});
     final prefs = await SharedPreferences.getInstance();
 
     syncService = RestSyncService(
@@ -649,6 +651,80 @@ void main() {
       final entries = await db.select(db.auditEntries).get();
       expect(entries, hasLength(1));
       expect(entries.first.action, 'PRODUCT_CREATED');
+    });
+
+    test('pull_storesAuditEnrichmentKeys_v1s_18_7', () async {
+      stubPull(entities: {
+        'auditEntries': [
+          {
+            'id': 'audit-enriched',
+            'userId': 'user-1',
+            'entityType': 'Category',
+            'entityId': 'cat-1',
+            'action': 'CATEGORY_CREATED',
+            'valueBefore': null,
+            'valueAfter': '{"name":"Pagnes"}',
+            'occurredAt': '2026-03-21T10:00:00.000Z',
+            'storeId': 'store-1',
+            'entityLabel': 'Pagnes',
+            'deviceId': 'device-D',
+            'source': 'SYNC',
+            'metadata': '{"actorLabel":"Awa"}',
+          },
+          {
+            // older server: no enrichment keys at all
+            'id': 'audit-legacy',
+            'userId': 'user-1',
+            'entityType': 'Product',
+            'entityId': 'prod-1',
+            'action': 'PRODUCT_CREATED',
+            'valueAfter': '{}',
+            'occurredAt': '2026-03-21T09:00:00.000Z',
+          },
+        ]
+      });
+
+      await syncService.pull();
+
+      final rows = {for (final e in await db.select(db.auditEntries).get()) e.id: e};
+      final enriched = rows['audit-enriched']!;
+      expect(enriched.storeId, 'store-1');
+      expect(enriched.entityLabel, 'Pagnes');
+      expect(enriched.deviceId, 'device-D');
+      expect(enriched.source, 'SYNC');
+      expect(enriched.metadata, '{"actorLabel":"Awa"}');
+      final legacy = rows['audit-legacy']!;
+      expect(legacy.storeId, isNull);
+      expect(legacy.entityLabel, isNull);
+      expect(legacy.metadata, isNull);
+    });
+
+    test('pull_nonOwnerDevice_dropsLocalAuditEntries_v1s_18_7', () async {
+      await db.customStatement(
+        'INSERT INTO audit_entries (id, user_id, entity_type, entity_id, '
+        'action, value_after, occurred_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        ['old', 'u', 'Sale', 's', 'SALE_CANCELLED', '{"justification":"x"}',
+            '2026-03-20T10:00:00.000'],
+      );
+      await (await SharedPreferences.getInstance())
+          .setString(kUserRoleKey, 'EMPLOYEE');
+      stubPull(entities: {
+        'auditEntries': [
+          {
+            'id': 'audit-new',
+            'userId': 'user-1',
+            'entityType': 'Product',
+            'entityId': 'prod-1',
+            'action': 'PRODUCT_CREATED',
+            'valueAfter': '{}',
+            'occurredAt': '2026-03-21T10:00:00.000Z',
+          }
+        ]
+      });
+
+      await syncService.pull();
+
+      expect(await db.select(db.auditEntries).get(), isEmpty);
     });
 
     test('pull_storesServerTimestampAsLastPullTimestamp', () async {

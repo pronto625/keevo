@@ -89,8 +89,12 @@ class AppDatabase extends _$AppDatabase {
   /// Test constructor — in-memory Drift database, no encryption, no file system.
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
+  /// Test constructor on a given executor — e.g. an in-memory database
+  /// pre-built at an older schema version to exercise [migration].
+  AppDatabase.forTestingWith(super.executor);
+
   @override
-  int get schemaVersion => 28;
+  int get schemaVersion => 29;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -276,6 +280,14 @@ class AppDatabase extends _$AppDatabase {
       if (from < 28) {
         // v1s-16-15: quarantine for money operations refused for good.
         await migrator.addColumn(syncQueue, syncQueue.quarantinedAt);
+      }
+      if (from < 29) {
+        // v1s-18-7: audit enrichment (store, label, device, source, metadata).
+        await migrator.addColumn(auditEntries, auditEntries.storeId);
+        await migrator.addColumn(auditEntries, auditEntries.entityLabel);
+        await migrator.addColumn(auditEntries, auditEntries.deviceId);
+        await migrator.addColumn(auditEntries, auditEntries.source);
+        await migrator.addColumn(auditEntries, auditEntries.metadata);
       }
     },
   );

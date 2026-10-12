@@ -24,6 +24,12 @@ public class AuditEntryDeltaProvider implements DeltaEntityProvider {
         return "auditEntries";
     }
 
+    /** Story v1s-18-7 — the audit log (with justification metadata) is OWNER-only (FR98). */
+    @Override
+    public boolean ownerOnly() {
+        return true;
+    }
+
     @Override
     public Page queryDeltaPage(Instant since, Position after, int limit) {
         // First-time sync: limit to last 30 days

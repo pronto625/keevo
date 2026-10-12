@@ -1299,6 +1299,9 @@ As an owner, I want to pick what, which period and which format to export, then 
 **And** a background export survives closing the app and is listed in Mes exports
 **And** an export error shows a clear message with a retry
 
+**Items (routed 2026-10-12 from build-auto v1s-18-7):**
+- [ ] [Deferred-from: build-auto v1s-18-7, 2026-10-12] « Exporter » button on « Historique des actions » (app bar of `keevo/app/lib/features/audit/presentation/page/audit_log_page.dart`) opening the export flow pre-filled with the « Journal d'audit » dataset and the current `AuditFilter` (period, store, employee, action, object type, `q`) — the export flow does not exist before 18.4; the filter model is `keevo/app/lib/features/audit/domain/model/audit_filter.dart`
+
 ## Story 18.5: Export local hors ligne (CSV) — **[C]**
 
 As a user without network, I want to export what is on my device as CSV.
@@ -1338,8 +1341,8 @@ As an owner, I want to tap an audit line and see its full detail.
 **And** the screen is hidden from employees
 
 **Items (routed 2026-10-12 from build-auto v1s-18-6 review):**
-- [ ] [Deferred-from: review v1s-18-6, 2026-10-12] Sync pull ships the enriched tenant audit log (`auditEntries`, incl. metadata ip/justification) to EMPLOYEE devices while REST `/api/v1/audit` is OWNER-only [keevo/backend/src/main/java/com/keevo/sync/sync/application/provider/AuditEntryDeltaProvider.java, SyncPushService.java:366] — make the pull role-aware (skip `auditEntries` for non-OWNER) when the offline owner list is built; `DeltaEntityProvider` has no role input today
-- [ ] [Deferred-from: review v1s-18-6, 2026-10-12] Generic `entityLabel` for sales ("Vente"), closures and inventory, null for employee events [AuditEventListener.java] — decide from the detail screen whether a richer label (receipt number, date, employee name) must be carried by the events
+- [x] [Deferred-from: review v1s-18-6, 2026-10-12] Sync pull ships the enriched tenant audit log (`auditEntries`, incl. metadata ip/justification) to EMPLOYEE devices while REST `/api/v1/audit` is OWNER-only [keevo/backend/src/main/java/com/keevo/sync/sync/application/provider/AuditEntryDeltaProvider.java, SyncPushService.java:366] — make the pull role-aware (skip `auditEntries` for non-OWNER) when the offline owner list is built; `DeltaEntityProvider` has no role input today
+- [x] [Deferred-from: review v1s-18-6, 2026-10-12] Generic `entityLabel` for sales ("Vente"), closures and inventory, null for employee events [AuditEventListener.java] — decide from the detail screen whether a richer label (receipt number, date, employee name) must be carried by the events
 
 ---
 
