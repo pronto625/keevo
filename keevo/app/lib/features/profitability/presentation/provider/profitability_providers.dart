@@ -6,6 +6,7 @@ import '../../data/datasource/local_profitability_datasource.dart';
 import '../../data/datasource/remote_profitability_datasource.dart';
 import '../../data/repository/profitability_repository_impl.dart';
 import '../../domain/model/product_profitability_model.dart';
+import '../../domain/model/seller_leaderboard_model.dart';
 import '../../domain/repository/profitability_repository.dart';
 import '../widget/period_filter_chips.dart';
 
@@ -19,6 +20,8 @@ export '../../domain/model/product_profitability_model.dart'
         ProductProfitabilityDetail,
         StorePerformanceEntry,
         DailyMarginEntry;
+export '../../domain/model/seller_leaderboard_model.dart'
+    show SellerLeaderboardEntry, SellerLeaderboardParams;
 
 // ── Infrastructure providers ──────────────────────────────────────────────────
 
@@ -154,4 +157,51 @@ final storePerformanceProvider = FutureProvider.autoDispose
         (ref, params) async {
   final repo = ref.watch(profitabilityRepositoryProvider);
   return repo.getStorePerformance(params: params);
+});
+
+// ── Seller leaderboard (FR44, v1s-14-2 — OWNER only) ─────────────────────────
+
+/// Period of the « Équipe » tab — its own state so the Rentabilité/Boutiques
+/// tabs keep their 30-day default. Defaults to today (Story 4.6).
+final selectedLeaderboardPeriodProvider =
+    StateProvider<PeriodSelection>((ref) => PeriodSelection.today);
+
+/// Ranking metric of the « Équipe » tab (default CA).
+final selectedLeaderboardMetricProvider = StateProvider<RankingMetric>(
+  (_) => RankingMetric.ca,
+);
+
+/// Ranks [entries] by [metric] locally (the toggle never re-fetches) and
+/// renumbers `rank` from 1. Same order as the backend strategies: metric
+/// desc, then revenue desc, then name asc (case-insensitive), then sellerId.
+List<SellerLeaderboardEntry> rankSellersBy(
+  List<SellerLeaderboardEntry> entries,
+  RankingMetric metric,
+) {
+  int primary(SellerLeaderboardEntry a, SellerLeaderboardEntry b) =>
+      switch (metric) {
+        RankingMetric.salesCount => b.salesCount.compareTo(a.salesCount),
+        RankingMetric.avgBasket => b.averageBasket.compareTo(a.averageBasket),
+        RankingMetric.ca => b.totalRevenue.compareTo(a.totalRevenue),
+      };
+  final sorted = List<SellerLeaderboardEntry>.from(entries)
+    ..sort((a, b) {
+      var c = primary(a, b);
+      if (c != 0) return c;
+      c = b.totalRevenue.compareTo(a.totalRevenue);
+      if (c != 0) return c;
+      c = a.sellerName.toLowerCase().compareTo(b.sellerName.toLowerCase());
+      if (c != 0) return c;
+      return a.sellerId.compareTo(b.sellerId);
+    });
+  return [for (final (i, e) in sorted.indexed) e.withRank(i + 1)];
+}
+
+/// Seller leaderboard provider (family by period + store). Unranked data;
+/// the page ranks with [rankSellersBy].
+final sellerLeaderboardProvider = FutureProvider.autoDispose
+    .family<List<SellerLeaderboardEntry>, SellerLeaderboardParams>(
+        (ref, params) async {
+  final repo = ref.watch(profitabilityRepositoryProvider);
+  return repo.getSellerLeaderboard(params: params);
 });

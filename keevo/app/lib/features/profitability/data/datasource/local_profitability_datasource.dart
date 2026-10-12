@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import '../../../../core/storage/app_database.dart';
 import '../../domain/model/product_profitability_model.dart';
+import '../../domain/model/seller_leaderboard_model.dart';
 
 /// SQL expression giving the shop's local day (`YYYY-MM-DD`) of a Drift
 /// DateTime column. Drift stores local times as `…T00:30:00.000 +01:00`, and
@@ -373,6 +374,71 @@ class LocalProfitabilityDatasource {
         averageBasket: s['averageBasket'] as int,
         topProductName: s['topProductName'] as String?,
         deltaPercent: s['deltaPercent'] as double,
+      );
+    }).toList();
+  }
+
+  // ── Seller leaderboard (v1s-14-2) ─────────────────────────────────────────
+
+  /// Offline mirror of `JdbcSellerLeaderboardRepository`: COMPLETED sales
+  /// grouped by seller (`sales.employee_id` = user id) in `[from, to+1)`,
+  /// optionally scoped to [storeId], plus the active employees (same scope)
+  /// without sale (0/0). Name = latest employee row of that user, else
+  /// « Propriétaire » when `users.role` is OWNER, else « Vendeur inconnu ».
+  /// Returned unranked (rank 0): the caller ranks with `rankSellersBy`.
+  Future<List<SellerLeaderboardEntry>> getSellerLeaderboard({
+    required DateTime from,
+    required DateTime to,
+    String? storeId,
+  }) async {
+    final toExclusive = DateTime(to.year, to.month, to.day + 1);
+    final rows = await _db.customSelect(
+      'WITH sold AS ('
+      '  SELECT s.employee_id AS seller_id, COUNT(s.id) AS sales_count, '
+      '    COALESCE(SUM(s.total_amount), 0) AS total_revenue '
+      '  FROM sales s '
+      '  WHERE s.status = ? AND s.occurred_at >= ? AND s.occurred_at < ? '
+      '  ${storeId != null ? 'AND s.store_id = ? ' : ''}'
+      '  GROUP BY s.employee_id'
+      '), sellers AS ('
+      '  SELECT seller_id, sales_count, total_revenue FROM sold '
+      '  UNION ALL '
+      '  SELECT DISTINCT e.user_id, 0, 0 FROM employees e '
+      "  WHERE e.status = 'ACTIVE' "
+      '  ${storeId != null ? 'AND e.store_id = ? ' : ''}'
+      '    AND NOT EXISTS (SELECT 1 FROM sold WHERE sold.seller_id = e.user_id)'
+      ') '
+      'SELECT x.seller_id, '
+      '  CAST(x.sales_count AS INTEGER) AS sales_count, '
+      '  CAST(x.total_revenue AS INTEGER) AS total_revenue, '
+      "  (SELECT NULLIF(TRIM(COALESCE(emp.first_name, '') || ' ' || "
+      "     COALESCE(emp.last_name, '')), '') "
+      '   FROM employees emp WHERE emp.user_id = x.seller_id '
+      '   ORDER BY emp.created_at DESC LIMIT 1) AS employee_name, '
+      '  (SELECT u.role FROM users u WHERE u.id = x.seller_id) AS role '
+      'FROM sellers x',
+      variables: [
+        Variable.withString('COMPLETED'),
+        Variable.withDateTime(from),
+        Variable.withDateTime(toExclusive),
+        if (storeId != null) Variable.withString(storeId),
+        if (storeId != null) Variable.withString(storeId),
+      ],
+    ).get();
+
+    return rows.map((r) {
+      final count = r.read<int>('sales_count');
+      final revenue = r.read<int>('total_revenue');
+      final isOwner = r.readNullable<String>('role') == 'OWNER';
+      return SellerLeaderboardEntry(
+        rank: 0,
+        sellerId: r.read<String>('seller_id'),
+        sellerName: r.readNullable<String>('employee_name') ??
+            (isOwner ? 'Propriétaire' : 'Vendeur inconnu'),
+        owner: isOwner,
+        salesCount: count,
+        totalRevenue: revenue,
+        averageBasket: count == 0 ? 0 : revenue ~/ count,
       );
     }).toList();
   }

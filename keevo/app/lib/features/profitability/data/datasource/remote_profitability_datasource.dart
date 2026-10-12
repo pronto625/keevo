@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../domain/model/product_profitability_model.dart';
+import '../../domain/model/seller_leaderboard_model.dart';
 
 /// RemoteProfitabilityDatasource — fetches profitability data from the backend.
 ///
@@ -68,5 +69,26 @@ class RemoteProfitabilityDatasource {
             StorePerformanceEntry.fromJson(e as Map<String, dynamic>))
         .toList();
     return items;
+  }
+
+  /// FR44 seller leaderboard (v1s-14-2, OWNER only). Fetched with the default
+  /// metric: the app re-ranks locally.
+  Future<List<SellerLeaderboardEntry>> fetchSellerLeaderboard({
+    required String from,
+    required String to,
+    String? storeId,
+  }) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/v1/reporting/leaderboard',
+      queryParameters: {
+        'from': from,
+        'to': to,
+        if (storeId != null) 'storeId': storeId,
+      },
+    );
+    return (response.data!['data'] as List<dynamic>)
+        .map((e) =>
+            SellerLeaderboardEntry.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 }

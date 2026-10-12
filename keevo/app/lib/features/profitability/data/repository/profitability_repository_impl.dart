@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 
 import '../../../../core/sync/connectivity_service.dart';
 import '../../domain/model/product_profitability_model.dart';
+import '../../domain/model/seller_leaderboard_model.dart';
 import '../../domain/repository/profitability_repository.dart';
 import '../datasource/local_profitability_datasource.dart';
 import '../datasource/remote_profitability_datasource.dart';
@@ -113,6 +114,34 @@ class ProfitabilityRepositoryImpl implements ProfitabilityRepository {
       from: params.from,
       to: params.to,
       metric: params.metric.toQueryParam(),
+    );
+  }
+
+  // ── Seller leaderboard (v1s-14-2) ─────────────────────────────
+
+  @override
+  Future<List<SellerLeaderboardEntry>> getSellerLeaderboard({
+    required SellerLeaderboardParams params,
+  }) async {
+    if (await _connectivity.isOnline()) {
+      try {
+        return await _remote.fetchSellerLeaderboard(
+          from: _fmt(params.from),
+          to: _fmt(params.to),
+          storeId: params.storeId,
+        );
+      } on DioException catch (e) {
+        // API answers (4xx/5xx, incl. 403) are rethrown; only a transport
+        // failure falls back to the local Drift aggregation.
+        if (e.response != null) rethrow;
+        dev.log('Remote seller leaderboard unreachable, using local: $e',
+            name: 'ProfitabilityRepository');
+      }
+    }
+    return _local.getSellerLeaderboard(
+      from: params.from,
+      to: params.to,
+      storeId: params.storeId,
     );
   }
 

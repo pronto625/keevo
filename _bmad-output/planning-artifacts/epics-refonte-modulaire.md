@@ -1391,6 +1391,8 @@ As a **propriétaire**, I want **annuler ou corriger une vente avec justificatio
 ### Story 17.2 : Leaderboard vendeurs + historique global (FR44)
 As a **propriétaire**, I want **un classement des vendeurs par performance**, So that **je motive/évalue l'équipe (FR44)**.
 **Acceptance Criteria:** **Given** des ventes par employé **When** OWNER ouvre le leaderboard **Then** classement (CA/nb ventes, période) ; **Premium** (gâté). **Notes:** module `reporting` ; données existantes ; remplace backlog 4-6.
+**Items routés depuis v1s-14-2 (V1 owner-only, `GET /api/v1/reporting/leaderboard` + onglet Rapports > Équipe) :**
+- [ ] Réglage owner « Afficher le leaderboard aux employés » (Story 4.6 / UX16) : OFF par défaut, confirmation à l'activation, classement anonymisé côté employé une fois activé. Exclu de la V1 (UX16 V1 = owner-only, endpoint EMPLOYEE → 403) ; à reprendre ici avec le gating Premium.
 
 ### Story 17.3 : Suivi d'activité des employés (FR67)
 As a **propriétaire**, I want **voir l'activité de mes employés (dernière connexion, ventes, actions)**, So that **je supervise l'équipe (FR67)**.
