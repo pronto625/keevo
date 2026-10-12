@@ -1,3 +1,4 @@
+import '../../../../core/storage/search_fold.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import 'package:flutter/material.dart';
@@ -502,10 +503,10 @@ class _ClientAutocomplete extends ConsumerWidget {
                 displayStringForOption: (c) => '${c.name} — ${c.phone}',
                 optionsBuilder: (textEditingValue) {
                   if (textEditingValue.text.isEmpty) return clients;
-                  final q = textEditingValue.text.toLowerCase();
+                  final q = foldForSearch(textEditingValue.text);
                   return clients.where((c) =>
-                      c.name.toLowerCase().contains(q) ||
-                      c.phone.contains(q));
+                      foldForSearch(c.name).contains(q) ||
+                      foldForSearch(c.phone).contains(q));
                 },
                 onSelected: onSelected,
                 fieldViewBuilder:

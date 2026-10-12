@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../../../core/storage/app_database.dart';
+import '../../../../core/storage/search_fold.dart';
 import '../../../../core/storage/sql_like.dart';
 import '../../domain/model/supplier_model.dart';
 
@@ -28,11 +29,11 @@ class LocalSupplierDataSource {
   }
 
   Future<List<SupplierModel>> search(String query) async {
-    final q = likeContains(query.toLowerCase());
+    final q = likeContainsFolded(query); // v1s-16-16
     final rows = await (_db.select(_db.suppliers)
           ..where((s) =>
               s.archived.equals(false) &
-              s.name.lower().like(q, escapeChar: likeEscapeChar))
+              foldedSqlExpr(s.name).like(q, escapeChar: likeEscapeChar))
           ..orderBy([(s) => OrderingTerm.asc(s.name)]))
         .get();
     final allLinks = await _db.select(_db.productSuppliers).get();

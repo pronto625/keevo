@@ -2,7 +2,7 @@ import 'package:drift/drift.dart' show Variable;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/di/providers.dart';
-import '../../../../core/storage/sql_like.dart';
+import '../../../../core/storage/search_fold.dart';
 
 /// Product search result for POS display.
 class PosProductResult {
@@ -48,7 +48,9 @@ class PosSearchNotifier extends Notifier<AsyncValue<List<PosProductResult>>> {
     state = const AsyncLoading();
     try {
       final db = ref.read(appDatabaseProvider);
-      final lowerQuery = likeContains(query.toLowerCase());
+      // v1s-16-16: case- and accent-insensitive (shared Unicode fold).
+      final foldedPattern = likeContainsFolded(query);
+      final foldedName = foldedSqlRaw('p.name');
       final List<dynamic> rows;
 
       if (storeId != null) {
@@ -62,12 +64,12 @@ class PosSearchNotifier extends Notifier<AsyncValue<List<PosProductResult>>> {
           '  WHERE sl.store_id = ? '
           '  GROUP BY sl.product_id'
           ') d ON d.product_id = p.id '
-          "WHERE p.archived = 0 AND p.status IN ('ACTIVE', 'DRAFT') AND LOWER(p.name) LIKE ? ESCAPE '\\' "
+          "WHERE p.archived = 0 AND p.status IN ('ACTIVE', 'DRAFT') AND $foldedName LIKE ? ESCAPE '\\' "
           'ORDER BY (CASE WHEN COALESCE(d.quantity, 0) > 0 THEN 0 ELSE 1 END) ASC, p.name ASC '
           'LIMIT 50',
           variables: [
             Variable.withString(storeId),
-            Variable.withString(lowerQuery),
+            Variable.withString(foldedPattern),
           ],
         ).get();
       } else {
@@ -84,11 +86,11 @@ class PosSearchNotifier extends Notifier<AsyncValue<List<PosProductResult>>> {
           '  ) d '
           '  GROUP BY d.product_id'
           ') agg ON agg.product_id = p.id '
-          "WHERE p.archived = 0 AND p.status IN ('ACTIVE', 'DRAFT') AND LOWER(p.name) LIKE ? ESCAPE '\\' "
+          "WHERE p.archived = 0 AND p.status IN ('ACTIVE', 'DRAFT') AND $foldedName LIKE ? ESCAPE '\\' "
           'ORDER BY (CASE WHEN COALESCE(agg.total_stock, 0) > 0 THEN 0 ELSE 1 END) ASC, p.name ASC '
           'LIMIT 50',
           variables: [
-            Variable.withString(lowerQuery),
+            Variable.withString(foldedPattern),
           ],
         ).get();
       }

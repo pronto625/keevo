@@ -402,7 +402,7 @@ development_status:
   v1s-16-13-app-ux-residual: backlog  # 2026-10-11 deferred-work redistribution — 23 items (incl. v1s-14-12 AC7 amended)
   v1s-16-14-catalog-list-quality: done  # 2026-10-11 deferred-work redistribution — 4 items | 2026-10-12 done (bmad-build-auto, spec-v1s-16-14-catalog-list-quality.md) : 4/4 items clos — LIKE échappé (helper sql_like, catalogue/POS/contacts/multi-boutique), dédup par id, badge « Jamais stocké » neutre, pagination rejetée avec raison + test NFR5 ; app 1.1.24+23 ; 1 passe de revue (7 patchs) ; routé → v1s-16-16
   v1s-16-15-sync-stuck-money-ops: done  # 2026-10-11 build-auto v1s-16-12 (review defer) — 1 item | 2026-10-11 done (bmad-build-auto, spec-v1s-16-15-sync-stuck-money-ops.md) : 2/2 items clos — quarantaine des opérations d'argent refusées (sync_queue.quarantined_at, schéma 28), liste « Bloquées » + Renvoyer/Exporter/Rattacher/Abandonner (PRD FR73a), STORE_NOT_FOUND backend vente/clôture, stock_transfers boutique fantôme nettoyés ; app 1.1.22+21 ; 1 passe de revue (15 entrées patchées) ; 0 routé
-  v1s-16-16-search-unicode-folding: backlog  # 2026-10-12 build-auto v1s-16-14 review — 1 item
+  v1s-16-16-search-unicode-folding: done  # 2026-10-12 build-auto v1s-16-14 review — 1 item | 2026-10-12 done (bmad-build-auto, spec-v1s-16-16-search-unicode-folding.md) : pli Unicode partagé (search_fold.dart, replace() SQL + miroir Dart) sur catalogue/POS/clients/fournisseurs/multi-boutique + filtres en mémoire + dédoublonnage ; pas de migration (schéma 28) ; app 1.1.25+24 ; 2 passes de revue (1 boucle spec, 4 patchs)
   v1s-epic-16-retrospective: optional
 
   # ─────────────────────────────────────────────────────────

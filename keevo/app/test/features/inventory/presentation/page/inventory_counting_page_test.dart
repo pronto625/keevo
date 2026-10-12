@@ -46,4 +46,56 @@ void main() {
     expect(find.textContaining('Inventaire terminé'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('search is case- and accent-insensitive (v1s-16-16)',
+      (tester) async {
+    final repo = _MockCountRepo();
+    when(() => repo.getCountingProducts('sess-1')).thenAnswer((_) async => [
+          const InventoryProductRowModel(
+            productId: 'p1',
+            productName: 'Épicerie fine',
+            theoreticalQty: 10,
+          ),
+          const InventoryProductRowModel(
+            productId: 'p2',
+            productName: 'Huile',
+            theoreticalQty: 10,
+          ),
+          const InventoryProductRowModel(
+            productId: 'p3',
+            productName: 'Sandales',
+            sku: 'ÉTÉ-01',
+            theoreticalQty: 10,
+          ),
+        ]);
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [inventoryCountRepositoryProvider.overrideWithValue(repo)],
+      child: const MaterialApp(home: InventoryCountingPage(sessionId: 'sess-1')),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Huile'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.search));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.descendant(
+            of: find.byType(AppBar), matching: find.byType(TextField)),
+        'epicerie');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Épicerie fine'), findsOneWidget);
+    expect(find.text('Huile'), findsNothing);
+    expect(find.text('Sandales'), findsNothing);
+
+    // SKU branch: name does not match, folded SKU does.
+    await tester.enterText(
+        find.descendant(
+            of: find.byType(AppBar), matching: find.byType(TextField)),
+        'ete-01');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sandales'), findsOneWidget);
+    expect(find.text('Épicerie fine'), findsNothing);
+  });
 }

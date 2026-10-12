@@ -228,4 +228,37 @@ void main() {
         productIds: {'p-1': 'p-real'}, storeId: null)).called(1);
     expect(_FakeTrigger.syncs, 1);
   });
+
+  testWidgets('Rattacher: product picker search is accent-insensitive '
+      '(v1s-16-16)', (tester) async {
+    Product product(String id, String name) => Product(
+        id: id,
+        name: name,
+        sku: '',
+        price: 500,
+        buyPrice: 0,
+        transportCost: 0,
+        stockQuantity: 0,
+        archived: false,
+        status: 'ACTIVE',
+        createdAt: DateTime(2026),
+        updatedAt: DateTime(2026));
+    when(() => service.reattachableProducts()).thenAnswer((_) async => [
+          product('p-epi', 'Épicerie fine'),
+          product('p-real', 'Savon de Marseille'),
+        ]);
+    await tester.pumpWidget(build('OWNER'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Rattacher'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Savon × 2'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Rechercher un produit'), 'EPICERIE');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Épicerie fine'), findsOneWidget);
+    expect(find.text('Savon de Marseille'), findsNothing);
+  });
 }

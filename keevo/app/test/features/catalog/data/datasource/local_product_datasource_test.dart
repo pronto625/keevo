@@ -302,6 +302,101 @@ void main() {
     });
   });
 
+  group('LocalProductDataSource.search() — Unicode case/accent folding (16.16)',
+      () {
+    Future<void> seed(String id, String name,
+        {String? sku, String? categoryId}) async {
+      final now = DateTime.now();
+      await db.into(db.products).insert(ProductsCompanion.insert(
+        id: id,
+        name: name,
+        sku: Value(sku ?? 'SKU-$id'),
+        categoryId: Value(categoryId),
+        archived: const Value(false),
+        createdAt: now,
+        updatedAt: now,
+      ));
+    }
+
+    test('non-ASCII case: "épicerie" finds "Épicerie fine"', () async {
+      await seed('f-1', 'Épicerie fine');
+      final results = await sut.search('épicerie');
+      expect(results.map((p) => p.name), ['Épicerie fine']);
+    });
+
+    test('accent-less typing: "epicerie" and "ÉPICERIE" find it', () async {
+      await seed('f-1', 'Épicerie fine');
+      expect((await sut.search('epicerie')).map((p) => p.name),
+          ['Épicerie fine']);
+      expect((await sut.search('ÉPICERIE')).map((p) => p.name),
+          ['Épicerie fine']);
+    });
+
+    test('accented query finds plain data', () async {
+      await seed('f-2', 'Epicerie');
+      final results = await sut.search('Épicerie');
+      expect(results.map((p) => p.name), ['Epicerie']);
+    });
+
+    test('ligature: "oeufs" finds "Œufs frais"', () async {
+      await seed('f-3', 'Œufs frais');
+      final results = await sut.search('oeufs');
+      expect(results.map((p) => p.name), ['Œufs frais']);
+    });
+
+    test('decomposed (NFD) stored name is found', () async {
+      await seed('f-4', 'Cafe\u0301 moulu');
+      final results = await sut.search('café');
+      expect(results.map((p) => p.id), ['f-4']);
+    });
+
+    test('SKU folding', () async {
+      await seed('f-5', 'Article', sku: 'ÉTÉ-01');
+      final results = await sut.search('ete-01');
+      expect(results.map((p) => p.id), ['f-5']);
+    });
+
+    test('category folding: "electro" finds "Électroménager" products',
+        () async {
+      final now = DateTime.now();
+      await db.into(db.categories).insert(CategoriesCompanion.insert(
+        id: 'cat-electro',
+        name: 'Électroménager',
+        createdAt: now,
+        updatedAt: now,
+      ));
+      await seed('f-6', 'Mixeur', categoryId: 'cat-electro');
+      final results = await sut.search('electro');
+      expect(results.map((p) => p.id), ['f-6']);
+    });
+
+    test('"50%" stays literal with folding', () async {
+      await seed('f-7', 'Remise 50%');
+      await seed('f-8', 'Riz 500g');
+      final results = await sut.search('50%');
+      expect(results.map((p) => p.name), ['Remise 50%']);
+    });
+
+    test('outside the Latin map: "жук" does not find "ЖУК" (documented limit)',
+        () async {
+      await seed('f-9', 'ЖУК');
+      final results = await sut.search('жук');
+      expect(results, isEmpty);
+    });
+
+    test('outside the Latin map: exact-case "ЖУК" still finds "ЖУК"',
+        () async {
+      await seed('f-9', 'ЖУК');
+      expect((await sut.search('ЖУК')).map((p) => p.name), ['ЖУК']);
+    });
+
+    test('Cameroonian letters: "ndole" finds "Ndɔlɛ"', () async {
+      await seed('f-10', 'Ndɔlɛ');
+      expect((await sut.search('ndole')).map((p) => p.name), ['Ndɔlɛ']);
+      expect((await sut.search('NDƆLƐ')).map((p) => p.name), ['Ndɔlɛ']);
+    });
+  });
+
   group('LocalProductDataSource.getLowStockProductIds() — per-store scoping', () {
     setUp(() async {
       final now = DateTime.now();

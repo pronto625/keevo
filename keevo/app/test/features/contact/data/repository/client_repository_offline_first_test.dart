@@ -270,5 +270,21 @@ void main() {
       final results = await local.search('0_01');
       expect(results, isEmpty);
     });
+
+    // v1s-16-16: case- and accent-insensitive.
+    test('"helene" / "HÉLÈNE" find "Hélène"', () async {
+      final now = DateTime.now();
+      await db.into(db.clients).insert(ClientsCompanion.insert(
+            id: 'c3',
+            name: 'Hélène',
+            phone: '+237690000003',
+            createdAt: now,
+            updatedAt: now,
+          ));
+      for (final q in ['helene', 'HÉLÈNE']) {
+        final results = await local.search(q);
+        expect(results.map((c) => c.name), ['Hélène'], reason: q);
+      }
+    });
   });
 }

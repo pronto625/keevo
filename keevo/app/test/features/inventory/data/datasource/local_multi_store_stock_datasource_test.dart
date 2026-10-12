@@ -132,6 +132,45 @@ void main() {
       expect(result.map((e) => e.productName), ['a_b']);
     });
 
+    test('searchAcrossStores folds case and accents (16.16)', () async {
+      await db.into(db.products).insert(ProductsCompanion.insert(
+        id: 'p-epi',
+        name: 'Épicerie',
+        createdAt: DateTime(2025, 1, 1),
+        updatedAt: DateTime(2025, 1, 1),
+      ));
+      await db.into(db.stockLevels).insert(StockLevelsCompanion.insert(
+        id: 'sl-p-epi',
+        productId: 'p-epi',
+        storeId: storeId,
+        quantity: 2,
+        updatedAt: DateTime(2025, 1, 1),
+      ));
+      for (final q in ['épicerie', 'epicerie', 'EPICERIE']) {
+        final result = await datasource.searchAcrossStores(q);
+        expect(result.map((e) => e.productName), ['Épicerie'], reason: q);
+      }
+    });
+
+    test('searchAcrossStores: exact-case "ЖУК" still finds "ЖУК" (16.16)',
+        () async {
+      await db.into(db.products).insert(ProductsCompanion.insert(
+        id: 'p-zhuk',
+        name: 'ЖУК',
+        createdAt: DateTime(2025, 1, 1),
+        updatedAt: DateTime(2025, 1, 1),
+      ));
+      await db.into(db.stockLevels).insert(StockLevelsCompanion.insert(
+        id: 'sl-p-zhuk',
+        productId: 'p-zhuk',
+        storeId: storeId,
+        quantity: 1,
+        updatedAt: DateTime(2025, 1, 1),
+      ));
+      final result = await datasource.searchAcrossStores('ЖУК');
+      expect(result.map((e) => e.productName), ['ЖУК']);
+    });
+
     test('upsertStockLevels writes remote entries into stock_levels', () async {
       final entries = [
         _buildEntry(productId: productId, storeId: storeId, quantity: 25, threshold: 5),

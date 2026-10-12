@@ -263,5 +263,19 @@ void main() {
       final results = await local.search('a_b');
       expect(results.map((s) => s.name), ['a_b']);
     });
+
+    // v1s-16-16: case- and accent-insensitive.
+    test('"societe" finds "Société Générale"', () async {
+      final now = DateTime.now();
+      await db.into(db.suppliers).insert(SuppliersCompanion.insert(
+            id: 's3',
+            name: 'Société Générale',
+            phone: '+237690000003',
+            createdAt: now,
+            updatedAt: now,
+          ));
+      final results = await local.search('societe');
+      expect(results.map((s) => s.name), ['Société Générale']);
+    });
   });
 }

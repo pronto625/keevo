@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import 'dart:developer' as dev;
 
 import '../../../../core/storage/app_database.dart';
+import '../../../../core/storage/search_fold.dart';
 import '../../../../core/storage/sql_like.dart';
 import '../../../../core/sync/sync_service.dart';
 import '../../domain/model/product_model.dart';
@@ -46,10 +47,12 @@ class LocalProductDataSource {
   }
 
   Future<List<ProductModel>> search(String query) async {
-    final q = likeContains(query.toLowerCase());
+    // v1s-16-16: case- and accent-insensitive (shared Unicode fold).
+    final q = likeContainsFolded(query);
     final matchingCategoryIds = await (_db.selectOnly(_db.categories)
           ..addColumns([_db.categories.id])
-          ..where(_db.categories.name.lower().like(q, escapeChar: likeEscapeChar) &
+          ..where(foldedSqlExpr(_db.categories.name)
+                  .like(q, escapeChar: likeEscapeChar) &
               _db.categories.isActive.equals(true)))
         .map((row) => row.read(_db.categories.id)!)
         .get();
@@ -57,8 +60,8 @@ class LocalProductDataSource {
           ..where(
             (p) =>
                 p.archived.equals(false) &
-                (p.name.lower().like(q, escapeChar: likeEscapeChar) |
-                    p.sku.lower().like(q, escapeChar: likeEscapeChar) |
+                (foldedSqlExpr(p.name).like(q, escapeChar: likeEscapeChar) |
+                    foldedSqlExpr(p.sku).like(q, escapeChar: likeEscapeChar) |
                     (matchingCategoryIds.isEmpty
                         ? const Constant(false)
                         : p.categoryId.isIn(matchingCategoryIds))),

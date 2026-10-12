@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../core/di/providers.dart';
 import '../../../../core/storage/app_database.dart';
+import '../../../../core/storage/search_fold.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
 import '../../data/datasource/remote_quick_add_datasource.dart';
 
@@ -169,12 +170,15 @@ class QuickAddProductNotifier extends _$QuickAddProductNotifier {
     final sku =
         'KEV-${uuid.v4().replaceAll('-', '').substring(0, 6).toUpperCase()}';
 
-    // Check local dedup
-    final existing = await (db.select(db.products)
-          ..where(
-              (p) => p.name.lower().equals(name.trim().toLowerCase())))
-        .getSingleOrNull();
-    if (existing != null) {
+    // Check local dedup (v1s-16-16): candidates are found with the shared
+    // Unicode fold (case + accents), then equality stays case-only like the
+    // backend `lower(name)` unique index — "Café" and "Cafe" are distinct.
+    final trimmed = name.trim();
+    final candidates = await (db.select(db.products)
+          ..where((p) => foldedSqlExpr(p.name).equals(foldForSql(trimmed))))
+        .get();
+    final lowerName = trimmed.toLowerCase();
+    if (candidates.any((p) => p.name.toLowerCase() == lowerName)) {
       return null; // Caller shows dedup dialog
     }
 

@@ -9,6 +9,7 @@ import 'package:keevo/features/contact/presentation/page/client_form_page.dart';
 import 'package:keevo/features/contact/presentation/page/client_list_page.dart';
 import 'package:keevo/features/contact/presentation/page/supplier_form_page.dart';
 import 'package:keevo/features/contact/presentation/page/supplier_list_page.dart';
+import 'package:keevo/features/catalog/domain/model/product_model.dart';
 import 'package:keevo/features/catalog/presentation/provider/product_provider.dart';
 import 'package:keevo/features/contact/presentation/provider/contact_provider.dart';
 
@@ -110,5 +111,43 @@ void main() {
 
     expect(find.text('Impossible de charger les produits'), findsOneWidget);
     expect(find.text('Réessayer'), findsOneWidget);
+  });
+
+  testWidgets('SupplierFormPage: product picker search is accent-insensitive '
+      '(v1s-16-16)', (tester) async {
+    final repo = _MockSupplierRepository();
+    when(() => repo.getAll(includeArchived: any(named: 'includeArchived')))
+        .thenAnswer((_) async => []);
+    await tester.binding.setSurfaceSize(const Size(800, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    ProductModel product(String id, String name) => ProductModel(
+        id: id,
+        name: name,
+        createdAt: DateTime(2026),
+        updatedAt: DateTime(2026));
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        supplierRepositoryProvider.overrideWithValue(repo),
+        productListForPickerProvider.overrideWith((ref) async => [
+              product('p-epi', 'Épicerie fine'),
+              product('p-huile', 'Huile'),
+            ]),
+      ],
+      child: const MaterialApp(home: SupplierFormPage()),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Associer des produits'));
+    await tester.tap(find.text('Associer des produits'));
+    await tester.pumpAndSettle();
+    expect(find.text('Huile'), findsOneWidget);
+
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Rechercher un produit…'), 'epicerie');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Épicerie fine'), findsOneWidget);
+    expect(find.text('Huile'), findsNothing);
   });
 }

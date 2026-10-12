@@ -1,7 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../../../core/storage/app_database.dart';
-import '../../../../core/storage/sql_like.dart';
+import '../../../../core/storage/search_fold.dart';
 import '../../domain/model/store_product_stock_model.dart';
 import '../../domain/model/store_stock_summary_model.dart';
 
@@ -84,7 +84,8 @@ class LocalMultiStoreStockDataSource {
 
   Future<List<StoreProductStockModel>> searchAcrossStores(String query) async {
     if (query.trim().isEmpty) return [];
-    const sql = '''
+    // v1s-16-16: case- and accent-insensitive (shared Unicode fold).
+    final sql = '''
       SELECT
         p.id    AS product_id,
         p.name  AS product_name,
@@ -95,13 +96,13 @@ class LocalMultiStoreStockDataSource {
       FROM stock_levels sl
       JOIN products p ON p.id = sl.product_id
       JOIN stores   s ON s.id = sl.store_id AND s.is_active = 1
-      WHERE p.name LIKE ? ESCAPE '\\' AND p.archived = 0
+      WHERE ${foldedSqlRaw('p.name')} LIKE ? ESCAPE '\\' AND p.archived = 0
       GROUP BY p.id, p.name, sl.variant_id, sl.store_id
       ORDER BY p.name ASC, s.name ASC
     ''';
     final rows = await _db.customSelect(
       sql,
-      variables: [Variable.withString(likeContains(query))],
+      variables: [Variable.withString(likeContainsFolded(query))],
     ).get();
     return rows.map(_mapEntry).toList();
   }
