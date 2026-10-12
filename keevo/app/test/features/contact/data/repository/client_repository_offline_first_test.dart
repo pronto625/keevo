@@ -10,7 +10,6 @@ import 'dart:io';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/storage/app_database.dart';
-import 'package:keevo/core/sync/connectivity_service.dart';
 import 'package:keevo/core/sync/sync_service.dart';
 import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
 import 'package:keevo/features/contact/data/datasource/local_client_datasource.dart';
@@ -22,7 +21,6 @@ import 'package:sqlite3/open.dart';
 
 class MockLocalClientDataSource extends Mock implements LocalClientDataSource {}
 class MockRemoteClientDataSource extends Mock implements RemoteClientDataSource {}
-class MockConnectivityService extends Mock implements ConnectivityService {}
 class MockSyncService extends Mock implements SyncService {}
 class MockSyncTriggerDispatcher extends Mock implements SyncTriggerDispatcher {}
 
@@ -42,7 +40,6 @@ void _overrideSqlite3ForLinuxTesting() {
 void main() {
   late MockLocalClientDataSource mockLocal;
   late MockRemoteClientDataSource mockRemote;
-  late MockConnectivityService mockConnectivity;
   late MockSyncService mockSyncService;
   late MockSyncTriggerDispatcher mockDispatcher;
   late ClientRepositoryImpl repo;
@@ -55,13 +52,11 @@ void main() {
   setUp(() {
     mockLocal = MockLocalClientDataSource();
     mockRemote = MockRemoteClientDataSource();
-    mockConnectivity = MockConnectivityService();
     mockSyncService = MockSyncService();
     mockDispatcher = MockSyncTriggerDispatcher();
     repo = ClientRepositoryImpl(
       local: mockLocal,
       remote: mockRemote,
-      connectivity: mockConnectivity,
       syncService: mockSyncService,
       syncTriggerDispatcher: mockDispatcher,
     );
@@ -143,7 +138,6 @@ void main() {
   group('archive() offline-first', () {
     test('archive_writesLocalFirst_queuesArchive_evenWhenOnline', () async {
       final callOrder = <String>[];
-      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
       when(() => mockLocal.archive(any())).thenAnswer((_) async {
         callOrder.add('local');
       });
@@ -199,7 +193,6 @@ void main() {
       atomicRepo = ClientRepositoryImpl(
         local: realLocal,
         remote: mockRemote,
-        connectivity: mockConnectivity,
         syncService: mockSyncService,
         syncTriggerDispatcher: mockDispatcher,
         db: db,

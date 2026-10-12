@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/theme/app_theme.dart';
+import 'package:keevo/features/catalog/domain/model/product_status.dart';
 import 'package:keevo/features/pos/data/datasource/local_sale_datasource.dart';
 import 'package:keevo/features/pos/domain/model/cart_item.dart';
 import 'package:keevo/features/pos/presentation/provider/cart_provider.dart';
@@ -87,7 +88,7 @@ Future<_MockLocalSaleDs> _encaisserDraft(WidgetTester tester,
                       unitPrice: 500,
                       appliedUnitPrice: 500,
                       quantity: 1,
-                      productStatus: 'DRAFT',
+                      productStatus: ProductStatus.draft,
                     ));
                 CartBottomSheet.show(context, onEncaisser: onEncaisser);
               },

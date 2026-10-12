@@ -10,6 +10,7 @@ import 'package:keevo/core/storage/app_database.dart'
 import 'package:keevo/core/sync/sync_service.dart';
 import 'package:keevo/core/sync/sync_gate_provider.dart';
 import 'package:keevo/features/catalog/data/datasource/local_product_datasource.dart';
+import 'package:keevo/features/catalog/domain/model/product_status.dart';
 import 'package:keevo/features/catalog/presentation/provider/product_provider.dart';
 import 'package:keevo/features/pos/data/datasource/local_sale_datasource.dart';
 import 'package:keevo/features/pos/domain/model/cart_item.dart';
@@ -225,7 +226,7 @@ void main() {
         unitPrice: 3000,
         appliedUnitPrice: 3000,
         quantity: 1,
-        productStatus: 'DRAFT',
+        productStatus: ProductStatus.draft,
       );
 
       // Pre-fill draftInitialStocksProvider
@@ -287,7 +288,7 @@ void main() {
           unitPrice: 3000,
           appliedUnitPrice: 3000,
           quantity: 1,
-          productStatus: 'DRAFT',
+          productStatus: ProductStatus.draft,
         );
         final container = createContainer(cart: [draftItem], role: role);
         container
@@ -329,7 +330,7 @@ void main() {
         unitPrice: 3000,
         appliedUnitPrice: 3000,
         quantity: 1,
-        productStatus: 'DRAFT',
+        productStatus: ProductStatus.draft,
       );
       final container = createContainer(cart: [draftItem]);
       container
@@ -392,7 +393,7 @@ void main() {
           unitPrice: 3000,
           appliedUnitPrice: 3000,
           quantity: qty,
-          productStatus: 'DRAFT',
+          productStatus: ProductStatus.draft,
         );
 
     test('draft with insufficient initial stock leaves everything untouched',

@@ -5,7 +5,6 @@ import 'package:mocktail/mocktail.dart';
 import 'package:sqlite3/open.dart';
 
 import 'package:keevo/core/storage/app_database.dart';
-import 'package:keevo/core/sync/connectivity_service.dart';
 import 'package:keevo/core/sync/sync_service.dart';
 import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
 import 'package:keevo/features/catalog/data/datasource/local_stock_datasource.dart';
@@ -13,8 +12,6 @@ import 'package:keevo/features/catalog/data/datasource/remote_stock_datasource.d
 import 'package:keevo/features/catalog/data/repository/stock_repository_impl.dart';
 
 class _MockRemote extends Mock implements RemoteStockDataSource {}
-
-class _MockConnectivity extends Mock implements ConnectivityService {}
 
 class _MockSyncService extends Mock implements SyncService {}
 
@@ -53,7 +50,6 @@ void main() {
       local: LocalStockDataSource(db),
       remote: _MockRemote(),
       syncService: sync,
-      connectivity: _MockConnectivity(),
       syncTriggerDispatcher: _MockDispatcher(),
     );
   });

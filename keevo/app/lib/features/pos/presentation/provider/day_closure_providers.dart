@@ -14,14 +14,11 @@ import '../../domain/usecase/close_day_usecase.dart';
 import '../../domain/usecase/get_sales_history_usecase.dart';
 import 'pos_providers.dart';
 
-/// DayCloseButtonState — visual state of the day-closure UI.
+/// DayClosureState — visual state of the day-closure UI.
 ///
 /// Drives `_ClosureButton` in `reports_page.dart` (the production day-close
-/// button) and the day-close gating in `pos_speed_dial.dart`. The standalone
-/// `DayCloseButton` widget that originally consumed this enum has been
-/// removed (v1s-16-10); the enum name is retained to avoid a cross-file
-/// rename cascade.
-enum DayCloseButtonState {
+/// button) and the day-close gating in `pos_speed_dial.dart`.
+enum DayClosureState {
   /// Button is available — user can close the day
   available,
 
@@ -80,23 +77,23 @@ final getSalesHistoryUseCaseProvider = Provider<GetSalesHistoryUseCase>((ref) {
 /// The backend accepts a single closure per store and calendar day, so once
 /// today is closed the button stays closed until midnight — sales made after
 /// the closure are rolled into the next day's closure.
-final dayClosureStateProvider = FutureProvider.family<DayCloseButtonState, String>((ref, storeId) async {
+final dayClosureStateProvider = FutureProvider.family<DayClosureState, String>((ref, storeId) async {
   final repository = ref.watch(dayClosureRepositoryProvider);
   final now = DateTime.now();
   final startOfDay = DateTime(now.year, now.month, now.day);
 
   final lastClosure = await repository.getLastClosure(storeId);
   if (lastClosure != null && lastClosure.closedAt.isAfter(startOfDay)) {
-    return DayCloseButtonState.closed;
+    return DayClosureState.closed;
   }
 
   // No closure today — check if there are any sales
   final salesCount = await repository.getTodaySalesCount(storeId);
   if (salesCount == 0) {
-    return DayCloseButtonState.noSales;
+    return DayClosureState.noSales;
   }
 
-  return DayCloseButtonState.available;
+  return DayClosureState.available;
 });
 
 /// Today's summary for the bottom sheet preview.

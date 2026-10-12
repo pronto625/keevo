@@ -53,7 +53,6 @@ final stockRepositoryProvider = Provider<StockRepository>((ref) {
     local: ref.watch(localStockDataSourceProvider),
     remote: ref.watch(remoteStockDataSourceProvider),
     syncService: ref.watch(syncServiceProvider),
-    connectivity: ref.watch(connectivityServiceProvider),
     syncTriggerDispatcher: ref.watch(syncTriggerDispatcherProvider),
   );
 });

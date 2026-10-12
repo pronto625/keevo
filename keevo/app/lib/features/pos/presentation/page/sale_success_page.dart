@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../domain/model/sale_status.dart';
 
 /// SaleSuccessPage — full-screen confirmation after a sale is recorded.
 class SaleSuccessPage extends StatefulWidget {
@@ -12,7 +13,7 @@ class SaleSuccessPage extends StatefulWidget {
   const SaleSuccessPage({
     super.key,
     required this.totalAmount,
-    this.saleStatus = 'COMPLETED',
+    this.saleStatus = SaleStatus.completedValue,
   });
 
   @override
@@ -62,7 +63,7 @@ class _SaleSuccessPageState extends State<SaleSuccessPage>
 
   @override
   Widget build(BuildContext context) {
-    final isPending = widget.saleStatus == 'PENDING_VALIDATION';
+    final isPending = widget.saleStatus == SaleStatus.pendingValidation.value;
     // Aplat sémantique plein (plus de dégradé) ; le vert est la teinte la
     // plus foncée de l'ancien dégradé pour garder le contraste du blanc. Sur
     // l'ambre, le blanc est illisible : texte et icône passent en onWarning.

@@ -174,4 +174,19 @@ void main() {
       expect(await hasSession(storage), isFalse);
     });
   });
+
+  group('routeForRole (v1s-15-10)', () {
+    test('OWNER goes to the dashboard', () {
+      expect(routeForRole('OWNER'), '/dashboard');
+    });
+
+    test('EMPLOYEE goes to the POS', () {
+      expect(routeForRole('EMPLOYEE'), '/pos');
+    });
+
+    test('unknown or missing role goes to the POS', () {
+      expect(routeForRole(null), '/pos');
+      expect(routeForRole('owner'), '/pos');
+    });
+  });
 }

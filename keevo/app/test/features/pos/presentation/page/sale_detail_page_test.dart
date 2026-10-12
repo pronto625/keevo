@@ -454,7 +454,7 @@ void main() {
       await pump(tester, role: 'OWNER', status: 'COMPLETED', extra: [
         dayClosureStateProvider.overrideWith((ref, storeId) async {
           closureStateBuilds++;
-          return DayCloseButtonState.available;
+          return DayClosureState.available;
         }),
       ]);
       final container = ProviderScope.containerOf(

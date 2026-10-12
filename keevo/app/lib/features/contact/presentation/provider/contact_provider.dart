@@ -40,7 +40,6 @@ final clientRepositoryProvider = Provider<ClientRepository>((ref) {
   return ClientRepositoryImpl(
     local: ref.watch(localClientDataSourceProvider),
     remote: ref.watch(remoteClientDataSourceProvider),
-    connectivity: ref.watch(connectivityServiceProvider),
     syncService: ref.watch(syncServiceProvider),
     syncTriggerDispatcher: ref.watch(syncTriggerDispatcherProvider),
     db: ref.watch(appDatabaseProvider),
@@ -51,7 +50,6 @@ final supplierRepositoryProvider = Provider<SupplierRepository>((ref) {
   return SupplierRepositoryImpl(
     local: ref.watch(localSupplierDataSourceProvider),
     remote: ref.watch(remoteSupplierDataSourceProvider),
-    connectivity: ref.watch(connectivityServiceProvider),
     syncService: ref.watch(syncServiceProvider),
     syncTriggerDispatcher: ref.watch(syncTriggerDispatcherProvider),
     db: ref.watch(appDatabaseProvider),

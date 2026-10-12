@@ -8,6 +8,7 @@ import '../../domain/exception/day_already_closed_exception.dart';
 import '../../domain/model/day_closure_model.dart';
 import '../../domain/model/payment_mode_enum.dart';
 import '../../domain/model/sale_model.dart';
+import '../../domain/model/sale_status.dart';
 import '../../domain/model/sales_history_filter.dart';
 import '../../domain/repository/day_closure_repository.dart';
 import '../datasource/local_day_closure_datasource.dart';
@@ -63,7 +64,7 @@ class DayClosureRepositoryImpl implements DayClosureRepository {
 
   DayClosureSummary _computeSummaryFromSales(List<Sale> sales) {
     final completed =
-        sales.where((s) => s.status == 'COMPLETED').toList();
+        sales.where((s) => s.status == SaleStatus.completed.value).toList();
 
     final totalRevenue =
         completed.fold<int>(0, (sum, s) => sum + s.totalAmount);
@@ -85,7 +86,7 @@ class DayClosureRepositoryImpl implements DayClosureRepository {
     }
 
     final pending =
-        sales.where((s) => s.status == 'PENDING_VALIDATION').toList();
+        sales.where((s) => s.status == SaleStatus.pendingValidation.value).toList();
 
     String? topProductId;
     String? topProductName;

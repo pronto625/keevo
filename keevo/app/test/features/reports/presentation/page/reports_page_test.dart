@@ -44,7 +44,7 @@ void main() {
           );
         }),
         dayClosureStateProvider
-            .overrideWith((ref, s) async => DayCloseButtonState.noSales),
+            .overrideWith((ref, s) async => DayClosureState.noSales),
         lastClosureProvider.overrideWith((ref, s) async => null),
       ],
       child: const MaterialApp(home: ReportsPage()),
@@ -84,7 +84,7 @@ void main() {
           );
         }),
         dayClosureStateProvider
-            .overrideWith((ref, s) async => DayCloseButtonState.noSales),
+            .overrideWith((ref, s) async => DayClosureState.noSales),
         lastClosureProvider.overrideWith((ref, s) async => null),
       ],
       child: const MaterialApp(home: ReportsPage()),

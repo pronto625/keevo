@@ -69,6 +69,7 @@ import '../../features/team/presentation/page/edit_employee_page.dart';
 import '../di/providers.dart';
 import '../scaffold/main_shell.dart';
 import '../storage/app_constants.dart';
+import 'session_presence_cache.dart';
 import 'startup_route.dart';
 
 /// Global ScaffoldMessenger key — used by AuthInterceptor.onAccountSuspended
@@ -119,7 +120,7 @@ class _SplashRedirectPageState extends ConsumerState<_SplashRedirectPage> {
     // Story 16.8 AC1: pull latest server state at cold start once signed in —
     // fire-and-forget, do NOT block navigation.
     try {
-      if (await hasSession(ref.read(flutterSecureStorageProvider))) {
+      if (await ref.read(sessionPresenceCacheProvider).hasSession()) {
         ref.read(syncTriggerNotifierProvider.notifier).onAppStartup();
       }
     } catch (_) {
@@ -268,11 +269,11 @@ final GoRouter appRouter = GoRouter(
     );
   },
   redirect: (context, state) async {
-    final storage = ProviderScope.containerOf(context, listen: false)
-        .read(flutterSecureStorageProvider);
+    final sessionCache = ProviderScope.containerOf(context, listen: false)
+        .read(sessionPresenceCacheProvider);
     return globalAuthRedirect(
       state.uri.path,
-      hasSession: () => hasSession(storage),
+      hasSession: sessionCache.hasSession,
       readRole: () async =>
           (await SharedPreferences.getInstance()).getString(kUserRoleKey),
     );
@@ -292,10 +293,10 @@ final GoRouter appRouter = GoRouter(
         // the refresh token even when the access token has expired). The
         // splash picks the destination (v1s-16-13): wizard, forced password
         // change, then OWNER → /dashboard, EMPLOYEE → /pos.
-        final storage = ProviderScope.containerOf(context, listen: false)
-            .read(flutterSecureStorageProvider);
+        final sessionCache = ProviderScope.containerOf(context, listen: false)
+            .read(sessionPresenceCacheProvider);
         return loginRouteRedirect(
-          hasSession: () => hasSession(storage),
+          hasSession: sessionCache.hasSession,
           extra: state.extra,
         );
       },

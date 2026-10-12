@@ -1,4 +1,5 @@
 import 'payment_mode_enum.dart';
+import 'sale_status.dart';
 
 /// SaleItemModel — snapshot of a line item at sale time.
 class SaleItemModel {
@@ -62,7 +63,7 @@ class Sale {
     this.mobileMoneyRef,
     required this.totalAmount,
     this.discountAmount = 0,
-    this.status = 'COMPLETED',
+    this.status = SaleStatus.completedValue,
     required this.items,
     required this.occurredAt,
     required this.createdAt,

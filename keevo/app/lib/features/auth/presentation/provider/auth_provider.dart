@@ -7,8 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../../core/di/providers.dart';
+import '../../../../core/auth/jwt_claims.dart';
 import '../../../../core/auth/session_refresher.dart';
+import '../../../../core/di/providers.dart';
 import '../../../../core/network/auth_interceptor.dart';
 import '../../../../core/network/log_redaction.dart';
 import '../../../../core/network/retry_interceptor.dart';
@@ -54,6 +55,18 @@ final tokenStorageProvider = Provider<TokenStorage>((ref) {
   return SecureTokenStorage(ref.watch(flutterSecureStorageProvider));
 });
 
+/// HttpClient shared by every Dio instance of the app.
+///
+/// HTTPS enforcement — invalid certificates are rejected in production; a
+/// self-signed certificate is accepted only in debug mode for localhost dev
+/// (Story 1.3 AC6).
+HttpClient _createHttpClient() {
+  final client = HttpClient();
+  client.badCertificateCallback =
+      (cert, host, port) => kDebugMode && host == 'localhost';
+  return client;
+}
+
 /// Separate Dio instance used ONLY for refresh token calls.
 /// Bypasses AuthInterceptor to prevent infinite refresh loops.
 final _refreshDioProvider = Provider<Dio>((ref) {
@@ -64,12 +77,7 @@ final _refreshDioProvider = Provider<Dio>((ref) {
     headers: const {'Content-Type': 'application/json'},
   ));
   dio.httpClientAdapter = IOHttpClientAdapter(
-    createHttpClient: () {
-      final client = HttpClient();
-      client.badCertificateCallback =
-          (cert, host, port) => kDebugMode && host == 'localhost';
-      return client;
-    },
+    createHttpClient: _createHttpClient,
   );
   dio.interceptors.add(RetryOnConnectionClosedInterceptor(dio));
   ref.onDispose(dio.close);
@@ -116,15 +124,9 @@ final dioProvider = Provider<Dio>((ref) {
     headers: const {'Content-Type': 'application/json'},
   ));
 
-  // HTTPS enforcement — reject invalid certificates in production;
-  // allow self-signed only in debug mode for localhost dev (Story 1.3 AC6).
+  // HTTPS enforcement: see [_createHttpClient].
   dio.httpClientAdapter = IOHttpClientAdapter(
-    createHttpClient: () {
-      final client = HttpClient();
-      client.badCertificateCallback =
-          (cert, host, port) => kDebugMode && host == 'localhost';
-      return client;
-    },
+    createHttpClient: _createHttpClient,
   );
 
   // Retry once on HTTP keep-alive connection-closed errors before giving up.
@@ -269,7 +271,10 @@ class Registration extends _$Registration {
           newSession: true,
           discardPreviousAccountData: discardPreviousAccountData);
       final prefs = ref.read(sharedPreferencesProvider);
-      await prefs.setString(kUserRoleKey, 'OWNER'); // Registration always creates OWNER
+      // The server's role claim wins; registration creates an OWNER, so that
+      // is only the fallback for a token without the claim.
+      await prefs.setString(
+          kUserRoleKey, JwtClaims.tryParse(result.token)?.role ?? 'OWNER');
       await prefs.setString(kUserPhoneKey, phoneNumber);
       ref.read(activeStoreIdProvider.notifier).setActiveStore(null);
       ref.invalidate(currentUserRoleProvider);

@@ -258,7 +258,7 @@
 - UX27: **Shop Status Card** — nom boutique + CA + indicateur status (vert/orange/rouge) + tendance %
 - UX28: **Metric Badge Card** — icône + nombre + label, variantes bleu/orange/vert
 - UX29: **Sync Indicator** — dot coloré + texte état, position AppBar trailing
-- UX30: **Day Close Button** — "Clôturer la journée" + icône lune, états : disponible / déjà clôturé / rappel (badge)
+- UX30: **Day Close Button** — "Clôturer la journée" + icône lune, états : disponible / déjà clôturé / rappel (badge) — implémenté par `_ClosureButton` (`ReportsPage`) + action « Clôturer la journée » du speed dial POS, état `DayClosureState`
 - UX31: **Shop Type Selector** — grille icons 4 templates onboarding avec animation ripple
 - UX32: **Inventory Row** — nom + stock théorique + champ saisie réel + badge écart (✅ / ⚠️)
 - UX33: **WhatsApp Report Preview** — aperçu formaté + bouton "Envoyer sur WhatsApp"
