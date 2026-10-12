@@ -13,13 +13,21 @@ class ExportDataset {
   /// Dataset-specific criteria keys this dataset accepts.
   final List<String> criteria;
 
+  /// French title of the PDF document made from this dataset (« Fin de
+  /// journée », « État de stock »…), `null` when it has none (v1s-18-3).
+  final String? pdfTemplate;
+
   const ExportDataset({
     required this.key,
     required this.label,
     this.storeFilter = false,
     this.periodFilter = false,
     this.criteria = const [],
+    this.pdfTemplate,
   });
+
+  /// Whether a PDF document can be made from this dataset.
+  bool get hasPdfTemplate => pdfTemplate != null && pdfTemplate!.isNotEmpty;
 
   factory ExportDataset.fromJson(Map<String, dynamic> json) => ExportDataset(
         key: json['key'] as String,
@@ -30,10 +38,12 @@ class ExportDataset {
           for (final c in (json['criteria'] as List<dynamic>? ?? const []))
             c as String,
         ],
+        pdfTemplate: json['pdfTemplate'] as String?,
       );
 }
 
-/// Export file formats. PDF is not available before v1s-18-3.
+/// Export file formats. A PDF is one document chosen by its dataset
+/// (template), v1s-18-3.
 enum ExportFormat {
   csv('CSV', 'CSV'),
   xlsx('XLSX', 'Excel'),
@@ -220,8 +230,11 @@ bool exportCriteriaApply(Set<String> selection) =>
 /// - `criteria` are sent only when the selection is exactly `{audit_log}`,
 ///   restricted to the keys that dataset declares, blank values dropped.
 ///
-/// Throws [ArgumentError] for PDF (not available before v1s-18-3) or an empty
-/// selection.
+/// PDF (v1s-18-3): the selection must be exactly one dataset that has a PDF
+/// template in [datasets] (the template is chosen by its dataset key).
+///
+/// Throws [ArgumentError] for an empty selection or a PDF request that is not
+/// one templated dataset.
 ExportRequest buildExportRequest({
   required Set<String> selection,
   required ExportFormat format,
@@ -231,13 +244,16 @@ ExportRequest buildExportRequest({
   Map<String, String> criteria = const {},
   List<ExportDataset> datasets = const [],
 }) {
-  if (format == ExportFormat.pdf) {
-    throw ArgumentError.value(format, 'format', 'PDF is not available yet');
-  }
   if (selection.isEmpty) {
     throw ArgumentError.value(selection, 'selection', 'empty selection');
   }
   final byKey = {for (final d in datasets) d.key: d};
+  if (format == ExportFormat.pdf &&
+      (selection.length != 1 ||
+          !(byKey[selection.first]?.hasPdfTemplate ?? false))) {
+    throw ArgumentError.value(selection, 'selection',
+        'PDF needs exactly one dataset with a template');
+  }
   final ordered = [
     for (final d in datasets)
       if (selection.contains(d.key)) d.key,

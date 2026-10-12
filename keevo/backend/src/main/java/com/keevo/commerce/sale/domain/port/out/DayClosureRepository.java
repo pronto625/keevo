@@ -2,6 +2,7 @@ package com.keevo.commerce.sale.domain.port.out;
 
 import com.keevo.commerce.sale.domain.model.DayClosure;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -47,4 +48,13 @@ public interface DayClosureRepository {
      * @return the most recent DayClosure, or empty if none exists
      */
     Optional<DayClosure> findLastClosureForStore(UUID storeId);
+
+    /** One closure by id (Story v1s-18-3 — « Fin de journée » PDF). */
+    Optional<DayClosure> findById(UUID closureId);
+
+    /**
+     * The store's closure just before {@code before} (greatest {@code closed_at} strictly
+     * earlier), i.e. the previous closure that bounds a closure's window (Story v1s-18-3).
+     */
+    Optional<DayClosure> findPreviousForStore(UUID storeId, Instant before);
 }

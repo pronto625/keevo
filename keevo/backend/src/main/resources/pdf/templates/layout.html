@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Shared fragments of the Keevo PDF documents (Story v1s-18-3) - versioned with the code, not
+  user-editable. Data is only ever written with th:text (escaped), never th:utext.
+-->
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
+<head>
+<style th:fragment="style">
+@page {
+  size: A4 portrait;
+  margin: 30mm 12mm 16mm 12mm;
+  @top-center { content: element(header); }
+  @bottom-right {
+    content: "Page " counter(page) " / " counter(pages);
+    font-family: 'Keevo Sans'; font-size: 8pt; color: #555555;
+  }
+}
+body { font-family: 'Keevo Sans'; font-size: 9pt; color: #1a1a1a; }
+.header { position: running(header); width: 100%; border-bottom: 1.5pt solid #0f766e; padding-bottom: 2mm; }
+.header .title { font-size: 14pt; font-weight: bold; color: #0f766e; }
+.header .business { font-size: 10pt; font-weight: bold; }
+.meta { font-size: 8.5pt; color: #444444; }
+h2 { font-size: 11pt; margin: 5mm 0 2mm 0; color: #0f766e; }
+h3 { font-size: 10pt; margin: 4mm 0 1.5mm 0; }
+table { width: 100%; border-collapse: collapse; -fs-table-paginate: paginate; margin-bottom: 3mm; }
+thead { display: table-header-group; }
+tr { page-break-inside: avoid; }
+th { background-color: #e6f2f1; font-weight: bold; text-align: left; padding: 1.2mm 1.5mm; border-bottom: 0.8pt solid #0f766e; }
+td { padding: 1mm 1.5mm; border-bottom: 0.4pt solid #dddddd; vertical-align: top; }
+.num { text-align: right; white-space: nowrap; }
+.total td { font-weight: bold; border-top: 0.8pt solid #0f766e; background-color: #f4f4f4; }
+.gap { background-color: #fdecea; font-weight: bold; }
+.muted { color: #777777; }
+.empty { margin-top: 10mm; font-size: 11pt; color: #555555; text-align: center; }
+.note { margin-top: 4mm; font-size: 8.5pt; color: #8a4b00; }
+.section { page-break-inside: auto; }
+.kv td.label { width: 55%; }
+</style>
+</head>
+<body>
+<div class="header" th:fragment="header">
+  <div><span class="title" th:text="${header.title()}">Titre</span></div>
+  <div class="business" th:text="${header.businessName()}">Commerce</div>
+  <div class="meta"><span th:text="${header.scope()}">Boutique</span> · <span th:text="${header.period()}">Période</span></div>
+  <div class="meta" th:text="${header.generatedAt()}">Généré le</div>
+</div>
+<div th:fragment="notes">
+  <p class="empty" th:if="${empty}">Aucune donnée pour cette période</p>
+  <p class="note" th:if="${truncated}" th:text="${'Document limité aux ' + limitText + ' premières ' + limitUnit + ' : les totaux portent sur ces seules lignes'}">Document limité</p>
+</div>
+</body>
+</html>

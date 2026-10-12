@@ -259,6 +259,25 @@ class CloseDayServiceTest {
         verify(saleRepository).findForClosure(STORE_ID, event.window());
     }
 
+    // v1s-18-3 — the « Fin de journée » PDF recomputes a closure's window afterwards with
+    // ClosureWindow.forClosure(closure, previous): it must be the window used at closing time.
+    @Test
+    void window_equalsForClosureOfTheSavedClosure_withAndWithoutPrevious() {
+        Instant prevAt = Instant.now().minus(java.time.Duration.ofHours(20));
+        DayClosure prev = previousClosure(prevAt, prevAt.plusSeconds(30));
+        for (java.util.Optional<DayClosure> previous : List.of(java.util.Optional.<DayClosure>empty(),
+                java.util.Optional.of(prev))) {
+            reset(dayClosureRepository, eventPublisher, saleRepository);
+            when(dayClosureRepository.findLastClosureForStore(STORE_ID)).thenReturn(previous);
+
+            DayClosedEvent event = closeAndCaptureEvent(new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, false));
+
+            var saved = ArgumentCaptor.forClass(DayClosure.class);
+            verify(dayClosureRepository).save(saved.capture());
+            assertThat(ClosureWindow.forClosure(saved.getValue(), previous)).isEqualTo(event.window());
+        }
+    }
+
     // Closures of a store only move forward: an older offline closure pushed after a newer
     // one would count the newer closure's sales a second time.
     @Test

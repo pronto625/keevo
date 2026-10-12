@@ -185,6 +185,25 @@ void main() {
     expect(find.textContaining('Export relancé'), findsOneWidget);
   });
 
+  testWidgets('a FAILED PDF job can be relaunched (v1s-18-3)', (tester) async {
+    ds.onList = () async => [
+          job('p1', ExportJobStatus.failed,
+              format: 'PDF', datasets: const ['day_closures'], storeId: 's-1'),
+        ];
+    ds.onRequest = (_) async => const ExportQueued(
+        ExportJob(id: 'n2', status: ExportJobStatus.pending, format: 'PDF'));
+    await pumpApp(tester, app());
+
+    expect(find.byKey(const Key('export-relaunch-p1')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('export-relaunch-p1')));
+    await tester.pump();
+    await tester.pump();
+    final r = ds.requests.single;
+    expect(r.datasets, ['day_closures']);
+    expect(r.format, ExportFormat.pdf);
+    expect(r.storeId, 's-1');
+  });
+
   testWidgets('load error → AppErrorWidget, retry reloads', (tester) async {
     var fail = true;
     ds.onList = () async {

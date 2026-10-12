@@ -111,13 +111,14 @@ public class GlobalExceptionHandler {
             Map.entry("EXPORT_FORMAT_UNSUPPORTED",   "Ce format d'export n'est pas encore disponible"),
             Map.entry("EXPORT_LINK_INVALID",         "Lien de téléchargement invalide"),
             Map.entry("EXPORT_QUEUE_FULL",           "Trop d'exports en cours, réessayez dans quelques minutes"),
+            Map.entry("EXPORT_PDF_TOO_LARGE",        "Ce PDF dépasserait la limite de {limit} {unit} : réduisez la période, choisissez une boutique ou exportez en Excel"),
             Map.entry("OPTIMISTIC_LOCK",              "Cette donnée a été modifiée par une autre opération, veuillez réessayer")
     );
 
     @ExceptionHandler(DomainException.class)
     public ResponseEntity<ApiResponseWrapper<Void>> handleDomainException(DomainException ex) {
         HttpStatus status = domainCodeToHttpStatus(ex.getDomainCode());
-        String userMessage = FR_MESSAGES.getOrDefault(ex.getDomainCode(), ex.getMessage());
+        String userMessage = userMessage(ex.getDomainCode(), ex.getMessage(), ex.getDetails());
         return ResponseEntity.status(status)
                 .body(ApiResponseWrapper.error(
                         userMessage,
@@ -216,6 +217,25 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    /**
+     * French message of a domain code with its {@code {key}} placeholders filled from the details
+     * (v1s-18-3); without a French message, the exception's own message, never substituted.
+     */
+    static String userMessage(String domainCode, String fallback, Map<String, Object> details) {
+        String fr = domainCode != null ? FR_MESSAGES.get(domainCode) : null;
+        return fr != null ? withDetails(fr, details) : fallback;
+    }
+
+    /** Fills {@code {key}} placeholders of a French message from the exception details (v1s-18-3). */
+    static String withDetails(String message, Map<String, Object> details) {
+        if (message == null || details == null || details.isEmpty() || message.indexOf('{') < 0) return message;
+        String result = message;
+        for (Map.Entry<String, Object> e : details.entrySet()) {
+            result = result.replace("{" + e.getKey() + "}", String.valueOf(e.getValue()));
+        }
+        return result;
+    }
+
     private HttpStatus domainCodeToHttpStatus(String domainCode) {
         if (domainCode == null) return HttpStatus.INTERNAL_SERVER_ERROR;
         return switch (domainCode) {
@@ -266,7 +286,8 @@ public class GlobalExceptionHandler {
                  "SALE_NOT_PENDING",
                  "SALE_NOT_COMPLETED",
                  "INVALID_OR_EXPIRED_CODE",
-                 "CODE_LOCKED" -> HttpStatus.UNPROCESSABLE_ENTITY;
+                 "CODE_LOCKED",
+                 "EXPORT_PDF_TOO_LARGE" -> HttpStatus.UNPROCESSABLE_ENTITY;  // v1s-18-3 — PDF over its row limit
             case "JUSTIFICATION_REQUIRED",
                  "JUSTIFICATION_TOO_SHORT" -> HttpStatus.BAD_REQUEST;
             case "SECTOR_TEMPLATE_NOT_FOUND",

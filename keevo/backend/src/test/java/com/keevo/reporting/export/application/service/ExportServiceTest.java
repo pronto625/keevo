@@ -106,12 +106,23 @@ class ExportServiceTest {
         return new Tenant(UUID.randomUUID(), "KV-ABC123", TENANT, status, PlanType.FREE, NOW);
     }
 
+    /** Optional document (PDF) renderer registered with CSV / XLSX (v1s-18-3). */
+    private FakePdfRenderer pdfRenderer;
+    private final SyntheticExportProvider sales = new SyntheticExportProvider("sales", "Ventes", 4);
+    private final SyntheticExportProvider bigSales = new SyntheticExportProvider("sales", "Ventes", 2001);
+
     private ExportService service() {
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
         ExportProperties props = new ExportProperties();
+        List<com.keevo.reporting.export.domain.port.out.ExportRenderer> renderers = new ArrayList<>(
+                List.of(new CsvExportRenderer(), new XlsxExportRenderer()));
+        if (pdfRenderer != null) renderers.add(pdfRenderer);
+        List<com.keevo.shared.application.port.export.ExportDatasetProvider> datasets = new ArrayList<>(
+                List.of(stores, big, audit));
+        if (pdfRenderer != null) datasets.add(pdfRenderer.salesProvider);
         return new ExportService(
-                new ExportDatasetRegistry(List.of(stores, big, audit)),
-                new ExportRendererRegistry(List.of(new CsvExportRenderer(), new XlsxExportRenderer())),
+                new ExportDatasetRegistry(datasets),
+                new ExportRendererRegistry(renderers),
                 new ExportStreamingWriter(1000), jobRepository, storage,
                 new ExportRateLimiter(maxRequestsPerHour, 3, jobRepository, clock), signer,
                 subscriptionRepository, eventPublisher, tenantRepository, executor, jobRunner, props, clock);
@@ -473,6 +484,138 @@ class ExportServiceTest {
             ExportService s = service();
             assertCode(() -> s.request(TENANT, ACTOR, req(ExportFormat.CSV, "nope"), direct), "EXPORT_DATASET_UNKNOWN");
             s.request(TENANT, ACTOR, req(ExportFormat.CSV, "stores"), direct);
+        }
+    }
+
+    /**
+     * Document renderer standing for the PDF one: only « sales », at most 2000 rows; writes a
+     * marker then reads the provider like the real renderer.
+     */
+    static final class FakePdfRenderer implements com.keevo.reporting.export.domain.port.out.DocumentExportRenderer {
+        final SyntheticExportProvider salesProvider;
+        final List<String> calls = new ArrayList<>();
+
+        FakePdfRenderer(SyntheticExportProvider salesProvider) {
+            this.salesProvider = salesProvider;
+        }
+
+        @Override public ExportFormat format() { return ExportFormat.PDF; }
+        @Override public String contentType(int n) { return "application/pdf"; }
+        @Override public String extension(int n) { return "pdf"; }
+        @Override public Optional<String> templateLabel(String key) {
+            return "sales".equals(key) ? Optional.of("Liste des ventes") : Optional.empty();
+        }
+
+        @Override
+        public void validate(List<com.keevo.shared.application.port.export.ExportDatasetProvider> providers) {
+            calls.add("validate");
+            if (providers.size() != 1 || !"sales".equals(providers.get(0).key())) {
+                throw new DomainException(com.keevo.shared.domain.exception.ErrorCode.EXPORT_FORMAT_UNSUPPORTED, "x",
+                        java.util.Map.of("format", "PDF", "dataset", providers.get(0).key()));
+            }
+        }
+
+        @Override
+        public void checkSize(List<com.keevo.shared.application.port.export.ExportDatasetProvider> providers,
+                              ExportFilter filter, long countedRows) {
+            calls.add("checkSize:" + countedRows);
+            if (countedRows > 2000) {
+                throw new DomainException(com.keevo.shared.domain.exception.ErrorCode.EXPORT_PDF_TOO_LARGE, "x",
+                        java.util.Map.of("limit", 2000, "rows", countedRows));
+            }
+        }
+
+        @Override
+        public long render(java.io.OutputStream out,
+                           List<com.keevo.shared.application.port.export.ExportDatasetProvider> providers,
+                           ExportFilter filter, java.util.concurrent.atomic.AtomicLong progress) throws IOException {
+            calls.add("render");
+            out.write("%PDF-fake".getBytes(StandardCharsets.US_ASCII));
+            long rows = 0;
+            String cursor = null;
+            do {
+                ExportPage page = providers.get(0).readPage(filter, cursor, 1000);
+                rows += page.rows().size();
+                progress.addAndGet(page.rows().size());
+                cursor = page.nextCursor();
+            } while (cursor != null);
+            return rows;
+        }
+    }
+
+    @Nested
+    @DisplayName("PDF documents (v1s-18-3)")
+    class PdfDocuments {
+
+        @BeforeEach
+        void premiumWithPdf() {
+            pdfRenderer = new FakePdfRenderer(sales);
+            plan(PlanType.PREMIUM, SubscriptionStatus.ACTIVE);
+        }
+
+        @Test
+        @DisplayName("Premium PDF of a templated dataset → DIRECT application/pdf keevo-sales-<stamp>.pdf, validated and size-checked first, audited")
+        void premiumPdfDirect() throws Exception {
+            var d = (RequestExportUseCase.Direct) run(req(ExportFormat.PDF, "sales"));
+
+            assertThat(d.fileName()).isEqualTo("keevo-sales-20261012-1330.pdf");
+            assertThat(opened).containsExactly("application/pdf|keevo-sales-20261012-1330.pdf");
+            assertThat(new String(out.toByteArray(), StandardCharsets.US_ASCII)).startsWith("%PDF");
+            assertThat(d.rowCount()).isEqualTo(4);
+            assertThat(pdfRenderer.calls).containsExactly("validate", "checkSize:4", "render");
+            DataExportedEvent e = capturedEvent();
+            assertThat(e.format()).isEqualTo("PDF");
+            assertThat(e.datasets()).containsExactly("sales");
+            assertThat(e.rowCount()).isEqualTo(4);
+            assertThat(e.mode()).isEqualTo("DIRECT");
+        }
+
+        @Test
+        @DisplayName("PDF of another dataset, or of two datasets → 400 EXPORT_FORMAT_UNSUPPORTED, nothing written, no quota used")
+        void wrongDatasets() throws Exception {
+            maxRequestsPerHour = 1;
+            ExportService s = service();
+            assertCode(() -> s.request(TENANT, ACTOR, req(ExportFormat.PDF, "stores"), direct), "EXPORT_FORMAT_UNSUPPORTED");
+            assertCode(() -> s.request(TENANT, ACTOR, req(ExportFormat.PDF, "stores", "sales"), direct),
+                    "EXPORT_FORMAT_UNSUPPORTED");
+            assertThat(opened).isEmpty();
+            verifyNoInteractions(eventPublisher);
+            s.request(TENANT, ACTOR, req(ExportFormat.CSV, "stores"), direct); // the slot is still free
+        }
+
+        @Test
+        @DisplayName("PDF over the row limit → 422 EXPORT_PDF_TOO_LARGE (limit, rows) before the quota, nothing streamed")
+        void tooLarge() throws Exception {
+            pdfRenderer = new FakePdfRenderer(bigSales);
+            maxRequestsPerHour = 1;
+            ExportService s = service();
+            assertThatThrownBy(() -> s.request(TENANT, ACTOR, req(ExportFormat.PDF, "sales"), direct))
+                    .isInstanceOf(DomainException.class)
+                    .satisfies(e -> {
+                        DomainException de = (DomainException) e;
+                        assertThat(de.getDomainCode()).isEqualTo("EXPORT_PDF_TOO_LARGE");
+                        assertThat(de.getDetails()).containsEntry("limit", 2000).containsEntry("rows", 2001L);
+                    });
+            assertThat(opened).isEmpty();
+            assertThat(bigSales.pageReads.get()).isZero();
+            verifyNoInteractions(eventPublisher);
+            assertThat(pdfRenderer.calls).doesNotContain("render");
+            s.request(TENANT, ACTOR, req(ExportFormat.CSV, "stores"), direct); // quota untouched
+        }
+
+        @Test
+        @DisplayName("FREE PDF → 403 PLAN_FEATURE_REQUIRED feature=EXPORT_PDF before the document checks")
+        void freePdf() {
+            plan(PlanType.FREE, SubscriptionStatus.ACTIVE);
+            assertThatThrownBy(() -> run(req(ExportFormat.PDF, "sales")))
+                    .isInstanceOf(DomainException.class)
+                    .satisfies(e -> {
+                        DomainException de = (DomainException) e;
+                        assertThat(de.getDomainCode()).isEqualTo("PLAN_FEATURE_REQUIRED");
+                        assertThat(de.getDetails()).containsEntry("feature", "EXPORT_PDF");
+                    });
+            assertThat(pdfRenderer.calls).isEmpty();
+            assertThat(opened).isEmpty();
         }
     }
 

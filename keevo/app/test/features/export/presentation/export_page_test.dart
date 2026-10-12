@@ -13,7 +13,7 @@ import 'package:keevo/features/export/presentation/provider/export_providers.dar
 
 import '../export_test_helpers.dart';
 
-/// v1s-18-4 — « Exporter » screen.
+/// v1s-18-4 — « Exporter » screen; v1s-18-3 — PDF templates.
 void main() {
   late FakeExportDataSource ds;
   late List<File> shared;
@@ -120,7 +120,7 @@ void main() {
         tester, app(prefill: const ExportPrefill(datasets: {'products'})));
     await tester.pumpAndSettle();
 
-    expect(find.text('Premium'), findsOneWidget);
+    expect(find.text('Premium'), findsNWidgets(2), reason: 'Excel and PDF');
     await tapKey(tester, 'export-format-xlsx');
     expect(find.byKey(const Key('premium_feature_cta')), findsOneWidget);
 
@@ -135,8 +135,7 @@ void main() {
     expect(find.text('ABONNEMENT'), findsOneWidget);
   });
 
-  testWidgets(
-      'Premium: Excel selectable without badge; PDF disabled « Bientôt »',
+  testWidgets('Premium: Excel and PDF selectable without badge',
       (tester) async {
     ds.onRequest = (_) async => ExportFileReady(tempFile());
     await pumpApp(
@@ -144,15 +143,128 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Premium'), findsNothing);
-    expect(find.text('Bientôt'), findsOneWidget);
+    expect(find.text('Bientôt'), findsNothing);
     final pdf =
         tester.widget<ListTile>(find.byKey(const Key('export-format-pdf')));
-    expect(pdf.enabled, isFalse);
-    await tapKey(tester, 'export-format-pdf');
+    expect(pdf.enabled, isNot(isFalse));
 
     await tapKey(tester, 'export-format-xlsx');
     await tapKey(tester, 'export-submit');
     expect(ds.requests.single.format, ExportFormat.xlsx);
+  });
+
+  // ── PDF templates (v1s-18-3) ───────────────────────────────────────────────
+
+  testWidgets('Free plan: PDF opens the PDF offer sheet, no request sent',
+      (tester) async {
+    premium = false;
+    ds.datasets = pdfTestDatasets;
+    await pumpApp(
+        tester, app(prefill: const ExportPrefill(datasets: {'sales'})));
+    await tester.pumpAndSettle();
+
+    await tapKey(tester, 'export-format-pdf');
+    expect(find.byKey(const Key('premium_feature_cta')), findsOneWidget);
+    expect(find.text('Le PDF est réservé au plan Premium'), findsOneWidget);
+    await tester.tap(find.text('Plus tard'));
+    await tester.pumpAndSettle();
+
+    expect(ds.requests, isEmpty);
+    expect(find.byKey(const Key('export-template-sales')), findsNothing,
+        reason: 'format stays CSV: the dataset checkboxes remain');
+    expect(find.byKey(const Key('export-dataset-sales')), findsOneWidget);
+  });
+
+  testWidgets(
+      'Premium PDF: « Modèle » list replaces the datasets, submit waits for a '
+      'template, « État de stock » sends datasets=[stock_levels] format PDF',
+      (tester) async {
+    ds.datasets = pdfTestDatasets;
+    final file = tempFile();
+    ds.onRequest = (_) async => ExportFileReady(file);
+    await pumpApp(
+        tester,
+        app(
+            prefill: const ExportPrefill(
+                datasets: {'products', 'audit_log'}, storeId: 's-1')));
+    await tester.pumpAndSettle();
+
+    await tapKey(tester, 'export-format-pdf');
+
+    expect(find.text('Modèle'), findsOneWidget);
+    expect(find.byKey(const Key('export-dataset-products')), findsNothing);
+    expect(find.byKey(const Key('export-all')), findsNothing);
+    expect(find.text('Liste des ventes'), findsOneWidget);
+    expect(find.text('État de stock'), findsOneWidget);
+    expect(find.byKey(const Key('export-template-products')), findsNothing);
+    expect(submit(tester).onPressed, isNull,
+        reason: 'no templated dataset was selected: nothing preselected');
+
+    await tapKey(tester, 'export-template-stock_levels');
+    expect(
+        tester.widget<ListTile>(find.byKey(const Key('export-period'))).enabled,
+        isFalse,
+        reason: 'the stock is a snapshot: no period');
+    expect(
+        tester.widget<ListTile>(find.byKey(const Key('export-store'))).enabled,
+        isTrue);
+    await tapKey(tester, 'export-submit');
+
+    expect(ds.requests.single.toJson(), {
+      'datasets': ['stock_levels'],
+      'format': 'PDF',
+      'storeId': 's-1',
+    });
+    expect(shared.single.path, file.path);
+  });
+
+  testWidgets(
+      'PDF preselects the one templated dataset; back to CSV restores the '
+      'dataset selection', (tester) async {
+    ds.datasets = pdfTestDatasets;
+    ds.onRequest = (_) async => ExportFileReady(tempFile());
+    await pumpApp(tester,
+        app(prefill: const ExportPrefill(datasets: {'sales', 'products'})));
+    await tester.pumpAndSettle();
+
+    await tapKey(tester, 'export-format-pdf');
+    final node = tester.getSemantics(find
+        .ancestor(
+            of: find.byKey(const Key('export-template-sales')),
+            matching: find.byType(Semantics))
+        .first);
+    expect(node.hasFlag(SemanticsFlag.isSelected), isTrue);
+    await tapKey(tester, 'export-submit');
+    expect(ds.requests.last.datasets, ['sales']);
+    expect(ds.requests.last.format, ExportFormat.pdf);
+
+    await tapKey(tester, 'export-format-csv');
+    expect(
+        tester
+            .widget<CheckboxListTile>(
+                find.byKey(const Key('export-dataset-products')))
+            .value,
+        isTrue);
+    await tapKey(tester, 'export-submit');
+    expect(ds.requests.last.datasets, ['products', 'sales']);
+    expect(ds.requests.last.format, ExportFormat.csv);
+  });
+
+  testWidgets('PDF too large: the server message is shown with « Réessayer »',
+      (tester) async {
+    ds.datasets = pdfTestDatasets;
+    ds.onRequest = (_) async => throw ExportException.fromResponse(422, {
+          'domainCode': 'EXPORT_PDF_TOO_LARGE',
+          'error': 'Ce PDF dépasserait la limite de 2000 lignes : réduisez '
+              'la période, choisissez une boutique ou exportez en Excel',
+        });
+    await pumpApp(
+        tester, app(prefill: const ExportPrefill(datasets: {'sales'})));
+    await tester.pumpAndSettle();
+    await tapKey(tester, 'export-format-pdf');
+    await tapKey(tester, 'export-submit');
+    expect(find.textContaining('limite de 2000 lignes'), findsOneWidget);
+    expect(find.byKey(const Key('export-retry')), findsOneWidget);
   });
 
   testWidgets('server plan gate (403) opens the offer sheet', (tester) async {
@@ -356,6 +468,33 @@ void main() {
 
     await tapKey(tester, 'export-submit');
     expect(ds.requests.last.format, ExportFormat.csv);
+  });
+
+  testWidgets(
+      'unknown plan + server plan gate on PDF shows the PDF sheet, then the '
+      'datasets come back and CSV is sent with the original selection',
+      (tester) async {
+    premium = null;
+    ds.datasets = pdfTestDatasets;
+    ds.onRequest = (r) async => r.format == ExportFormat.pdf
+        ? throw const ExportException(
+            domainCode: 'PLAN_FEATURE_REQUIRED', message: 'x', statusCode: 403)
+        : ExportFileReady(tempFile());
+    await pumpApp(
+        tester, app(prefill: const ExportPrefill(datasets: {'sales'})));
+    await tester.pumpAndSettle();
+
+    await tapKey(tester, 'export-format-pdf');
+    await tapKey(tester, 'export-submit');
+    expect(ds.requests.last.format, ExportFormat.pdf);
+    expect(find.text('Le PDF est réservé au plan Premium'), findsOneWidget);
+    await tester.tap(find.text('Plus tard'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('export-dataset-sales')), findsOneWidget);
+    await tapKey(tester, 'export-submit');
+    expect(ds.requests.last.format, ExportFormat.csv);
+    expect(ds.requests.last.datasets, ['sales']);
   });
 
   testWidgets('prefilled keys missing from the catalogue are dropped',

@@ -7,6 +7,7 @@ import com.keevo.commerce.sale.domain.model.DayClosureSummary;
 import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
@@ -56,6 +57,17 @@ public class DayClosureRepositoryAdapter implements DayClosureRepository {
     @Override
     public Optional<DayClosure> findLastClosureForStore(UUID storeId) {
         return springRepository.findFirstByStoreIdOrderByClosedAtDesc(storeId)
+                .map(this::toDomain);
+    }
+
+    @Override
+    public Optional<DayClosure> findById(UUID closureId) {
+        return springRepository.findById(closureId).map(this::toDomain);
+    }
+
+    @Override
+    public Optional<DayClosure> findPreviousForStore(UUID storeId, Instant before) {
+        return springRepository.findFirstByStoreIdAndClosedAtBeforeOrderByClosedAtDesc(storeId, before)
                 .map(this::toDomain);
     }
 

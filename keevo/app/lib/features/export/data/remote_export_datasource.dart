@@ -71,13 +71,6 @@ class RemoteExportDataSource {
     ExportRequest request, {
     required Directory dir,
   }) async {
-    if (request.format == ExportFormat.pdf) {
-      // Guard: PDF is not available before v1s-18-3.
-      throw const ExportException(
-        domainCode: 'EXPORT_FORMAT_UNSUPPORTED',
-        message: 'Le format PDF sera bientôt disponible',
-      );
-    }
     final Response<ResponseBody> response;
     try {
       response = await _dio.post<ResponseBody>(
@@ -222,7 +215,7 @@ class RemoteExportDataSource {
 
 /// File name of a downloaded export: the `Content-Disposition` `filename`
 /// (else [fallbackName]) sanitized to `[A-Za-z0-9._-]`, else
-/// `keevo-export.<csv|zip|xlsx>` from the content type.
+/// `keevo-export.<csv|zip|xlsx|pdf>` from the content type.
 String exportFileName(
   String? contentDisposition,
   String? contentType, {
@@ -254,6 +247,8 @@ String exportFileName(
       ? 'zip'
       : type.contains('spreadsheetml') || type.contains('excel')
           ? 'xlsx'
-          : 'csv';
+          : type.contains('pdf')
+              ? 'pdf'
+              : 'csv';
   return 'keevo-export.$ext';
 }

@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- « Liste des ventes » (Story v1s-18-3): one row per sale, totals by status and payment mode. -->
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+<title th:text="${header.title()}">Liste des ventes</title>
+<style th:replace="~{layout :: style}"></style>
+</head>
+<body>
+<div th:replace="~{layout :: header}"></div>
+
+<table th:unless="${empty}">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th th:if="${showStore}">Boutique</th>
+      <th>Vendeur</th>
+      <th>Client</th>
+      <th>Statut</th>
+      <th>Paiement</th>
+      <th class="num">Articles</th>
+      <th class="num">Montant</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr th:each="s : ${sales}" th:attr="class=${s.cancelled()} ? 'muted' : ''">
+      <td th:text="${s.date()}">01/01/2026 10:00</td>
+      <td th:if="${showStore}" th:text="${s.store()}">Boutique</td>
+      <td th:text="${s.employee()}">Vendeur</td>
+      <td th:text="${s.client()}">Client</td>
+      <td th:text="${s.status()}">Validée</td>
+      <td th:text="${s.paymentMode()}">Espèces</td>
+      <td class="num" th:text="${s.items()}">1</td>
+      <td class="num" th:text="${s.amount()}">0 XAF</td>
+    </tr>
+  </tbody>
+</table>
+
+<div th:unless="${empty}">
+  <h2>Totaux par statut</h2>
+  <table>
+    <thead><tr><th>Statut</th><th class="num">Ventes</th><th class="num">Montant</th></tr></thead>
+    <tbody>
+      <tr th:each="t : ${byStatus}">
+        <td th:text="${t.label()}">Validée</td>
+        <td class="num" th:text="${t.count()}">0</td>
+        <td class="num" th:text="${t.amount()}">0 XAF</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Ventes validées par mode de paiement</h2>
+  <table>
+    <thead><tr><th>Mode de paiement</th><th class="num">Ventes</th><th class="num">Montant</th></tr></thead>
+    <tbody>
+      <tr th:each="t : ${byPayment}">
+        <td th:text="${t.label()}">Espèces</td>
+        <td class="num" th:text="${t.count()}">0</td>
+        <td class="num" th:text="${t.amount()}">0 XAF</td>
+      </tr>
+      <tr class="total">
+        <td>Total des ventes validées</td>
+        <td class="num" th:text="${grandCount}">0</td>
+        <td class="num" th:text="${grandTotal}">0 XAF</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div th:replace="~{layout :: notes}"></div>
+</body>
+</html>

@@ -5,6 +5,8 @@ import com.keevo.reporting.export.adapter.in.rest.dto.ExportJobDto;
 import com.keevo.reporting.export.adapter.in.rest.dto.ExportRequestDto;
 import com.keevo.reporting.export.application.service.ExportDatasetRegistry;
 import com.keevo.reporting.export.application.service.ExportCriteria;
+import com.keevo.reporting.export.application.service.ExportRendererRegistry;
+import com.keevo.reporting.export.domain.port.out.DocumentExportRenderer;
 import com.keevo.reporting.export.domain.model.ExportFormat;
 import com.keevo.reporting.export.domain.model.ExportJob;
 import com.keevo.reporting.export.domain.model.ExportJobStatus;
@@ -59,7 +61,7 @@ import java.util.UUID;
  * <p>A direct export is written to the {@link HttpServletResponse} on the request thread — a
  * {@code StreamingResponseBody} would run on another thread and lose {@code TenantContext}.
  */
-@Tag(name = "Exports", description = "Export de données (CSV, Excel) — propriétaire uniquement")
+@Tag(name = "Exports", description = "Export de données (CSV, Excel, PDF) — propriétaire uniquement")
 @RestController
 @RequestMapping("/api/v1/exports")
 @PreAuthorize("hasRole('OWNER')")
@@ -72,23 +74,31 @@ public class ExportController {
     private final ListExportsUseCase listExportsUseCase;
     private final DownloadExportUseCase downloadExportUseCase;
     private final ExportDatasetRegistry datasetRegistry;
+    private final ExportRendererRegistry rendererRegistry;
 
     public ExportController(RequestExportUseCase requestExportUseCase,
                             ListExportsUseCase listExportsUseCase,
                             DownloadExportUseCase downloadExportUseCase,
-                            ExportDatasetRegistry datasetRegistry) {
+                            ExportDatasetRegistry datasetRegistry,
+                            ExportRendererRegistry rendererRegistry) {
         this.requestExportUseCase = requestExportUseCase;
         this.listExportsUseCase = listExportsUseCase;
         this.downloadExportUseCase = downloadExportUseCase;
         this.datasetRegistry = datasetRegistry;
+        this.rendererRegistry = rendererRegistry;
     }
 
     @Operation(summary = "Jeux de données exportables")
     @GetMapping("/datasets")
     public ResponseEntity<ApiResponseWrapper<List<ExportDatasetDto>>> datasets() {
         CurrentActor.requireOwner(OWNER_ONLY);
-        return ResponseEntity.ok(ApiResponseWrapper.ok(
-                datasetRegistry.all().stream().map(ExportDatasetDto::from).toList()));
+        // Story v1s-18-3 — the PDF document made from each dataset, if any (app template list).
+        var pdf = rendererRegistry.find(ExportFormat.PDF)
+                .filter(DocumentExportRenderer.class::isInstance)
+                .map(DocumentExportRenderer.class::cast);
+        return ResponseEntity.ok(ApiResponseWrapper.ok(datasetRegistry.all().stream()
+                .map(p -> ExportDatasetDto.from(p, pdf.flatMap(r -> r.templateLabel(p.key())).orElse(null)))
+                .toList()));
     }
 
     @Operation(summary = "Lancer un export (fichier direct ou tâche en arrière-plan)")

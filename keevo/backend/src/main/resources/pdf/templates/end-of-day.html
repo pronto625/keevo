@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  « Fin de journée » (Story v1s-18-3): one section per closure, figures from EndOfDayReportBuilder
+  over ClosureWindow.forClosure - the same as the WhatsApp end-of-day report of that closure.
+-->
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+<title th:text="${header.title()}">Fin de journée</title>
+<style th:replace="~{layout :: style}"></style>
+</head>
+<body>
+<div th:replace="~{layout :: header}"></div>
+
+<div class="section" th:each="c : ${closures}">
+  <h2 th:text="${c.title()}">Clôture du</h2>
+  <p class="meta" th:text="${c.subtitle()}">Boutique · Clôture manuelle</p>
+  <table class="kv">
+    <thead><tr><th>Indicateur</th><th class="num">Valeur</th></tr></thead>
+    <tbody>
+      <tr><td class="label">Nombre de ventes</td><td class="num" th:text="${c.salesCount()}">0</td></tr>
+      <tr><td class="label">Chiffre d'affaires</td><td class="num" th:text="${c.revenue()}">0 XAF</td></tr>
+      <tr><td class="label">Espèces</td><td class="num" th:text="${c.cash()}">0 XAF</td></tr>
+      <tr><td class="label">Mobile Money</td><td class="num" th:text="${c.momo()}">0 XAF</td></tr>
+      <tr><td class="label">Panier moyen</td><td class="num" th:text="${c.avgBasket()}">0 XAF</td></tr>
+      <tr><td class="label">Ventes en attente de validation</td><td class="num" th:text="${c.pending()}">0</td></tr>
+      <tr><td class="label">Produits en stock bas (à ce jour)</td><td class="num" th:text="${c.lowStock()}">0</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Meilleurs produits</h3>
+  <p class="muted" th:if="${c.topProducts().isEmpty()}">Aucune vente validée</p>
+  <table th:unless="${c.topProducts().isEmpty()}">
+    <thead><tr><th>Produit</th><th class="num">Quantité</th><th class="num">Chiffre d'affaires</th></tr></thead>
+    <tbody>
+      <tr th:each="t : ${c.topProducts()}">
+        <td th:text="${t.name()}">Produit</td>
+        <td class="num" th:text="${t.quantity()}">0</td>
+        <td class="num" th:text="${t.revenue()}">0 XAF</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Ventes par employé</h3>
+  <p class="muted" th:if="${c.employees().isEmpty()}">Aucune vente validée</p>
+  <table th:unless="${c.employees().isEmpty()}">
+    <thead><tr><th>Employé</th><th class="num">Ventes</th><th class="num">Chiffre d'affaires</th></tr></thead>
+    <tbody>
+      <tr th:each="e : ${c.employees()}">
+        <td th:text="${e.name()}">Employé</td>
+        <td class="num" th:text="${e.salesCount()}">0</td>
+        <td class="num" th:text="${e.revenue()}">0 XAF</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<p class="note" th:unless="${empty}">Chiffres recalculés sur la fenêtre de chaque clôture ; statuts des ventes et stock à la date de génération.</p>
+<div th:replace="~{layout :: notes}"></div>
+</body>
+</html>

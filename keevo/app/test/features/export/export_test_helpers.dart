@@ -98,13 +98,29 @@ const testDatasets = [
       storeFilter: false,
       periodFilter: false),
   ExportDataset(
-      key: 'sales', label: 'Ventes', storeFilter: true, periodFilter: true),
+      key: 'sales',
+      label: 'Ventes',
+      storeFilter: true,
+      periodFilter: true,
+      pdfTemplate: 'Liste des ventes'),
   ExportDataset(
       key: 'audit_log',
       label: 'Journal d\'audit',
       storeFilter: true,
       periodFilter: true,
       criteria: ['action', 'entityId', 'entityType', 'q', 'userId']),
+];
+
+/// [testDatasets] plus « Stocks », whose PDF template « État de stock » is a
+/// snapshot (store filter, no period) — v1s-18-3.
+const pdfTestDatasets = [
+  ...testDatasets,
+  ExportDataset(
+      key: 'stock_levels',
+      label: 'Stocks',
+      storeFilter: true,
+      periodFilter: false,
+      pdfTemplate: 'État de stock'),
 ];
 
 /// Scriptable fake for page tests (no HTTP).

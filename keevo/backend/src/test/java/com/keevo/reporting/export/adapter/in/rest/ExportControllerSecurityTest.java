@@ -1,6 +1,7 @@
 package com.keevo.reporting.export.adapter.in.rest;
 
 import com.keevo.reporting.export.application.service.ExportDatasetRegistry;
+import com.keevo.reporting.export.application.service.ExportRendererRegistry;
 import com.keevo.reporting.export.domain.port.in.DownloadExportUseCase;
 import com.keevo.reporting.export.domain.port.in.ListExportsUseCase;
 import com.keevo.reporting.export.domain.port.in.RequestExportUseCase;
@@ -50,6 +51,7 @@ class ExportControllerSecurityTest {
     @MockitoBean ListExportsUseCase listUseCase;
     @MockitoBean DownloadExportUseCase downloadUseCase;
     @MockitoBean ExportDatasetRegistry datasetRegistry;
+    @MockitoBean ExportRendererRegistry rendererRegistry;
     @MockitoBean JwtAuthFilter jwtAuthFilter;
 
     @AfterEach

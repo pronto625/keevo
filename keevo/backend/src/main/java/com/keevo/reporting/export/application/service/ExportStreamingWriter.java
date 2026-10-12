@@ -1,6 +1,7 @@
 package com.keevo.reporting.export.application.service;
 
 import com.keevo.reporting.export.adapter.out.config.ExportProperties;
+import com.keevo.reporting.export.domain.port.out.DocumentExportRenderer;
 import com.keevo.reporting.export.domain.port.out.ExportRenderer;
 import com.keevo.reporting.export.domain.port.out.ExportRenderer.RenderSession;
 import com.keevo.shared.application.port.export.ExportDatasetProvider;
@@ -49,6 +50,10 @@ public class ExportStreamingWriter {
      */
     public long write(OutputStream out, ExportRenderer renderer, List<ExportDatasetProvider> providers,
                       ExportFilter filter, AtomicLong progress) throws IOException {
+        if (renderer instanceof DocumentExportRenderer document) {
+            // Story v1s-18-3 — a document (PDF) reads its providers itself, bounded by its limits.
+            return document.render(out, providers, filter, progress);
+        }
         RenderSession session = renderer.open(out, providers.size());
         long total = 0;
         try {

@@ -219,6 +219,17 @@
             <version>5.4.1</version>
         </dependency>
 
+        <!-- v1s-18-3: PDF export templates (Thymeleaf HTML -> OpenHTMLtoPDF / PDFBox) -->
+        <dependency>
+            <groupId>org.thymeleaf</groupId>
+            <artifactId>thymeleaf</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.openhtmltopdf</groupId>
+            <artifactId>openhtmltopdf-pdfbox</artifactId>
+            <version>1.1.22</version>
+        </dependency>
+
         <!-- Story 8.0: Firebase Admin SDK for FCM push notifications -->
         <dependency>
             <groupId>com.google.firebase</groupId>

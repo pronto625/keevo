@@ -170,4 +170,19 @@ class GlobalExceptionHandlerTest {
         assertThat(resp.getBody().domainCode()).isEqualTo("OPTIMISTIC_LOCK");
         assertThat(resp.getBody().error()).contains("modifiée");
     }
+
+    @Test
+    @DisplayName("v1s-18-3 — French message placeholders are filled from details; fallback messages are never substituted")
+    void userMessage_fillsPlaceholdersOfFrenchMessagesOnly() {
+        assertThat(GlobalExceptionHandler.userMessage("EXPORT_PDF_TOO_LARGE", "x",
+                java.util.Map.of("limit", 31, "unit", "clôtures", "rows", 40L)))
+                .startsWith("Ce PDF dépasserait la limite de 31 clôtures");
+        assertThat(GlobalExceptionHandler.userMessage("EXPORT_QUEUE_FULL", "x", java.util.Map.of("limit", 3)))
+                .isEqualTo("Trop d'exports en cours, réessayez dans quelques minutes");
+        assertThat(GlobalExceptionHandler.userMessage("NO_FR_MESSAGE_CODE", "raw {dataset}",
+                java.util.Map.of("dataset", "<script>")))
+                .isEqualTo("raw {dataset}");
+        assertThat(GlobalExceptionHandler.withDetails("no placeholder", java.util.Map.of("a", 1)))
+                .isEqualTo("no placeholder");
+    }
 }

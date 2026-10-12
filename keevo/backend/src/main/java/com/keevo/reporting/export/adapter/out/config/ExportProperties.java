@@ -27,6 +27,10 @@ public class ExportProperties {
     private int maxActiveJobs = 3;
     /** PENDING / RUNNING jobs older than this are failed by the purge (interrupted). */
     private Duration staleJobAfter = Duration.ofHours(2);
+    /** Data rows one PDF may hold (Story v1s-18-3); a larger request is refused (422). */
+    private int pdfMaxRows = 2000;
+    /** Closures one « Fin de journée » PDF may hold (Story v1s-18-3). */
+    private int pdfMaxClosures = 31;
 
     public long getSyncRowThreshold() { return syncRowThreshold; }
     public void setSyncRowThreshold(long syncRowThreshold) { this.syncRowThreshold = syncRowThreshold; }
@@ -44,4 +48,8 @@ public class ExportProperties {
     public void setMaxActiveJobs(int maxActiveJobs) { this.maxActiveJobs = maxActiveJobs; }
     public Duration getStaleJobAfter() { return staleJobAfter; }
     public void setStaleJobAfter(Duration staleJobAfter) { this.staleJobAfter = staleJobAfter; }
+    public int getPdfMaxRows() { return pdfMaxRows; }
+    public void setPdfMaxRows(int pdfMaxRows) { this.pdfMaxRows = pdfMaxRows; }
+    public int getPdfMaxClosures() { return pdfMaxClosures; }
+    public void setPdfMaxClosures(int pdfMaxClosures) { this.pdfMaxClosures = pdfMaxClosures; }
 }

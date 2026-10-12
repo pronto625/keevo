@@ -17,6 +17,10 @@ import '../provider/export_providers.dart';
 /// Datasets → filters (store, period) → format → « Exporter ». A direct
 /// export is streamed to a temp file and handed to the share sheet; a
 /// background export (Premium) is confirmed and listed in « Mes exports ».
+/// PDF (Premium, v1s-18-3) replaces the dataset checkboxes by a single-choice
+/// « Modèle » list (Fin de journée, Rapport d'inventaire, État de stock,
+/// Liste des ventes) read from the server catalogue; the template is sent as
+/// its one dataset key.
 /// Route: /exports/new (extra: [ExportPrefill]).
 class ExportPage extends ConsumerStatefulWidget {
   final ExportPrefill? prefill;
@@ -40,6 +44,10 @@ class _ExportPageState extends ConsumerState<ExportPage> {
   late Map<String, String> _criteria;
 
   ExportFormat _format = ExportFormat.csv;
+
+  /// Dataset key of the chosen PDF template (PDF only; the CSV / Excel
+  /// selection in [_selected] is kept untouched meanwhile).
+  String? _template;
   bool _busy = false;
   bool _pruned = false;
   ExportException? _error;
@@ -95,25 +103,54 @@ class _ExportPageState extends ConsumerState<ExportPage> {
         _clearError();
       });
 
-  Future<void> _selectFormat(ExportFormat f, bool? premium) async {
-    if (f == ExportFormat.pdf) return; // « Bientôt » (v1s-18-3)
-    if (f == ExportFormat.xlsx && premium == false) {
-      await _showOffer();
+  Future<void> _selectFormat(
+      ExportFormat f, bool? premium, List<ExportDataset> datasets) async {
+    if (f != ExportFormat.csv && premium == false) {
+      await _showOffer(f);
       return;
     }
     setState(() {
+      if (f == ExportFormat.pdf && _format != ExportFormat.pdf) {
+        // Preselect the template when the selection holds exactly one.
+        final templated = [
+          for (final d in datasets)
+            if (d.hasPdfTemplate && _selected.contains(d.key)) d.key,
+        ];
+        _template = templated.length == 1 ? templated.first : null;
+      }
       _format = f;
+      _queued = null;
       _clearError();
     });
   }
 
-  Future<void> _showOffer() => showPremiumFeatureSheet(
-        context: context,
-        title: 'Excel est réservé au plan Premium',
-        message: 'Le CSV reste disponible sur tous les plans. Passez au '
-            'plan Premium pour exporter en Excel et préparer les gros '
-            'exports en arrière-plan.',
-      );
+  void _selectTemplate(String key) => setState(() {
+        _template = key;
+        _queued = null;
+        _clearError();
+      });
+
+  Future<void> _showOffer(ExportFormat format) => format == ExportFormat.pdf
+      ? showPremiumFeatureSheet(
+          context: context,
+          title: 'Le PDF est réservé au plan Premium',
+          message: 'Le CSV reste disponible sur tous les plans. Passez au '
+              'plan Premium pour obtenir les documents PDF : fin de '
+              'journée, rapport d\'inventaire, état de stock et liste des '
+              'ventes.',
+        )
+      : showPremiumFeatureSheet(
+          context: context,
+          title: 'Excel est réservé au plan Premium',
+          message: 'Le CSV reste disponible sur tous les plans. Passez au '
+              'plan Premium pour exporter en Excel et préparer les gros '
+              'exports en arrière-plan.',
+        );
+
+  /// Datasets the request is built from: the chosen template for PDF.
+  Set<String> get _requestSelection => _format == ExportFormat.pdf
+      ? {if (_template != null) _template!}
+      : _selected;
 
   Future<void> _launch(List<ExportDataset> datasets,
       {ExportRequest? replay}) async {
@@ -123,7 +160,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
     try {
       request = replay ??
           buildExportRequest(
-            selection: _selected,
+            selection: _requestSelection,
             format: _format,
             storeId: _storeId,
             from: _from,
@@ -141,6 +178,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
       _lastRequest = request;
     });
     var planGate = false;
+    final requestedFormat = request.format;
     try {
       final dir = await ref.read(exportTempDirProvider.future);
       final outcome = await ref
@@ -160,7 +198,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
     } on ExportException catch (e) {
       if (e.isPlanGate) {
         planGate = true;
-        // Unknown plan let Excel through: fall back to the free format.
+        // Unknown plan let Excel / PDF through: fall back to the free format.
         if (mounted) setState(() => _format = ExportFormat.csv);
       } else if (mounted) {
         setState(() => _error = e);
@@ -171,7 +209,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
       if (mounted) setState(() => _busy = false);
     }
     // After the busy state: the sheet must not keep the spinner running.
-    if (planGate && mounted) await _showOffer();
+    if (planGate && mounted) await _showOffer(requestedFormat);
   }
 
   Future<void> _pickPeriod() async {
@@ -322,8 +360,11 @@ class _ExportPageState extends ConsumerState<ExportPage> {
     final stores =
         ref.watch(exportStoreOptionsProvider).valueOrNull ?? const [];
 
-    final canLaunch =
-        !offline && !_busy && _selected.isNotEmpty && datasetsAsync.hasValue;
+    final pdf = _format == ExportFormat.pdf;
+    final canLaunch = !offline &&
+        !_busy &&
+        _requestSelection.isNotEmpty &&
+        datasetsAsync.hasValue;
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -413,7 +454,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
                   : () => _launch(datasets, replay: _lastRequest),
             ),
           if (_queued != null) const _QueuedCard(),
-          const _SectionTitle('Quoi'),
+          _SectionTitle(pdf ? 'Modèle' : 'Quoi'),
           ...datasetsAsync.when(
             skipLoadingOnRefresh: true,
             loading: () => const [
@@ -430,14 +471,16 @@ class _ExportPageState extends ConsumerState<ExportPage> {
                 onRetry: () => ref.invalidate(exportDatasetsProvider),
               ),
             ],
-            data: (list) => _datasetTiles(list),
+            data: (list) => pdf ? _templateTiles(list) : _datasetTiles(list),
           ),
-          if (_criteria.isNotEmpty && _selected.contains(kAuditLogDatasetKey))
+          if (!pdf &&
+              _criteria.isNotEmpty &&
+              _selected.contains(kAuditLogDatasetKey))
             _criteriaHint(context),
           const _SectionTitle('Filtres'),
           ..._filterTiles(datasets, stores),
           const _SectionTitle('Format'),
-          ..._formatTiles(premium),
+          ..._formatTiles(premium, datasets),
         ],
       ),
     );
@@ -469,6 +512,45 @@ class _ExportPageState extends ConsumerState<ExportPage> {
     ];
   }
 
+  /// PDF: one template per dataset that has one, single choice.
+  List<Widget> _templateTiles(List<ExportDataset> list) {
+    final cs = Theme.of(context).colorScheme;
+    final templated = [
+      for (final d in list)
+        if (d.hasPdfTemplate) d,
+    ];
+    if (templated.isEmpty) {
+      return [
+        const ListTile(
+          key: Key('export-template-none'),
+          enabled: false,
+          title: Text('Aucun modèle PDF disponible'),
+        ),
+      ];
+    }
+    return [
+      for (final d in templated)
+        Semantics(
+          container: true,
+          selected: _template == d.key,
+          inMutuallyExclusiveGroup: true,
+          child: ListTile(
+            key: Key('export-template-${d.key}'),
+            leading: Icon(
+              _template == d.key
+                  ? Icons.radio_button_checked_rounded
+                  : Icons.radio_button_off_rounded,
+              color: _template == d.key ? cs.primary : cs.onSurfaceVariant,
+            ),
+            title: Text(d.pdfTemplate!),
+            subtitle: Text('Données : ${d.label}'),
+            dense: true,
+            onTap: () => _selectTemplate(d.key),
+          ),
+        ),
+    ];
+  }
+
   Widget _criteriaHint(BuildContext context) {
     final applies = exportCriteriaApply(_selected);
     return _Banner(
@@ -484,9 +566,10 @@ class _ExportPageState extends ConsumerState<ExportPage> {
 
   List<Widget> _filterTiles(
       List<ExportDataset> datasets, List<ExportStoreOption> stores) {
+    final selection = _requestSelection;
     final selected = [
       for (final d in datasets)
-        if (_selected.contains(d.key)) d,
+        if (selection.contains(d.key)) d,
     ];
     // Unknown catalogue (still loading): keep the pickers usable.
     final storeEnabled = selected.isEmpty || selected.any((d) => d.storeFilter);
@@ -531,28 +614,24 @@ class _ExportPageState extends ConsumerState<ExportPage> {
     ];
   }
 
-  List<Widget> _formatTiles(bool? premium) {
+  List<Widget> _formatTiles(bool? premium, List<ExportDataset> datasets) {
     final cs = Theme.of(context).colorScheme;
     Widget tile(ExportFormat f, String subtitle, {Widget? badge}) {
-      final disabled = f == ExportFormat.pdf;
       final selected = _format == f;
       final listTile = ListTile(
         key: Key('export-format-${f.name}'),
-        enabled: !disabled,
         leading: Icon(
           selected
               ? Icons.radio_button_checked_rounded
               : Icons.radio_button_off_rounded,
-          color: disabled
-              ? cs.onSurfaceVariant
-              : (selected ? cs.primary : cs.onSurfaceVariant),
+          color: selected ? cs.primary : cs.onSurfaceVariant,
         ),
         title: Row(children: [
           Text(f.label),
           if (badge != null) ...[const SizedBox(width: 8), badge],
         ]),
         subtitle: Text(subtitle),
-        onTap: disabled ? null : () => _selectFormat(f, premium),
+        onTap: () => _selectFormat(f, premium, datasets),
       );
       return Semantics(
         container: true,
@@ -567,8 +646,9 @@ class _ExportPageState extends ConsumerState<ExportPage> {
       tile(ExportFormat.csv, 'Tous les plans · ouvre dans Excel'),
       tile(ExportFormat.xlsx, 'Une feuille par jeu de données',
           badge: premiumBadge),
-      tile(ExportFormat.pdf, 'Modèles PDF',
-          badge: const _Badge('Bientôt', muted: true)),
+      tile(
+          ExportFormat.pdf, 'Fin de journée, inventaire, état de stock, ventes',
+          badge: premiumBadge),
     ];
   }
 }
@@ -639,14 +719,12 @@ class _Banner extends StatelessWidget {
 
 class _Badge extends StatelessWidget {
   final String text;
-  final bool muted;
 
-  const _Badge(this.text, {this.muted = false});
+  const _Badge(this.text);
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final color = muted ? cs.onSurfaceVariant : AppTheme.iconAmber;
+    const color = AppTheme.iconAmber;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
