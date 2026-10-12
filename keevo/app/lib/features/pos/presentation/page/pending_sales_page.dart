@@ -106,9 +106,7 @@ class _PendingSaleTile extends StatelessWidget {
             children: [
               SoftIconBadge(
                 icon: Icons.pending_actions_rounded,
-                color: cs.brightness == Brightness.dark
-                    ? cs.warning
-                    : const Color(0xFFE67700),
+                color: cs.warningStrong,
                 size: 44,
               ),
               const SizedBox(width: 14),

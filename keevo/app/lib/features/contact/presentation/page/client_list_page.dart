@@ -49,7 +49,7 @@ class _ClientListPageState extends ConsumerState<ClientListPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Row(children: [
-              Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+              Icon(Icons.check_circle_rounded, color: AppTheme.onBrand, size: 18),
               SizedBox(width: 8),
               Text('Clients synchronisés'),
             ]),

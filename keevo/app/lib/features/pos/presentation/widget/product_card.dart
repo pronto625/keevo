@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import 'product_initials_avatar.dart';
 
 /// ProductCard — displays a product in the POS grid.
 /// Modern card design: image fills the top zone, info bar at bottom.
@@ -66,7 +65,7 @@ class _ProductCardState extends State<ProductCard>
     final isOutOfStock = widget.stockQuantity <= 0;
     final theme = Theme.of(context);
     final avatarColor =
-        kAvatarColors[widget.name.hashCode.abs() % kAvatarColors.length];
+        AppTheme.avatarPalette[widget.name.hashCode.abs() % AppTheme.avatarPalette.length];
 
     return AnimatedBuilder(
       animation: _scaleCtrl,
@@ -120,7 +119,7 @@ class _ProductCardState extends State<ProductCard>
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: const Icon(Icons.close_rounded,
-                                  size: 12, color: Colors.white),
+                                  size: 12, color: AppTheme.onBrand),
                             ),
                           ),
                       ],
@@ -205,7 +204,7 @@ class _ProductCardState extends State<ProductCard>
         child: Text(
           initials,
           style: const TextStyle(
-            color: Colors.white,
+            color: AppTheme.onBrand,
             fontWeight: FontWeight.bold,
             fontSize: 20,
             letterSpacing: 1,
@@ -216,7 +215,6 @@ class _ProductCardState extends State<ProductCard>
   }
 
   Widget _buildStockBadge(ColorScheme cs) {
-    final isDark = cs.brightness == Brightness.dark;
     final isOutOfStock = widget.stockQuantity <= 0;
     if (isOutOfStock) {
       return Container(
@@ -249,8 +247,8 @@ class _ProductCardState extends State<ProductCard>
         style: TextStyle(
           // Teintes foncées lisibles sur fond clair ; vives en mode sombre.
           color: isLow
-              ? (isDark ? cs.warning : const Color(0xFFE67700))
-              : (isDark ? cs.success : const Color(0xFF2B8A3E)),
+              ? cs.warningStrong
+              : cs.successStrong,
           fontSize: 9,
           fontWeight: FontWeight.w600,
         ),
@@ -270,7 +268,7 @@ class _ProductCardState extends State<ProductCard>
       fit: BoxFit.cover,
       errorBuilder: (_, __, ___) {
         final color =
-            kAvatarColors[widget.name.hashCode.abs() % kAvatarColors.length];
+            AppTheme.avatarPalette[widget.name.hashCode.abs() % AppTheme.avatarPalette.length];
         return _buildInitialsBackground(color);
       },
     );

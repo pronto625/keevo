@@ -428,11 +428,11 @@ class _StepMapColumns extends StatelessWidget {
               style: _ctaStyle,
               onPressed: canLaunchImport && !isLoading ? onLaunchImport : null,
               icon: isLoading
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
+                          strokeWidth: 2, color: Theme.of(context).colorScheme.onSurfaceVariant),
                     )
                   : const Icon(Icons.upload_rounded),
               label: Text(isLoading ? 'Import en cours…' : 'Lancer l\'import'),

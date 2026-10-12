@@ -91,13 +91,13 @@ class _DayCloseSuccessOverlayState extends State<DayCloseSuccessOverlay>
                   ),
                 );
               },
-              child: const Column(
+              child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
                     Icons.nightlight_round,
                     size: 80,
-                    color: Colors.white,
+                    color: AppTheme.onBrand,
                   ),
                   SizedBox(height: 24),
                   Text(
@@ -105,7 +105,7 @@ class _DayCloseSuccessOverlayState extends State<DayCloseSuccessOverlay>
                     style: TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: AppTheme.onBrand,
                     ),
                   ),
                   SizedBox(height: 8),
@@ -113,7 +113,7 @@ class _DayCloseSuccessOverlayState extends State<DayCloseSuccessOverlay>
                     'Journée clôturée avec succès',
                     style: TextStyle(
                       fontSize: 16,
-                      color: Colors.white70,
+                      color: AppTheme.onBrand.withValues(alpha: 0.7),
                     ),
                   ),
                 ],

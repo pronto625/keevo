@@ -299,14 +299,14 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                                   width: 22,
                                   height: 22,
                                   child: CircularProgressIndicator(
-                                      strokeWidth: 2.5, color: Colors.white),
+                                      strokeWidth: 2.5, color: AppTheme.onBrand),
                                 )
                               : Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     if (hasDraftItems) ...[
                                       const Icon(Icons.edit_note_rounded,
-                                          color: Colors.white, size: 22),
+                                          color: AppTheme.onBrand, size: 22),
                                       const SizedBox(width: 8),
                                     ],
                                     Text(
@@ -314,7 +314,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                                           ? 'Vente brouillon'
                                           : 'Valider la vente',
                                       style: const TextStyle(
-                                        color: Colors.white,
+                                        color: AppTheme.onBrand,
                                         fontSize: 17,
                                         fontWeight: FontWeight.w700,
                                       ),
@@ -369,9 +369,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   }
 
   /// Vert foncé lisible sur la pastille pâle en clair ; vert vif en sombre.
-  Color _changeColor(ColorScheme cs) => cs.brightness == Brightness.dark
-      ? cs.success
-      : const Color(0xFF2B8A3E);
+  Color _changeColor(ColorScheme cs) => cs.successStrong;
 }
 
 class _PaymentModeCard extends StatelessWidget {

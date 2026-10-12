@@ -24,11 +24,11 @@ class StorePerformanceRow extends StatelessWidget {
   static Color _rankColor(int rank, ColorScheme colorScheme) {
     switch (rank) {
       case 1:
-        return const Color(0xFFFFD700); // gold
+        return AppTheme.medalGold; // gold
       case 2:
-        return const Color(0xFFC0C0C0); // silver
+        return AppTheme.medalSilver; // silver
       case 3:
-        return const Color(0xFFCD7F32); // bronze
+        return AppTheme.medalBronze; // bronze
       default:
         return colorScheme.outlineVariant;
     }

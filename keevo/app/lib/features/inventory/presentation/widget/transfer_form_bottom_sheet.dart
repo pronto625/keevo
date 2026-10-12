@@ -166,7 +166,7 @@ class _TransferFormBottomSheetState
           SnackBar(
             content: Row(children: [
               const Icon(Icons.check_circle_outline,
-                  color: Colors.white, size: 18),
+                  color: AppTheme.onBrand, size: 18),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -477,17 +477,17 @@ class _TransferFormBottomSheetState
                       onPressed: _isSubmitting ? null : _submit,
                       style: FilledButton.styleFrom(
                         backgroundColor: cs.primary,
-                        foregroundColor: Colors.white,
+                        foregroundColor: cs.onPrimary,
                         minimumSize: const Size.fromHeight(52),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14)),
                       ),
                       icon: _isSubmitting
-                          ? const SizedBox(
+                          ? SizedBox(
                               height: 18,
                               width: 18,
                               child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white),
+                                  strokeWidth: 2, color: cs.onSurfaceVariant),
                             )
                           : const Icon(Icons.swap_horiz_rounded),
                       label: const Text('Confirmer le transfert',

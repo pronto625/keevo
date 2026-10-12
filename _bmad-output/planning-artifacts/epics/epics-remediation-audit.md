@@ -1016,6 +1016,13 @@ As a Toor, I want dark mode to render correctly, so that white panels don't appe
 
 **Doc:** UX2/UX20. **TDD:** widget test asserting no `Colors.white` literal; `shouldRenderReadableOfflineBannerInDarkMode()`.
 
+**Items (recount 2026-10-12: 95 `Colors.white` incl. 3 in the theme file, 46 `Color(0x…)`, 5 `Colors.teal`, 3 `Colors.primaries`, 1 `Colors.black54`):**
+- [x] Every literal colour outside `lib/core/theme/app_theme.dart` replaced by `ColorScheme` / `KeevoColors` / named `AppTheme` tokens (foreground follows its fill: `onPrimary`, `onError`, `onSecondary`, `AppTheme.onBrand` on fixed brand fills) — ✅ 2026-10-12 (spec-v1s-16-3-dark-mode-colors-white-banner.md)
+- [x] `AppTheme.dark()` carries the spec dark tokens (`onPrimary #0D1B2A`, `primaryContainer #1B3A5C`, `onSurface #F0F4F8`, `onSurfaceVariant #ADB5BD`, `surfaceContainerHighest #1B2838`) — ✅ 2026-10-12
+- [x] Offline banner readable: `warningContainer`/`errorContainer_` + new `onWarningContainer`/`onErrorContainer_` (AA light & dark), also adopted by `DeletionPendingBanner` and `SuspensionBanner`; `offline_gate_banner_test` aligned on the `warningContainer` token `#FFF9DB` (≈ spec « #FCC419 15 % »; `#FFF3BF` matched neither spec nor token) — ✅ 2026-10-12
+- [x] Guard `test/core/theme/no_hardcoded_colors_test.dart` — ✅ 2026-10-12
+- Routed → `v1s-16-17-feedback-fill-contrast`: success SnackBar fills, speed-dial, disabled checkout CTA, dark `colorError`.
+
 ## Story 16.4: Recherche catalogue — debounce 300ms + fuzzy (UX9) — **[A]**
 
 As a Toor, I want the product search debounced and typo-tolerant, so that it doesn't re-query per keystroke and finds products despite typos (<500ms, UX9).
@@ -1166,6 +1173,24 @@ As a Toor, I want local searches to ignore case and accents beyond ASCII, so tha
 
 **Items (routed 2026-10-12 from build-auto v1s-16-14 review):**
 - [x] [Deferred-from: build-auto v1s-16-14 review, 2026-10-12] Non-ASCII case-insensitive search fails ("épicerie" vs "Épicerie") [local_product_datasource.dart search(), pos_search_provider.dart, local_client/supplier_datasource.dart, local_multi_store_stock_datasource.dart] — SQLite LOWER folds ASCII only; also weakens the local duplicate-name check in ProductRepositoryImpl.create/createDraft — ✅ 2026-10-12 resolved (spec-v1s-16-16-search-unicode-folding.md): shared fold `core/storage/search_fold.dart` (SQL `replace()` over `lower()` + exact Dart mirror) on every listed site plus in-memory filters; dedup candidates folded, equality case-only (backend `lower(name)`). Explicitly rejected with reason: case folding for scripts outside the Latin/French/Cameroonian table (Cyrillic, Greek…) stays same-case-only in SQL — full ICU folding needs a registered function (rejected: every DB opener and test DB would need it); no schema migration needed.
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
+---
+
+## Story 16.17: Contraste des aplats de feedback (SnackBars succès, speed-dial, CTA désactivés) — **[A]**
+
+As a Toor, I want success toasts, the POS speed-dial and disabled checkout buttons to keep readable foregrounds in light and dark mode, so that feedback stays legible (UX20, NFR23-26, WCAG AA).
+
+**Scope:** Story 16.3 routed every foreground through theme tokens but kept pre-existing fixed fills whose pairs fail AA: success SnackBars filled with `AppTheme.success` (#51CF66) carry a white icon (≈ 2:1) while their text inherits the SnackBar theme's `onInverseSurface` (dark in dark mode, so icon and text disagree); the POS speed-dial draws a white icon on `AppTheme.warning` and on `cs.onSurfaceVariant` (day closed); the checkout / cart CTA keeps a white label on its disabled `cs.outlineVariant` fill. Define a success-feedback fill/foreground pair (e.g. `successStrong` fill + `onBrand` text and icon, or a `snackBarTheme` per tone), give the speed-dial options a foreground per fill, and use the disabled foreground on disabled CTAs. Decide whether dark `colorError` moves to the spec's `#FF6B6B` (left at `#FA5252` by 16.3 because `errorColor` is used as a fixed fill under white). Tracker key: `v1s-16-17-feedback-fill-contrast`.
+
+**Refs:** UX20, ux-design-specification.md (Feedback Patterns, Color System), Story 16.3 (`spec-v1s-16-3-dark-mode-colors-white-banner.md`).
+
+**Items (routed 2026-10-12 from build-auto v1s-16-3 review):**
+- [ ] [Deferred-from: build-auto v1s-16-3 review, 2026-10-12] Success SnackBars on `AppTheme.success` fill: white icon ≈ 2:1 and text colour from `onInverseSurface` (dark in dark mode) [catalog_page.dart:170, catalog product_card.dart:602/695/787, product_form_page.dart:294, client/supplier/stores list pages, transfer_history_page.dart:421, transfer_form_bottom_sheet.dart:166] — settled by one AA success pair applied to icon and text
+- [ ] [Deferred-from: build-auto v1s-16-3 review, 2026-10-12] POS speed-dial white icon on `AppTheme.warning` (≈ 1.6:1) and on `cs.onSurfaceVariant` when the day is closed [pos_speed_dial.dart:116-118,144,257] — settled by a foreground per option fill
+- [ ] [Deferred-from: build-auto v1s-16-3 review, 2026-10-12] Disabled checkout / cart CTA keeps a white label on `cs.outlineVariant` (≈ 1.7:1) [checkout_page.dart:299-317, cart_bottom_sheet.dart:297] — settled by the disabled foreground when not enabled
+- [ ] [Deferred-from: build-auto v1s-16-3 review, 2026-10-12] Dark `colorError` is `#FA5252`, spec table says `#FF6B6B` [app_theme.dart dark()] — settle together with the fixed `errorColor` fills and their white foreground
 
 **AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
 

@@ -28,6 +28,61 @@ class AppTheme {
   static const Color onError = Color(0xFFFFFFFF);
   static const Color darkSurface = Color(0xFF0D1B2A);
 
+  /// Texte/icône sur un aplat de marque FIXE (ne change pas avec la
+  /// luminosité) : [primary], [primaryGradient], [primaryGradientDark],
+  /// [successGradient], aplats [success]/[errorColor]/[darkSurface],
+  /// [avatarPalette]. Sur `cs.primary`, utiliser `cs.onPrimary`.
+  static const Color onBrand = Color(0xFFFFFFFF);
+
+  /// Vert soutenu (texte/icône sur fond clair, aplats avec [onBrand]).
+  /// Fusionne #2B8A3E / #37B24D / #40C057 / #22C55E ; assombri pour tenir
+  /// AA (≥ 4.5:1) en texte sur blanc ET sous [onBrand].
+  static const Color successStrong = Color(0xFF2B7A3B);
+
+  /// Orange soutenu (texte/icône d'attention sur fond clair).
+  /// Fusionne #E67700 / #E65100 / #F08C00 / #F59E0B / #F9A825 ; assombri
+  /// pour tenir AA (≥ 4.5:1) en texte sur blanc.
+  static const Color warningStrong = Color(0xFFA85500);
+
+  /// Violet profond (accents secondaires : speed-dial, rapports).
+  static const Color violet = Color(0xFF7048E8);
+  static const Color violetDeep = Color(0xFF5F3DC4);
+
+  // ── Classement (médailles) ───────────────────────────────────────────
+  static const Color medalGold = Color(0xFFFFD700);
+  static const Color medalSilver = Color(0xFFC0C0C0);
+  static const Color medalBronze = Color(0xFFCD7F32);
+
+  // ── Avatars produits (initiales) — aplats fixes, texte [onBrand] ─────
+  static const List<Color> avatarPalette = [
+    primary, // Indigo
+    Color(0xFF1098AD), // Cyan
+    Color(0xFF37B24D), // Green
+    Color(0xFFE8590C), // Orange
+    Color(0xFFF03E3E), // Red
+    Color(0xFF7048E8), // Violet
+    Color(0xFFAE3EC9), // Grape
+    Color(0xFF1C7ED6), // Blue
+  ];
+
+  /// Initiales lisibles (AA) sur la pastille `accent` à 15 % : l'accent
+  /// assombri en clair, éclairci en sombre.
+  static Color avatarInitials(Color accent, Brightness brightness) =>
+      Color.lerp(
+        accent,
+        brightness == Brightness.dark ? onBrand : const Color(0xFF000000),
+        0.35,
+      )!;
+
+  // ── Dark scheme tokens (UX spec) ─────────────────────────────────────
+  static const Color primaryDark = Color(0xFF4DABF7);
+  static const Color secondaryDark = Color(0xFFFF8787);
+  static const Color onPrimaryDark = Color(0xFF0D1B2A);
+  static const Color primaryContainerDark = Color(0xFF1B3A5C);
+  static const Color onSurfaceDark = Color(0xFFF0F4F8);
+  static const Color onSurfaceVariantDark = Color(0xFFADB5BD);
+  static const Color surfaceVariantDark = Color(0xFF1B2838);
+
   // ── Neutral greys (semantic) ──────────────────────────────────────────
   static const Color grey600 = Color(0xFF868E96);
   static const Color grey500 = Color(0xFFADB5BD);
@@ -262,9 +317,11 @@ class AppTheme {
       brightness: Brightness.light,
     ).copyWith(
       primary: primary,
+      onPrimary: onBrand,
       secondary: secondary,
       onSecondary: Colors.white,
       error: errorColor,
+      onError: onError,
     );
     final base = ThemeData(
       useMaterial3: true,
@@ -296,11 +353,18 @@ class AppTheme {
       seedColor: primary,
       brightness: Brightness.dark,
     ).copyWith(
-      primary: const Color(0xFF4DABF7), // bleu ciel en dark mode (UX spec)
-      secondary: const Color(0xFFFF8787), // corail clair dark mode (UX spec)
+      primary: primaryDark, // bleu ciel en dark mode (UX spec)
+      onPrimary: onPrimaryDark,
+      primaryContainer: primaryContainerDark,
+      secondary: secondaryDark, // corail clair dark mode (UX spec)
       onSecondary: Colors.black,
       error: errorColor,
+      onError: onError,
       surface: darkSurface,
+      onSurface: onSurfaceDark,
+      onSurfaceVariant: onSurfaceVariantDark,
+      // M3 successor of `surfaceVariant` (UX spec "surfaceVariant").
+      surfaceContainerHighest: surfaceVariantDark,
     );
     final base = ThemeData(
       useMaterial3: true,
@@ -338,6 +402,20 @@ extension KeevoColors on ColorScheme {
       _isDark ? const Color(0xFF462F00) : const Color(0xFFFFF9DB);
   Color get errorContainer_ =>
       _isDark ? const Color(0xFF5C1A1A) : const Color(0xFFFFE3E3);
+
+  /// Texte/icône lisible (AA) sur [warningContainer].
+  Color get onWarningContainer =>
+      _isDark ? const Color(0xFFFFE8A3) : AppTheme.onWarning;
+
+  /// Texte/icône lisible (AA) sur [errorContainer_].
+  Color get onErrorContainer_ =>
+      _isDark ? const Color(0xFFFFC9C9) : const Color(0xFF8C1D1D);
+
+  /// Vert de statut lisible : [AppTheme.successStrong] en clair.
+  Color get successStrong => _isDark ? success : AppTheme.successStrong;
+
+  /// Orange de statut lisible : [AppTheme.warningStrong] en clair.
+  Color get warningStrong => _isDark ? warning : AppTheme.warningStrong;
 
   /// Light scaffold‐grey that adapts for dark mode.
   Color get scaffoldBg => _isDark ? surface : AppTheme.scaffoldLight;

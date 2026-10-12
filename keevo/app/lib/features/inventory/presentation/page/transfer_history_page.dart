@@ -225,7 +225,7 @@ class _TransferHistoryPageState extends ConsumerState<TransferHistoryPage> {
           key: const Key('new_transfer_fab_bottom'),
           onPressed: _openNewTransfer,
           backgroundColor: Colors.transparent,
-          foregroundColor: Colors.white,
+          foregroundColor: cs.onPrimary,
           elevation: 0,
           icon: const Icon(Icons.swap_horiz_rounded),
           label: const Text('Nouveau transfert',
@@ -297,7 +297,7 @@ class _FilterBar extends StatelessWidget {
                 label: 'En transit',
                 icon: Icons.local_shipping_outlined,
                 active: selected == 'IN_TRANSIT',
-                color: Colors.teal,
+                color: AppTheme.iconTeal,
                 onTap: () => onSelect('IN_TRANSIT')),
             const SizedBox(width: 8),
             _Chip(
@@ -421,7 +421,7 @@ class _TransferTileState extends ConsumerState<_TransferTile> {
       if (mounted) {
         messenger.showSnackBar(SnackBar(
           content: Row(children: [
-            const Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
+            const Icon(Icons.check_circle_outline, color: AppTheme.onBrand, size: 18),
             const SizedBox(width: 10),
             Expanded(
                 child: Text(
@@ -604,18 +604,18 @@ class _TransferTileState extends ConsumerState<_TransferTile> {
                   key: Key('receive_transfer_${widget.transfer.id}'),
                   onPressed: _isReceiving ? null : _receive,
                   icon: _isReceiving
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
+                              strokeWidth: 2, color: Theme.of(context).colorScheme.onSurfaceVariant),
                         )
                       : const Icon(Icons.download_done_rounded, size: 18),
                   label: const Text('Réceptionner le stock',
                       style: TextStyle(fontWeight: FontWeight.w600)),
                   style: FilledButton.styleFrom(
                     backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Colors.white,
+                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
                     minimumSize: const Size.fromHeight(44),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
@@ -638,7 +638,7 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (icon, label, color) = switch (status) {
-      'IN_TRANSIT'   => (Icons.local_shipping_outlined,      'En transit',         Colors.teal),
+      'IN_TRANSIT'   => (Icons.local_shipping_outlined,      'En transit',         AppTheme.iconTeal),
       'COMPLETED'    => (Icons.check_circle_outline_rounded, 'Effectué',           AppTheme.success),
       'PENDING_SYNC' => (Icons.schedule_rounded,             'En attente de sync', AppTheme.warning),
       'CONFLICT'     => (Icons.error_outline_rounded,        'Conflit',            AppTheme.errorColor),

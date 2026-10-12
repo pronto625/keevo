@@ -238,8 +238,8 @@ class EmployeeCard extends ConsumerWidget {
 
               // ── Regenerate password ─────────────────────────────────
               ListTile(
-                leading: const Icon(Icons.lock_reset_rounded,
-                    color: Color(0xFFF59E0B)),
+                leading: Icon(Icons.lock_reset_rounded,
+                    color: Theme.of(context).colorScheme.warningStrong),
                 title: const Text('Regénérer le mot de passe'),
                 subtitle: const Text('Nouveau mot de passe temporaire'),
                 onTap: () {
@@ -280,8 +280,8 @@ class EmployeeCard extends ConsumerWidget {
             if (!isActive) ...[
               // ── Reactivate ──────────────────────────────────────────
               ListTile(
-                leading: const Icon(Icons.person_add_rounded,
-                    color: Color(0xFF2B8A3E)),
+                leading: Icon(Icons.person_add_rounded,
+                    color: Theme.of(context).colorScheme.successStrong),
                 title: const Text('Réactiver l\'accès'),
                 subtitle: const Text('L\'employé pourra se reconnecter'),
                 onTap: () {
@@ -293,8 +293,8 @@ class EmployeeCard extends ConsumerWidget {
 
               // ── Regenerate password (also for inactive) ─────────────
               ListTile(
-                leading: const Icon(Icons.lock_reset_rounded,
-                    color: Color(0xFFF59E0B)),
+                leading: Icon(Icons.lock_reset_rounded,
+                    color: Theme.of(context).colorScheme.warningStrong),
                 title: const Text('Regénérer le mot de passe'),
                 subtitle: const Text('Nouveau mot de passe temporaire'),
                 onTap: () {
@@ -410,7 +410,8 @@ class EmployeeCard extends ConsumerWidget {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF2B8A3E),
+              backgroundColor: AppTheme.successStrong,
+              foregroundColor: AppTheme.onBrand,
             ),
             onPressed: () async {
               Navigator.pop(ctx);
@@ -493,9 +494,8 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = cs.brightness == Brightness.dark;
     // Vert foncé en clair (lisible sur fond pâle), vert clair en sombre.
-    final activeColor = isDark ? cs.success : const Color(0xFF2B8A3E);
+    final activeColor = cs.successStrong;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
@@ -522,9 +522,7 @@ class _PwdBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final color = cs.brightness == Brightness.dark
-        ? cs.warning
-        : const Color(0xFFE65100);
+    final color = cs.warningStrong;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(

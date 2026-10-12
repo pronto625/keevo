@@ -52,7 +52,7 @@ class ProductCard extends ConsumerWidget {
         ? AppTheme.errorColor
         : isLowStock
             ? AppTheme.warning
-            : Colors.teal;
+            : AppTheme.iconTeal;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -223,14 +223,15 @@ class ProductCard extends ConsumerWidget {
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Icon(Icons.edit_note_rounded,
-                                        size: 12, color: Color(0xFFF08C00)),
+                                    Icon(Icons.edit_note_rounded,
+                                        size: 12,
+                                        color: theme.colorScheme.warningStrong),
                                     const SizedBox(width: 4),
                                     Text(
                                       'Brouillon',
                                       style:
                                           theme.textTheme.labelSmall?.copyWith(
-                                        color: const Color(0xFFF08C00),
+                                        color: theme.colorScheme.warningStrong,
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
@@ -392,7 +393,7 @@ class ProductCard extends ConsumerWidget {
                 icon: Icons.store_outlined,
                 title: 'Disponibilité cross-boutique',
                 subtitle: 'Voir le stock dans toutes les boutiques',
-                color: Colors.teal,
+                color: AppTheme.iconTeal,
                 onTap: () {
                   Navigator.pop(context);
                   showCrossStoreAvailabilitySheet(
@@ -602,7 +603,7 @@ class ProductCard extends ConsumerWidget {
                     SnackBar(
                       content: const Row(
                         children: [
-                          Icon(Icons.check_circle, color: Colors.white),
+                          Icon(Icons.check_circle, color: AppTheme.onBrand),
                           SizedBox(width: 8),
                           Text('Produit validé avec succès'),
                         ],
@@ -619,7 +620,7 @@ class ProductCard extends ConsumerWidget {
                     SnackBar(
                       content: Row(
                         children: [
-                          const Icon(Icons.error, color: Colors.white),
+                          const Icon(Icons.error, color: AppTheme.onBrand),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(e is ProductException
@@ -695,7 +696,7 @@ class ProductCard extends ConsumerWidget {
                   SnackBar(
                     content: Row(
                       children: [
-                        Icon(Icons.check_circle, color: Colors.white),
+                        Icon(Icons.check_circle, color: AppTheme.onBrand),
                         const SizedBox(width: 8),
                         const Text('Produit archivé avec succès'),
                       ],
@@ -712,7 +713,7 @@ class ProductCard extends ConsumerWidget {
                   SnackBar(
                     content: Row(
                       children: [
-                        Icon(Icons.error, color: Colors.white),
+                        Icon(Icons.error, color: AppTheme.onBrand),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(e is ProductException
@@ -787,7 +788,7 @@ class ProductCard extends ConsumerWidget {
                   SnackBar(
                     content: Row(
                       children: [
-                        Icon(Icons.check_circle, color: Colors.white),
+                        Icon(Icons.check_circle, color: AppTheme.onBrand),
                         const SizedBox(width: 8),
                         const Text('Produit désarchivé avec succès'),
                       ],
@@ -804,7 +805,7 @@ class ProductCard extends ConsumerWidget {
                   SnackBar(
                     content: Row(
                       children: [
-                        Icon(Icons.error, color: Colors.white),
+                        Icon(Icons.error, color: AppTheme.onBrand),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(e is ProductException

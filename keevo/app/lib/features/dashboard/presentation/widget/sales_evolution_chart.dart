@@ -325,7 +325,7 @@ class _TooltipBubble extends StatelessWidget {
             child: Text(
               text,
               style: const TextStyle(
-                color: Colors.white,
+                color: AppTheme.onBrand,
                 fontWeight: FontWeight.w700,
                 fontSize: 11,
               ),

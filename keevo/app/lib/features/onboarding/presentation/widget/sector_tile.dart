@@ -128,7 +128,7 @@ class _SelectionIndicator extends StatelessWidget {
         ),
       ),
       child: selected
-          ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
+          ? Icon(Icons.check_rounded, size: 16, color: cs.onPrimary)
           : null,
     );
   }

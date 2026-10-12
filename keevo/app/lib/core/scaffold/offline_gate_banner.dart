@@ -55,16 +55,12 @@ class OfflineGateBanner extends ConsumerWidget {
     if (!isCritical && ref.watch(offlineGateDismissedTodayProvider)) return const SizedBox.shrink();
 
     final cs = Theme.of(context).colorScheme;
-    final isDark = cs.brightness == Brightness.dark;
     final backgroundColor =
         isCritical ? cs.errorContainer_ : cs.warningContainer;
-    // Rouge sur le rouge foncé de `errorContainer_` est illisible en mode
-    // sombre : l'urgence y reste portée par le fond et l'icône.
+    // v1s-16-3 : paire conteneur / on-conteneur (AA en clair et en sombre).
     final textColor =
-        isCritical && !isDark ? AppTheme.errorColor : cs.onSurface;
-    final iconColor = isCritical
-        ? AppTheme.errorColor
-        : (isDark ? cs.warning : AppTheme.iconAmber);
+        isCritical ? cs.onErrorContainer_ : cs.onWarningContainer;
+    final iconColor = textColor;
     final message = isCritical
         ? 'Dernière chance : synchronisez demain ou l\'accès sera limité (Jour $days/7)'
         : 'Synchronisation requise dans ${7 - days} jour${(7 - days) > 1 ? 's' : ''} (Jour $days/7)';

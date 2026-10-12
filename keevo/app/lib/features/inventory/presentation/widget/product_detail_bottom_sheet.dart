@@ -55,7 +55,7 @@ class ProductDetailBottomSheet extends StatelessWidget {
           children: [
             // Drag handle: provided by the bottom sheet theme.
             // Avatar / photo
-            _buildAvatar(),
+            _buildAvatar(context),
             const SizedBox(height: 16),
 
             // Product name
@@ -144,7 +144,7 @@ class ProductDetailBottomSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildAvatar() {
+  Widget _buildAvatar(BuildContext context) {
     if (row.photoUrl != null && row.photoUrl!.isNotEmpty) {
       return CircleAvatar(
         radius: 40,
@@ -152,8 +152,8 @@ class ProductDetailBottomSheet extends StatelessWidget {
       );
     }
     final colorIndex =
-        row.productId.hashCode.abs() % Colors.primaries.length;
-    final accent = Colors.primaries[colorIndex];
+        row.productId.hashCode.abs() % AppTheme.avatarPalette.length;
+    final accent = AppTheme.avatarPalette[colorIndex];
     final initials = _initials(row.productName);
     // Même teinte que la ligne du rapport, diluée plutôt qu'en aplat saturé.
     return CircleAvatar(
@@ -162,7 +162,7 @@ class ProductDetailBottomSheet extends StatelessWidget {
       child: Text(
         initials,
         style: TextStyle(
-            color: accent.shade700,
+            color: AppTheme.avatarInitials(accent, Theme.of(context).brightness),
             fontWeight: FontWeight.bold,
             fontSize: 24),
       ),

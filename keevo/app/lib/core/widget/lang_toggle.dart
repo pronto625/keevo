@@ -58,7 +58,7 @@ class _LangSegment extends StatelessWidget {
         child: Text(
           label,
           style: TextStyle(
-            color: selected ? Colors.white : cs.onSurfaceVariant,
+            color: selected ? cs.onPrimary : cs.onSurfaceVariant,
             fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
             fontSize: 12,
           ),

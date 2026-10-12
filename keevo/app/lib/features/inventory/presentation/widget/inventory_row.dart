@@ -226,8 +226,8 @@ class _InventoryRowState extends ConsumerState<InventoryRow> {
       );
     }
     // Deterministic color from productId
-    final colorIndex = product.productId.hashCode.abs() % Colors.primaries.length;
-    final accent = Colors.primaries[colorIndex];
+    final colorIndex = product.productId.hashCode.abs() % AppTheme.avatarPalette.length;
+    final accent = AppTheme.avatarPalette[colorIndex];
     final initials = _initials(product.productName);
     // Même teinte par produit, mais diluée (badge rond soft) plutôt qu'en
     // aplat saturé.
@@ -237,7 +237,7 @@ class _InventoryRowState extends ConsumerState<InventoryRow> {
       child: Text(
         initials,
         style: TextStyle(
-            color: accent.shade700,
+            color: AppTheme.avatarInitials(accent, Theme.of(context).brightness),
             fontWeight: FontWeight.bold,
             fontSize: 14),
       ),

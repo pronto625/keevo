@@ -54,7 +54,7 @@ class GapRowTile extends StatelessWidget {
         child: Row(
           children: [
             // Avatar (48dp)
-            _buildAvatar(),
+            _buildAvatar(context),
             const SizedBox(width: 12),
 
             // Product info
@@ -139,7 +139,7 @@ class GapRowTile extends StatelessWidget {
     );
   }
 
-  Widget _buildAvatar() {
+  Widget _buildAvatar(BuildContext context) {
     if (row.photoUrl != null && row.photoUrl!.isNotEmpty) {
       return CircleAvatar(
         radius: 24,
@@ -147,8 +147,8 @@ class GapRowTile extends StatelessWidget {
       );
     }
     final colorIndex =
-        row.productId.hashCode.abs() % Colors.primaries.length;
-    final accent = Colors.primaries[colorIndex];
+        row.productId.hashCode.abs() % AppTheme.avatarPalette.length;
+    final accent = AppTheme.avatarPalette[colorIndex];
     final initials = _initials(row.productName);
     // Même teinte par produit, mais diluée (badge rond soft) plutôt qu'en
     // aplat saturé.
@@ -158,7 +158,7 @@ class GapRowTile extends StatelessWidget {
       child: Text(
         initials,
         style: TextStyle(
-            color: accent.shade700,
+            color: AppTheme.avatarInitials(accent, Theme.of(context).brightness),
             fontWeight: FontWeight.bold,
             fontSize: 14),
       ),

@@ -297,7 +297,7 @@ class _CartBottomSheetState extends ConsumerState<CartBottomSheet> {
                         child: Text(
                           'Encaisser',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: AppTheme.onBrand,
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
                           ),
