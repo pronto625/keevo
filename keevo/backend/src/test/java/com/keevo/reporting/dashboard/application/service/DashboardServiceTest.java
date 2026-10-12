@@ -12,6 +12,9 @@ import org.mockito.quality.Strictness;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,7 +36,8 @@ class DashboardServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new DashboardService(jdbc);
+        service = new DashboardService(jdbc,
+                Clock.fixed(Instant.parse("2026-03-18T14:00:00Z"), ZoneOffset.UTC));
 
         // Default stubs — everything returns 0/empty
         lenient().when(jdbc.queryForObject(anyString(), eq(Long.class), (Object[]) any()))

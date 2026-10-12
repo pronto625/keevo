@@ -1223,8 +1223,8 @@ As an owner, I want the 12-week revenue chart to count every sale of every week,
 **Refs:** Story 15.8 (`spec-v1s-15-8-flutter-test-hygiene.md`, review triage), Story 7-x dashboard charts.
 
 **Items (routed 2026-10-12 from build-auto v1s-15-8 review):**
-- [ ] [Deferred-from: build-auto v1s-15-8 review, 2026-10-12] Sales from 1 January onward in a week that starts in December vanish from the weekly chart [lib/features/dashboard/data/datasource/local_dashboard_datasource.dart getWeeklyCA ~L364, getStoreWeeklyCA ~L476] — pre-existing; key both SQL and slots by the Monday date, test a week spanning the year end
-- [ ] [Deferred-from: build-auto v1s-15-8 review, 2026-10-12] Slot Mondays built with `monday.subtract(Duration(days: k*7))` land on Sunday 23:00 after a DST change [same lines] — no impact in Cameroon (no DST); build with calendar fields `DateTime(y, m, d - k*7)`, test under a DST time zone if CI allows
+- [x] [Deferred-from: build-auto v1s-15-8 review, 2026-10-12] Sales from 1 January onward in a week that starts in December vanish from the weekly chart [lib/features/dashboard/data/datasource/local_dashboard_datasource.dart getWeeklyCA ~L364, getStoreWeeklyCA ~L476] — pre-existing; key both SQL and slots by the Monday date, test a week spanning the year end — **resolved v1s-16-19** (Monday `YYYY-MM-DD` key SQL+Dart, year-end tests all/store; backend dashboard REST now buckets in WAT; remote series zero-filled in the app)
+- [x] [Deferred-from: build-auto v1s-15-8 review, 2026-10-12] Slot Mondays built with `monday.subtract(Duration(days: k*7))` land on Sunday 23:00 after a DST change [same lines] — no impact in Cameroon (no DST); build with calendar fields `DateTime(y, m, d - k*7)`, test under a DST time zone if CI allows — **resolved v1s-16-19** (`mondayOf`/`weeklySlots` calendar fields, slot test 2024-2035 run under TZ=Europe/Paris; CI stays single-zone, accepted: no DST in target market)
 
 **AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
 
