@@ -778,6 +778,38 @@ public class TenantSchemaProvisioner {
     static final String DDL_REPORTS_IDX_DELIVERY_STATUS =
             "CREATE INDEX IF NOT EXISTS idx_reports_delivery_status ON reports (delivery_status, delivery_attempts)";
 
+    // Story v1s-18-1 — background export jobs (public.export_jobs from V15 is the template)
+    static final String DDL_EXPORT_JOBS = """
+            CREATE TABLE IF NOT EXISTS export_jobs (
+                id            UUID         PRIMARY KEY,
+                requested_by  UUID         NOT NULL,
+                status        VARCHAR(10)  NOT NULL
+                                CONSTRAINT export_jobs_status_check
+                                CHECK (status IN ('PENDING', 'RUNNING', 'READY', 'FAILED', 'EXPIRED')),
+                format        VARCHAR(10)  NOT NULL
+                                CONSTRAINT export_jobs_format_check
+                                CHECK (format IN ('CSV', 'XLSX', 'PDF')),
+                datasets      VARCHAR(500) NOT NULL,
+                store_id      UUID,
+                period_from   TIMESTAMPTZ,
+                period_to     TIMESTAMPTZ,
+                row_count     BIGINT,
+                file_name     VARCHAR(255) NOT NULL,
+                file_size     BIGINT,
+                content_type  VARCHAR(100) NOT NULL,
+                storage_path  VARCHAR(500),
+                error_code    VARCHAR(50),
+                created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                started_at    TIMESTAMPTZ,
+                completed_at  TIMESTAMPTZ,
+                expires_at    TIMESTAMPTZ
+            )""";
+
+    static final String DDL_EXPORT_JOBS_IDX_CREATED =
+            "CREATE INDEX IF NOT EXISTS idx_export_jobs_created ON export_jobs (created_at DESC)";
+    static final String DDL_EXPORT_JOBS_IDX_STATUS_EXPIRES =
+            "CREATE INDEX IF NOT EXISTS idx_export_jobs_status_expires ON export_jobs (status, expires_at)";
+
     // Story 8.0 — device_tokens table for FCM push notifications
     static final String DDL_DEVICE_TOKENS = """
             CREATE TABLE IF NOT EXISTS device_tokens (
@@ -1049,6 +1081,10 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_NOTIFICATION_COOLDOWNS_IDX_TYPE_STORE);
             // Story 8.1 — trend notification preference
             stmt.execute(DDL_TENANT_PREFS_MIGRATE_TREND_NOTIFICATION);
+            // Story v1s-18-1 — background export jobs
+            stmt.execute(DDL_EXPORT_JOBS);
+            stmt.execute(DDL_EXPORT_JOBS_IDX_CREATED);
+            stmt.execute(DDL_EXPORT_JOBS_IDX_STATUS_EXPIRES);
             stmt.execute("SET search_path TO public");
         }
     }

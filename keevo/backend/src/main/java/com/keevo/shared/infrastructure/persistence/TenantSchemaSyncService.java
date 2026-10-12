@@ -83,7 +83,8 @@ public class TenantSchemaSyncService {
                     java.util.Map.entry("inventory_counts",      TenantSchemaProvisioner.DDL_INVENTORY_COUNTS),
                     java.util.Map.entry("reports",                TenantSchemaProvisioner.DDL_REPORTS),
                     java.util.Map.entry("device_tokens",          TenantSchemaProvisioner.DDL_DEVICE_TOKENS),  // Story 8.0
-                    java.util.Map.entry("notification_cooldowns", TenantSchemaProvisioner.DDL_NOTIFICATION_COOLDOWNS)  // Story 8.1
+                    java.util.Map.entry("notification_cooldowns", TenantSchemaProvisioner.DDL_NOTIFICATION_COOLDOWNS),  // Story 8.1
+                    java.util.Map.entry("export_jobs",            TenantSchemaProvisioner.DDL_EXPORT_JOBS)  // Story v1s-18-1
             );
 
     /** Transaction-scoped advisory lock serialising syncs of one schema (released on commit/rollback). */
@@ -309,6 +310,9 @@ public class TenantSchemaSyncService {
             for (String ddl : TenantSchemaProvisioner.DDL_AUDIT_LOG_ENRICHMENT) {
                 stmt.execute(ddl);
             }
+            // Story v1s-18-1 — export_jobs indexes
+            stmt.execute(TenantSchemaProvisioner.DDL_EXPORT_JOBS_IDX_CREATED);
+            stmt.execute(TenantSchemaProvisioner.DDL_EXPORT_JOBS_IDX_STATUS_EXPIRES);
             stmt.execute("SET search_path TO public");
         }
     }

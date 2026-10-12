@@ -87,6 +87,16 @@ keevo:
     # Story 10.3 (AC2): dev keeps the well-known default Admin@1234! so a local admin is usable.
     # In prod/staging, ProdSecretsValidator rejects this default (and empty/blank) at boot — fail-fast.
     password: ${ADMIN_PASSWORD:Admin@1234!}
+  # Story v1s-18-1 — server-side data export
+  export:
+    sync-row-threshold: 5000      # above: Premium exports run in the background
+    page-size: 1000               # keyset page size read from dataset providers
+    retention: 24h                # READY files stay downloadable this long
+    storage-dir: ${KEEVO_EXPORT_STORAGE_DIR:${java.io.tmpdir}/keevo-exports}
+    link-secret: ${KEEVO_EXPORT_LINK_SECRET:}   # blank = random per boot (signed links die on restart)
+    max-requests-per-hour: 30
+    max-active-jobs: 3
+    stale-job-after: 2h
   fcm:
     enabled: ${KEEVO_FCM_ENABLED:false}
     credentials-path: ${GOOGLE_APPLICATION_CREDENTIALS:}

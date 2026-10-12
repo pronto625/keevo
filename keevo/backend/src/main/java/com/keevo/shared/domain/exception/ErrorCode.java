@@ -122,6 +122,15 @@ public enum ErrorCode {
     // ── Audit ─────────────────────────────────────────────────────────────
     AUDIT_IMMUTABLE,        // HTTP 403 — attempt to modify or delete an immutable audit entry
     AUDIT_ENTRY_NOT_FOUND,  // HTTP 404 — audit entry id unknown in the tenant (v1s-18-6)
+    // ── Export (Story v1s-18-1) ───────────────────────────────────────────
+    PLAN_FEATURE_REQUIRED,     // HTTP 403 — feature needs Premium (details.feature)
+    EXPORT_NOT_FOUND,          // HTTP 404 — export job id unknown in the tenant
+    EXPORT_EXPIRED,            // HTTP 410 — export file expired / purged
+    EXPORT_NOT_READY,          // HTTP 409 — job PENDING / RUNNING / FAILED
+    EXPORT_DATASET_UNKNOWN,    // HTTP 400 — unknown dataset key
+    EXPORT_FORMAT_UNSUPPORTED, // HTTP 400 — no renderer for the format yet
+    EXPORT_LINK_INVALID,       // HTTP 403 — bad / tampered signed download token
+    EXPORT_QUEUE_FULL,         // HTTP 429 — export executor saturated
     // ── WhatsApp (Story 8.0) ──────────────────────────────────────────────
     WHATSAPP_DELIVERY_FAILED, // WhatsApp message delivery failed (Wassender API error or timeout)
     // ── Generic ───────────────────────────────────────────────────

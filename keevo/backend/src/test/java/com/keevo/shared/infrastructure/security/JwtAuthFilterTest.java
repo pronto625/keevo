@@ -642,4 +642,18 @@ class JwtAuthFilterTest {
                 .expiration(new Date(System.currentTimeMillis() + 3_600_000))
                 .build();
     }
+
+    @Test
+    @DisplayName("v1s-18-1 — signed export download without Authorization passes through the filter (public path)")
+    void exportDownload_isPublic() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/exports/download");
+        request.setParameter("token", "abc.def");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+        assertThat(response.getStatus()).isEqualTo(200);
+        verifyNoInteractions(jwtTokenProvider, tenantSchemaSyncService);
+    }
 }

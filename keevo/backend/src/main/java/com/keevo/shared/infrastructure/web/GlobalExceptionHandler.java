@@ -103,6 +103,14 @@ public class GlobalExceptionHandler {
             Map.entry("DELETION_ALREADY_REQUESTED", "Une demande de suppression est déjà en cours"),
             Map.entry("DELETION_NOT_PENDING",       "Aucune demande de suppression en cours"),
             Map.entry("WHATSAPP_DELIVERY_FAILED",         "Envoi WhatsApp échoué. Vérifiez votre connexion et réessayez."),
+            Map.entry("PLAN_FEATURE_REQUIRED",       "Cette fonctionnalité nécessite l'offre Premium"),
+            Map.entry("EXPORT_NOT_FOUND",            "Export introuvable"),
+            Map.entry("EXPORT_EXPIRED",              "Ce fichier d'export a expiré, relancez l'export"),
+            Map.entry("EXPORT_NOT_READY",            "Cet export n'est pas encore prêt"),
+            Map.entry("EXPORT_DATASET_UNKNOWN",      "Jeu de données inconnu"),
+            Map.entry("EXPORT_FORMAT_UNSUPPORTED",   "Ce format d'export n'est pas encore disponible"),
+            Map.entry("EXPORT_LINK_INVALID",         "Lien de téléchargement invalide"),
+            Map.entry("EXPORT_QUEUE_FULL",           "Trop d'exports en cours, réessayez dans quelques minutes"),
             Map.entry("OPTIMISTIC_LOCK",              "Cette donnée a été modifiée par une autre opération, veuillez réessayer")
     );
 
@@ -223,6 +231,7 @@ public class GlobalExceptionHandler {
                  "INVENTORY_STORE_NOT_FOUND",
                  "REPORT_NOT_FOUND",
                  "AUDIT_ENTRY_NOT_FOUND",
+                 "EXPORT_NOT_FOUND",
                  "NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "UNAUTHORIZED", "TOKEN_EXPIRED",
                  "TOKEN_INVALID",
@@ -245,7 +254,8 @@ public class GlobalExceptionHandler {
                  "OPTIMISTIC_LOCK",
                  "PHONE_ALREADY_REGISTERED",
                  "DELETION_ALREADY_REQUESTED",
-                 "DELETION_NOT_PENDING" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4 / 6.1 / 7.2 / v1s-13-1 / v1s-13-5 / v1s-14-11 / 14.5
+                 "DELETION_NOT_PENDING",
+                 "EXPORT_NOT_READY" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4 / 6.1 / 7.2 / v1s-13-1 / v1s-13-5 / v1s-14-11 / 14.5
             case "VALIDATION_ERROR", "INVALID_AMOUNT",
                  "INVALID_PHONE_NUMBER", "INVALID_PASSWORD",
                  "INSUFFICIENT_STOCK",
@@ -262,7 +272,10 @@ public class GlobalExceptionHandler {
             case "SECTOR_TEMPLATE_NOT_FOUND",
                  "ONBOARDING_ALREADY_COMPLETED",
                  "INVENTORY_INVALID_CATEGORIES",
-                 "INVENTORY_COUNT_PRODUCT_NOT_IN_SCOPE" -> HttpStatus.BAD_REQUEST;
+                 "INVENTORY_COUNT_PRODUCT_NOT_IN_SCOPE",
+                 "EXPORT_DATASET_UNKNOWN",
+                 "EXPORT_FORMAT_UNSUPPORTED" -> HttpStatus.BAD_REQUEST;
+            case "EXPORT_EXPIRED" -> HttpStatus.GONE;  // v1s-18-1 — expired export file
             case "TENANT_PROVISION_FAILED" -> HttpStatus.INTERNAL_SERVER_ERROR;
             case "CSV_PARSE_ERROR" -> HttpStatus.UNPROCESSABLE_ENTITY;  // Story 2.4 malformed CSV
             case "PLAN_LIMIT_EXCEEDED",
@@ -274,8 +287,11 @@ public class GlobalExceptionHandler {
                  "DEVICE_ID_MISMATCH",
                  "CANNOT_CHANGE_OWN_ROLE",
                  "CANNOT_DEMOTE_LAST_OWNER",
-                 "CANNOT_SET_OWN_PASSWORD" -> HttpStatus.FORBIDDEN;   // H2 fix: role mismatch is 403, not 401; AUDIT_IMMUTABLE = immutable log; DEVICE_ID_MISMATCH = deviceId belongs to another user (v1s-13-2); CANNOT_* = role anti-lockout (v1s-14-11)
-            case "RATE_LIMIT_EXCEEDED" -> HttpStatus.TOO_MANY_REQUESTS;
+                 "CANNOT_SET_OWN_PASSWORD",
+                 "PLAN_FEATURE_REQUIRED",
+                 "EXPORT_LINK_INVALID" -> HttpStatus.FORBIDDEN;   // H2 fix: role mismatch is 403, not 401; AUDIT_IMMUTABLE = immutable log; DEVICE_ID_MISMATCH = deviceId belongs to another user (v1s-13-2); CANNOT_* = role anti-lockout (v1s-14-11)
+            case "RATE_LIMIT_EXCEEDED",
+                 "EXPORT_QUEUE_FULL" -> HttpStatus.TOO_MANY_REQUESTS;
             case "WHATSAPP_DELIVERY_FAILED" -> HttpStatus.BAD_GATEWAY;  // upstream WhatsApp failure
             default -> HttpStatus.INTERNAL_SERVER_ERROR;
         };
