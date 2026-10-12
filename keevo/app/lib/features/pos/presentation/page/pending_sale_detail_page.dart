@@ -241,7 +241,10 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
           TextButton(
               onPressed: () => Navigator.pop(ctx), child: const Text('Retour')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.errorColor),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.errorStrong,
+              foregroundColor: AppTheme.onBrand,
+            ),
             onPressed: () {
               Navigator.pop(ctx);
               _doCancel(saleId, '');
@@ -395,7 +398,8 @@ class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
               onPressed: () => Navigator.pop(
                   ctx, int.tryParse(stockController.text) ?? 0),
               style: FilledButton.styleFrom(
-                backgroundColor: AppTheme.success,
+                backgroundColor: AppTheme.successStrong,
+                foregroundColor: AppTheme.onBrand,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),

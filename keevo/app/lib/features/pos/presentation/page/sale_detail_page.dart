@@ -602,7 +602,10 @@ class _CancelSaleDialogState extends State<_CancelSaleDialog> {
           child: const Text('Retour'),
         ),
         FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: AppTheme.errorColor),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppTheme.errorStrong,
+            foregroundColor: AppTheme.onBrand,
+          ),
           onPressed:
               canConfirm ? () => Navigator.pop(context, justification) : null,
           child: const Text('Confirmer annulation'),

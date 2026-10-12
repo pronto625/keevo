@@ -128,7 +128,7 @@ class _ShopNamePageState extends ConsumerState<ShopNamePage> {
             SnackBar(
               key: const Key('errorSnackBar'),
               content: Text(msg),
-              backgroundColor: Theme.of(context).colorScheme.error,
+              backgroundColor: AppTheme.errorStrong,
             ),
           );
         }

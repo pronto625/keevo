@@ -377,7 +377,8 @@ class EmployeeCard extends ConsumerWidget {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: AppTheme.errorColor,
+              backgroundColor: AppTheme.errorStrong,
+              foregroundColor: AppTheme.onBrand,
             ),
             onPressed: () async {
               Navigator.pop(ctx);

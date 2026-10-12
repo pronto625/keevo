@@ -9,7 +9,14 @@ import 'package:google_fonts/google_fonts.dart';
 /// colorSuccess:    #51CF66  (vert lime)        — confirmations, sync OK
 /// colorWarning:    #FCC419  (ambre doré)       — stock bas, brouillons
 /// colorError:      #FA5252  (rouge rubis)      — ruptures, erreurs
+///                  #FF6B6B en sombre, avec onError #0D1B2A (v1s-16-17)
 /// darkSurface:     #0D1B2A  (navy nuit)
+///
+/// Aplats de feedback (v1s-16-17) : tout aplat FIXE sous texte/icône blanc
+/// ([onBrand]) utilise une teinte « strong » AA — [successStrong],
+/// [errorStrong], [warningStrong] — jamais [success]/[errorColor] (2.0:1 /
+/// 3.28:1 sous blanc). Les SnackBars ont un aplat fixe ([snackBarNeutral] /
+/// [snackBarNeutralDark] par défaut) et un contenu [onBrand] via le thème.
 class AppTheme {
   AppTheme._();
 
@@ -24,14 +31,34 @@ class AppTheme {
   /// Couleur de texte/icône accessible sur fond [warning] (ambre).
   static const Color onWarning = Color(0xFF4A2C00);
   static const Color errorColor = Color(0xFFFA5252);
-  /// Couleur de texte/icône accessible sur fond [errorColor] (rouge rubis).
+  /// Blanc sur [errorColor] : 3.28:1, icônes seulement (pas de texte). Les
+  /// aplats rouges fixes sous texte blanc utilisent [errorStrong] (v1s-16-17).
   static const Color onError = Color(0xFFFFFFFF);
   static const Color darkSurface = Color(0xFF0D1B2A);
 
+  /// Rouge soutenu (Open Color red-9) : aplats d'erreur / danger FIXES
+  /// (SnackBars d'erreur, boutons destructifs, badges) sous [onBrand]
+  /// (5.46:1). [errorColor] reste la couleur d'indicateur/texte.
+  static const Color errorStrong = Color(0xFFC92A2A);
+
+  /// `cs.error` en mode sombre (UX spec, colonne sombre).
+  static const Color errorDark = Color(0xFFFF6B6B);
+
+  /// `cs.onError` en mode sombre : texte foncé sur [errorDark] (6.27:1).
+  static const Color onErrorDark = darkSurface;
+
+  /// Aplat par défaut des SnackBars (clair) — texte [onBrand] ≥ 8.6:1.
+  static const Color snackBarNeutral = Color(0xFF343A40);
+
+  /// Aplat par défaut des SnackBars (sombre) — ardoise distincte de la
+  /// surface navy, texte [onBrand] ≥ 8.6:1.
+  static const Color snackBarNeutralDark = Color(0xFF3B4D63);
+
   /// Texte/icône sur un aplat de marque FIXE (ne change pas avec la
   /// luminosité) : [primary], [primaryGradient], [primaryGradientDark],
-  /// [successGradient], aplats [success]/[errorColor]/[darkSurface],
-  /// [avatarPalette]. Sur `cs.primary`, utiliser `cs.onPrimary`.
+  /// [successGradient], aplats [successStrong]/[errorStrong]/
+  /// [warningStrong]/[darkSurface]/[violetDeep], SnackBars, [avatarPalette].
+  /// Sur `cs.primary`, utiliser `cs.onPrimary`.
   static const Color onBrand = Color(0xFFFFFFFF);
 
   /// Vert soutenu (texte/icône sur fond clair, aplats avec [onBrand]).
@@ -302,11 +329,25 @@ class AppTheme {
         showDragHandle: true,
       );
 
-  static SnackBarThemeData _snackBarTheme(ColorScheme cs) => SnackBarThemeData(
+  /// v1s-16-17 — every SnackBar sits on a FIXED fill (neutral by default,
+  /// AA tone fills otherwise) with [onBrand] content, so text, icon, action
+  /// and close icon agree on every fill in both modes. [textTheme] must be
+  /// the Inter text theme (a bare TextStyle would drop font and size).
+  static SnackBarThemeData _snackBarTheme(
+    ColorScheme cs,
+    TextTheme textTheme,
+  ) =>
+      SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusM),
         ),
+        backgroundColor: cs.brightness == Brightness.dark
+            ? snackBarNeutralDark
+            : snackBarNeutral,
+        contentTextStyle: textTheme.bodyMedium?.copyWith(color: onBrand),
+        actionTextColor: onBrand,
+        closeIconColor: onBrand,
       );
 
   // ── Light theme ───────────────────────────────────────────────────────
@@ -328,8 +369,9 @@ class AppTheme {
       colorScheme: colorScheme,
       scaffoldBackgroundColor: scaffoldLight,
     );
+    final textTheme = _interTextTheme(base.textTheme);
     return base.copyWith(
-      textTheme: _interTextTheme(base.textTheme),
+      textTheme: textTheme,
       primaryTextTheme: _interTextTheme(base.primaryTextTheme),
       inputDecorationTheme: _inputDecoration(colorScheme),
       cardTheme: _cardTheme(colorScheme),
@@ -337,7 +379,7 @@ class AppTheme {
       navigationBarTheme: _navBarTheme(colorScheme),
       dialogTheme: _dialogTheme(colorScheme),
       bottomSheetTheme: _bottomSheetTheme(colorScheme),
-      snackBarTheme: _snackBarTheme(colorScheme),
+      snackBarTheme: _snackBarTheme(colorScheme, textTheme),
       dividerTheme: DividerThemeData(
         color: colorScheme.outlineVariant.withAlpha(80),
         thickness: 0.5,
@@ -358,8 +400,9 @@ class AppTheme {
       primaryContainer: primaryContainerDark,
       secondary: secondaryDark, // corail clair dark mode (UX spec)
       onSecondary: Colors.black,
-      error: errorColor,
-      onError: onError,
+      // v1s-16-17 — UX-spec dark error; fixed red fills use [errorStrong].
+      error: errorDark,
+      onError: onErrorDark,
       surface: darkSurface,
       onSurface: onSurfaceDark,
       onSurfaceVariant: onSurfaceVariantDark,
@@ -370,8 +413,9 @@ class AppTheme {
       useMaterial3: true,
       colorScheme: colorScheme,
     );
+    final textTheme = _interTextTheme(base.textTheme);
     return base.copyWith(
-      textTheme: _interTextTheme(base.textTheme),
+      textTheme: textTheme,
       primaryTextTheme: _interTextTheme(base.primaryTextTheme),
       inputDecorationTheme: _inputDecoration(colorScheme),
       cardTheme: _cardTheme(colorScheme),
@@ -379,7 +423,7 @@ class AppTheme {
       navigationBarTheme: _navBarTheme(colorScheme),
       dialogTheme: _dialogTheme(colorScheme),
       bottomSheetTheme: _bottomSheetTheme(colorScheme),
-      snackBarTheme: _snackBarTheme(colorScheme),
+      snackBarTheme: _snackBarTheme(colorScheme, textTheme),
       dividerTheme: DividerThemeData(
         color: colorScheme.outlineVariant.withAlpha(80),
         thickness: 0.5,
@@ -412,9 +456,11 @@ extension KeevoColors on ColorScheme {
       _isDark ? const Color(0xFFFFC9C9) : const Color(0xFF8C1D1D);
 
   /// Vert de statut lisible : [AppTheme.successStrong] en clair.
+  /// Teinte de texte/icône, jamais un aplat sous onBrand (utiliser [AppTheme.successStrong]).
   Color get successStrong => _isDark ? success : AppTheme.successStrong;
 
   /// Orange de statut lisible : [AppTheme.warningStrong] en clair.
+  /// Teinte de texte/icône, jamais un aplat sous onBrand (utiliser [AppTheme.warningStrong]).
   Color get warningStrong => _isDark ? warning : AppTheme.warningStrong;
 
   /// Light scaffold‐grey that adapts for dark mode.

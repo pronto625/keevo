@@ -30,10 +30,10 @@ class NotificationBellWidget extends ConsumerWidget {
         icon: Badge(
           label: Text(
             count > 99 ? '99+' : '$count',
-            style: const TextStyle(color: AppTheme.onError, fontSize: 10),
+            style: const TextStyle(color: AppTheme.onBrand, fontSize: 10),
           ),
           isLabelVisible: count > 0,
-          backgroundColor: AppTheme.errorColor,
+          backgroundColor: AppTheme.errorStrong,
           child: Icon(Icons.notifications_outlined,
               color: theme.colorScheme.primary),
         ),

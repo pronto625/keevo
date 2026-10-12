@@ -270,10 +270,13 @@ class _CartBottomSheetState extends ConsumerState<CartBottomSheet> {
                 width: double.infinity,
                 height: 52,
                 child: DecoratedBox(
-                  // Couleur pleine plutôt qu'un dégradé ; indigo de marque
-                  // dans les deux thèmes pour garder le contraste du libellé.
+                  // Couleur pleine plutôt qu'un dégradé : indigo de marque + onBrand
+                  // quand actif ; désactivé, paire neutre surfaceContainerHighest
+                  // + onSurfaceVariant (AA clair/sombre, v1s-16-17).
                   decoration: BoxDecoration(
-                    color: cart.isNotEmpty ? AppTheme.primary : cs.outlineVariant,
+                    color: cart.isNotEmpty
+                        ? AppTheme.primary
+                        : cs.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: cart.isNotEmpty
                         ? [
@@ -297,7 +300,10 @@ class _CartBottomSheetState extends ConsumerState<CartBottomSheet> {
                         child: Text(
                           'Encaisser',
                           style: TextStyle(
-                            color: AppTheme.onBrand,
+                            // v1s-16-17 — disabled label stays readable (AA).
+                            color: cart.isNotEmpty
+                                ? AppTheme.onBrand
+                                : cs.onSurfaceVariant,
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
                           ),

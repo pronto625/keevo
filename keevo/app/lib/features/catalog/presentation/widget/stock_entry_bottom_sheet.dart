@@ -107,7 +107,7 @@ class _StockEntryBottomSheetState extends ConsumerState<StockEntryBottomSheet> {
         messenger.showSnackBar(
           SnackBar(
             content: Text('Entrée enregistrée : +$quantity unités'),
-            backgroundColor: AppTheme.success,
+            backgroundColor: AppTheme.successStrong,
             duration: const Duration(seconds: 3),
           ),
         );
@@ -119,7 +119,7 @@ class _StockEntryBottomSheetState extends ConsumerState<StockEntryBottomSheet> {
           messenger.showSnackBar(
             const SnackBar(
               content: Text('Erreur lors de l\'enregistrement'),
-              backgroundColor: AppTheme.errorColor,
+              backgroundColor: AppTheme.errorStrong,
             ),
           );
         }
@@ -246,7 +246,7 @@ class _StockEntryBottomSheetState extends ConsumerState<StockEntryBottomSheet> {
                   // ── Submit ────────────────────────────────────────────
                   FilledButton.icon(
                     style: FilledButton.styleFrom(
-                      backgroundColor: AppTheme.success,
+                      backgroundColor: AppTheme.successStrong,
                       foregroundColor: AppTheme.onBrand,
                       minimumSize: const Size.fromHeight(56),
                       shape: RoundedRectangleBorder(

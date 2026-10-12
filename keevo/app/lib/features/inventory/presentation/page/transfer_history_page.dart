@@ -429,7 +429,7 @@ class _TransferTileState extends ConsumerState<_TransferTile> {
               overflow: TextOverflow.ellipsis,
             )),
           ]),
-          backgroundColor: AppTheme.success,
+          backgroundColor: AppTheme.successStrong,
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 4),
         ));
@@ -449,7 +449,7 @@ class _TransferTileState extends ConsumerState<_TransferTile> {
       if (mounted) {
         messenger.showSnackBar(SnackBar(
           content: Text(msg.toString()),
-          backgroundColor: AppTheme.errorColor,
+          backgroundColor: AppTheme.errorStrong,
           behavior: SnackBarBehavior.floating,
         ));
       }
@@ -457,7 +457,7 @@ class _TransferTileState extends ConsumerState<_TransferTile> {
       if (mounted) {
         messenger.showSnackBar(SnackBar(
           content: Text(e.toString()),
-          backgroundColor: AppTheme.errorColor,
+          backgroundColor: AppTheme.errorStrong,
           behavior: SnackBarBehavior.floating,
         ));
       }

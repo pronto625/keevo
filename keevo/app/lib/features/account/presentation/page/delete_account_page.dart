@@ -219,8 +219,8 @@ class _DeleteAccountPageState extends ConsumerState<DeleteAccountPage> {
                 : const Icon(Icons.delete_forever_rounded),
             label: const Text('Confirmer la suppression'),
             style: FilledButton.styleFrom(
-              backgroundColor: cs.error,
-              foregroundColor: cs.onError,
+              backgroundColor: AppTheme.errorStrong,
+              foregroundColor: AppTheme.onBrand,
               minimumSize: const Size.fromHeight(56),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppTheme.radiusL),

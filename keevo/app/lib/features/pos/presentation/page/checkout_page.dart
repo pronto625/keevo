@@ -59,6 +59,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     final saleState = ref.watch(recordSaleNotifierProvider);
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    // v1s-16-17 — disabled CTA: neutral fill + variant foreground (AA).
+    final submitDisabled = _selectedMode == null ||
+        _isSubmitting ||
+        saleState is RecordSaleLoading;
+    final submitFg = submitDisabled ? cs.onSurfaceVariant : AppTheme.onBrand;
 
     ref.listen<RecordSaleState>(recordSaleNotifierProvider, (_, state) {
       if (state is RecordSaleSuccess) {
@@ -71,7 +76,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             content: Text(state.message == 'INSUFFICIENT_STOCK'
                 ? 'Stock insuffisant pour un ou plusieurs articles'
                 : 'Erreur: ${state.message}'),
-            backgroundColor: AppTheme.errorColor,
+            backgroundColor: AppTheme.errorStrong,
           ),
         );
       }
@@ -263,17 +268,16 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 padding: const EdgeInsets.only(bottom: 16),
                 child: SizedBox(
                   height: 56,
-                  // Couleur pleine plutôt qu'un dégradé ; indigo de marque
-                  // dans les deux thèmes pour garder le contraste du libellé.
+                  // Couleur pleine plutôt qu'un dégradé : indigo de marque + onBrand
+                  // quand actif ; désactivé, paire neutre surfaceContainerHighest
+                  // + onSurfaceVariant (AA clair/sombre, v1s-16-17).
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: _selectedMode == null ||
-                              _isSubmitting ||
-                              saleState is RecordSaleLoading
-                          ? cs.outlineVariant
+                      color: submitDisabled
+                          ? cs.surfaceContainerHighest
                           : AppTheme.primary,
                       borderRadius: BorderRadius.circular(16),
-                      boxShadow: _selectedMode != null
+                      boxShadow: !submitDisabled
                           ? [
                               BoxShadow(
                                 color: AppTheme.primary.withValues(alpha: 0.25),
@@ -287,34 +291,30 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                       color: Colors.transparent,
                       borderRadius: BorderRadius.circular(16),
                       child: InkWell(
-                        onTap: _selectedMode == null ||
-                                _isSubmitting ||
-                                saleState is RecordSaleLoading
-                            ? null
-                            : _submit,
+                        onTap: submitDisabled ? null : _submit,
                         borderRadius: BorderRadius.circular(16),
                         child: Center(
                           child: saleState is RecordSaleLoading
-                              ? const SizedBox(
+                              ? SizedBox(
                                   width: 22,
                                   height: 22,
                                   child: CircularProgressIndicator(
-                                      strokeWidth: 2.5, color: AppTheme.onBrand),
+                                      strokeWidth: 2.5, color: submitFg),
                                 )
                               : Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     if (hasDraftItems) ...[
-                                      const Icon(Icons.edit_note_rounded,
-                                          color: AppTheme.onBrand, size: 22),
+                                      Icon(Icons.edit_note_rounded,
+                                          color: submitFg, size: 22),
                                       const SizedBox(width: 8),
                                     ],
                                     Text(
                                       hasDraftItems
                                           ? 'Vente brouillon'
                                           : 'Valider la vente',
-                                      style: const TextStyle(
-                                        color: AppTheme.onBrand,
+                                      style: TextStyle(
+                                        color: submitFg,
                                         fontSize: 17,
                                         fontWeight: FontWeight.w700,
                                       ),

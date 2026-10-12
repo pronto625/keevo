@@ -48,7 +48,10 @@ void main() {
       expect(cs.onSurface, const Color(0xFFF0F4F8));
       expect(cs.onSurfaceVariant, const Color(0xFFADB5BD));
       expect(cs.surfaceContainerHighest, const Color(0xFF1B2838));
-      expect(cs.onError, AppTheme.onError);
+      // v1s-16-17 — UX-spec dark error with a dark foreground.
+      expect(cs.error, const Color(0xFFFF6B6B));
+      expect(cs.onError, AppTheme.onErrorDark);
+      expect(cs.onError, const Color(0xFF0D1B2A));
     });
 
     test('light theme onPrimary is white and onError explicit', () {
@@ -106,6 +109,90 @@ void main() {
         expect(contrast(AppTheme.onBrand, AppTheme.successStrong),
             greaterThanOrEqualTo(4.5));
       });
+    });
+
+    // v1s-16-17 — feedback fills: every fill/foreground pair is AA in
+    // light and dark (text ≥ 4.5:1, icons ≥ 3:1).
+    group('feedback fill pairs (v1s-16-17)', () {
+      double contrast(Color a, Color b) {
+        final la = a.computeLuminance();
+        final lb = b.computeLuminance();
+        return ((la > lb ? la : lb) + 0.05) / ((la > lb ? lb : la) + 0.05);
+      }
+
+      const aa = 4.5;
+
+      test('fixed tone fills are AA under onBrand', () {
+        for (final fill in [
+          AppTheme.successStrong,
+          AppTheme.errorStrong,
+          AppTheme.warningStrong,
+          AppTheme.primary,
+          AppTheme.violetDeep,
+          AppTheme.snackBarNeutral,
+          AppTheme.snackBarNeutralDark,
+        ]) {
+          expect(contrast(AppTheme.onBrand, fill), greaterThanOrEqualTo(aa),
+              reason: '$fill');
+        }
+        expect(AppTheme.errorStrong, const Color(0xFFC92A2A));
+      });
+
+      test('onWarning is AA on the warning fill', () {
+        expect(contrast(AppTheme.onWarning, AppTheme.warning),
+            greaterThanOrEqualTo(aa));
+      });
+
+      test('dark error pair is AA', () {
+        final cs = AppTheme.dark().colorScheme;
+        expect(contrast(cs.onError, cs.error), greaterThanOrEqualTo(aa));
+      });
+
+      test('light error token unchanged (indicator role)', () {
+        final cs = AppTheme.light().colorScheme;
+        expect(cs.error, const Color(0xFFFA5252));
+        expect(cs.onError, AppTheme.onError);
+      });
+
+      for (final theme in [AppTheme.light(), AppTheme.dark()]) {
+        final cs = theme.colorScheme;
+        final b = cs.brightness;
+
+        test('snackBarTheme: fixed neutral fill + onBrand content ($b)', () {
+          final sb = theme.snackBarTheme;
+          expect(
+              sb.backgroundColor,
+              b == Brightness.dark
+                  ? AppTheme.snackBarNeutralDark
+                  : AppTheme.snackBarNeutral);
+          expect(sb.contentTextStyle?.color, AppTheme.onBrand);
+          expect(sb.actionTextColor, AppTheme.onBrand);
+          expect(sb.closeIconColor, AppTheme.onBrand);
+          for (final fg in [
+            sb.contentTextStyle!.color!,
+            sb.actionTextColor!,
+            sb.closeIconColor!,
+          ]) {
+            expect(contrast(fg, sb.backgroundColor!), greaterThanOrEqualTo(aa));
+          }
+          // Built from the Inter text theme, not a bare TextStyle.
+          expect(sb.contentTextStyle?.fontFamily,
+              theme.textTheme.bodyMedium?.fontFamily);
+          expect(sb.contentTextStyle?.fontFamily, contains('Inter'));
+          expect(sb.contentTextStyle?.fontSize,
+              theme.textTheme.bodyMedium?.fontSize);
+        });
+
+        test('speed-dial closed pair is AA ($b)', () {
+          expect(contrast(cs.surface, cs.onSurfaceVariant),
+              greaterThanOrEqualTo(aa));
+        });
+
+        test('disabled CTA pair is AA ($b)', () {
+          expect(contrast(cs.onSurfaceVariant, cs.surfaceContainerHighest),
+              greaterThanOrEqualTo(aa));
+        });
+      }
     });
 
     test('softTint follows brightness', () {

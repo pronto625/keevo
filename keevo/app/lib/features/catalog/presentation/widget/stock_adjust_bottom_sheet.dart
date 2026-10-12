@@ -95,7 +95,7 @@ class _StockAdjustBottomSheetState
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Erreur lors de l\'ajustement'),
-              backgroundColor: AppTheme.errorColor,
+              backgroundColor: AppTheme.errorStrong,
             ),
           );
         }

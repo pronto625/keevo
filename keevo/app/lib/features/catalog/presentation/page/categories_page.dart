@@ -40,7 +40,7 @@ class _CategoriesPageState extends ConsumerState<CategoriesPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Catégorie « $name » créée'),
-            backgroundColor: AppTheme.success,
+            backgroundColor: AppTheme.successStrong,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -50,7 +50,7 @@ class _CategoriesPageState extends ConsumerState<CategoriesPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(appErrorMessage(e)),
-            backgroundColor: AppTheme.errorColor,
+            backgroundColor: AppTheme.errorStrong,
           ),
         );
       }
@@ -92,7 +92,7 @@ class _CategoriesPageState extends ConsumerState<CategoriesPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(appErrorMessage(e)),
-              backgroundColor: AppTheme.errorColor,
+              backgroundColor: AppTheme.errorStrong,
             ),
           );
         }
@@ -117,7 +117,10 @@ class _CategoriesPageState extends ConsumerState<CategoriesPage> {
           ),
           FilledButton(
             style:
-                FilledButton.styleFrom(backgroundColor: AppTheme.errorColor),
+                FilledButton.styleFrom(
+                  backgroundColor: AppTheme.errorStrong,
+                  foregroundColor: AppTheme.onBrand,
+                ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Supprimer'),
           ),
@@ -132,7 +135,7 @@ class _CategoriesPageState extends ConsumerState<CategoriesPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(appErrorMessage(e)),
-              backgroundColor: AppTheme.errorColor,
+              backgroundColor: AppTheme.errorStrong,
             ),
           );
         }

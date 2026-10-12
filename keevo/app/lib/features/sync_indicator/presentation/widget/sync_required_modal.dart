@@ -49,17 +49,17 @@ class _SyncRequiredModalState extends ConsumerState<SyncRequiredModal> {
               content: Row(
                 children: [
                   Icon(Icons.check_circle_rounded,
-                      color: AppTheme.onSuccess, size: 20),
+                      color: AppTheme.onBrand, size: 20),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Synchronisation réussie — accès complet restauré',
-                      style: TextStyle(color: AppTheme.onSuccess),
+                      style: TextStyle(color: AppTheme.onBrand),
                     ),
                   ),
                 ],
               ),
-              backgroundColor: AppTheme.success,
+              backgroundColor: AppTheme.successStrong,
               duration: Duration(seconds: 4),
             ),
           );

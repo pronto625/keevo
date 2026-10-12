@@ -45,7 +45,7 @@ class _ReportPreferencesPageState
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(next.successMessage!),
-            backgroundColor: AppTheme.success,
+            backgroundColor: AppTheme.successStrong,
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 3),
           ),
@@ -56,7 +56,7 @@ class _ReportPreferencesPageState
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(next.error ?? ''),
-            backgroundColor: AppTheme.secondary,
+            backgroundColor: AppTheme.errorStrong,
             behavior: SnackBarBehavior.floating,
           ),
         );
