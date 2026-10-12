@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo/features/contact/domain/model/client_model.dart';
+import 'package:keevo/features/contact/presentation/provider/contact_provider.dart';
 import 'package:keevo/features/pos/domain/model/cart_item.dart';
 import 'package:keevo/features/pos/presentation/page/checkout_page.dart';
 import 'package:keevo/features/pos/domain/model/payment_mode_enum.dart';
@@ -12,6 +14,26 @@ import 'package:keevo/features/stores/presentation/provider/active_store_provide
 class _FixedStore extends ActiveStoreNotifier {
   @override
   String? build() => 'store-1';
+}
+
+class _FakeClients extends ClientListNotifier {
+  @override
+  Future<List<ClientModel>> build() async => [
+        ClientModel(
+          id: 'c1',
+          name: 'Hélène Ngo',
+          phone: '690000001',
+          createdAt: DateTime(2026, 1, 1),
+          updatedAt: DateTime(2026, 1, 1),
+        ),
+        ClientModel(
+          id: 'c2',
+          name: 'Paul Biya',
+          phone: '690000002',
+          createdAt: DateTime(2026, 1, 1),
+          updatedAt: DateTime(2026, 1, 1),
+        ),
+      ];
 }
 
 class _CapturingRecordSale extends RecordSaleNotifier {
@@ -204,6 +226,24 @@ void main() {
       expect(_CapturingRecordSale.called, isTrue);
       expect(_CapturingRecordSale.mode, PaymentModeEnum.cash);
       expect(_CapturingRecordSale.mobileRef, isNull);
+    });
+
+    testWidgets('client autocomplete is accent-insensitive (v1s-16-16)',
+        (tester) async {
+      await tester.pumpWidget(_buildApp(
+        items: [_item(price: 10000, qty: 1)],
+        overrides: [clientListNotifierProvider.overrideWith(_FakeClients.new)],
+      ));
+      await tester.pumpAndSettle();
+
+      final field = find.widgetWithText(TextField, 'Client (optionnel)');
+      await tester.ensureVisible(field);
+      await tester.tap(field);
+      await tester.enterText(field, 'helene');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Hélène Ngo — 690000001'), findsOneWidget);
+      expect(find.text('Paul Biya — 690000002'), findsNothing);
     });
   });
 }

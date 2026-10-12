@@ -143,6 +143,61 @@ void main() {
             photoUrl: any(named: 'photoUrl'),
           ));
     });
+
+    // v1s-16-16: search() candidates are accent-insensitive; equality stays
+    // case-only, like the backend `lower(name)` unique index.
+    ProductModel named(String name) => ProductModel(
+          id: 'existing-$name',
+          name: name,
+          price: 500,
+          buyPrice: 0,
+          transportCost: 0,
+          createdAt: DateTime(2026, 4, 22),
+          updatedAt: DateTime(2026, 4, 22),
+        );
+
+    test('create "épicerie" next to "Épicerie" is a duplicate (non-ASCII case)',
+        () async {
+      when(() => mockLocal.search(any()))
+          .thenAnswer((_) async => [named('Épicerie')]);
+
+      await expectLater(
+        () => repo.create(name: 'épicerie', price: 500),
+        throwsA(isA<ProductException>()),
+      );
+    });
+
+    test('createDraft "épicerie" next to "Épicerie" is a duplicate', () async {
+      when(() => mockLocal.search(any()))
+          .thenAnswer((_) async => [named('Épicerie')]);
+
+      await expectLater(
+        () => repo.createDraft(
+            name: 'épicerie', priceVente: 500, categoryId: 'cat-1'),
+        throwsA(isA<ProductException>()),
+      );
+    });
+
+    test('create "Cafe" next to "Café" is allowed (accents are distinct)',
+        () async {
+      _stubInsert(_testProduct(id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12'));
+      when(() => mockLocal.search(any()))
+          .thenAnswer((_) async => [named('Café')]);
+      when(() => mockDispatcher.triggerPushIfIdle()).thenReturn(null);
+
+      await repo.create(name: 'Cafe', price: 500);
+
+      verify(() => mockLocal.insert(
+            name: 'Cafe',
+            description: any(named: 'description'),
+            sku: any(named: 'sku'),
+            categoryId: any(named: 'categoryId'),
+            price: any(named: 'price'),
+            buyPrice: any(named: 'buyPrice'),
+            transportCost: any(named: 'transportCost'),
+            photoUrl: any(named: 'photoUrl'),
+          )).called(1);
+    });
   });
 
   group('AC2 — update() offline-first', () {

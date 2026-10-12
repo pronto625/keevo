@@ -1,3 +1,4 @@
+import '../../../../core/storage/search_fold.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
 import 'package:flutter/material.dart';
@@ -318,11 +319,11 @@ class _InventoryCountingPageState
 
     // Apply search (AC5: name OR sku)
     if (search.isNotEmpty) {
-      final lower = search.toLowerCase();
+      final folded = foldForSearch(search);
       result = result
           .where((p) =>
-              p.productName.toLowerCase().contains(lower) ||
-              (p.sku != null && p.sku!.toLowerCase().contains(lower)))
+              foldForSearch(p.productName).contains(folded) ||
+              (p.sku != null && foldForSearch(p.sku!).contains(folded)))
           .toList();
     }
 

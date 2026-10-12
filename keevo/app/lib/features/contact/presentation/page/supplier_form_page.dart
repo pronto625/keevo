@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/storage/search_fold.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import '../../../catalog/domain/model/product_model.dart';
@@ -589,8 +590,9 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
     final theme = Theme.of(context);
     final primary = theme.colorScheme.primary;
 
+    final q = foldForSearch(_search);
     final filtered = widget.products
-        .where((p) => p.name.toLowerCase().contains(_search.toLowerCase()))
+        .where((p) => foldForSearch(p.name).contains(q))
         .toList();
 
     return DraggableScrollableSheet(

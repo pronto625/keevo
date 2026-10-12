@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../../../core/storage/app_database.dart';
+import '../../../../core/storage/search_fold.dart';
 import '../../../../core/storage/sql_like.dart';
 import '../../domain/model/client_model.dart';
 
@@ -21,12 +22,13 @@ class LocalClientDataSource {
   }
 
   Future<List<ClientModel>> search(String query) async {
-    final q = likeContains(query.toLowerCase());
+    final q = likeContainsFolded(query); // v1s-16-16
     final rows = await (_db.select(_db.clients)
           ..where((c) =>
               c.archived.equals(false) &
-              (c.name.lower().like(q, escapeChar: likeEscapeChar) |
-                  c.phone.lower().like(q, escapeChar: likeEscapeChar)))
+              (foldedSqlExpr(c.name).like(q, escapeChar: likeEscapeChar) |
+                  foldedSqlExpr(c.phone)
+                      .like(q, escapeChar: likeEscapeChar)))
           ..orderBy([(c) => OrderingTerm.asc(c.name)]))
         .get();
     return rows.map(_toModel).toList();

@@ -259,6 +259,69 @@ void main() {
       expect(await db.select(db.inventoryCounts).get(), isEmpty);
     });
 
+    // v1s-16-16: offline dedup candidates use the shared Unicode fold;
+    // equality stays case-only (backend `lower(name)` unique index).
+    group('offline local dedup (Unicode)', () {
+      Future<void> seedProduct(String id, String name) async {
+        final now = DateTime.now();
+        await db.into(db.products).insert(ProductsCompanion.insert(
+              id: id,
+              name: name,
+              createdAt: now,
+              updatedAt: now,
+            ));
+      }
+
+      Future<QuickAddResult?> quickAddOffline(String name) async {
+        when(() => mockDatasource.quickAdd(
+              sessionId: any(named: 'sessionId'),
+              name: any(named: 'name'),
+              categoryId: any(named: 'categoryId'),
+              physicalQty: any(named: 'physicalQty'),
+            )).thenThrow(DioException(
+          requestOptions: RequestOptions(path: ''),
+          type: DioExceptionType.connectionError,
+        ));
+        when(() => mockSyncService.queueOperation(
+              operation: any(named: 'operation'),
+              payload: any(named: 'payload'),
+              entityId: any(named: 'entityId'),
+            )).thenAnswer((_) async {});
+        final container = buildContainer();
+        addTearDown(container.dispose);
+        return container.read(quickAddProductNotifierProvider.notifier).quickAdd(
+              sessionId: 'session-001',
+              name: name,
+              categoryId: 'cat-001',
+              physicalQty: 1,
+            );
+      }
+
+      test('"épicerie" next to "Épicerie" is a duplicate', () async {
+        await seedProduct('p-epi', 'Épicerie');
+        expect(await quickAddOffline(' épicerie '), isNull);
+      });
+
+      test('"Epicerie" next to "Épicerie" is allowed', () async {
+        await seedProduct('p-epi', 'Épicerie');
+        final result = await quickAddOffline('Epicerie');
+        expect(result, isNotNull);
+        expect(result!.productName, 'Epicerie');
+      });
+
+      test('several fold candidates do not throw; case match is a duplicate',
+          () async {
+        await seedProduct('p-cafe-1', 'Café');
+        await seedProduct('p-cafe-2', 'Cafe');
+        expect(await quickAddOffline('CAFÉ'), isNull);
+      });
+
+      test('identical non-Latin name "ЖУК" is a duplicate', () async {
+        await seedProduct('p-zhuk', 'ЖУК');
+        expect(await quickAddOffline('ЖУК'), isNull);
+      });
+    });
+
     test('quickAdd state transitions to AsyncData on success', () async {
       when(() => mockDatasource.quickAdd(
             sessionId: any(named: 'sessionId'),

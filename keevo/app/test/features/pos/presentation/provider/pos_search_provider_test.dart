@@ -149,6 +149,27 @@ void main() {
             container.read(posSearchProvider).value!.map((r) => r.name);
         expect(names, containsAll(['Remise 50%', 'Riz 500g']));
       });
+
+      // v1s-16-16: case- and accent-insensitive.
+      for (final storeId in ['store-1', null]) {
+        test('"epicerie" / "ÉPICERIE" find "Épicerie fine" (storeId: $storeId)',
+            () async {
+          final now = DateTime.now();
+          await db.into(db.products).insert(ProductsCompanion.insert(
+                id: 'p3',
+                name: 'Épicerie fine',
+                createdAt: now,
+                updatedAt: now,
+              ));
+          final notifier = container.read(posSearchProvider.notifier);
+          for (final q in ['epicerie', 'ÉPICERIE']) {
+            await notifier.search(q, storeId);
+            final names =
+                container.read(posSearchProvider).value!.map((r) => r.name);
+            expect(names, ['Épicerie fine'], reason: q);
+          }
+        });
+      }
     });
   });
 }

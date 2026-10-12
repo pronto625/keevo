@@ -1165,7 +1165,7 @@ As a Toor, I want local searches to ignore case and accents beyond ASCII, so tha
 **Refs:** UX9, NFR5, Story 16.4 (fuzzy scoped out), Story 16.14 (`core/storage/sql_like.dart`).
 
 **Items (routed 2026-10-12 from build-auto v1s-16-14 review):**
-- [ ] [Deferred-from: build-auto v1s-16-14 review, 2026-10-12] Non-ASCII case-insensitive search fails ("épicerie" vs "Épicerie") [local_product_datasource.dart search(), pos_search_provider.dart, local_client/supplier_datasource.dart, local_multi_store_stock_datasource.dart] — SQLite LOWER folds ASCII only; also weakens the local duplicate-name check in ProductRepositoryImpl.create/createDraft
+- [x] [Deferred-from: build-auto v1s-16-14 review, 2026-10-12] Non-ASCII case-insensitive search fails ("épicerie" vs "Épicerie") [local_product_datasource.dart search(), pos_search_provider.dart, local_client/supplier_datasource.dart, local_multi_store_stock_datasource.dart] — SQLite LOWER folds ASCII only; also weakens the local duplicate-name check in ProductRepositoryImpl.create/createDraft — ✅ 2026-10-12 resolved (spec-v1s-16-16-search-unicode-folding.md): shared fold `core/storage/search_fold.dart` (SQL `replace()` over `lower()` + exact Dart mirror) on every listed site plus in-memory filters; dedup candidates folded, equality case-only (backend `lower(name)`). Explicitly rejected with reason: case folding for scripts outside the Latin/French/Cameroonian table (Cyrillic, Greek…) stays same-case-only in SQL — full ICU folding needs a registered function (rejected: every DB opener and test DB would need it); no schema migration needed.
 
 **AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
 

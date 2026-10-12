@@ -62,7 +62,10 @@ class ProductRepositoryImpl implements ProductRepository {
     int transportCost = 0,
     String? photoUrl,
   }) async {
-    // Check local name uniqueness first
+    // Check local name uniqueness first. v1s-16-16: search() candidates are
+    // case- and accent-insensitive; the equality below stays case-only,
+    // matching the backend `uq_products_name` index on `lower(name)`
+    // ("Café" and "Cafe" are two valid products).
     final existing = await _local.search(name);
     final duplicate = existing.any(
       (p) => p.name.toLowerCase() == name.toLowerCase(),
@@ -295,7 +298,9 @@ class ProductRepositoryImpl implements ProductRepository {
     required String categoryId,
     int stockQuantity = 0,
   }) async {
-    // Check local name uniqueness before hitting the backend
+    // Check local name uniqueness before hitting the backend. v1s-16-16:
+    // candidates accent-insensitive, equality case-only (backend
+    // `uq_products_name` on `lower(name)`).
     final existing = await _local.search(name);
     final duplicate = existing.any(
       (p) => p.name.toLowerCase() == name.toLowerCase(),

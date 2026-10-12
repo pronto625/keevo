@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/di/providers.dart';
 import '../../../../core/storage/app_database.dart';
+import '../../../../core/storage/search_fold.dart';
 import '../../../../core/sync/sync_monitoring_providers.dart';
 import '../../../../core/sync/sync_quarantine_service.dart';
 import '../../../../core/sync/sync_rejection_messages.dart';
@@ -538,13 +539,13 @@ class _ProductPickerDialogState extends State<_ProductPickerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final q = _query.trim().toLowerCase();
+    final q = foldForSearch(_query.trim());
     final filtered = q.isEmpty
         ? widget.products
         : widget.products
             .where((p) =>
-                p.name.toLowerCase().contains(q) ||
-                p.sku.toLowerCase().contains(q))
+                foldForSearch(p.name).contains(q) ||
+                foldForSearch(p.sku).contains(q))
             .toList();
     return AlertDialog(
       title: const Text('Choisir le produit'),
