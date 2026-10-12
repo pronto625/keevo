@@ -116,7 +116,7 @@ class AuditLogRepositoryAdapterTest {
         AuditPort.AuditPage page = adapter.findByEntityTypeAndEntityId("User", entityId, 0, 20);
 
         verify(nativeQuery).setParameter("entityType", "User");
-        verify(nativeQuery).setParameter("entityId", entityId.toString());
+        verify(nativeQuery).setParameter("entityId", entityId); // bound as uuid (v1s-18-6)
         verify(nativeQuery).setFirstResult(0);
         verify(nativeQuery).setMaxResults(21);
 
@@ -131,6 +131,8 @@ class AuditLogRepositoryAdapterTest {
         assertThat(record.valueAfter()).isEqualTo("{}");
         assertThat(record.actorPhone()).isEqualTo(phone);
         assertThat(record.occurredAt()).isEqualTo(now);
+        assertThat(record.source()).isNull();
+        assertThat(record.actorName()).isEqualTo("Le propriétaire"); // role fallback on a legacy row
     }
 
     @Test
@@ -195,7 +197,9 @@ class AuditLogRepositoryAdapterTest {
     /**
      * Build an Object[] row matching the SELECT_WITH_PHONE native query column order:
      * [0]=id::text, [1]=entity_type, [2]=entity_id::text, [3]=action,
-     * [4]=value_before, [5]=value_after, [6]=user_id::text, [7]=occurred_at, [8]=phone_number
+     * [4]=value_before, [5]=value_after, [6]=user_id::text, [7]=occurred_at, [8]=phone_number,
+     * v1s-18-6: [9]=store_id, [10]=store name, [11]=entity_label, [12]=device_id, [13]=source,
+     * [14]=metadata, [15]=employee name, [16]=metadata actorLabel, [17]=users.role (legacy row: nulls, OWNER)
      */
     private Object[] buildRow(UUID id, String entityType, UUID entityId, String action,
                               String valueBefore, String valueAfter, UUID userId,
@@ -209,7 +213,8 @@ class AuditLogRepositoryAdapterTest {
                 valueAfter,
                 userId.toString(),
                 Timestamp.from(occurredAt),
-                actorPhone
+                actorPhone,
+                null, null, null, null, null, null, null, null, "OWNER"
         };
     }
 

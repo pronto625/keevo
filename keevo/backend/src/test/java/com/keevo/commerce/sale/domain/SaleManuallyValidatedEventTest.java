@@ -21,9 +21,10 @@ class SaleManuallyValidatedEventTest {
         List<UUID> forcedProducts = List.of(forced1, forced2);
         String tenantId = "kv_test";
         Instant occurredAt = Instant.now();
+        UUID storeId = UUID.randomUUID();
 
         var event = new SaleManuallyValidatedEvent(
-                saleId, actorId, justification, forcedProducts, tenantId, occurredAt);
+                saleId, actorId, justification, forcedProducts, tenantId, occurredAt, storeId);
 
         assertThat(event.saleId()).isEqualTo(saleId);
         assertThat(event.actorId()).isEqualTo(actorId);
@@ -31,5 +32,6 @@ class SaleManuallyValidatedEventTest {
         assertThat(event.forcedProducts()).containsExactly(forced1, forced2);
         assertThat(event.tenantId()).isEqualTo(tenantId);
         assertThat(event.occurredAt()).isEqualTo(occurredAt);
+        assertThat(event.storeId()).isEqualTo(storeId);
     }
 }

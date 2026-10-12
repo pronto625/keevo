@@ -17,13 +17,15 @@ class SaleAutoValidatedEventTest {
         UUID actorId = UUID.randomUUID();
         String tenantId = "kv_test";
         Instant occurredAt = Instant.now();
+        UUID storeId = UUID.randomUUID();
 
-        var event = new SaleAutoValidatedEvent(saleId, triggerProductId, actorId, tenantId, occurredAt);
+        var event = new SaleAutoValidatedEvent(saleId, triggerProductId, actorId, tenantId, occurredAt, storeId);
 
         assertThat(event.saleId()).isEqualTo(saleId);
         assertThat(event.triggerProductId()).isEqualTo(triggerProductId);
         assertThat(event.actorId()).isEqualTo(actorId);
         assertThat(event.tenantId()).isEqualTo(tenantId);
         assertThat(event.occurredAt()).isEqualTo(occurredAt);
+        assertThat(event.storeId()).isEqualTo(storeId);
     }
 }

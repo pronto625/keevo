@@ -51,7 +51,7 @@ class SaleValidationCascadeServiceTest {
         TenantContext.setCurrentTenant("kv_test");
         service = new SaleValidationCascadeService(
                 saleRepository, productStatusPort, stockLevelRepository,
-                stockOperationService, eventPublisher);
+                stockOperationService, eventPublisher, new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules());
         // Story v1s-13-10: the cascade claims PENDING_VALIDATION→COMPLETED atomically; default = won.
         lenient().when(saleRepository.updateStatusIfCurrent(
                 any(), eq(SaleStatus.PENDING_VALIDATION), eq(SaleStatus.COMPLETED))).thenReturn(true);
@@ -97,6 +97,13 @@ class SaleValidationCascadeServiceTest {
         verify(eventPublisher, atLeastOnce()).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getAllValues()).anyMatch(e -> e instanceof SaleAutoValidatedEvent);
         assertThat(eventCaptor.getAllValues()).anyMatch(e -> e instanceof SaleCompletedEvent);
+        // v1s-18-6: the audit snapshot carries the real items, not a hard-coded "[]"
+        SaleCompletedEvent completed = eventCaptor.getAllValues().stream()
+                .filter(SaleCompletedEvent.class::isInstance).map(SaleCompletedEvent.class::cast)
+                .findFirst().orElseThrow();
+        assertThat(completed.getItemsSnapshot())
+                .contains(PRODUCT_A.toString())
+                .contains(PRODUCT_B.toString());
     }
 
     @Test

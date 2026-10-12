@@ -121,6 +121,7 @@ public enum ErrorCode {
     DELETION_NOT_PENDING,       // HTTP 409 — no deletion pending to cancel (Story 14.5)
     // ── Audit ─────────────────────────────────────────────────────────────
     AUDIT_IMMUTABLE,        // HTTP 403 — attempt to modify or delete an immutable audit entry
+    AUDIT_ENTRY_NOT_FOUND,  // HTTP 404 — audit entry id unknown in the tenant (v1s-18-6)
     // ── WhatsApp (Story 8.0) ──────────────────────────────────────────────
     WHATSAPP_DELIVERY_FAILED, // WhatsApp message delivery failed (Wassender API error or timeout)
     // ── Generic ───────────────────────────────────────────────────

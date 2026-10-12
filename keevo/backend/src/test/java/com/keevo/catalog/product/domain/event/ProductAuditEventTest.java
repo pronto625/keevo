@@ -15,6 +15,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.Instant;
 import java.util.UUID;
 
+import static com.keevo.shared.infrastructure.web.AuditEntryMatchers.ANY;
+import static com.keevo.shared.infrastructure.web.AuditEntryMatchers.entry;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -80,15 +82,7 @@ class ProductAuditEventTest {
         listener.on(event);
 
         // Then - verify auditPort.record() called with correct parameters
-        verify(auditPort).record(
-                eq(actorId),              // actorId
-                eq(tenantId),             // tenantId
-                eq("PRODUCT_CREATED"),    // action
-                eq("Product"),            // entityType
-                eq(productId),            // entityId
-                eq(null),                 // valueBefore — null for creation
-                any()                     // valueAfter — JSON with product details
-        );
+        verify(auditPort).record(entry(actorId, tenantId, "PRODUCT_CREATED", "Product", productId, null));
     }
 
     // ── ProductUpdatedEvent ───────────────────────────────────────────────────
@@ -117,15 +111,7 @@ class ProductAuditEventTest {
         listener.on(event);
 
         // Then - verify auditPort.record() with valueBefore/valueAfter from event
-        verify(auditPort).record(
-                eq(actorId),              // actorId
-                eq(tenantId),             // tenantId
-                eq("PRODUCT_UPDATED"),    // action
-                eq("Product"),            // entityType
-                eq(productId),            // entityId
-                eq(valueBefore),          // valueBefore — from event
-                eq(valueAfter)            // valueAfter — from event
-        );
+        verify(auditPort).record(entry(actorId, tenantId, "PRODUCT_UPDATED", "Product", productId, valueBefore, valueAfter));
     }
 
     // ── ProductArchivedEvent ──────────────────────────────────────────────────
@@ -151,15 +137,7 @@ class ProductAuditEventTest {
         listener.on(event);
 
         // Then - verify auditPort.record() called with correct parameters
-        verify(auditPort).record(
-                eq(actorId),              // actorId
-                eq(tenantId),             // tenantId
-                eq("PRODUCT_ARCHIVED"),   // action
-                eq("Product"),            // entityType
-                eq(productId),            // entityId
-                eq(null),                 // valueBefore — null for archive (just status change)
-                any()                     // valueAfter — JSON with archive details
-        );
+        verify(auditPort).record(entry(actorId, tenantId, "PRODUCT_ARCHIVED", "Product", productId, null));
     }
 
     // Note: Since Product endpoints are authenticated (@PreAuthorize("hasRole('USER')")), 
@@ -192,14 +170,6 @@ class ProductAuditEventTest {
         listener.on(event);
 
         // Then
-        verify(auditPort).record(
-                eq(actorId),
-                eq(tenantId),
-                eq("PRICE_OVERRIDDEN"),
-                eq("PriceOverride"),
-                eq(productId),
-                any(),   // valueBefore — JSON with cataloguePrice
-                any()    // valueAfter  — JSON with appliedPrice
-        );
+        verify(auditPort).record(entry(actorId, tenantId, "PRICE_OVERRIDDEN", "PriceOverride", productId));
     }
 }

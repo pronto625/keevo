@@ -118,6 +118,29 @@ class SyncControllerPushGateTest {
     }
 
     @Test
+    void push_runsBatchInsideSyncAuditContext_v1s_18_6() throws Exception {
+        mockJwt("OWNER");
+        when(syncGateCheckService.isStalePush("device-D")).thenReturn(false);
+        var seen = new java.util.concurrent.atomic.AtomicReference<String>();
+        when(syncUseCase.pushBatch(any())).thenAnswer(inv -> {
+            seen.set(com.keevo.shared.application.port.AuditContext.current()
+                    .map(com.keevo.shared.application.port.AuditContext.SyncContext::deviceId)
+                    .orElse("NONE"));
+            return new SyncBatchResult(Instant.now(), List.of());
+        });
+
+        mockMvc.perform(post("/api/v1/sync/push")
+                        .header("Authorization", "Bearer fake-jwt")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(validPushBody("device-D"))))
+                .andExpect(status().isOk());
+
+        org.assertj.core.api.Assertions.assertThat(seen.get()).isEqualTo("device-D");
+        org.assertj.core.api.Assertions.assertThat(com.keevo.shared.application.port.AuditContext.current())
+                .as("sync context cleared after the push").isEmpty();
+    }
+
+    @Test
     void push_unknownDevice_returns200() throws Exception {
         mockJwt("OWNER");
         // Device not found in DB → isStalePush returns false → first push allowed

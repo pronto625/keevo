@@ -215,7 +215,14 @@ public class TenantSchemaProvisioner {
                 action       VARCHAR(80) NOT NULL,
                 value_before TEXT,
                 value_after  TEXT,
-                occurred_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                occurred_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                store_id     UUID,
+                entity_label VARCHAR(200),
+                device_id    VARCHAR(100),
+                source       VARCHAR(10),
+                metadata     JSONB,
+                CONSTRAINT audit_log_source_check
+                    CHECK (source IS NULL OR source IN ('ONLINE', 'SYNC', 'SYSTEM'))
             )""";
 
     static final String DDL_AUDIT_LOG_IDX_ENTITY =
@@ -223,6 +230,76 @@ public class TenantSchemaProvisioner {
 
     static final String DDL_AUDIT_LOG_IDX_OCCURRED =
             "CREATE INDEX IF NOT EXISTS idx_audit_log_occurred ON audit_log(occurred_at DESC)";
+
+    // ── Audit log enrichment (Story v1s-18-6) — idempotent for pre-existing tenants ──
+
+    static final String DDL_AUDIT_LOG_MIGRATE_STORE_ID =
+            "ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS store_id UUID";
+    static final String DDL_AUDIT_LOG_MIGRATE_ENTITY_LABEL =
+            "ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS entity_label VARCHAR(200)";
+    static final String DDL_AUDIT_LOG_MIGRATE_DEVICE_ID =
+            "ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS device_id VARCHAR(100)";
+    static final String DDL_AUDIT_LOG_MIGRATE_SOURCE =
+            "ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS source VARCHAR(10)";
+    static final String DDL_AUDIT_LOG_MIGRATE_METADATA =
+            "ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS metadata JSONB";
+
+    /** The column may have been added by the column sync (no CHECK) — add the CHECK once. */
+    static final String DDL_AUDIT_LOG_SOURCE_CHECK = """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                               WHERE conname = 'audit_log_source_check'
+                                 AND conrelid = 'audit_log'::regclass) THEN
+                    ALTER TABLE audit_log ADD CONSTRAINT audit_log_source_check
+                        CHECK (source IS NULL OR source IN ('ONLINE', 'SYNC', 'SYSTEM'));
+                END IF;
+            END $$""";
+
+    static final String DDL_AUDIT_LOG_IDX_STORE_OCCURRED =
+            "CREATE INDEX IF NOT EXISTS idx_audit_log_store_occurred ON audit_log(store_id, occurred_at DESC)";
+    static final String DDL_AUDIT_LOG_IDX_USER_OCCURRED =
+            "CREATE INDEX IF NOT EXISTS idx_audit_log_user_occurred ON audit_log(user_id, occurred_at DESC)";
+    static final String DDL_AUDIT_LOG_IDX_ACTION_OCCURRED =
+            "CREATE INDEX IF NOT EXISTS idx_audit_log_action_occurred ON audit_log(action, occurred_at DESC)";
+
+    /**
+     * Tenant-local trigger function (created in the tenant schema via search_path) so the
+     * guard never depends on the public schema. NFR13 at database level.
+     */
+    static final String DDL_AUDIT_LOG_IMMUTABLE_FUNCTION = """
+            CREATE OR REPLACE FUNCTION keevo_audit_log_immutable() RETURNS trigger
+                LANGUAGE plpgsql AS $$
+            BEGIN
+                RAISE EXCEPTION 'audit_log is append-only (% rejected)', TG_OP
+                    USING ERRCODE = 'insufficient_privilege';
+            END $$""";
+    static final String DDL_AUDIT_LOG_TRIGGER_NO_MUTATION = """
+            CREATE OR REPLACE TRIGGER trg_audit_log_no_mutation
+                BEFORE UPDATE OR DELETE ON audit_log
+                FOR EACH ROW EXECUTE FUNCTION keevo_audit_log_immutable()""";
+    static final String DDL_AUDIT_LOG_TRIGGER_NO_TRUNCATE = """
+            CREATE OR REPLACE TRIGGER trg_audit_log_no_truncate
+                BEFORE TRUNCATE ON audit_log
+                FOR EACH STATEMENT EXECUTE FUNCTION keevo_audit_log_immutable()""";
+    static final String DDL_AUDIT_LOG_REVOKE_PUBLIC =
+            "REVOKE UPDATE, DELETE, TRUNCATE ON audit_log FROM PUBLIC";
+
+    /** Ordered audit enrichment DDL, executed by the provisioner and by the boot/request sync. */
+    static final java.util.List<String> DDL_AUDIT_LOG_ENRICHMENT = java.util.List.of(
+            DDL_AUDIT_LOG_MIGRATE_STORE_ID,
+            DDL_AUDIT_LOG_MIGRATE_ENTITY_LABEL,
+            DDL_AUDIT_LOG_MIGRATE_DEVICE_ID,
+            DDL_AUDIT_LOG_MIGRATE_SOURCE,
+            DDL_AUDIT_LOG_MIGRATE_METADATA,
+            DDL_AUDIT_LOG_SOURCE_CHECK,
+            DDL_AUDIT_LOG_IDX_STORE_OCCURRED,
+            DDL_AUDIT_LOG_IDX_USER_OCCURRED,
+            DDL_AUDIT_LOG_IDX_ACTION_OCCURRED,
+            DDL_AUDIT_LOG_IMMUTABLE_FUNCTION,
+            DDL_AUDIT_LOG_TRIGGER_NO_MUTATION,
+            DDL_AUDIT_LOG_TRIGGER_NO_TRUNCATE,
+            DDL_AUDIT_LOG_REVOKE_PUBLIC);
 
     // ── Stock levels (Story 2.3) ───────────────────────────────────────────────
 
@@ -875,6 +952,9 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_AUDIT_LOG);
             stmt.execute(DDL_AUDIT_LOG_IDX_ENTITY);
             stmt.execute(DDL_AUDIT_LOG_IDX_OCCURRED);
+            for (String ddl : DDL_AUDIT_LOG_ENRICHMENT) { // Story v1s-18-6
+                stmt.execute(ddl);
+            }
             // Story 2.3 — stock tables
             stmt.execute(DDL_STOCK_LEVELS);
             stmt.execute(DDL_STOCK_LEVELS_IDX_PRODUCT);

@@ -1,5 +1,6 @@
 package com.keevo.sync.sync.adapter.in.rest;
 
+import com.keevo.shared.application.port.AuditContext;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
@@ -160,8 +161,10 @@ public class SyncController {
                         dto.payload(), dto.clientTimestamp()))
                 .toList();
 
-        SyncBatchResult result = syncUseCase.pushBatch(
-                new PushBatchCommand(actorId, tenantId, deviceId, operations));
+        // Story v1s-18-6 — audit entries written while applying the batch carry source=SYNC and
+        // this deviceId (listener runs synchronously on this thread; context restored in finally).
+        SyncBatchResult result = AuditContext.runAsSync(deviceId, () -> syncUseCase.pushBatch(
+                new PushBatchCommand(actorId, tenantId, deviceId, operations)));
 
         // ── Record successful push timestamp ──────────────────────────────────
         boolean written = userSyncStateRepository.upsert(

@@ -12,5 +12,6 @@ public record InventorySessionCancelledEvent(
         UUID sessionId,
         UUID actorId,
         String tenantId,
-        Instant occurredAt
+        Instant occurredAt,
+        UUID storeId          // v1s-18-6: store the action happened in (audit store_id)
 ) {}

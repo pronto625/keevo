@@ -141,7 +141,8 @@ public class QuickAddProductService implements QuickAddProductUseCase {
         eventPublisher.publishEvent(new InventoryCountSavedEvent(
                 savedCount.getId(), cmd.sessionId(), savedProduct.getId(), null,
                 0, cmd.physicalQty(), savedCount.getEcart(),
-                cmd.actorId(), TenantContext.getCurrentTenant(), now
+                cmd.actorId(), TenantContext.getCurrentTenant(), now,
+                session.getStoreId()
         ));
 
         return new QuickAddProductResult(savedProduct, savedStock, savedCount);

@@ -63,7 +63,8 @@ public class SaveInventoryCountService implements SaveInventoryCountUseCase {
         eventPublisher.publishEvent(new InventoryCountSavedEvent(
                 saved.getId(), saved.getSessionId(), saved.getProductId(), saved.getVariantId(),
                 saved.getTheoretical(), saved.getPhysical(), saved.getEcart(),
-                command.actorId(), TenantContext.getCurrentTenant(), Instant.now()));
+                command.actorId(), TenantContext.getCurrentTenant(), Instant.now(),
+                session.getStoreId()));
 
         return saved;
     }

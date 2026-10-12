@@ -3,6 +3,7 @@ package com.keevo.shared.infrastructure.web;
 import com.keevo.shared.application.port.AuditPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.dto.AuditEntryResponse;
 import com.keevo.shared.infrastructure.web.dto.AuditPageResponse;
 import org.springframework.http.ResponseEntity;
@@ -11,19 +12,15 @@ import org.springframework.web.bind.annotation.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
  * AuditController — Query endpoint for immutable audit log entries.
  *
  * <p>Story 1.8 — GET /api/v1/audit with optional filters.
- *
- * <p><b>Three routing branches (AC3):</b>
- * <ul>
- *   <li>Both {@code entityType} and {@code entityId} present → filtered query</li>
- *   <li>Only {@code entityType} → type-only filter query</li>
- *   <li>No params → full tenant log (safe: TenantContext scopes to caller's schema)</li>
- * </ul>
+ * Story v1s-18-6 — OWNER-only, filtered + cursor-paged list, {@code GET /{id}} detail. No
+ * filter → full tenant log (safe: TenantContext scopes to the caller's schema).
  *
  * <p><b>Immutability protection (AC2):</b> DELETE and PUT endpoints throw
  * {@code DomainException(AUDIT_IMMUTABLE)} and return HTTP 403. No modifications possible.
@@ -40,6 +37,8 @@ public class AuditController {
 
     private static final Logger log = LoggerFactory.getLogger(AuditController.class);
 
+    static final int MAX_SIZE = 100;
+
     private final AuditPort auditPort;
 
     public AuditController(AuditPort auditPort) {
@@ -47,56 +46,82 @@ public class AuditController {
     }
 
     /**
-     * Query audit entries (paginated) with optional filters.
+     * Query audit entries — OWNER only (FR98), newest first ({@code occurredAt DESC, id DESC}).
      *
-     * <p>Pagination: {@code page} (0-based, default 0) and {@code size} (default 20).
-     * Response includes {@code hasMore=true} when a next page exists.
+     * <p>Filters (all optional, Story v1s-18-6): {@code from}/{@code to} (ISO-8601 instants,
+     * inclusive), {@code storeId}, {@code userId}, {@code action}, {@code entityType},
+     * {@code entityId}. Paging: keyset {@code cursor} (from {@code nextCursor}) or legacy
+     * {@code page} (0-based offset, used only without cursor). {@code size} 1..100, default 20.
      *
-     * <p>Both entityType/entityId params are optional — a missing param is not an error (AC3).
-     * Routing: both → filtered | entityType only → type filter | none → full tenant log.
-     *
-     * @param entityType optional entity type filter (e.g. "Product", "User")
-     * @param entityId   optional entity UUID filter — ignored if entityType is absent
-     * @param page       zero-based page index (default 0)
-     * @param size       page size, max entries per response (default 20)
-     * @return HTTP 200 with paginated audit entries sorted occurredAt DESC
+     * @return HTTP 200 with entries, {@code hasMore}, {@code page}, {@code size}, {@code nextCursor};
+     *         400 VALIDATION_ERROR on a malformed parameter; 403 for a non-OWNER actor
      */
     @GetMapping
     public ResponseEntity<ApiResponseWrapper<AuditPageResponse>> getAuditHistory(
+            @RequestParam(required = false) Instant from,
+            @RequestParam(required = false) Instant to,
+            @RequestParam(required = false) UUID storeId,
+            @RequestParam(required = false) UUID userId,
+            @RequestParam(required = false) String action,
             @RequestParam(required = false) String entityType,
-            @RequestParam(required = false) String entityId,
+            @RequestParam(required = false) UUID entityId,
+            @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "0")  int page,
             @RequestParam(defaultValue = "20") int size) {
 
-        AuditPort.AuditPage auditPage;
+        CurrentActor.requireOwner("Audit log is restricted to the owner");
 
-        if (entityType != null && entityId != null) {
-            // Branch 1: both filters present — validate UUID format before delegating
-            UUID entityUuid;
+        if (size < 1 || size > MAX_SIZE) {
+            throw new InvalidRequestParameterException("size", "size must be between 1 and " + MAX_SIZE);
+        }
+        if (page < 0) {
+            throw new InvalidRequestParameterException("page", "page must be >= 0");
+        }
+        if ((long) page * size > Integer.MAX_VALUE) {
+            throw new InvalidRequestParameterException("page", "page * size exceeds the maximum offset");
+        }
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new InvalidRequestParameterException("from", "from must not be after to");
+        }
+        String effectiveCursor = cursor == null || cursor.isBlank() ? null : cursor;
+        if (effectiveCursor != null) {
             try {
-                entityUuid = UUID.fromString(entityId);
+                AuditPort.AuditCursor.decode(effectiveCursor);
             } catch (IllegalArgumentException e) {
-                log.debug("Invalid entityId UUID format received: {}", entityId);
-                throw new DomainException(ErrorCode.VALIDATION_ERROR,
-                        "entityId doit être un UUID valide (format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)");
+                log.debug("Malformed audit cursor received");
+                throw new InvalidRequestParameterException("cursor", "cursor is malformed");
             }
-            auditPage = auditPort.findByEntityTypeAndEntityId(entityType, entityUuid, page, size);
-        } else if (entityType != null) {
-            // Branch 2: entity type only
-            auditPage = auditPort.findByEntityType(entityType, page, size);
-        } else {
-            // Branch 3: no filters — full tenant log (safe: schema routing scopes to caller's tenant)
-            auditPage = auditPort.findAll(page, size);
         }
 
-        AuditPageResponse response = new AuditPageResponse(
-                auditPage.entries().stream().map(AuditEntryResponse::fromRecord).toList(),
-                auditPage.hasMore(),
-                page,
-                size
-        );
+        AuditPort.AuditQuery query = new AuditPort.AuditQuery(
+                from, to, storeId, userId, blankToNull(action), blankToNull(entityType), entityId);
+        AuditPort.AuditSlice slice = auditPort.search(query, effectiveCursor, page, size);
 
+        AuditPageResponse response = new AuditPageResponse(
+                slice.entries().stream().map(AuditEntryResponse::fromRecord).toList(),
+                slice.hasMore(),
+                page,
+                size,
+                slice.nextCursor()
+        );
         return ResponseEntity.ok(ApiResponseWrapper.ok(response));
+    }
+
+    /**
+     * Full detail of one entry — OWNER only. 404 {@code AUDIT_ENTRY_NOT_FOUND} when unknown in
+     * the caller's tenant (schema routing scopes the lookup).
+     */
+    @GetMapping("/{id}")
+    public ResponseEntity<ApiResponseWrapper<AuditEntryResponse>> getAuditEntry(@PathVariable UUID id) {
+        CurrentActor.requireOwner("Audit log is restricted to the owner");
+        AuditPort.AuditEntryRecord entry = auditPort.findById(id)
+                .orElseThrow(() -> new DomainException(ErrorCode.AUDIT_ENTRY_NOT_FOUND,
+                        "Audit entry not found"));
+        return ResponseEntity.ok(ApiResponseWrapper.ok(AuditEntryResponse.fromRecord(entry)));
+    }
+
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() ? null : s;
     }
 
     /**

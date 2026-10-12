@@ -1,6 +1,5 @@
 package com.keevo.commerce.sale.application.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.catalog.stock.domain.entity.MovementType;
 import com.keevo.catalog.stock.domain.service.StockOperationService;
@@ -65,7 +64,7 @@ public class CorrectSaleService implements CorrectSaleUseCase {
 
         JustificationPolicy.requireStrict(command.justification());
 
-        String beforeSnapshot = serializeItems(sale.getItems());
+        String beforeSnapshot = serializeItems(sale.getItems(), sale.getId());
 
         List<SaleItem> correctedItems = new ArrayList<>();
         for (SaleItem item : sale.getItems()) {
@@ -121,15 +120,12 @@ public class CorrectSaleService implements CorrectSaleUseCase {
         String tenantId = TenantContext.getCurrentTenant();
         eventPublisher.publishEvent(new SaleCorrectedEvent(
                 sale.getId(), command.actorId(), command.justification(),
-                beforeSnapshot, serializeItems(correctedItems), tenantId, Instant.now()));
+                beforeSnapshot, serializeItems(correctedItems, sale.getId()), tenantId, Instant.now(),
+                sale.getStoreId()));
     }
 
-    private String serializeItems(List<SaleItem> items) {
-        try {
-            return objectMapper.writeValueAsString(items);
-        } catch (JsonProcessingException e) {
-            return "[]";
-        }
+    private String serializeItems(List<SaleItem> items, UUID saleId) {
+        return SaleAuditSnapshot.serialize(objectMapper, items, saleId);
     }
 
     private void enforceEmployeeStoreScope(UUID assignedStoreId, UUID saleStoreId) {

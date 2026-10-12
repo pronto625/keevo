@@ -418,8 +418,8 @@ development_status:
   v1s-18-3-pdf-templates: backlog                     # FR95 — EOD, inventaire, état de stock, ventes
   v1s-18-4-export-screen-app: backlog                 # FR55, FR94, FR96 — écran Exporter + Mes exports
   v1s-18-5-local-offline-csv-export: backlog          # FR97 — CSV depuis Drift, hors ligne
-  v1s-18-6-audit-enrichment-backend: in-progress          # FR84 — store/label/device/source/metadata + GET /audit/{id}
-  v1s-18-7-audit-log-screen-app: backlog              # FR98 — liste filtrable + détail cliquable
+  v1s-18-6-audit-enrichment-backend: done                 # FR84 — store/label/device/source/metadata + GET /audit/{id} ; 2026-10-12 done — spec-v1s-18-6-audit-enrichment-backend.md
+  v1s-18-7-audit-log-screen-app: backlog              # FR98 — liste filtrable + détail cliquable ; 2026-10-12 build-auto v1s-18-6 review — 2 items
   v1s-epic-18-retrospective: optional
 
   # Suivi audit 2026-10-11 (dashboard Next.js)

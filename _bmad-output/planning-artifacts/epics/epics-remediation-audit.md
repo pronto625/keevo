@@ -1321,8 +1321,8 @@ As an owner, I want each audit entry to say who, what, on what, where and how, s
 **And** immutability is unchanged (NFR13) and an EMPLOYEE gets 403
 
 **Items (routed 2026-10-11 from deferred-work):**
-- [ ] [Deferred-from: CR v1s-13-5, 2026-07-22] Audit snapshot silently '[]' on JSON serialization failure [ValidateSaleService.java:212-217, CorrectSaleService.java:127, RecordSaleService.java] — log/alert on failure across commerce/sale serializers
-- [ ] [Deferred-from: v1s-15-5 new defers, 2026-07-23] D3 audit_log has no DB-level immutability [V1__baseline_public.sql:22-30] — story title promises append-only DB; add trigger BEFORE UPDATE/DELETE + REVOKE (Flyway V10) (owner decision 2026-10-11: 11-3 stays done, DB-level protection delivered here)
+- [x] [Deferred-from: CR v1s-13-5, 2026-07-22] Audit snapshot silently '[]' on JSON serialization failure [ValidateSaleService.java:212-217, CorrectSaleService.java:127, RecordSaleService.java] — log/alert on failure across commerce/sale serializers — ✅ v1s-18-6: `SaleAuditSnapshot` logs `AUDIT_SNAPSHOT_SERIALIZATION_FAILED` at ERROR + marker snapshot; hard-coded `[]` replaced by real items (spec-v1s-18-6-audit-enrichment-backend.md)
+- [x] [Deferred-from: v1s-15-5 new defers, 2026-07-23] D3 audit_log has no DB-level immutability [V1__baseline_public.sql:22-30] — story title promises append-only DB; add trigger BEFORE UPDATE/DELETE + REVOKE (Flyway V10) (owner decision 2026-10-11: 11-3 stays done, DB-level protection delivered here) — ✅ v1s-18-6: Flyway V14 + tenant DDL, BEFORE UPDATE/DELETE row trigger + BEFORE TRUNCATE trigger, REVOKE FROM PUBLIC; REVOKE from the owner role rejected (owner can re-grant; the trigger blocks the owner too)
 
 **AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
 
@@ -1336,6 +1336,10 @@ As an owner, I want to tap an audit line and see its full detail.
 **Given** an owner **When** tapping an audit line **Then** the detail shows actor, action, object, time, store, source and the field-by-field changes
 **And** offline the list shows the last known state, and unknown action types use a generic rendering
 **And** the screen is hidden from employees
+
+**Items (routed 2026-10-12 from build-auto v1s-18-6 review):**
+- [ ] [Deferred-from: review v1s-18-6, 2026-10-12] Sync pull ships the enriched tenant audit log (`auditEntries`, incl. metadata ip/justification) to EMPLOYEE devices while REST `/api/v1/audit` is OWNER-only [keevo/backend/src/main/java/com/keevo/sync/sync/application/provider/AuditEntryDeltaProvider.java, SyncPushService.java:366] — make the pull role-aware (skip `auditEntries` for non-OWNER) when the offline owner list is built; `DeltaEntityProvider` has no role input today
+- [ ] [Deferred-from: review v1s-18-6, 2026-10-12] Generic `entityLabel` for sales ("Vente"), closures and inventory, null for employee events [AuditEventListener.java] — decide from the detail screen whether a richer label (receipt number, date, employee name) must be carried by the events
 
 ---
 

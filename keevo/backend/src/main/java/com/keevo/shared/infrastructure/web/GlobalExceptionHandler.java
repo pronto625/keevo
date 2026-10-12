@@ -55,6 +55,7 @@ public class GlobalExceptionHandler {
             Map.entry("PLAN_LIMIT_EXCEEDED",       "Limite de votre plan atteinte"),
             Map.entry("RATE_LIMIT_EXCEEDED",       "Trop de requêtes, veuillez patienter"),
             Map.entry("AUDIT_IMMUTABLE",           "Les entrées du journal d'audit ne peuvent pas être modifiées"),
+            Map.entry("AUDIT_ENTRY_NOT_FOUND",     "Entrée du journal d'audit introuvable"),
             Map.entry("INSUFFICIENT_STOCK",        "Stock insuffisant pour cette opération"),
             Map.entry("STOCK_NOT_FOUND",           "Niveau de stock introuvable"),
             Map.entry("CLIENT_NOT_FOUND",          "Client introuvable"),
@@ -146,6 +147,18 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(InvalidRequestParameterException.class)
+    public ResponseEntity<ApiResponseWrapper<Void>> handleInvalidParameter(
+            InvalidRequestParameterException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponseWrapper.error(
+                        "Paramètre invalide : " + ex.getParameter(),
+                        HttpStatus.BAD_REQUEST.name(),
+                        "VALIDATION_ERROR",
+                        null
+                ));
+    }
+
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ResponseEntity<ApiResponseWrapper<Void>> handleMissingParam(
             MissingServletRequestParameterException ex) {
@@ -209,6 +222,7 @@ public class GlobalExceptionHandler {
                  "INVENTORY_SESSION_NOT_FOUND",
                  "INVENTORY_STORE_NOT_FOUND",
                  "REPORT_NOT_FOUND",
+                 "AUDIT_ENTRY_NOT_FOUND",
                  "NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "UNAUTHORIZED", "TOKEN_EXPIRED",
                  "TOKEN_INVALID",

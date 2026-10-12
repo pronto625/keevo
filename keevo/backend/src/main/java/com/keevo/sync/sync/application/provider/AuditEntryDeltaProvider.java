@@ -31,7 +31,8 @@ public class AuditEntryDeltaProvider implements DeltaEntityProvider {
         Instant effectiveSince = since.isAfter(thirtyDaysAgo) ? since : thirtyDaysAgo;
 
         var page = DeltaPageQuery.fetch(em,
-                "id, user_id, entity_type, entity_id, action, value_before, value_after, occurred_at",
+                "id, user_id, entity_type, entity_id, action, value_before, value_after, occurred_at, "
+                        + "store_id, entity_label, device_id, source, CAST(metadata AS text)",
                 "audit_log", "occurred_at", effectiveSince, after, limit);
         return new Page(page.rows().stream().map(this::mapRow).toList(), page.next());
     }
@@ -46,6 +47,12 @@ public class AuditEntryDeltaProvider implements DeltaEntityProvider {
         map.put("valueBefore", str(row[5]));
         map.put("valueAfter", str(row[6]));
         map.put("occurredAt", ts(row[7]));
+        // Story v1s-18-6 — additive enrichment keys (null on rows written before V14)
+        map.put("storeId", str(row[8]));
+        map.put("entityLabel", str(row[9]));
+        map.put("deviceId", str(row[10]));
+        map.put("source", str(row[11]));
+        map.put("metadata", str(row[12]));
         return map;
     }
 

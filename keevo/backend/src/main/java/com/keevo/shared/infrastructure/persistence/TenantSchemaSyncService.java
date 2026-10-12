@@ -305,6 +305,10 @@ public class TenantSchemaSyncService {
             stmt.execute(TenantSchemaProvisioner.DDL_NOTIFICATION_COOLDOWNS_IDX_TYPE_STORE);
             // Story 8.1 — trend notification preference migration
             stmt.execute(TenantSchemaProvisioner.DDL_TENANT_PREFS_MIGRATE_TREND_NOTIFICATION);
+            // Story v1s-18-6 — audit enrichment columns, indexes, append-only trigger
+            for (String ddl : TenantSchemaProvisioner.DDL_AUDIT_LOG_ENRICHMENT) {
+                stmt.execute(ddl);
+            }
             stmt.execute("SET search_path TO public");
         }
     }
