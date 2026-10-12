@@ -13,6 +13,13 @@ String _localDay(String column) =>
     "(CASE WHEN $column LIKE '%Z' THEN date($column, 'localtime') "
     "ELSE substr($column, 1, 10) END)";
 
+/// SQL expression giving the local Monday (`YYYY-MM-DD`) of the week of a
+/// Drift DateTime column (weeks start Monday; `%w`: 0 = Sunday).
+String _localMonday(String column) {
+  final day = _localDay(column);
+  return "date($day, '-' || ((CAST(strftime('%w', $day) AS INTEGER) + 6) % 7) || ' days')";
+}
+
 /// LocalDashboardDatasource — Drift SQL aggregation queries for dashboard.
 ///
 /// GoF Builder: getDashboardSnapshot() orchestrates multiple async queries
@@ -20,12 +27,47 @@ String _localDay(String column) =>
 /// Story 7.1 — AC2, AC3, AC4, AC7, AC8.
 class LocalDashboardDatasource {
   final AppDatabase _db;
+  final DateTime Function() _now;
 
-  LocalDashboardDatasource(this._db);
+  /// [now] is the clock (v1s-16-19: injectable for tests); defaults to
+  /// [DateTime.now] so production wiring is unchanged.
+  LocalDashboardDatasource(this._db, {DateTime Function()? now})
+      : _now = now ?? DateTime.now;
+
+  /// Local Monday 00:00 of the week containing [date] (weeks start Monday).
+  /// Calendar-field arithmetic only — no `Duration` subtraction, which would
+  /// shift by an hour across a DST change.
+  @visibleForTesting
+  static DateTime mondayOf(DateTime date) =>
+      DateTime(date.year, date.month, date.day - (date.weekday - 1));
+
+  /// Test hook: the local-Monday SQL expression applied to [column].
+  @visibleForTesting
+  static String localMondaySql(String column) => _localMonday(column);
+
+  /// Coarse SQL lower bound for the chart queries: one calendar day before
+  /// [start]. `occurred_at` is compared as raw text, so a row synced in UTC
+  /// (`<Sunday>T23:30:00.000Z`) that `_localDay` buckets into the first slot
+  /// would sort before `<Monday>T00:00:00.000 +01:00`. Rows outside the window
+  /// are dropped by the slot-key lookup (zero-filled maps).
+  static DateTime _prefilter(DateTime start) =>
+      DateTime(start.year, start.month, start.day - 1);
+
+  static String _d(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  /// The 12 weekly slots (local Mondays 00:00), oldest → newest, ending with
+  /// the week containing [now]. Shared with the remote zero-fill
+  /// (dashboard_providers) so online and offline charts have the same slots.
+  static List<DateTime> weeklySlots(DateTime now) {
+    final m = mondayOf(now);
+    return List.generate(
+        12, (i) => DateTime(m.year, m.month, m.day - (11 - i) * 7));
+  }
 
   /// Today's total CA across all stores (COMPLETED sales only).
   Future<int> getTodayCA() async {
-    final now = DateTime.now();
+    final now = _now();
     final startOfDay = DateTime(now.year, now.month, now.day);
     final result = await _db.customSelect(
       'SELECT COALESCE(SUM(total_amount), 0) AS total FROM sales '
@@ -37,7 +79,7 @@ class LocalDashboardDatasource {
 
   /// Yesterday's total CA across all stores.
   Future<int> getYesterdayCA() async {
-    final now = DateTime.now();
+    final now = _now();
     final startYesterday = DateTime(now.year, now.month, now.day - 1);
     final endYesterday = DateTime(now.year, now.month, now.day);
     final result = await _db.customSelect(
@@ -54,7 +96,7 @@ class LocalDashboardDatasource {
 
   /// Day-before-yesterday's total CA.
   Future<int> getDayBeforeYesterdayCA() async {
-    final now = DateTime.now();
+    final now = _now();
     final start = DateTime(now.year, now.month, now.day - 2);
     final end = DateTime(now.year, now.month, now.day - 1);
     final result = await _db.customSelect(
@@ -72,7 +114,7 @@ class LocalDashboardDatasource {
   /// Daily CA for the last 30 days, grouped by date.
   /// Zero-fills missing days so the chart always has 30 bars.
   Future<List<DailyCA>> getDailyCAForLast30Days() async {
-    final now = DateTime.now();
+    final now = _now();
     final start = DateTime(now.year, now.month, now.day - 29);
     final rows = await _db.customSelect(
       'SELECT ${_localDay('occurred_at')} AS day, COALESCE(SUM(total_amount), 0) AS total '
@@ -80,7 +122,7 @@ class LocalDashboardDatasource {
       'GROUP BY ${_localDay('occurred_at')} ORDER BY day ASC',
       variables: [
         Variable.withString('COMPLETED'),
-        Variable.withDateTime(start),
+        Variable.withDateTime(_prefilter(start)),
       ],
     ).get();
     final dataMap = <String, int>{};
@@ -88,15 +130,14 @@ class LocalDashboardDatasource {
       dataMap[row.read<String>('day')] = row.read<int>('total');
     }
     return List.generate(30, (i) {
-      final d = start.add(Duration(days: i));
-      final key = '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-      return DailyCA(date: d, amount: dataMap[key] ?? 0);
+      final d = DateTime(start.year, start.month, start.day + i);
+      return DailyCA(date: d, amount: dataMap[_d(d)] ?? 0);
     });
   }
 
   /// Count of COMPLETED sales today.
   Future<int> getTodaySalesCount() async {
-    final now = DateTime.now();
+    final now = _now();
     final startOfDay = DateTime(now.year, now.month, now.day);
     final result = await _db.customSelect(
       'SELECT COUNT(*) AS cnt FROM sales '
@@ -108,7 +149,7 @@ class LocalDashboardDatasource {
 
   /// Total COMPLETED sales this calendar month.
   Future<int> getMonthlyTransactionCount() async {
-    final now = DateTime.now();
+    final now = _now();
     final startOfMonth = DateTime(now.year, now.month, 1);
     final result = await _db.customSelect(
       'SELECT COUNT(*) AS cnt FROM sales '
@@ -120,7 +161,7 @@ class LocalDashboardDatasource {
 
   /// Total COMPLETED sales for the previous calendar month.
   Future<int> getPreviousMonthTransactionCount() async {
-    final now = DateTime.now();
+    final now = _now();
     final startPrev = DateTime(now.year, now.month - 1, 1);
     final endPrev = DateTime(now.year, now.month, 1);
     final result = await _db.customSelect(
@@ -137,7 +178,7 @@ class LocalDashboardDatasource {
 
   /// Average basket this calendar month: SUM(total_amount) / COUNT.
   Future<int> getMonthlyAverageBasket() async {
-    final now = DateTime.now();
+    final now = _now();
     final startOfMonth = DateTime(now.year, now.month, 1);
     final result = await _db.customSelect(
       'SELECT COALESCE(SUM(total_amount), 0) AS total, COUNT(*) AS cnt FROM sales '
@@ -151,7 +192,7 @@ class LocalDashboardDatasource {
 
   /// Average basket for the previous calendar month.
   Future<int> getPreviousMonthAverageBasket() async {
-    final now = DateTime.now();
+    final now = _now();
     final startPrev = DateTime(now.year, now.month - 1, 1);
     final endPrev = DateTime(now.year, now.month, 1);
     final result = await _db.customSelect(
@@ -180,9 +221,9 @@ class LocalDashboardDatasource {
 
   /// Top [limit] best-selling products over the last 7 rolling days.
   Future<List<TopProduct>> getWeeklyTopProducts({int limit = 5}) async {
-    final now = DateTime.now();
+    final now = _now();
     // Rolling 7-day window (matches UI label "7j", avoids Monday-boundary issue)
-    final startOfWeek = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 6));
+    final startOfWeek = DateTime(now.year, now.month, now.day - 6);
 
     // First get total weekly revenue for market share calculation
     final totalResult = await _db.customSelect(
@@ -224,7 +265,7 @@ class LocalDashboardDatasource {
 
   /// Per-store overview: today CA, yesterday CA, employee count.
   Future<List<StoreOverview>> getStoreOverviews() async {
-    final now = DateTime.now();
+    final now = _now();
     final startToday = DateTime(now.year, now.month, now.day);
     final startYesterday = DateTime(now.year, now.month, now.day - 1);
 
@@ -291,9 +332,9 @@ class LocalDashboardDatasource {
   /// Includes non-archived catalog products that had 0 sales so that
   /// the list isn't just a reverse of topProducts.
   Future<List<TopProduct>> getWeeklyWorstProducts({int limit = 5}) async {
-    final now = DateTime.now();
+    final now = _now();
     // Rolling 7-day window (matches UI label "7j", avoids Monday-boundary issue)
-    final startOfWeek = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 6));
+    final startOfWeek = DateTime(now.year, now.month, now.day - 6);
 
     final totalResult = await _db.customSelect(
       'SELECT COALESCE(SUM(si.subtotal), 0) AS total '
@@ -343,62 +384,23 @@ class LocalDashboardDatasource {
 
   /// Weekly CA for the last 12 weeks.
   /// Zero-fills missing weeks so the chart always has 12 bars.
-  Future<List<DailyCA>> getWeeklyCA() async {
-    final now = DateTime.now();
-    final start = now.subtract(const Duration(days: 84));
-    final rows = await _db.customSelect(
-      "SELECT strftime('%Y-%W', ${_localDay('occurred_at')}) AS period, "
-      'MIN(${_localDay('occurred_at')}) AS period_start, '
-      'COALESCE(SUM(total_amount), 0) AS total '
-      "FROM sales WHERE status = 'COMPLETED' AND occurred_at >= ? "
-      "GROUP BY strftime('%Y-%W', ${_localDay('occurred_at')}) ORDER BY period ASC",
-      variables: [Variable.withDateTime(start)],
-    ).get();
-    final dataMap = <String, int>{};
-    for (final r in rows) {
-      dataMap[r.read<String>('period')] = r.read<int>('total');
-    }
-    // Generate 12 week slots starting from 11 weeks ago
-    final today = DateTime(now.year, now.month, now.day);
-    final monday = today.subtract(Duration(days: today.weekday - 1));
-    return List.generate(12, (i) {
-      final weekStart = monday.subtract(Duration(days: (11 - i) * 7));
-      // Match strftime('%Y-%W') format used by SQLite
-      final weekNum = sqliteWeekW(weekStart);
-      final key = '${weekStart.year}-${weekNum.toString().padLeft(2, '0')}';
-      return DailyCA(date: weekStart, amount: dataMap[key] ?? 0);
-    });
-  }
-
-  /// Week number matching SQLite's strftime('%W') — Monday-based, 00-53:
-  /// `(yday + 7 - wd) / 7` with a 0-based day of year and 0 = Monday.
   ///
-  /// v1s-15-8: the former formula was off by one for Mondays in years whose
-  /// 1 January is a Monday (next: 2029), and counted days with a local
-  /// `difference().inDays`, which loses a day after a DST change. Only this
-  /// day-of-year computation is now DST-safe (calendar fields compared as UTC
-  /// dates); callers still build `weekStart` by local `Duration` subtraction,
-  /// and caller-side DST / year-crossing weeks are tracked separately.
-  @visibleForTesting
-  static int sqliteWeekW(DateTime date) {
-    final yday = DateTime.utc(date.year, date.month, date.day)
-        .difference(DateTime.utc(date.year, 1, 1))
-        .inDays;
-    final wd = date.weekday - 1; // 0=Mon, ..., 6=Sun
-    return (yday + 7 - wd) ~/ 7;
-  }
+  /// v1s-16-19: buckets are keyed by the week's local Monday (`YYYY-MM-DD`),
+  /// unique across years — a week straddling 31 Dec / 1 Jan is one bucket
+  /// (the former `strftime('%Y-%W')` key split it and lost the January part).
+  Future<List<DailyCA>> getWeeklyCA() => _weeklyCA();
 
   /// Monthly CA for the last 12 months.
   /// Zero-fills missing months so the chart always has 12 bars.
   Future<List<DailyCA>> getMonthlyCA() async {
-    final now = DateTime.now();
+    final now = _now();
     final start = DateTime(now.year - 1, now.month, 1);
     final rows = await _db.customSelect(
       "SELECT substr(${_localDay('occurred_at')}, 1, 7) AS period, "
       'COALESCE(SUM(total_amount), 0) AS total '
       "FROM sales WHERE status = 'COMPLETED' AND occurred_at >= ? "
       "GROUP BY substr(${_localDay('occurred_at')}, 1, 7) ORDER BY period ASC",
-      variables: [Variable.withDateTime(start)],
+      variables: [Variable.withDateTime(_prefilter(start))],
     ).get();
     final dataMap = <String, int>{};
     for (final r in rows) {
@@ -414,14 +416,14 @@ class LocalDashboardDatasource {
   /// Yearly CA for the last 5 years.
   /// Zero-fills missing years so the chart always has 5 bars.
   Future<List<DailyCA>> getYearlyCA() async {
-    final now = DateTime.now();
+    final now = _now();
     final start = DateTime(now.year - 4, 1, 1);
     final rows = await _db.customSelect(
       "SELECT substr(${_localDay('occurred_at')}, 1, 4) AS period, "
       'COALESCE(SUM(total_amount), 0) AS total '
       "FROM sales WHERE status = 'COMPLETED' AND occurred_at >= ? "
       "GROUP BY substr(${_localDay('occurred_at')}, 1, 4) ORDER BY period ASC",
-      variables: [Variable.withDateTime(start)],
+      variables: [Variable.withDateTime(_prefilter(start))],
     ).get();
     final dataMap = <String, int>{};
     for (final r in rows) {
@@ -438,63 +440,64 @@ class LocalDashboardDatasource {
   /// Daily CA for a specific store (last 30 days).
   /// Zero-fills missing days so the chart always has 30 bars.
   Future<List<DailyCA>> getStoreDailyCA(String storeId) async {
-    final now = DateTime.now();
+    final now = _now();
     final start = DateTime(now.year, now.month, now.day - 29);
     final rows = await _db.customSelect(
       'SELECT ${_localDay('occurred_at')} AS day, COALESCE(SUM(total_amount), 0) AS total '
       "FROM sales WHERE status = 'COMPLETED' AND store_id = ? AND occurred_at >= ? "
       'GROUP BY ${_localDay('occurred_at')} ORDER BY day ASC',
-      variables: [Variable.withString(storeId), Variable.withDateTime(start)],
+      variables: [Variable.withString(storeId), Variable.withDateTime(_prefilter(start))],
     ).get();
     final dataMap = <String, int>{};
     for (final r in rows) {
       dataMap[r.read<String>('day')] = r.read<int>('total');
     }
     return List.generate(30, (i) {
-      final d = start.add(Duration(days: i));
-      final key = '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-      return DailyCA(date: d, amount: dataMap[key] ?? 0);
+      final d = DateTime(start.year, start.month, start.day + i);
+      return DailyCA(date: d, amount: dataMap[_d(d)] ?? 0);
     });
   }
 
   /// Weekly CA for a specific store (last 12 weeks).
   /// Zero-fills missing weeks so the chart always has 12 bars.
-  Future<List<DailyCA>> getStoreWeeklyCA(String storeId) async {
-    final now = DateTime.now();
-    final start = now.subtract(const Duration(days: 84));
+  Future<List<DailyCA>> getStoreWeeklyCA(String storeId) =>
+      _weeklyCA(storeId: storeId);
+
+  Future<List<DailyCA>> _weeklyCA({String? storeId}) async {
+    final slots = weeklySlots(_now());
+    final monday = _localMonday('occurred_at');
     final rows = await _db.customSelect(
-      "SELECT strftime('%Y-%W', ${_localDay('occurred_at')}) AS period, "
-      'MIN(${_localDay('occurred_at')}) AS period_start, '
+      'SELECT $monday AS period, '
       'COALESCE(SUM(total_amount), 0) AS total '
-      "FROM sales WHERE status = 'COMPLETED' AND store_id = ? AND occurred_at >= ? "
-      "GROUP BY strftime('%Y-%W', ${_localDay('occurred_at')}) ORDER BY period ASC",
-      variables: [Variable.withString(storeId), Variable.withDateTime(start)],
+      "FROM sales WHERE status = 'COMPLETED' "
+      '${storeId != null ? 'AND store_id = ? ' : ''}'
+      'AND occurred_at >= ? '
+      'GROUP BY period ORDER BY period ASC',
+      variables: [
+        if (storeId != null) Variable.withString(storeId),
+        Variable.withDateTime(_prefilter(slots.first)),
+      ],
     ).get();
     final dataMap = <String, int>{};
     for (final r in rows) {
       dataMap[r.read<String>('period')] = r.read<int>('total');
     }
-    final today = DateTime(now.year, now.month, now.day);
-    final monday = today.subtract(Duration(days: today.weekday - 1));
-    return List.generate(12, (i) {
-      final weekStart = monday.subtract(Duration(days: (11 - i) * 7));
-      final weekNum = sqliteWeekW(weekStart);
-      final key = '${weekStart.year}-${weekNum.toString().padLeft(2, '0')}';
-      return DailyCA(date: weekStart, amount: dataMap[key] ?? 0);
-    });
+    return [
+      for (final slot in slots) DailyCA(date: slot, amount: dataMap[_d(slot)] ?? 0),
+    ];
   }
 
   /// Monthly CA for a specific store (last 12 months).
   /// Zero-fills missing months so the chart always has 12 bars.
   Future<List<DailyCA>> getStoreMonthlyCA(String storeId) async {
-    final now = DateTime.now();
+    final now = _now();
     final start = DateTime(now.year - 1, now.month, 1);
     final rows = await _db.customSelect(
       "SELECT substr(${_localDay('occurred_at')}, 1, 7) AS period, "
       'COALESCE(SUM(total_amount), 0) AS total '
       "FROM sales WHERE status = 'COMPLETED' AND store_id = ? AND occurred_at >= ? "
       "GROUP BY substr(${_localDay('occurred_at')}, 1, 7) ORDER BY period ASC",
-      variables: [Variable.withString(storeId), Variable.withDateTime(start)],
+      variables: [Variable.withString(storeId), Variable.withDateTime(_prefilter(start))],
     ).get();
     final dataMap = <String, int>{};
     for (final r in rows) {
@@ -510,14 +513,14 @@ class LocalDashboardDatasource {
   /// Yearly CA for a specific store (last 5 years).
   /// Zero-fills missing years so the chart always has 5 bars.
   Future<List<DailyCA>> getStoreYearlyCA(String storeId) async {
-    final now = DateTime.now();
+    final now = _now();
     final start = DateTime(now.year - 4, 1, 1);
     final rows = await _db.customSelect(
       "SELECT substr(${_localDay('occurred_at')}, 1, 4) AS period, "
       'COALESCE(SUM(total_amount), 0) AS total '
       "FROM sales WHERE status = 'COMPLETED' AND store_id = ? AND occurred_at >= ? "
       "GROUP BY substr(${_localDay('occurred_at')}, 1, 4) ORDER BY period ASC",
-      variables: [Variable.withString(storeId), Variable.withDateTime(start)],
+      variables: [Variable.withString(storeId), Variable.withDateTime(_prefilter(start))],
     ).get();
     final dataMap = <String, int>{};
     for (final r in rows) {
@@ -531,9 +534,8 @@ class LocalDashboardDatasource {
 
   /// Top products for a specific store this week.
   Future<List<TopProduct>> getStoreTopProducts(String storeId, {int limit = 5}) async {
-    final now = DateTime.now();
-    final monday = now.subtract(Duration(days: now.weekday - 1));
-    final startOfWeek = DateTime(monday.year, monday.month, monday.day);
+    final now = _now();
+    final startOfWeek = mondayOf(now);
 
     final totalResult = await _db.customSelect(
       'SELECT COALESCE(SUM(si.subtotal), 0) AS total '
@@ -572,9 +574,8 @@ class LocalDashboardDatasource {
   /// Worst products for a specific store this week.
   /// Includes non-archived catalog products that had 0 sales.
   Future<List<TopProduct>> getStoreWorstProducts(String storeId, {int limit = 5}) async {
-    final now = DateTime.now();
-    final monday = now.subtract(Duration(days: now.weekday - 1));
-    final startOfWeek = DateTime(monday.year, monday.month, monday.day);
+    final now = _now();
+    final startOfWeek = mondayOf(now);
 
     final totalResult = await _db.customSelect(
       'SELECT COALESCE(SUM(si.subtotal), 0) AS total '

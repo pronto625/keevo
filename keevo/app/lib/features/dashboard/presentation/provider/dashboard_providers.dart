@@ -1,5 +1,6 @@
 export '../../../../core/storage/app_constants.dart' show kUserFirstNameKey;
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -20,6 +21,10 @@ const kMotivationalDismissedDate = 'motivational_dismissed_date';
 
 /// SharedPreferences key for tenant name.
 const kTenantNameKey = 'tenant_name';
+
+/// Clock for the dashboard chart slots (v1s-16-19) — overridable in tests.
+final dashboardClockProvider =
+    Provider<DateTime Function()>((ref) => DateTime.now);
 
 /// Local Drift datasource for dashboard aggregation queries.
 final localDashboardDatasourceProvider = Provider<LocalDashboardDatasource>((ref) {
@@ -71,40 +76,66 @@ final chartDaysProvider = StateProvider<int>((ref) => 7);
 final chartDataProvider = FutureProvider<List<DailyCA>>((ref) async {
   final period = ref.watch(chartPeriodProvider);
   final snapshot = await ref.watch(dashboardSnapshotProvider.future);
+  final now = ref.watch(dashboardClockProvider)();
   switch (period) {
     case ChartPeriod.daily:
       final days = ref.watch(chartDaysProvider);
       // Zero-fill so days with no sales still appear as empty bars.
-      final all = _zeroFillDailyCA(snapshot.dailyCALast30, 30);
+      final all = _zeroFillDailyCA(snapshot.dailyCALast30, 30, now);
       return all.length > days ? all.sublist(all.length - days) : all;
     case ChartPeriod.weekly:
-      return snapshot.weeklyCA;
+      return zeroFillWeeklyCA(snapshot.weeklyCA, now);
     case ChartPeriod.monthly:
-      return snapshot.monthlyCA;
+      return zeroFillMonthlyCA(snapshot.monthlyCA, now);
     case ChartPeriod.yearly:
-      return snapshot.yearlyCA;
+      return zeroFillYearlyCA(snapshot.yearlyCA, now);
   }
 });
 
-/// Fills in missing dates so the list always covers [totalDays] consecutive days
-/// ending today, with amount = 0 for days the backend didn't return.
-List<DailyCA> _zeroFillDailyCA(List<DailyCA> data, int totalDays) {
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final start = today.subtract(Duration(days: totalDays - 1));
+String _dayKey(DateTime d) =>
+    '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+String _monthKey(DateTime d) =>
+    '${d.year}-${d.month.toString().padLeft(2, '0')}';
+String _yearKey(DateTime d) => '${d.year}';
+
+/// Maps [data] onto [slots] by [key] (amounts of equal keys are summed);
+/// slots without data get 0. Gives the remote (online) series the same slot
+/// shapes as the local datasource (v1s-16-19).
+List<DailyCA> _zeroFill(
+    List<DailyCA> data, List<DateTime> slots, String Function(DateTime) key) {
   final map = <String, int>{};
   for (final d in data) {
-    final key =
-        '${d.date.year}-${d.date.month.toString().padLeft(2, '0')}-${d.date.day.toString().padLeft(2, '0')}';
-    map[key] = d.amount;
+    map.update(key(d.date), (v) => v + d.amount, ifAbsent: () => d.amount);
   }
-  return List.generate(totalDays, (i) {
-    final d = start.add(Duration(days: i));
-    final key =
-        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-    return DailyCA(date: d, amount: map[key] ?? 0);
-  });
+  return [for (final s in slots) DailyCA(date: s, amount: map[key(s)] ?? 0)];
 }
+
+/// 12 weekly slots (local Mondays, oldest → newest), keyed by the Monday.
+@visibleForTesting
+List<DailyCA> zeroFillWeeklyCA(List<DailyCA> data, DateTime now) => _zeroFill(
+    data, LocalDashboardDatasource.weeklySlots(now), _dayKey);
+
+/// 12 monthly slots (1st of month), keyed `YYYY-MM`.
+@visibleForTesting
+List<DailyCA> zeroFillMonthlyCA(List<DailyCA> data, DateTime now) => _zeroFill(
+    data,
+    List.generate(12, (i) => DateTime(now.year, now.month - 11 + i, 1)),
+    _monthKey);
+
+/// 5 yearly slots (1 January), keyed `YYYY`.
+@visibleForTesting
+List<DailyCA> zeroFillYearlyCA(List<DailyCA> data, DateTime now) => _zeroFill(
+    data, List.generate(5, (i) => DateTime(now.year - 4 + i)), _yearKey);
+
+/// Fills in missing dates so the list always covers [totalDays] consecutive days
+/// ending today, with amount = 0 for days the backend didn't return.
+/// Calendar-field arithmetic (no `Duration`): DST-safe.
+List<DailyCA> _zeroFillDailyCA(List<DailyCA> data, int totalDays, DateTime now) =>
+    _zeroFill(
+        data,
+        List.generate(totalDays,
+            (i) => DateTime(now.year, now.month, now.day - (totalDays - 1 - i))),
+        _dayKey);
 
 /// Top 5 best-selling products this week — toutes boutiques confondues.
 /// Online-first: uses backend data from snapshot; falls back to local DB.
@@ -146,25 +177,28 @@ final storeChartDataProvider = FutureProvider.family<List<DailyCA>, String>((ref
   if (store == null) return [];
 
   final local = ref.watch(localDashboardDatasourceProvider);
+  final now = ref.watch(dashboardClockProvider)();
 
+  // Remote series are sparse (only periods with sales): zero-fill them onto
+  // the same slots as the local datasource (v1s-16-19).
   switch (period) {
     case ChartPeriod.daily:
       final fullData = store.dailyCA.isNotEmpty
-          ? store.dailyCA
+          ? _zeroFillDailyCA(store.dailyCA, 30, now)
           : await local.getStoreDailyCA(storeId);
       final days = ref.watch(storeChartDaysProvider(storeId));
       return fullData.length > days ? fullData.sublist(fullData.length - days) : fullData;
     case ChartPeriod.weekly:
       return store.weeklyCA.isNotEmpty
-          ? store.weeklyCA
+          ? zeroFillWeeklyCA(store.weeklyCA, now)
           : await local.getStoreWeeklyCA(storeId);
     case ChartPeriod.monthly:
       return store.monthlyCA.isNotEmpty
-          ? store.monthlyCA
+          ? zeroFillMonthlyCA(store.monthlyCA, now)
           : await local.getStoreMonthlyCA(storeId);
     case ChartPeriod.yearly:
       return store.yearlyCA.isNotEmpty
-          ? store.yearlyCA
+          ? zeroFillYearlyCA(store.yearlyCA, now)
           : await local.getStoreYearlyCA(storeId);
   }
 });

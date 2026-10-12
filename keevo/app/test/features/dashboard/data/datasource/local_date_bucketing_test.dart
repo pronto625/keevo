@@ -29,15 +29,14 @@ void main() {
   });
 
   late AppDatabase db;
-  // v1s-15-8: "today" is taken per test, not once when the file loads. The
-  // midnight window shrinks from the whole file run to the gap between this
-  // now() and the datasource's own DateTime.now() (lib reads the clock itself).
-  late DateTime today;
-  late String todayStr;
+  // v1s-16-19: the datasource takes an injected clock — "today" is fixed, so
+  // there is no midnight window between the test and the lib any more.
+  final today = DateTime(2026, 3, 18, 15); // a Wednesday
+  final todayStr = _d(today);
+  LocalDashboardDatasource dashboard({DateTime? at}) =>
+      LocalDashboardDatasource(db, now: () => at ?? today);
   setUp(() {
     db = AppDatabase.forTesting();
-    today = DateTime.now();
-    todayStr = _d(today);
   });
   tearDown(() => db.close());
 
@@ -55,7 +54,7 @@ void main() {
     test('a 00:30 (+01:00) sale counts on its local day', () async {
       await insertSale('s1', '${todayStr}T00:30:00.000 +01:00');
 
-      final days = await LocalDashboardDatasource(db).getDailyCAForLast30Days();
+      final days = await dashboard().getDailyCAForLast30Days();
 
       expect(days.last.amount, 1000);
     });
@@ -65,7 +64,7 @@ void main() {
       final first = DateTime(today.year, today.month, 1);
       await insertSale('s2', '${_d(first)}T00:30:00.000 +01:00');
 
-      final months = await LocalDashboardDatasource(db).getMonthlyCA();
+      final months = await dashboard().getMonthlyCA();
 
       expect(months.last.amount, 1000);
     });
@@ -74,18 +73,17 @@ void main() {
       final noon = DateTime(today.year, today.month, today.day, 12);
       await insertSale('s3', noon.toUtc().toIso8601String());
 
-      final days = await LocalDashboardDatasource(db).getDailyCAForLast30Days();
+      final days = await dashboard().getDailyCAForLast30Days();
 
       expect(days.last.amount, 1000);
     });
 
     // Monday 00:30 (+01:00) is Sunday in UTC: it must stay in its own week.
     test('a 00:30 (+01:00) sale on Monday counts in its local week', () async {
-      final day = DateTime(today.year, today.month, today.day);
-      final monday = day.subtract(Duration(days: day.weekday - 1));
+      final monday = LocalDashboardDatasource.mondayOf(today);
       await insertSale('w1', '${_d(monday)}T00:30:00.000 +01:00');
 
-      final ds = LocalDashboardDatasource(db);
+      final ds = dashboard();
       expect((await ds.getWeeklyCA()).last.amount, 1000);
       expect((await ds.getStoreWeeklyCA('store-1')).last.amount, 1000);
     });
@@ -95,7 +93,7 @@ void main() {
         () async {
       await insertSale('y1', '${today.year}-01-01T00:30:00.000 +01:00');
 
-      final ds = LocalDashboardDatasource(db);
+      final ds = dashboard();
       expect((await ds.getYearlyCA()).last.amount, 1000);
       expect((await ds.getStoreYearlyCA('store-1')).last.amount, 1000);
     });
@@ -103,7 +101,7 @@ void main() {
     test('store daily and monthly charts bucket on the local day', () async {
       await insertSale('sd1', '${todayStr}T00:30:00.000 +01:00');
 
-      final ds = LocalDashboardDatasource(db);
+      final ds = dashboard();
       expect((await ds.getStoreDailyCA('store-1')).last.amount, 1000);
       expect((await ds.getStoreMonthlyCA('store-1')).last.amount, 1000);
     });
@@ -167,28 +165,114 @@ void main() {
     expect(perf.single.deltaPercent, closeTo(100.0, 0.01));
   });
 
-  // v1s-15-8: the Dart week key must equal SQLite's strftime('%W') for every
-  // day — including years starting on a Monday (2029) or a Sunday (2034).
-  test('sqliteWeekW matches SQLite strftime(%W) for every day 2024-2035',
-      () async {
-    final mismatches = <String>[];
-    for (var year = 2024; year <= 2035; year++) {
+  group('weekly buckets (v1s-16-19)', () {
+    // A week starting in December: its January days must not be lost.
+    test('a week straddling the year end is one bucket (all stores)',
+        () async {
+      await insertSale('ye1', '2025-12-30T10:00:00.000 +01:00', total: 500);
+      await insertSale('ye2', '2026-01-02T10:00:00.000 +01:00', total: 300);
+
+      final weeks =
+          await dashboard(at: DateTime(2026, 1, 7, 15)).getWeeklyCA();
+
+      final slot = weeks.singleWhere((w) => _d(w.date) == '2025-12-29');
+      expect(slot.amount, 800);
+      expect(weeks.fold<int>(0, (a, w) => a + w.amount), 800);
+    });
+
+    test('a week straddling the year end is one bucket (one store)',
+        () async {
+      await insertSale('ys1', '2025-12-30T10:00:00.000 +01:00', total: 500);
+      await insertSale('ys2', '2026-01-02T10:00:00.000 +01:00', total: 300);
+
+      final weeks = await dashboard(at: DateTime(2026, 1, 7, 15))
+          .getStoreWeeklyCA('store-1');
+
+      final slot = weeks.singleWhere((w) => _d(w.date) == '2025-12-29');
+      expect(slot.amount, 800);
+    });
+
+    test('a sale on the oldest slot Monday at 00:30 is inside the window',
+        () async {
+      final ds = dashboard();
+      final oldest = (await ds.getWeeklyCA()).first.date;
+      await insertSale('old1', '${_d(oldest)}T00:30:00.000 +01:00');
+
+      expect((await ds.getWeeklyCA()).first.amount, 1000);
+    });
+
+    // A synced row stored in UTC (Z) at 00:30 local on the oldest Monday is
+    // `<Sunday>T23:30Z` east of UTC: the raw-text window must not drop it.
+    test('a Z-stored 00:30 local sale on the oldest slot Monday counts',
+        () async {
+      final ds = dashboard();
+      final oldest = (await ds.getWeeklyCA()).first.date;
+      await insertSale(
+          'oldz',
+          DateTime(oldest.year, oldest.month, oldest.day, 0, 30)
+              .toUtc()
+              .toIso8601String());
+
+      expect((await ds.getWeeklyCA()).first.amount, 1000);
+      expect((await ds.getStoreWeeklyCA('store-1')).first.amount, 1000);
+    });
+
+    // SQL Monday key == Dart Monday for every day 2024-2035.
+    test('SQL local-Monday key matches mondayOf for every day 2024-2035',
+        () async {
+      final mismatches = <String>[];
       final rows = await db.customSelect(
         'WITH RECURSIVE d(x) AS (SELECT date(?) UNION ALL '
         "SELECT date(x, '+1 day') FROM d WHERE x < date(?)) "
-        "SELECT x, strftime('%W', x) AS w FROM d",
+        'SELECT x, ${LocalDashboardDatasource.localMondaySql('x')} AS m FROM d',
         variables: [
-          Variable.withString('$year-01-01'),
-          Variable.withString('$year-12-31'),
+          Variable.withString('2024-01-01'),
+          Variable.withString('2035-12-31'),
         ],
       ).get();
+      expect(rows.length, greaterThan(4000));
       for (final r in rows) {
-        final day = DateTime.parse(r.read<String>('x'));
-        final expected = int.parse(r.read<String>('w'));
-        final actual = LocalDashboardDatasource.sqliteWeekW(day);
-        if (actual != expected) mismatches.add('$day: $actual != $expected');
+        final x = r.read<String>('x');
+        final expected = _d(LocalDashboardDatasource.mondayOf(DateTime.parse(x)));
+        final actual = r.read<String>('m');
+        if (actual != expected) mismatches.add('$x: $actual != $expected');
       }
-    }
-    expect(mismatches, isEmpty);
+      expect(mismatches, isEmpty);
+    });
+
+    // Meaningful in a DST zone (run once with TZ=Europe/Paris); green in UTC.
+    test('12 slots are local Mondays 00:00, 7 calendar days apart (2024-2035)',
+        () {
+      final problems = <String>[];
+      for (var d = DateTime(2024, 1, 1);
+          d.isBefore(DateTime(2036, 1, 1));
+          d = DateTime(d.year, d.month, d.day + 1)) {
+        for (final hour in const [0, 12, 23]) {
+          final now = DateTime(d.year, d.month, d.day, hour, 30);
+          final slots = LocalDashboardDatasource.weeklySlots(now);
+          if (slots.length != 12) problems.add('$now: ${slots.length} slots');
+          for (var i = 0; i < slots.length; i++) {
+            final s = slots[i];
+            if (s.weekday != DateTime.monday ||
+                s.hour != 0 ||
+                s.minute != 0) {
+              problems.add('$now: slot $i = $s');
+            }
+            if (i > 0) {
+              final p = slots[i - 1];
+              if (DateTime(p.year, p.month, p.day + 7) != s) {
+                problems.add('$now: $p -> $s');
+              }
+            }
+          }
+          final last = slots.last;
+          if (now.isBefore(last) ||
+              !now.isBefore(DateTime(last.year, last.month, last.day + 7))) {
+            problems.add('$now: last slot $last does not contain now');
+          }
+        }
+      }
+      expect(problems.take(20).toList(), isEmpty);
+    });
   });
 }

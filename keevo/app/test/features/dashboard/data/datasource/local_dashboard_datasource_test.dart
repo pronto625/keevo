@@ -31,11 +31,12 @@ void main() {
 
     const storeId = 'store-dash-001';
 
-    final now = DateTime.now();
+    // v1s-16-19: fixed clock injected into the datasource — no midnight race.
+    final now = DateTime(2026, 3, 18, 15);
 
     setUp(() async {
       db = AppDatabase.forTesting();
-      datasource = LocalDashboardDatasource(db);
+      datasource = LocalDashboardDatasource(db, now: () => now);
 
       // Seed a store
       await db.into(db.stores).insert(StoresCompanion.insert(
@@ -71,7 +72,6 @@ void main() {
     }
 
     test('getTodayCA returns sum of today COMPLETED sales', () async {
-      final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day, 10);
       await _insertSale(occurredAt: today, totalAmount: 5000);
       await _insertSale(occurredAt: today.add(const Duration(hours: 1)), totalAmount: 3000);
@@ -83,7 +83,6 @@ void main() {
     });
 
     test('getYesterdayCA returns sum of yesterday COMPLETED sales', () async {
-      final now = DateTime.now();
       final yesterday = DateTime(now.year, now.month, now.day - 1, 14);
       await _insertSale(occurredAt: yesterday, totalAmount: 12000);
       await _insertSale(occurredAt: yesterday.add(const Duration(hours: 2)), totalAmount: 8000);
@@ -93,7 +92,6 @@ void main() {
     });
 
     test('getDayBeforeYesterdayCA returns correct total', () async {
-      final now = DateTime.now();
       final dayBefore = DateTime(now.year, now.month, now.day - 2, 10);
       await _insertSale(occurredAt: dayBefore, totalAmount: 7500);
 
@@ -102,7 +100,6 @@ void main() {
     });
 
     test('getTodaySalesCount returns count only COMPLETED', () async {
-      final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day, 9);
       await _insertSale(occurredAt: today, totalAmount: 1000);
       await _insertSale(occurredAt: today.add(const Duration(hours: 1)), totalAmount: 2000);
@@ -113,7 +110,6 @@ void main() {
     });
 
     test('getMonthlyTransactionCount counts current month only', () async {
-      final now = DateTime.now();
       final thisMonth = DateTime(now.year, now.month, 5, 10);
       final lastMonth = DateTime(now.year, now.month - 1, 15, 10);
 
@@ -126,7 +122,6 @@ void main() {
     });
 
     test('getMonthlyAverageBasket returns average', () async {
-      final now = DateTime.now();
       final d1 = DateTime(now.year, now.month, 3, 10);
       final d2 = DateTime(now.year, now.month, 4, 10);
 
@@ -209,7 +204,6 @@ void main() {
     });
 
     test('getDashboardSnapshot assembles all fields', () async {
-      final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day, 11);
       await _insertSale(occurredAt: today, totalAmount: 10000);
 
@@ -219,7 +213,6 @@ void main() {
     });
 
     test('getStoreOverviews returns per-store data', () async {
-      final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day, 10);
       await _insertSale(occurredAt: today, totalAmount: 15000);
 
