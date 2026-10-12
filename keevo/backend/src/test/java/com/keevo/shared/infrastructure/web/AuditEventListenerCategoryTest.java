@@ -16,6 +16,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.Instant;
 import java.util.UUID;
 
+import static com.keevo.shared.infrastructure.web.AuditEntryMatchers.ANY;
+import static com.keevo.shared.infrastructure.web.AuditEntryMatchers.entry;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -49,10 +51,12 @@ class AuditEventListenerCategoryTest {
     void on_categoryCreated_records_audit() {
         listener.on(new CategoryCreatedEvent(CATEGORY_ID, "Boissons", null, ACTOR_ID, TENANT, NOW));
 
-        var after = ArgumentCaptor.forClass(String.class);
-        verify(auditPort).record(eq(ACTOR_ID), eq(TENANT), eq("CATEGORY_CREATED"), eq("Category"),
-                eq(CATEGORY_ID), eq(null), after.capture());
-        assertThat(after.getValue()).contains("\"name\":\"Boissons\"");
+        AuditPort.AuditEntry e = capture();
+        assertThat(e).extracting(AuditPort.AuditEntry::actorId, AuditPort.AuditEntry::tenantId,
+                        AuditPort.AuditEntry::action, AuditPort.AuditEntry::entityType, AuditPort.AuditEntry::entityId)
+                .containsExactly(ACTOR_ID, TENANT, "CATEGORY_CREATED", "Category", CATEGORY_ID);
+        assertThat(e.valueBefore()).isNull();
+        assertThat(e.valueAfter()).contains("\"name\":\"Boissons\"");
     }
 
     @Test
@@ -61,10 +65,12 @@ class AuditEventListenerCategoryTest {
         UUID parentId = UUID.randomUUID();
         listener.on(new CategoryCreatedEvent(CATEGORY_ID, "Sodas", parentId, ACTOR_ID, TENANT, NOW));
 
-        var after = ArgumentCaptor.forClass(String.class);
-        verify(auditPort).record(eq(ACTOR_ID), eq(TENANT), eq("CATEGORY_CREATED"), eq("Category"),
-                eq(CATEGORY_ID), eq(null), after.capture());
-        assertThat(after.getValue())
+        AuditPort.AuditEntry e = capture();
+        assertThat(e).extracting(AuditPort.AuditEntry::actorId, AuditPort.AuditEntry::tenantId,
+                        AuditPort.AuditEntry::action, AuditPort.AuditEntry::entityType, AuditPort.AuditEntry::entityId)
+                .containsExactly(ACTOR_ID, TENANT, "CATEGORY_CREATED", "Category", CATEGORY_ID);
+        assertThat(e.valueBefore()).isNull();
+        assertThat(e.valueAfter())
                 .contains("\"name\":\"Sodas\"")
                 .contains("\"parentId\":\"" + parentId + "\"");
     }
@@ -74,12 +80,12 @@ class AuditEventListenerCategoryTest {
     void on_categoryDeactivated_records_audit() {
         listener.on(new CategoryActiveChangedEvent(CATEGORY_ID, "Boissons", false, ACTOR_ID, TENANT, NOW));
 
-        var before = ArgumentCaptor.forClass(String.class);
-        var after = ArgumentCaptor.forClass(String.class);
-        verify(auditPort).record(eq(ACTOR_ID), eq(TENANT), eq("CATEGORY_DEACTIVATED"), eq("Category"),
-                eq(CATEGORY_ID), before.capture(), after.capture());
-        assertThat(before.getValue()).contains("\"active\":true");
-        assertThat(after.getValue()).contains("\"active\":false").contains("\"name\":\"Boissons\"");
+        AuditPort.AuditEntry e = capture();
+        assertThat(e).extracting(AuditPort.AuditEntry::actorId, AuditPort.AuditEntry::tenantId,
+                        AuditPort.AuditEntry::action, AuditPort.AuditEntry::entityType, AuditPort.AuditEntry::entityId)
+                .containsExactly(ACTOR_ID, TENANT, "CATEGORY_DEACTIVATED", "Category", CATEGORY_ID);
+        assertThat(e.valueBefore()).contains("\"active\":true");
+        assertThat(e.valueAfter()).contains("\"active\":false").contains("\"name\":\"Boissons\"");
     }
 
     @Test
@@ -87,12 +93,12 @@ class AuditEventListenerCategoryTest {
     void on_categoryActivated_records_audit() {
         listener.on(new CategoryActiveChangedEvent(CATEGORY_ID, "Boissons", true, ACTOR_ID, TENANT, NOW));
 
-        var before = ArgumentCaptor.forClass(String.class);
-        var after = ArgumentCaptor.forClass(String.class);
-        verify(auditPort).record(eq(ACTOR_ID), eq(TENANT), eq("CATEGORY_ACTIVATED"), eq("Category"),
-                eq(CATEGORY_ID), before.capture(), after.capture());
-        assertThat(before.getValue()).contains("\"active\":false");
-        assertThat(after.getValue()).contains("\"active\":true").contains("\"name\":\"Boissons\"");
+        AuditPort.AuditEntry e = capture();
+        assertThat(e).extracting(AuditPort.AuditEntry::actorId, AuditPort.AuditEntry::tenantId,
+                        AuditPort.AuditEntry::action, AuditPort.AuditEntry::entityType, AuditPort.AuditEntry::entityId)
+                .containsExactly(ACTOR_ID, TENANT, "CATEGORY_ACTIVATED", "Category", CATEGORY_ID);
+        assertThat(e.valueBefore()).contains("\"active\":false");
+        assertThat(e.valueAfter()).contains("\"active\":true").contains("\"name\":\"Boissons\"");
     }
 
     @Test
@@ -100,11 +106,35 @@ class AuditEventListenerCategoryTest {
     void on_categoryRenamed_records_audit() {
         listener.on(new CategoryRenamedEvent(CATEGORY_ID, "Ancien", "Nouveau", ACTOR_ID, TENANT, NOW));
 
-        var before = ArgumentCaptor.forClass(String.class);
-        var after = ArgumentCaptor.forClass(String.class);
-        verify(auditPort).record(eq(ACTOR_ID), eq(TENANT), eq("CATEGORY_RENAMED"), eq("Category"),
-                eq(CATEGORY_ID), before.capture(), after.capture());
-        assertThat(before.getValue()).contains("Ancien");
-        assertThat(after.getValue()).contains("Nouveau");
+        AuditPort.AuditEntry e = capture();
+        assertThat(e).extracting(AuditPort.AuditEntry::actorId, AuditPort.AuditEntry::tenantId,
+                        AuditPort.AuditEntry::action, AuditPort.AuditEntry::entityType, AuditPort.AuditEntry::entityId)
+                .containsExactly(ACTOR_ID, TENANT, "CATEGORY_RENAMED", "Category", CATEGORY_ID);
+        assertThat(e.valueBefore()).contains("Ancien");
+        assertThat(e.valueAfter()).contains("Nouveau");
+    }
+
+    // ── v1s-18-6 — readable label + context ──
+
+    @Test
+    @DisplayName("category events carry the category name as entityLabel (renamed → new name)")
+    void category_label_isName() {
+        listener.on(new CategoryRenamedEvent(CATEGORY_ID, "Ancien", "Nouveau", ACTOR_ID, TENANT, NOW));
+        assertThat(capture().entityLabel()).isEqualTo("Nouveau");
+    }
+
+    @Test
+    @DisplayName("category active change keeps {active} before and {name, active} after, label = name")
+    void category_activeChange_label() {
+        listener.on(new CategoryActiveChangedEvent(CATEGORY_ID, "Boissons", false, ACTOR_ID, TENANT, NOW));
+        AuditPort.AuditEntry e = capture();
+        assertThat(e.entityLabel()).isEqualTo("Boissons");
+        assertThat(e.source()).isEqualTo("SYSTEM"); // no request bound in a unit test
+    }
+
+    private AuditPort.AuditEntry capture() {
+        ArgumentCaptor<AuditPort.AuditEntry> captor = ArgumentCaptor.forClass(AuditPort.AuditEntry.class);
+        verify(auditPort).record(captor.capture());
+        return captor.getValue();
     }
 }

@@ -112,6 +112,13 @@ class ValidateSaleServiceTest {
         verify(eventPublisher, atLeastOnce()).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getAllValues()).anyMatch(e -> e instanceof SaleManuallyValidatedEvent);
         assertThat(eventCaptor.getAllValues()).anyMatch(e -> e instanceof SaleCompletedEvent);
+        // v1s-18-6: the audit snapshot carries the real items, not a hard-coded "[]"
+        SaleCompletedEvent completed = eventCaptor.getAllValues().stream()
+                .filter(SaleCompletedEvent.class::isInstance).map(SaleCompletedEvent.class::cast)
+                .findFirst().orElseThrow();
+        assertThat(completed.getItemsSnapshot())
+                .contains(PRODUCT_A.toString())
+                .contains(PRODUCT_B.toString());
     }
 
     @Test
@@ -178,6 +185,12 @@ class ValidateSaleServiceTest {
         var eventCaptor = ArgumentCaptor.forClass(Object.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getValue()).isInstanceOf(SaleCancelledEvent.class);
+        // v1s-18-6: the pending-cancel snapshot carries the sale's items, not "[]"
+        var cancelled = (SaleCancelledEvent) eventCaptor.getValue();
+        assertThat(cancelled.itemsSnapshot())
+                .contains(PRODUCT_A.toString())
+                .contains(PRODUCT_B.toString());
+        assertThat(cancelled.storeId()).isEqualTo(STORE_ID);
     }
 
     @Test

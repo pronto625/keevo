@@ -1,6 +1,5 @@
 package com.keevo.commerce.sale.application.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.catalog.stock.domain.entity.MovementType;
 import com.keevo.catalog.stock.domain.port.out.StockLevelRepository;
@@ -136,11 +135,12 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
 
         eventPublisher.publishEvent(new SaleManuallyValidatedEvent(
                 sale.getId(), command.actorId(), command.justification(),
-                forcedProducts, tenantId, now));
+                forcedProducts, tenantId, now, sale.getStoreId()));
 
         eventPublisher.publishEvent(new SaleCompletedEvent(
                 sale.getId(), command.actorId(), tenantId, sale.getStoreId(),
-                sale.getTotalAmount(), sale.getDiscountAmount(), "[]", now));
+                sale.getTotalAmount(), sale.getDiscountAmount(),
+                serializeItems(sale.getItems(), sale.getId()), now));
     }
 
     @Override
@@ -162,7 +162,8 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
                 }
                 eventPublisher.publishEvent(new SaleCancelledEvent(
                         sale.getId(), command.actorId(), command.justification(),
-                        "[]", tenantId, Instant.now()));
+                        serializeItems(sale.getItems(), sale.getId()), tenantId, Instant.now(),
+                        sale.getStoreId()));
             }
             case COMPLETED -> {
                 if (command.pendingOnly()) {
@@ -186,7 +187,8 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
                 }
                 eventPublisher.publishEvent(new SaleCancelledEvent(
                         sale.getId(), command.actorId(), command.justification(),
-                        serializeItems(sale.getItems()), tenantId, Instant.now()));
+                        serializeItems(sale.getItems(), sale.getId()), tenantId, Instant.now(),
+                        sale.getStoreId()));
             }
         }
     }
@@ -264,12 +266,8 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
         JustificationPolicy.requireStrict(justification);
     }
 
-    private String serializeItems(List<SaleItem> items) {
-        try {
-            return objectMapper.writeValueAsString(items);
-        } catch (JsonProcessingException e) {
-            return "[]";
-        }
+    private String serializeItems(List<SaleItem> items, UUID saleId) {
+        return SaleAuditSnapshot.serialize(objectMapper, items, saleId);
     }
 
     private void enforceEmployeeStoreScope(UUID assignedStoreId, UUID saleStoreId) {

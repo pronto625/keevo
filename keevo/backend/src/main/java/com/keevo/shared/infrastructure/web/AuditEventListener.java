@@ -41,9 +41,11 @@ import com.keevo.shared.application.port.AuditPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -76,22 +78,52 @@ import java.util.UUID;
  * </ul>
  *
  * <p>Story 1.8 — Full audit_log persistence replacing stub implementation.
+ *
+ * <p><b>Story v1s-18-6 — enrichment.</b> Every handler writes an {@link AuditPort.AuditEntry} with:
+ * <ul>
+ *   <li>{@code storeId} — the event's store (Store events: the store itself), else the actor's
+ *       assigned store resolved at write time;</li>
+ *   <li>{@code entityLabel} — readable target name at action time, {@code null} when the event
+ *       carries none (never a UUID);</li>
+ *   <li>{@code source}/{@code deviceId} — from {@link AuditWriteContextResolver}
+ *       (ONLINE / SYNC / SYSTEM);</li>
+ *   <li>{@code valueBefore}/{@code valueAfter} — entity fields only; keys read by the shipped app
+ *       stay in {@code valueAfter};</li>
+ *   <li>{@code metadata} — pure context (store id, notes, justification, occurredAt, sale id,
+ *       scope, trigger ids, ...) plus {@code actorLabel}.</li>
+ * </ul>
  */
 @Component
 public class AuditEventListener {
 
     private static final Logger log = LoggerFactory.getLogger(AuditEventListener.class);
 
+    static final String LABEL_SALE = "Vente";
+    static final String LABEL_DAY_CLOSURE = "Clôture de journée";
+    static final String LABEL_INVENTORY = "Inventaire";
+
     private final AuditPort auditPort;
     private final ObjectMapper objectMapper;
     private final UserRepository userRepository;
+    private final AuditWriteContextResolver contextResolver;
 
+    @Autowired
     public AuditEventListener(AuditPort auditPort, ObjectMapper objectMapper,
-                               UserRepository userRepository) {
-        this.auditPort    = auditPort;
-        this.objectMapper = objectMapper;
-        this.userRepository = userRepository;
+                              UserRepository userRepository,
+                              AuditWriteContextResolver contextResolver) {
+        this.auditPort       = auditPort;
+        this.objectMapper    = objectMapper;
+        this.userRepository  = userRepository;
+        this.contextResolver = contextResolver;
     }
+
+    /** Convenience for unit tests — uses a stateless resolver. */
+    public AuditEventListener(AuditPort auditPort, ObjectMapper objectMapper,
+                              UserRepository userRepository) {
+        this(auditPort, objectMapper, userRepository, new AuditWriteContextResolver());
+    }
+
+    // ── Identity ──────────────────────────────────────────────────────────────
 
     /**
      * Handle user registered event.
@@ -103,15 +135,10 @@ public class AuditEventListener {
     public void on(UserRegisteredEvent event) {
         TenantContext.setCurrentTenant(event.schemaName()); // MANDATORY: /auth/register bypasses JwtAuthFilter
         try {
-            auditPort.record(
-                    event.userId(),
-                    event.schemaName(),
-                    "USER_REGISTERED",
-                    "User",
-                    event.userId(),
+            write(event.userId(), event.schemaName(), "USER_REGISTERED", "User", event.userId(),
                     null,
-                    toJson(Map.of("tenantCode", event.tenantCode(), "schemaName", event.schemaName()))
-            );
+                    map("tenantCode", event.tenantCode(), "schemaName", event.schemaName()),
+                    null, null, null, null);
             log.info("AUDIT: user_registered userId={} schema={}", event.userId(), event.schemaName());
         } finally {
             TenantContext.clear(); // always clear — thread may be reused for next request
@@ -132,18 +159,12 @@ public class AuditEventListener {
         // event.tenantId() = schemaName (kv_xxxxxx) resolved by SelectTenantService before publishing
         TenantContext.setCurrentTenant(event.tenantId());
         try {
-            auditPort.record(
-                    event.userId(),
-                    event.tenantId(),
-                    "USER_AUTHENTICATED",
-                    "User",
-                    event.userId(),
+            write(event.userId(), event.tenantId(), "USER_AUTHENTICATED", "User", event.userId(),
                     null,
-                    toJson(Map.of(
-                            "role", event.role(),
-                            "ip",   event.ipAddress() != null ? event.ipAddress() : "unknown"
-                    ))
-            );
+                    map("role", event.role()),
+                    null, null,
+                    map("ip", event.ipAddress() != null ? event.ipAddress() : "unknown"),
+                    null);
             log.info("AUDIT: user_authenticated userId={} schema={}", event.userId(), event.tenantId());
         } finally {
             TenantContext.clear();
@@ -159,19 +180,12 @@ public class AuditEventListener {
     @EventListener
     public void on(OnboardingCompletedEvent event) {
         // Authenticated endpoint — JwtAuthFilter already set TenantContext; NO manual set/clear
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "ONBOARDING_COMPLETED",
-                "Tenant",
-                event.actorId(),
+        write(event.actorId(), event.tenantId(), "ONBOARDING_COMPLETED", "Tenant", event.actorId(),
                 null,
-                toJson(Map.of(
-                        "sectorType",       event.sectorType().name(),
-                        "storeName",        event.storeName(),
-                        "categoriesCreated", event.categoriesCreated()
-                ))
-        );
+                map("sectorType", event.sectorType().name(),
+                        "storeName", event.storeName(),
+                        "categoriesCreated", event.categoriesCreated()),
+                null, event.storeName(), null, null);
         log.info("AUDIT: onboarding_completed tenantId={} sector={} storeName={} categoriesCreated={} actorId={}",
                 event.tenantId(), event.sectorType(), event.storeName(),
                 event.categoriesCreated(), event.actorId());
@@ -179,101 +193,50 @@ public class AuditEventListener {
 
     // ── Product Events (Story 2.1) ───────────────────────────────────────────
 
-    /**
-     * Handle product created event.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
-     */
     @EventListener
     public void on(ProductCreatedEvent event) {
-        // Authenticated endpoint — JwtAuthFilter already set TenantContext; NO manual set/clear
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "PRODUCT_CREATED",
-                "Product",
-                event.productId(),
+        write(event.actorId(), event.tenantId(), "PRODUCT_CREATED", "Product", event.productId(),
                 null,
-                toJson(Map.of(
-                        "productName", event.productName(),
-                        "productSku",  event.productSku()
-                ))
-        );
+                map("productName", event.productName(), "productSku", event.productSku()),
+                null, event.productName(), null, event.actorName());
         log.info("AUDIT: product_created productId={} productName={} tenantId={} actorId={}",
                 event.productId(), event.productName(), event.tenantId(), event.actorId());
     }
 
-    /**
-     * Handle product updated event.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
-     */
     @EventListener
     public void on(ProductUpdatedEvent event) {
-        // Authenticated endpoint — JwtAuthFilter already set TenantContext; NO manual set/clear
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "PRODUCT_UPDATED",
-                "Product",
-                event.productId(),
-                event.valueBefore(),  // JSON from event
-                event.valueAfter()    // JSON from event
-        );
+        writeRaw(event.actorId(), event.tenantId(), "PRODUCT_UPDATED", "Product", event.productId(),
+                event.valueBefore(),  // JSON from event (field-by-field)
+                event.valueAfter(),   // JSON from event
+                null, event.productName(), null, null);
         log.info("AUDIT: product_updated productId={} productName={} tenantId={} actorId={}",
                 event.productId(), event.productName(), event.tenantId(), event.actorId());
     }
 
-    /**
-     * Handle product archived event.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
-     */
     @EventListener
     public void on(ProductArchivedEvent event) {
-        // Authenticated endpoint — JwtAuthFilter already set TenantContext; NO manual set/clear
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "PRODUCT_ARCHIVED",
-                "Product",
-                event.productId(),
+        write(event.actorId(), event.tenantId(), "PRODUCT_ARCHIVED", "Product", event.productId(),
                 null,
-                toJson(Map.of(
-                        "productName", event.productName(),
-                        "productSku",  event.productSku(),
-                        "archived",     true
-                ))
-        );
+                map("productName", event.productName(), "productSku", event.productSku(), "archived", true),
+                null, event.productName(), null, null);
         log.info("AUDIT: product_archived productId={} productName={} tenantId={} actorId={}",
                 event.productId(), event.productName(), event.tenantId(), event.actorId());
     }
 
     /**
-     * Handle sale price override event (Epic 4 — POS).
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
-     *
-     * <p>Records the override in the audit log with entityType="PriceOverride" so that
+     * Handle sale price override event (Epic 4 — POS). entityType="PriceOverride" so that
      * compliance queries can filter by entity type.
      */
     @EventListener
     public void on(SalePriceOverriddenEvent event) {
-        // Authenticated endpoint — JwtAuthFilter already set TenantContext; NO manual set/clear
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "PRICE_OVERRIDDEN",
-                "PriceOverride",
-                event.productId(),
-                toJson(Map.of("cataloguePrice", event.cataloguePrice())),
-                toJson(Map.of(
-                        "appliedPrice", event.appliedPrice(),
-                        "productName",  event.productName() != null ? event.productName() : "",
-                        "saleId",       event.saleId() != null ? event.saleId().toString() : null,
-                        "occurredAt",   event.occurredAt().toString()
-                ))
-        );
+        write(event.actorId(), event.tenantId(), "PRICE_OVERRIDDEN", "PriceOverride", event.productId(),
+                map("cataloguePrice", event.cataloguePrice()),
+                map("appliedPrice", event.appliedPrice(),
+                        "productName", event.productName() != null ? event.productName() : ""),
+                null, event.productName(),
+                map("saleId", event.saleId() != null ? event.saleId().toString() : null,
+                        "occurredAt", str(event.occurredAt())),
+                null);
         log.info("AUDIT: price_overridden productId={} cataloguePrice={} appliedPrice={} tenantId={} actorId={}",
                 event.productId(), event.cataloguePrice(), event.appliedPrice(),
                 event.tenantId(), event.actorId());
@@ -281,763 +244,499 @@ public class AuditEventListener {
 
     // ── Stock Events (Story 2.3) ──────────────────────────────────────────────
 
-    /**
-     * Handle stock adjusted event — records every stock movement in the audit log.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management.
-     */
     @EventListener
     public void on(StockAdjustedEvent event) {
-        auditPort.record(
-            event.actorId(),
-            event.tenantId(),
-            "STOCK_ADJUSTED",
-            "StockMovement",
-            event.productId(),
-            toJson(Map.of("quantityBefore", event.quantityBefore())),
-            toJson(Map.of(
-                "movementType",   event.movementType().name(),
-                "quantityChange", event.quantityChange(),
-                "quantityAfter",  event.quantityAfter(),
-                "storeId",        event.storeId().toString(),
-                "notes",          event.notes() != null ? event.notes() : ""
-            ))
-        );
+        write(event.actorId(), event.tenantId(), "STOCK_ADJUSTED", "StockMovement", event.productId(),
+                map("quantityBefore", event.quantityBefore()),
+                map("movementType", event.movementType().name(),
+                        "quantityChange", event.quantityChange(),
+                        "quantityAfter", event.quantityAfter()),
+                event.storeId(), event.productName(),
+                map("storeId", str(event.storeId()),
+                        "variantId", str(event.variantId()),
+                        "notes", event.notes()),
+                event.actorName());
         log.info("AUDIT: stock_adjusted productId={} type={} before={} change={} after={} tenantId={}",
-            event.productId(), event.movementType(), event.quantityBefore(),
-            event.quantityChange(), event.quantityAfter(), event.tenantId());
+                event.productId(), event.movementType(), event.quantityBefore(),
+                event.quantityChange(), event.quantityAfter(), event.tenantId());
     }
 
-    /**
-     * Handle stock threshold breached event — signals low-stock alert in audit log.
-     *
-     * <p>FCM push notification delivery deferred to Story 8-1.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management.
-     */
     @EventListener
     public void on(StockThresholdBreachedEvent event) {
-        auditPort.record(
-            event.actorId(),
-            event.tenantId(),
-            "STOCK_THRESHOLD_BREACHED",
-            "StockAlert",
-            event.productId(),
-            null,
-            toJson(Map.of(
-                "productName",      event.productName(),
-                "storeId",          event.storeId().toString(),
-                "currentQuantity",  event.currentQuantity(),
-                "threshold",        event.threshold()
-            ))
-        );
+        write(event.actorId(), event.tenantId(), "STOCK_THRESHOLD_BREACHED", "StockAlert", event.productId(),
+                null,
+                map("productName", event.productName(),
+                        "currentQuantity", event.currentQuantity(),
+                        "threshold", event.threshold()),
+                event.storeId(), event.productName(),
+                map("storeId", str(event.storeId())),
+                null);
         log.warn("AUDIT: stock_threshold_breached productId={} product={} qty={} threshold={} tenantId={}",
-            event.productId(), event.productName(), event.currentQuantity(),
-            event.threshold(), event.tenantId());
+                event.productId(), event.productName(), event.currentQuantity(),
+                event.threshold(), event.tenantId());
     }
 
     // ── Contact Events (Story 2.5) ────────────────────────────────────────────
 
-    /**
-     * Handle client created event.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management.
-     */
     @EventListener
     public void on(ClientCreatedEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "CLIENT_CREATED",
-                "Client",
-                event.clientId(),
-                null,
-                toJson(Map.of("name", event.name()))
-        );
+        write(event.actorId(), event.tenantId(), "CLIENT_CREATED", "Client", event.clientId(),
+                null, map("name", event.name()), null, event.name(), null, null);
         log.info("AUDIT: client_created clientId={} tenantId={} actorId={}",
                 event.clientId(), event.tenantId(), event.actorId());
     }
 
-    /**
-     * Handle client archived event.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management.
-     */
     @EventListener
     public void on(ClientArchivedEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "CLIENT_ARCHIVED",
-                "Client",
-                event.clientId(),
-                null,
-                toJson(Map.of("name", event.name(), "archived", true))
-        );
+        write(event.actorId(), event.tenantId(), "CLIENT_ARCHIVED", "Client", event.clientId(),
+                null, map("name", event.name(), "archived", true), null, event.name(), null, null);
         log.info("AUDIT: client_archived clientId={} tenantId={} actorId={}",
                 event.clientId(), event.tenantId(), event.actorId());
     }
 
-    /**
-     * Handle category created event (v1s-14-15) — REST create or sync CREATE_CATEGORY.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management.
-     */
+    /** v1s-14-15 — REST create or sync CREATE_CATEGORY. */
     @EventListener
     public void on(CategoryCreatedEvent event) {
-        Map<String, Object> after = new java.util.LinkedHashMap<>();
-        after.put("name", event.name());
-        after.put("parentId", event.parentId() != null ? event.parentId().toString() : null);
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "CATEGORY_CREATED",
-                "Category",
-                event.categoryId(),
+        write(event.actorId(), event.tenantId(), "CATEGORY_CREATED", "Category", event.categoryId(),
                 null,
-                toJson(after)
-        );
+                map("name", event.name(),
+                        "parentId", event.parentId() != null ? event.parentId().toString() : null),
+                null, event.name(), null, null);
         log.info("AUDIT: category_created categoryId={} tenantId={} actorId={}",
                 event.categoryId(), event.tenantId(), event.actorId());
     }
 
-    /**
-     * Handle category active-flag change (v1s-14-15) — toggle (REST/sync) or REST delete.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management.
-     */
+    /** v1s-14-15 — toggle (REST/sync) or REST delete. */
     @EventListener
     public void on(CategoryActiveChangedEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
+        write(event.actorId(), event.tenantId(),
                 event.active() ? "CATEGORY_ACTIVATED" : "CATEGORY_DEACTIVATED",
-                "Category",
-                event.categoryId(),
-                toJson(Map.of("active", !event.active())),
-                toJson(Map.of("name", event.name(), "active", event.active()))
-        );
+                "Category", event.categoryId(),
+                map("active", !event.active()),
+                map("name", event.name(), "active", event.active()),
+                null, event.name(), null, null);
         log.info("AUDIT: category_{} categoryId={} tenantId={} actorId={}",
                 event.active() ? "activated" : "deactivated",
                 event.categoryId(), event.tenantId(), event.actorId());
     }
 
-    /**
-     * Handle category renamed event (v1s-14-15) — REST rename or sync RENAME_CATEGORY.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management.
-     */
+    /** v1s-14-15 — REST rename or sync RENAME_CATEGORY. */
     @EventListener
     public void on(CategoryRenamedEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "CATEGORY_RENAMED",
-                "Category",
-                event.categoryId(),
-                toJson(Map.of("name", event.oldName())),
-                toJson(Map.of("name", event.newName()))
-        );
+        write(event.actorId(), event.tenantId(), "CATEGORY_RENAMED", "Category", event.categoryId(),
+                map("name", event.oldName()),
+                map("name", event.newName()),
+                null, event.newName(), null, null);
         log.info("AUDIT: category_renamed categoryId={} tenantId={} actorId={}",
                 event.categoryId(), event.tenantId(), event.actorId());
     }
 
-    /**
-     * Handle supplier created event.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management.
-     */
     @EventListener
     public void on(SupplierCreatedEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "SUPPLIER_CREATED",
-                "Supplier",
-                event.supplierId(),
-                null,
-                toJson(Map.of("name", event.name()))
-        );
+        write(event.actorId(), event.tenantId(), "SUPPLIER_CREATED", "Supplier", event.supplierId(),
+                null, map("name", event.name()), null, event.name(), null, null);
         log.info("AUDIT: supplier_created supplierId={} tenantId={} actorId={}",
                 event.supplierId(), event.tenantId(), event.actorId());
     }
 
-    /**
-     * Handle supplier archived event.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management.
-     */
     @EventListener
     public void on(SupplierArchivedEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "SUPPLIER_ARCHIVED",
-                "Supplier",
-                event.supplierId(),
-                null,
-                toJson(Map.of("name", event.name(), "archived", true))
-        );
+        write(event.actorId(), event.tenantId(), "SUPPLIER_ARCHIVED", "Supplier", event.supplierId(),
+                null, map("name", event.name(), "archived", true), null, event.name(), null, null);
         log.info("AUDIT: supplier_archived supplierId={} tenantId={} actorId={}",
                 event.supplierId(), event.tenantId(), event.actorId());
     }
 
-    // ── Store Events (Story 3.1) ──────────────────────────────────────────────
+    // ── Store Events (Story 3.1) — store column = the store itself ───────────
 
-    /**
-     * Handle store created event.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
-     */
     @EventListener
     public void on(StoreCreatedEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "STORE_CREATED",
-                "Store",
-                event.storeId(),
-                null,
-                toJson(Map.of("name", event.name(), "type", event.type().name()))
-        );
+        write(event.actorId(), event.tenantId(), "STORE_CREATED", "Store", event.storeId(),
+                null, map("name", event.name(), "type", event.type().name()),
+                event.storeId(), event.name(), null, null);
         log.info("AUDIT: store_created storeId={} name={} type={} tenantId={} actorId={}",
                 event.storeId(), event.name(), event.type(), event.tenantId(), event.actorId());
     }
 
-    /**
-     * Handle store updated event.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
-     */
+    /** The event carries no previous name, so {@code valueBefore} stays null. */
     @EventListener
     public void on(StoreUpdatedEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "STORE_UPDATED",
-                "Store",
-                event.storeId(),
-                null,
-                toJson(Map.of("newName", event.newName()))
-        );
+        write(event.actorId(), event.tenantId(), "STORE_UPDATED", "Store", event.storeId(),
+                null, map("newName", event.newName(), "name", event.newName()),
+                event.storeId(), event.newName(), null, null);
         log.info("AUDIT: store_updated storeId={} newName={} tenantId={} actorId={}",
                 event.storeId(), event.newName(), event.tenantId(), event.actorId());
     }
 
-    /**
-     * Handle store deactivated event.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
-     */
     @EventListener
     public void on(StoreDeactivatedEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "STORE_DEACTIVATED",
-                "Store",
-                event.storeId(),
-                null,
-                toJson(Map.of("name", event.name(), "deactivated", true))
-        );
+        write(event.actorId(), event.tenantId(), "STORE_DEACTIVATED", "Store", event.storeId(),
+                null, map("name", event.name(), "deactivated", true),
+                event.storeId(), event.name(), null, null);
         log.info("AUDIT: store_deactivated storeId={} name={} tenantId={} actorId={}",
                 event.storeId(), event.name(), event.tenantId(), event.actorId());
     }
 
-    // ── Employee events (Story 14.11) ────────────────────────────────────────
+    // ── Employee events (Story 14.11) — events carry no name → label null ────
 
-    /**
-     * Handle employee profile updated event.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
-     */
     @EventListener
     public void on(EmployeeUpdatedEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "EMPLOYEE_UPDATED",
-                "Employee",
-                event.employeeId(),
-                null,
-                toJson(Map.of("fieldsChanged", event.fieldsChanged()))
-        );
+        write(event.actorId(), event.tenantId(), "EMPLOYEE_UPDATED", "Employee", event.employeeId(),
+                null, map("fieldsChanged", event.fieldsChanged()), null, null, null, null);
         log.info("AUDIT: employee_updated employeeId={} fieldsChanged={} tenantId={} actorId={}",
                 event.employeeId(), event.fieldsChanged(), event.tenantId(), event.actorId());
     }
 
-    /**
-     * Handle employee role changed event.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
-     */
     @EventListener
     public void on(EmployeeRoleChangedEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "EMPLOYEE_ROLE_CHANGED",
-                "Employee",
-                event.employeeId(),
-                toJson(Map.of("role", event.previousRole())),
-                toJson(Map.of("role", event.newRole()))
-        );
+        write(event.actorId(), event.tenantId(), "EMPLOYEE_ROLE_CHANGED", "Employee", event.employeeId(),
+                map("role", event.previousRole()),
+                map("role", event.newRole()),
+                null, null, null, null);
         log.info("AUDIT: employee_role_changed employeeId={} {}→{} tenantId={} actorId={}",
                 event.employeeId(), event.previousRole(), event.newRole(),
                 event.tenantId(), event.actorId());
     }
 
-    /**
-     * Handle employee password set by owner event.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
-     */
     @EventListener
     public void on(EmployeePasswordSetByOwnerEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "EMPLOYEE_PASSWORD_SET_BY_OWNER",
-                "Employee",
+        write(event.actorId(), event.tenantId(), "EMPLOYEE_PASSWORD_SET_BY_OWNER", "Employee",
                 event.employeeId(),
-                null,
-                toJson(Map.of("forcedReset", true))
-        );
+                null, map("forcedReset", true), null, null, null, null);
         log.info("AUDIT: employee_password_set_by_owner employeeId={} tenantId={} actorId={}",
                 event.employeeId(), event.tenantId(), event.actorId());
     }
 
     // ── Account deletion events (Story 14.5, FR91) ──────────────────────────
 
-    /**
-     * Handle account deletion requested event.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
-     */
     @EventListener
     public void on(AccountDeletionRequestedEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId().toString(),
-                "ACCOUNT_DELETION_REQUESTED",
-                "Tenant",
+        write(event.actorId(), event.tenantId().toString(), "ACCOUNT_DELETION_REQUESTED", "Tenant",
                 event.tenantId(),
-                null,
-                toJson(Map.of(
-                        "scheduledDeletionAt", event.scheduledDeletionAt().toString()
-                ))
-        );
+                null, map("scheduledDeletionAt", str(event.scheduledDeletionAt())),
+                null, null, null, null);
         log.info("AUDIT: account_deletion_requested tenantId={} actorId={} scheduledDeletion={}",
                 event.tenantId(), event.actorId(), event.scheduledDeletionAt());
     }
 
-    /**
-     * Handle account deletion cancelled event.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
-     */
     @EventListener
     public void on(AccountDeletionCancelledEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId().toString(),
-                "ACCOUNT_DELETION_CANCELLED",
-                "Tenant",
+        write(event.actorId(), event.tenantId().toString(), "ACCOUNT_DELETION_CANCELLED", "Tenant",
                 event.tenantId(),
-                null,
-                toJson(Map.of("cancelledAt", event.cancelledAt().toString()))
-        );
+                null, map("cancelledAt", str(event.cancelledAt())),
+                null, null, null, null);
         log.info("AUDIT: account_deletion_cancelled tenantId={} actorId={}",
                 event.tenantId(), event.actorId());
     }
 
-    // ── Sale events (Story 4.1) ──────────────────────────────────────────────
+    // ── Sale events (Story 4.1 / 4.3) ────────────────────────────────────────
 
-    /**
-     * Handle sale completed event.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
-     */
     @EventListener
     public void on(SaleCompletedEvent event) {
-        auditPort.record(
-                event.getActorId(),
-                event.getTenantId(),
-                "SALE_COMPLETED",
-                "Sale",
-                event.getSaleId(),
+        write(event.getActorId(), event.getTenantId(), "SALE_COMPLETED", "Sale", event.getSaleId(),
                 null,
-                toJson(Map.of(
-                        "storeId",        event.getStoreId().toString(),
-                        "totalAmount",    event.getTotalAmount(),
+                map("totalAmount", event.getTotalAmount(),
                         "discountAmount", event.getDiscountAmount(),
-                        "itemsSnapshot",  event.getItemsSnapshot()
-                ))
-        );
+                        "itemsSnapshot", event.getItemsSnapshot()),
+                event.getStoreId(), LABEL_SALE,
+                map("storeId", str(event.getStoreId()), "occurredAt", str(event.getOccurredAt())),
+                null);
         log.info("AUDIT: sale_completed saleId={} storeId={} total={} discount={} tenantId={} actorId={}",
                 event.getSaleId(), event.getStoreId(), event.getTotalAmount(),
                 event.getDiscountAmount(), event.getTenantId(), event.getActorId());
     }
 
-    // ── Story 4.3 — Pending validation events ───────────────────────────────────
-
     @EventListener
     public void on(ProductActivatedEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "PRODUCT_ACTIVATED",
-                "Product",
-                event.productId(),
-                null,
-                toJson(Map.of("productId", event.productId().toString()))
-        );
+        write(event.actorId(), event.tenantId(), "PRODUCT_ACTIVATED", "Product", event.productId(),
+                map("status", "DRAFT"), map("status", "ACTIVE"),
+                null, null, null, null);
         log.info("AUDIT: product_activated productId={} tenantId={} actorId={}",
                 event.productId(), event.tenantId(), event.actorId());
     }
 
     @EventListener
     public void on(SalePendingValidationEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "SALE_PENDING_VALIDATION",
-                "Sale",
-                event.saleId(),
+        write(event.actorId(), event.tenantId(), "SALE_PENDING_VALIDATION", "Sale", event.saleId(),
                 null,
-                toJson(Map.of(
-                        "storeId", event.storeId().toString(),
+                map("status", "PENDING_VALIDATION",
                         "draftProductIds", event.draftProductIds().stream().map(UUID::toString).toList(),
-                        "totalAmount", event.totalAmount()
-                ))
-        );
+                        "totalAmount", event.totalAmount()),
+                event.storeId(), LABEL_SALE,
+                map("storeId", str(event.storeId())),
+                null);
         log.info("AUDIT: sale_pending_validation saleId={} tenantId={} actorId={}",
                 event.saleId(), event.tenantId(), event.actorId());
     }
 
     @EventListener
     public void on(SaleAutoValidatedEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "SALE_AUTO_VALIDATED",
-                "Sale",
-                event.saleId(),
-                null,
-                toJson(Map.of("triggerProductId", event.triggerProductId().toString()))
-        );
+        write(event.actorId(), event.tenantId(), "SALE_AUTO_VALIDATED", "Sale", event.saleId(),
+                map("status", "PENDING_VALIDATION"), map("status", "COMPLETED"),
+                event.storeId(), LABEL_SALE,
+                map("triggerProductId", str(event.triggerProductId())),
+                null);
         log.info("AUDIT: sale_auto_validated saleId={} triggeredBy={} tenantId={}",
                 event.saleId(), event.triggerProductId(), event.tenantId());
     }
 
     @EventListener
     public void on(SaleManuallyValidatedEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "SALE_MANUALLY_VALIDATED",
-                "Sale",
-                event.saleId(),
-                null,
-                toJson(Map.of(
-                        "justification", event.justification(),
-                        "forcedProducts", event.forcedProducts().stream().map(UUID::toString).toList()
-                ))
-        );
+        write(event.actorId(), event.tenantId(), "SALE_MANUALLY_VALIDATED", "Sale", event.saleId(),
+                map("status", "PENDING_VALIDATION"), map("status", "COMPLETED"),
+                event.storeId(), LABEL_SALE,
+                map("justification", event.justification(),
+                        "forcedProducts", event.forcedProducts().stream().map(UUID::toString).toList()),
+                null);
         log.info("AUDIT: sale_manually_validated saleId={} forcedProducts={} tenantId={}",
                 event.saleId(), event.forcedProducts().size(), event.tenantId());
     }
 
     @EventListener
     public void on(SaleCancelledEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "SALE_CANCELLED",
-                "Sale",
-                event.saleId(),
+        write(event.actorId(), event.tenantId(), "SALE_CANCELLED", "Sale", event.saleId(),
                 null,
-                toJson(Map.of(
-                        "justification", event.justification() != null ? event.justification() : "",
-                        "itemsSnapshot", event.itemsSnapshot()
-                ))
-        );
+                map("status", "CANCELLED", "itemsSnapshot", event.itemsSnapshot()),
+                event.storeId(), LABEL_SALE,
+                map("justification", event.justification() != null ? event.justification() : ""),
+                null);
         log.info("AUDIT: sale_cancelled saleId={} tenantId={} actorId={}",
                 event.saleId(), event.tenantId(), event.actorId());
     }
 
+    /** Field-by-field: before/after are the sale item snapshots; justification is context. */
     @EventListener
     public void on(SaleCorrectedEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "SALE_CORRECTED",
-                "Sale",
-                event.saleId(),
-                null,
-                toJson(Map.of(
-                        "justification", event.justification(),
-                        "beforeSnapshot", event.beforeSnapshot(),
-                        "afterSnapshot", event.afterSnapshot()
-                ))
-        );
+        writeRaw(event.actorId(), event.tenantId(), "SALE_CORRECTED", "Sale", event.saleId(),
+                event.beforeSnapshot(), event.afterSnapshot(),
+                event.storeId(), LABEL_SALE,
+                map("justification", event.justification()),
+                null);
         log.info("AUDIT: sale_corrected saleId={} tenantId={} actorId={}",
                 event.saleId(), event.tenantId(), event.actorId());
     }
 
     @EventListener
     public void on(StockForcedZeroEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "STOCK_FORCED_ZERO",
-                "StockLevel",
-                event.productId(),
+        write(event.actorId(), event.tenantId(), "STOCK_FORCED_ZERO", "StockLevel", event.productId(),
                 null,
-                toJson(Map.of(
-                        "storeId", event.storeId().toString(),
-                        "requestedQuantity", event.requestedQuantity(),
-                        "availableQuantity", event.availableQuantity()
-                ))
-        );
+                map("requestedQuantity", event.requestedQuantity(),
+                        "availableQuantity", event.availableQuantity()),
+                event.storeId(), null,
+                map("storeId", str(event.storeId())),
+                null);
         log.info("AUDIT: stock_forced_zero productId={} storeId={} requested={} available={}",
                 event.productId(), event.storeId(), event.requestedQuantity(), event.availableQuantity());
     }
 
     // ── Day Closure Events (Story 4.4) ───────────────────────────────────────
 
-    /**
-     * Handle day closed event — records the day closure in the audit log.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
-     */
     @EventListener
     public void on(DayClosedEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "DAY_CLOSED",
-                "DayClosure",
-                event.closureId(),
+        write(event.actorId(), event.tenantId(), "DAY_CLOSED", "DayClosure", event.closureId(),
                 null,
-                toJson(Map.of(
-                        "storeId", event.storeId().toString(),
+                map("totalSales", event.summary().totalSales(),
+                        "totalRevenue", event.summary().totalRevenue()),
+                event.storeId(), LABEL_DAY_CLOSURE,
+                map("storeId", str(event.storeId()),
                         "isAutomatic", event.isAutomatic(),
-                        "totalSales", event.summary().totalSales(),
-                        "totalRevenue", event.summary().totalRevenue(),
-                        "occurredAt", event.occurredAt().toString()
-                ))
-        );
+                        "occurredAt", str(event.occurredAt())),
+                null);
         log.info("AUDIT: day_closed closureId={} storeId={} isAutomatic={} totalSales={} totalRevenue={} tenantId={} actorId={}",
                 event.closureId(), event.storeId(), event.isAutomatic(),
                 event.summary().totalSales(), event.summary().totalRevenue(),
                 event.tenantId(), event.actorId());
     }
 
-    // ── Inventory (Story 6.1) ─────────────────────────────────────────────────
+    // ── Inventory (Story 6.1 – 6.4) ─────────────────────────────────────────
 
-    /**
-     * Handle inventory session created event.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
-     */
     @EventListener
     public void on(InventorySessionCreatedEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "INVENTORY_SESSION_CREATED",
-                "InventorySession",
+        write(event.actorId(), event.tenantId(), "INVENTORY_SESSION_CREATED", "InventorySession",
                 event.sessionId(),
-                null,
-                toJson(Map.of(
-                        "storeId", event.storeId().toString(),
+                null, map("status", "IN_PROGRESS"),
+                event.storeId(), LABEL_INVENTORY,
+                map("storeId", str(event.storeId()),
                         "scope", event.scope().name(),
-                        "occurredAt", event.occurredAt().toString()
-                ))
-        );
+                        "occurredAt", str(event.occurredAt())),
+                null);
         log.info("AUDIT: inventory_session_created sessionId={} storeId={} scope={} tenantId={} actorId={}",
                 event.sessionId(), event.storeId(), event.scope(),
                 event.tenantId(), event.actorId());
     }
 
-    /**
-     * Handle inventory session cancelled event.
-     *
-     * <p><b>AUTHENTICATED endpoint</b> — JwtAuthFilter already set TenantContext → NO manual management needed.
-     */
     @EventListener
     public void on(InventorySessionCancelledEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "INVENTORY_SESSION_CANCELLED",
-                "InventorySession",
+        write(event.actorId(), event.tenantId(), "INVENTORY_SESSION_CANCELLED", "InventorySession",
                 event.sessionId(),
-                null,
-                toJson(Map.of(
-                        "cancelledBy", event.actorId().toString(),
-                        "occurredAt", event.occurredAt().toString()
-                ))
-        );
+                map("status", "IN_PROGRESS"), map("status", "CANCELLED"),
+                event.storeId(), LABEL_INVENTORY,
+                map("cancelledBy", str(event.actorId()), "occurredAt", str(event.occurredAt())),
+                null);
         log.info("AUDIT: inventory_session_cancelled sessionId={} tenantId={} actorId={}",
                 event.sessionId(), event.tenantId(), event.actorId());
     }
 
-    // ── Inventory Count (Story 6.2) ──────────────────────────────────────────
-
     @EventListener
     public void on(InventoryCountSavedEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "INVENTORY_COUNT_SAVED",
-                "InventoryCount",
+        write(event.actorId(), event.tenantId(), "INVENTORY_COUNT_SAVED", "InventoryCount",
                 event.countId(),
                 null,
-                toJson(Map.of(
-                        "sessionId", event.sessionId().toString(),
-                        "productId", event.productId().toString(),
+                map("productId", str(event.productId()),
+                        "variantId", str(event.variantId()),
                         "theoretical", event.theoretical(),
                         "physical", event.physical(),
-                        "ecart", event.ecart(),
-                        "occurredAt", event.occurredAt().toString()
-                ))
-        );
+                        "ecart", event.ecart()),
+                event.storeId(), null,
+                map("sessionId", str(event.sessionId()), "occurredAt", str(event.occurredAt())),
+                null);
         log.info("AUDIT: inventory_count_saved countId={} sessionId={} productId={} ecart={} tenantId={}",
                 event.countId(), event.sessionId(), event.productId(), event.ecart(), event.tenantId());
     }
 
-    // ── Inventory Report (Story 6.3) ────────────────────────────────────────
-
     @EventListener
     public void on(InventoryReportGeneratedEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "INVENTORY_REPORT_GENERATED",
-                "InventorySession",
+        write(event.actorId(), event.tenantId(), "INVENTORY_REPORT_GENERATED", "InventorySession",
                 event.sessionId(),
-                null,
-                toJson(Map.of(
-                        "sessionId", event.sessionId().toString(),
-                        "occurredAt", event.occurredAt().toString()
-                ))
-        );
+                null, null,
+                event.storeId(), LABEL_INVENTORY,
+                map("occurredAt", str(event.occurredAt())),
+                null);
         log.info("AUDIT: inventory_report_generated sessionId={} tenantId={} actorId={}",
                 event.sessionId(), event.tenantId(), event.actorId());
     }
 
-    // ── Inventory Validation (Story 6.4) ────────────────────────────────────────
-
     @EventListener
     public void on(InventoryValidatedEvent event) {
-        auditPort.record(
-                event.actorId(),
-                event.tenantId(),
-                "INVENTORY_VALIDATED",
-                "InventorySession",
+        write(event.actorId(), event.tenantId(), "INVENTORY_VALIDATED", "InventorySession",
                 event.sessionId(),
-                null,
-                toJson(Map.of(
-                        "adjustmentCount", event.adjustmentCount(),
-                        "occurredAt", event.occurredAt().toString()
-                ))
-        );
+                map("status", "IN_PROGRESS"),
+                map("status", "VALIDATED", "adjustmentCount", event.adjustmentCount()),
+                event.storeId(), LABEL_INVENTORY,
+                map("occurredAt", str(event.occurredAt())),
+                null);
         log.info("AUDIT: inventory_validated sessionId={} adjustments={} tenantId={} actorId={}",
                 event.sessionId(), event.adjustmentCount(), event.tenantId(), event.actorId());
     }
 
-    // ── Template Method helper ────────────────────────────────────────────────
+    // ── Password reset (Story 14.12) — cross-tenant, best-effort ────────────
 
     /**
-     * Story 14.12 — Handle password reset requested event (cross-tenant audit, D4).
-     *
-     * <p><b>PUBLIC endpoint</b> — /auth/forgot-password has no JWT, no TenantContext.
-     * Must audit in EVERY tenant where the user has a membership (the password reset
-     * affects all memberships, like revokeAllSessionsEverywhere).
-     *
-     * <p>Anti-PII: only userId is logged, never the phone number (AC5).
+     * <b>PUBLIC endpoint</b> — /auth/forgot-password has no JWT, no TenantContext.
+     * Audits in EVERY tenant where the user has a membership. Anti-PII: only userId is logged.
      */
     @EventListener
     public void on(PasswordResetRequestedEvent event) {
-        List<UserMembershipInfo> memberships =
-                userRepository.findMembershipsWithTenantInfo(event.userId());
-        for (UserMembershipInfo m : memberships) {
-            TenantContext.setCurrentTenant(m.schemaName());
-            try {
-                auditPort.record(
-                        event.userId(),
-                        m.schemaName(),
-                        "PASSWORD_RESET_REQUESTED",
-                        "User",
-                        event.userId(),
-                        null,
-                        toJson(Map.of("userId", event.userId().toString()))
-                );
-                log.info("AUDIT: password_reset_requested userId={} schema={}",
-                        event.userId(), m.schemaName());
-            } catch (Exception e) {
-                // Best-effort audit per tenant — one tenant's audit failure must NOT
-                // skip remaining tenants nor propagate to the caller (which would roll
-                // back the outer @Transactional and fail the user's password reset).
-                log.error("AUDIT FAILED: password_reset_requested userId={} schema={} error={}",
-                        event.userId(), m.schemaName(), e.getMessage(), e);
-            } finally {
-                TenantContext.clear();
-            }
-        }
+        auditInEveryMembership(event.userId(), "PASSWORD_RESET_REQUESTED", "password_reset_requested");
     }
 
-    /**
-     * Story 14.12 — Handle password reset completed event (cross-tenant audit, D4).
-     *
-     * <p><b>PUBLIC endpoint</b> — /auth/reset-password has no JWT, no TenantContext.
-     * Same cross-tenant loop as PasswordResetRequestedEvent.
-     *
-     * <p>Anti-PII: only userId is logged, never the phone number or new password (AC5).
-     */
+    /** Same cross-tenant loop as {@link PasswordResetRequestedEvent}. */
     @EventListener
     public void on(PasswordResetEvent event) {
-        List<UserMembershipInfo> memberships =
-                userRepository.findMembershipsWithTenantInfo(event.userId());
+        auditInEveryMembership(event.userId(), "PASSWORD_RESET", "password_reset");
+    }
+
+    private void auditInEveryMembership(UUID userId, String action, String logName) {
+        List<UserMembershipInfo> memberships = userRepository.findMembershipsWithTenantInfo(userId);
         for (UserMembershipInfo m : memberships) {
             TenantContext.setCurrentTenant(m.schemaName());
             try {
-                auditPort.record(
-                        event.userId(),
-                        m.schemaName(),
-                        "PASSWORD_RESET",
-                        "User",
-                        event.userId(),
-                        null,
-                        toJson(Map.of("userId", event.userId().toString()))
-                );
-                log.info("AUDIT: password_reset userId={} schema={}",
-                        event.userId(), m.schemaName());
+                write(userId, m.schemaName(), action, "User", userId,
+                        null, map("userId", userId.toString()), null, null, null, null);
+                log.info("AUDIT: {} userId={} schema={}", logName, userId, m.schemaName());
             } catch (Exception e) {
                 // Best-effort audit per tenant — one tenant's audit failure must NOT
                 // skip remaining tenants nor propagate to the caller (which would roll
                 // back the outer @Transactional and fail the user's password reset).
-                log.error("AUDIT FAILED: password_reset userId={} schema={} error={}",
-                        event.userId(), m.schemaName(), e.getMessage(), e);
+                log.error("AUDIT FAILED: {} userId={} schema={} error={}",
+                        logName, userId, m.schemaName(), e.getMessage(), e);
             } finally {
                 TenantContext.clear();
             }
         }
     }
 
-    // ── Template Method helper ────────────────────────────────────────────────
+    // ── Template Method helpers ───────────────────────────────────────────────
+
+    /**
+     * Build and record one enriched entry (maps serialized to JSON).
+     *
+     * @param storeId        event store, or null → actor's assigned store (resolver fallback)
+     * @param entityLabel    readable target label, or null
+     * @param context        pure context for {@code metadata} (null values dropped)
+     * @param eventActorName actor display name carried by the event; preferred over the
+     *                       resolver label when non-blank
+     */
+    private void write(UUID actorId, String tenantId, String action, String entityType, UUID entityId,
+                       Map<String, Object> before, Map<String, Object> after,
+                       UUID storeId, String entityLabel, Map<String, Object> context,
+                       String eventActorName) {
+        writeRaw(actorId, tenantId, action, entityType, entityId,
+                before != null ? toJson(before) : null,
+                after != null ? toJson(after) : null,
+                storeId, entityLabel, context, eventActorName);
+    }
+
+    private void writeRaw(UUID actorId, String tenantId, String action, String entityType, UUID entityId,
+                          String valueBefore, String valueAfter,
+                          UUID storeId, String entityLabel, Map<String, Object> context,
+                          String eventActorName) {
+        AuditWriteContextResolver.WriteContext ctx = contextResolver.resolve();
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        if (context != null) {
+            context.forEach((k, v) -> {
+                if (v != null) metadata.put(k, v);
+            });
+        }
+        // The event's real actor name beats the resolver label (a role fallback when no firstName).
+        String eventName = blankToNull(eventActorName);
+        String actorLabel = eventName != null ? eventName : ctx.actorLabel();
+        if (actorLabel != null) metadata.put("actorLabel", actorLabel);
+
+        auditPort.record(new AuditPort.AuditEntry(
+                actorId, tenantId, action, entityType, entityId,
+                valueBefore, valueAfter,
+                storeId != null ? storeId : ctx.fallbackStoreId(),
+                truncate(blankToNull(entityLabel), 200),
+                ctx.deviceId(),
+                ctx.source(),
+                metadata.isEmpty() ? null : toJson(metadata)));
+    }
+
+    /** Insertion-ordered map that tolerates null values (unlike {@code Map.of}). */
+    private static Map<String, Object> map(Object... keyValues) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        for (int i = 0; i < keyValues.length; i += 2) {
+            m.put((String) keyValues[i], keyValues[i + 1]);
+        }
+        return m;
+    }
+
+    private static String str(Object o) {
+        return o != null ? o.toString() : null;
+    }
+
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() ? null : s;
+    }
+
+    /** Cut at {@code max} chars without splitting a surrogate pair. */
+    private static String truncate(String s, int max) {
+        if (s == null || s.length() <= max) return s;
+        int end = Character.isHighSurrogate(s.charAt(max - 1)) ? max - 1 : max;
+        return s.substring(0, end);
+    }
 
     /**
      * Serialize an object to a JSON string.
-     * Returns "{}" on error — audit is best-effort on serialization.
+     * Returns "{}" on error — the entry is still written, the failure is logged as an error.
      */
     private String toJson(Object obj) {
         try {
             return objectMapper.writeValueAsString(obj);
         } catch (JsonProcessingException e) {
-            log.warn("AuditEventListener: failed to serialize valueAfter to JSON — using {{}}: {}", e.getMessage());
+            log.error("AUDIT_SERIALIZATION_FAILED AuditEventListener: failed to serialize audit JSON — using {{}}: {}",
+                    e.getMessage(), e);
             return "{}";
         }
     }

@@ -1,5 +1,6 @@
 package com.keevo.shared.infrastructure.web.dto;
 
+import com.fasterxml.jackson.annotation.JsonRawValue;
 import com.keevo.shared.application.port.AuditPort;
 
 import java.time.Instant;
@@ -9,9 +10,9 @@ import java.util.UUID;
  * AuditEntryResponse — REST response DTO for a single audit log entry.
  *
  * <p>Story 1.8 — returned by {@link com.keevo.shared.infrastructure.web.AuditController}.
- *
- * <p>Maps from {@link AuditPort.AuditEntryRecord} — the port-layer aggregate.
- * This is a pure data carrier for the HTTP response layer.
+ * Story v1s-18-6 — additive enrichment fields (null on entries written before V14, except
+ * {@code actorName}, resolved at read time). {@code metadata} is emitted as a JSON object
+ * (raw jsonb text), not as a string.
  */
 public record AuditEntryResponse(
         UUID      id,
@@ -22,7 +23,14 @@ public record AuditEntryResponse(
         String    valueAfter,
         UUID      userId,
         String    actorPhone,
-        Instant   occurredAt
+        Instant   occurredAt,
+        UUID      storeId,
+        String    storeName,
+        String    entityLabel,
+        String    deviceId,
+        String    source,
+        @JsonRawValue String metadata,
+        String    actorName
 ) {
 
     /**
@@ -38,7 +46,14 @@ public record AuditEntryResponse(
                 r.valueAfter(),
                 r.userId(),
                 r.actorPhone(),
-                r.occurredAt()
+                r.occurredAt(),
+                r.storeId(),
+                r.storeName(),
+                r.entityLabel(),
+                r.deviceId(),
+                r.source(),
+                r.metadata(),
+                r.actorName()
         );
     }
 }

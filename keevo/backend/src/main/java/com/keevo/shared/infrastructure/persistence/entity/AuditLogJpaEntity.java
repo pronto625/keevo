@@ -5,6 +5,8 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.Immutable;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -62,6 +64,25 @@ public class AuditLogJpaEntity {
     @Column(name = "occurred_at", nullable = false, insertable = true, updatable = false)
     private Instant occurredAt;
 
+    // ── Story v1s-18-6 — enrichment (all nullable: rows written before V14 keep NULL) ──
+
+    @Column(name = "store_id", updatable = false)
+    private UUID storeId;
+
+    @Column(name = "entity_label", updatable = false, length = 200)
+    private String entityLabel;
+
+    @Column(name = "device_id", updatable = false, length = 100)
+    private String deviceId;
+
+    @Column(name = "source", updatable = false, length = 10)
+    private String source;
+
+    /** Raw JSON object text, stored as {@code jsonb}. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "metadata", columnDefinition = "jsonb", updatable = false)
+    private String metadata;
+
     /** Required no-arg constructor for Hibernate proxy. */
     protected AuditLogJpaEntity() {
     }
@@ -79,6 +100,18 @@ public class AuditLogJpaEntity {
         this.occurredAt  = occurredAt;
     }
 
+    public AuditLogJpaEntity(UUID id, UUID userId, String entityType, UUID entityId,
+                              String action, String valueBefore, String valueAfter,
+                              Instant occurredAt, UUID storeId, String entityLabel,
+                              String deviceId, String source, String metadata) {
+        this(id, userId, entityType, entityId, action, valueBefore, valueAfter, occurredAt);
+        this.storeId     = storeId;
+        this.entityLabel = entityLabel;
+        this.deviceId    = deviceId;
+        this.source      = source;
+        this.metadata    = metadata;
+    }
+
     // ── Read-only accessors ───────────────────────────────────────────────────
 
     public UUID    getId()          { return id; }
@@ -89,4 +122,9 @@ public class AuditLogJpaEntity {
     public String  getValueBefore() { return valueBefore; }
     public String  getValueAfter()  { return valueAfter; }
     public Instant getOccurredAt()  { return occurredAt; }
+    public UUID    getStoreId()     { return storeId; }
+    public String  getEntityLabel() { return entityLabel; }
+    public String  getDeviceId()    { return deviceId; }
+    public String  getSource()      { return source; }
+    public String  getMetadata()    { return metadata; }
 }

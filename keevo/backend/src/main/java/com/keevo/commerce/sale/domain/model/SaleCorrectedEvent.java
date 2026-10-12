@@ -16,5 +16,6 @@ public record SaleCorrectedEvent(
         String beforeSnapshot,
         String afterSnapshot,
         String tenantId,
-        Instant occurredAt
+        Instant occurredAt,
+        UUID storeId          // v1s-18-6: store the action happened in (audit store_id)
 ) {}

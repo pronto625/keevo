@@ -121,6 +121,29 @@ public final class CurrentActor {
     }
 
     /**
+     * The actor's assigned store, or {@code null} when unauthenticated, unscoped (OWNER) or the
+     * token carries no store. Never throws — used as the audit store fallback (v1s-18-6).
+     */
+    public static UUID assignedStoreIdOrNull() {
+        Authentication auth = authentication();
+        if (auth != null && auth.getDetails() instanceof AuthDetails ad) {
+            return ad.storeId();
+        }
+        return null;
+    }
+
+    /**
+     * Role-based label used when no name is known (read-time audit actor name, v1s-18-6).
+     *
+     * @param role role name ({@code "OWNER"}, {@code "EMPLOYEE"}, ...) or {@code null}
+     */
+    public static String fallbackLabel(String role) {
+        if (Role.EMPLOYEE.name().equals(role)) return FALLBACK_EMPLOYEE_LABEL;
+        if (Role.OWNER.name().equals(role)) return FALLBACK_OWNER_LABEL;
+        return FALLBACK_OTHER_LABEL;
+    }
+
+    /**
      * Human-readable actor label for notifications: the JWT {@code firstName} when present,
      * otherwise a role-based fallback. Never returns a raw UUID.
      */

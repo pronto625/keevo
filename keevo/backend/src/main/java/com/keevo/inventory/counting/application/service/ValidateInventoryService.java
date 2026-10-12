@@ -116,7 +116,7 @@ public class ValidateInventoryService implements ValidateInventoryUseCase {
         String tenantId = TenantContext.getCurrentTenant();
         eventPublisher.publishEvent(new InventoryValidatedEvent(
                 session.getId(), command.actorId(), adjustmentsApplied,
-                tenantId, Instant.now()
+                tenantId, Instant.now(), session.getStoreId()
         ));
 
         return new ValidateInventoryResult(

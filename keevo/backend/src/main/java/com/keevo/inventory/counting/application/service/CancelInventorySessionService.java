@@ -46,7 +46,7 @@ public class CancelInventorySessionService implements CancelInventorySessionUseC
 
         eventPublisher.publishEvent(new InventorySessionCancelledEvent(
                 session.getId(), command.actorId(),
-                TenantContext.getCurrentTenant(), Instant.now()));
+                TenantContext.getCurrentTenant(), Instant.now(), session.getStoreId()));
 
         return session;
     }

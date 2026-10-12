@@ -8,6 +8,7 @@ import com.keevo.commerce.sale.domain.model.*;
 import com.keevo.commerce.sale.domain.port.out.ProductStatusPort;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -35,12 +36,15 @@ public class SaleValidationCascadeService {
     private final StockLevelRepository stockLevelRepository;
     private final StockOperationService stockOperationService;
     private final ApplicationEventPublisher eventPublisher;
+    private final ObjectMapper objectMapper;
 
     public SaleValidationCascadeService(SaleRepository saleRepository,
                                         ProductStatusPort productStatusPort,
                                         StockLevelRepository stockLevelRepository,
                                         StockOperationService stockOperationService,
-                                        ApplicationEventPublisher eventPublisher) {
+                                        ApplicationEventPublisher eventPublisher,
+                                        ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
         this.saleRepository = saleRepository;
         this.productStatusPort = productStatusPort;
         this.stockLevelRepository = stockLevelRepository;
@@ -117,10 +121,11 @@ public class SaleValidationCascadeService {
 
         eventPublisher.publishEvent(new SaleCompletedEvent(
                 sale.getId(), actorId, tenantId, sale.getStoreId(),
-                sale.getTotalAmount(), sale.getDiscountAmount(), "[]", now));
+                sale.getTotalAmount(), sale.getDiscountAmount(),
+                SaleAuditSnapshot.serialize(objectMapper, sale.getItems(), sale.getId()), now));
 
         eventPublisher.publishEvent(new SaleAutoValidatedEvent(
-                sale.getId(), triggerProductId, actorId, tenantId, now));
+                sale.getId(), triggerProductId, actorId, tenantId, now, sale.getStoreId()));
 
         return true;
     }

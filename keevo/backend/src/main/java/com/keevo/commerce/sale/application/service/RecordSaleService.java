@@ -1,6 +1,5 @@
 package com.keevo.commerce.sale.application.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.catalog.product.domain.event.SalePriceOverriddenEvent;
 import com.keevo.catalog.stock.domain.entity.StockLevel;
@@ -157,10 +156,6 @@ public class RecordSaleService implements RecordSaleUseCase {
     }
 
     private String serializeItems(RecordSaleCommand command) {
-        try {
-            return objectMapper.writeValueAsString(command.items());
-        } catch (JsonProcessingException e) {
-            return "[]";
-        }
+        return SaleAuditSnapshot.serialize(objectMapper, command.items(), command.saleId());
     }
 }

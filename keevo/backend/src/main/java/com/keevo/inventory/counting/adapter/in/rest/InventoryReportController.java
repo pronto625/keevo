@@ -55,7 +55,7 @@ public class InventoryReportController {
         InventoryGapReport report = generateGapReportUseCase.execute(
                 new GenerateGapReportQuery(sessionId, actorId));
 
-        publishAuditEvent(sessionId, actorId);
+        publishAuditEvent(sessionId, actorId, report.getStoreId());
 
         return ResponseEntity.ok(ApiResponseWrapper.ok(
                 InventoryGapReportResponseDto.fromDomain(report)));
@@ -77,9 +77,9 @@ public class InventoryReportController {
         return UUID.fromString(auth.getName());
     }
 
-    private void publishAuditEvent(UUID sessionId, UUID actorId) {
+    private void publishAuditEvent(UUID sessionId, UUID actorId, UUID storeId) {
         String tenantId = TenantContext.getCurrentTenant();
         eventPublisher.publishEvent(new InventoryReportGeneratedEvent(
-                sessionId, actorId, tenantId, Instant.now()));
+                sessionId, actorId, tenantId, Instant.now(), storeId));
     }
 }

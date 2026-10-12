@@ -3,13 +3,20 @@ package com.keevo.shared.infrastructure.persistence.impl;
 import com.keevo.shared.application.port.AuditPort;
 import com.keevo.shared.infrastructure.persistence.entity.AuditLogJpaEntity;
 import com.keevo.shared.infrastructure.persistence.jpa.AuditLogSpringRepository;
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.Query;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -36,13 +43,33 @@ import java.util.UUID;
 @Component
 public class AuditLogRepositoryAdapter implements AuditPort {
 
-    private static final String SELECT_WITH_PHONE = """
-            SELECT a.id::text, a.entity_type, a.entity_id::text, a.action,
-                   a.value_before, a.value_after, a.user_id::text, a.occurred_at,
-                   u.phone_number
+    /**
+     * Story v1s-18-6 — enriched read projection. {@code public.users} is the only cross-schema
+     * join; {@code stores}/{@code employees} resolve to the tenant schema via search_path.
+     * The employee lookup is LATERAL + LIMIT 1 so a user with several employee rows never
+     * duplicates an audit row.
+     */
+    private static final String SELECT_ENRICHED = """
+            SELECT CAST(a.id AS text), a.entity_type, CAST(a.entity_id AS text), a.action,
+                   a.value_before, a.value_after, CAST(a.user_id AS text), a.occurred_at,
+                   u.phone_number,
+                   CAST(a.store_id AS text), st.name, a.entity_label, a.device_id, a.source,
+                   CAST(a.metadata AS text),
+                   NULLIF(TRIM(COALESCE(e.first_name, '') || ' ' || COALESCE(e.last_name, '')), ''),
+                   a.metadata ->> 'actorLabel',
+                   u.role
             FROM audit_log a
             LEFT JOIN public.users u ON a.user_id = u.id
+            LEFT JOIN stores st ON st.id = a.store_id
+            LEFT JOIN LATERAL (
+                SELECT emp.first_name, emp.last_name FROM employees emp
+                WHERE emp.user_id = a.user_id
+                ORDER BY emp.updated_at DESC
+                LIMIT 1
+            ) e ON TRUE
             """;
+
+    private static final String ORDER_BY = " ORDER BY a.occurred_at DESC, a.id DESC";
 
     private final AuditLogSpringRepository repository;
     private final EntityManager            entityManager;
@@ -66,81 +93,117 @@ public class AuditLogRepositoryAdapter implements AuditPort {
      * <p>This is required for public-endpoint callers (e.g. {@code UserRegisteredEvent}
      * from {@code /auth/register}) where the outer transaction uses a connection scoped
      * to the public schema. Without {@code REQUIRES_NEW}, {@code repository.save()} would
-     * join the outer session and silently insert into {@code public.audit_log} (which does
-     * not exist, causing a silent no-op or error).
+     * join the outer session and silently insert into {@code public.audit_log}.
      *
      * <p>Audit entries are intentionally independent of the triggering transaction:
      * if the caller rolls back, the audit entry is still persisted (audit-on-attempt semantics).
+     *
+     * <p>{@code occurred_at} is truncated to microseconds (PostgreSQL precision) so the keyset
+     * cursor built from a read row always matches the stored value exactly.
      */
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void record(UUID actorId, String tenantId, String action,
-                       String entityType, UUID entityId,
-                       String valueBefore, String valueAfter) {
+    public void record(AuditEntry e) {
         AuditLogJpaEntity entity = new AuditLogJpaEntity(
                 UUID.randomUUID(),
-                actorId,
-                entityType,
-                entityId,
-                action,
-                valueBefore,
-                valueAfter,
-                Instant.now()
+                e.actorId(),
+                e.entityType(),
+                e.entityId(),
+                e.action(),
+                e.valueBefore(),
+                e.valueAfter(),
+                Instant.now().truncatedTo(ChronoUnit.MICROS),
+                e.storeId(),
+                e.entityLabel(),
+                e.deviceId(),
+                e.source(),
+                e.metadataJson()
         );
         repository.save(entity);
     }
 
-    // ── AuditPort: queries (native SQL — LEFT JOIN public.users for actorPhone) ──
+    // ── AuditPort: queries ────────────────────────────────────────────────────
 
     @Override
     @Transactional(readOnly = true)
-    public AuditPage findByEntityTypeAndEntityId(String entityType, UUID entityId, int page, int size) {
+    public AuditSlice search(AuditQuery q, String cursor, Integer page, int size) {
+        AuditQuery query = q != null ? q : AuditQuery.none();
+        AuditCursor after = cursor != null ? AuditCursor.decode(cursor) : null;
+
+        List<String> where = new ArrayList<>();
+        Map<String, Object> params = new LinkedHashMap<>();
+        if (query.from() != null) {
+            where.add("a.occurred_at >= :fromTs");
+            params.put("fromTs", query.from());
+        }
+        if (query.to() != null) {
+            where.add("a.occurred_at <= :toTs");
+            params.put("toTs", query.to());
+        }
+        if (query.storeId() != null) {
+            where.add("a.store_id = :storeId");
+            params.put("storeId", query.storeId());
+        }
+        if (query.userId() != null) {
+            where.add("a.user_id = :userId");
+            params.put("userId", query.userId());
+        }
+        if (query.action() != null) {
+            where.add("a.action = :action");
+            params.put("action", query.action());
+        }
+        if (query.entityType() != null) {
+            where.add("a.entity_type = :entityType");
+            params.put("entityType", query.entityType());
+        }
+        if (query.entityId() != null) {
+            where.add("a.entity_id = :entityId");
+            params.put("entityId", query.entityId());
+        }
+        if (after != null) {
+            where.add("(a.occurred_at, a.id) < (CAST(:cursorAt AS timestamptz), CAST(:cursorId AS uuid))");
+            params.put("cursorAt", after.occurredAt());
+            params.put("cursorId", after.id());
+        }
+
+        StringBuilder sql = new StringBuilder(SELECT_ENRICHED);
+        if (!where.isEmpty()) {
+            sql.append("WHERE ").append(String.join(" AND ", where));
+        }
+        sql.append(ORDER_BY);
+
+        Query nq = entityManager.createNativeQuery(sql.toString());
+        params.forEach(nq::setParameter);
+        if (after == null) {
+            int p = page != null ? Math.max(page, 0) : 0;
+            nq.setFirstResult(p * size);
+        }
+        nq.setMaxResults(size + 1);
+
         @SuppressWarnings("unchecked")
-        List<Object[]> rows = entityManager.createNativeQuery(
-                SELECT_WITH_PHONE +
-                "WHERE a.entity_type = :entityType AND a.entity_id = :entityId::uuid " +
-                "ORDER BY a.occurred_at DESC")
-                .setParameter("entityType", entityType)
-                .setParameter("entityId", entityId.toString())
-                .setFirstResult(page * size)
-                .setMaxResults(size + 1)
-                .getResultList();
-        return toPage(rows, size);
+        List<Object[]> rows = nq.getResultList();
+        boolean hasMore = rows.size() > size;
+        List<AuditEntryRecord> entries = mapRows(hasMore ? rows.subList(0, size) : rows);
+        String nextCursor = null;
+        if (hasMore && !entries.isEmpty()) {
+            AuditEntryRecord last = entries.get(entries.size() - 1);
+            nextCursor = new AuditCursor(last.occurredAt(), last.id()).encode();
+        }
+        return new AuditSlice(entries, hasMore, nextCursor);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public AuditPage findByEntityType(String entityType, int page, int size) {
+    public Optional<AuditEntryRecord> findById(UUID id) {
         @SuppressWarnings("unchecked")
-        List<Object[]> rows = entityManager.createNativeQuery(
-                SELECT_WITH_PHONE +
-                "WHERE a.entity_type = :entityType " +
-                "ORDER BY a.occurred_at DESC")
-                .setParameter("entityType", entityType)
-                .setFirstResult(page * size)
-                .setMaxResults(size + 1)
+        List<Object[]> rows = entityManager.createNativeQuery(SELECT_ENRICHED + "WHERE a.id = :id")
+                .setParameter("id", id)
+                .setMaxResults(1)
                 .getResultList();
-        return toPage(rows, size);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public AuditPage findAll(int page, int size) {
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = entityManager.createNativeQuery(
-                SELECT_WITH_PHONE + "ORDER BY a.occurred_at DESC")
-                .setFirstResult(page * size)
-                .setMaxResults(size + 1)
-                .getResultList();
-        return toPage(rows, size);
+        return mapRows(rows).stream().findFirst();
     }
 
     // ── Mapping ───────────────────────────────────────────────────────────────
-
-    private AuditPage toPage(List<Object[]> rows, int size) {
-        boolean hasMore = rows.size() > size;
-        return new AuditPage(mapRows(hasMore ? rows.subList(0, size) : rows), hasMore);
-    }
 
     private List<AuditEntryRecord> mapRows(List<Object[]> rows) {
         return rows.stream().map(r -> new AuditEntryRecord(
@@ -152,8 +215,22 @@ public class AuditLogRepositoryAdapter implements AuditPort {
                 (String) r[5],                    // valueAfter (nullable)
                 UUID.fromString((String) r[6]),   // userId
                 (String) r[8],                    // actorPhone (nullable — LEFT JOIN)
-                toInstant(r[7])                   // occurredAt
+                toInstant(r[7]),                  // occurredAt
+                r[9] != null ? UUID.fromString((String) r[9]) : null, // storeId
+                (String) r[10],                   // storeName (LEFT JOIN stores)
+                (String) r[11],                   // entityLabel
+                (String) r[12],                   // deviceId
+                (String) r[13],                   // source
+                (String) r[14],                   // metadata (raw JSON text)
+                actorName((String) r[15], (String) r[16], (String) r[17])
         )).toList();
+    }
+
+    /** Employee name &gt; label stored at write time &gt; role-based fallback. Never a UUID. */
+    static String actorName(String employeeName, String storedLabel, String role) {
+        if (employeeName != null && !employeeName.isBlank()) return employeeName;
+        if (storedLabel != null && !storedLabel.isBlank()) return storedLabel;
+        return CurrentActor.fallbackLabel(role);
     }
 
     private static Instant toInstant(Object o) {

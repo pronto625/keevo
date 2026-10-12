@@ -16,6 +16,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.Instant;
 import java.util.UUID;
 
+import static com.keevo.shared.infrastructure.web.AuditEntryMatchers.ANY;
+import static com.keevo.shared.infrastructure.web.AuditEntryMatchers.entry;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -55,15 +57,7 @@ class AuditEventListenerContactTest {
 
         listener.on(event);
 
-        verify(auditPort).record(
-                eq(ACTOR_ID),
-                eq(TENANT),
-                eq("CLIENT_CREATED"),
-                eq("Client"),
-                eq(CLIENT_ID),
-                eq(null),   // no valueBefore on creation
-                any()       // valueAfter JSON with name
-        );
+        verify(auditPort).record(entry(ACTOR_ID, TENANT, "CLIENT_CREATED", "Client", CLIENT_ID, null));
     }
 
     // ── ClientArchivedEvent ───────────────────────────────────────────────────
@@ -75,15 +69,7 @@ class AuditEventListenerContactTest {
 
         listener.on(event);
 
-        verify(auditPort).record(
-                eq(ACTOR_ID),
-                eq(TENANT),
-                eq("CLIENT_ARCHIVED"),
-                eq("Client"),
-                eq(CLIENT_ID),
-                eq(null),
-                any()
-        );
+        verify(auditPort).record(entry(ACTOR_ID, TENANT, "CLIENT_ARCHIVED", "Client", CLIENT_ID, null));
     }
 
     // ── SupplierCreatedEvent ──────────────────────────────────────────────────
@@ -95,15 +81,7 @@ class AuditEventListenerContactTest {
 
         listener.on(event);
 
-        verify(auditPort).record(
-                eq(ACTOR_ID),
-                eq(TENANT),
-                eq("SUPPLIER_CREATED"),
-                eq("Supplier"),
-                eq(SUPPLIER_ID),
-                eq(null),
-                any()
-        );
+        verify(auditPort).record(entry(ACTOR_ID, TENANT, "SUPPLIER_CREATED", "Supplier", SUPPLIER_ID, null));
     }
 
     // ── SupplierArchivedEvent ─────────────────────────────────────────────────
@@ -115,14 +93,22 @@ class AuditEventListenerContactTest {
 
         listener.on(event);
 
-        verify(auditPort).record(
-                eq(ACTOR_ID),
-                eq(TENANT),
-                eq("SUPPLIER_ARCHIVED"),
-                eq("Supplier"),
-                eq(SUPPLIER_ID),
-                eq(null),
-                any()
-        );
+        verify(auditPort).record(entry(ACTOR_ID, TENANT, "SUPPLIER_ARCHIVED", "Supplier", SUPPLIER_ID, null));
+    }
+
+    // ── v1s-18-6 — readable label ──
+
+    @Test
+    @DisplayName("client and supplier events carry the contact name as entityLabel")
+    void contact_label_isName() {
+        listener.on(new ClientArchivedEvent(CLIENT_ID, "Alice", ACTOR_ID, TENANT, NOW));
+        listener.on(new SupplierCreatedEvent(SUPPLIER_ID, "Fournisseur SA", ACTOR_ID, TENANT, NOW));
+
+        org.mockito.ArgumentCaptor<AuditPort.AuditEntry> captor =
+                org.mockito.ArgumentCaptor.forClass(AuditPort.AuditEntry.class);
+        verify(auditPort, org.mockito.Mockito.times(2)).record(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getAllValues())
+                .extracting(AuditPort.AuditEntry::entityLabel)
+                .containsExactly("Alice", "Fournisseur SA");
     }
 }

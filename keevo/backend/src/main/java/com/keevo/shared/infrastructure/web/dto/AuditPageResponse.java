@@ -9,15 +9,18 @@ import java.util.List;
  *
  * <p>Fields:
  * <ul>
- *   <li>{@code entries} — audit entries for the requested page, sorted occurredAt DESC</li>
- *   <li>{@code hasMore} — true if at least one more page exists</li>
- *   <li>{@code page}    — zero-based page index echoed back to the client</li>
- *   <li>{@code size}    — page size echoed back to the client</li>
+ *   <li>{@code entries}    — audit entries, sorted occurredAt DESC, id DESC</li>
+ *   <li>{@code hasMore}    — true if at least one more page exists</li>
+ *   <li>{@code page}       — zero-based page index echoed back (legacy offset paging)</li>
+ *   <li>{@code size}       — page size echoed back to the client</li>
+ *   <li>{@code nextCursor} — opaque keyset cursor for the next slice, null when no more
+ *       (Story v1s-18-6)</li>
  * </ul>
  */
 public record AuditPageResponse(
         List<AuditEntryResponse> entries,
         boolean hasMore,
         int page,
-        int size
+        int size,
+        String nextCursor
 ) {}
