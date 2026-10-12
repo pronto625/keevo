@@ -4,6 +4,7 @@ import com.keevo.reporting.export.adapter.in.rest.dto.ExportDatasetDto;
 import com.keevo.reporting.export.adapter.in.rest.dto.ExportJobDto;
 import com.keevo.reporting.export.adapter.in.rest.dto.ExportRequestDto;
 import com.keevo.reporting.export.application.service.ExportDatasetRegistry;
+import com.keevo.reporting.export.application.service.ExportCriteria;
 import com.keevo.reporting.export.domain.model.ExportFormat;
 import com.keevo.reporting.export.domain.model.ExportJob;
 import com.keevo.reporting.export.domain.model.ExportJobStatus;
@@ -40,6 +41,7 @@ import java.time.format.DateTimeParseException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -95,6 +97,7 @@ public class ExportController {
                                                                     HttpServletResponse response) throws IOException {
         CurrentActor.requireOwner(OWNER_ONLY);
         ExportRequest request = parse(body);
+        checkCriteriaApply(request);
         String tenant = TenantContext.getCurrentTenant();
         RequestExportUseCase.ExportOutcome outcome;
         try {
@@ -201,7 +204,27 @@ public class ExportController {
         if (from != null && to != null && from.isAfter(to)) {
             throw new InvalidRequestParameterException("from", "from must not be after to");
         }
-        return new ExportRequest(body.datasets(), format, new ExportFilter(storeId, from, to));
+        Map<String, String> criteria = criteria(body);
+        return new ExportRequest(body.datasets(), format, new ExportFilter(storeId, from, to, criteria));
+    }
+
+    /** Story v1s-18-2 — value shape here; applicability is checked against the requested datasets. */
+    private static Map<String, String> criteria(ExportRequestDto body) {
+        try {
+            return ExportCriteria.normalize(body.criteria());
+        } catch (ExportCriteria.InvalidCriterionException e) {
+            throw new InvalidRequestParameterException(e.getField(), e.getMessage());
+        }
+    }
+
+    /** Unknown datasets are left to the service (400 EXPORT_DATASET_UNKNOWN). */
+    private void checkCriteriaApply(ExportRequest request) {
+        try {
+            ExportCriteria.checkApplicable(request.filter().criteria(), request.datasets().stream()
+                    .map(datasetRegistry::find).flatMap(java.util.Optional::stream).toList());
+        } catch (ExportCriteria.InvalidCriterionException e) {
+            throw new InvalidRequestParameterException(e.getField(), e.getMessage());
+        }
     }
 
     private static UUID parseUuid(String name, String value) {

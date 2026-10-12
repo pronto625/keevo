@@ -80,6 +80,12 @@ class ExportServiceTest {
     private Executor executor = submitted::add;
     private final SyntheticExportProvider stores = new SyntheticExportProvider("stores", "Boutiques", 3);
     private final SyntheticExportProvider big = new SyntheticExportProvider("big", "Gros", 6000);
+    private final SyntheticExportProvider audit = new SyntheticExportProvider("audit_log", "Journal d'audit", 2) {
+        @Override
+        public java.util.Set<String> criteriaKeys() {
+            return java.util.Set.of("userId", "action", "entityType", "entityId", "q");
+        }
+    };
     private final ExportLinkSigner signer = new ExportLinkSigner("export-link-secret-for-tests-0123456789");
     private int maxRequestsPerHour = 30;
 
@@ -104,7 +110,7 @@ class ExportServiceTest {
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
         ExportProperties props = new ExportProperties();
         return new ExportService(
-                new ExportDatasetRegistry(List.of(stores, big)),
+                new ExportDatasetRegistry(List.of(stores, big, audit)),
                 new ExportRendererRegistry(List.of(new CsvExportRenderer(), new XlsxExportRenderer())),
                 new ExportStreamingWriter(1000), jobRepository, storage,
                 new ExportRateLimiter(maxRequestsPerHour, 3, jobRepository, clock), signer,
@@ -118,6 +124,10 @@ class ExportServiceTest {
 
     private static ExportRequest req(ExportFormat format, String... datasets) {
         return new ExportRequest(List.of(datasets), format, ExportFilter.none());
+    }
+
+    private static ExportRequest withCriteria(java.util.Map<String, String> criteria, String... datasets) {
+        return new ExportRequest(List.of(datasets), ExportFormat.CSV, new ExportFilter(null, null, null, criteria));
     }
 
     private RequestExportUseCase.ExportOutcome run(ExportRequest r) throws Exception {
@@ -416,6 +426,43 @@ class ExportServiceTest {
                     new ExportFilter(null, NOW, NOW.minusSeconds(1)))), "VALIDATION_ERROR");
             assertThat(opened).isEmpty();
             verifyNoInteractions(eventPublisher);
+        }
+
+        @Test
+        @DisplayName("criteria: unknown key for a requested dataset, bad UUID, q > 100, action > 80 → VALIDATION_ERROR, no slot used")
+        void criteriaValidation() throws Exception {
+            plan(PlanType.FREE, SubscriptionStatus.ACTIVE);
+            maxRequestsPerHour = 1;
+            ExportService s = service();
+            for (ExportRequest bad : List.of(
+                    withCriteria(java.util.Map.of("action", "X"), "stores"),                  // wrong dataset
+                    withCriteria(java.util.Map.of("action", "X"), "audit_log", "stores"),     // not on every dataset
+                    withCriteria(java.util.Map.of("nope", "X"), "audit_log"),                 // unknown key
+                    withCriteria(java.util.Map.of("userId", "not-a-uuid"), "audit_log"),
+                    withCriteria(java.util.Map.of("entityId", "123"), "audit_log"),
+                    withCriteria(java.util.Map.of("q", "x".repeat(101)), "audit_log"),
+                    withCriteria(java.util.Map.of("action", "A".repeat(81)), "audit_log"),
+                    withCriteria(java.util.Map.of("bad key", "x"), "audit_log"))) {
+                assertCode(() -> s.request(TENANT, ACTOR, bad, direct), "VALIDATION_ERROR");
+            }
+            assertThat(opened).isEmpty();
+            verifyNoInteractions(eventPublisher);
+            // the hourly slot is still available
+            s.request(TENANT, ACTOR, withCriteria(java.util.Map.of("q", "x".repeat(100)), "audit_log"), direct);
+        }
+
+        @Test
+        @DisplayName("valid criteria are normalised (trimmed, blank dropped), passed to the provider and audited")
+        void criteriaPassedThrough() throws Exception {
+            plan(PlanType.FREE, SubscriptionStatus.ACTIVE);
+            UUID user = UUID.randomUUID();
+            run(withCriteria(java.util.Map.of("userId", " " + user + " ", "action", "SALE_CREATED", "q", "  "),
+                    "audit_log"));
+
+            assertThat(audit.lastFilter.criteria())
+                    .containsExactlyInAnyOrderEntriesOf(java.util.Map.of("userId", user.toString(), "action", "SALE_CREATED"));
+            assertThat(capturedEvent().criteria())
+                    .containsExactlyInAnyOrderEntriesOf(java.util.Map.of("userId", user.toString(), "action", "SALE_CREATED"));
         }
 
         @Test

@@ -57,7 +57,7 @@ class AuditEventListenerExportTest {
 
         new AuditEventListener(auditPort, objectMapper, userRepository).on(new DataExportedEvent(
                 exportId, actor, "kv_abc123", "CSV", List.of("stores", "products"), List.of("Boutiques", "Produits"),
-                store, from, to,
+                store, from, to, java.util.Map.of("action", "SALE_CREATED", "q", "riz"),
                 1234, "BACKGROUND", Instant.parse("2026-10-12T12:00:00Z")));
 
         ArgumentCaptor<AuditPort.AuditEntry> c = ArgumentCaptor.forClass(AuditPort.AuditEntry.class);
@@ -82,6 +82,8 @@ class AuditEventListenerExportTest {
         assertThat(after.get("to").asText()).isEqualTo("2026-10-12T00:00:00Z");
         assertThat(after.get("rowCount").asLong()).isEqualTo(1234);
         assertThat(after.get("mode").asText()).isEqualTo("BACKGROUND");
+        assertThat(after.get("criteria").get("action").asText()).isEqualTo("SALE_CREATED"); // v1s-18-2
+        assertThat(after.get("criteria").get("q").asText()).isEqualTo("riz");
         assertThat(objectMapper.readTree(e.metadataJson()).get("occurredAt").asText())
                 .isEqualTo("2026-10-12T12:00:00Z");
     }
@@ -99,6 +101,7 @@ class AuditEventListenerExportTest {
         JsonNode after = objectMapper.readTree(c.getValue().valueAfter());
         assertThat(after.get("storeId").isNull()).isTrue();
         assertThat(after.get("mode").asText()).isEqualTo("DIRECT");
+        assertThat(after.get("criteria")).isEmpty();
         assertThat(c.getValue().entityLabel()).as("keys as fallback").isEqualTo("Export XLSX — stores");
     }
 }

@@ -638,6 +638,7 @@ public class AuditEventListener {
                         "storeId", str(event.storeId()),
                         "from", str(event.from()),
                         "to", str(event.to()),
+                        "criteria", new java.util.TreeMap<>(event.criteria()),
                         "rowCount", event.rowCount(),
                         "mode", event.mode()),
                 event.storeId(), label,

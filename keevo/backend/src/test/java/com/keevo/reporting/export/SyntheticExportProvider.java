@@ -25,6 +25,8 @@ public class SyntheticExportProvider implements ExportDatasetProvider {
     public final AtomicInteger maxLimitRequested = new AtomicInteger();
     public final AtomicInteger maxRowsReturned = new AtomicInteger();
     public final AtomicInteger pageReads = new AtomicInteger();
+    /** Filter of the last count / page read (criteria pass-through checks). */
+    public volatile ExportFilter lastFilter;
 
     public SyntheticExportProvider(String key, String label, long total) {
         this.key = key;
@@ -46,12 +48,14 @@ public class SyntheticExportProvider implements ExportDatasetProvider {
 
     @Override
     public long count(ExportFilter filter) {
+        lastFilter = filter;
         return total;
     }
 
     @Override
     public ExportPage readPage(ExportFilter filter, String cursor, int limit) {
         pageReads.incrementAndGet();
+        lastFilter = filter;
         maxLimitRequested.accumulateAndGet(limit, Math::max);
         long start = cursor == null ? 0 : Long.parseLong(cursor);
         long end = Math.min(total, start + limit);

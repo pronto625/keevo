@@ -42,6 +42,10 @@ public class ExportJobJpaEntity {
     @Column(name = "period_to")
     private Instant periodTo;
 
+    /** Dataset-specific criteria as a JSON object of strings, null when none (Story v1s-18-2, V16). */
+    @Column(name = "criteria", columnDefinition = "TEXT")
+    private String criteria;
+
     @Column(name = "row_count")
     private Long rowCount;
 
@@ -77,7 +81,7 @@ public class ExportJobJpaEntity {
 
     @SuppressWarnings("java:S107")
     ExportJobJpaEntity(UUID id, UUID requestedBy, String status, String format, String datasets,
-                       UUID storeId, Instant periodFrom, Instant periodTo, Long rowCount,
+                       UUID storeId, Instant periodFrom, Instant periodTo, String criteria, Long rowCount,
                        String fileName, Long fileSize, String contentType, String storagePath,
                        String errorCode, Instant createdAt, Instant startedAt, Instant completedAt,
                        Instant expiresAt) {
@@ -89,6 +93,7 @@ public class ExportJobJpaEntity {
         this.storeId = storeId;
         this.periodFrom = periodFrom;
         this.periodTo = periodTo;
+        this.criteria = criteria;
         this.rowCount = rowCount;
         this.fileName = fileName;
         this.fileSize = fileSize;
@@ -109,6 +114,7 @@ public class ExportJobJpaEntity {
     public UUID getStoreId() { return storeId; }
     public Instant getPeriodFrom() { return periodFrom; }
     public Instant getPeriodTo() { return periodTo; }
+    public String getCriteria() { return criteria; }
     public Long getRowCount() { return rowCount; }
     public String getFileName() { return fileName; }
     public Long getFileSize() { return fileSize; }

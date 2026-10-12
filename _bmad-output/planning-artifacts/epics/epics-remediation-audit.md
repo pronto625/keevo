@@ -1284,6 +1284,11 @@ As an owner, I want every business dataset exportable, so that nothing stays loc
 **And** columns are stable and documented (same schema as the local export, story 18.5)
 **And** amounts are integer XAF and dates are WAT
 
+**Delivered 2026-10-12 (v1s-18-2, spec-v1s-18-2-export-datasets.md):**
+- [x] 16 datasets, one provider per domain (`<module>/adapter/out/export/`): products, categories, stock_levels, stock_movements, stock_transfers, clients, suppliers, sales, sale_items, day_closures, inventory_sessions, inventory_counts, employees (no credentials), stores, reports, audit_log (criteria userId/action/entityType/entityId/q)
+- [x] Decisions: event datasets filter the period on their event column; reference datasets (products, categories, stock_levels, clients, suppliers, employees, stores) ignore the period; filters honoured are exposed by `GET /api/v1/exports/datasets`; archived/cancelled rows exported with a status column; no variant dataset (no server-side variant catalogue)
+- [x] Column schema pinned by `ExportDatasetCatalogTest` (contract for 18.5); criteria persisted on background jobs (Flyway V16)
+
 ## Story 18.3: Modèles PDF — **[C]**
 
 As an owner, I want branded PDF documents, so that I can share or print clean reports.
@@ -1308,6 +1313,9 @@ As an owner, I want to pick what, which period and which format to export, then 
 **Items (routed 2026-10-12 from build-auto v1s-18-7):**
 - [ ] [Deferred-from: build-auto v1s-18-7, 2026-10-12] « Exporter » button on « Historique des actions » (app bar of `keevo/app/lib/features/audit/presentation/page/audit_log_page.dart`) opening the export flow pre-filled with the « Journal d'audit » dataset and the current `AuditFilter` (period, store, employee, action, object type, `q`) — the export flow does not exist before 18.4; the filter model is `keevo/app/lib/features/audit/domain/model/audit_filter.dart`
 
+**Items (routed 2026-10-12 from build-auto v1s-18-2 review):**
+- [ ] [Deferred-from: review v1s-18-2, 2026-10-12] Export criteria (`userId`, `action`, `entityType`, `entityId`, `q`) are request-global: `POST /api/v1/exports` answers 400 `VALIDATION_ERROR` when a requested dataset does not declare a criterion [keevo/backend/src/main/java/com/keevo/reporting/export/application/service/ExportCriteria.java] — the screen must send `criteria` only when « Journal d'audit » is the sole dataset (read `GET /api/v1/exports/datasets` → `criteria`), or drop them when the user adds other datasets
+
 ## Story 18.5: Export local hors ligne (CSV) — **[C]**
 
 As a user without network, I want to export what is on my device as CSV.
@@ -1318,6 +1326,9 @@ As a user without network, I want to export what is on my device as CSV.
 **Given** airplane mode **When** exporting **Then** a CSV is produced and shared
 **And** the file is marked « données de cet appareil » and opens directly in French-locale Excel
 **And** 10,000 rows are generated without UI jank (isolate)
+
+**Items (routed 2026-10-12 from build-auto v1s-18-2 review):**
+- [ ] [Deferred-from: review v1s-18-2, 2026-10-12] Reuse the server column schema verbatim (keys, French labels, types pinned by `keevo/backend/src/test/java/com/keevo/reporting/export/ExportDatasetCatalogTest.java`) and the code→French label maps of each provider (`keevo/backend/src/main/java/com/keevo/*/**/adapter/out/export/*ExportDatasetProvider.java`, e.g. movement types, sale status, payment mode, report type incl. `DAILY_COMBINED`, delivery status) — the golden test pins columns but not the label maps
 
 ## Story 18.6: Audit enrichi (backend) — **[C]**
 

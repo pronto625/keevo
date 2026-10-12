@@ -126,7 +126,68 @@ class ExportControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].key").value("stores"))
                 .andExpect(jsonPath("$.data[0].label").value("Boutiques"))
-                .andExpect(jsonPath("$.data[0].columns[2].type").value("AMOUNT_XAF"));
+                .andExpect(jsonPath("$.data[0].columns[2].type").value("AMOUNT_XAF"))
+                .andExpect(jsonPath("$.data[0].storeFilter").value(true))
+                .andExpect(jsonPath("$.data[0].periodFilter").value(true))
+                .andExpect(jsonPath("$.data[0].criteria").isEmpty());
+    }
+
+    @Test
+    @DisplayName("GET /datasets → store / period filter flags and criteria keys (sorted) per dataset (v1s-18-2)")
+    void datasetsFilterMetadata() throws Exception {
+        as("OWNER");
+        SyntheticExportProvider reference = new SyntheticExportProvider("products", "Produits", 1) {
+            @Override public boolean supportsPeriodFilter() { return false; }
+            @Override public boolean supportsStoreFilter() { return false; }
+        };
+        SyntheticExportProvider audit = new SyntheticExportProvider("audit_log", "Journal d'audit", 1) {
+            @Override public java.util.Set<String> criteriaKeys() { return java.util.Set.of("userId", "q", "action"); }
+        };
+        MockMvc m = MockMvcBuilders.standaloneSetup(new ExportController(requestUseCase, listUseCase, downloadUseCase,
+                        new ExportDatasetRegistry(List.of(reference, audit))))
+                .setControllerAdvice(new GlobalExceptionHandler()).build();
+        m.perform(get("/api/v1/exports/datasets"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.key=='products')].storeFilter").value(false))
+                .andExpect(jsonPath("$.data[?(@.key=='products')].periodFilter").value(false))
+                .andExpect(jsonPath("$.data[?(@.key=='audit_log')].storeFilter").value(true))
+                .andExpect(jsonPath("$.data[?(@.key=='audit_log')].criteria[*]").value(
+                        org.hamcrest.Matchers.contains("action", "q", "userId")));
+    }
+
+    @Test
+    @DisplayName("POST with criteria → parsed into the filter (trimmed, blank dropped); malformed criteria → 400 VALIDATION_ERROR")
+    void postCriteria() throws Exception {
+        as("OWNER");
+        UUID user = UUID.randomUUID();
+        when(requestUseCase.request(eq(TENANT), eq(actor), any(), any())).thenAnswer(inv -> {
+            RequestExportUseCase.DirectOutput d = inv.getArgument(3);
+            d.open("text/csv; charset=UTF-8", "keevo-audit_log.csv").write('x');
+            return new RequestExportUseCase.Direct(UUID.randomUUID(), "keevo-audit_log.csv", 0);
+        });
+        mvc.perform(post("/api/v1/exports").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"datasets\":[\"audit_log\"],\"format\":\"CSV\",\"criteria\":{\"userId\":\" " + user
+                                + "\",\"action\":\"SALE_CREATED\",\"q\":\"\"}}"))
+                .andExpect(status().isOk());
+        ArgumentCaptor<ExportRequest> req = ArgumentCaptor.forClass(ExportRequest.class);
+        verify(requestUseCase).request(eq(TENANT), eq(actor), req.capture(), any());
+        assertThat(req.getValue().filter().criteria())
+                .containsExactlyInAnyOrderEntriesOf(java.util.Map.of("userId", user.toString(), "action", "SALE_CREATED"));
+
+        for (String criteria : List.of("{\"userId\":\"nope\"}", "{\"entityId\":\"42\"}",
+                "{\"q\":\"" + "x".repeat(101) + "\"}", "{\"action\":\"" + "A".repeat(81) + "\"}",
+                "{\"bad key\":\"x\"}")) {
+            mvc.perform(post("/api/v1/exports").contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"datasets\":[\"audit_log\"],\"format\":\"CSV\",\"criteria\":" + criteria + "}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.domainCode").value("VALIDATION_ERROR"));
+        }
+        // a criterion the requested dataset does not accept (stores has none)
+        mvc.perform(post("/api/v1/exports").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"datasets\":[\"stores\"],\"format\":\"CSV\",\"criteria\":{\"action\":\"X\"}}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.domainCode").value("VALIDATION_ERROR"));
+        verify(requestUseCase, org.mockito.Mockito.times(1)).request(any(), any(), any(), any());
     }
 
     @Test

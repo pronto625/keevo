@@ -1,6 +1,7 @@
 package com.keevo.shared.application.port.export;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * ExportDatasetProvider — port through which a domain contributes one exportable dataset to the
@@ -47,4 +48,29 @@ public interface ExportDatasetProvider {
      * @return the page; {@code nextCursor == null} when there is no further row
      */
     ExportPage readPage(ExportFilter filter, String cursor, int limit);
+
+    /**
+     * Whether {@link ExportFilter#storeId()} narrows this dataset (Story v1s-18-2). Event datasets
+     * filter on their store column; reference datasets only when they are store-scoped.
+     */
+    default boolean supportsStoreFilter() {
+        return true;
+    }
+
+    /**
+     * Whether {@link ExportFilter#from()} / {@link ExportFilter#to()} narrow this dataset (Story
+     * v1s-18-2). Event datasets filter on their event column; reference datasets (current
+     * snapshot: products, clients…) ignore the period.
+     */
+    default boolean supportsPeriodFilter() {
+        return true;
+    }
+
+    /**
+     * Dataset-specific criteria keys accepted in {@link ExportFilter#criteria()} (Story v1s-18-2).
+     * A request carrying any other key for this dataset is rejected (400).
+     */
+    default Set<String> criteriaKeys() {
+        return Set.of();
+    }
 }
