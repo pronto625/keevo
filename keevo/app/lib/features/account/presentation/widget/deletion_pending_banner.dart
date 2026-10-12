@@ -46,8 +46,8 @@ class _DeletionPendingBannerState extends ConsumerState<DeletionPendingBanner> {
     if (status == null) return const SizedBox.shrink();
 
     final cs = Theme.of(context).colorScheme;
-    final isDark = cs.brightness == Brightness.dark;
-    final iconColor = isDark ? cs.warning : AppTheme.iconAmber;
+    // v1s-16-3 : on-conteneur AA (l'ambre #F59F00 sur #FFF9DB était à 2:1).
+    final iconColor = cs.onWarningContainer;
 
     final date = status.scheduledAt;
     final days = status.daysRemaining();

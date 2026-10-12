@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_theme.dart';
 
 /// SectorType — Domain enum representing the merchant's business sector.
 ///
@@ -9,49 +10,49 @@ enum SectorType {
     apiCode: 'CLOTHING',
     emoji: '👔',
     label: 'Vêtements',
-    selectedColor: Color(0xFFD0EBFF),
+    selectedColor: AppTheme.iconBlueBg,
   ),
   electronics(
     apiCode: 'ELECTRONICS',
     emoji: '📱',
     label: 'Électronique',
-    selectedColor: Color(0xFFD0EBFF),
+    selectedColor: AppTheme.iconBlueBg,
   ),
   booksStationery(
     apiCode: 'BOOKS_STATIONERY',
     emoji: '📚',
     label: 'Librairie / Papeterie',
-    selectedColor: Color(0xFFD0EBFF),
+    selectedColor: AppTheme.iconBlueBg,
   ),
   homeAppliances(
     apiCode: 'HOME_APPLIANCES',
     emoji: '🏠',
     label: 'Électroménager',
-    selectedColor: Color(0xFFD0EBFF),
+    selectedColor: AppTheme.iconBlueBg,
   ),
   foodGrocery(
     apiCode: 'FOOD_GROCERY',
     emoji: '🛒',
     label: 'Alimentation',
-    selectedColor: Color(0xFFD0EBFF),
+    selectedColor: AppTheme.iconBlueBg,
   ),
   pharmacy(
     apiCode: 'PHARMACY',
     emoji: '💊',
     label: 'Pharmacie',
-    selectedColor: Color(0xFFD0EBFF),
+    selectedColor: AppTheme.iconBlueBg,
   ),
   hardware(
     apiCode: 'HARDWARE',
     emoji: '🔧',
     label: 'Quincaillerie',
-    selectedColor: Color(0xFFD0EBFF),
+    selectedColor: AppTheme.iconBlueBg,
   ),
   other(
     apiCode: 'OTHER',
     emoji: '🏪',
     label: 'Autre',
-    selectedColor: Color(0xFFD0EBFF),
+    selectedColor: AppTheme.iconBlueBg,
   );
 
   const SectorType({

@@ -66,10 +66,10 @@ class _SaleSuccessPageState extends State<SaleSuccessPage>
     // Aplat sémantique plein (plus de dégradé) ; le vert est la teinte la
     // plus foncée de l'ancien dégradé pour garder le contraste du blanc. Sur
     // l'ambre, le blanc est illisible : texte et icône passent en onWarning.
-    final fg = isPending ? AppTheme.onWarning : Colors.white;
+    final fg = isPending ? AppTheme.onWarning : AppTheme.onBrand;
     return Scaffold(
       body: Container(
-        color: isPending ? AppTheme.warning : const Color(0xFF37B24D),
+        color: isPending ? AppTheme.warning : AppTheme.successStrong,
         child: FadeTransition(
           opacity: _fadeIn,
           child: Center(

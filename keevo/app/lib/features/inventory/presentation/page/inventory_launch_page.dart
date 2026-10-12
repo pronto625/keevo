@@ -170,7 +170,7 @@ class InventoryLaunchPage extends ConsumerWidget {
                       }
                     },
                     backgroundColor: Colors.transparent,
-                    foregroundColor: Colors.white,
+                    foregroundColor: theme.colorScheme.onPrimary,
                     elevation: 0,
                     icon: const Icon(Icons.add),
                     label: const Text('Nouvel inventaire',

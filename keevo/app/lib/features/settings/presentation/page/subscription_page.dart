@@ -138,7 +138,7 @@ class _PlanCard extends StatelessWidget {
     final (planLabel, planColor, planIcon) = switch (info.planType) {
       'PREMIUM' => (
           'Premium',
-          const Color(0xFFF9A825),
+          cs.warningStrong,
           Icons.workspace_premium_outlined
         ),
       'PREMIUM_TRIAL' => (

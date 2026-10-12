@@ -49,7 +49,7 @@ class CartPill extends StatelessWidget {
                     borderRadius: BorderRadius.circular(AppTheme.radiusL),
                     border: isDark
                         ? Border.all(
-                            color: Colors.white.withValues(alpha: 0.12))
+                            color: AppTheme.onBrand.withValues(alpha: 0.12))
                         : null,
                     boxShadow: [
                       BoxShadow(
@@ -75,7 +75,7 @@ class CartPill extends StatelessWidget {
                               children: [
                                 const Icon(
                                   Icons.shopping_bag_outlined,
-                                  color: Colors.white,
+                                  color: AppTheme.onBrand,
                                   size: 24,
                                 ),
                                 Positioned(
@@ -84,13 +84,13 @@ class CartPill extends StatelessWidget {
                                   child: Container(
                                     padding: const EdgeInsets.all(4),
                                     decoration: const BoxDecoration(
-                                      color: Color(0xFF22C55E),
+                                      color: AppTheme.successStrong,
                                       shape: BoxShape.circle,
                                     ),
                                     child: Text(
                                       '$itemCount',
                                       style: const TextStyle(
-                                        color: Colors.white,
+                                        color: AppTheme.onBrand,
                                         fontWeight: FontWeight.w700,
                                         fontSize: 10,
                                         height: 1,
@@ -110,7 +110,7 @@ class CartPill extends StatelessWidget {
                                   Text(
                                     '$itemCount ARTICLE${itemCount > 1 ? 'S' : ''}',
                                     style: TextStyle(
-                                      color: Colors.white.withValues(alpha: 0.7),
+                                      color: AppTheme.onBrand.withValues(alpha: 0.7),
                                       fontWeight: FontWeight.w600,
                                       fontSize: 10,
                                       letterSpacing: 0.8,
@@ -120,7 +120,7 @@ class CartPill extends StatelessWidget {
                                   Text(
                                     _currencyFormat.format(totalAmount),
                                     style: const TextStyle(
-                                      color: Colors.white,
+                                      color: AppTheme.onBrand,
                                       fontWeight: FontWeight.w700,
                                       fontSize: 15,
                                     ),
@@ -142,7 +142,7 @@ class CartPill extends StatelessWidget {
                                   Text(
                                     'ENCAISSER',
                                     style: const TextStyle(
-                                      color: Colors.white,
+                                      color: AppTheme.onBrand,
                                       fontWeight: FontWeight.w700,
                                       fontSize: 13,
                                       letterSpacing: 0.5,
@@ -151,7 +151,7 @@ class CartPill extends StatelessWidget {
                                   const SizedBox(width: 6),
                                   const Icon(
                                     Icons.arrow_forward_rounded,
-                                    color: Colors.white,
+                                    color: AppTheme.onBrand,
                                     size: 16,
                                   ),
                                 ],

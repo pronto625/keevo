@@ -198,7 +198,7 @@ class ReportHistoryCard extends StatelessWidget {
       case 'WEEKLY':
         return cs.warning;
       case 'DAILY_COMBINED':
-        return const Color(0xFF7048E8);
+        return AppTheme.violet;
       default:
         return cs.primary;
     }

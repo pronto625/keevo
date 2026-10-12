@@ -90,7 +90,7 @@ class _SupplierFormPageState extends ConsumerState<SupplierFormPage>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(children: [
-              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+              const Icon(Icons.check_circle_rounded, color: AppTheme.onBrand, size: 20),
               const SizedBox(width: 12),
               Text(
                 widget.isEditing
@@ -112,7 +112,7 @@ class _SupplierFormPageState extends ConsumerState<SupplierFormPage>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(children: [
-              const Icon(Icons.error_rounded, color: Colors.white, size: 20),
+              const Icon(Icons.error_rounded, color: AppTheme.onBrand, size: 20),
               const SizedBox(width: 12),
               Expanded(child: Text(e.toString())),
             ]),
@@ -382,17 +382,17 @@ class _SaveButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           child: Center(
             child: isSaving
-                ? const Row(
+                ? Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       SizedBox(
                         width: 20, height: 20,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        child: CircularProgressIndicator(color: Theme.of(context).colorScheme.onPrimary, strokeWidth: 2),
                       ),
                       SizedBox(width: 16),
                       Text(
                         'Sauvegarde en cours…',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                        style: TextStyle(color: Theme.of(context).colorScheme.onPrimary, fontWeight: FontWeight.w600),
                       ),
                     ],
                   )
@@ -401,15 +401,15 @@ class _SaveButton extends StatelessWidget {
                     children: [
                       Icon(
                         isEditing ? Icons.save_outlined : Icons.add_business_outlined,
-                        color: Colors.white, size: 24,
+                        color: Theme.of(context).colorScheme.onPrimary, size: 24,
                       ),
                       const SizedBox(width: 12),
                       Text(
                         isEditing
                             ? 'Enregistrer les modifications'
                             : 'Créer le fournisseur',
-                        style: const TextStyle(
-                          color: Colors.white, fontSize: 16,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onPrimary, fontSize: 16,
                           fontWeight: FontWeight.w700, letterSpacing: 0.5,
                         ),
                       ),

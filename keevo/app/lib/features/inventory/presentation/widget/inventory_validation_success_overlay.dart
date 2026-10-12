@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_theme.dart';
+
 /// InventoryValidationSuccessOverlay — full-screen animated success overlay.
 ///
 /// Shows a green checkmark with ScaleTransition, "Inventaire validé" title,
@@ -26,7 +28,7 @@ class InventoryValidationSuccessOverlay extends StatefulWidget {
     showDialog(
       context: context,
       barrierDismissible: false,
-      barrierColor: Colors.black54,
+      barrierColor: Theme.of(context).colorScheme.scrim.withValues(alpha: 0.54),
       builder: (_) => InventoryValidationSuccessOverlay(
         adjustmentsApplied: adjustmentsApplied,
         onComplete: onComplete,
@@ -90,12 +92,12 @@ class _InventoryValidationSuccessOverlayState
                 width: 100,
                 height: 100,
                 decoration: const BoxDecoration(
-                  color: Color(0xFF40C057),
+                  color: AppTheme.successStrong,
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   Icons.check,
-                  color: Colors.white,
+                  color: AppTheme.onBrand,
                   size: 56,
                 ),
               ),
@@ -104,7 +106,7 @@ class _InventoryValidationSuccessOverlayState
             Text(
               'Inventaire validé',
               style: theme.textTheme.headlineSmall?.copyWith(
-                color: Colors.white,
+                color: AppTheme.onBrand,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -112,7 +114,7 @@ class _InventoryValidationSuccessOverlayState
             Text(
               '${widget.adjustmentsApplied} ajustement${widget.adjustmentsApplied > 1 ? 's' : ''} appliqué${widget.adjustmentsApplied > 1 ? 's' : ''}',
               style: theme.textTheme.bodyLarge?.copyWith(
-                color: Colors.white70,
+                color: AppTheme.onBrand.withValues(alpha: 0.7),
               ),
             ),
           ],

@@ -376,14 +376,13 @@ class _RoleBadgeRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isOwner = role == 'OWNER';
-    final isDark = cs.brightness == Brightness.dark;
     // Mêmes teintes (ambre = propriétaire, bleu = employé) mais résolues
     // selon le thème : les pastels opaques d'origine étaient illisibles en
     // mode sombre.
     final badgeColor =
         isOwner ? cs.warningContainer : AppTheme.softTint(cs.brightness);
     final textColor = isOwner
-        ? (isDark ? cs.warning : const Color(0xFF664D03))
+        ? cs.onWarningContainer
         : cs.primary;
     final label = isOwner ? 'Propriétaire' : 'Employé';
 

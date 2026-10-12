@@ -186,12 +186,12 @@ class _CategoriesPageState extends ConsumerState<CategoriesPage> {
                 FilledButton.icon(
                   onPressed: _loading ? null : _createCategory,
                   icon: _loading
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.white,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         )
                       : const Icon(Icons.add, size: 18),

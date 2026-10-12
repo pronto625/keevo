@@ -52,15 +52,12 @@ class _Banner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = cs.brightness == Brightness.dark;
     // Fond sémantique dilué + icône colorée : le texte blanc sur ambre
     // plein était peu lisible, et la teinte reste rouge/ambre.
     final (background, accent) = switch (tone) {
-      _BannerTone.error => (cs.errorContainer_, cs.error),
-      _BannerTone.warning => (
-          cs.warningContainer,
-          isDark ? cs.warning : AppTheme.onWarning,
-        ),
+      // v1s-16-3 : paires conteneur / on-conteneur (AA clair et sombre).
+      _BannerTone.error => (cs.errorContainer_, cs.onErrorContainer_),
+      _BannerTone.warning => (cs.warningContainer, cs.onWarningContainer),
     };
     return Container(
       width: double.infinity,

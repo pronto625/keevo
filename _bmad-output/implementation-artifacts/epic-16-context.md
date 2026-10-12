@@ -10,14 +10,14 @@ Fix the mobile (Flutter) defects found by the V1 conformity and coherence audits
 
 - Story 16.1: FCM token cleanup on logout (done)
 - Story 16.2: iOS notifications (Darwin settings) and foreground display
-- Story 16.3: Dark mode: replace hard-coded `Colors.white` (recount first: ~95 after UI-3) and fix offline banner contrast
+- Story 16.3: Dark mode: replace hard-coded `Colors.white` (recount first: ~95 after UI-3, 91 in `lib/features`, 4 in `lib/core`) and fix offline banner contrast (in progress)
 - Story 16.4: Catalog search: 300 ms debounce and wider matching (done)
 - Story 16.5: SyncIndicator online-stale state and daysSinceLastSync (done)
 - Story 16.6: `ADJUSTMENT` movement type and offline store sync_queue (done)
 - Story 16.7–16.10: mark-all-read fix, startup sync pull wiring, duplicate /reports route, dead DayCloseButton (done)
 - Story 16.11: "Réessayer" buttons on app error screens (done)
 - Story 16.12: User feedback on sync rejections (done)
-- Story 16.13: Residual app UX bugs (auth/router, banners, lists, pickers) (in progress)
+- Story 16.13: Residual app UX bugs (auth/router, banners, lists, pickers) (done)
 - Story 16.14: Catalog list quality (search escaping, dedup, never-stocked vs out-of-stock, pagination) (done)
 - Story 16.15: Offline sales stuck in the sync queue (done — quarantine)
 - Story 16.16: Unicode case- and accent-insensitive local search (done)
@@ -62,7 +62,7 @@ Fix the mobile (Flutter) defects found by the V1 conformity and coherence audits
 - **Settings › Synchronisation.** The screen shows sync history, the conflict log and the pending queue, with type, entity, queued time and `lastError`. Rejected money operations show in red. A read-only payload view is available for rejected or conflicted operations. A forced full sync is available.
 - **Local retention.** Sales, sale items and stock movements are kept 30 days on the device, and older data is online-only. Reference data is never purged.
 - **Stack.** Flutter with Riverpod 3 (codegen, `AsyncValue`), Drift (encrypted), go_router. Code is organised feature-first (`domain/data/presentation`). Shared widgets live in `core/widget/`, including `AppErrorWidget` with a required `onRetry`.
-- **Design tokens.** Use `Theme.of(context).colorScheme.*` and the `AppTheme` helpers. Never hard-code colors.
+- **Design tokens.** Use `Theme.of(context).colorScheme.*` and the `AppTheme` helpers. Never hard-code colors. `AppTheme.light()` / `AppTheme.dark()` build the global `ThemeData`; dark mode follows the system (`ThemeMode.system`). The full token table is under UX below.
 - **Testing.**
   - Sync tests use the in-memory `AppDatabase.forTesting()` with the MockDio harness (`test/core/sync/rest_sync_service_rejection_test.dart`).
   - Provider tests use `ProviderContainer` with mocktail.
@@ -71,6 +71,25 @@ Fix the mobile (Flutter) defects found by the V1 conformity and coherence audits
 
 ## UX & Interaction Patterns
 
+- **Color tokens ("Indigo Sky", Material `ColorScheme`), light / dark:**
+
+  | Token | Light | Dark | Use |
+  |---|---|---|---|
+  | primary | `#3B5BDB` | `#4DABF7` | Primary buttons, active nav |
+  | onPrimary | `#FFFFFF` | `#0D1B2A` | Text/icons on primary |
+  | primaryContainer | `#D0EBFF` | `#1B3A5C` | Card fills, chips, selection |
+  | secondary | `#FF6B6B` | `#FF8787` | CTA accent, prices |
+  | success | `#51CF66` | `#69DB7C` | Confirmations, sync OK |
+  | warning | `#FCC419` | `#FFD43B` | Low stock, drafts, offline banner |
+  | error | `#FA5252` | `#FF6B6B` | Stock-outs, errors |
+  | surface | `#FFFFFF` | `#0D1B2A` | Main background (navy in dark) |
+  | surfaceVariant | `#F8F9FA` | `#1B2838` | Secondary background |
+  | onSurface | `#212529` | `#F0F4F8` | Body text |
+  | onSurfaceVariant | `#868E96` | `#ADB5BD` | Secondary text |
+
+  Rebrand (soft/modern) additions: `AppTheme.primarySoftTint` `#EEF1FE` / `#16223A` (badge and icon fills, replaces ad-hoc `primary.withOpacity(...)`), `AppTheme.softBackgroundGradient` `#F7F8FF → #FFFFFF` / `#0D1B2A → #13233A`, `AppTheme.radiusXXL` 32 dp. AppBar: gradient `#3B5BDB → #4DABF7` in light, flat `#0D1B2A` in dark.
+- **Dark-mode fix rules (16.3).** A white panel on the navy surface is the bug: hard-coded `Colors.white` backgrounds become `colorScheme.surface` (or the card background token); text on primary/danger fills uses `onPrimary`/`onError`, not a literal white. `AppTheme.dark()` must carry the dark column above (notably onSurface `#F0F4F8`, onSurfaceVariant `#ADB5BD`, surfaceVariant `#1B2838`, primaryContainer `#1B3A5C`). The offline banner sits on the warning color and its icon/text use `AppTheme.onWarning` (the spec gives no hex for onWarning: pick a dark value that meets AA on both warning shades). Body text needs at least 4.5:1 in light and dark (spec ratios: `#212529` on white 15.4:1, `#F0F4F8` on `#0D1B2A` 14.8:1). Alerts are always color + icon + text, never color alone.
+- **Feedback colors.** Success SnackBar on success color (3 s); system error SnackBar on error color with "Réessayer", persistent; in-page attention banner on warning at 15% opacity with ⚠️, persistent; info SnackBar on primary (4 s); offline banner on warning, persistent at the top. Danger button: error fill, light text, always behind a confirmation dialog.
 - **Sync indicator** (AppBar dot and label): green "Mis à jour", amber "En ligne (sync J-X)" on day 5, red "⚠ Sync urgente" on day 6. Tapping it opens a detail sheet with the last sync time, the pending count and a "Synchroniser maintenant" button.
 - **Unsynced operations.** If operations stay unsynced for more than 1 hour while online, a diagnostic runs and the user sees "Vérification requise : des données n'ont pas pu être synchronisées."
 - **Errors.** Errors never auto-dismiss. A system-error SnackBar uses the error color and offers "Réessayer". Banners use a warning tint and stay visible at the top.
@@ -82,5 +101,5 @@ Fix the mobile (Flutter) defects found by the V1 conformity and coherence audits
 - 16.13 collects leftovers from 16.1, 16.5, 14.9, 14.12 and 12.7, and owns banner precedence and the SnackBar flood fix. The OTP requirement was amended: a single 6-digit field is enough.
 - 16.16 builds on 16.14 (`sql_like.dart` escaping, NFR5 test) and on 16.4 (category match, debounce); 16.13's contacts search fix (respect « Voir les archivés ») must keep using the shared fold and escaping.
 - 16.14 extends 16.4 (debounce, category match, empty-state create) and the earlier fix that made products visible in every store's catalog; keep that visibility and the per-store low-stock scope intact.
-- 16.11 and 16.3 touch the same screens, so coordinate to avoid reintroducing `Colors.white`.
+- 16.11 and 16.3 touch the same screens: 16.11 (done) already moved error states to `AppErrorWidget`, so 16.3 must not reintroduce `Colors.white` there. 16.13 (done) owns banner precedence; 16.3 changes only the offline banner's colors, not its precedence. The known baseline failure `offline_gate_banner_test` (amber color) covers the banner color 16.3 changes, so expect to touch it.
 - The modular rewrite must re-apply every fix in this epic, including the sync protocol behaviour.

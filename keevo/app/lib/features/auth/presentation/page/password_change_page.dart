@@ -220,12 +220,12 @@ class _PasswordChangePageState extends ConsumerState<PasswordChangePage> {
                           ),
                         ),
                         child: changeState.isLoading
-                            ? const SizedBox(
+                            ? SizedBox(
                                 width: 20,
                                 height: 20,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: Colors.white,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
                               )
                             : const Text(

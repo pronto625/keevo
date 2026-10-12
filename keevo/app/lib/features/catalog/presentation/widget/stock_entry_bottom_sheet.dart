@@ -247,7 +247,7 @@ class _StockEntryBottomSheetState extends ConsumerState<StockEntryBottomSheet> {
                   FilledButton.icon(
                     style: FilledButton.styleFrom(
                       backgroundColor: AppTheme.success,
-                      foregroundColor: Colors.white,
+                      foregroundColor: AppTheme.onBrand,
                       minimumSize: const Size.fromHeight(56),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(AppTheme.radiusL),
@@ -255,11 +255,15 @@ class _StockEntryBottomSheetState extends ConsumerState<StockEntryBottomSheet> {
                     ),
                     onPressed: _loading ? null : _submit,
                     icon: _loading
-                        ? const SizedBox(
+                        ? SizedBox(
                             height: 18,
                             width: 18,
+                            // Disabled while loading: spinner on the disabled fill.
                             child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
+                                strokeWidth: 2,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant),
                           )
                         : const Icon(Icons.check_rounded),
                     label: const Text('Enregistrer l\'entrée'),

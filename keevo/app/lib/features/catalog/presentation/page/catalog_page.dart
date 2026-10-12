@@ -167,7 +167,7 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
                                   SnackBar(
                                     content: Row(
                                       children: [
-                                        const Icon(Icons.check_circle, color: Colors.white),
+                                        const Icon(Icons.check_circle, color: AppTheme.onBrand),
                                         const SizedBox(width: 8),
                                         const Text('Catalogue synchronisé'),
                                       ],
@@ -384,11 +384,11 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
           onPressed: () => context.push('/products/new'),
           backgroundColor: Colors.transparent,
           elevation: 0,
-          icon: const Icon(Icons.add_rounded, color: Colors.white),
+          icon: Icon(Icons.add_rounded, color: theme.colorScheme.onPrimary),
           label: Text(
             'Ajouter un produit',
             style: TextStyle(
-              color: Colors.white,
+              color: theme.colorScheme.onPrimary,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -461,7 +461,7 @@ class _ModernTabDelegate extends SliverPersistentHeaderDelegate {
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceVariant.withOpacity(0.4),
+          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
           borderRadius: BorderRadius.circular(16),
         ),
         child: TabBar(
@@ -476,7 +476,7 @@ class _ModernTabDelegate extends SliverPersistentHeaderDelegate {
           ),
           indicatorSize: TabBarIndicatorSize.tab,
           dividerColor: Colors.transparent,
-          labelColor: Colors.white,
+          labelColor: theme.colorScheme.onPrimary,
           unselectedLabelColor: theme.colorScheme.onSurfaceVariant,
           labelStyle: const TextStyle(
             fontWeight: FontWeight.w600,
@@ -857,11 +857,11 @@ class _CategoryManagerSheetState
                 FilledButton.icon(
                   onPressed: _loading ? null : _createCategory,
                   icon: _loading
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
+                              strokeWidth: 2, color: Theme.of(context).colorScheme.onSurfaceVariant))
                       : const Icon(Icons.add, size: 18),
                   label: const Text('Ajouter'),
                 ),

@@ -58,8 +58,8 @@ class _ClientFormPageState extends ConsumerState<ClientFormPage>
   Future<void> _save() async {
     if (_name.text.trim().isEmpty || _phone.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Row(children: [
-          Icon(Icons.warning_amber_rounded, color: Colors.white, size: 18),
+        content: Row(children: [
+          Icon(Icons.warning_amber_rounded, color: Theme.of(context).colorScheme.onError, size: 18),
           SizedBox(width: 8),
           Text('Nom et téléphone sont requis'),
         ]),
@@ -92,7 +92,7 @@ class _ClientFormPageState extends ConsumerState<ClientFormPage>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Row(children: [
-            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+            const Icon(Icons.check_circle_rounded, color: AppTheme.onBrand, size: 18),
             const SizedBox(width: 8),
             Text(_isEdit ? 'Client mis à jour' : 'Client ajouté'),
           ]),
@@ -107,7 +107,7 @@ class _ClientFormPageState extends ConsumerState<ClientFormPage>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Row(children: [
-            const Icon(Icons.error_rounded, color: Colors.white, size: 18),
+            Icon(Icons.error_rounded, color: Theme.of(context).colorScheme.onError, size: 18),
             const SizedBox(width: 8),
             Expanded(child: Text(appErrorMessage(e))),
           ]),
@@ -338,19 +338,19 @@ class _SaveButton extends StatelessWidget {
           onTap: saving ? null : onPressed,
           child: Center(
             child: saving
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 24, height: 24,
-                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                      child: CircularProgressIndicator(color: theme.colorScheme.onPrimary, strokeWidth: 2.5),
                     )
                   : Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.save_outlined, color: Colors.white),
+                        Icon(Icons.save_outlined, color: theme.colorScheme.onPrimary),
                         const SizedBox(width: 10),
                         Text(
                           isEdit ? 'Enregistrer les modifications' : 'Ajouter le client',
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: theme.colorScheme.onPrimary,
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
                           ),

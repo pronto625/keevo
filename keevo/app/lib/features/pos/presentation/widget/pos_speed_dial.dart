@@ -115,7 +115,7 @@ class _PosSpeedDialState extends State<PosSpeedDial>
                                     : 'Clôturer',
                                 backgroundColor: isClosed
                                     ? Theme.of(context).colorScheme.onSurfaceVariant
-                                    : const Color(0xFF5F3DC4),
+                                    : AppTheme.violetDeep,
                                 onTap: isClosed
                                     ? () {
                                         _close();
@@ -170,7 +170,7 @@ class _PosSpeedDialState extends State<PosSpeedDial>
                   _isOpen ? Icons.close_rounded : Icons.more_vert_rounded,
                   color: _isOpen
                       ? Theme.of(context).colorScheme.surface
-                      : Colors.white,
+                      : AppTheme.onBrand,
                 ),
               );
             },
@@ -257,7 +257,7 @@ class _SpeedDialOption extends StatelessWidget {
               ),
               child: Icon(
                 icon,
-                color: Colors.white,
+                color: AppTheme.onBrand,
                 size: 24,
               ),
             ),

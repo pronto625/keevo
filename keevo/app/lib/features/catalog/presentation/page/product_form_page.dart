@@ -170,6 +170,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
                 title: 'Prendre une photo',
                 subtitle: 'Utiliser l\'appareil photo',
                 color: theme.colorScheme.secondary,
+                onColor: theme.colorScheme.onSecondary,
                 onTap: () => _pickImage(ImageSource.camera),
               ),
 
@@ -181,6 +182,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
                 title: 'Choisir depuis la galerie',
                 subtitle: 'Sélectionner une image existante',
                 color: theme.colorScheme.primary,
+                onColor: theme.colorScheme.onPrimary,
                 onTap: () => _pickImage(ImageSource.gallery),
               ),
               
@@ -292,7 +294,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
               children: [
                 Icon(
                   Icons.check_circle_rounded, 
-                  color: Colors.white,
+                  color: AppTheme.onBrand,
                   size: 20,
                 ),
                 const SizedBox(width: 12),
@@ -318,7 +320,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
               children: [
                 Icon(
                   Icons.error_rounded, 
-                  color: Colors.white,
+                  color: AppTheme.onBrand,
                   size: 20,
                 ),
                 const SizedBox(width: 12),
@@ -338,7 +340,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
           SnackBar(
             content: Row(
               children: [
-                const Icon(Icons.error_rounded, color: Colors.white, size: 20),
+                const Icon(Icons.error_rounded, color: AppTheme.onBrand, size: 20),
                 const SizedBox(width: 12),
                 Expanded(child: Text(appErrorMessage(e))),
               ],
@@ -583,7 +585,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
                               _SectionHeader(
                                 icon: Icons.inventory_2_outlined,
                                 title: 'Gestion du stock',
-                                color: Colors.teal,
+                                color: AppTheme.iconTeal,
                               ),
                               const SizedBox(height: 12),
                               if (widget.product?.status == ProductStatus.draft)
@@ -838,7 +840,7 @@ class _LoadingDropdown extends StatelessWidget {
       height: 60,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: theme.colorScheme.outline.withOpacity(0.2),
@@ -1031,6 +1033,8 @@ class _PhotoOptionTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final Color color;
+  /// Texte/icône sur [color] (`onPrimary` / `onSecondary`).
+  final Color onColor;
   final VoidCallback onTap;
 
   const _PhotoOptionTile({
@@ -1038,6 +1042,7 @@ class _PhotoOptionTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.color,
+    required this.onColor,
     required this.onTap,
   });
 
@@ -1068,12 +1073,12 @@ class _PhotoOptionTile extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: onColor.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
                     icon,
-                    color: Colors.white,
+                    color: onColor,
                     size: 24,
                   ),
                 ),
@@ -1084,8 +1089,8 @@ class _PhotoOptionTile extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: onColor,
                           fontWeight: FontWeight.w600,
                           fontSize: 16,
                         ),
@@ -1094,7 +1099,7 @@ class _PhotoOptionTile extends StatelessWidget {
                       Text(
                         subtitle,
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.9),
+                          color: onColor.withValues(alpha: 0.9),
                           fontSize: 14,
                         ),
                       ),
@@ -1103,7 +1108,7 @@ class _PhotoOptionTile extends StatelessWidget {
                 ),
                 Icon(
                   Icons.arrow_forward_ios_rounded,
-                  color: Colors.white.withOpacity(0.8),
+                  color: onColor.withValues(alpha: 0.8),
                   size: 18,
                 ),
               ],
@@ -1159,7 +1164,7 @@ class _SaveButton extends StatelessWidget {
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(
-                          color: Colors.white,
+                          color: theme.colorScheme.onPrimary,
                           strokeWidth: 2,
                         ),
                       ),
@@ -1168,7 +1173,7 @@ class _SaveButton extends StatelessWidget {
                         child: Text(
                           'Sauvegarde en cours...',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: theme.colorScheme.onPrimary,
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                           ),
@@ -1184,7 +1189,7 @@ class _SaveButton extends StatelessWidget {
                         isEditing 
                             ? Icons.save_rounded 
                             : Icons.add_circle_rounded,
-                        color: Colors.white,
+                        color: theme.colorScheme.onPrimary,
                         size: 24,
                       ),
                       const SizedBox(width: 12),
@@ -1193,8 +1198,8 @@ class _SaveButton extends StatelessWidget {
                           isEditing
                               ? 'Enregistrer les modifications'
                               : 'Créer le produit',
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: theme.colorScheme.onPrimary,
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 0.5,
@@ -1243,7 +1248,7 @@ class _SupplierTile extends ConsumerWidget {
       loading: () => Container(
         height: 72,
         decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: theme.colorScheme.outline.withOpacity(0.2)),
         ),
@@ -1283,7 +1288,7 @@ class _NoSupplierCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: theme.colorScheme.outline.withOpacity(0.2)),
       ),
@@ -1342,7 +1347,7 @@ class _SupplierCard extends StatelessWidget {
               ),
               child: const Icon(
                 Icons.local_shipping_outlined,
-                color: Colors.white,
+                color: AppTheme.onBrand,
                 size: 20,
               ),
             ),

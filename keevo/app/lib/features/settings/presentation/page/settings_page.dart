@@ -93,9 +93,7 @@ class SettingsPage extends ConsumerWidget {
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700,
                                     color: isOwner
-                                        ? (theme.brightness == Brightness.dark
-                                            ? cs.warning
-                                            : const Color(0xFF664D03))
+                                        ? cs.onWarningContainer
                                         : cs.onSurfaceVariant,
                                   ),
                                 ),

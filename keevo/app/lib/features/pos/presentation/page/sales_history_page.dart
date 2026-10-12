@@ -277,7 +277,7 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
           data: Theme.of(context).copyWith(
             colorScheme: Theme.of(context).colorScheme.copyWith(
               primary: AppTheme.primary,
-              onPrimary: Colors.white,
+              onPrimary: AppTheme.onBrand,
             ),
           ),
           child: child!,

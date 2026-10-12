@@ -155,7 +155,7 @@ class _ReportPreferencesPageState
                   // ── Section 2 : Rapport Hebdomadaire ───────────────────
                   const _SectionHeader(
                     icon: Icons.calendar_month_outlined,
-                    iconColor: Color(0xFF20C997),
+                    iconColor: AppTheme.iconTeal,
                     title: 'Rapport Hebdomadaire',
                   ),
                   const SizedBox(height: 8),
@@ -218,8 +218,8 @@ class _ReportPreferencesPageState
                             ? 'Génération...'
                             : 'Aperçu du rapport hebdomadaire'),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF20C997),
-                          side: const BorderSide(color: Color(0xFF20C997)),
+                          foregroundColor: AppTheme.iconTeal,
+                          side: const BorderSide(color: AppTheme.iconTeal),
                           shape: RoundedRectangleBorder(
                               borderRadius:
                                   BorderRadius.circular(AppTheme.radiusL)),
@@ -235,7 +235,7 @@ class _ReportPreferencesPageState
                   // ── Section 3 : Rapport Inventaire ─────────────────────
                   const _SectionHeader(
                     icon: Icons.inventory_2_outlined,
-                    iconColor: Color(0xFFF59F00),
+                    iconColor: AppTheme.iconAmber,
                     title: 'Rapport Inventaire',
                   ),
                   const SizedBox(height: 8),
@@ -280,7 +280,7 @@ class _ReportPreferencesPageState
                   // ── Section 5 : Tendances de Ventes ─────────────────────
                   const _SectionHeader(
                     icon: Icons.trending_up_rounded,
-                    iconColor: Color(0xFF20C997),
+                    iconColor: AppTheme.iconTeal,
                     title: 'Tendances de Ventes',
                   ),
                   const SizedBox(height: 8),

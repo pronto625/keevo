@@ -379,12 +379,12 @@ class _CreateDraftProductBottomSheetState
                   ),
                   onPressed: _isLoading ? null : _submit,
                   icon: _isLoading
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.white,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         )
                       : const Icon(Icons.add_circle_outline),

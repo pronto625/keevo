@@ -130,7 +130,7 @@ class _PosPageState extends ConsumerState<PosPage> {
             backgroundColor: Colors.transparent,
             elevation: 0,
             onPressed: () => _createDraftAndAddToCart(context, ref, ''),
-            child: const Icon(Icons.add_rounded, color: Colors.white),
+            child: const Icon(Icons.add_rounded, color: AppTheme.onBrand),
           ),
         ),
       ),
@@ -694,7 +694,7 @@ class _CategoryChipsSliver extends ConsumerWidget {
                       isAll ? 'Tous' : cat!.name,
                       style: TextStyle(
                         color: isSelected
-                            ? Colors.white
+                            ? AppTheme.onBrand
                             : theme.colorScheme.primary,
                         fontWeight: FontWeight.w600,
                         fontSize: 13,

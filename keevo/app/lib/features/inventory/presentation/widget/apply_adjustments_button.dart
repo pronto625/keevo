@@ -42,12 +42,12 @@ class _ApplyAdjustmentsButtonState
     return FilledButton.icon(
       onPressed: _isApplying ? null : () => _showConfirmDialog(context),
       icon: _isApplying
-          ? const SizedBox(
+          ? SizedBox(
               width: 20,
               height: 20,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             )
           : const Icon(Icons.check_circle_outline),

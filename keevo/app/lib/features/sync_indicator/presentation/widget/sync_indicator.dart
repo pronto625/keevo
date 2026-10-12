@@ -277,7 +277,7 @@ class SyncIndicator extends ConsumerWidget {
   Color _dotColor(SyncStatus status) {
     return switch (status) {
       SyncStatus.online => AppTheme.success,
-      SyncStatus.syncing => const Color(0xFF339AF0),
+      SyncStatus.syncing => AppTheme.iconBlue,
       SyncStatus.offlineOk => AppTheme.warning,
       SyncStatus.offlineCritical => AppTheme.errorColor,
     };

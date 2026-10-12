@@ -251,7 +251,7 @@ class _FeatureCard extends StatelessWidget {
               color: cs.primary,
               borderRadius: BorderRadius.circular(7),
             ),
-            child: const Icon(Icons.check_rounded, size: 16, color: Colors.white),
+            child: Icon(Icons.check_rounded, size: 16, color: cs.onPrimary),
           ),
         ],
       ),

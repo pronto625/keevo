@@ -6,19 +6,62 @@ import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/core/scaffold/offline_gate_banner.dart';
 import 'package:keevo/core/sync/sync_gate_provider.dart';
 import 'package:keevo/core/sync/sync_gate_state.dart';
+import 'package:keevo/core/theme/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-Widget _wrap(SyncGateState gate, int days, SharedPreferences prefs) {
+Widget _wrap(SyncGateState gate, int days, SharedPreferences prefs,
+    {ThemeData? theme}) {
   return ProviderScope(
     overrides: [
       syncGateStateProvider.overrideWithValue(gate),
       daysSinceLastSyncProvider.overrideWithValue(days),
       sharedPreferencesProvider.overrideWithValue(prefs),
     ],
-    child: const MaterialApp(
-      home: Scaffold(body: OfflineGateBanner()),
+    child: MaterialApp(
+      theme: theme,
+      home: const Scaffold(body: OfflineGateBanner()),
     ),
   );
+}
+
+/// WCAG 2.x contrast ratio between two opaque colors.
+double _contrast(Color a, Color b) {
+  final la = a.computeLuminance();
+  final lb = b.computeLuminance();
+  final hi = la > lb ? la : lb;
+  final lo = la > lb ? lb : la;
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+Future<void> _expectReadable(
+  WidgetTester tester,
+  ThemeData theme,
+  SyncGateState gate,
+  int days,
+  String text,
+) async {
+  SharedPreferences.setMockInitialValues({});
+  final prefs = await SharedPreferences.getInstance();
+  await tester.pumpWidget(_wrap(gate, days, prefs, theme: theme));
+  await tester.pumpAndSettle();
+
+  final bg = tester
+      .widget<Container>(find
+          .ancestor(of: find.textContaining(text), matching: find.byType(Container))
+          .first)
+      .color!;
+  final textColor =
+      tester.widget<Text>(find.textContaining(text)).style!.color!;
+  final iconColor = tester
+      .widget<Icon>(find.byIcon(gate == SyncGateState.critical
+          ? Icons.error_outline_rounded
+          : Icons.warning_amber_rounded))
+      .color!;
+
+  expect(_contrast(textColor, bg), greaterThanOrEqualTo(4.5),
+      reason: 'text $textColor on $bg (${theme.brightness}, $gate)');
+  expect(_contrast(iconColor, bg), greaterThanOrEqualTo(4.5),
+      reason: 'icon $iconColor on $bg (${theme.brightness}, $gate)');
 }
 
 void main() {
@@ -53,8 +96,10 @@ void main() {
         ).first,
       );
       final decoration = container.color;
-      expect(decoration, const Color(0xFFFFF3BF),
-          reason: 'Warning banner background must be light amber #FFF3BF');
+      // v1s-16-3: design-system token `warningContainer` (≈ spec "#FCC419 at
+      // 15%"); the former #FFF3BF matched neither the spec nor a token.
+      expect(decoration, const Color(0xFFFFF9DB),
+          reason: 'Warning banner background must be warningContainer #FFF9DB');
     });
 
     testWidgets('banner_critical_redBannerShown_notDismissable', (tester) async {
@@ -138,6 +183,31 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Synchronisation requise'), findsOneWidget);
+    });
+
+    // One fresh widget tree per scenario (no ProviderScope reuse).
+    testWidgets('shouldRenderReadableOfflineBannerInLightMode_warning',
+        (tester) async {
+      await _expectReadable(tester, AppTheme.light(), SyncGateState.warning, 5,
+          'Synchronisation requise');
+    });
+
+    testWidgets('shouldRenderReadableOfflineBannerInLightMode_critical',
+        (tester) async {
+      await _expectReadable(tester, AppTheme.light(), SyncGateState.critical, 6,
+          'Derni\u00e8re chance');
+    });
+
+    testWidgets('shouldRenderReadableOfflineBannerInDarkMode_warning',
+        (tester) async {
+      await _expectReadable(tester, AppTheme.dark(), SyncGateState.warning, 5,
+          'Synchronisation requise');
+    });
+
+    testWidgets('shouldRenderReadableOfflineBannerInDarkMode_critical',
+        (tester) async {
+      await _expectReadable(tester, AppTheme.dark(), SyncGateState.critical, 6,
+          'Derni\u00e8re chance');
     });
   });
 }

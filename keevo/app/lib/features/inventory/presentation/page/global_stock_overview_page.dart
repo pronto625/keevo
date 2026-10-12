@@ -112,10 +112,10 @@ class _GlobalStockOverviewPageState
           onPressed: () => context.push('/stock/transfers'),
           backgroundColor: Colors.transparent,
           elevation: 0,
-          icon: const Icon(Icons.swap_horiz_rounded, color: Colors.white),
-          label: const Text(
+          icon: Icon(Icons.swap_horiz_rounded, color: cs.onPrimary),
+          label: Text(
             'Transfert',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+            style: TextStyle(color: cs.onPrimary, fontWeight: FontWeight.w600),
           ),
           heroTag: 'stock_transfer_fab',
         ),

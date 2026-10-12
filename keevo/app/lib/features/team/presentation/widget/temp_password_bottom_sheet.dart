@@ -51,10 +51,9 @@ class _TempPasswordSheetState extends State<_TempPasswordSheet> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final isDark = cs.brightness == Brightness.dark;
     // Teintes foncées en clair (lisibles sur fond pâle), claires en sombre.
-    final successColor = isDark ? cs.success : const Color(0xFF2B8A3E);
-    final warningColor = isDark ? cs.warning : const Color(0xFFE65100);
+    final successColor = cs.successStrong;
+    final warningColor = cs.warningStrong;
 
     return PopScope(
       canPop: false,
