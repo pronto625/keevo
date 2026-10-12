@@ -999,7 +999,8 @@ As a Toor, I want foreground FCM notifications displayed on iOS, so that stock/t
 **Doc:** Story 8-0 AC4. **TDD:** `shouldInitializeDarwinSettingsOnIos()`, `shouldRequestAlertBadgeSoundPermissions()`.
 
 **Items (routed 2026-10-11 from deferred-work):**
-- [ ] [Deferred-from: CR v1s-16-1, 2026-07-25] FCM token freshness not verified at deleteToken [fcm_service.dart:102-110] — getToken() may differ from backend-registered token; settle when FcmService registration is reworked
+- [x] [Deferred-from: CR v1s-16-1, 2026-07-25] FCM token freshness not verified at deleteToken [fcm_service.dart:102-110] — getToken() may differ from backend-registered token; settle when FcmService registration is reworked — ✅ 2026-10-12 resolved (spec-v1s-16-2-ios-darwin-notifications.md): registration centralised in `FcmService.registerCurrentToken()`, which records `lastRegisteredToken` (also on refresh success); sign-out deletes both the current and the last registered token on the backend, then `deleteToken()` clears it and blocks post-logout refresh registration. Across restarts, stale tokens are pruned by the backend on `UNREGISTERED` (FcmNotificationAdapter:126).
+- Routed → `v1s-16-18-ios-release-identity`: bundle id `com.example.keevo`, template icons/orientation, `aps-environment` production check.
 
 **AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
 
@@ -1191,6 +1192,21 @@ As a Toor, I want success toasts, the POS speed-dial and disabled checkout butto
 - [x] [Deferred-from: build-auto v1s-16-3 review, 2026-10-12] POS speed-dial white icon on `AppTheme.warning` (≈ 1.6:1) and on `cs.onSurfaceVariant` when the day is closed [pos_speed_dial.dart:116-118,144,257] — settled by a foreground per option fill — ✅ 2026-10-12 resolved (spec-v1s-16-17-feedback-fill-contrast.md): `_SpeedDialOption.foregroundColor` required; Clôturer violetDeep + onBrand (7.1:1), Clôturée `cs.onSurfaceVariant` + `cs.surface`, Produit `warning` + `onWarning` (7.9:1); widget test under `AppTheme.dark()`.
 - [x] [Deferred-from: build-auto v1s-16-3 review, 2026-10-12] Disabled checkout / cart CTA keeps a white label on `cs.outlineVariant` (≈ 1.7:1) [checkout_page.dart:299-317, cart_bottom_sheet.dart:297] — settled by the disabled foreground when not enabled — ✅ 2026-10-12 resolved (spec-v1s-16-17-feedback-fill-contrast.md): disabled fill `cs.surfaceContainerHighest`, label/icon/spinner `cs.onSurfaceVariant` (AA light and dark); enabled stays `AppTheme.primary` + `onBrand`.
 - [x] [Deferred-from: build-auto v1s-16-3 review, 2026-10-12] Dark `colorError` is `#FA5252`, spec table says `#FF6B6B` [app_theme.dart dark()] — settle together with the fixed `errorColor` fills and their white foreground — ✅ 2026-10-12 resolved (spec-v1s-16-17-feedback-fill-contrast.md): dark `cs.error` = #FF6B6B with `onError` #0D1B2A (6.27:1, M3 dark pattern); every fixed red fill now uses `errorStrong` + `onBrand`, so the white-on-#FF6B6B blocker is gone. Light `cs.error` kept at #FA5252 (UX table value, indicator/text role).
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
+
+## Story 16.18: Identité de release iOS (bundle id, icônes, orientation, APNs production) — **[A]**
+
+As a Toor, I want the iOS app to carry a real store identity, so that it can be registered with Apple/Firebase and shipped through TestFlight/App Store.
+
+**Scope:** Story 16.2 generated the missing `keevo/app/ios/` Runner from the Flutter 3.41 template to wire push notifications. It kept the template identity: bundle id `com.example.keevo` (same as the Android `applicationId`, but Apple refuses the `com.example` prefix), the default Flutter icons and launch image, and iPhone landscape orientations. `Runner.entitlements` has `aps-environment=development` for every configuration. Decide the production reverse-DNS id for Android and iOS together (then register the Firebase iOS app and its `GoogleService-Info.plist` under it). Generate the iOS icons (`flutter_launcher_icons` `ios: true`) and align orientations with the Android manifest. Confirm on the first archive that export signs with `aps-environment=production`, or split the entitlements per configuration. Tracker key: `v1s-16-18-ios-release-identity`.
+
+**Refs:** Story 16.2 (`spec-v1s-16-2-ios-darwin-notifications.md`, manual iOS checklist), Story 8-0 task 7.4.
+
+**Items (routed 2026-10-12 from build-auto v1s-16-2 review):**
+- [ ] [Deferred-from: build-auto v1s-16-2 review, 2026-10-12] Bundle id `com.example.keevo` cannot be registered on App Store Connect [ios/Runner.xcodeproj/project.pbxproj PRODUCT_BUNDLE_IDENTIFIER, android/app/build.gradle.kts:39] — settle with a product decision on the reverse-DNS id, applied to both platforms before the Firebase iOS app is registered
+- [ ] [Deferred-from: build-auto v1s-16-2 review, 2026-10-12] iOS keeps the Flutter default icons/launch image and allows iPhone landscape [ios/Runner/Assets.xcassets, ios/Runner/Info.plist UISupportedInterfaceOrientations] — settle by generating the brand icons and matching Android orientation
+- [ ] [Deferred-from: build-auto v1s-16-2 review, 2026-10-12] `aps-environment=development` for Release/Profile [ios/Runner/Runner.entitlements] — confirm on the first TestFlight archive that export rewrites it to production, else add a per-configuration entitlements file
 
 **AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
 

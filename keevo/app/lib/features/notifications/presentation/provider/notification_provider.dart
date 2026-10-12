@@ -27,10 +27,16 @@ final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {
   );
 });
 
+/// Firebase seam behind [FcmService]; overridden in tests.
+final fcmMessagingGatewayProvider = Provider<FcmMessagingGateway>(
+  (ref) => const FirebaseFcmMessagingGateway(),
+);
+
 final fcmServiceProvider = Provider<FcmService>((ref) {
   return FcmService(
     localNotifications: ref.watch(localNotificationDataSourceProvider),
     remoteTokenDataSource: ref.watch(remoteDeviceTokenDataSourceProvider),
+    messaging: ref.watch(fcmMessagingGatewayProvider),
   );
 });
 
