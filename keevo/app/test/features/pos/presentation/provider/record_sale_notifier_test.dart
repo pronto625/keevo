@@ -89,6 +89,8 @@ void main() {
       ],
     );
 
+    addTearDown(container.dispose);
+
     // Pre-populate cart
     final notifier = container.read(cartProvider.notifier);
     for (final item in cart) {
@@ -117,6 +119,25 @@ void main() {
       final state = container.read(recordSaleNotifierProvider);
       expect(state, isA<RecordSaleSuccess>());
       expect(container.read(cartProvider), isEmpty);
+    });
+
+    // v1s-15-8: the notifier itself refuses an empty cart (not only the CTA).
+    test('submit with an empty cart records nothing', () async {
+      final container = createContainer();
+      final notifier = container.read(recordSaleNotifierProvider.notifier);
+
+      await notifier.submit(
+        cart: const [],
+        mode: PaymentModeEnum.cash,
+        storeId: 'store-1',
+        employeeId: 'emp-1',
+      );
+
+      final state = container.read(recordSaleNotifierProvider);
+      expect(state, isA<RecordSaleError>());
+      expect((state as RecordSaleError).message, 'EMPTY_CART');
+      verifyNever(() => mockRepo.recordSale(any()));
+      verifyNever(() => mockLocalDs.getAvailableStock(any(), any()));
     });
 
     test('submit insufficient stock returns error', () async {
@@ -585,6 +606,71 @@ void main() {
 
       expect(
           container.read(recordSaleNotifierProvider), isA<RecordSaleError>());
+      expect(container.read(draftInitialStocksProvider), {'d1': 5});
+    });
+
+    // v1s-15-8 (deferred from CR v1s-13-6): failure inside the draft
+    // transaction before the sale is recorded.
+    test('draft: applyInitialStockEntries failure records nothing, keeps cart '
+        'and entries', () async {
+      final container = createContainer(cart: [draft()]);
+      container.read(draftInitialStocksProvider.notifier).state = {'d1': 5};
+      when(() => mockLocalDs.getAvailableStock('d1', any()))
+          .thenAnswer((_) async => 0);
+      when(() => mockLocalDs.applyInitialStockEntries(any(), any(), any(),
+              movementIds: any(named: 'movementIds')))
+          .thenThrow(Exception('disk full'));
+
+      await container.read(recordSaleNotifierProvider.notifier).submit(
+        cart: [draft()],
+        mode: PaymentModeEnum.cash,
+        storeId: 'store-1',
+        employeeId: 'emp-1',
+      );
+
+      expect(
+          container.read(recordSaleNotifierProvider), isA<RecordSaleError>());
+      verifyNever(() => mockProductDs.promoteToActive(any()));
+      verifyNever(() => mockRepo.recordSale(any()));
+      expect(container.read(cartProvider), hasLength(1));
+      expect(container.read(draftInitialStocksProvider), {'d1': 5});
+    });
+
+    test('draft: promoteToActive failure rolls back the credited stock',
+        () async {
+      final db = AppDatabase.forTesting();
+      addTearDown(db.close);
+      final productDs = MockLocalProductDataSource();
+      when(() => productDs.promoteToActive(any()))
+          .thenThrow(Exception('constraint'));
+      final container = ProviderContainer(overrides: [
+        daysSinceLastSyncProvider.overrideWithValue(0),
+        currentUserRoleProvider.overrideWithValue('OWNER'),
+        appDatabaseProvider.overrideWithValue(db),
+        saleRepositoryProvider.overrideWithValue(mockRepo),
+        localSaleDataSourceProvider.overrideWithValue(LocalSaleDataSource(db)),
+        localProductDataSourceProvider.overrideWithValue(productDs),
+        recordSaleUseCaseProvider
+            .overrideWithValue(RecordSaleUseCase(mockRepo)),
+      ]);
+      addTearDown(container.dispose);
+      container.read(cartProvider.notifier).addItem(draft());
+      container.read(draftInitialStocksProvider.notifier).state = {'d1': 5};
+
+      await container.read(recordSaleNotifierProvider.notifier).submit(
+        cart: [draft()],
+        mode: PaymentModeEnum.cash,
+        storeId: 'store-1',
+        employeeId: 'emp-1',
+      );
+
+      expect(
+          container.read(recordSaleNotifierProvider), isA<RecordSaleError>());
+      verify(() => productDs.promoteToActive('d1')).called(1);
+      verifyNever(() => mockRepo.recordSale(any()));
+      expect(await db.select(db.stockLevels).get(), isEmpty);
+      expect(await db.select(db.stockMovements).get(), isEmpty);
+      expect(container.read(cartProvider), hasLength(1));
       expect(container.read(draftInitialStocksProvider), {'d1': 5});
     });
   });

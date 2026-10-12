@@ -234,6 +234,27 @@ void main() {
       expect(find.text('Login Page'), findsOneWidget);
     });
 
+    // v1s-15-8 (deferred from CR v1s-16-1): the OWNER settings page has more
+    // tiles above the logout — the FCM cleanup must run for that role too.
+    testWidgets('OWNER logout deletes remote + local FCM token', (tester) async {
+      const token = 'fcm-token-owner';
+      when(() => mockFcm.getToken()).thenAnswer((_) async => token);
+
+      await tester.pumpWidget(_buildPage(
+        mockFcmService: mockFcm,
+        mockTokenDataSource: mockTokenDs,
+        prefs: prefs,
+        role: 'OWNER',
+      ));
+      await tester.pumpAndSettle();
+
+      await _tapLogoutAndConfirm(tester);
+
+      verify(() => mockTokenDs.deleteToken(token)).called(1);
+      verify(() => mockFcm.deleteToken()).called(1);
+      expect(find.text('Login Page'), findsOneWidget);
+    });
+
     // ── AC4: Null token guard (desktop / no GMS) ────────────────────────
 
     testWidgets(

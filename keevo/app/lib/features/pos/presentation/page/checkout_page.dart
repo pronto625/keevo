@@ -60,7 +60,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     // v1s-16-17 — disabled CTA: neutral fill + variant foreground (AA).
-    final submitDisabled = _selectedMode == null ||
+    // v1s-15-8: an empty cart (e.g. emptied from another screen) never
+    // reaches submit — it would record a zero-total sale.
+    final submitDisabled = cart.isEmpty ||
+        _selectedMode == null ||
         _isSubmitting ||
         saleState is RecordSaleLoading;
     final submitFg = submitDisabled ? cs.onSurfaceVariant : AppTheme.onBrand;

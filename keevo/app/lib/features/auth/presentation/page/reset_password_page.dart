@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -74,25 +75,31 @@ class _ResetPasswordPageState extends ConsumerState<ResetPasswordPage> {
     setState(() => _errorMessage = null);
     if (!_validatePasswords()) return;
 
-    try {
-      await ref.read(resetPasswordProvider.notifier).reset(
-            phoneNumber: _phoneNumber,
-            // Strip ALL whitespace (internal + edges) — users often paste "123 456"
-            // from SMS/WhatsApp. `.trim()` alone keeps internal spaces, which would
-            // fail server-side validation (OTP is 6 contiguous digits).
-            code: _codeController.text.replaceAll(RegExp(r'\s+'), ''),
-            newPassword: _passwordController.text,
-          );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Mot de passe réinitialisé, connectez-vous.'),
-        ),
-      );
-      context.go('/auth/login');
-    } on AuthException catch (e) {
-      setState(() => _errorMessage = _computeErrorMessage(e.domainCode));
+    // The notifier stores failures in its state (AsyncValue.guard) and never
+    // throws: read the outcome instead of catching (v1s-15-8 — a wrong code
+    // used to show the success message and leave the page).
+    await ref.read(resetPasswordProvider.notifier).reset(
+          phoneNumber: _phoneNumber,
+          // Strip ALL whitespace (internal + edges) — users often paste "123 456"
+          // from SMS/WhatsApp. `.trim()` alone keeps internal spaces, which would
+          // fail server-side validation (OTP is 6 contiguous digits).
+          code: _codeController.text.replaceAll(RegExp(r'\s+'), ''),
+          newPassword: _passwordController.text,
+        );
+    if (!mounted) return;
+    final result = ref.read(resetPasswordProvider);
+    if (result.hasError) {
+      final error = result.error;
+      setState(() => _errorMessage = _computeErrorMessage(
+          error is AuthException ? error.domainCode : ''));
+      return;
     }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Mot de passe réinitialisé, connectez-vous.'),
+      ),
+    );
+    context.go('/auth/login');
   }
 
   @override
@@ -142,6 +149,9 @@ class _ResetPasswordPageState extends ConsumerState<ResetPasswordPage> {
                   key: const Key('otpCodeField'),
                   controller: _codeController,
                   keyboardType: TextInputType.number,
+                  // Digits first, then the 6-char limit: a pasted "123 456"
+                  // used to be cut to "123 45" by maxLength (v1s-15-8).
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   maxLength: 6,
                   decoration: InputDecoration(
                     counterText: '',

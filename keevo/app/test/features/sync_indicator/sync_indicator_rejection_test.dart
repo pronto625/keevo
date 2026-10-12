@@ -21,6 +21,8 @@ void main() {
       daysOfflineProvider.overrideWithValue(0),
       daysSinceLastSyncProvider.overrideWithValue(0),
     ]);
+    // Safety net if an expectation fails before the in-body dispose.
+    addTearDown(container.dispose);
 
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container,
@@ -100,6 +102,8 @@ void main() {
       daysOfflineProvider.overrideWithValue(0),
       daysSinceLastSyncProvider.overrideWithValue(0),
     ]);
+    // Safety net if an expectation fails before the in-body dispose.
+    addTearDown(container.dispose);
     final router = GoRouter(routes: [
       GoRoute(
         path: '/',

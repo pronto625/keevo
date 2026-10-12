@@ -70,8 +70,11 @@ void main() {
     });
 
     test('getHistory returns events ordered by createdAt DESC', () async {
+      // Injected clock: two distinct timestamps without a real wait.
+      var tick = DateTime(2026, 10, 12, 9);
+      logger = SyncEventLogger(db, now: () => tick);
       await logger.logPushSuccess(1);
-      await Future.delayed(const Duration(milliseconds: 10));
+      tick = tick.add(const Duration(minutes: 1));
       await logger.logPullSuccess(2);
 
       final events = await logger.getHistory();

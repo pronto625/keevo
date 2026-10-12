@@ -87,17 +87,22 @@ void main() {
       expect(container.read(daysSinceLastSyncProvider), 0);
     });
 
-    test('re_evaluates_at_the_next_day_boundary_without_a_sync', () async {
-      // Last sync 1 day minus 150 ms ago: the provider must move to 1 on its
-      // own once the 24 h boundary is crossed.
-      final lastSync = DateTime.now()
-          .subtract(const Duration(days: 1) - const Duration(milliseconds: 150));
+    // v1s-15-8: injected clock + the testWidgets fake timer — no real wait
+    // (it used to race a real 150 ms Timer against a real 400 ms delay).
+    testWidgets('re_evaluates_at_the_next_day_boundary_without_a_sync',
+        (tester) async {
+      // Last sync 1 day minus 100 ms before "now": the provider must move to
+      // 1 on its own once the 24 h boundary is crossed.
+      final lastSync = DateTime(2026, 1, 1, 12);
+      var now = lastSync
+          .add(const Duration(days: 1) - const Duration(milliseconds: 100));
       SharedPreferences.setMockInitialValues(
           {kLastSyncAtKey: lastSync.millisecondsSinceEpoch});
       final prefs = await SharedPreferences.getInstance();
-      final container = ProviderContainer(
-        overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
-      );
+      final container = ProviderContainer(overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        syncGateClockProvider.overrideWithValue(() => now),
+      ]);
       addTearDown(container.dispose);
 
       final seen = <int>[];
@@ -105,8 +110,11 @@ void main() {
           fireImmediately: true);
       expect(seen, [0]);
 
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+      now = now.add(const Duration(milliseconds: 200));
+      await tester.pump(const Duration(milliseconds: 200));
       expect(seen.last, 1);
+      // Cancels the next-boundary Timer before the fake-timer invariant check.
+      container.dispose();
     });
 
     test('uses_the_injected_clock', () async {
