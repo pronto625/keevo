@@ -71,9 +71,15 @@ void main() {
       }
     });
 
-    // v1s-18-4: the export screens are owner-only.
+    // v1s-18-4: the export screens are owner-only (v1s-18-5: the on-device
+    // CSV too).
     test('an employee is kept out of the export routes', () async {
-      for (final path in ['/exports', '/exports/new', '/exports/x']) {
+      for (final path in [
+        '/exports',
+        '/exports/new',
+        '/exports/local',
+        '/exports/x',
+      ]) {
         expect(await redirect(path, session: true, role: 'EMPLOYEE'), '/pos',
             reason: path);
         expect(await redirect(path, session: true, role: 'OWNER'), isNull,

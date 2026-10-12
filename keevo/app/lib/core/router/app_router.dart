@@ -65,6 +65,7 @@ import '../../features/audit/presentation/page/audit_log_page.dart';
 import '../../features/audit/presentation/page/stock_movements_page.dart';
 import '../../features/export/domain/model/export_models.dart';
 import '../../features/export/presentation/page/export_page.dart';
+import '../../features/export/presentation/page/local_export_page.dart';
 import '../../features/export/presentation/page/my_exports_page.dart';
 import '../../features/notifications/presentation/page/notifications_page.dart';
 import '../../features/dashboard/presentation/page/dashboard_page.dart';
@@ -697,6 +698,15 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/exports/new',
       builder: (_, state) => ExportPage(
+        prefill: state.extra is ExportPrefill
+            ? state.extra as ExportPrefill
+            : null,
+      ),
+    ),
+    // On-device CSV (v1s-18-5) — also before `/exports/:id`.
+    GoRoute(
+      path: '/exports/local',
+      builder: (_, state) => LocalExportPage(
         prefill: state.extra is ExportPrefill
             ? state.extra as ExportPrefill
             : null,

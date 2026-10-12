@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -8,6 +9,7 @@ import 'package:dio/dio.dart';
 import 'package:keevo/features/export/data/remote_export_datasource.dart';
 import 'package:keevo/features/export/domain/exception/export_exception.dart';
 import 'package:keevo/features/export/domain/model/export_models.dart';
+import 'package:sqlite3/open.dart';
 
 /// A scripted HTTP response of [FakeExportAdapter].
 class FakeHttp {
@@ -162,4 +164,17 @@ class FakeExportDataSource implements RemoteExportDataSource {
     downloads.add(job.id);
     return onDownload?.call(job) ?? Future.error(ExportException.unexpected);
   }
+}
+
+/// Linux test host: load the system SQLite (sqlcipher_flutter_libs only
+/// ships Android / iOS libraries).
+void overrideSqliteForLinuxTests() {
+  if (!Platform.isLinux) return;
+  open.overrideFor(OperatingSystem.linux, () {
+    try {
+      return DynamicLibrary.open('libsqlite3.so');
+    } catch (_) {
+      return DynamicLibrary.open('libsqlite3.so.0');
+    }
+  });
 }

@@ -417,7 +417,7 @@ development_status:
   v1s-18-2-export-datasets: done                      # FR94 — un ExportDatasetProvider par domaine ; 2026-10-12 done — spec-v1s-18-2-export-datasets.md (16 datasets, criteria audit, V16) ; routé → 18-4, 18-5
   v1s-18-3-pdf-templates: done                     # FR95 — EOD, inventaire, état de stock, ventes ; 2026-10-12 build-auto v1s-18-4 — 1 item ; 2026-10-12 done — spec-v1s-18-3-pdf-templates.md (4 modèles PDF, PDF activé dans l'app)
   v1s-18-4-export-screen-app: done                 # FR55, FR94, FR96 — écran Exporter + Mes exports ; 2026-10-12 build-auto v1s-18-7 — 1 item | 2026-10-12 build-auto v1s-18-2 review — 1 item ; 2026-10-12 done — spec-v1s-18-4-export-screen-app.md (Exporter + Mes exports ; routé → 18-3, 18-5)
-  v1s-18-5-local-offline-csv-export: in-progress          # FR97 — CSV depuis Drift, hors ligne ; 2026-10-12 build-auto v1s-18-2 review — 1 item | 2026-10-12 build-auto v1s-18-4 — 1 item
+  v1s-18-5-local-offline-csv-export: done          # FR97 — CSV depuis Drift, hors ligne ; 2026-10-12 build-auto v1s-18-2 review — 1 item | 2026-10-12 build-auto v1s-18-4 — 1 item ; 2026-10-12 done — spec-v1s-18-5-local-offline-csv-export.md (CSV appareil Drift + isolate, contrat keevo/contracts/export-datasets.json, OWNER)
   v1s-18-6-audit-enrichment-backend: done                 # FR84 — store/label/device/source/metadata + GET /audit/{id} ; 2026-10-12 done — spec-v1s-18-6-audit-enrichment-backend.md
   v1s-18-7-audit-log-screen-app: done                     # FR98 — liste filtrable + détail cliquable ; 2026-10-12 done — spec-v1s-18-7-audit-log-screen-app.md
   v1s-epic-18-retrospective: optional

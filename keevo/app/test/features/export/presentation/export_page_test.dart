@@ -19,12 +19,14 @@ void main() {
   late List<File> shared;
   late bool online;
   late bool? premium;
+  ExportPrefill? localPrefill;
 
   setUp(() {
     ds = FakeExportDataSource();
     shared = [];
     online = true;
     premium = true;
+    localPrefill = null;
   });
 
   Widget app({ExportPrefill? prefill}) => ProviderScope(
@@ -53,6 +55,12 @@ void main() {
                   path: '/exports',
                   builder: (_, __) =>
                       const Scaffold(body: Text('MES EXPORTS'))),
+              GoRoute(
+                  path: '/exports/local',
+                  builder: (_, state) {
+                    localPrefill = state.extra as ExportPrefill?;
+                    return const Scaffold(body: Text('LOCAL CSV'));
+                  }),
               GoRoute(
                   path: '/settings/subscription',
                   builder: (_, __) => const Scaffold(body: Text('ABONNEMENT'))),
@@ -375,11 +383,20 @@ void main() {
     expect(find.text('Réessayer'), findsOneWidget);
   });
 
-  testWidgets('offline: banner, launch disabled, local CSV entry disabled',
-      (tester) async {
+  testWidgets('offline: banner, launch disabled, local CSV entry opens '
+      '/exports/local with the current choices (v1s-18-5)', (tester) async {
     online = false;
+    final from = DateTime(2026, 10, 1);
+    final to = DateTime(2026, 10, 7, 23, 59);
     await pumpApp(
-        tester, app(prefill: const ExportPrefill(datasets: {'products'})));
+        tester,
+        app(
+            prefill: ExportPrefill(
+                datasets: const {'products', 'sales'},
+                storeId: 's-1',
+                from: from,
+                to: to,
+                criteria: const {'action': 'SALE_CREATED'})));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('export-offline-banner')), findsOneWidget);
@@ -388,9 +405,47 @@ void main() {
     expect(submit(tester).onPressed, isNull);
     final local = tester
         .widget<ListTile>(find.byKey(const Key('export-local-csv-entry')));
-    expect(local.enabled, isFalse);
+    expect(local.enabled, isTrue);
     expect(find.text('CSV — données de cet appareil'), findsOneWidget);
-    expect(find.text('Bientôt disponible'), findsOneWidget);
+    expect(
+        find.text(
+            'Contient uniquement les données synchronisées sur cet appareil'),
+        findsOneWidget);
+    expect(find.text('Bientôt disponible'), findsNothing);
+
+    await tapKey(tester, 'export-local-csv-entry');
+    expect(find.text('LOCAL CSV'), findsOneWidget);
+    expect(localPrefill!.datasets, {'products', 'sales'});
+    expect(localPrefill!.storeId, 's-1');
+    expect(localPrefill!.from, from);
+    expect(localPrefill!.to, to);
+    expect(localPrefill!.criteria, {'action': 'SALE_CREATED'});
+  });
+
+  testWidgets('online: no local CSV entry until the server is unreachable',
+      (tester) async {
+    ds.onRequest = (_) async => throw ExportException.network;
+    await pumpApp(
+        tester, app(prefill: const ExportPrefill(datasets: {'products'})));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('export-local-csv-entry')), findsNothing);
+
+    await tapKey(tester, 'export-submit');
+    expect(find.byKey(const Key('export-error')), findsOneWidget);
+    expect(find.byKey(const Key('export-local-csv-entry')), findsOneWidget);
+    await tapKey(tester, 'export-local-csv-entry');
+    expect(find.text('LOCAL CSV'), findsOneWidget);
+    expect(localPrefill!.datasets, {'products'});
+  });
+
+  testWidgets('other errors do not offer the local CSV', (tester) async {
+    ds.onRequest = (_) async => throw ExportException.unexpected;
+    await pumpApp(
+        tester, app(prefill: const ExportPrefill(datasets: {'products'})));
+    await tester.pumpAndSettle();
+    await tapKey(tester, 'export-submit');
+    expect(find.byKey(const Key('export-error')), findsOneWidget);
+    expect(find.byKey(const Key('export-local-csv-entry')), findsNothing);
   });
 
   testWidgets('background export: confirmation and link to Mes exports',
