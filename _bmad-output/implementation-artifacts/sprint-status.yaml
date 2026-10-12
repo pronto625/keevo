@@ -414,7 +414,7 @@ development_status:
   # ─────────────────────────────────────────────────────────
   v1s-epic-18-export-audit: in-progress
   v1s-18-1-export-module-foundation: done                 # FR55, FR94, FR96 — reporting/export, CSV/XLSX, jobs, gating ; 2026-10-12 done — spec-v1s-18-1-export-module-foundation.md
-  v1s-18-2-export-datasets: backlog                   # FR94 — un ExportDatasetProvider par domaine
+  v1s-18-2-export-datasets: in-progress               # FR94 — un ExportDatasetProvider par domaine
   v1s-18-3-pdf-templates: backlog                     # FR95 — EOD, inventaire, état de stock, ventes
   v1s-18-4-export-screen-app: backlog                 # FR55, FR94, FR96 — écran Exporter + Mes exports ; 2026-10-12 build-auto v1s-18-7 — 1 item
   v1s-18-5-local-offline-csv-export: backlog          # FR97 — CSV depuis Drift, hors ligne
