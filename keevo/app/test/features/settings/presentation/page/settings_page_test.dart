@@ -468,5 +468,31 @@ void main() {
       expect(service.signOutCalls, 1);
       expect(find.text('Login Page'), findsOneWidget);
     });
+
+    // v1s-16-13 (routed from CR v1s-16-1): a double tap on the tile opens a
+    // single confirmation and signs out once.
+    testWidgets('a double tap on the logout tile signs out once',
+        (tester) async {
+      final service = _FakeSignOutService(() async => true);
+      await tester.pumpWidget(page(service));
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.text('Se déconnecter'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Se déconnecter'));
+      await tester.tap(find.text('Se déconnecter'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Se déconnecter ?'), findsOneWidget);
+      await tester.tap(find.text('Déconnecter'));
+      await tester.pumpAndSettle();
+
+      expect(service.flushCalls, 1);
+      expect(service.signOutCalls, 1);
+      expect(find.text('Login Page'), findsOneWidget);
+    });
   });
 }

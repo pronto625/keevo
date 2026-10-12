@@ -46,7 +46,8 @@ class SupplierRepositoryImpl implements SupplierRepository {
       _local.getAll(includeArchived: includeArchived);
 
   @override
-  Future<List<SupplierModel>> search(String query) => _local.search(query);
+  Future<List<SupplierModel>> search(String query, {bool includeArchived = false}) =>
+      _local.search(query, includeArchived: includeArchived);
 
   @override
   Future<SupplierModel?> getById(String id) => _local.getById(id);

@@ -7,6 +7,7 @@ import '../../../../core/storage/secure_storage_provider.dart';
 import '../../../notifications/presentation/provider/notification_provider.dart';
 import '../../../pos/presentation/provider/cart_provider.dart';
 import '../../../settings/presentation/provider/account_status_provider.dart';
+import '../../../settings/presentation/provider/subscription_info_provider.dart';
 import 'auth_provider.dart';
 
 /// Ends the session on this device.
@@ -46,7 +47,13 @@ class SignOutService {
     }
 
     final fcm = _ref.read(fcmServiceProvider);
-    final fcmToken = await fcm.getToken();
+    // v1s-16-13: an FCM failure (offline) must not keep the session alive.
+    String? fcmToken;
+    try {
+      fcmToken = await fcm.getToken();
+    } catch (e) {
+      debugPrint('[FCM] Token read on logout failed: $e');
+    }
     if (fcmToken != null) {
       try {
         await _ref.read(remoteDeviceTokenDataSourceProvider).deleteToken(fcmToken);
@@ -55,7 +62,11 @@ class SignOutService {
       }
     }
     // Unconditional: local unsubscribe must happen even if the remote delete failed.
-    await fcm.deleteToken();
+    try {
+      await fcm.deleteToken();
+    } catch (e) {
+      debugPrint('[FCM] Local token deletion on logout failed: $e');
+    }
 
     await clearSessionSecrets(_ref.read(flutterSecureStorageProvider));
 
@@ -70,6 +81,11 @@ class SignOutService {
     _ref.invalidate(currentUserPhoneProvider);
     _ref.invalidate(currentUserIdProvider);
     _ref.invalidate(tenantStatusClaimProvider);
+    // v1s-16-13: the next account must not see this tenant's plan. Only
+    // when mounted: Ref.invalidate mounts (and fetches) it in debug.
+    if (_ref.exists(subscriptionInfoProvider)) {
+      _ref.invalidate(subscriptionInfoProvider);
+    }
   }
 }
 

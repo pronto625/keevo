@@ -16,8 +16,20 @@ import '../widget/onboarding_progress_dots.dart';
 ///
 /// L'acceptation est persistée en SharedPreferences — la page n'est plus
 /// affichée lors des ouvertures suivantes.
+///
+/// v1s-16-13: [readOnly] shows the same text without the progress dots, the
+/// reading hint and the acceptance zone — opened from the register form's
+/// « Conditions d'utilisation » / « Politique de confidentialité » links
+/// (`/terms/view`). [scrollToPrivacy] opens it at the privacy policy.
 class TermsPage extends StatefulWidget {
-  const TermsPage({super.key});
+  final bool readOnly;
+  final bool scrollToPrivacy;
+
+  const TermsPage({
+    super.key,
+    this.readOnly = false,
+    this.scrollToPrivacy = false,
+  });
 
   @override
   State<TermsPage> createState() => _TermsPageState();
@@ -25,6 +37,7 @@ class TermsPage extends StatefulWidget {
 
 class _TermsPageState extends State<TermsPage> {
   final ScrollController _scrollCtrl = ScrollController();
+  final GlobalKey _privacyKey = GlobalKey();
 
   bool _hasScrolledToBottom = false;
   bool _termsAccepted = false;
@@ -36,6 +49,15 @@ class _TermsPageState extends State<TermsPage> {
   void initState() {
     super.initState();
     _scrollCtrl.addListener(_onScroll);
+    if (widget.scrollToPrivacy) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final target = _privacyKey.currentContext;
+        if (target != null) {
+          Scrollable.ensureVisible(target,
+              duration: const Duration(milliseconds: 300));
+        }
+      });
+    }
   }
 
   @override
@@ -88,16 +110,18 @@ class _TermsPageState extends State<TermsPage> {
                       if (context.canPop()) {
                         context.pop();
                       } else {
-                        context.go('/onboarding');
+                        context.go(
+                            widget.readOnly ? '/auth/register' : '/onboarding');
                       }
                     },
                   ),
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 12),
-                    child: Center(
-                      child: OnboardingProgressDots(step: 2, total: 4),
+                  if (!widget.readOnly)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 12),
+                      child: Center(
+                        child: OnboardingProgressDots(step: 2, total: 4),
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -113,14 +137,12 @@ class _TermsPageState extends State<TermsPage> {
                     const SizedBox(height: 8),
                     Text(
                       'Conditions\nd\'utilisation',
-                      style: Theme.of(context)
-                          .textTheme
-                          .headlineMedium
-                          ?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            height: 1.15,
-                            letterSpacing: -0.3,
-                          ),
+                      style:
+                          Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                height: 1.15,
+                                letterSpacing: -0.3,
+                              ),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -132,7 +154,7 @@ class _TermsPageState extends State<TermsPage> {
                     const SizedBox(height: 24),
 
                     // Indicateur de progression de lecture
-                    if (!_hasScrolledToBottom)
+                    if (!_hasScrolledToBottom && !widget.readOnly)
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -228,6 +250,7 @@ class _TermsPageState extends State<TermsPage> {
                     // Politique de confidentialité (résumé)
                     Text(
                       'Politique de confidentialité',
+                      key: _privacyKey,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
@@ -265,63 +288,66 @@ class _TermsPageState extends State<TermsPage> {
             ),
 
             // ── Zone d'acceptation ───────────────────────────────────
-            Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).scaffoldBackgroundColor,
-                border: Border(
-                  top: BorderSide(
-                    color: cs.outlineVariant.withAlpha(60),
+            if (!widget.readOnly)
+              Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  border: Border(
+                    top: BorderSide(
+                      color: cs.outlineVariant.withAlpha(60),
+                    ),
                   ),
                 ),
-              ),
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Case 1 : CGU
-                  _AcceptCheckbox(
-                    value: _termsAccepted,
-                    enabled: _hasScrolledToBottom,
-                    label: 'J\'accepte les Conditions d\'utilisation de Keevo',
-                    onChanged: (v) => setState(() => _termsAccepted = v ?? false),
-                  ),
-                  const SizedBox(height: 8),
-                  // Case 2 : Politique de confidentialité
-                  _AcceptCheckbox(
-                    value: _privacyAccepted,
-                    enabled: _hasScrolledToBottom,
-                    label: 'J\'accepte la Politique de confidentialité',
-                    onChanged:
-                        (v) => setState(() => _privacyAccepted = v ?? false),
-                  ),
-                  const SizedBox(height: 16),
-                  // Bouton
-                  SizedBox(
-                    height: 56,
-                    child: FilledButton(
-                      onPressed: _canProceed ? _accept : null,
-                      style: FilledButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(28),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Case 1 : CGU
+                    _AcceptCheckbox(
+                      value: _termsAccepted,
+                      enabled: _hasScrolledToBottom,
+                      label:
+                          'J\'accepte les Conditions d\'utilisation de Keevo',
+                      onChanged: (v) =>
+                          setState(() => _termsAccepted = v ?? false),
+                    ),
+                    const SizedBox(height: 8),
+                    // Case 2 : Politique de confidentialité
+                    _AcceptCheckbox(
+                      value: _privacyAccepted,
+                      enabled: _hasScrolledToBottom,
+                      label: 'J\'accepte la Politique de confidentialité',
+                      onChanged: (v) =>
+                          setState(() => _privacyAccepted = v ?? false),
+                    ),
+                    const SizedBox(height: 16),
+                    // Bouton
+                    SizedBox(
+                      height: 56,
+                      child: FilledButton(
+                        onPressed: _canProceed ? _accept : null,
+                        style: FilledButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(28),
+                          ),
+                          disabledBackgroundColor: cs.primary.withAlpha(50),
                         ),
-                        disabledBackgroundColor: cs.primary.withAlpha(50),
-                      ),
-                      child: Text(
-                        _canProceed
-                            ? 'J\'accepte et continuer'
-                            : _hasScrolledToBottom
-                                ? 'Cochez les cases pour continuer'
-                                : 'Lisez les conditions pour continuer',
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
+                        child: Text(
+                          _canProceed
+                              ? 'J\'accepte et continuer'
+                              : _hasScrolledToBottom
+                                  ? 'Cochez les cases pour continuer'
+                                  : 'Lisez les conditions pour continuer',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -439,8 +465,7 @@ class _AcceptCheckbox extends StatelessWidget {
                 label,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: enabled ? cs.onSurface : cs.onSurfaceVariant,
-                      fontWeight:
-                          enabled ? FontWeight.w500 : FontWeight.normal,
+                      fontWeight: enabled ? FontWeight.w500 : FontWeight.normal,
                     ),
               ),
             ),

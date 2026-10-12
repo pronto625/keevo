@@ -57,6 +57,12 @@ class _CsvImportPageState extends ConsumerState<CsvImportPage> {
     super.dispose();
   }
 
+  /// Drops every mapping that points to a column [headers] does not have
+  /// (v1s-16-13: a stale value is not in the dropdown items).
+  void _keepMappingsFor(List<String> headers) {
+    _mapping.updateAll((_, header) => headers.contains(header) ? header : null);
+  }
+
   void _goToStep(int step) {
     _pageController.animateToPage(
       step,
@@ -109,6 +115,8 @@ class _CsvImportPageState extends ConsumerState<CsvImportPage> {
       }
       // Transition to step 1 when file is picked
       if (next is CsvImportFilePicked) {
+        // v1s-16-13: a new file keeps only the mappings whose column it has.
+        setState(() => _keepMappingsFor(next.detectedHeaders));
         _goToStep(1);
       }
     });
@@ -158,6 +166,8 @@ class _CsvImportPageState extends ConsumerState<CsvImportPage> {
               onLaunchImport: _launchImport,
               onCancel: () {
                 ref.read(csvImportNotifierProvider.notifier).reset();
+                // v1s-16-13: the next file starts from a clean mapping.
+                setState(() => _mapping.updateAll((_, __) => null));
                 _goToStep(0);
               },
             )
@@ -355,7 +365,9 @@ class _StepMapColumns extends StatelessWidget {
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: DropdownButtonFormField<String>(
-                value: mapping[entry.key],
+                value: headers.contains(mapping[entry.key])
+                    ? mapping[entry.key]
+                    : null,
                 decoration: InputDecoration(
                   labelText: entry.value,
                   suffixIcon: isRequired

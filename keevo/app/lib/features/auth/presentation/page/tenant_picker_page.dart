@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
+import '../../../../core/widget/soft_icon_button.dart';
 import '../../domain/exception/auth_exception.dart';
 import '../../domain/model/membership_dto.dart';
 import '../provider/auth_provider.dart';
@@ -77,65 +78,89 @@ class _TenantPickerPageState extends ConsumerState<TenantPickerPage> {
       }
     });
 
-    final errorMessage = asyncState.hasError &&
-            asyncState.error is! PreviousAccountDataException
-        ? _errorMessage(asyncState.error)
-        : null;
+    final errorMessage =
+        asyncState.hasError && asyncState.error is! PreviousAccountDataException
+            ? _errorMessage(asyncState.error)
+            : null;
 
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Scaffold(
-      body: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: isDark
-              ? AppTheme.softBackgroundGradientDark
-              : AppTheme.softBackgroundGradient,
-        ),
-        child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
-                child: Text(
-                  'Choisir une boutique',
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: cs.onSurface,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-              ),
-              if (errorMessage != null)
+    // v1s-16-13: no session exists yet (the login token only lives in the
+    // route), so leaving goes straight back to the login form.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        // Not while a selection runs: it would complete after leaving.
+        if (!didPop && !asyncState.isLoading) context.go('/auth/login');
+      },
+      child: Scaffold(
+        body: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: isDark
+                ? AppTheme.softBackgroundGradientDark
+                : AppTheme.softBackgroundGradient,
+          ),
+          child: SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-                  child: Text(
-                    errorMessage,
-                    style: TextStyle(color: cs.error),
-                    textAlign: TextAlign.center,
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: SoftIconButton(
+                      key: const Key('tenant_picker_back'),
+                      icon: Icons.arrow_back_rounded,
+                      tooltip: 'Retour à la connexion',
+                      onPressed: asyncState.isLoading
+                          ? null
+                          : () => context.go('/auth/login'),
+                    ),
                   ),
                 ),
-              Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-                  itemCount: widget.memberships.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final m = widget.memberships[index];
-                    final isLoading =
-                        asyncState.isLoading && _selectingCode == m.tenantCode;
-
-                    return _TenantTile(
-                      membership: m,
-                      isLoading: isLoading,
-                      onTap:
-                          asyncState.isLoading ? null : () => _selectTenant(m),
-                    );
-                  },
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
+                  child: Text(
+                    'Choisir une boutique',
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+                if (errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+                    child: Text(
+                      errorMessage,
+                      style: TextStyle(color: cs.error),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+                    itemCount: widget.memberships.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final m = widget.memberships[index];
+                      final isLoading = asyncState.isLoading &&
+                          _selectingCode == m.tenantCode;
+
+                      return _TenantTile(
+                        membership: m,
+                        isLoading: isLoading,
+                        onTap: asyncState.isLoading
+                            ? null
+                            : () => _selectTenant(m),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

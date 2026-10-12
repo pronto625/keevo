@@ -10,11 +10,22 @@ import 'package:keevo/features/auth/domain/model/auth_tokens.dart';
 import 'package:keevo/features/auth/domain/usecase/change_password_usecase.dart';
 import 'package:keevo/features/auth/presentation/page/password_change_page.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
+import 'package:keevo/features/auth/presentation/provider/sign_out_service.dart';
 
 class _MockChangePasswordUseCase extends Mock
     implements ChangePasswordUseCase {}
 
 late SharedPreferences _prefs;
+
+class _FakeSignOutService implements SignOutService {
+  int signOutCalls = 0;
+
+  @override
+  Future<bool> flushPendingOperations() async => true;
+
+  @override
+  Future<void> signOut() async => signOutCalls++;
+}
 
 void main() {
   setUp(() async {
@@ -45,6 +56,9 @@ void main() {
           GoRoute(
               path: '/splash',
               builder: (_, __) => const Scaffold(body: Text('Splash'))),
+          GoRoute(
+              path: '/auth/login',
+              builder: (_, __) => const Scaffold(body: Text('Login'))),
         ]),
       ),
     );
@@ -131,6 +145,22 @@ void main() {
       // No back button should exist
       expect(find.byType(BackButton), findsNothing);
       expect(find.byIcon(Icons.arrow_back), findsNothing);
+    });
+
+    // v1s-16-13: the forced change had no exit.
+    testWidgets('« Se déconnecter » signs out then returns to login',
+        (tester) async {
+      final signOut = _FakeSignOutService();
+      await tester.pumpWidget(buildPage(
+          overrides: [signOutServiceProvider.overrideWithValue(signOut)]));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Se déconnecter'));
+      await tester.tap(find.text('Se déconnecter'));
+      await tester.pumpAndSettle();
+
+      expect(signOut.signOutCalls, 1);
+      expect(find.text('Login'), findsOneWidget);
     });
   });
 }

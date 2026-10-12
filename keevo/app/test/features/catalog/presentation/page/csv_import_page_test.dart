@@ -34,6 +34,42 @@ class _FailingImportNotifier extends CsvImportNotifier {
   }
 }
 
+/// Each pick returns the next file of [files] (headers only matter here).
+class _SequenceNotifier extends CsvImportNotifier {
+  _SequenceNotifier(this.files);
+  final List<List<String>> files;
+  int _next = 0;
+
+  @override
+  CsvImportState build() => const CsvImportIdle();
+
+  @override
+  Future<void> pickFile() async {
+    final headers = files[_next++];
+    state = CsvImportFilePicked(
+      bytes: Uint8List.fromList(utf8.encode('${headers.join(',')}\n')),
+      fileName: 'f$_next.csv',
+      detectedHeaders: headers,
+    );
+  }
+}
+
+Future<void> _map(WidgetTester tester, String field, String header) async {
+  await tester.tap(find.text(field));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(header).last);
+  await tester.pumpAndSettle();
+}
+
+String? _value(WidgetTester tester, String field) => tester
+    .widget<DropdownButton<String>>(find.descendant(
+        of: find.ancestor(
+            of: find.text(field),
+            matching: find.byWidgetPredicate(
+                (w) => w is DropdownButtonFormField<String>)),
+        matching: find.byWidgetPredicate((w) => w is DropdownButton<String>)))
+    .value;
+
 void main() {
   testWidgets('mapping step stays visible during and after a failed import',
       (tester) async {
@@ -75,5 +111,44 @@ void main() {
           .onPressed,
       isNotNull,
     );
+  });
+
+  // v1s-16-13: a stale mapping is not in the dropdown items.
+  testWidgets('cancel clears the mapping; a new file keeps only its columns',
+      (tester) async {
+    final notifier = _SequenceNotifier([
+      ['nom', 'prix', 'sku'],
+      ['nom', 'tarif', 'sku'],
+      ['nom', 'sku'],
+    ]);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [csvImportNotifierProvider.overrideWith(() => notifier)],
+      child: const MaterialApp(home: CsvImportPage()),
+    ));
+
+    await tester.tap(find.text('Choisir un fichier .csv'));
+    await tester.pumpAndSettle();
+    await _map(tester, 'Nom du produit *', 'nom');
+    await _map(tester, 'Prix de vente *', 'prix');
+    expect(_value(tester, 'Prix de vente *'), 'prix');
+
+    // Cancel, then pick another file: nothing carried over.
+    await tester.ensureVisible(find.text('Annuler'));
+    await tester.tap(find.text('Annuler'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Choisir un fichier .csv'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(_value(tester, 'Nom du produit *'), isNull);
+    expect(_value(tester, 'Prix de vente *'), isNull);
+
+    // Map name + price, then a new file that has "nom" but not "tarif".
+    await _map(tester, 'Nom du produit *', 'nom');
+    await _map(tester, 'Prix de vente *', 'tarif');
+    await notifier.pickFile();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(_value(tester, 'Nom du produit *'), 'nom');
+    expect(_value(tester, 'Prix de vente *'), isNull);
   });
 }

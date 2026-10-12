@@ -21,11 +21,15 @@ class LocalClientDataSource {
     return rows.map(_toModel).toList();
   }
 
-  Future<List<ClientModel>> search(String query) async {
+  /// v1s-16-13: [includeArchived] mirrors « Voir les archivés ».
+  Future<List<ClientModel>> search(String query,
+      {bool includeArchived = false}) async {
     final q = likeContainsFolded(query); // v1s-16-16
     final rows = await (_db.select(_db.clients)
           ..where((c) =>
-              c.archived.equals(false) &
+              (includeArchived
+                  ? const Constant(true)
+                  : c.archived.equals(false)) &
               (foldedSqlExpr(c.name).like(q, escapeChar: likeEscapeChar) |
                   foldedSqlExpr(c.phone)
                       .like(q, escapeChar: likeEscapeChar)))

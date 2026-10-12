@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -51,8 +52,16 @@ class _AuthPageState extends ConsumerState<AuthPage> {
     _mode = widget.initialMode;
   }
 
+  // v1s-16-13: the CGU / privacy mentions open the read-only terms page.
+  late final TapGestureRecognizer _termsTap = TapGestureRecognizer()
+    ..onTap = () => context.push('/terms/view');
+  late final TapGestureRecognizer _privacyTap = TapGestureRecognizer()
+    ..onTap = () => context.push('/terms/view?section=privacy');
+
   @override
   void dispose() {
+    _termsTap.dispose();
+    _privacyTap.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -331,7 +340,7 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                             borderSide: BorderSide(color: cs.primary, width: 1.5),
                           ),
                         ),
-                        initialCountryCode: 'CM',
+                        initialCountryCode: kDefaultPhoneCountryCode,
                         languageCode: 'fr',
                         keyboardType: TextInputType.phone,
                         // Shown by the field's own length check, which runs
@@ -443,6 +452,7 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                                           const TextSpan(text: 'Vous avez accepté nos '),
                                           TextSpan(
                                             text: "Conditions d'utilisation",
+                                            recognizer: _termsTap,
                                             style: TextStyle(
                                               color: cs.primary,
                                               fontWeight: FontWeight.w600,
@@ -451,6 +461,7 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                                           const TextSpan(text: ' et notre '),
                                           TextSpan(
                                             text: 'Politique de confidentialité',
+                                            recognizer: _privacyTap,
                                             style: TextStyle(
                                               color: cs.primary,
                                               fontWeight: FontWeight.w600,
@@ -461,6 +472,7 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                                           const TextSpan(text: 'You have accepted our '),
                                           TextSpan(
                                             text: 'Terms of Use',
+                                            recognizer: _termsTap,
                                             style: TextStyle(
                                               color: cs.primary,
                                               fontWeight: FontWeight.w600,
@@ -469,6 +481,7 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                                           const TextSpan(text: ' and our '),
                                           TextSpan(
                                             text: 'Privacy Policy',
+                                            recognizer: _privacyTap,
                                             style: TextStyle(
                                               color: cs.primary,
                                               fontWeight: FontWeight.w600,

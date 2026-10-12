@@ -7,6 +7,7 @@ library;
 import 'dart:ffi';
 import 'dart:io';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/core/sync/connectivity_service.dart';
@@ -285,6 +286,22 @@ void main() {
         final results = await local.search(q);
         expect(results.map((c) => c.name), ['Hélène'], reason: q);
       }
+    });
+
+    // v1s-16-13: search respects « Voir les archivés ».
+    test('archived clients match only with includeArchived', () async {
+      final now = DateTime.now();
+      await db.into(db.clients).insert(ClientsCompanion.insert(
+            id: 'c4',
+            name: 'Ancien Client',
+            phone: '+237690000004',
+            archived: const Value(true),
+            createdAt: now,
+            updatedAt: now,
+          ));
+      expect(await local.search('ancien'), isEmpty);
+      final all = await local.search('ancien', includeArchived: true);
+      expect(all.map((c) => c.name), ['Ancien Client']);
     });
   });
 }

@@ -111,5 +111,33 @@ void main() {
       final todayKey = 'offline_gate_banner_dismissed_date';
       expect(prefs.getString(todayKey), isNotNull);
     });
+
+    // v1s-16-13: the dismissed state is read from prefs at start.
+    String day(DateTime d) =>
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+    testWidgets('banner_warning_dismissedToday_staysHidden', (tester) async {
+      SharedPreferences.setMockInitialValues(
+          {'offline_gate_banner_dismissed_date': day(DateTime.now())});
+      final prefs = await SharedPreferences.getInstance();
+
+      await tester.pumpWidget(_wrap(SyncGateState.warning, 5, prefs));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Synchronisation requise'), findsNothing);
+    });
+
+    testWidgets('banner_warning_dismissedYesterday_showsAgain', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'offline_gate_banner_dismissed_date':
+            day(DateTime.now().subtract(const Duration(days: 1))),
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      await tester.pumpWidget(_wrap(SyncGateState.warning, 5, prefs));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Synchronisation requise'), findsOneWidget);
+    });
   });
 }

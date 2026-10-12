@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -189,6 +190,88 @@ void main() {
 
       final status = c.read(accountStatusProvider);
       expect(status, AccountStatus.active);
+    });
+
+    // v1s-16-13: after an auth transition the subscription reloads; its
+    // previous value (another tenant on a shared device) must not show.
+    test('ignores the previous plan while the subscription reloads',
+        () async {
+      final token = _jwtWith({'tenantStatus': 'ACTIVE'});
+      when(() => mockTokenStorage.getToken()).thenAnswer((_) async => token);
+      var calls = 0;
+      final second = Completer<SubscriptionInfo>();
+
+      final c = ProviderContainer(overrides: [
+        tokenStorageProvider.overrideWith((ref) => mockTokenStorage),
+        subscriptionInfoProvider.overrideWith((ref) {
+          calls++;
+          if (calls == 1) {
+            return Future.value(const SubscriptionInfo(
+              planType: 'FREE',
+              status: 'ACTIVE',
+              currentStores: 1,
+              currentProducts: 10,
+              currentEmployees: 0,
+            ));
+          }
+          return second.future;
+        }),
+      ]);
+      addTearDown(c.dispose);
+      c.listen(accountStatusProvider, (_, __) {});
+
+      await c.read(tenantStatusClaimProvider.future);
+      await c.read(subscriptionInfoProvider.future);
+      expect(c.read(accountStatusProvider), AccountStatus.trialExpired);
+
+      c.invalidate(subscriptionInfoProvider);
+      expect(c.read(subscriptionInfoProvider).isLoading, isTrue);
+      expect(c.read(accountStatusProvider), AccountStatus.active);
+
+      second.complete(const SubscriptionInfo(
+        planType: 'PREMIUM',
+        status: 'ACTIVE',
+        currentStores: 1,
+        currentProducts: 10,
+        currentEmployees: 0,
+      ));
+      await c.read(subscriptionInfoProvider.future);
+      expect(c.read(accountStatusProvider), AccountStatus.active);
+    });
+
+    test('ignores the previous plan when the reload fails', () async {
+      final token = _jwtWith({'tenantStatus': 'ACTIVE'});
+      when(() => mockTokenStorage.getToken()).thenAnswer((_) async => token);
+      var calls = 0;
+
+      final c = ProviderContainer(overrides: [
+        tokenStorageProvider.overrideWith((ref) => mockTokenStorage),
+        subscriptionInfoProvider.overrideWith((ref) async {
+          calls++;
+          if (calls == 1) {
+            return const SubscriptionInfo(
+              planType: 'FREE',
+              status: 'ACTIVE',
+              currentStores: 1,
+              currentProducts: 10,
+              currentEmployees: 0,
+            );
+          }
+          throw Exception('network error');
+        }),
+      ]);
+      addTearDown(c.dispose);
+      c.listen(accountStatusProvider, (_, __) {});
+
+      await c.read(tenantStatusClaimProvider.future);
+      await c.read(subscriptionInfoProvider.future);
+      expect(c.read(accountStatusProvider), AccountStatus.trialExpired);
+
+      c.invalidate(subscriptionInfoProvider);
+      await expectLater(
+          c.read(subscriptionInfoProvider.future), throwsA(isException));
+      expect(c.read(subscriptionInfoProvider).hasError, isTrue);
+      expect(c.read(accountStatusProvider), AccountStatus.active);
     });
   });
 }

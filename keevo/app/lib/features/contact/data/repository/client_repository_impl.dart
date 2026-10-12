@@ -49,7 +49,8 @@ class ClientRepositoryImpl implements ClientRepository {
       _local.getAll(includeArchived: includeArchived);
 
   @override
-  Future<List<ClientModel>> search(String query) => _local.search(query);
+  Future<List<ClientModel>> search(String query, {bool includeArchived = false}) =>
+      _local.search(query, includeArchived: includeArchived);
 
   @override
   Future<ClientModel?> getById(String id) => _local.getById(id);

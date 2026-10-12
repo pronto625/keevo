@@ -98,8 +98,7 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
     );
     if (_planLimitHit && mounted) {
       _planLimitHit = false;
-      await showPlanLimitBottomSheet(
-          context: context, entity: 'stores', limit: 3);
+      await showPlanLimitBottomSheet(context: context, entity: 'stores');
     }
   }
 

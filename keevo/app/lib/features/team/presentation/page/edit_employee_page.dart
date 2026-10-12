@@ -5,6 +5,7 @@ import 'package:intl_phone_field/countries.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:intl_phone_field/phone_number.dart';
 
+import '../../../../core/storage/app_constants.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
@@ -42,7 +43,7 @@ class _EditEmployeePageState extends ConsumerState<EditEmployeePage> {
   String? _completePhone;
   String _typedNumber = '';
   bool _phoneValid = false;
-  String _initialCountryCode = 'CM';
+  String _initialCountryCode = kDefaultPhoneCountryCode;
   String _initialNationalNumber = '';
   String? _selectedStoreId;
   late String _selectedRole;

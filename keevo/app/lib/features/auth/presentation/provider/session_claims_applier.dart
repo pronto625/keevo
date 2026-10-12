@@ -7,6 +7,7 @@ import '../../../../core/storage/app_database.dart';
 import '../../../../core/storage/secure_storage_provider.dart';
 import '../../../pos/presentation/provider/cart_provider.dart';
 import '../../../settings/presentation/provider/account_status_provider.dart';
+import '../../../settings/presentation/provider/subscription_info_provider.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import 'auth_provider.dart';
 
@@ -77,6 +78,11 @@ class SessionClaimsApplier {
     _ref.invalidate(currentUserRoleProvider);
     _ref.invalidate(tenantStatusClaimProvider);
     _ref.invalidate(currentUserIdProvider);
+    // v1s-16-13: a sign-in may be another tenant (shared POS device).
+    // Only when mounted: Ref.invalidate mounts (and fetches) it in debug.
+    if (newSession && _ref.exists(subscriptionInfoProvider)) {
+      _ref.invalidate(subscriptionInfoProvider);
+    }
   }
 
   /// Ends a sign-in that the user abandoned (e.g. to keep the previous

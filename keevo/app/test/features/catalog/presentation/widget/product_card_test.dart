@@ -274,6 +274,52 @@ void main() {
     expect(find.text('Produit validé avec succès'), findsOneWidget);
   });
 
+  // v1s-16-13: an invalid stock entry is no longer read as 0.
+  test('parsePromotionStock', () {
+    expect(parsePromotionStock(''), 0);
+    expect(parsePromotionStock('  '), 0);
+    expect(parsePromotionStock('12'), 12);
+    expect(parsePromotionStock(' 7 '), 7);
+    for (final bad in ['abc', '-3', '1.5', '1,5', '+2', '12a']) {
+      expect(parsePromotionStock(bad), isNull, reason: bad);
+    }
+  });
+
+  testWidgets('promotion dialog: invalid stock shows an error, Valider disabled',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _pump(
+      tester,
+      product: _product(status: ProductStatus.draft),
+      role: 'OWNER',
+      activeStoreId: 's1',
+    );
+
+    await tester.longPress(find.byType(ProductCard));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Valider ce produit'));
+    await tester.pumpAndSettle();
+
+    FilledButton valider() =>
+        tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Valider'));
+    expect(valider().onPressed, isNotNull, reason: 'empty → 0 is allowed');
+
+    for (final bad in ['abc', '-3', '1.5']) {
+      await tester.enterText(find.byKey(const Key('promote_stock_field')), bad);
+      await tester.pump();
+      expect(find.text('Entrez un nombre entier positif'), findsOneWidget,
+          reason: bad);
+      expect(valider().onPressed, isNull, reason: bad);
+    }
+
+    await tester.enterText(find.byKey(const Key('promote_stock_field')), '4');
+    await tester.pump();
+    expect(find.text('Entrez un nombre entier positif'), findsNothing);
+    expect(valider().onPressed, isNotNull);
+  });
+
   // v1s-12-10: an EMPLOYEE update of a DRAFT is rejected server-side, so the
   // app does not open the edit form (no GoRouter here: a push would throw).
   // Fail closed: an unknown (null) role is treated like an EMPLOYEE.

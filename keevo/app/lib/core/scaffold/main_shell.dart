@@ -5,23 +5,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-import '../../features/account/presentation/widget/deletion_pending_banner.dart';
 import '../../features/catalog/presentation/provider/product_provider.dart';
 import '../../features/inventory/presentation/provider/global_stock_provider.dart';
 import '../../features/notifications/presentation/provider/notification_provider.dart';
 import '../../features/pos/data/datasource/local_day_closure_datasource.dart';
 import '../../features/pos/presentation/provider/day_closure_providers.dart';
 import '../../features/reports/presentation/provider/report_history_providers.dart';
-import '../../features/settings/presentation/widget/suspension_banner.dart';
 import '../../features/stores/presentation/provider/active_store_provider.dart';
 import '../../features/stores/presentation/provider/store_provider.dart';
-import '../../features/sync_indicator/presentation/widget/sync_warning_banner.dart';
 import '../di/providers.dart';
 import '../router/app_router.dart';
 import '../theme/app_theme.dart';
 import '../sync/auto_closure_notification_checker.dart';
 import '../sync/sync_trigger_notifier.dart';
-import 'offline_gate_banner.dart';
+import 'shell_banners.dart';
 
 /// MainShell — persistent bottom navigation scaffold wrapping the main sections.
 ///
@@ -354,11 +351,10 @@ class _MainShellState extends ConsumerState<MainShell> {
     return Scaffold(
       body: Column(
         children: [
-          const SuspensionBanner(),
-          // v1s-14-5 AC8 — account deletion scheduled: visible on every shell page.
-          const DeletionPendingBanner(),
-          const SyncWarningBanner(),
-          const OfflineGateBanner(),
+          // v1s-16-13: one banner at a time, by priority (suspension,
+          // deletion pending — v1s-14-5 AC8 —, offline gate, sync failure,
+          // trial expired).
+          const ShellBanners(),
           Expanded(child: widget.child),
         ],
       ),

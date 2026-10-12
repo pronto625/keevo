@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:keevo/core/sync/sync_gate_provider.dart';
+import 'package:keevo/core/sync/sync_gate_state.dart';
 import 'package:keevo/core/sync/sync_status.dart';
 import 'package:keevo/core/sync/sync_status_provider.dart';
 import 'package:keevo/features/sync_indicator/presentation/widget/sync_indicator.dart';
@@ -93,5 +96,73 @@ void main() {
     final btn = tester.widget<ElevatedButton>(
         find.widgetWithText(ElevatedButton, 'Hors-ligne'));
     expect(btn.onPressed, isNull);
+  });
+
+  // v1s-16-13: neutral loading — no "En ligne" / stale flash before the
+  // first status arrives.
+  testWidgets('loading shows a neutral « Vérification… » state',
+      (tester) async {
+    final never = StreamController<SyncStatus>();
+    addTearDown(never.close);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        syncStatusProvider.overrideWith((ref) => never.stream),
+        daysOfflineProvider.overrideWithValue(0),
+        daysSinceLastSyncProvider.overrideWithValue(5),
+      ],
+      child: const MaterialApp(
+        home: Scaffold(body: Center(child: SyncIndicator())),
+      ),
+    ));
+    await tester.pump();
+
+    expect(find.text('Vérification…'), findsOneWidget);
+    expect(find.text('En ligne'), findsNothing);
+    expect(find.textContaining('En ligne (sync'), findsNothing);
+    final dot = tester.widget<Container>(find.byKey(const Key('sync_dot')));
+    expect((dot.decoration as BoxDecoration).color, isNull);
+  });
+
+  testWidgets('« Sync urgente » carries a screen-reader label', (tester) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        syncStatusProvider.overrideWith((ref) => Stream.value(SyncStatus.online)),
+        daysOfflineProvider.overrideWithValue(0),
+        daysSinceLastSyncProvider.overrideWithValue(6),
+        syncGateStateProvider.overrideWithValue(SyncGateState.critical),
+      ],
+      child: const MaterialApp(
+        home: Scaffold(body: Center(child: SyncIndicator())),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sync urgente'), findsOneWidget);
+    expect(
+        find.bySemanticsLabel(RegExp(r'^Synchronisation urgente.*6 jours')),
+        findsOneWidget);
+    handle.dispose();
+  });
+
+  testWidgets('the blocked state carries a screen-reader label',
+      (tester) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        syncStatusProvider.overrideWith((ref) => Stream.value(SyncStatus.online)),
+        daysOfflineProvider.overrideWithValue(0),
+        daysSinceLastSyncProvider.overrideWithValue(7),
+        syncGateStateProvider.overrideWithValue(SyncGateState.blocked),
+      ],
+      child: const MaterialApp(
+        home: Scaffold(body: Center(child: SyncIndicator())),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel(RegExp(r'^Accès limité : synchronisation')),
+        findsOneWidget);
+    handle.dispose();
   });
 }

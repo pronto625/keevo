@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo/features/settings/domain/model/subscription_info.dart';
+import 'package:keevo/features/settings/presentation/provider/subscription_info_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3/open.dart';
 
@@ -221,5 +223,37 @@ void main() {
     expect(await storage.read(key: 'jwt_token'), isNull);
     expect(await storage.read(key: 'refresh_token'), isNull);
     expect(await storage.read(key: kDbEncryptionKey), 'db-key');
+  });
+
+  // v1s-16-13: a sign-in may be another tenant (shared POS device) — the
+  // subscription is fetched again; a silent renewal does not refetch it.
+  test('a new session invalidates the subscription, a renewal does not',
+      () async {
+    var fetches = 0;
+    final c = ProviderContainer(overrides: [
+      sharedPreferencesProvider.overrideWithValue(prefs),
+      appDatabaseProvider.overrideWithValue(db),
+      subscriptionInfoProvider.overrideWith((ref) async {
+        fetches++;
+        return const SubscriptionInfo(
+                planType: 'FREE',
+                status: 'ACTIVE',
+                currentStores: 1,
+                currentProducts: 0,
+                currentEmployees: 0);
+      }),
+    ]);
+    addTearDown(c.dispose);
+    await c.read(subscriptionInfoProvider.future);
+
+    await c.read(sessionClaimsApplierProvider).apply(_owner('o1'));
+    await c.read(subscriptionInfoProvider.future);
+    expect(fetches, 1);
+
+    await c
+        .read(sessionClaimsApplierProvider)
+        .apply(_owner('o1'), newSession: true);
+    await c.read(subscriptionInfoProvider.future);
+    expect(fetches, 2);
   });
 }

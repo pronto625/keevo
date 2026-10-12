@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/widget/date_range_clamp.dart';
 
 /// Period preset of the profitability screens.
 enum PeriodPreset { today, last7, last30, custom }
@@ -75,12 +76,17 @@ class PeriodFilterChips extends StatelessWidget {
             () async {
               final now = DateTime.now();
               final current = selected.range(now);
+              final firstDate = DateTime(now.year - 2);
               final range = await showDateRangePicker(
                 context: context,
-                firstDate: DateTime(now.year - 2),
+                firstDate: firstDate,
                 lastDate: now,
-                initialDateRange:
+                // v1s-16-13: a stored range outside the bounds made the
+                // picker assert.
+                initialDateRange: clampDateRange(
                     DateTimeRange(start: current.from, end: current.to),
+                    firstDate,
+                    now),
                 locale: const Locale('fr'),
               );
               if (range != null && context.mounted) {

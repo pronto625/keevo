@@ -1,5 +1,6 @@
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/date_range_clamp.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -254,15 +255,20 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
 
   Future<void> _selectCustomRange() async {
     final now = DateTime.now();
+    final firstDate = now.subtract(const Duration(days: 365));
     final range = await showDateRangePicker(
       context: context,
-      firstDate: now.subtract(const Duration(days: 365)),
+      firstDate: firstDate,
       lastDate: now,
-      initialDateRange: _customRange ??
-          DateTimeRange(
-            start: now.subtract(const Duration(days: 7)),
-            end: now,
-          ),
+      // v1s-16-13: a stored range outside the bounds made the picker assert.
+      initialDateRange: clampDateRange(
+          _customRange ??
+              DateTimeRange(
+                start: now.subtract(const Duration(days: 7)),
+                end: now,
+              ),
+          firstDate,
+          now),
       locale: const Locale('fr', 'FR'),
       builder: (context, child) {
         return Theme(

@@ -52,11 +52,9 @@ Future<String?> _readTenantStatusClaim(TokenStorage storage) async {
 /// Invalidated at every auth transition (login, tenant selection, logout —
 /// see auth_provider.dart/settings_page.dart) so a stale `suspended` claim
 /// from a previous session never leaks into the next one on a shared device.
-/// Note: [subscriptionInfoProvider] (used for `trialExpired`) is NOT
-/// invalidated here — it is a pre-existing provider with its own network
-/// fetch, and eagerly invalidating it on every auth transition triggers an
-/// unconditional API call; same staleness characteristic it already had
-/// before this story (tracked as a defer, see deferred-work.md).
+/// [subscriptionInfoProvider] (used for `trialExpired`) is invalidated on a
+/// new session and on sign-out (v1s-16-13), and [accountStatusProvider]
+/// ignores it while it reloads, so a previous tenant's plan never shows.
 final tenantStatusClaimProvider = FutureProvider<String?>(
   (ref) => _readTenantStatusClaim(ref.watch(tokenStorageProvider)),
 );
@@ -74,7 +72,12 @@ final accountStatusProvider = Provider<AccountStatus>((ref) {
   final tenantStatus = ref.watch(tenantStatusClaimProvider).valueOrNull;
   if (tenantStatus == 'SUSPENDED') return AccountStatus.suspended;
 
-  final planType = ref.watch(subscriptionInfoProvider).valueOrNull?.planType;
+  // v1s-16-13: while the subscription reloads (after an auth transition) or
+  // failed, its previous value may belong to another tenant — ignore it.
+  final subscription = ref.watch(subscriptionInfoProvider);
+  final planType = (subscription.isLoading || subscription.hasError)
+      ? null
+      : subscription.valueOrNull?.planType;
   if (planType == 'FREE') return AccountStatus.trialExpired;
 
   return AccountStatus.active;

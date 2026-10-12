@@ -6,6 +6,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import '../../domain/exception/auth_exception.dart';
 import '../provider/auth_provider.dart';
+import '../provider/sign_out_service.dart';
 
 /// PasswordChangePage — Story 3.5, AC4.
 ///
@@ -24,6 +25,20 @@ class _PasswordChangePageState extends ConsumerState<PasswordChangePage> {
   final _newPwdController = TextEditingController();
   bool _obscureCurrent = true;
   bool _obscureNew = true;
+  bool _signingOut = false;
+
+  /// v1s-16-13: the forced change had no exit — signing out returns to login
+  /// (with the session still there, /auth/login would send back here).
+  Future<void> _signOut() async {
+    setState(() => _signingOut = true);
+    try {
+      await ref.read(signOutServiceProvider).signOut();
+    } catch (_) {
+      // Best effort: the session secrets are cleared before anything that
+      // can fail offline; the login page is shown anyway.
+    }
+    if (mounted) context.go('/auth/login');
+  }
 
   @override
   void dispose() {
@@ -221,6 +236,15 @@ class _PasswordChangePageState extends ConsumerState<PasswordChangePage> {
                                 ),
                               ),
                       ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      key: const Key('password_change_sign_out'),
+                      onPressed: (_signingOut || changeState.isLoading)
+                          ? null
+                          : _signOut,
+                      icon: const Icon(Icons.logout_rounded),
+                      label: const Text('Se déconnecter'),
                     ),
                   ],
                 ),
