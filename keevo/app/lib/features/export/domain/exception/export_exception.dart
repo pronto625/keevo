@@ -57,6 +57,8 @@ class ExportException implements Exception {
       'VALIDATION_ERROR' ||
       'EXPORT_DATASET_UNKNOWN' =>
         server ?? 'Demande d\'export invalide',
+      'EXPORT_PDF_TOO_LARGE' => server ??
+          'Ce PDF est trop volumineux : réduisez la période ou exportez en Excel',
       'UNAUTHORIZED' => 'Session expirée, reconnectez-vous',
       _ => switch (statusCode) {
           429 => 'Trop d\'exports en cours, réessayez dans quelques minutes',

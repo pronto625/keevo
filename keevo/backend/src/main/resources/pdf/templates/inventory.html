@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- « Rapport d'inventaire » (Story v1s-18-3): one block per session, theoretical / counted / gap. -->
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+<title th:text="${header.title()}">Rapport d'inventaire</title>
+<style th:replace="~{layout :: style}"></style>
+</head>
+<body>
+<div th:replace="~{layout :: header}"></div>
+
+<div class="section" th:each="s : ${sessions}">
+  <h2 th:text="${s.title()}">Inventaire du</h2>
+  <p class="meta" th:text="${s.subtitle()}">Boutique · Statut</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Produit</th>
+        <th>Variante</th>
+        <th class="num">Stock théorique</th>
+        <th class="num">Stock compté</th>
+        <th class="num">Écart</th>
+        <th>Compté par</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr th:each="l : ${s.lines()}" th:attr="class=${l.highlighted()} ? 'gap' : ''">
+        <td th:text="${l.product()}">Produit</td>
+        <td th:text="${l.variant()}">Variante</td>
+        <td class="num" th:text="${l.theoretical()}">0</td>
+        <td class="num" th:text="${l.counted()}">0</td>
+        <td class="num" th:text="${l.gap()}">0</td>
+        <td th:text="${l.countedBy()}">Employé</td>
+      </tr>
+      <tr class="total">
+        <td colspan="2" th:text="${'Total — ' + s.gapLines() + ' ligne(s) avec écart'}">Total</td>
+        <td class="num" th:text="${s.theoretical()}">0</td>
+        <td class="num" th:text="${s.counted()}">0</td>
+        <td class="num" th:text="${s.gap()}">0</td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div th:replace="~{layout :: notes}"></div>
+</body>
+</html>

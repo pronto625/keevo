@@ -1300,7 +1300,12 @@ As an owner, I want branded PDF documents, so that I can share or print clean re
 **And** accents render correctly, multi-page documents repeat headers and number pages, format A4
 
 **Items (routed 2026-10-12 from build-auto v1s-18-4):**
-- [ ] [Deferred-from: build-auto v1s-18-4, 2026-10-12] Enable PDF in the app « Exporter » screen [keevo/app/lib/features/export/presentation/page/export_page.dart `_selectFormat` / `_formatTiles`, keevo/app/lib/features/export/domain/model/export_models.dart `buildExportRequest`, keevo/app/lib/features/export/data/remote_export_datasource.dart `requestExport` PDF guard] — PDF is a disabled « Bientôt » tile for every plan until the renderer exists; once it does, remove the three PDF guards, open the Premium offer sheet on Free + PDF (AC 18.4 « Excel or PDF »), and add the template choice (Fin de journée, Inventaire, État de stock, Ventes) from the UX journey
+- [x] [Deferred-from: build-auto v1s-18-4, 2026-10-12] Enable PDF in the app « Exporter » screen [keevo/app/lib/features/export/presentation/page/export_page.dart `_selectFormat` / `_formatTiles`, keevo/app/lib/features/export/domain/model/export_models.dart `buildExportRequest`, keevo/app/lib/features/export/data/remote_export_datasource.dart `requestExport` PDF guard] — PDF is a disabled « Bientôt » tile for every plan until the renderer exists; once it does, remove the three PDF guards, open the Premium offer sheet on Free + PDF (AC 18.4 « Excel or PDF »), and add the template choice (Fin de journée, Inventaire, État de stock, Ventes) from the UX journey — ✅ v1s-18-3: guards removed, Free + PDF → offer sheet « Le PDF est réservé au plan Premium », « Modèle » single choice driven by `pdfTemplate` from `GET /api/v1/exports/datasets`
+
+**Delivered 2026-10-12 (v1s-18-3, spec-v1s-18-3-pdf-templates.md):**
+- [x] `PdfExportRenderer` (Thymeleaf → OpenHTMLtoPDF 1.1.22, Liberation Sans OFL): template = single dataset (`day_closures` Fin de journée, `inventory_counts` Rapport d'inventaire, `stock_levels` État de stock, `sales` Liste des ventes); A4, running header, repeated table headers, « Page x / y », XAF totals
+- [x] EOD figures from `EndOfDayReportBuilder` over `ClosureWindow.forClosure` (shared with `CloseDayService`); low stock / statuses as of generation (labelled)
+- [x] Bounded: `keevo.export.pdf-max-rows` 2000 / `pdf-max-closures` 31 → 422 `EXPORT_PDF_TOO_LARGE` before the quota; no logo (none in the model)
 
 ## Story 18.4: Écran « Exporter » (app) — **[C]**
 

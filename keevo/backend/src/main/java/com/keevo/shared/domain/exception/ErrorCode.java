@@ -131,6 +131,7 @@ public enum ErrorCode {
     EXPORT_FORMAT_UNSUPPORTED, // HTTP 400 — no renderer for the format yet
     EXPORT_LINK_INVALID,       // HTTP 403 — bad / tampered signed download token
     EXPORT_QUEUE_FULL,         // HTTP 429 — export executor saturated
+    EXPORT_PDF_TOO_LARGE,      // HTTP 422 — PDF over keevo.export.pdf-max-rows / pdf-max-closures (v1s-18-3)
     // ── WhatsApp (Story 8.0) ──────────────────────────────────────────────
     WHATSAPP_DELIVERY_FAILED, // WhatsApp message delivery failed (Wassender API error or timeout)
     // ── Generic ───────────────────────────────────────────────────

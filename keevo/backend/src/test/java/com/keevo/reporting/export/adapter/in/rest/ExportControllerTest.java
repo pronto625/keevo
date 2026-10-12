@@ -2,6 +2,7 @@ package com.keevo.reporting.export.adapter.in.rest;
 
 import com.keevo.reporting.export.SyntheticExportProvider;
 import com.keevo.reporting.export.application.service.ExportDatasetRegistry;
+import com.keevo.reporting.export.application.service.ExportRendererRegistry;
 import com.keevo.reporting.export.domain.model.ExportFormat;
 import com.keevo.reporting.export.domain.model.ExportJob;
 import com.keevo.reporting.export.domain.model.ExportRequest;
@@ -57,6 +58,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ExportControllerTest {
 
     private static final String TENANT = "kv_abc123";
+    private static final ExportRendererRegistry NO_RENDERERS = new ExportRendererRegistry(List.of());
     private static final String CSV_BODY = "{\"datasets\":[\"stores\"],\"format\":\"CSV\"}";
 
     @Mock RequestExportUseCase requestUseCase;
@@ -71,7 +73,7 @@ class ExportControllerTest {
         ExportDatasetRegistry registry = new ExportDatasetRegistry(
                 List.of(new SyntheticExportProvider("stores", "Boutiques", 1)));
         mvc = MockMvcBuilders.standaloneSetup(
-                        new ExportController(requestUseCase, listUseCase, downloadUseCase, registry),
+                        new ExportController(requestUseCase, listUseCase, downloadUseCase, registry, NO_RENDERERS),
                         new ExportDownloadController(downloadUseCase))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -144,7 +146,7 @@ class ExportControllerTest {
             @Override public java.util.Set<String> criteriaKeys() { return java.util.Set.of("userId", "q", "action"); }
         };
         MockMvc m = MockMvcBuilders.standaloneSetup(new ExportController(requestUseCase, listUseCase, downloadUseCase,
-                        new ExportDatasetRegistry(List.of(reference, audit))))
+                        new ExportDatasetRegistry(List.of(reference, audit)), NO_RENDERERS))
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
         m.perform(get("/api/v1/exports/datasets"))
                 .andExpect(status().isOk())
@@ -279,6 +281,54 @@ class ExportControllerTest {
         mvc.perform(post("/api/v1/exports").contentType(MediaType.APPLICATION_JSON).content(CSV_BODY))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.domainCode").value("EXPORT_QUEUE_FULL"));
+    }
+
+    @Test
+    @DisplayName("POST PDF (v1s-18-3) → 422 EXPORT_PDF_TOO_LARGE with the limit in the French message, 400 wrong dataset, 403 FREE")
+    void postPdfErrors() throws Exception {
+        as("OWNER");
+        String pdfBody = "{\"datasets\":[\"stores\"],\"format\":\"PDF\"}";
+        when(requestUseCase.request(any(), any(), any(), any()))
+                .thenThrow(new DomainException(ErrorCode.EXPORT_PDF_TOO_LARGE, "x", Map.of("limit", 2000, "rows", 2500L, "unit", "lignes")))
+                .thenThrow(new DomainException(ErrorCode.EXPORT_FORMAT_UNSUPPORTED, "x",
+                        Map.of("format", "PDF", "dataset", "stores")))
+                .thenThrow(new DomainException(ErrorCode.PLAN_FEATURE_REQUIRED, "x", Map.of("feature", "EXPORT_PDF")));
+
+        mvc.perform(post("/api/v1/exports").contentType(MediaType.APPLICATION_JSON).content(pdfBody))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.domainCode").value("EXPORT_PDF_TOO_LARGE"))
+                .andExpect(jsonPath("$.details.limit").value(2000))
+                .andExpect(jsonPath("$.details.rows").value(2500))
+                .andExpect(jsonPath("$.error").value("Ce PDF dépasserait la limite de 2000 lignes : réduisez la "
+                        + "période, choisissez une boutique ou exportez en Excel"));
+        mvc.perform(post("/api/v1/exports").contentType(MediaType.APPLICATION_JSON).content(pdfBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.domainCode").value("EXPORT_FORMAT_UNSUPPORTED"))
+                .andExpect(jsonPath("$.details.format").value("PDF"))
+                .andExpect(jsonPath("$.details.dataset").value("stores"));
+        mvc.perform(post("/api/v1/exports").contentType(MediaType.APPLICATION_JSON).content(pdfBody))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.details.feature").value("EXPORT_PDF"));
+    }
+
+    @Test
+    @DisplayName("GET /datasets → pdfTemplate label from the PDF renderer, null for datasets without a document (v1s-18-3)")
+    void datasetsPdfTemplate() throws Exception {
+        as("OWNER");
+        var pdf = org.mockito.Mockito.mock(com.keevo.reporting.export.domain.port.out.DocumentExportRenderer.class);
+        when(pdf.format()).thenReturn(ExportFormat.PDF);
+        when(pdf.templateLabel(any())).thenReturn(java.util.Optional.empty());
+        when(pdf.templateLabel("sales")).thenReturn(java.util.Optional.of("Liste des ventes"));
+        MockMvc m = MockMvcBuilders.standaloneSetup(new ExportController(requestUseCase, listUseCase, downloadUseCase,
+                        new ExportDatasetRegistry(List.of(new SyntheticExportProvider("sales", "Ventes", 1),
+                                new SyntheticExportProvider("stores", "Boutiques", 1))),
+                        new ExportRendererRegistry(List.of(pdf))))
+                .setControllerAdvice(new GlobalExceptionHandler()).build();
+        m.perform(get("/api/v1/exports/datasets"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.key=='sales')].pdfTemplate").value("Liste des ventes"))
+                .andExpect(jsonPath("$.data[?(@.key=='stores')].pdfTemplate").value(org.hamcrest.Matchers.contains(
+                        org.hamcrest.Matchers.nullValue())));
     }
 
     @Test

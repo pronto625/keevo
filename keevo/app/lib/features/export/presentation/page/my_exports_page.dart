@@ -98,7 +98,7 @@ class _MyExportsPageState extends ConsumerState<MyExportsPage> {
 
   Future<void> _relaunch(ExportJob job) async {
     final format = job.exportFormat;
-    if (format == null || format == ExportFormat.pdf) return;
+    if (format == null) return;
     if (!_busy.add(job.id)) return;
     setState(() {});
     // Criteria are not carried by the job DTO: they cannot be restored.
@@ -128,16 +128,15 @@ class _MyExportsPageState extends ConsumerState<MyExportsPage> {
         await showPremiumFeatureSheet(
           context: context,
           title: 'Fonction Premium',
-          message: 'Les exports Excel et en arrière-plan sont réservés au '
-              'plan Premium. Le CSV reste disponible sur tous les plans.',
+          message: 'Les exports Excel, PDF et en arrière-plan sont réservés '
+              'au plan Premium. Le CSV reste disponible sur tous les plans.',
         );
       } else {
         _snack(e.message, retry: () => _relaunch(job));
       }
     } catch (_) {
       if (mounted) {
-        _snack(ExportException.unexpected.message,
-            retry: () => _relaunch(job));
+        _snack(ExportException.unexpected.message, retry: () => _relaunch(job));
       }
     } finally {
       _busy.remove(job.id);
@@ -308,8 +307,7 @@ class _JobCard extends StatelessWidget {
         : (storeLabel ?? 'Une boutique');
     final muted =
         theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant);
-    final canRelaunch =
-        job.exportFormat != null && job.exportFormat != ExportFormat.pdf;
+    final canRelaunch = job.exportFormat != null;
 
     return Container(
       key: Key('export-job-${job.id}'),

@@ -1,7 +1,10 @@
 package com.keevo.commerce.sale.domain.model;
 
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * ClosureWindow — which sales a day closure (and its end-of-day report) covers.
@@ -35,6 +38,37 @@ public record ClosureWindow(Instant start, Instant end, Instant lateFrom, Instan
         Objects.requireNonNull(end, "end must not be null");
         lateFrom = lateFrom != null ? lateFrom : NEVER;
         receivedUntil = receivedUntil != null ? receivedUntil : NEVER;
+    }
+
+    /** Day closures are dated in West Africa Time (UTC+1, no DST). */
+    private static final ZoneId WAT = ZoneId.of("Africa/Lagos");
+
+    /**
+     * The window of closure {@code closure} following {@code previous} (Story v1s-18-3) — the one
+     * definition shared by {@code CloseDayService} (at closing time) and the « Fin de journée »
+     * PDF (afterwards), so both cover the same sales.
+     *
+     * @param closure  the closure (its {@code receivedAt} bounds the late sales it covers)
+     * @param previous the store's closure just before it, if any
+     */
+    public static ClosureWindow forClosure(DayClosure closure, Optional<DayClosure> previous) {
+        Objects.requireNonNull(closure, "closure must not be null");
+        return forClosure(closure.getClosedAt(), closure.getReceivedAt(), previous);
+    }
+
+    /**
+     * Same as {@link #forClosure(DayClosure, Optional)} for a closure not built yet: with a previous
+     * closure P, {@code (P.closedAt + 1µs, closedAt, P.receivedAt, receivedAt)} (the range is
+     * inclusive, so P's own instant is skipped); without one, from WAT midnight of
+     * {@code closedAt}'s day with no late sales.
+     */
+    public static ClosureWindow forClosure(Instant closedAt, Instant receivedAt, Optional<DayClosure> previous) {
+        Objects.requireNonNull(closedAt, "closedAt must not be null");
+        return previous
+                .map(p -> new ClosureWindow(p.getClosedAt().plus(1, ChronoUnit.MICROS), closedAt,
+                        p.getReceivedAt(), receivedAt))
+                .orElseGet(() -> new ClosureWindow(
+                        closedAt.atZone(WAT).toLocalDate().atStartOfDay(WAT).toInstant(), closedAt, null, receivedAt));
     }
 
     /** Plain time window on sale time only (manual and weekly reports). */

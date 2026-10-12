@@ -4,6 +4,7 @@ import com.keevo.commerce.sale.adapter.out.persistence.entity.DayClosureJpaEntit
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -34,4 +35,7 @@ public interface DayClosureSpringRepository extends JpaRepository<DayClosureJpaE
      * Spring Data derives: SELECT * FROM day_closures WHERE store_id = ? ORDER BY closed_at DESC LIMIT 1
      */
     Optional<DayClosureJpaEntity> findFirstByStoreIdOrderByClosedAtDesc(UUID storeId);
+
+    /** Closure of the store with the greatest closed_at strictly before {@code before} (v1s-18-3). */
+    Optional<DayClosureJpaEntity> findFirstByStoreIdAndClosedAtBeforeOrderByClosedAtDesc(UUID storeId, Instant before);
 }

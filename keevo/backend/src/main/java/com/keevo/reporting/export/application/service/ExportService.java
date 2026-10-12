@@ -11,6 +11,7 @@ import com.keevo.reporting.export.domain.model.ExportRequest;
 import com.keevo.reporting.export.domain.port.in.DownloadExportUseCase;
 import com.keevo.reporting.export.domain.port.in.ListExportsUseCase;
 import com.keevo.reporting.export.domain.port.in.RequestExportUseCase;
+import com.keevo.reporting.export.domain.port.out.DocumentExportRenderer;
 import com.keevo.reporting.export.domain.port.out.ExportFileStorage;
 import com.keevo.reporting.export.domain.port.out.ExportJobRepository;
 import com.keevo.reporting.export.domain.port.out.ExportRenderer;
@@ -45,7 +46,8 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * ExportService — export use cases (Story v1s-18-1, FR55/FR94/FR96).
  *
- * <p>{@code request}: validate → plan gate → rate limit → count (Premium only) → then
+ * <p>{@code request}: validate → plan gate → (document renderer: datasets + size check, v1s-18-3)
+ * → rate limit → count (Premium only) → then
  * <ul>
  *   <li><b>DIRECT</b> (rows ≤ {@code sync-row-threshold}, or any non-Premium tenant — CSV stays
  *       free, background is Premium): streams to the caller's output on the request thread;</li>
@@ -127,7 +129,14 @@ public class ExportService implements RequestExportUseCase, ListExportsUseCase, 
                     Map.of("feature", feature));
         }
         ExportRenderer renderer = rendererRegistry.require(request.format());
-        // After the gates: a refused request (400 / 403) does not burn the hourly quota.
+        // Story v1s-18-3 — a document (PDF) checks its datasets and size before the quota too.
+        Long documentCount = null;
+        if (renderer instanceof DocumentExportRenderer document) {
+            document.validate(providers);
+            documentCount = count(providers, request.filter());
+            document.checkSize(providers, request.filter(), documentCount);
+        }
+        // After the gates: a refused request (400 / 403 / 422) does not burn the hourly quota.
         rateLimiter.acquireRequest(tenantSchema);
 
         Instant now = Instant.now(clock);
@@ -137,10 +146,7 @@ public class ExportService implements RequestExportUseCase, ListExportsUseCase, 
         if (!premium) { // background is Premium: the count would be unused
             return streamDirect(tenantSchema, actorId, request, providers, renderer, contentType, fileName, direct);
         }
-        long counted = 0;
-        for (ExportDatasetProvider p : providers) {
-            counted += p.count(request.filter());
-        }
+        long counted = documentCount != null ? documentCount : count(providers, request.filter());
         if (counted <= syncRowThreshold) {
             return streamDirect(tenantSchema, actorId, request, providers, renderer, contentType, fileName, direct);
         }
@@ -192,6 +198,14 @@ public class ExportService implements RequestExportUseCase, ListExportsUseCase, 
         log.info("EXPORT_DIRECT exportId={} tenant={} format={} datasets={} rows={}",
                 exportId, tenantSchema, request.format(), request.datasets(), rows);
         return new Direct(exportId, fileName, rows);
+    }
+
+    private static long count(List<ExportDatasetProvider> providers, ExportFilter filter) {
+        long counted = 0;
+        for (ExportDatasetProvider p : providers) {
+            counted += p.count(filter);
+        }
+        return counted;
     }
 
     /** Defensive re-validation (the controller already answers 400 on a malformed body). */

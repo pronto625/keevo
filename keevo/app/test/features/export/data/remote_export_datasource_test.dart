@@ -195,14 +195,53 @@ void main() {
     expect(multi['datasets'], ['sales', 'audit_log']);
   });
 
-  test('a PDF request is never sent', () async {
+  test('a PDF request is sent and its file streamed (v1s-18-3)', () async {
+    adapter.handler = (_) => FakeHttp.file('%PDF-1.7 fake',
+        disposition: 'attachment; filename="keevo-stock_levels-20261012.pdf"',
+        contentType: 'application/pdf');
+
+    final outcome = await ds.requestExport(
+        const ExportRequest(
+            datasets: ['stock_levels'], format: ExportFormat.pdf),
+        dir: dir);
+
+    expect(adapter.bodies.single, {
+      'datasets': ['stock_levels'],
+      'format': 'PDF'
+    });
+    final file = (outcome as ExportFileReady).file;
+    expect(file.path, endsWith('keevo-stock_levels-20261012.pdf'));
+    expect(await file.readAsString(), '%PDF-1.7 fake');
+    expect(exportFileName(null, 'application/pdf'), 'keevo-export.pdf');
+  });
+
+  test('datasets carry their PDF template label', () async {
+    adapter.handler = (_) => FakeHttp.json(200, {
+          'data': [
+            {
+              'key': 'sales',
+              'label': 'Ventes',
+              'pdfTemplate': 'Liste des ventes'
+            },
+            {'key': 'products', 'label': 'Produits', 'pdfTemplate': null},
+          ]
+        });
+    final list = await ds.getDatasets();
+    expect(list.map((d) => d.pdfTemplate), ['Liste des ventes', null]);
+  });
+
+  test('422 EXPORT_PDF_TOO_LARGE keeps the server message', () async {
+    adapter.handler = (_) => FakeHttp.json(
+        422,
+        errorBody('EXPORT_PDF_TOO_LARGE',
+            'Ce PDF dépasserait la limite de 2000 lignes'));
     final e = await ds
         .requestExport(
             const ExportRequest(datasets: ['sales'], format: ExportFormat.pdf),
             dir: dir)
         .then<Object?>((_) => null, onError: (Object e) => e);
-    expect(e, isA<ExportException>());
-    expect(adapter.requests, isEmpty);
+    expect((e as ExportException).domainCode, 'EXPORT_PDF_TOO_LARGE');
+    expect(e.message, 'Ce PDF dépasserait la limite de 2000 lignes');
   });
 
   test('downloadJobFile streams GET /{id}/file; 410 is mapped', () async {

@@ -15,7 +15,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.time.ZoneId;
 import java.util.List;
 
@@ -93,12 +92,8 @@ public class CloseDayService implements CloseDayUseCase {
         // Step 2: The closure covers the sales made since the previous closure, plus the
         // sales made before it but received after it (offline devices syncing late), so
         // that every sale belongs to exactly one closure (see ClosureWindow).
-        ClosureWindow window = previous
-                .map(p -> new ClosureWindow(
-                        // Range is inclusive; skip the previous closure's own instant.
-                        p.getClosedAt().plus(1, ChronoUnit.MICROS), closedAt, p.getReceivedAt(), now))
-                .orElseGet(() -> new ClosureWindow(
-                        reportDate.atStartOfDay(WAT_ZONE).toInstant(), closedAt, null, now));
+        // One definition shared with the « Fin de journée » PDF (v1s-18-3); received now.
+        ClosureWindow window = ClosureWindow.forClosure(closedAt, now, previous);
         List<Sale> sales = saleRepository.findForClosure(command.storeId(), window);
 
         // Step 3: Build summary

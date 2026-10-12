@@ -97,6 +97,8 @@ keevo:
     max-requests-per-hour: 30
     max-active-jobs: 3
     stale-job-after: 2h
+    pdf-max-rows: 2000            # v1s-18-3: data rows a PDF may hold (larger → 422 EXPORT_PDF_TOO_LARGE)
+    pdf-max-closures: 31          # v1s-18-3: closures in one « Fin de journée » PDF
   fcm:
     enabled: ${KEEVO_FCM_ENABLED:false}
     credentials-path: ${GOOGLE_APPLICATION_CREDENTIALS:}

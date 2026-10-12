@@ -1,11 +1,14 @@
 package com.keevo.commerce.sale.domain;
 
 import com.keevo.commerce.sale.domain.model.ClosureWindow;
+import com.keevo.commerce.sale.domain.model.DayClosure;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -67,5 +70,43 @@ class ClosureWindowTest {
                     .as("window %s", w)
                     .isEqualTo(w == expected);
         }
+    }
+
+    // ── forClosure (v1s-18-3): one window definition for the closure and its PDF ─────────
+
+    private static DayClosure closure(Instant closedAt, Instant receivedAt) {
+        return new DayClosure(UUID.randomUUID(), UUID.randomUUID(), null, closedAt, null, false, "kv_t", receivedAt);
+    }
+
+    @Test
+    @DisplayName("forClosure with a previous closure: (P.closedAt + 1µs, C.closedAt, P.receivedAt, C.receivedAt)")
+    void forClosureWithPrevious() {
+        DayClosure prev = closure(at(20), at(21));
+        DayClosure c = closure(at(44), at(45));
+
+        ClosureWindow w = ClosureWindow.forClosure(c, Optional.of(prev));
+
+        assertThat(w).isEqualTo(new ClosureWindow(at(20).plusNanos(1000), at(44), at(21), at(45)));
+        assertThat(w.covers(at(10), at(30))).as("made before P, received after it: late sale of C").isTrue();
+    }
+
+    @Test
+    @DisplayName("forClosure without a previous closure: from WAT midnight of the closure's day, no late sales")
+    void forClosureWithoutPrevious() {
+        Instant closedAt = Instant.parse("2026-10-10T23:30:00Z"); // 00:30 WAT on the 11th
+        DayClosure c = closure(closedAt, closedAt.plusSeconds(2));
+
+        ClosureWindow w = ClosureWindow.forClosure(c, Optional.empty());
+
+        assertThat(w).isEqualTo(new ClosureWindow(Instant.parse("2026-10-10T23:00:00Z"), closedAt, null,
+                closedAt.plusSeconds(2)));
+        assertThat(w.lateFrom()).isEqualTo(ClosureWindow.NEVER);
+    }
+
+    @Test
+    @DisplayName("forClosure of a closure predating receivedAt uses closedAt as its reception time")
+    void forClosureLegacyReceivedAt() {
+        DayClosure c = closure(at(44), null);
+        assertThat(ClosureWindow.forClosure(c, Optional.empty()).receivedUntil()).isEqualTo(at(44));
     }
 }

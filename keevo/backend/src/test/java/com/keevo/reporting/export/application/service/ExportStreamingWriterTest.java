@@ -139,4 +139,23 @@ class ExportStreamingWriterTest {
         }
         return rows;
     }
+
+    @Test
+    @DisplayName("a document renderer (PDF, v1s-18-3) renders the whole document itself: no row session opened")
+    void documentRendererDelegates() throws Exception {
+        var document = mock(com.keevo.reporting.export.domain.port.out.DocumentExportRenderer.class);
+        SyntheticExportProvider provider = new SyntheticExportProvider("sales", "Ventes", 3);
+        var progress = new java.util.concurrent.atomic.AtomicLong();
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        when(document.render(out, List.of(provider), ExportFilter.none(), progress)).thenAnswer(inv -> {
+            progress.addAndGet(3);
+            return 3L;
+        });
+
+        long written = new ExportStreamingWriter(PAGE).write(out, document, List.of(provider), ExportFilter.none(), progress);
+
+        assertThat(written).isEqualTo(3);
+        assertThat(progress.get()).isEqualTo(3);
+        verify(document, never()).open(any(), anyInt());
+    }
 }

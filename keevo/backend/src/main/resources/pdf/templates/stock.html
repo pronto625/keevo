@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- « État de stock » (Story v1s-18-3): current stock grouped by store, value per store and in total. -->
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+<title th:text="${header.title()}">État de stock</title>
+<style th:replace="~{layout :: style}"></style>
+</head>
+<body>
+<div th:replace="~{layout :: header}"></div>
+
+<div class="section" th:each="g : ${stores}">
+  <h2 th:text="${g.name()}">Boutique</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Référence</th>
+        <th>Produit</th>
+        <th>Catégorie</th>
+        <th class="num">Quantité</th>
+        <th class="num">Seuil</th>
+        <th>État</th>
+        <th class="num">Prix d'achat</th>
+        <th class="num">Valeur</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr th:each="l : ${g.lines()}" th:attr="class=${l.alert()} ? 'gap' : ''">
+        <td th:text="${l.sku()}">SKU</td>
+        <td th:text="${l.product()}">Produit</td>
+        <td th:text="${l.category()}">Catégorie</td>
+        <td class="num" th:text="${l.quantity()}">0</td>
+        <td class="num" th:text="${l.threshold()}">0</td>
+        <td th:text="${l.status()}">OK</td>
+        <td class="num" th:text="${l.buyPrice()}">0 XAF</td>
+        <td class="num" th:text="${l.value()}">0 XAF</td>
+      </tr>
+      <tr class="total">
+        <td colspan="7" th:text="${'Valeur du stock — ' + g.name()}">Valeur du stock</td>
+        <td class="num" th:text="${g.totalValue()}">0 XAF</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<table th:unless="${empty}">
+  <tbody>
+    <tr class="total">
+      <td>Valeur totale du stock</td>
+      <td class="num" th:text="${grandTotal}">0 XAF</td>
+    </tr>
+  </tbody>
+</table>
+
+<div th:replace="~{layout :: notes}"></div>
+</body>
+</html>
