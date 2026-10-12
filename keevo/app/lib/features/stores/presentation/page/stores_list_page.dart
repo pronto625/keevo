@@ -72,7 +72,7 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Synchronisation impossible : ${appErrorMessage(e)}'),
-            backgroundColor: Theme.of(context).colorScheme.error,
+            backgroundColor: AppTheme.errorStrong,
             behavior: SnackBarBehavior.floating,
             margin: const EdgeInsets.all(16),
           ),
@@ -157,7 +157,7 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Theme.of(context).colorScheme.error,
+        backgroundColor: AppTheme.errorStrong,
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.all(16),
       ),

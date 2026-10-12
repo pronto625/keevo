@@ -36,26 +36,26 @@ class SyncIndicator extends ConsumerWidget {
         final resultingStock = data['resultingStock'] ?? '?';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: AppTheme.warning,
+            backgroundColor: AppTheme.warningStrong,
             duration: const Duration(seconds: 5),
-            // Texte foncé fixe : le fond ambre ne change pas avec le thème,
-            // `onSurface` devenait illisible en mode sombre.
+            // Aplat fixe warningStrong (AA) sous onBrand, couleur de contenu
+            // imposée par le snackBarTheme dans les deux modes (v1s-16-17).
             content: Row(
               children: [
                 const Icon(Icons.warning_amber_rounded,
-                    color: AppTheme.onWarning, size: 20),
+                    color: AppTheme.onBrand, size: 20),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Conflit de stock : $productName \u2014 stock n\u00e9gatif ($resultingStock). V\u00e9rifiez l\u2019inventaire.',
-                    style: const TextStyle(color: AppTheme.onWarning),
+                    style: const TextStyle(color: AppTheme.onBrand),
                   ),
                 ),
               ],
             ),
             action: SnackBarAction(
               label: 'Voir',
-              textColor: AppTheme.onWarning,
+              textColor: AppTheme.onBrand,
               onPressed: () => context.push('/settings/sync/conflicts'),
             ),
           ),
@@ -85,24 +85,24 @@ class SyncIndicator extends ConsumerWidget {
             : 'Non synchronisé ($operation) : $reason$undone';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: AppTheme.errorColor,
+            backgroundColor: AppTheme.errorStrong,
             duration: const Duration(seconds: 6),
             content: Row(
               children: [
                 const Icon(Icons.error_outline_rounded,
-                    color: AppTheme.onError, size: 20),
+                    color: AppTheme.onBrand, size: 20),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     text,
-                    style: const TextStyle(color: AppTheme.onError),
+                    style: const TextStyle(color: AppTheme.onBrand),
                   ),
                 ),
               ],
             ),
             action: SnackBarAction(
               label: 'Voir',
-              textColor: AppTheme.onError,
+              textColor: AppTheme.onBrand,
               // /sync/blocked is open to every role; /settings/sync is
               // OWNER-only.
               onPressed: () => context

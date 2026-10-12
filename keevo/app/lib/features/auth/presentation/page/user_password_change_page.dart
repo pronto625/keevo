@@ -95,7 +95,7 @@ class _UserPasswordChangePageState
           messenger.showSnackBar(
             SnackBar(
               content: const Text('Mot de passe modifié avec succès'),
-              backgroundColor: AppTheme.success,
+              backgroundColor: AppTheme.successStrong,
               duration: const Duration(seconds: 3),
             ),
           );

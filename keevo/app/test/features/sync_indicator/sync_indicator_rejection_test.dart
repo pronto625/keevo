@@ -7,6 +7,7 @@ import 'package:keevo/core/sync/sync_gate_provider.dart';
 import 'package:keevo/core/sync/sync_status.dart';
 import 'package:keevo/core/sync/sync_status_provider.dart';
 import 'package:keevo/core/sync/sync_trigger_notifier.dart';
+import 'package:keevo/core/theme/app_theme.dart';
 import 'package:keevo/features/sync_indicator/presentation/widget/sync_indicator.dart';
 
 /// v1s-16-12: a rejection whose local change was undone says so.
@@ -57,6 +58,19 @@ void main() {
             'forfait atteinte — passez à un forfait supérieur — annulé sur cet '
             'appareil'),
         findsOneWidget);
+
+    // v1s-16-17 — AA error fill under onBrand content.
+    final snack = tester.widget<SnackBar>(find.byType(SnackBar));
+    expect(snack.backgroundColor, AppTheme.errorStrong);
+    final msg = tester.widget<Text>(find.textContaining('Non synchronisé'));
+    expect(msg.style?.color, AppTheme.onBrand);
+    expect(
+        tester
+            .widget<Icon>(find.descendant(
+                of: find.byType(SnackBar),
+                matching: find.byIcon(Icons.error_outline_rounded)))
+            .color,
+        AppTheme.onBrand);
 
     // SnackBars are queued: the second shows once the first is gone.
     tester

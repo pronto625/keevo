@@ -172,7 +172,7 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
                                         const Text('Catalogue synchronisé'),
                                       ],
                                     ),
-                                    backgroundColor: AppTheme.success,
+                                    backgroundColor: AppTheme.successStrong,
                                     behavior: SnackBarBehavior.floating,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
@@ -707,7 +707,7 @@ class _CategoryManagerSheetState
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Catégorie « $name » créée'),
-            backgroundColor: AppTheme.success,
+            backgroundColor: AppTheme.successStrong,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -715,7 +715,7 @@ class _CategoryManagerSheetState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(appErrorMessage(e)), backgroundColor: AppTheme.errorColor),
+          SnackBar(content: Text(appErrorMessage(e)), backgroundColor: AppTheme.errorStrong),
         );
       }
     } finally {
@@ -753,7 +753,7 @@ class _CategoryManagerSheetState
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-                content: Text(appErrorMessage(e)), backgroundColor: AppTheme.errorColor),
+                content: Text(appErrorMessage(e)), backgroundColor: AppTheme.errorStrong),
           );
         }
       }
@@ -778,7 +778,10 @@ class _CategoryManagerSheetState
               child: const Text('Annuler')),
           FilledButton(
             style:
-                FilledButton.styleFrom(backgroundColor: AppTheme.errorColor),
+                FilledButton.styleFrom(
+                  backgroundColor: AppTheme.errorStrong,
+                  foregroundColor: AppTheme.onBrand,
+                ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Supprimer'),
           ),
@@ -792,7 +795,7 @@ class _CategoryManagerSheetState
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-                content: Text(appErrorMessage(e)), backgroundColor: AppTheme.errorColor),
+                content: Text(appErrorMessage(e)), backgroundColor: AppTheme.errorStrong),
           );
         }
       }

@@ -116,7 +116,7 @@ class _SupplierFormPageState extends ConsumerState<SupplierFormPage>
               const SizedBox(width: 12),
               Expanded(child: Text(e.toString())),
             ]),
-            backgroundColor: AppTheme.errorColor,
+            backgroundColor: AppTheme.errorStrong,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             margin: const EdgeInsets.all(16),

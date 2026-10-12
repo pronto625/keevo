@@ -116,6 +116,10 @@ class _PosSpeedDialState extends State<PosSpeedDial>
                                 backgroundColor: isClosed
                                     ? Theme.of(context).colorScheme.onSurfaceVariant
                                     : AppTheme.violetDeep,
+                                // v1s-16-17 — foreground per fill (AA).
+                                foregroundColor: isClosed
+                                    ? Theme.of(context).colorScheme.surface
+                                    : AppTheme.onBrand,
                                 onTap: isClosed
                                     ? () {
                                         _close();
@@ -142,6 +146,7 @@ class _PosSpeedDialState extends State<PosSpeedDial>
                         icon: Icons.add_rounded,
                         label: 'Produit',
                         backgroundColor: AppTheme.warning,
+                        foregroundColor: AppTheme.onWarning,
                         onTap: () {
                           _close();
                           widget.onCreateDraft();
@@ -207,12 +212,16 @@ class _SpeedDialOption extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color backgroundColor;
+
+  /// Icon colour matching [backgroundColor] (AA ≥ 3:1, v1s-16-17).
+  final Color foregroundColor;
   final VoidCallback onTap;
 
   const _SpeedDialOption({
     required this.icon,
     required this.label,
     required this.backgroundColor,
+    required this.foregroundColor,
     required this.onTap,
   });
 
@@ -257,7 +266,7 @@ class _SpeedDialOption extends StatelessWidget {
               ),
               child: Icon(
                 icon,
-                color: AppTheme.onBrand,
+                color: foregroundColor,
                 size: 24,
               ),
             ),

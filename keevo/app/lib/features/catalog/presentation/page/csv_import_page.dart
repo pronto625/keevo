@@ -108,7 +108,7 @@ class _CsvImportPageState extends ConsumerState<CsvImportPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(next.message),
-            backgroundColor: theme.colorScheme.error,
+            backgroundColor: AppTheme.errorStrong,
             behavior: SnackBarBehavior.floating,
           ),
         );

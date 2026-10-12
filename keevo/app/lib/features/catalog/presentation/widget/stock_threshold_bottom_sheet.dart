@@ -83,7 +83,7 @@ class _StockThresholdBottomSheetState
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Erreur lors de la mise à jour du seuil'),
-            backgroundColor: AppTheme.errorColor,
+            backgroundColor: AppTheme.errorStrong,
           ),
         );
       }

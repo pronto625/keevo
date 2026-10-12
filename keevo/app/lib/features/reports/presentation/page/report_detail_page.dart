@@ -83,7 +83,7 @@ class _DetailScaffold extends ConsumerWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Rapport renvoyé avec succès via WhatsApp'),
-            backgroundColor: AppTheme.success,
+            backgroundColor: AppTheme.successStrong,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -95,7 +95,7 @@ class _DetailScaffold extends ConsumerWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(message),
-            backgroundColor: AppTheme.errorColor,
+            backgroundColor: AppTheme.errorStrong,
             behavior: SnackBarBehavior.floating,
           ),
         );

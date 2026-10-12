@@ -156,7 +156,7 @@ class _ApplyAdjustmentsButtonState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(appErrorMessage(e)),
-          backgroundColor: AppTheme.errorColor,
+          backgroundColor: AppTheme.errorStrong,
         ),
       );
     }

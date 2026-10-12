@@ -608,7 +608,7 @@ class ProductCard extends ConsumerWidget {
                           Text('Produit validé avec succès'),
                         ],
                       ),
-                      backgroundColor: AppTheme.success,
+                      backgroundColor: AppTheme.successStrong,
                       behavior: SnackBarBehavior.floating,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -629,7 +629,7 @@ class ProductCard extends ConsumerWidget {
                           ),
                         ],
                       ),
-                      backgroundColor: AppTheme.errorColor,
+                      backgroundColor: AppTheme.errorStrong,
                       behavior: SnackBarBehavior.floating,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -639,7 +639,8 @@ class ProductCard extends ConsumerWidget {
                 }
               },
               style: FilledButton.styleFrom(
-                backgroundColor: AppTheme.success,
+                backgroundColor: AppTheme.successStrong,
+                foregroundColor: AppTheme.onBrand,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -701,7 +702,7 @@ class ProductCard extends ConsumerWidget {
                         const Text('Produit archivé avec succès'),
                       ],
                     ),
-                    backgroundColor: AppTheme.success,
+                    backgroundColor: AppTheme.successStrong,
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -722,7 +723,7 @@ class ProductCard extends ConsumerWidget {
                         ),
                       ],
                     ),
-                    backgroundColor: AppTheme.errorColor,
+                    backgroundColor: AppTheme.errorStrong,
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -733,6 +734,7 @@ class ProductCard extends ConsumerWidget {
             },
             style: FilledButton.styleFrom(
               backgroundColor: AppTheme.warning,
+              foregroundColor: AppTheme.onWarning,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -793,7 +795,7 @@ class ProductCard extends ConsumerWidget {
                         const Text('Produit désarchivé avec succès'),
                       ],
                     ),
-                    backgroundColor: AppTheme.success,
+                    backgroundColor: AppTheme.successStrong,
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -814,7 +816,7 @@ class ProductCard extends ConsumerWidget {
                         ),
                       ],
                     ),
-                    backgroundColor: AppTheme.errorColor,
+                    backgroundColor: AppTheme.errorStrong,
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -824,7 +826,8 @@ class ProductCard extends ConsumerWidget {
               }
             },
             style: FilledButton.styleFrom(
-              backgroundColor: AppTheme.success,
+              backgroundColor: AppTheme.successStrong,
+              foregroundColor: AppTheme.onBrand,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),

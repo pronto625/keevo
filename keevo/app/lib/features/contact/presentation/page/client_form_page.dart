@@ -58,12 +58,12 @@ class _ClientFormPageState extends ConsumerState<ClientFormPage>
   Future<void> _save() async {
     if (_name.text.trim().isEmpty || _phone.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Row(children: [
-          Icon(Icons.warning_amber_rounded, color: Theme.of(context).colorScheme.onError, size: 18),
+        content: const Row(children: [
+          Icon(Icons.warning_amber_rounded, color: AppTheme.onBrand, size: 18),
           SizedBox(width: 8),
           Text('Nom et téléphone sont requis'),
         ]),
-        backgroundColor: Theme.of(context).colorScheme.error,
+        backgroundColor: AppTheme.errorStrong,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
@@ -107,11 +107,11 @@ class _ClientFormPageState extends ConsumerState<ClientFormPage>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Row(children: [
-            Icon(Icons.error_rounded, color: Theme.of(context).colorScheme.onError, size: 18),
+            const Icon(Icons.error_rounded, color: AppTheme.onBrand, size: 18),
             const SizedBox(width: 8),
             Expanded(child: Text(appErrorMessage(e))),
           ]),
-          backgroundColor: Theme.of(context).colorScheme.error,
+          backgroundColor: AppTheme.errorStrong,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           margin: const EdgeInsets.all(16),

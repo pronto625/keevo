@@ -352,12 +352,13 @@ class _CreateDraftProductBottomSheetState
                   child: Row(
                     children: [
                       Icon(Icons.error_outline,
-                          color: theme.colorScheme.error, size: 16),
+                          color: theme.colorScheme.onErrorContainer, size: 16),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           _errorMessage!,
-                          style: TextStyle(color: theme.colorScheme.error),
+                          style: TextStyle(
+                              color: theme.colorScheme.onErrorContainer),
                         ),
                       ),
                     ],

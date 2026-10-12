@@ -175,7 +175,7 @@ class _TransferFormBottomSheetState
                 ),
               ),
             ]),
-            backgroundColor: AppTheme.success,
+            backgroundColor: AppTheme.successStrong,
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 4),
           ),
