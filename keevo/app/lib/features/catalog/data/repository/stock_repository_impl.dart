@@ -6,7 +6,6 @@ import '../../domain/model/cross_store_availability_model.dart';
 import '../../domain/model/stock_level_model.dart';
 import '../../domain/model/stock_movement_model.dart';
 import '../../domain/repository/stock_repository.dart';
-import '../../../../core/sync/connectivity_service.dart';
 import '../../../../core/sync/sync_service.dart';
 import '../../../../core/sync/sync_trigger_dispatcher.dart';
 import '../datasource/local_stock_datasource.dart';
@@ -22,19 +21,16 @@ class StockRepositoryImpl implements StockRepository {
   final LocalStockDataSource _local;
   final RemoteStockDataSource _remote;
   final SyncService _syncService;
-  final ConnectivityService _connectivity;
   final SyncTriggerDispatcher _syncTriggerDispatcher;
 
   const StockRepositoryImpl({
     required LocalStockDataSource local,
     required RemoteStockDataSource remote,
     required SyncService syncService,
-    required ConnectivityService connectivity,
     required SyncTriggerDispatcher syncTriggerDispatcher,
   })  : _local = local,
         _remote = remote,
         _syncService = syncService,
-        _connectivity = connectivity,
         _syncTriggerDispatcher = syncTriggerDispatcher;
 
   // ── Stock Levels ─────────────────────────────────────────────────────────
@@ -303,24 +299,11 @@ class StockRepositoryImpl implements StockRepository {
       minimumThreshold: minimumThreshold,
     );
     // Best-effort local update — does not fail the operation if offline cache
-    // cannot be updated (mirrors the _refreshLocalLevels pattern).
+    // cannot be updated.
     try {
       await _local.updateThreshold(productId, minimumThreshold);
     } catch (_) {
       // Ignore — remote succeeded; local will be refreshed on next sync.
-    }
-  }
-
-  // ── Private ───────────────────────────────────────────────────────────────
-
-  Future<void> _refreshLocalLevels(String productId) async {
-    try {
-      final levels = await _remote.getLevels(productId);
-      for (final level in levels) {
-        await _local.upsertLevel(level);
-      }
-    } catch (_) {
-      // Best-effort — local may be stale until next sync
     }
   }
 }

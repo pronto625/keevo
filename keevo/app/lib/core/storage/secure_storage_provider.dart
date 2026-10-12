@@ -34,9 +34,31 @@ const _sessionSecureKeys = <String>[
 /// Signs the session out of secure storage without touching device secrets.
 /// Use this instead of `deleteAll()` for logout and session expiry.
 Future<void> clearSessionSecrets(FlutterSecureStorage storage) async {
-  for (final key in _sessionSecureKeys) {
-    await storage.delete(key: key);
+  try {
+    for (final key in _sessionSecureKeys) {
+      await storage.delete(key: key);
+    }
+  } finally {
+    // Even a partial clear changed what storage holds.
+    markSessionSecretsChanged();
   }
+}
+
+int _sessionSecretsGeneration = 0;
+
+/// Monotonically increasing counter bumped every time a session secret
+/// (access or refresh token) is written or cleared.
+///
+/// Caches of session presence (`SessionPresenceCache`) tag what they read
+/// with this value and re-read secure storage once it changes.
+int get sessionSecretsGeneration => _sessionSecretsGeneration;
+
+/// Signals that the session secrets in secure storage changed. Every writer
+/// of `jwt_token` / `refresh_token` must call it after writing:
+/// `SecureTokenStorage.saveToken/saveRefreshToken`, [clearSessionSecrets] and
+/// the startup garbage-token delete.
+void markSessionSecretsChanged() {
+  _sessionSecretsGeneration++;
 }
 
 /// SharedPreferences key flagging that the one-shot migration from the legacy

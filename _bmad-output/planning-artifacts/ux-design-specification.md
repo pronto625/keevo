@@ -323,7 +323,7 @@ Buttons, Cards, Navigation Bar, App Bar, Bottom Sheets, Dialogs, Text Fields, Ch
 - **Morning Summary Card** — widget "moment café" résumé matinal
 - **Shop Type Selector** — grille visuelle d'icônes pour type boutique
 - **WhatsApp Report Preview** — aperçu du format de rapport
-- **Day Close Button** — bouton de clôture journalière proeminent
+- **Day Close Button** — bouton de clôture journalière proeminent (implémenté par `_ClosureButton` dans `ReportsPage` + action « Clôturer la journée » du speed dial POS)
 
 ### Implementation Approach
 
@@ -740,6 +740,7 @@ Super Admin Dashboard → Vue d'ensemble → Tenants (liste, statut, plan, sync)
 - **Purpose :** Bouton prominent de clôture journalière
 - **Contenu :** "Clôturer la journée" + icône lune
 - **États :** Disponible | Déjà clôturé (grisé) | Rappel (badge notification)
+- **Implémentation actuelle : pas de widget `DayCloseButton` dédié (supprimé en v1s-16-10) — bouton `_ClosureButton` de `ReportsPage` + action « Clôturer la journée » du speed dial POS, état `DayClosureState`.**
 
 #### 8. Shop Type Selector
 - **Purpose :** Grille visuelle sélection type boutique (onboarding)

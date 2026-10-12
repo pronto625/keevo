@@ -287,8 +287,7 @@ class _PosPageState extends ConsumerState<PosPage> {
   }
 
   void _addProductToCart(
-      PosProductResult product, CartNotifier cartNotifier,
-      {String productStatus = 'ACTIVE'}) {
+      PosProductResult product, CartNotifier cartNotifier) {
     HapticFeedback.lightImpact();
     cartNotifier.addItem(CartItem(
       id: product.id,
@@ -297,7 +296,6 @@ class _PosPageState extends ConsumerState<PosPage> {
       unitPrice: product.price,
       appliedUnitPrice: product.price,
       quantity: 1,
-      productStatus: productStatus,
     ));
   }
 
@@ -319,7 +317,7 @@ class _PosPageState extends ConsumerState<PosPage> {
         unitPrice: result.product.price,
         appliedUnitPrice: result.product.price,
         quantity: result.quantity,
-        productStatus: result.product.status.name.toUpperCase(),
+        productStatus: result.product.status,
       ));
     }
   }

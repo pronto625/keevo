@@ -33,7 +33,7 @@ Color _circleFill(WidgetTester tester, IconData icon) {
 Future<void> _pumpOpenSpeedDial(
   WidgetTester tester,
   ThemeData theme,
-  DayCloseButtonState state,
+  DayClosureState state,
 ) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -109,7 +109,7 @@ void main() {
   testWidgets('speed-dial day open (dark): Clôturer violetDeep + onBrand, '
       'Produit warning + onWarning', (tester) async {
     await _pumpOpenSpeedDial(
-        tester, themes['dark']!, DayCloseButtonState.available);
+        tester, themes['dark']!, DayClosureState.available);
 
     expect(_circleFill(tester, Icons.nightlight_round), AppTheme.violetDeep);
     expect(_iconColor(tester, Icons.nightlight_round), AppTheme.onBrand);
@@ -127,7 +127,7 @@ void main() {
 
     testWidgets('speed-dial day closed (${entry.key}): onSurfaceVariant + '
         'surface', (tester) async {
-      await _pumpOpenSpeedDial(tester, theme, DayCloseButtonState.closed);
+      await _pumpOpenSpeedDial(tester, theme, DayClosureState.closed);
 
       final fill = _circleFill(tester, Icons.check_circle_rounded);
       final fg = _iconColor(tester, Icons.check_circle_rounded);

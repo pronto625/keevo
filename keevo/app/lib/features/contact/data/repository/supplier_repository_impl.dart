@@ -3,7 +3,6 @@ import 'dart:developer' as dev;
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/storage/app_database.dart';
-import '../../../../core/sync/connectivity_service.dart';
 import '../../../../core/sync/sync_service.dart';
 import '../../../../core/sync/sync_trigger_dispatcher.dart';
 import '../../domain/model/supplier_model.dart';
@@ -15,7 +14,6 @@ import '../datasource/remote_supplier_datasource.dart';
 class SupplierRepositoryImpl implements SupplierRepository {
   final LocalSupplierDataSource _local;
   final RemoteSupplierDataSource _remote;
-  final ConnectivityService _connectivity;
   final SyncService _syncService;
   final SyncTriggerDispatcher _syncTriggerDispatcher;
   final AppDatabase? _db;
@@ -25,13 +23,11 @@ class SupplierRepositoryImpl implements SupplierRepository {
   const SupplierRepositoryImpl({
     required LocalSupplierDataSource local,
     required RemoteSupplierDataSource remote,
-    required ConnectivityService connectivity,
     required SyncService syncService,
     required SyncTriggerDispatcher syncTriggerDispatcher,
     AppDatabase? db,
   })  : _local = local,
         _remote = remote,
-        _connectivity = connectivity,
         _syncService = syncService,
         _syncTriggerDispatcher = syncTriggerDispatcher,
         _db = db;

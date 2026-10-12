@@ -5,6 +5,17 @@
 ///
 /// All implementations must reside in lib/core/sync/ and be
 /// registered via Riverpod providers in lib/core/di/providers.dart.
+///
+/// **Drift connection contract:** every implementation must read and write
+/// `sync_queue` (and any local table) through the app's single `AppDatabase`
+/// (Drift) connection obtained from `appDatabaseProvider` — never a second
+/// connection or isolate of its own. Repositories enqueue operations inside
+/// their own Drift transactions; only the shared connection guarantees that
+/// [push] sees those queue rows once the transaction commits (and never
+/// before). Swapping the strategy (e.g. to PowerSync) must keep that
+/// guarantee. When a second implementation appears, add an integration test
+/// proving that a row enqueued inside a repository transaction is pushed by
+/// it.
 abstract interface class SyncService {
   /// Push queued local operations to the remote backend.
   ///

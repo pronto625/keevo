@@ -229,7 +229,7 @@ So that I can end my shift properly without any manual accounting and track my o
 
 **Given** Loïc is working during the day
 **When** he wants to close his day
-**Then** a "🌙 Clôturer la journée" button (`DayCloseButton` component) is prominently visible on the POS screen (bottom trailing position)
+**Then** a "🌙 Clôturer la journée" action is prominently available — the "Clôturer la journée" action of the POS speed dial and the `_ClosureButton` of `ReportsPage` (state `DayClosureState`)
 **And** the button shows a notification badge with the count of sales made since last closure
 **And** tapping it shows a flash summary bottom sheet (non-blocking, auto-dismisses after 5s): total sales count, total revenue in XAF, top product sold (name + qty), payment breakdown (Cash vs MoMo)
 
@@ -248,7 +248,7 @@ So that I can end my shift properly without any manual accounting and track my o
 ✅ Clôture manuelle à 18h32
 ```
 **And** the app shows "Bonne soirée Loïc ! 🌙" on a success screen before returning to the POS
-**And** the `DayCloseButton` transitions to a "Journée clôturée ✅" disabled state until the next calendar day
+**And** the day-close action (`DayClosureState.closed`) transitions to a "Journée clôturée ✅" disabled state until the next calendar day
 
 **Given** Loïc forgets to close his day manually
 **When** 20:00 local time is reached without a `DayClosedEvent` for that store and actor

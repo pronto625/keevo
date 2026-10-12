@@ -129,12 +129,12 @@ class ReportsPage extends ConsumerWidget {
     ThemeData theme,
     DayClosureSummary summary,
     String storeId,
-    AsyncValue<DayCloseButtonState> closureStateAsync,
+    AsyncValue<DayClosureState> closureStateAsync,
     AsyncValue<String?> userIdAsync,
     DayClosure? lastClosure,
   ) {
     final isClosed =
-        closureStateAsync.valueOrNull == DayCloseButtonState.closed;
+        closureStateAsync.valueOrNull == DayClosureState.closed;
     // B3.4: mask financial totals for EMPLOYEE role (AC6 / HF-2).
     final isEmployee = ref.watch(currentUserRoleProvider) == 'EMPLOYEE';
 

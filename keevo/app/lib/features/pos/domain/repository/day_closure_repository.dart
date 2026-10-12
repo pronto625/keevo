@@ -10,7 +10,10 @@ abstract interface class DayClosureRepository {
   ///
   /// Aggregates from local Drift database (offline-first).
   /// [storeId] — Store to compute summary for.
-  /// [employeeId] — Employee to filter sales for (optional for OWNER).
+  /// [employeeId] — `null` means **all sales of the store** (OWNER view and
+  /// the day closure itself, which covers the whole store); online, the
+  /// server-wide summary is fetched. A non-null value scopes the summary to
+  /// the sales recorded by that employee.
   Future<DayClosureSummary> computeTodaySummary(String storeId, String? employeeId);
 
   /// Save a closure record locally.

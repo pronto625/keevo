@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo/features/catalog/domain/model/product_status.dart';
 import 'package:keevo/features/contact/domain/model/client_model.dart';
 import 'package:keevo/features/contact/presentation/provider/contact_provider.dart';
 import 'package:keevo/features/pos/domain/model/cart_item.dart';
@@ -60,7 +61,7 @@ CartItem _item({
   String id = 'p1',
   int price = 10000,
   int qty = 2,
-  String productStatus = 'ACTIVE',
+  ProductStatus productStatus = ProductStatus.active,
 }) =>
     CartItem(
       id: id,
@@ -183,7 +184,7 @@ void main() {
     testWidgets('shows Vente brouillon label when cart has a draft item',
         (tester) async {
       await tester.pumpWidget(_buildApp(items: [
-        _item(id: 'd1', price: 3000, qty: 1, productStatus: 'DRAFT'),
+        _item(id: 'd1', price: 3000, qty: 1, productStatus: ProductStatus.draft),
       ]));
       await tester.pumpAndSettle();
 
@@ -196,7 +197,7 @@ void main() {
         (tester) async {
       await tester.pumpWidget(_buildApp(items: [
         _item(id: 'a1', price: 2000, qty: 1),
-        _item(id: 'd1', price: 3000, qty: 1, productStatus: 'DRAFT'),
+        _item(id: 'd1', price: 3000, qty: 1, productStatus: ProductStatus.draft),
       ]));
       await tester.pumpAndSettle();
 

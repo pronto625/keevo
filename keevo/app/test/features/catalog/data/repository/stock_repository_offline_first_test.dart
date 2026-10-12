@@ -5,7 +5,6 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/sync/connectivity_service.dart';
 import 'package:keevo/core/sync/sync_service.dart';
 import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
 import 'package:keevo/features/catalog/data/datasource/local_stock_datasource.dart';
@@ -21,7 +20,6 @@ class MockLocalStockDataSource extends Mock implements LocalStockDataSource {
   Future<T> transaction<T>(Future<T> Function() action) => action();
 }
 class MockRemoteStockDataSource extends Mock implements RemoteStockDataSource {}
-class MockConnectivityService extends Mock implements ConnectivityService {}
 class MockSyncService extends Mock implements SyncService {}
 class MockSyncTriggerDispatcher extends Mock implements SyncTriggerDispatcher {}
 
@@ -31,7 +29,6 @@ class FakeStockMovement extends Fake implements StockMovementModel {}
 void main() {
   late MockLocalStockDataSource mockLocal;
   late MockRemoteStockDataSource mockRemote;
-  late MockConnectivityService mockConnectivity;
   late MockSyncService mockSyncService;
   late MockSyncTriggerDispatcher mockDispatcher;
   late StockRepositoryImpl repo;
@@ -45,14 +42,12 @@ void main() {
   setUp(() {
     mockLocal = MockLocalStockDataSource();
     mockRemote = MockRemoteStockDataSource();
-    mockConnectivity = MockConnectivityService();
     mockSyncService = MockSyncService();
     mockDispatcher = MockSyncTriggerDispatcher();
     repo = StockRepositoryImpl(
       local: mockLocal,
       remote: mockRemote,
       syncService: mockSyncService,
-      connectivity: mockConnectivity,
       syncTriggerDispatcher: mockDispatcher,
     );
   });

@@ -19,12 +19,22 @@ class SecureTokenStorage implements TokenStorage {
   const SecureTokenStorage(this._storage);
 
   @override
-  Future<void> saveToken(String token) =>
-      _storage.write(key: _keyToken, value: token);
+  Future<void> saveToken(String token) async {
+    try {
+      await _storage.write(key: _keyToken, value: token);
+    } finally {
+      markSessionSecretsChanged();
+    }
+  }
 
   @override
-  Future<void> saveRefreshToken(String refreshToken) =>
-      _storage.write(key: _keyRefreshToken, value: refreshToken);
+  Future<void> saveRefreshToken(String refreshToken) async {
+    try {
+      await _storage.write(key: _keyRefreshToken, value: refreshToken);
+    } finally {
+      markSessionSecretsChanged();
+    }
+  }
 
   @override
   Future<void> saveUserId(String userId) =>

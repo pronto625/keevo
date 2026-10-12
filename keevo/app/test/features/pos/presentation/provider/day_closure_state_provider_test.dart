@@ -49,7 +49,7 @@ void main() {
 
     final state =
         await container.read(dayClosureStateProvider('store-1').future);
-    expect(state, DayCloseButtonState.closed);
+    expect(state, DayClosureState.closed);
   });
 
   test('second closure the same day throws a readable exception', () async {

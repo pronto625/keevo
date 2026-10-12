@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/router/startup_route.dart';
 import '../../../../core/storage/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
@@ -77,7 +78,7 @@ class _ShopNamePageState extends ConsumerState<ShopNamePage> {
     if (!mounted) return;
     // AC2 (HF-1): Route OWNER to /dashboard; EMPLOYEE stays on /pos.
     final role = prefs.getString(kUserRoleKey);
-    router.go(role == 'OWNER' ? '/dashboard' : '/pos');
+    router.go(routeForRole(role));
   }
 
   /// Returns a user-friendly error message, OR null for errors that are

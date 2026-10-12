@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:drift/drift.dart' hide isNull;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/core/sync/connectivity_service.dart';
 import 'package:keevo/core/sync/riverpod_sync_trigger_dispatcher.dart';
@@ -38,6 +39,33 @@ class _ReadingPushNotifier extends SyncTriggerNotifier {
     } finally {
       if (!done.isCompleted) done.complete();
     }
+  }
+}
+
+/// Online check that counts its calls.
+class _CountingOnline implements ConnectivityService {
+  int calls = 0;
+
+  @override
+  Future<bool> isOnline() async {
+    calls++;
+    return true;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// Push that only counts its calls.
+class _CountingPushNotifier extends SyncTriggerNotifier {
+  static int pushes = 0;
+
+  @override
+  SyncTriggerState build() => const SyncTriggerState.idle();
+
+  @override
+  Future<void> triggerPush() async {
+    pushes++;
   }
 }
 
@@ -89,6 +117,58 @@ void main() {
 
     expect(_ReadingPushNotifier.error, isNull);
     expect(_ReadingPushNotifier.queuedRowsSeen, 1);
+  });
+
+  group('v1s-15-10: no stale Ref after the scope is disposed', () {
+    late _CountingOnline online;
+
+    ProviderContainer newContainer() {
+      _CountingPushNotifier.pushes = 0;
+      online = _CountingOnline();
+      return ProviderContainer(overrides: [
+        connectivityServiceProvider.overrideWithValue(online),
+        syncTriggerNotifierProvider.overrideWith(_CountingPushNotifier.new),
+      ]);
+    }
+
+    test('a live dispatcher pushes', () async {
+      final container = newContainer();
+      addTearDown(container.dispose);
+      final dispatcher = container.read(syncTriggerDispatcherProvider);
+
+      dispatcher.triggerPushIfIdle();
+      await pumpEventQueue();
+
+      expect(online.calls, 1);
+      expect(_CountingPushNotifier.pushes, 1);
+    });
+
+    test('provider dispose turns triggerPushIfIdle into a no-op', () async {
+      final container = newContainer();
+      final dispatcher = container.read(syncTriggerDispatcherProvider)
+          as RiverpodSyncTriggerDispatcher;
+
+      container.dispose();
+      expect(dispatcher.isDisposed, isTrue);
+
+      dispatcher.triggerPushIfIdle();
+      await pumpEventQueue();
+
+      expect(online.calls, 0, reason: 'never touches the stale Ref');
+      expect(_CountingPushNotifier.pushes, 0);
+    });
+
+    test('dispose between scheduling and the microtask: no push', () async {
+      final container = newContainer();
+      final dispatcher = container.read(syncTriggerDispatcherProvider);
+
+      dispatcher.triggerPushIfIdle();
+      container.dispose();
+      await pumpEventQueue();
+
+      expect(online.calls, 0);
+      expect(_CountingPushNotifier.pushes, 0);
+    });
   });
 }
 

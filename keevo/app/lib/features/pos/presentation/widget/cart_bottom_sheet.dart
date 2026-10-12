@@ -16,9 +16,6 @@ class CartBottomSheet extends ConsumerStatefulWidget {
 
   const CartBottomSheet({super.key, required this.onEncaisser});
 
-  static final _currencyFormat =
-      NumberFormat.currency(locale: 'fr_CM', symbol: 'FCFA', decimalDigits: 0);
-
   static void show(BuildContext context, {required VoidCallback onEncaisser}) {
     showModalBottomSheet(
       context: context,

@@ -7,17 +7,42 @@ import '../di/providers.dart';
 import '../storage/app_constants.dart';
 import '../storage/secure_storage_provider.dart';
 
-const _kAccessTokenKey = 'jwt_token';
-const _kRefreshTokenKey = 'refresh_token';
+/// Secure-storage key of the access token.
+const kAccessTokenKey = 'jwt_token';
+
+/// Secure-storage key of the refresh token.
+const kRefreshTokenKey = 'refresh_token';
+
+/// Home route of a signed-in user: OWNER → `/dashboard`, anyone else
+/// (EMPLOYEE, unknown role) → `/pos`.
+String routeForRole(String? role) => role == 'OWNER' ? '/dashboard' : '/pos';
+
+/// The session decision shared by [hasSession] and `SessionPresenceCache`:
+/// a valid access token, or an expired one that a stored refresh token can
+/// renew. [hasRefreshToken] is only consulted when the access token expired.
+Future<bool> isSessionUsable(
+  String? accessToken, {
+  required Future<bool> Function() hasRefreshToken,
+  DateTime? now,
+}) async {
+  final claims = JwtClaims.tryParse(accessToken);
+  if (claims == null) return false;
+  if (!claims.isExpired(now: now)) return true;
+  return hasRefreshToken();
+}
 
 /// Whether the device holds a usable session: a valid access token, or an
 /// expired one that the stored refresh token can renew (the HTTP layer renews
 /// it before the next request; offline, the user keeps working meanwhile).
+///
+/// Always reads secure storage; the router goes through the cached
+/// `SessionPresenceCache` instead.
 Future<bool> hasSession(FlutterSecureStorage storage) async {
-  final claims = JwtClaims.tryParse(await storage.read(key: _kAccessTokenKey));
-  if (claims == null) return false;
-  if (!claims.isExpired()) return true;
-  return await storage.read(key: _kRefreshTokenKey) != null;
+  return isSessionUsable(
+    await storage.read(key: kAccessTokenKey),
+    hasRefreshToken: () async =>
+        await storage.read(key: kRefreshTokenKey) != null,
+  );
 }
 
 /// Decides where the app opens.
@@ -32,16 +57,17 @@ Future<String> resolveStartupRoute({
   required SessionRefresher refresher,
   required Future<void> Function(String accessToken) applyClaims,
 }) async {
-  var token = await storage.read(key: _kAccessTokenKey);
+  var token = await storage.read(key: kAccessTokenKey);
   if (token != null && JwtClaims.tryParse(token) == null) {
-    await storage.delete(key: _kAccessTokenKey);
+    await storage.delete(key: kAccessTokenKey);
+    markSessionSecretsChanged();
     token = null;
   }
 
   if (token != null && JwtClaims.tryParse(token)!.isExpired()) {
     switch (await refresher.refresh()) {
       case RefreshOutcome.renewed:
-        token = await storage.read(key: _kAccessTokenKey);
+        token = await storage.read(key: kAccessTokenKey);
       case RefreshOutcome.unreachable:
         break; // keep the expired token: offline session
       case RefreshOutcome.rejected:
@@ -73,7 +99,7 @@ Future<String> resolveStartupRoute({
   if (prefs.getBool(kPasswordChangeRequiredKey) ?? false) {
     return '/auth/change-password';
   }
-  return claims.role == 'OWNER' ? '/dashboard' : '/pos';
+  return routeForRole(claims.role);
 }
 
 String _signedOutRoute(SharedPreferences prefs) {

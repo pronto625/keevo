@@ -114,6 +114,9 @@ class LocalDayClosureDataSource {
   /// Aggregates COMPLETED sales for totalRevenue,
   /// and PENDING_VALIDATION sales for pending count/total.
   /// Only includes sales AFTER the last closure (if any) to avoid double-counting.
+  ///
+  /// [employeeId] `null` = all sales of the store (OWNER view, close-day);
+  /// non-null = only the sales recorded by that employee.
   Future<domain.DayClosureSummary> computeTodaySummary(
       String storeId, String? employeeId) async {
     final now = DateTime.now();

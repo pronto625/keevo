@@ -105,7 +105,7 @@ class _PosSpeedDialState extends State<PosSpeedDial>
                             data: (userId) {
                               if (userId == null) return const SizedBox.shrink();
                               final isClosed = closureState.valueOrNull ==
-                                  DayCloseButtonState.closed;
+                                  DayClosureState.closed;
                               return _SpeedDialOption(
                                 icon: isClosed
                                     ? Icons.check_circle_rounded

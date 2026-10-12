@@ -3,7 +3,6 @@ import 'dart:developer' as dev;
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/storage/app_database.dart';
-import '../../../../core/sync/connectivity_service.dart';
 import '../../../../core/sync/sync_service.dart';
 import '../../../../core/sync/sync_trigger_dispatcher.dart';
 import '../../domain/model/client_model.dart';
@@ -18,7 +17,6 @@ import '../datasource/remote_client_datasource.dart';
 class ClientRepositoryImpl implements ClientRepository {
   final LocalClientDataSource _local;
   final RemoteClientDataSource _remote;
-  final ConnectivityService _connectivity;
   final SyncService _syncService;
   final SyncTriggerDispatcher _syncTriggerDispatcher;
   final AppDatabase? _db;
@@ -28,13 +26,11 @@ class ClientRepositoryImpl implements ClientRepository {
   const ClientRepositoryImpl({
     required LocalClientDataSource local,
     required RemoteClientDataSource remote,
-    required ConnectivityService connectivity,
     required SyncService syncService,
     required SyncTriggerDispatcher syncTriggerDispatcher,
     AppDatabase? db,
   })  : _local = local,
         _remote = remote,
-        _connectivity = connectivity,
         _syncService = syncService,
         _syncTriggerDispatcher = syncTriggerDispatcher,
         _db = db;

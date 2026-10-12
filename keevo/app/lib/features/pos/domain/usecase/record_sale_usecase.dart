@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../model/cart_item.dart';
 import '../model/payment_mode_enum.dart';
 import '../model/sale_model.dart';
+import '../model/sale_status.dart';
 import '../repository/sale_repository.dart';
 
 /// RecordSaleUseCase — orchestrates local sale recording.
@@ -21,7 +22,7 @@ class RecordSaleUseCase {
     String? clientId,
     String? mobileRef,
     int discountAmount = 0,
-    String status = 'COMPLETED',
+    String status = SaleStatus.completedValue,
     List<String> originalDraftProductIds = const [],
     Map<String, int> initialStockEntries = const {},
     Map<String, String> initialStockMovementIds = const {},
