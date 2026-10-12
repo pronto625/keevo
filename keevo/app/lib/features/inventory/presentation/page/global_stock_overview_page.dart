@@ -12,6 +12,8 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import '../../../../core/widget/soft_icon_button.dart';
+import '../../../export/domain/model/export_models.dart';
+import '../../../export/presentation/widget/export_entry_button.dart';
 import '../provider/global_stock_provider.dart';
 import '../widget/store_product_stock_tile.dart';
 import '../widget/store_stock_card.dart';
@@ -149,6 +151,12 @@ class _GlobalStockOverviewPageState
                 ),
                 const SizedBox(width: 6),
               ],
+              // v1s-18-4 — « Exporter » the stock levels (OWNER only). The
+              // overview spans every store: no store pre-selected.
+              const ExportEntryButton(
+                key: Key('stock-export'),
+                prefill: ExportPrefill(datasets: {'stock_levels'}),
+              ),
               // Pastille posée à la main : l'icône devient un spinner pendant
               // l'actualisation, ce que SoftIconButton (IconData) ne permet pas.
               Container(

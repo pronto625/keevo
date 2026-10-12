@@ -9,6 +9,8 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/date_range_clamp.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
+import '../../../export/domain/model/export_models.dart';
+import '../../../export/presentation/widget/export_entry_button.dart';
 import '../../domain/exception/audit_exception.dart';
 import '../../domain/model/audit_entry_dto.dart';
 import '../../domain/model/audit_filter.dart';
@@ -30,6 +32,22 @@ Color auditCategoryColor(AuditCategory c, ColorScheme cs) => switch (c) {
       AuditCategory.inventory => AppTheme.iconTeal,
       AuditCategory.other => cs.onSurfaceVariant,
     };
+
+/// v1s-18-4 — « Exporter » prefill of the history: only the audit log, the
+/// same store and period, and the employee / action / object / search
+/// filters as criteria.
+ExportPrefill auditExportPrefill(AuditFilter f) => ExportPrefill(
+      datasets: const {kAuditLogDatasetKey},
+      storeId: f.storeId,
+      from: f.from,
+      to: f.to,
+      criteria: {
+        if (f.userId != null) 'userId': f.userId!,
+        if (f.action != null) 'action': f.action!,
+        if (f.entityType != null) 'entityType': f.entityType!,
+        if (f.normalizedQuery != null) 'q': f.normalizedQuery!,
+      },
+    );
 
 /// AuditLogPage — « Historique des actions » (v1s-18-7, OWNER only).
 ///
@@ -343,6 +361,12 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
             letterSpacing: -0.2,
           ),
         ),
+        actions: [
+          ExportEntryButton(
+            key: const Key('audit-export'),
+            prefill: auditExportPrefill(filter),
+          ),
+        ],
       ),
       body: Column(
         children: [

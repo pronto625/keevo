@@ -211,7 +211,8 @@ void main() {
   });
 
   group('SettingsPage — Historique des actions (v1s-18-7)', () {
-    testWidgets('OWNER sees « Historique des actions » and « Mouvements de stock »',
+    testWidgets(
+        'OWNER sees « Historique des actions » and « Mouvements de stock »',
         (tester) async {
       await tester.pumpWidget(_buildPage(
         mockFcmService: mockFcm,
@@ -250,6 +251,45 @@ void main() {
     });
   });
 
+  group('SettingsPage — Export tiles (v1s-18-4)', () {
+    testWidgets('OWNER sees « Exporter mes données » and « Mes exports »',
+        (tester) async {
+      await tester.pumpWidget(_buildPage(
+        mockFcmService: mockFcm,
+        mockTokenDataSource: mockTokenDs,
+        prefs: prefs,
+        role: 'OWNER',
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('settings-exports')),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.byKey(const Key('settings-export-new')), findsOneWidget);
+      expect(find.text('Exporter mes données'), findsOneWidget);
+      expect(find.text('Mes exports'), findsOneWidget);
+    });
+
+    testWidgets('EMPLOYEE sees no export tile', (tester) async {
+      await tester.pumpWidget(_buildPage(
+        mockFcmService: mockFcm,
+        mockTokenDataSource: mockTokenDs,
+        prefs: prefs,
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.text('Se déconnecter'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.byKey(const Key('settings-export-new')), findsNothing);
+      expect(find.byKey(const Key('settings-exports')), findsNothing);
+    });
+  });
+
   group('SettingsPage — Logout FCM cleanup (Story 16.1)', () {
     // ── AC1 + AC2: Normal logout with token ─────────────────────────────
 
@@ -279,7 +319,8 @@ void main() {
 
     // v1s-15-8 (deferred from CR v1s-16-1): the OWNER settings page has more
     // tiles above the logout — the FCM cleanup must run for that role too.
-    testWidgets('OWNER logout deletes remote + local FCM token', (tester) async {
+    testWidgets('OWNER logout deletes remote + local FCM token',
+        (tester) async {
       const token = 'fcm-token-owner';
       when(() => mockFcm.getToken()).thenAnswer((_) async => token);
 
@@ -380,7 +421,8 @@ void main() {
 
       final mockTokenStorage = MockTokenStorage();
       when(() => mockTokenStorage.getToken()).thenAnswer((_) async => null);
-      when(() => mockTokenStorage.getRefreshToken()).thenAnswer((_) async => null);
+      when(() => mockTokenStorage.getRefreshToken())
+          .thenAnswer((_) async => null);
 
       final container = ProviderContainer(
         overrides: [
@@ -501,7 +543,8 @@ void main() {
       expect(find.text('Opérations non synchronisées'), findsOneWidget);
     });
 
-    testWidgets('progress is shown while the queue is sent, a second tap is ignored',
+    testWidgets(
+        'progress is shown while the queue is sent, a second tap is ignored',
         (tester) async {
       final release = Completer<bool>();
       final service = _FakeSignOutService(() => release.future);

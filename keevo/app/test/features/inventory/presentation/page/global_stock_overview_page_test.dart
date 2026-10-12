@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/core/sync/sync_status.dart';
 import 'package:keevo/core/sync/sync_status_provider.dart';
+import 'package:keevo/features/export/domain/model/export_models.dart';
 import 'package:keevo/features/inventory/domain/model/store_stock_summary_model.dart';
 import 'package:keevo/features/inventory/domain/repository/multi_store_stock_repository.dart';
 import 'package:keevo/features/inventory/presentation/page/global_stock_overview_page.dart';
@@ -67,12 +69,11 @@ void main() {
     expect(refreshSpinner(), findsNothing);
   });
 
-  testWidgets('low-stock filter resets when the page is left',
-      (tester) async {
+  testWidgets('low-stock filter resets when the page is left', (tester) async {
     when(() => repo.getOverview()).thenAnswer((_) async => []);
 
-    await tester.pumpWidget(
-        app(const GlobalStockOverviewPage(showLowOnly: true)));
+    await tester
+        .pumpWidget(app(const GlobalStockOverviewPage(showLowOnly: true)));
     await tester.pumpAndSettle();
     expect(container.read(showLowStockOnlyProvider), isTrue);
 
@@ -81,5 +82,35 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(container.read(showLowStockOnlyProvider), isFalse);
+  });
+
+  // v1s-18-4 — « Exporter » the stock levels, no store pre-selected.
+  testWidgets('owner « Exporter » opens the export screen with stock levels',
+      (tester) async {
+    when(() => repo.getOverview()).thenAnswer((_) async => []);
+    ExportPrefill? pushed;
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp.router(
+        routerConfig: GoRouter(routes: [
+          GoRoute(
+              path: '/', builder: (_, __) => const GlobalStockOverviewPage()),
+          GoRoute(
+            path: '/exports/new',
+            builder: (_, state) {
+              pushed = state.extra as ExportPrefill?;
+              return const Scaffold(body: Text('EXPORTER'));
+            },
+          ),
+        ]),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('stock-export')));
+    await tester.pumpAndSettle();
+    expect(find.text('EXPORTER'), findsOneWidget);
+    expect(pushed?.datasets, {'stock_levels'});
+    expect(pushed?.storeId, isNull);
   });
 }
