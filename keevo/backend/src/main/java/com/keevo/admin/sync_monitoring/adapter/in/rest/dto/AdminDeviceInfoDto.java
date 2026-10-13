@@ -9,7 +9,9 @@ public record AdminDeviceInfoDto(
         String userId,
         Instant lastPushAt,
         Instant lastPullAt,
-        Instant updatedAt
+        Instant updatedAt,
+        String userName,
+        String userRole
 ) {
     public static AdminDeviceInfoDto from(AdminDeviceInfo model) {
         return new AdminDeviceInfoDto(
@@ -17,6 +19,8 @@ public record AdminDeviceInfoDto(
                 model.userId(),
                 model.lastPushAt(),
                 model.lastPullAt(),
-                model.updatedAt());
+                model.updatedAt(),
+                model.userName(),
+                model.userRole());
     }
 }

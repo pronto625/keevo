@@ -2,9 +2,10 @@
 title: '9-8 — Sync monitoring page completion (human labels, refresh errors, dashboard test harness)'
 type: 'feature'
 created: '2026-10-13'
-status: 'ready-for-dev'
+status: 'done'
+baseline_revision: '352f065dc3499e69a82e61430ee366270b967787'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-9-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/9-8-monitoring-sync-sante-devices.md'
@@ -79,9 +80,63 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-10-13 — Review pass
+- verdicts: 33 findings — high 0, medium 4, low 14, false 7, maybe-false 0 (+ intent rows descriptive)
+- findings:
+  - `[medium]` `[patch]` (blind) a failing name/role sub-select empties the whole device list — devices queried alone; names/roles resolved by separate lookups run last (read-only tx: a failed statement aborts later ones), merged by user_id; integration test drops `employees` and keeps 4 devices.
+  - `[low]` `[patch]` (blind) inactive OWNER membership outranks an active one — `ORDER BY m.is_active DESC, (role='OWNER') DESC` (one membership per user/tenant by unique key, so practically moot).
+  - `[medium]` `[patch]` (blind) « Appareil N » swaps between refreshes — numbering by sorted deviceId per user.
+  - `[false]` `[reject]` (blind) null userId devices share one counter — `user_sync_state.user_id` is NOT NULL.
+  - `[false]` `[reject]` (blind) known roles thrown away — spec rule: employee name, else « Propriétaire », else « Utilisateur inconnu »; tenant roles are OWNER/EMPLOYEE only; stale comment fixed.
+  - `[low]` `[patch]` (blind) drawer blank while query paused — `isPending` shows « Chargement… ».
+  - `[low]` `[reject]` (blind) « Réessayer » clickable during retry — React Query restarts the same fetch; no data harm.
+  - `[low]` `[patch]` (blind) no-raw-code test misses single-word codes — test also fails on all-caps tokens ≥ 3 letters.
+  - `[low]` `[reject]` (blind) missing tests backdrop / Space / backend order / null contract — behaviours unchanged by this diff except null fields, covered by the integration test values.
+  - `[medium]` `[patch]` (blind) SQL only checked by mocks — `AdminSyncMonitoringServiceIntegrationTest` (Testcontainers).
+  - `[false]` `[reject]` (blind) story `done` vs spec `in-progress` — orchestrator finalizes both in this commit.
+  - `[low]` `[patch]` (blind) ticked item still says « reste ouverte » — reworded.
+  - `[low]` `[patch]` (blind) epic Story 9.7 section: custom period vs API, « to be confirmed » — aligned (CUSTOM from/to, decided defaults, 422 VALIDATION_ERROR per GlobalExceptionHandler convention).
+  - `[low]` `[patch]` (blind) labels uneven (reason not upper-cased, id-like tokens humanized) — trim/upper-case, `isCode` rejects hex-like runs.
+  - `[low]` `[reject]` (blind) two « Échec de l'actualisation » banners when both queries fail — each retries its own section; rare double failure.
+  - `[medium]` `[patch]` (edge) device list wiped on lookup failure — same as blind row 1.
+  - `[low]` `[patch]` (edge) drawer paused blank — same as blind row 6.
+  - `[low]` `[reject]` (edge) retry without progress cue — same as blind row 7.
+  - `[low]` `[patch]` (edge) prototype keys return functions — `Object.hasOwn`.
+  - `[low]` `[patch]` (edge) padded/lower-case reason — same as blind row 14.
+  - `[false]` `[reject]` (edge) role in another case — roles stored upper-case (CHECK constraint).
+  - `[medium]` `[patch]` (edge) unstable numbering — same as blind row 3.
+  - `[low]` `[reject]` (edge) two unnamed users look identical — devices still numbered per user; names come from employees for every real employee.
+  - `[low]` `[patch]` (edge) deactivated owner labelled Propriétaire — same as blind row 2.
+  - `[low]` `[patch]` (edge, claim) no-raw-code regex — same as blind row 8.
+  - `[medium]` `[patch]` (gap) SQL never run on Postgres — same as blind row 10.
+  - `[medium]` `[patch]` (gap) page wiring of isError/onRetry/isFetching untested — `app/monitoring/sync/__tests__/page.test.tsx`.
+  - `[low]` `[patch]` (gap other) regex single-word — same as blind row 8.
+  - `[low]` `[patch]` (gap other) lookup lower-case free text humanized — same as blind row 14.
+  - `[false]` `[reject]` (gap other) userRoleLabel unused — same as blind row 5.
+  - `[false]` `[reject]` (intent) R1–R4 readings, layered tests — descriptive; SQL and page wiring gaps patched above; strict R4 is the spec rule.
+  - `[false]` `[reject]` (intent) extras (« Entreprise » wording, status badge labels, @types/node 24 for vitest 5) — required by the no-technical-data rule and the harness.
+  - `[false]` `[reject]` (intent) commands green only claimed — re-run by the orchestrator (below).
+
 ## Verification
 
 **Commands:**
 - `cd keevo/dashboard && npm ci && npm run lint && npx tsc --noEmit && npm test && npm run build` -- expected: all succeed
 - `cd keevo/backend && MAVEN_OPTS=-Xmx1g mvn -q -o test -Dtest='AdminSyncMonitoring*Test' -DforkCount=1 -DargLine=-Xmx1536m` -- expected: 0 failures
 - `cd keevo/backend && MAVEN_OPTS=-Xmx1g mvn -q -o test -Dtest='com.keevo.admin.**' -DforkCount=1 -DargLine=-Xmx1536m` -- expected: 0 failures
+
+## Auto Run Result
+
+Status: done
+
+**Summary:** Story 9-8 closed. Device rows carry the user's name and role (separate, failure-isolated lookups); the sync page shows only French labels (`lib/labels.ts`, single source reused by later epic-9 pages: operations, rejection reasons, entities, conflicts, strategies, plans, roles, health status, stable « Appareil N »); refresh failures and in-flight refresh are visible with « Réessayer »; JSON contract locked by `jsonPath`; the dashboard has a Vitest + Testing Library harness run in CI; epic document has Story 9.6/9.7/9.8 sections.
+
+**Files changed:** backend `admin/sync_monitoring` (model, DTO, service, unit + Testcontainers integration tests, controller test); dashboard `lib/labels.ts`, `components/sync/*` (+ `SyncErrorStates.tsx`), `app/monitoring/sync/page.tsx`, `types/sync-monitoring.ts`, tests under `__tests__`, `vitest.config.mts`, `vitest.setup.ts`, `package.json`/lock (vitest 5, vite 8, jsdom, Testing Library, @types/node 24); `.github/workflows/dashboard-ci.yml` (npm test); `epic-9-super-admin-dashboard-toor.md`; `9-8-monitoring-sync-sante-devices.md` (done).
+
+**Review:** 33 findings — patched 4 medium entries (device list wipe, unstable numbering, SQL integration test, page wiring test) and 9 low; deferred 0; rejected 20 (false 7 + low with reasons in the triage log).
+
+**Follow-up review recommended:** true — 4 medium entries patched; unverified risk: the read-only transaction ordering of the label lookups (a failing lookup aborts later statements) is only proven for the `employees` drop case, not for a failing role lookup.
+
+**Verification:** dashboard `npm run lint`, `npx tsc --noEmit`, `npm test` (6 files, 32 tests), `npm run build` — all green. Backend `-Dtest='com.keevo.admin.**'` — 9 classes incl. `AdminSyncMonitoringServiceIntegrationTest`, 0 failures.
+
+**Residual risks:** `npm audit` still lists pre-existing advisories of next/axios/sharp.
+

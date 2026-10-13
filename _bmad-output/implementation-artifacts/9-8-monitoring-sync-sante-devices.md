@@ -3,7 +3,7 @@ baseline_commit: 6a0efea
 ---
 # Story 9.8: Monitoring Synchronisation & Santé Devices (Super Admin) — frontend Next.js manquant
 
-Status: review
+Status: done
 
 <!-- V1-stabilization track — tag A (release-blocker pour le build dashboard).
      Branche : v1-stabilization (HEAD 6a0efea).
@@ -51,8 +51,8 @@ Status: review
   - [x] 4.3 `components/sync/SyncTenantDetailDrawer.tsx` — drawer conditionnel sur `tenantId`, `useQuery(['admin-sync-tenant-detail', tenantId], () => getTenantSyncDetail(tenantId!), {enabled: tenantId !== null})`, 3 sous-sections (devices/failedOps/conflicts), bouton fermeture.
 - [x] **Task 5 — Vérification build (AC6)**
   - [x] 5.1 `npm run build` — 0 erreur `Module not found`.
-- [ ] **Task 6 — Documentation rétroactive**
-  - [ ] 6.1 Ajouter "Story 9.8" à `epic-9-super-admin-dashboard-toor.md` (absente aujourd'hui).
+- [x] **Task 6 — Documentation rétroactive**
+  - [x] 6.1 Ajouter "Story 9.8" à `epic-9-super-admin-dashboard-toor.md` (absente aujourd'hui).
 
 ## Dev Notes
 
@@ -82,14 +82,14 @@ Status: review
 
 ### Deferred items routed 2026-10-11
 
-- [ ] [Deferred-from: v1s-17-1-dashboard-build-ci, 2026-10-11] Harnais de tests dashboard absent [keevo/dashboard/package.json] — aucun script `test` ni dépendance de test ; les comportements UI de 9-8 (squelettes, vide/erreur, sélection clavier, drawer + Échap) ne sont couverts que par lint/tsc/build + revue. Mettre en place Vitest + Testing Library et couvrir `SyncHealthTable`, `SyncTenantDetailDrawer`, ainsi que la restauration du token au refresh (`lib/auth/auth-context.tsx` : seed `sessionStorage.ks_admin_token`, la 1re requête doit porter `Authorization: Bearer`).
-- [ ] [Deferred-from: v1s-17-1-dashboard-build-ci, 2026-10-11] Contrat JSON sync non verrouillé [AdminSyncMonitoringControllerTest.java:58,85,102] — ajouter des assertions `jsonPath` sur chaque champ lu par `keevo/dashboard/src/types/sync-monitoring.ts` (overview, tenants, detail) pour qu'un renommage de DTO casse un test.
-- [ ] [Deferred-from: v1s-17-1-dashboard-build-ci, 2026-10-11] Erreurs de rafraîchissement silencieuses [components/sync/SyncOverviewCards.tsx, SyncHealthTable.tsx] — `page.tsx` (contrat figé) ne transmet ni `isError` ni `isFetching` : un refetch échoué garde les données périmées sans signal, une requête « paused » hors-ligne affiche l'erreur. Réglé si la page passe `error`/`isFetching` aux composants (retry + spinner sur « Actualiser »).
-- [ ] Task 6.1 (ajout de "Story 9.8" à `epic-9-super-admin-dashboard-toor.md`) reste ouverte.
+- [x] [Deferred-from: v1s-17-1-dashboard-build-ci, 2026-10-11] Harnais de tests dashboard absent [keevo/dashboard/package.json] — aucun script `test` ni dépendance de test ; les comportements UI de 9-8 (squelettes, vide/erreur, sélection clavier, drawer + Échap) ne sont couverts que par lint/tsc/build + revue. Mettre en place Vitest + Testing Library et couvrir `SyncHealthTable`, `SyncTenantDetailDrawer`, ainsi que la restauration du token au refresh (`lib/auth/auth-context.tsx` : seed `sessionStorage.ks_admin_token`, la 1re requête doit porter `Authorization: Bearer`).
+- [x] [Deferred-from: v1s-17-1-dashboard-build-ci, 2026-10-11] Contrat JSON sync non verrouillé [AdminSyncMonitoringControllerTest.java:58,85,102] — ajouter des assertions `jsonPath` sur chaque champ lu par `keevo/dashboard/src/types/sync-monitoring.ts` (overview, tenants, detail) pour qu'un renommage de DTO casse un test.
+- [x] [Deferred-from: v1s-17-1-dashboard-build-ci, 2026-10-11] Erreurs de rafraîchissement silencieuses [components/sync/SyncOverviewCards.tsx, SyncHealthTable.tsx] — `page.tsx` (contrat figé) ne transmet ni `isError` ni `isFetching` : un refetch échoué garde les données périmées sans signal, une requête « paused » hors-ligne affiche l'erreur. Réglé si la page passe `error`/`isFetching` aux composants (retry + spinner sur « Actualiser »).
+- [x] Task 6.1 (ajout de "Story 9.8" à `epic-9-super-admin-dashboard-toor.md`) — fermée le 2026-10-13 (sections 9.6, 9.7 et 9.8 ajoutées).
 
 ### Deferred items routed 2026-10-13
 
-- [ ] [Deferred-from: follow-up review v1s-17-1, 2026-10-13] Identifiants et codes bruts dans le panneau de synchronisation [keevo/dashboard/src/components/sync/SyncTenantDetailDrawer.tsx:120-125, sections opérations/conflits] — la colonne Appareil/Utilisateur affiche des UUID et les opérations/conflits affichent `operationType`, `conflictType`, `strategy` bruts (ex. CREATE_SALE, LWW). Règle 2026-10-13 : libellés français compréhensibles (« Téléphone de Awa », nom de l'employé, « Création de vente »…), sinon omettre le champ. Nécessite d'ajouter `deviceName` / nom de l'utilisateur aux DTO `AdminDeviceInfo` (backend) et une table de libellés côté dashboard ; v1s-17-1 interdisait tout changement backend.
+- [x] [Deferred-from: follow-up review v1s-17-1, 2026-10-13] Identifiants et codes bruts dans le panneau de synchronisation [keevo/dashboard/src/components/sync/SyncTenantDetailDrawer.tsx:120-125, sections opérations/conflits] — la colonne Appareil/Utilisateur affiche des UUID et les opérations/conflits affichent `operationType`, `conflictType`, `strategy` bruts (ex. CREATE_SALE, LWW). Règle 2026-10-13 : libellés français compréhensibles (« Téléphone de Awa », nom de l'employé, « Création de vente »…), sinon omettre le champ. Nécessite d'ajouter `deviceName` / nom de l'utilisateur aux DTO `AdminDeviceInfo` (backend) et une table de libellés côté dashboard ; v1s-17-1 interdisait tout changement backend.
 
 ## Dev Agent Record
 
@@ -108,6 +108,13 @@ Claude Opus 5.5 (via v1s-17-1-dashboard-build-ci)
 - Comme `page.tsx` ne transmet pas l'erreur des queries, `SyncOverviewCards`/`SyncHealthTable` affichent une erreur inline quand `!isLoading && data === undefined`.
 - Entrée sidebar « Synchronisation » passée à `comingSoon: false`.
 - Vérifié : `npm ci && npm run lint && npx tsc --noEmit && npm run build` sur copie propre — 0 erreur.
+- 2026-10-13 — Finalisation (spec-9-8-monitoring-sync-completion.md) :
+  - Backend : `AdminDeviceInfo`/`AdminDeviceInfoDto` gagnent `userName` (prénom + nom de l'employé, null sinon) et `userRole` (rôle d'adhésion, ex. OWNER). La requête appareils reste seule sur `public.user_sync_state` ; noms (`<schema>.employees`, 1re ligne par user) et rôles (`public.user_tenant_memberships` du tenant, adhésion active d'abord) sont résolus par user_id dans deux `safeQuery` séparées, exécutées en dernier (un échec avorte la transaction PostgreSQL) — un échec laisse `userName`/`userRole` à null sans perdre d'appareil. Couvert par `AdminSyncMonitoringServiceIntegrationTest` (Postgres réel : doublon employé, propriétaire, inconnu, table employees absente).
+  - Contrat JSON verrouillé : `AdminSyncMonitoringControllerTest` asserte chaque champ lu par `types/sync-monitoring.ts` (overview, tenants, détail incl. devices/recentFailedOps/recentConflicts).
+  - Dashboard : `lib/labels.ts` (source unique des libellés FR : opérations, raisons de rejet, entités, conflits, stratégies, plans, rôles, statut de synchro, numérotation « Appareil N »). Code inconnu → humanisé ; texte libre → « Données refusées par le serveur ». Aucun UUID ni code brut dans la page ni le panneau ; statut affiché Sain / À surveiller / En erreur.
+  - Erreurs : `page.tsx` passe désormais `isError`/`isFetching`/`refetch` ; échec au 1er chargement → « Erreur de chargement » + « Réessayer » ; échec d'actualisation → données conservées + avertissement + « Réessayer » ; requête en attente sans erreur (ex. hors-ligne « paused ») → squelette, pas d'erreur ; « Actualiser » désactivé pendant le chargement.
+  - Harnais : Vitest 5 + Testing Library (jsdom), `npm test` ajouté à la CI Dashboard ; `@types/node` passé à ^24 (peer de vitest 5, Node 24 en CI). tests labels, SyncHealthTable, SyncTenantDetailDrawer, SyncOverviewCards, page sync (câblage erreur/retry/actualisation), restauration du token. Numérotation « Appareil N » stable (ids triés par utilisateur, indépendante du tri par dernier push).
+  - Epic 9 : sections Story 9.6, 9.7 et 9.8 ajoutées.
 
 ### File List
 
@@ -118,3 +125,19 @@ Claude Opus 5.5 (via v1s-17-1-dashboard-build-ci)
 - keevo/dashboard/src/components/sync/SyncHealthTable.tsx (nouveau)
 - keevo/dashboard/src/components/sync/SyncTenantDetailDrawer.tsx (nouveau)
 - keevo/dashboard/src/components/layout/Sidebar.tsx (modifié)
+- 2026-10-13 :
+  - keevo/backend/src/main/java/com/keevo/admin/sync_monitoring/application/service/AdminSyncMonitoringService.java (modifié)
+  - keevo/backend/src/main/java/com/keevo/admin/sync_monitoring/domain/model/AdminDeviceInfo.java (modifié)
+  - keevo/backend/src/main/java/com/keevo/admin/sync_monitoring/adapter/in/rest/dto/AdminDeviceInfoDto.java (modifié)
+  - keevo/backend/src/test/java/com/keevo/admin/sync_monitoring/application/service/AdminSyncMonitoringServiceTest.java (modifié)
+  - keevo/backend/src/test/java/com/keevo/admin/sync_monitoring/application/service/AdminSyncMonitoringServiceIntegrationTest.java (nouveau)
+  - keevo/backend/src/test/java/com/keevo/admin/sync_monitoring/adapter/in/rest/AdminSyncMonitoringControllerTest.java (modifié)
+  - keevo/dashboard/src/lib/labels.ts (nouveau)
+  - keevo/dashboard/src/components/sync/SyncErrorStates.tsx (nouveau)
+  - keevo/dashboard/src/components/sync/{SyncOverviewCards,SyncHealthTable,SyncTenantDetailDrawer}.tsx (modifiés)
+  - keevo/dashboard/src/app/monitoring/sync/page.tsx (modifié)
+  - keevo/dashboard/src/types/sync-monitoring.ts (modifié)
+  - keevo/dashboard/{package.json, package-lock.json} (modifiés), vitest.config.mts, vitest.setup.ts (nouveaux)
+  - keevo/dashboard/src/lib/__tests__/labels.test.ts, src/components/sync/__tests__/*.test.tsx, src/lib/auth/__tests__/auth-context.test.tsx, src/app/monitoring/sync/__tests__/page.test.tsx (nouveaux)
+  - .github/workflows/dashboard-ci.yml (modifié)
+  - _bmad-output/planning-artifacts/epics/epic-9-super-admin-dashboard-toor.md (modifié)
