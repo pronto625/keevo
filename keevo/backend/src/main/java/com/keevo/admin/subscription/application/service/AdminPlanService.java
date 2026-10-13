@@ -288,6 +288,10 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
     }
 
     private Map<String, Object> expiringRow(UUID tenantId, String schema, Timestamp now, Timestamp horizon) {
+        if (!TenantSchema.isValid(schema)) { // listAlerts() filters; re-checked at use
+            log.warn("Plan alerts: tenant {} skipped (invalid schema name)", tenantId);
+            return null;
+        }
         try {
             List<Map<String, Object>> rows = jdbc.queryForList(String.format(EXPIRING_SQL, schema), now, horizon);
             return rows.isEmpty() ? null : rows.get(0);

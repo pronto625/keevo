@@ -65,7 +65,12 @@ public class SchemaAwareMultiTenantConnectionProvider
     public Connection getConnection(String tenantIdentifier) throws SQLException {
         Connection conn = dataSource.getConnection();
         if (TenantSchema.isValid(tenantIdentifier)) { // "public" never matches the tenant format
-            applySearchPath(conn, tenantIdentifier);
+            try {
+                applySearchPath(conn, tenantIdentifier);
+            } catch (SQLException | RuntimeException e) {
+                conn.close(); // never leak the pooled connection
+                throw e;
+            }
         }
         return conn;
     }
@@ -112,6 +117,7 @@ public class SchemaAwareMultiTenantConnectionProvider
 
     @SuppressWarnings("SqlSourceToSinkFlow")
     private void applySearchPath(Connection conn, String schemaName) throws SQLException {
+        TenantSchema.validate(schemaName); // callers gate with isValid; never interpolate an unchecked name
         try (Statement stmt = conn.createStatement()) {
             // Include public so that shared objects (functions, types) remain accessible.
             stmt.execute("SET search_path TO \"" + schemaName + "\", public");

@@ -2,6 +2,9 @@ package com.keevo.admin.sync_monitoring.application.service;
 
 import com.keevo.admin.sync_monitoring.domain.model.*;
 import com.keevo.admin.sync_monitoring.domain.port.in.*;
+import com.keevo.shared.infrastructure.persistence.TenantSchema;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
@@ -32,6 +35,8 @@ import java.util.Map;
 public class AdminSyncMonitoringService
         implements GetSyncOverviewUseCase, ListTenantSyncHealthUseCase, GetSyncTenantDetailUseCase {
 
+    private static final Logger log = LoggerFactory.getLogger(AdminSyncMonitoringService.class);
+
     private final JdbcTemplate jdbc;
 
     public AdminSyncMonitoringService(JdbcTemplate jdbc) {
@@ -50,6 +55,7 @@ public class AdminSyncMonitoringService
         int tenantsInAlert = 0;
 
         for (TenantSchemaRef tenant : loadActiveTenantSchemas()) {
+            if (!TenantSchema.isValid(tenant.schemaName())) { skipInvalid(tenant); continue; } // re-checked at use
             long failed = safeCount(
                     "SELECT COUNT(*) FROM " + tenant.schemaName() + ".sync_operations_log "
                     + "WHERE status = 'FAILED' AND processed_at >= NOW() - INTERVAL '7 days'");
@@ -72,6 +78,7 @@ public class AdminSyncMonitoringService
 
         List<AdminTenantSyncHealth> items = tenants.stream().map(tenant -> {
             String schema = tenant.schemaName();
+            if (!TenantSchema.isValid(schema)) { skipInvalid(tenant); return null; } // re-checked at use
 
             long deviceCount = safeCount(
                     "SELECT COUNT(*) FROM public.user_sync_state WHERE tenant_id = ?", schema);
@@ -93,7 +100,7 @@ public class AdminSyncMonitoringService
                     tenant.id(), tenant.name(), tenant.planType(),
                     failedOps7d, conflicts7d, (int) deviceCount,
                     lastPush, lastPull, status);
-        }).toList();
+        }).filter(java.util.Objects::nonNull).toList();
 
         Map<String, Integer> statusOrder = Map.of("ERROR", 0, "WARN", 1, "OK", 2);
         return items.stream()
@@ -109,6 +116,7 @@ public class AdminSyncMonitoringService
     @Override
     public AdminSyncTenantDetail execute(GetSyncTenantDetailQuery query) {
         TenantSchemaRef tenant = loadTenantById(query.tenantId().toString());
+        TenantSchema.validate(tenant.schemaName()); // request path: loadTenantById() already refuses invalid rows
 
         List<AdminDeviceInfo> rawDevices = safeQuery(
                 "SELECT device_id, user_id, last_push_at, last_pull_at, updated_at "
@@ -146,7 +154,7 @@ public class AdminSyncMonitoringService
      * Schema name already validated by {@code loadTenantById} (TenantSchema.isValid).
      */
     private List<AdminDeviceInfo> withUserLabels(List<AdminDeviceInfo> devices, TenantSchemaRef tenant) {
-        if (devices.isEmpty()) return devices;
+        if (devices.isEmpty() || !TenantSchema.isValid(tenant.schemaName())) return devices;
 
         Map<String, String> roles = new HashMap<>();
         safeQuery(
@@ -179,6 +187,10 @@ public class AdminSyncMonitoringService
 
     private record TenantSchemaRef(String id, String schemaName, String name, String planType) {}
 
+    private static void skipInvalid(TenantSchemaRef tenant) {
+        log.warn("Sync monitoring: tenant {} skipped (invalid schema name)", tenant.id());
+    }
+
     private List<TenantSchemaRef> loadActiveTenantSchemas() {
         // Follow-up review v1s-13-12: gate before the schema name is interpolated into SQL.
         return jdbc.query(
@@ -189,7 +201,7 @@ public class AdminSyncMonitoringService
                         rs.getString("id"), rs.getString("schema_name"),
                         rs.getString("name"), rs.getString("plan_type")))
                 .stream()
-                .filter(t -> com.keevo.shared.infrastructure.persistence.TenantSchema.isValid(t.schemaName()))
+                .filter(t -> TenantSchema.isValid(t.schemaName()))
                 .toList();
     }
 
@@ -201,7 +213,7 @@ public class AdminSyncMonitoringService
                         rs.getString("name"), rs.getString("plan_type")),
                 tenantUuid);
         if (results.isEmpty()
-                || !com.keevo.shared.infrastructure.persistence.TenantSchema.isValid(results.get(0).schemaName())) {
+                || !TenantSchema.isValid(results.get(0).schemaName())) {
             throw new IllegalArgumentException("Tenant not found: " + tenantUuid);
         }
         return results.get(0);

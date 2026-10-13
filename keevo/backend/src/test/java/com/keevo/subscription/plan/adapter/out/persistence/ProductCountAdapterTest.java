@@ -46,7 +46,12 @@ class ProductCountAdapterTest {
         // Use real constructor — TenantContext is not Spring-managed, safe in unit tests
         adapter = new ProductCountAdapter(jdbcTemplate);
         // TenantContext is a ThreadLocal — set a dummy schema so SQL is deterministic
-        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test");
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenant() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
     }
 
     // ── Behaviour when products table is absent (pre-Epic 2) ──────────────────
@@ -55,7 +60,7 @@ class ProductCountAdapterTest {
     @DisplayName("countActiveProducts() returns 0 when products table does not exist")
     void countActiveProducts_tableAbsent_returns0() {
         when(jdbcTemplate.queryForObject(
-                eq("SELECT COUNT(*) FROM \"kv_test\".products WHERE status = 'ACTIVE'"),
+                eq("SELECT COUNT(*) FROM \"kv_test01\".products WHERE status = 'ACTIVE'"),
                 eq(Integer.class)))
                 .thenThrow(new org.springframework.dao.DataAccessException("relation products does not exist") {});
 
@@ -68,7 +73,7 @@ class ProductCountAdapterTest {
     @DisplayName("countActiveProducts() returns actual count when table exists")
     void countActiveProducts_tableExists_returnsCount() {
         when(jdbcTemplate.queryForObject(
-                eq("SELECT COUNT(*) FROM \"kv_test\".products WHERE status = 'ACTIVE'"),
+                eq("SELECT COUNT(*) FROM \"kv_test01\".products WHERE status = 'ACTIVE'"),
                 eq(Integer.class)))
                 .thenReturn(42);
 
@@ -81,13 +86,24 @@ class ProductCountAdapterTest {
     @DisplayName("countActiveProducts() returns 0 when jdbcTemplate returns null")
     void countActiveProducts_nullResult_returns0() {
         when(jdbcTemplate.queryForObject(
-                eq("SELECT COUNT(*) FROM \"kv_test\".products WHERE status = 'ACTIVE'"),
+                eq("SELECT COUNT(*) FROM \"kv_test01\".products WHERE status = 'ACTIVE'"),
                 eq(Integer.class)))
                 .thenReturn(null);
 
         int count = adapter.countActiveProducts();
 
         assertThat(count).isZero();
+    }
+
+    // ── Story 11.4 AC7 — schema validated before interpolation ────────────────
+
+    @Test
+    @DisplayName("countActiveProducts() returns 0 and builds no SQL when the tenant schema is invalid")
+    void countActiveProducts_invalidSchema_returns0WithoutSql() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("public");
+
+        assertThat(adapter.countActiveProducts()).isZero();
+        org.mockito.Mockito.verifyNoInteractions(jdbcTemplate);
     }
 
     // ── Transaction propagation guard ─────────────────────────────────────────

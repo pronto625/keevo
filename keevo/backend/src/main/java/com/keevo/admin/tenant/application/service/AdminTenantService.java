@@ -192,9 +192,9 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
         String previousTenant = TenantContext.getCurrentTenant();
         TenantContext.setCurrentTenant(schemaName);
         try {
-            List<AdminStoreInfo> stores = loadStores(schemaName);
+            List<AdminStoreInfo> stores = loadStores(schemaName, query.tenantId());
             List<AdminEmployeeInfo> employees = loadEmployees(schemaName, query.tenantId());
-            long auditTotal = countAuditEvents(schemaName);
+            long auditTotal = countAuditEvents(schemaName, query.tenantId());
             List<AdminAuditEvent> auditEvents = loadAuditEvents(schemaName, query.tenantId(), query.auditPage());
             AdminPlanInfo plan = loadPlan(schemaName, query.tenantId());
             return new AdminTenantDetail(summary, stores, employees, auditEvents, auditTotal, plan);
@@ -453,7 +453,11 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
         return s;
     }
 
-    private List<AdminStoreInfo> loadStores(String schema) {
+    private List<AdminStoreInfo> loadStores(String schema, UUID tenantId) {
+        if (!TenantSchema.isValid(schema)) { // fail-soft like the SQL errors below; no SQL built
+            log.warn("Tenant detail: tenant {} section skipped (invalid schema name)", tenantId);
+            return List.of();
+        }
         try {
             return jdbc.query(
                     "SELECT id::text, name, type AS store_type, 0 AS total_revenue FROM " + schema + ".stores WHERE is_active = true ORDER BY name",
@@ -502,6 +506,10 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
 
     /** Names (trimmed first + last) of the given users in the tenant's employees table; fail-soft. */
     private Map<UUID, String> loadEmployeeNames(String schema, UUID tenantId, List<UUID> userIds) {
+        if (!TenantSchema.isValid(schema)) { // fail-soft like the SQL errors below; no SQL built
+            log.warn("Tenant detail: tenant {} section skipped (invalid schema name)", tenantId);
+            return Map.of();
+        }
         if (userIds.isEmpty()) return Map.of();
         List<Map<String, Object>> rows = tenantRows(tenantId,
                 "SELECT e.user_id, " + EMPLOYEE_FULL_NAME + " AS full_name FROM " + schema + ".employees e "
@@ -533,6 +541,10 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
 
     /** Story 9-2 — current subscription (first row by created_at), null when unreadable. */
     private AdminPlanInfo loadPlan(String schema, UUID tenantId) {
+        if (!TenantSchema.isValid(schema)) { // fail-soft like the SQL errors below; no SQL built
+            log.warn("Tenant detail: tenant {} section skipped (invalid schema name)", tenantId);
+            return null;
+        }
         try {
             List<AdminPlanInfo> rows = jdbc.query(
                     "SELECT plan_type, expires_at FROM \"" + schema + "\".subscriptions "
@@ -551,7 +563,11 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
         }
     }
 
-    private long countAuditEvents(String schema) {
+    private long countAuditEvents(String schema, UUID tenantId) {
+        if (!TenantSchema.isValid(schema)) { // fail-soft like the SQL errors below; no SQL built
+            log.warn("Tenant detail: tenant {} section skipped (invalid schema name)", tenantId);
+            return 0L;
+        }
         try {
             Long count = jdbc.queryForObject(
                     "SELECT COUNT(*) FROM " + schema + ".audit_log "
@@ -570,6 +586,10 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
      * name — never {@code entity_id} nor {@code user_id}.
      */
     private List<AdminAuditEvent> loadAuditEvents(String schema, UUID tenantId, int page) {
+        if (!TenantSchema.isValid(schema)) { // fail-soft like the SQL errors below; no SQL built
+            log.warn("Tenant detail: tenant {} section skipped (invalid schema name)", tenantId);
+            return List.of();
+        }
         record AuditRow(String action, String entityType, String entityLabel, String source,
                         UUID userId, boolean isOwner, String storeName, Instant occurredAt) {}
         List<AuditRow> rows;

@@ -55,7 +55,7 @@ public class TenantSchemaAdapter implements TenantSchemaPort {
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private UUID fetchOwnerRoleId(Connection conn, String schemaName) throws SQLException {
-        String sql = "SELECT id FROM \"" + schemaName + "\".roles WHERE name = 'OWNER'";
+        String sql = "SELECT id FROM \"" + TenantSchema.validate(schemaName) + "\".roles WHERE name = 'OWNER'";
         try (PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             if (!rs.next()) {
@@ -68,7 +68,7 @@ public class TenantSchemaAdapter implements TenantSchemaPort {
 
     private void insertUserRole(Connection conn, String schemaName,
                                 UUID userId, UUID roleId) throws SQLException {
-        String sql = "INSERT INTO \"" + schemaName + "\".user_roles (user_id, role_id) " +
+        String sql = "INSERT INTO \"" + TenantSchema.validate(schemaName) + "\".user_roles (user_id, role_id) " +
                      "VALUES (?, ?) ON CONFLICT (user_id, role_id) DO NOTHING";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setObject(1, userId);

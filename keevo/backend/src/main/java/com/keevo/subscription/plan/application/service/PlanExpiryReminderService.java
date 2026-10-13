@@ -104,6 +104,10 @@ public class PlanExpiryReminderService implements SendPlanExpiryRemindersUseCase
     }
 
     private boolean remind(UUID tenantId, String schema, LocalDate today) {
+        if (!TenantSchema.isValid(schema)) { // run loop filters; re-checked before expiry() builds SQL
+            log.warn("Plan expiry reminder: tenant {} skipped (invalid schema name)", tenantId);
+            return false;
+        }
         Optional<Expiry> expiry = expiry(schema);
         if (expiry.isEmpty()) return false;
         long daysLeft = ChronoUnit.DAYS.between(today, expiry.get().date());

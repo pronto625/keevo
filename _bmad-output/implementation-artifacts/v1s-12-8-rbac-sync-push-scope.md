@@ -129,3 +129,12 @@ Code review 2026-07-24 — 3 layers (Blind Hunter, Edge Case Hunter, Acceptance 
 - [x] [Review][Defer] **D2 — `extractAssignedStoreId()` retourne `null` (fail-open) quand `auth == null`** [AbstractSyncOperationHandler.java:50-51] — deferred, préexistant — `@PreAuthorize` sur `SyncController.push()` protège en pratique, mais la méthode `protected` est un point d'extension : si un futur handler est invoqué hors thread HTTP, `auth == null` → scope OWNER implicite. Pattern identique dans `StockController.extractAssignedStoreId()` (ligne 209-221). Hygiène à traiter globalement (story future : unifier les extractors en fail-closed).
 - [x] [Review][Defer] **D3 — Troncature silencieuse `quantity` (`intValue()` overflow)** [StockAdjustSyncHandler.java:47] — deferred, préexistant — `((Number) p.get("quantity")).intValue()` tronque si > `Integer.MAX_VALUE`. Pas introduit par ce diff.
 - [x] [Review][Defer] **D4 — `TransferSyncHandler` ne valide pas `sourceStoreId` contre le tenant** [TransferSyncHandler.java:41-49] — deferred, préexistant — le guard OWNER-only est correct, mais le `sourceStoreId` du payload n'est pas validé (mitigé par `TenantContext` dans les repositories). Pas introduit par ce diff.
+
+### Superseded by Story 11.4 (2026-10-13)
+
+- The AC2/AC6 case « EMPLOYEE same store → APPLIED » for `CANCEL_SALE` is **superseded**. Cancelling a sale is OWNER-only on REST (`PendingSaleController.cancelSale`, FR90 / v1s-13-5 D2), and the sync channel now applies the same rule. `CancelSaleSyncHandler.apply()` rejects every non-OWNER actor (including an unauthenticated one) with `FORBIDDEN` before the use case runs.
+- Pinned by `CancelSaleSyncHandlerTest`:
+  - `apply_pendingSale_employeeSameStore_rejectedForbidden`
+  - `apply_pendingSale_employeeCrossStore_rejectedForbidden`
+  - `apply_unauthenticated_rejectedForbidden`
+- `VALIDATE_SALE`, `STOCK_ADJUST` and `TRANSFER` scoping from this story is unchanged.

@@ -1,5 +1,6 @@
 package com.keevo.sync.sync.application.service;
 
+import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,6 +43,10 @@ public class SyncErrorLogCleanupJob {
                 String.class);
         int totalDeleted = 0;
         for (String schema : schemas) {
+            if (!TenantSchema.isValid(schema)) { // Java-side gate before interpolation (SQL filter above is not enough)
+                log.warn("SyncErrorLogCleanupJob: invalid tenant schema name skipped");
+                continue;
+            }
             try {
                 int deleted = jdbcTemplate.update(
                         "DELETE FROM \"" + schema + "\".sync_error_log WHERE created_at < ?",

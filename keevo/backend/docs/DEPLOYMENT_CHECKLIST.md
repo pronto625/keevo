@@ -70,6 +70,7 @@ chmod 400 private_key.pem public_key.pem
 |---|---|---|---|
 | `APP_PORT` | Optional | `4500` | Default: 4500 |
 | `LOG_LEVEL` | Optional | `INFO` | Default: INFO |
+| `DASHBOARD_ORIGIN` | Recommended | `https://admin.keevo.cm` | CORS allow-list, comma-separated. In prod/staging it is the **only** allowed browser origin (no `localhost:3000`, no `*`); unset → every browser origin refused and `ProdSecretsValidator` logs a WARN (boot continues). Mobile app and server-side dashboard proxy are unaffected (Story 11.4) |
 
 ---
 

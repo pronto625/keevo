@@ -6,6 +6,7 @@ import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
 import com.keevo.shared.infrastructure.security.JwtProperties;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
+import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -49,7 +50,8 @@ public class SessionTokenIssuer {
     }
 
     public IssuedSession issue(UUID userId, Tenant tenant, String role) {
-        String schema = tenant.getSchemaName();
+        // Story 11.4 AC7: throws before the schema reaches any SQL (employee lookup, onboarding probe)
+        String schema = TenantSchema.validate(tenant.getSchemaName());
 
         UUID storeId = null;
         boolean passwordChangeRequired = false;
@@ -94,6 +96,7 @@ public class SessionTokenIssuer {
      * swallowed here.
      */
     private boolean onboardingCompleted(String schema) {
+        TenantSchema.validate(schema); // issue() already validated it; re-checked at use
         Boolean tableExists = jdbcTemplate.queryForObject(
                 "SELECT to_regclass(?) IS NOT NULL", Boolean.class,
                 "\"" + schema + "\".tenant_preferences");

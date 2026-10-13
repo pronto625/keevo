@@ -34,6 +34,8 @@ import java.util.List;
 @Service
 public class AdminCatalogService implements ListProductsUseCase, GetCatalogSummaryUseCase {
 
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(AdminCatalogService.class);
+
     private static final String ADMIN_TENANT_ID = "00000000-0000-0000-0000-000000000000";
 
     private final JdbcTemplate jdbc;
@@ -88,6 +90,10 @@ public class AdminCatalogService implements ListProductsUseCase, GetCatalogSumma
 
         for (TenantSchema t : tenants) {
             String s = t.schemaName();
+            if (!com.keevo.shared.infrastructure.persistence.TenantSchema.isValid(s)) { // onlyValidSchemas() filters; re-checked at use
+                LOG.warn("Tenant {} skipped from the admin catalog: invalid schema_name", t.id());
+                continue;
+            }
             total    += safeCount("SELECT COUNT(*) FROM " + s + ".products");
             active   += safeCount("SELECT COUNT(*) FROM " + s + ".products WHERE status = 'ACTIVE'");
             draft    += safeCount("SELECT COUNT(*) FROM " + s + ".products WHERE status = 'DRAFT'");
@@ -168,6 +174,10 @@ public class AdminCatalogService implements ListProductsUseCase, GetCatalogSumma
     }
 
     private List<AdminProductListItem> safeQueryProducts(TenantSchema tenant, ListProductsQuery q) {
+        if (!com.keevo.shared.infrastructure.persistence.TenantSchema.isValid(tenant.schemaName())) { // onlyValidSchemas() filters; re-checked at use
+            LOG.warn("Tenant {} skipped from the admin catalog: invalid schema_name", tenant.id());
+            return List.of();
+        }
         try {
             StringBuilder sql = new StringBuilder(
                     "SELECT p.id::text, p.name, p.price, p.stock_quantity, p.status, p.updated_at, "

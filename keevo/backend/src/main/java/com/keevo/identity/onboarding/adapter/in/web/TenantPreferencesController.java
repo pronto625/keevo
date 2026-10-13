@@ -11,6 +11,7 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.infrastructure.persistence.TenantSchema;
 
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -114,7 +115,7 @@ public class TenantPreferencesController {
      */
     @GetMapping("/stores")
     public ResponseEntity<ApiResponseWrapper<List<StoreDto>>> getStores() {
-        String schema = TenantContext.getCurrentTenant();
+        String schema = TenantSchema.validate(TenantContext.getCurrentTenant());
         List<StoreDto> stores = jdbcTemplate.query(
                 "SELECT id::text, name FROM \"" + schema + "\".stores WHERE is_active = TRUE ORDER BY created_at ASC",
                 (rs, rowNum) -> new StoreDto(rs.getString("id"), rs.getString("name"))

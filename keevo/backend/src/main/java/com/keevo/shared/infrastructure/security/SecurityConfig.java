@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -19,6 +21,11 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * SecurityConfig — Spring Security 6.x configuration (REST / stateless).
@@ -61,12 +68,22 @@ public class SecurityConfig {
             "/swagger-ui.html"
     };
 
+    private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
+
+    /** Env var holding the comma-separated browser origins allowed by CORS (Story 11.4 AC5). */
+    static final String DASHBOARD_ORIGIN_ENV = "DASHBOARD_ORIGIN";
+
+    /** Local Next.js dashboard — allowed only outside the prod/staging profiles (AC6). */
+    static final String LOCAL_DASHBOARD_ORIGIN = "http://localhost:3000";
+
     private final JwtAuthFilter jwtAuthFilter;
     private final ObjectMapper objectMapper;
+    private final Environment environment;
 
-    public SecurityConfig(JwtAuthFilter jwtAuthFilter, ObjectMapper objectMapper) {
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter, ObjectMapper objectMapper, Environment environment) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.objectMapper = objectMapper;
+        this.environment = environment;
     }
 
     @Bean
@@ -124,22 +141,82 @@ public class SecurityConfig {
     }
 
     /**
-     * CORS configuration — allows all origins for the mobile-backend API.
-     * Flutter app, Swagger UI, Next.js dashboard, and any other client
-     * may connect from various origins.
+     * CORS configuration — explicit allow-list, never a wildcard (Story 11.4 AC5/AC6). This bean is
+     * the single CORS source of the application (no MVC-level CORS mapping).
+     *
+     * <ul>
+     *   <li>Allowed origins: the comma-separated {@code DASHBOARD_ORIGIN} values that are well-formed
+     *       {@code http(s)://host[:port]} origins (see {@link #parseOrigins(String)}).</li>
+     *   <li>{@code http://localhost:3000} is added only for local profiles: no active profile
+     *       (default) or one of {@code dev}, {@code local}, {@code test}. Every other profile —
+     *       including a misspelled one — is hardened (fails closed).</li>
+     * </ul>
+     *
+     * <p>Credentials are NOT allowed: the API is stateless bearer-JWT (no cookies). The mobile app (no
+     * {@code Origin} header) and the dashboard's server-side proxy are not subject to CORS. A missing
+     * {@code DASHBOARD_ORIGIN} is reported once at boot by {@code ProdSecretsValidator}.
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(java.util.List.of("*"));
-        config.setAllowedMethods(java.util.List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(java.util.List.of("*"));
-        config.setAllowCredentials(true);
+        config.setAllowedOrigins(allowedOrigins());
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("*"));
+        config.setAllowCredentials(false);
         config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
+    }
+
+    /** Resolves the CORS allow-list from {@code DASHBOARD_ORIGIN} and the active profiles. */
+    List<String> allowedOrigins() {
+        List<String> origins = new ArrayList<>(parseOrigins(environment.getProperty(DASHBOARD_ORIGIN_ENV)));
+        if (isLocalProfile() && !origins.contains(LOCAL_DASHBOARD_ORIGIN)) {
+            origins.add(LOCAL_DASHBOARD_ORIGIN);
+        }
+        return List.copyOf(origins);
+    }
+
+    /** Local dev only: no active profile, or one of dev / local / test. */
+    private boolean isLocalProfile() {
+        String[] active = environment.getActiveProfiles();
+        return active.length == 0 || environment.acceptsProfiles(Profiles.of("dev", "local", "test"));
+    }
+
+    /** {@code http(s)://host[:port]} — no path, no query, no wildcard, no placeholder. */
+    private static final java.util.regex.Pattern ORIGIN =
+            java.util.regex.Pattern.compile("^https?://[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?(?::\\d{1,5})?$");
+
+    /**
+     * Splits a comma-separated origin list: entries are trimmed, one trailing {@code /} is removed,
+     * empty entries are ignored, and anything that is not a plain {@code http(s)://host[:port]} origin
+     * ({@code *}, a path, a placeholder such as {@code https://<domaine_dashboard>}) is dropped with a WARN.
+     */
+    static List<String> parseOrigins(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return List.of();
+        }
+        List<String> out = new ArrayList<>();
+        for (String entry : raw.split(",")) {
+            String origin = entry.trim();
+            if (origin.endsWith("/")) {
+                origin = origin.substring(0, origin.length() - 1);
+            }
+            if (origin.isEmpty()) {
+                continue;
+            }
+            if (!ORIGIN.matcher(origin).matches()) {
+                log.warn("[CORS] {} entry ignored — not an http(s)://host[:port] origin: '{}'",
+                        DASHBOARD_ORIGIN_ENV, origin);
+                continue;
+            }
+            if (!out.contains(origin)) {
+                out.add(origin);
+            }
+        }
+        return List.copyOf(out);
     }
 
     /**

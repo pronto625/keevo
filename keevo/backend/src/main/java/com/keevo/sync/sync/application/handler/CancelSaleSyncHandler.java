@@ -2,6 +2,8 @@ package com.keevo.sync.sync.application.handler;
 
 import com.keevo.commerce.sale.domain.port.in.CancelPendingSaleUseCase;
 import com.keevo.commerce.sale.domain.port.in.CancelPendingSaleUseCase.CancelPendingSaleCommand;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
@@ -35,6 +37,12 @@ public class CancelSaleSyncHandler extends AbstractSyncOperationHandler {
 
     @Override
     protected SyncOperationResult apply(SyncOperation operation, UUID actorId, String tenantId) {
+        // Story 11.4: same rule as REST (PendingSaleController.cancelSale is OWNER-only) — the
+        // offline queue must not let an EMPLOYEE cancel what the online API refuses. Role read
+        // from the authenticated actor (JWT), never from the payload; fails closed when absent.
+        if (!isOwnerRole()) {
+            throw new DomainException(ErrorCode.FORBIDDEN, "OWNER role required to cancel a sale");
+        }
         Map<String, Object> p = operation.payload();
 
         UUID saleId = UUID.fromString((String) p.get("saleId"));

@@ -28,7 +28,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
- * CancelSaleSyncHandlerTest — Story v1s-13-5 AC5 + v1s-12-8 AC2/AC6.
+ * CancelSaleSyncHandlerTest — Story v1s-13-5 AC5 + v1s-12-8 AC2/AC6 + 11.4 (OWNER-only, same as REST).
  */
 @ExtendWith(MockitoExtension.class)
 class CancelSaleSyncHandlerTest {
@@ -83,37 +83,51 @@ class CancelSaleSyncHandlerTest {
         verify(cancelPendingSaleUseCase).cancelPendingSale(any());
     }
 
+    // Story 11.4: cancellation is OWNER-only on REST (PendingSaleController.cancelSale) and the
+    // sync channel follows the same rule — an EMPLOYEE is refused before the use case runs, in its
+    // own store as in another one (supersedes the v1s-12-8 "EMPLOYEE same store → APPLIED" case).
     @Test
-    void apply_pendingSale_employeeSameStore_applied() {
+    void apply_pendingSale_employeeSameStore_rejectedForbidden() {
         authenticateAsEmployee(STORE_ID);
-
-        var result = handler.handle(buildOp(), ACTOR_ID, TENANT_ID);
-
-        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        // Review P2: ArgumentCaptor verifies the handler actually transmitted
-        // the assignedStoreId from the SecurityContext (not null).
-        ArgumentCaptor<CancelPendingSaleCommand> captor = ArgumentCaptor.forClass(CancelPendingSaleCommand.class);
-        verify(cancelPendingSaleUseCase).cancelPendingSale(captor.capture());
-        assertThat(captor.getValue().assignedStoreId()).isEqualTo(STORE_ID);
-    }
-
-    @Test
-    void apply_pendingSale_employeeCrossStore_rejectedForbidden() {
-        UUID otherStoreId = UUID.randomUUID();
-        authenticateAsEmployee(otherStoreId);
-        // Review P2: doAnswer captures the command to verify assignedStoreId was
-        // correctly transmitted, then simulates enforceEmployeeStoreScope() rejection.
-        doAnswer(invocation -> {
-            CancelPendingSaleCommand cmd = invocation.getArgument(0);
-            assertThat(cmd.assignedStoreId()).isEqualTo(otherStoreId);
-            throw new DomainException(ErrorCode.FORBIDDEN,
-                    "Employee cannot operate pending sale outside assigned store");
-        }).when(cancelPendingSaleUseCase).cancelPendingSale(any());
 
         var result = handler.handle(buildOp(), ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).isEqualTo("FORBIDDEN");
+        verify(cancelPendingSaleUseCase, never()).cancelPendingSale(any());
+    }
+
+    @Test
+    void apply_pendingSale_employeeCrossStore_rejectedForbidden() {
+        authenticateAsEmployee(UUID.randomUUID());
+
+        var result = handler.handle(buildOp(), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("FORBIDDEN");
+        verify(cancelPendingSaleUseCase, never()).cancelPendingSale(any());
+    }
+
+    @Test
+    void apply_unauthenticated_rejectedForbidden() {
+        var result = handler.handle(buildOp(), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("FORBIDDEN");
+        verify(cancelPendingSaleUseCase, never()).cancelPendingSale(any());
+    }
+
+    @Test
+    void apply_owner_sendsNoStoreScope() {
+        authenticateAsOwner();
+
+        var result = handler.handle(buildOp(), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+
+        ArgumentCaptor<CancelPendingSaleCommand> captor = ArgumentCaptor.forClass(CancelPendingSaleCommand.class);
+        verify(cancelPendingSaleUseCase).cancelPendingSale(captor.capture());
+        assertThat(captor.getValue().assignedStoreId()).isNull();
     }
 
     @Test
