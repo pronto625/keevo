@@ -5,7 +5,7 @@ created: '2026-10-11'
 status: 'done'
 baseline_revision: '590818558fec05f44168f8dfe660426da1df0edd'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-16-context.md'
 warnings: [oversized]
@@ -131,6 +131,55 @@ deferred:
   - `[false]` `[reject]` (intent f) no per-item tick box — done in the epic brief at finalization.
   - `[maybe-false]` `[reject]` (intent g) backend change is test-only — descriptive, matches the epic rule.
 
+### 2026-10-13 — Review pass (follow-up)
+- verdicts: 44 findings — high 0, medium 2, low 24, false 13, maybe-false 5
+- findings:
+  - `[false]` `[reject]` (blind) no pubspec bump in the diff — the review diff excluded pubspec on purpose; 16-12 bumped to 1.1.21+20 in its own commit.
+  - `[false]` `[reject]` (blind) hunks of 16-13/15/17/20, 18-7, 13-13 mixed in — the follow-up diff runs from the baseline to the current tree by design.
+  - `[false]` `[reject]` (blind) audit upsert writes columns no migration creates — `audit_entries_table.dart` declares them (v1s-18-7 schema).
+  - `[maybe-false]` `[reject]` (blind) a null role at pull wipes the owner's audit cache — v1s-18-7 code; the role is written by the splash/login claims before any sync; would need a trace of a pull with no role stored; if true only low.
+  - `[low]` `[reject]` (blind) `kUserRoleKey` imported from `di/providers.dart` into core/sync — layering nit, no caller diverges.
+  - `[false]` `[reject]` (blind) `onAppStartup` `.then` never runs if the cycle fails — carried: `_syncCycle`/`_pushCycle` catch every error (outer `catch (_) { _scheduleRetry(); }`), the cycle future always completes normally.
+  - `[low]` `[reject]` (blind) several startup calls each queue one more full sync — idempotent extra pulls, only on login/tenant switch.
+  - `[false]` `[reject]` (blind, edge) handling depends on the order of the server's results — `SyncPushService.dependencyOrder` hoists creations (categories/stores/contacts, then products, then sessions) ahead of dependents, so a ghost creation's result always precedes its dependents' results.
+  - `[low]` `[reject]` (blind) ghost product/store rollback deletes the SALE movements of kept sales — those sales can only apply after « Rattacher »/« Renvoyer »; the server's movements come back by pull.
+  - `[low]` `[reject]` (blind) a REJECTED without reason is never surfaced — the backend always sets a reason (`AbstractSyncOperationHandler`); null stays a silent transient by design.
+  - `[low]` `[reject]` (blind) transient reasons that never clear have no retry ceiling — carried design (surfaced once, visible in the queue screen); escalation is a product decision.
+  - `[low]` `[reject]` (blind) rolled-back rows stay on screen when the pull then fails — every list re-reads Drift on the next invalidation (next successful cycle); the active store, the only cross-screen pointer, is invalidated immediately.
+  - `[low]` `[reject]` (blind) NOT_IN_PROGRESS session stays VALIDATED until a pull succeeds — matrix row: the next pull brings the server status.
+  - `[low]` `[reject]` (blind, edge) inventory create: non-Dio errors / 408 / 429 no longer fall back offline — Dio wraps timeouts as DioException; 408/429 are rare; a refusal must not create a ghost session.
+  - `[low]` `[reject]` (blind) online-create test only checks `upsert` was called — `upsert` is the synced write (datasource contract); the new Drift test covers the offline path.
+  - `[low]` `[patch]` (blind) two message test names contradict their assertions — renamed.
+  - `[low]` `[reject]` (blind) message coverage test misses a few reasons — each falls to a French generic message (no technical text), already tested.
+  - `[low]` `[patch]` (blind) no test of a rewritten payload re-read in a later batch / rewritten op APPLIED — new group « multi-batch queue rewriting (Drift in memory) »: sale in batch 2 sent without the ghost client, product in batch 2 without the ghost category, same-batch rewrite retried then sent clean on the next push, rewritten op refused for its own reason in a later batch reconciled normally.
+  - `[low]` `[patch]` (blind, gap) active store kept when a different store is rejected — test added.
+  - `[low]` `[reject]` (blind) a rejected CREATE_INVENTORY_SESSION drops its counts without listing them — one notice « annulé sur cet appareil » is shown for the session (matrix row).
+  - `[low]` `[reject]` (blind) whole-queue re-read per terminal rejection — bounded by 50-op batches; rejections are rare.
+  - `[low]` `[patch]` (blind) policy doc: PLAN_LIMIT bullet mis-nested — moved under the ghost-creation bullet.
+  - `[medium]` `[patch]` (edge) a later batch failing on the network threw away the earlier batches' notices while their ops were already rolled back / quarantined — `_push` returns the collected notices when a later batch fails (rethrows only when nothing was collected); 2 tests.
+  - `[low]` `[reject]` (edge) sale/stock op quarantined when its parent creation was rejected *transiently* in the same batch — rare (transient failure of a creation); recoverable with « Renvoyer »; the guard needs a reference lookup per op.
+  - `[low]` `[reject]` (edge) non-money op dropped when its parent creation was rejected transiently — same rarity; the server refresh corrects the local state.
+  - `[low]` `[reject]` (edge) ghost parent category: queued child CREATE_CATEGORY keeps `parentId` — offline sub-category under a refused parent is rare; the child is then rolled back with a notice.
+  - `[low]` `[reject]` (edge) ghost category in a queued session's `categoryIds` — rare; the session is abandoned with a notice.
+  - `[low]` `[patch]` (edge) ghost product leaves its local `stock_transfers` rows — deleted with the product; test added.
+  - `[low]` `[reject]` (edge) transfer to a ghost store: source decrement not re-credited — the stock key is no longer pending, the next pull rewrites the source level.
+  - `[low]` `[reject]` (edge) queued REASSIGN_EMPLOYEE to a ghost store — refused and dropped next push, pull restores the assignment.
+  - `[low]` `[reject]` (edge) count refused after an offline validation applied its adjustment — the validation op carries the server-side adjustment; pull rewrites the level.
+  - `[low]` `[reject]` (edge) cascade deletes an already-quarantined op silently — it depends on a ghost and could never apply; lists refresh on the next cycle.
+  - `[maybe-false]` `[reject]` (edge) audit wipe on null role — same as blind row 4.
+  - `[low]` `[patch]` (edge) employee « Voir » on a plain rejection opens OWNER-only `/settings/sync` — action shown only to OWNER (blocked operations keep `/sync/blocked` for every role); widget test added.
+  - `[false]` `[reject]` (edge, claim) transient reasons are surfaced — carried: deliberate first-pass patch (silent forever retries).
+  - `[false]` `[reject]` (edge, claim) 5xx falls back offline — carried: deliberate first-pass patch (gateway errors are unreachability).
+  - `[false]` `[reject]` (edge, claim) unknown code without « (CODE) » — overridden by the v1s-16-20 rule (no technical data shown).
+  - `[false]` `[reject]` (edge, claim) money ops quarantined instead of retried — v1s-16-15 (routed from this story's deferred item) replaced that behaviour.
+  - `[medium]` `[patch]` (edge, claim) AC « one SnackBar after rollback » broken by a later batch failure — same root cause as edge row 1.
+  - `[low]` `[patch]` (gap) quarantined-list invalidation after push untested when pull fails — v1s-16-15 code; test added in this follow-up's 16-15 pass.
+  - `[low]` `[reject]` (gap) stale-queue diagnostic skipping quarantined ops untested — rate-limited diagnostic, spurious entry at worst.
+  - `[low]` `[patch]` (gap) offline session create atomicity only mock-tested — Drift in-memory test: a failing queue write leaves neither session nor queue row.
+  - `[maybe-false]` `[reject]` (intent) transient surfacing contradicts the matrix — carried decision (row above).
+  - `[maybe-false]` `[reject]` (intent) cascades go beyond the matrix (store stock ops, rewrites, counts) — first-pass patches toward the user outcome (no ghost follow-ups), recorded in the 2026-10-11 log.
+  - `[maybe-false]` `[reject]` (intent) UI surfaces exercised through hand-built notices / mocked push — the service side is now proven on Drift across batches and pushes; the SnackBar reads the same notice map.
+
 ## Design Notes
 
 - Why drop terminal non-money ops: the server replays a REJECTED operationId on each push and gets the same refusal; meanwhile `hasPendingOperations()` stays true, which disables `ProductRepositoryImpl.syncFromRemote` and the stock refreshes — the stuck op was actively preventing reconciliation. The server keeps the payload in `sync_error_log` (epic 5: 30-day manual recovery), so nothing is lost without a trace.
@@ -171,3 +220,17 @@ Status: done
 
 **Residual risks:** local `stock_transfers` rows of a rolled-back store are not cleaned; a session answered `NOT_IN_PROGRESS` only gets its true status if the next delta pull includes it; queued sales referencing a rolled-back product/store stay stuck (→ v1s-16-15).
 
+
+### Follow-up pass 2026-10-13
+
+**Summary:** Notices of earlier batches survive a later batch's network failure; a ghost product takes its local transfers along; employees no longer get a « Voir » to the OWNER-only sync page. Multi-batch rewriting/re-read is now proven end to end on an in-memory Drift database (4 tests), plus atomicity of the offline session create on Drift, the « other active store kept » case, and renamed message tests.
+
+**Files changed:** `keevo/app/lib/core/sync/rest_sync_service.dart`, `keevo/app/lib/core/sync/sync_rejection_policy.dart` (doc), `keevo/app/lib/features/sync_indicator/presentation/widget/sync_indicator.dart`, tests `test/core/sync/rest_sync_service_rejection_test.dart`, `test/core/sync/sync_rejection_messages_test.dart`, `test/features/sync_indicator/sync_indicator_rejection_test.dart`, new `test/features/inventory/data/repository/inventory_session_offline_create_drift_test.dart`, `keevo/app/pubspec.yaml` 1.1.48+47.
+
+**Review:** 44 findings — patched: 1 medium root cause (reported twice), 8 low; rejected 35; deferred 0.
+
+**Follow-up review recommended:** false — no high patched in this follow-up pass.
+
+**Verification:** `flutter analyze` 0 error / 0 warning. Lots: test/core 506 ✓, inventory 191 ✓, sync_indicator 64 ✓, stores 45 ✓.
+
+**Residual risks:** creations rejected transiently with dependents in the same batch (rare) can quarantine/drop the dependents — recoverable via « Renvoyer » / server refresh.

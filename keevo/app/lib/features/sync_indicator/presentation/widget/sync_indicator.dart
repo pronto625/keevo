@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/di/providers.dart';
 import '../../../../core/sync/sync_gate_provider.dart';
 import '../../../../core/sync/sync_gate_state.dart';
 import '../../../../core/sync/sync_rejection_messages.dart';
@@ -69,6 +70,8 @@ class SyncIndicator extends ConsumerWidget {
     ref.listen<List<Map<String, dynamic>>>(
         pendingRejectionNotificationsProvider, (prev, rejections) {
       if (rejections.isEmpty) return;
+      // /settings/sync is OWNER-only: another role gets no « Voir » there.
+      bool isOwner() => ref.read(currentUserRoleProvider) == 'OWNER';
       for (final r in rejections) {
         final operation =
             friendlySyncOperationLabel(r['operation'] as String? ?? '');
@@ -100,14 +103,16 @@ class SyncIndicator extends ConsumerWidget {
                 ),
               ],
             ),
-            action: SnackBarAction(
-              label: 'Voir',
-              textColor: AppTheme.onBrand,
-              // /sync/blocked is open to every role; /settings/sync is
-              // OWNER-only.
-              onPressed: () => context
-                  .push(quarantined ? '/sync/blocked' : '/settings/sync'),
-            ),
+            action: quarantined || isOwner()
+                ? SnackBarAction(
+                    label: 'Voir',
+                    textColor: AppTheme.onBrand,
+                    // /sync/blocked is open to every role; /settings/sync is
+                    // OWNER-only.
+                    onPressed: () => context.push(
+                        quarantined ? '/sync/blocked' : '/settings/sync'),
+                  )
+                : null,
           ),
         );
       }

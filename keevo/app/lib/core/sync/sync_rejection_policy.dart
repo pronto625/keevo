@@ -28,7 +28,9 @@
 ///     local sync history). "Zero sales lost": the server also keeps the
 ///     refused payload in `sync_error_log` for 30 days;
 ///   - creations of a catalog/contact/store entity ([ghostCreateOperations])
-///     roll the ghost local row back and drop its queued follow-ups —
+///     refused for good (e.g. `PLAN_LIMIT_EXCEEDED`: the user is told to
+///     upgrade; upgrading later does not resurrect it — the user recreates
+///     it) roll the ghost local row back and drop its queued follow-ups —
 ///     including the stock-ledger operations (RECORD_STOCK_ENTRY,
 ///     STOCK_ADJUST, STOCK_TRANSFER) of a rolled-back product or store, which
 ///     could never apply. Sales and day closures are never dropped: a queued
@@ -37,9 +39,6 @@
 ///     `categoryId`, instead of being refused in turn;
 ///   - an inventory count refused for good is removed locally so a later
 ///     offline validation does not apply it;
-///     `PLAN_LIMIT_EXCEEDED` is terminal: the product/store is removed from
-///     the device and the user is told to upgrade (upgrading later does not
-///     resurrect it — the user recreates it);
 ///   - inventory sessions refused by the server are abandoned locally and
 ///     their offline stock adjustments are reverted;
 ///   - any other operation is dropped after one notice, so that
