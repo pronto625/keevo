@@ -36,6 +36,24 @@ describe("InactiveTenantsSection", () => {
     expect(text).not.toContain(TENANT_B);
   });
 
+  it("formats the last activity date in Africa/Douala, not the browser time zone", () => {
+    render(
+      <InactiveTenantsSection
+        data={[
+          {
+            tenantId: TENANT_A,
+            tenantName: "Boutique Tardive",
+            plan: "FREE",
+            // 23:30 UTC = 00:30 the next day in Douala (UTC+1).
+            lastActivityAt: "2026-09-28T23:30:00Z",
+            daysSinceLastActivity: 15,
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByText("29/09/2026")).toBeInTheDocument();
+  });
+
   it("shows the empty state", () => {
     render(<InactiveTenantsSection data={[]} />);
     expect(screen.getByText("Aucune entreprise inactive")).toBeInTheDocument();

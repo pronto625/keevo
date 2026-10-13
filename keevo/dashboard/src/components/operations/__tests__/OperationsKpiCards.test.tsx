@@ -55,7 +55,7 @@ describe("OperationsKpiCards", () => {
       <OperationsKpiCards
         overview={DATA}
         isLoading={false}
-        lastUpdated={new Date(2026, 9, 13, 9, 5)}
+        lastUpdated={new Date("2026-10-13T08:05:00Z")} // 09:05 in Douala (UTC+1)
         onRefresh={vi.fn()}
       />,
     );

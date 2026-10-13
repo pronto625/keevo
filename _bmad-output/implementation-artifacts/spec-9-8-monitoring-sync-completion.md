@@ -5,7 +5,7 @@ created: '2026-10-13'
 status: 'done'
 baseline_revision: '352f065dc3499e69a82e61430ee366270b967787'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-9-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/9-8-monitoring-sync-sante-devices.md'
@@ -80,6 +80,30 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-10-13 — Review pass (follow-up)
+- verdicts: 31 findings — high 0, medium 0, low 13, false 10, maybe-false 0 (+ intent rows descriptive)
+- findings:
+  - `[low]` `[patch]` (blind/edge) names lookup prefers an INACTIVE employee row — ACTIVE first, tie-break on id; IT.
+  - `[low]` `[patch]` (edge) inactive membership still labelled Propriétaire — `AND m.is_active`; IT.
+  - `[low]` `[patch]` (blind) failed label lookups leave no trace — WARN with tenant id and exception class.
+  - `[false]` `[reject]` (blind/edge) failing role lookup poisons the names lookup in a read-only transaction — the service is no longer transactional since 9-1 (stale comments corrected).
+  - `[low]` `[reject]` (blind) label queries re-read `user_sync_state` — negligible (one tenant's devices), consistent snapshot not required.
+  - `[false]` `[reject]` (blind/edge) role thrown away for non-owner users — spec rule (employee name, else Propriétaire, else Utilisateur inconnu), carried.
+  - `[low]` `[reject]` (blind/edge) identical rows for two unknown users / renumbering on a new device — carried decision (stable per-user numbering).
+  - `[low]` `[patch]` (blind) React key with index — `deviceId` only.
+  - `[low]` `[patch]` (blind) contract fixture uses non-existent role `CASHIER` — `EMPLOYEE`.
+  - `[low]` `[patch]` (blind) English headers « Dernier push / pull » — « Dernier envoi / Dernière réception ».
+  - `[low]` `[reject]` (blind) labels copied from Flutter without parity test — unknown codes humanize safely; parity tooling is out of scope.
+  - `[false]` `[reject]` (blind) paused query skeleton forever / drawer refresh feedback — carried.
+  - `[false]` `[reject]` (blind) lockfile not in diff — committed in the story commit.
+  - `[low]` `[reject]` (blind) missing unit cases (args, null userId numbering, onRetry fallback) — covered by the IT and component tests at the observable level.
+  - `[low]` `[patch]` (gap) page never wires an overview failure — page test (reject → error → Réessayer → recovered).
+  - `[false]` `[reject]` (gap other) CI may not run (Actions startup_failure) — environment issue tracked in project memory, not this story.
+  - `[low]` `[reject]` (edge) retry button without in-flight feedback — carried.
+  - `[low]` `[patch]` (edge) `Object.hasOwn` on older browsers — `hasOwnProperty.call`.
+  - `[false]` `[reject]` (intent) R1/R3/R4/R5/R6 readings — descriptive; device numbering R3b is the decided stable rule.
+
+
 ### 2026-10-13 — Review pass
 - verdicts: 33 findings — high 0, medium 4, low 14, false 7, maybe-false 0 (+ intent rows descriptive)
 - findings:
@@ -140,3 +164,12 @@ Status: done
 
 **Residual risks:** `npm audit` still lists pre-existing advisories of next/axios/sharp.
 
+### Follow-up pass 2026-10-13
+
+**Summary:** Active employee rows preferred for names, inactive memberships carry no role, failed label lookups logged, French drawer headers, stable React keys, real role in the contract fixture, page-level overview failure test, older-browser-safe label lookup.
+
+**Review:** 31 findings — patched 0 medium, 9 low; rejected 22 (carried or false).
+
+**Follow-up review recommended:** false — follow-up pass, no high patched.
+
+**Verification:** dashboard lint/tsc/`npm test` (54 files, 260 tests)/build green; backend `com.keevo.admin.**` green after the 9-7 assertion update (sync monitoring classes incl. Postgres IT green).

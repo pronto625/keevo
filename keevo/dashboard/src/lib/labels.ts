@@ -25,7 +25,7 @@ export const UNNAMED_TENANT_LABEL = "Entreprise sans nom";
 export const DELETED_TENANT_LABEL = "Entreprise supprimée";
 
 function own(map: Record<string, string>, key: string): string | undefined {
-  return Object.hasOwn(map, key) ? map[key] : undefined;
+  return Object.prototype.hasOwnProperty.call(map, key) ? map[key] : undefined;
 }
 
 /** `SOME_CODE` → « Some code ». Also accepts lower_snake codes (`stock_level` → « Stock level »). */

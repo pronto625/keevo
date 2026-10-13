@@ -81,17 +81,17 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
         int newTenants = 0;
 
         for (TenantRef tenant : loadActiveTenants()) {
-            if (tenant.createdAt() != null
-                    && !tenant.createdAt().isBefore(window.start())
-                    && tenant.createdAt().isBefore(window.end())) {
-                newTenants++;
-            }
             if (!TenantSchema.isValid(tenant.schemaName())) { skipInvalid(tenant); continue; }
             Map<String, Object> row = safeSingleRow(tenant,
                     "SELECT COALESCE(SUM(total_amount), 0) AS gmv, COUNT(*) AS order_count "
                     + "FROM " + tenant.schemaName() + ".sales WHERE " + IN_WINDOW,
                     window.startTs(), window.endTs());
-            if (row == null) continue;
+            if (row == null) continue; // skipped tenant: not counted anywhere, new tenants included
+            if (tenant.createdAt() != null
+                    && !tenant.createdAt().isBefore(window.start())
+                    && tenant.createdAt().isBefore(window.end())) {
+                newTenants++;
+            }
             long orders = asLong(row.get("order_count"));
             totalGmv += asLong(row.get("gmv"));
             totalOrders += orders;

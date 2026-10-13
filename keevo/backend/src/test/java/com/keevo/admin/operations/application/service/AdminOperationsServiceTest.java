@@ -195,6 +195,22 @@ class AdminOperationsServiceTest {
     }
 
     @Test
+    @DisplayName("a skipped tenant created in the period is not counted as new")
+    void overview_skippedTenantNotCountedAsNew() {
+        Instant inWindow = Instant.parse("2026-10-10T08:00:00Z");
+        stubTenants(
+                tenant("t1", "Boutique A", "kv_aaaaaa", "FREE", inWindow),
+                tenant("t2", "Boutique B", "kv_bbbbbb", "FREE", inWindow));
+        when(jdbc.queryForList(contains("kv_aaaaaa.sales"), any(Object[].class)))
+                .thenThrow(new BadSqlGrammarException("q", "sql", new SQLException("relation does not exist")));
+        stubRows("kv_bbbbbb.sales", row("gmv", 0L, "order_count", 0L));
+
+        OperationsOverview result = service.getOverview(new OperationsPeriodQuery("7D", null, null));
+
+        assertThat(result.newTenantsCount()).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("a per-tenant data error (integrity / data) skips only that tenant")
     void overview_skipsTenantOnDataError() {
         stubTenants(

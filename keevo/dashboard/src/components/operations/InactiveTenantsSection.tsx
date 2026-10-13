@@ -1,7 +1,6 @@
 "use client";
 
 import type { InactiveTenant } from "@/types/operations";
-import { formatDate } from "@/lib/format";
 import { planLabel } from "@/lib/labels";
 import { LoadError, StaleDataWarning } from "@/components/sync/SyncErrorStates";
 
@@ -11,6 +10,11 @@ interface InactiveTenantsSectionProps {
   /** The last fetch failed with nothing to show. */
   isError?: boolean;
   onRetry?: () => void;
+}
+
+/** Calendar date in Africa/Douala (the shops' time zone), whatever the browser's time zone. */
+function formatDoualaDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("fr-FR", { timeZone: "Africa/Douala" });
 }
 
 function daysLabel(days: number | null): string {
@@ -73,7 +77,7 @@ export function InactiveTenantsSection({
                   </td>
                   <td className="px-4 py-3 text-gray-600">{planLabel(t.plan)}</td>
                   <td className="px-4 py-3 text-gray-500">
-                    {t.lastActivityAt ? formatDate(t.lastActivityAt) : "Jamais"}
+                    {t.lastActivityAt ? formatDoualaDate(t.lastActivityAt) : "Jamais"}
                   </td>
                   <td
                     className={`px-4 py-3 ${

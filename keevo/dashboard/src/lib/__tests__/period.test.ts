@@ -19,6 +19,13 @@ describe("customRangeError (mirrors the backend CUSTOM rules)", () => {
     expect(customRangeError("2026-02-01", "2026-01-01")).toBe("La date de début doit précéder la date de fin.");
     expect(customRangeError("2024-01-01", "2025-01-01")).toBe("La période ne peut pas dépasser 366 jours.");
   });
+
+  it("rejects years outside 2000..9999 like the backend", () => {
+    const msg = "Les dates doivent être comprises entre 2000 et 9999.";
+    expect(customRangeError("1999-12-31", "2000-01-05")).toBe(msg);
+    expect(customRangeError("0001-01-01", "0001-01-02")).toBe(msg);
+    expect(customRangeError("2000-01-01", "2000-01-31")).toBeNull();
+  });
 });
 
 describe("periodLabel", () => {

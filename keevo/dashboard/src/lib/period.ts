@@ -1,5 +1,5 @@
 // Story 9.7 — client-side check of a CUSTOM period, same rules as the backend
-// (inclusive ISO dates, from ≤ to, at most 366 days; otherwise 422 VALIDATION_ERROR).
+// (inclusive ISO dates, years 2000..9999, from ≤ to, at most 366 days; otherwise 422 VALIDATION_ERROR).
 
 export const MAX_CUSTOM_DAYS = 366;
 
@@ -20,6 +20,8 @@ export function customRangeError(from: string, to: string): string | null {
   const f = toUtcDay(from);
   const t = toUtcDay(to);
   if (f === null || t === null) return "Dates invalides.";
+  const yearError = yearBoundError(from, to);
+  if (yearError) return yearError;
   if (f > t) return "La date de début doit précéder la date de fin.";
   if (t - f + 1 > MAX_CUSTOM_DAYS) return `La période ne peut pas dépasser ${MAX_CUSTOM_DAYS} jours.`;
   return null;

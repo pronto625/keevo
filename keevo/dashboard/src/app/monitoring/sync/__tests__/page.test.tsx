@@ -55,6 +55,25 @@ describe("Sync monitoring page wiring", () => {
     expect(await screen.findByText("Aucune entreprise")).toBeInTheDocument();
   });
 
+  it("shows « Erreur de chargement » when /overview fails and « Réessayer » refetches it", async () => {
+    overview.mockRejectedValueOnce(new Error("boom")).mockResolvedValueOnce({
+      totalDevices: 3,
+      totalFailedOps7d: 0,
+      totalConflicts7d: 0,
+      tenantsInAlert: 0,
+      latestPushGlobally: null,
+    });
+    health.mockResolvedValue([]);
+
+    renderPage();
+
+    expect(await screen.findByText("Erreur de chargement")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Réessayer" }));
+
+    await waitFor(() => expect(overview).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByText("Erreur de chargement")).not.toBeInTheDocument());
+  });
+
   it("disables « Actualiser » while the overview is pending", async () => {
     overview.mockReturnValue(new Promise(() => {}));
     health.mockResolvedValue([]);

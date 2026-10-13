@@ -40,7 +40,11 @@ function SkeletonCard() {
 }
 
 function formatTime(d: Date): string {
-  return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleTimeString("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Africa/Douala",
+  });
 }
 
 export function OperationsKpiCards({

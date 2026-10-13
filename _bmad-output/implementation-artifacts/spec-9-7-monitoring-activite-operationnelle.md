@@ -5,7 +5,7 @@ created: '2026-10-13'
 status: 'done'
 baseline_revision: '7668dba2ad7fd6ac0bbaee9247c2c37295e5c0d5'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-9-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/9-7-monitoring-activite-operationnelle.md'
@@ -71,6 +71,26 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-10-13 — Review pass (follow-up)
+- verdicts: 30 findings — high 0, medium 0, low 9, false 11, maybe-false 0 (+ intent rows descriptive)
+- findings:
+  - `[false]` `[reject]` (blind/edge) new tenants listed as dormant — carried spec decision.
+  - `[false]` `[reject]` (blind/edge) plan may be an expired subscription — carried (one row per tenant).
+  - `[low]` `[reject]` (blind) partial totals without a flag — carried.
+  - `[low]` `[reject]` (blind) per-request loops, no cache — carried Phase 1.
+  - `[low]` `[reject]` (blind) use-case ports unused by the controller — matches the existing admin modules' style; refactor out of scope.
+  - `[low]` `[patch]` (blind/gap/edge/intent) client misses the 2000..9999 year bound — `yearBoundError` in `customRangeError`; test.
+  - `[false]` `[reject]` (blind) GMV ignores refunds — refunds are sale cancellations (status CANCELLED, excluded).
+  - `[low]` `[reject]` (blind) page clamp inside queryFn — lint forbids setState in effects here; documented.
+  - `[low]` `[reject]` (blind) inactive list unbounded — Phase 1 volumes.
+  - `[low]` `[reject]` (blind) weak tests (WAT boundary, exclusions, roles) — carried.
+  - `[low]` `[patch]` (edge) skipped tenant still counted as new — counted only when its row was read; unit test + IT assertion updated.
+  - `[low]` `[patch]` (edge) dates shown in browser time zone — Africa/Douala formatting; test.
+  - `[low]` `[patch]` (gap) API client untested — `admin-operations.test.ts`.
+  - `[low]` `[patch]` (gap) sidebar entry not asserted — Sidebar test.
+  - `[false]` `[reject]` (intent) readings — descriptive.
+
+
 ### 2026-10-13 — Review pass
 - verdicts: 41 findings — high 0, medium 5, low 18, false 9, maybe-false 2 (+ intent rows descriptive)
 - findings:
@@ -132,3 +152,12 @@ Status: done
 
 **Residual risks:** per-tenant loop is O(tenants) per request (accepted Phase 1); components import error states from `components/sync`.
 
+### Follow-up pass 2026-10-13
+
+**Summary:** Client range check now enforces the backend's year bounds, tenants skipped for their own SQL error are no longer counted as new, dates shown in Douala time, API client and sidebar entry pinned by tests.
+
+**Review:** 30 findings — patched 5 low; rejected 25 (carried or false).
+
+**Follow-up review recommended:** false — follow-up pass, no high patched.
+
+**Verification:** dashboard green (see 9-8 follow-up); `AdminOperationsServiceTest` 41 and `AdminOperationsServiceIntegrationTest` green (assertion updated to the new count rule).
