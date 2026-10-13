@@ -140,6 +140,7 @@ public enum ErrorCode {
     VALIDATION_FAILED,
     VALIDATION_ERROR,
     INTERNAL_ERROR,
+    SERVICE_UNAVAILABLE,        // HTTP 503 — a dependency (database read) failed, nothing was stored; retry later
     /**
      * FORBIDDEN — authenticated user does not have the required role.
      * Maps to HTTP 403. Use instead of UNAUTHORIZED (401) when user IS

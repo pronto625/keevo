@@ -102,6 +102,7 @@ public class GlobalExceptionHandler {
             Map.entry("ACCOUNT_DELETION_PENDING",  "Suppression de compte en cours — écriture bloquée"),
             Map.entry("DELETION_ALREADY_REQUESTED", "Une demande de suppression est déjà en cours"),
             Map.entry("DELETION_NOT_PENDING",       "Aucune demande de suppression en cours"),
+            Map.entry("SERVICE_UNAVAILABLE",        "Service momentanément indisponible, réessayez dans un instant"),
             Map.entry("INVALID_STATE",              "Action impossible dans l'état actuel du compte"),
             Map.entry("WHATSAPP_DELIVERY_FAILED",         "Envoi WhatsApp échoué. Vérifiez votre connexion et réessayez."),
             Map.entry("PLAN_FEATURE_REQUIRED",       "Cette fonctionnalité nécessite l'offre Premium"),
@@ -290,6 +291,7 @@ public class GlobalExceptionHandler {
                  "INVALID_OR_EXPIRED_CODE",
                  "CODE_LOCKED",
                  "EXPORT_PDF_TOO_LARGE" -> HttpStatus.UNPROCESSABLE_ENTITY;  // v1s-18-3 — PDF over its row limit
+            case "SERVICE_UNAVAILABLE" -> HttpStatus.SERVICE_UNAVAILABLE;
             case "JUSTIFICATION_REQUIRED",
                  "JUSTIFICATION_TOO_SHORT" -> HttpStatus.BAD_REQUEST;
             case "SECTOR_TEMPLATE_NOT_FOUND",

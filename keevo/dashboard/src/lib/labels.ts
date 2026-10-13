@@ -653,3 +653,57 @@ export function lastActivityDayLabel(day: string | null | undefined, today: Date
   if (value === key(yesterday)) return "Hier";
   return `${d}/${m}/${y}`;
 }
+
+// Story 9-5 (2/2) — global push notifications (« Notifications » page).
+export const GLOBAL_TARGETS = ["ALL", "PREMIUM", "TRIAL", "FREE", "TENANT"] as const;
+
+const GLOBAL_TARGET_LABELS: Record<string, string> = {
+  ALL: "Tous",
+  PREMIUM: "Premium",
+  TRIAL: "Essai",
+  FREE: "Gratuit",
+  TENANT: "Un commerce",
+};
+
+/** Target of a global push; for one company, its business name when known. */
+export function globalTargetLabel(code: string | null | undefined, tenantName?: string | null): string {
+  if (code?.trim().toUpperCase() === "TENANT") {
+    return tenantName?.trim() ? tenantName.trim() : DELETED_TENANT_LABEL;
+  }
+  return lookup(GLOBAL_TARGET_LABELS, code, "—");
+}
+
+/** Label of a target in the compose form select (« Un commerce » for TENANT). */
+export function globalTargetOptionLabel(code: string): string {
+  return lookup(GLOBAL_TARGET_LABELS, code, "—");
+}
+
+const GLOBAL_NOTIFICATION_STATUS_LABELS: Record<string, string> = {
+  SCHEDULED: "Programmé",
+  SENDING: "Envoi en cours",
+  SENT: "Envoyé",
+  FAILED: "Échec de l'envoi",
+  CANCELLED: "Annulé",
+};
+
+export function globalNotificationStatusLabel(code: string | null | undefined): string {
+  return lookup(GLOBAL_NOTIFICATION_STATUS_LABELS, code, "—");
+}
+
+const GLOBAL_FAILURE_REASON_LABELS: Record<string, string> = {
+  PUSH_UNAVAILABLE: "Notifications push non configurées",
+  ALL_CHUNKS_FAILED: "Échec d'envoi vers Firebase",
+  INTERRUPTED: "Envoi interrompu",
+  NO_RECIPIENT: "Aucun appareil ciblé",
+};
+
+/** Why a global push failed; null / unknown without a code → null (nothing shown). */
+export function globalFailureReasonLabel(code: string | null | undefined): string | null {
+  if (!code?.trim()) return null;
+  return lookup(GLOBAL_FAILURE_REASON_LABELS, code, "—");
+}
+
+/** « 1 appareil » / « 12 appareils ». */
+export function deviceCountLabel(n: number): string {
+  return `${n} ${n > 1 ? "appareils" : "appareil"}`;
+}

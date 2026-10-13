@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   auditActionLabel,
   auditEntityTypeLabel,
+  deviceCountLabel,
   feedbackTypeLabel,
+  globalFailureReasonLabel,
+  globalNotificationStatusLabel,
+  globalTargetLabel,
   lastActivityDayLabel,
   planFilterLabel,
   platformLabel,
@@ -172,5 +176,26 @@ describe("labels — spec 9-1 completion", () => {
     expect(lastActivityDayLabel("2026-10-12", today)).toBe("Hier");
     expect(lastActivityDayLabel("2026-09-30", today)).toBe("30/09/2026");
     expect(lastActivityDayLabel(null, today)).toBe("Jamais");
+  });
+
+  it("global push: target and status labels (Story 9-5)", () => {
+    expect(globalTargetLabel("ALL")).toBe("Tous");
+    expect(globalTargetLabel("PREMIUM")).toBe("Premium");
+    expect(globalTargetLabel("TRIAL")).toBe("Essai");
+    expect(globalTargetLabel("FREE")).toBe("Gratuit");
+    expect(globalTargetLabel("TENANT", "Boutique Awa")).toBe("Boutique Awa");
+    expect(globalTargetLabel("TENANT", null)).toBe("Entreprise supprimée");
+    expect(globalNotificationStatusLabel("SCHEDULED")).toBe("Programmé");
+    expect(globalNotificationStatusLabel("SENDING")).toBe("Envoi en cours");
+    expect(globalNotificationStatusLabel("SENT")).toBe("Envoyé");
+    expect(globalNotificationStatusLabel("FAILED")).toBe("Échec de l'envoi");
+    expect(globalNotificationStatusLabel("CANCELLED")).toBe("Annulé");
+    expect(globalFailureReasonLabel("PUSH_UNAVAILABLE")).toBe("Notifications push non configurées");
+    expect(globalFailureReasonLabel("ALL_CHUNKS_FAILED")).toBe("Échec d'envoi vers Firebase");
+    expect(globalFailureReasonLabel("INTERRUPTED")).toBe("Envoi interrompu");
+    expect(globalFailureReasonLabel("NO_RECIPIENT")).toBe("Aucun appareil ciblé");
+    expect(globalFailureReasonLabel(null)).toBeNull();
+    expect(deviceCountLabel(1)).toBe("1 appareil");
+    expect(deviceCountLabel(3)).toBe("3 appareils");
   });
 });

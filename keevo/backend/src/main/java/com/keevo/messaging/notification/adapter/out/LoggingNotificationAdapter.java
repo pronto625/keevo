@@ -1,6 +1,7 @@
 package com.keevo.messaging.notification.adapter.out;
 
 import com.keevo.messaging.notification.domain.model.NotificationPayload;
+import com.keevo.messaging.notification.domain.model.PushSendResult;
 import com.keevo.messaging.notification.domain.port.out.NotificationPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,5 +36,19 @@ public class LoggingNotificationAdapter implements NotificationPort {
         log.info("[NOTIFICATION STUB] tenant={} recipients={} type={} title='{}' deepLink={}",
                 tenantId, userIds.size(), payload.type(), payload.title(), payload.deepLink());
     }
-}
 
+    /** No push channel: a global push is marked FAILED (Story 9-5). */
+    @Override
+    public boolean isPushAvailable() {
+        return false;
+    }
+
+    /** Nothing is sent: every token counted as a failure of one failed chunk. */
+    @Override
+    public PushSendResult sendToTokens(String tenantId, List<String> tokens, NotificationPayload payload) {
+        if (tokens == null || tokens.isEmpty()) return PushSendResult.EMPTY;
+        log.info("[NOTIFICATION STUB] tenant={} tokens={} type={} title='{}' — not sent (FCM disabled)",
+                tenantId, tokens.size(), payload.type(), payload.title());
+        return new PushSendResult(0, tokens.size(), 1, 1);
+    }
+}

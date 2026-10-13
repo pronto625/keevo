@@ -38,6 +38,8 @@ export function Sidebar() {
     // Story 9-5 — badge = HIGH alerts not handled yet.
     { href: "/alertes", label: "Alertes", badge: highAlertCount, badgeLabel: alertBadgeLabel },
     { href: "/sante", label: "Santé système", badge: 0 },
+    // Story 9-5 (2/2) — global push notifications.
+    { href: "/notifications", label: "Notifications", badge: 0 },
   ];
 
   const monitoringItems = [

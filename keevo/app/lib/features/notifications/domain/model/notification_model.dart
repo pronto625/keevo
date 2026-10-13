@@ -27,8 +27,16 @@ class NotificationModel with _$NotificationModel {
         'TREND_DOWN' => '📉',
         'TREND_UP' => '📈',
         'DAILY_REPORT' || 'WEEKLY_REPORT' => '📊',
+        globalAnnouncementType => '📣',
         _ => '🔔',
       };
+
+  /// Push type of the announcements broadcast by the Keevo team (Story 9-5).
+  static const globalAnnouncementType = 'GLOBAL_ANNOUNCEMENT';
+
+  /// Label shown above the title in the notifications list, or `null`.
+  String? get typeLabel =>
+      type == globalAnnouncementType ? 'Annonce Keevo' : null;
 
   NotificationModel markAsRead() => copyWith(isRead: true);
 }

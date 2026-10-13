@@ -26,6 +26,34 @@ class LocalNotificationDataSource {
         );
   }
 
+  /// Inserts the notification unread unless a row with this id exists
+  /// (Story 9-5: an announcement already stored from FCM keeps its read
+  /// state). Returns true when inserted.
+  Future<bool> insertIfAbsent({
+    required String id,
+    required String type,
+    required String title,
+    required String body,
+    required DateTime receivedAt,
+  }) async {
+    final existing = await (_db.select(_db.notifications)
+          ..where((t) => t.id.equals(id)))
+        .getSingleOrNull();
+    if (existing != null) return false;
+    await _db.into(_db.notifications).insert(
+          NotificationsCompanion.insert(
+            id: id,
+            type: type,
+            title: title,
+            body: body,
+            isRead: const Value(false),
+            receivedAt: receivedAt,
+          ),
+          mode: InsertMode.insertOrIgnore,
+        );
+    return true;
+  }
+
   Future<void> markAsRead(String id) async {
     await (_db.update(_db.notifications)
           ..where((t) => t.id.equals(id)))

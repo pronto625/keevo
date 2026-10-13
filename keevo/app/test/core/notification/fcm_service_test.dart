@@ -358,6 +358,126 @@ void main() {
     });
   });
 
+  group('Keevo announcement (GLOBAL_ANNOUNCEMENT, Story 9-5)', () {
+    const announcement = RemoteMessage(
+      notification: RemoteNotification(
+          title: 'Maintenance ce soir', body: 'Keevo indisponible 22h-23h'),
+      data: {
+        'type': 'GLOBAL_ANNOUNCEMENT',
+        'id': 'g-1',
+        'title': 'Maintenance ce soir',
+        'body': 'Keevo indisponible 22h-23h',
+      },
+    );
+
+    setUp(() {
+      when(() => local.markAsRead(any())).thenAnswer((_) async {});
+    });
+
+    test('foreground: stored and shown, its tap opens the notifications list',
+        () async {
+      usePlatform(TargetPlatform.android);
+      await service.initialize(router);
+
+      onMessage.add(announcement);
+      await pumpEventQueue();
+
+      verify(() => local.insert(
+            id: 'g-1',
+            type: 'GLOBAL_ANNOUNCEMENT',
+            title: 'Maintenance ce soir',
+            body: 'Keevo indisponible 22h-23h',
+            deepLink: null,
+            receivedAt: any(named: 'receivedAt'),
+          )).called(1);
+      verify(() => plugin.show(any(), 'Maintenance ce soir',
+          'Keevo indisponible 22h-23h', any(),
+          payload: '/notifications')).called(1);
+    });
+
+    test('background tap: stored, marked read, notifications list opened',
+        () async {
+      usePlatform(TargetPlatform.android);
+      await service.initialize(router);
+
+      onOpened.add(announcement);
+      await pumpEventQueue();
+
+      verify(() => router.push<Object?>('/notifications')).called(1);
+      verifyInOrder([
+        () => local.insert(
+              id: 'g-1',
+              type: 'GLOBAL_ANNOUNCEMENT',
+              title: 'Maintenance ce soir',
+              body: 'Keevo indisponible 22h-23h',
+              deepLink: null,
+              receivedAt: any(named: 'receivedAt'),
+            ),
+        () => local.markAsRead('g-1'),
+      ]);
+    });
+
+    test('cold start tap: stored and notifications list opened', () async {
+      usePlatform(TargetPlatform.iOS);
+      when(() => gateway.getInitialMessage())
+          .thenAnswer((_) async => announcement);
+
+      await service.initialize(router);
+      await pumpEventQueue();
+
+      verify(() => router.push<Object?>('/notifications')).called(1);
+      verify(() => local.insert(
+            id: 'g-1',
+            type: 'GLOBAL_ANNOUNCEMENT',
+            title: any(named: 'title'),
+            body: any(named: 'body'),
+            deepLink: null,
+            receivedAt: any(named: 'receivedAt'),
+          )).called(1);
+    });
+
+    test('tap long after the push: receivedAt is the send time', () async {
+      usePlatform(TargetPlatform.android);
+      await service.initialize(router);
+      final sentTime = DateTime(2026, 10, 12, 18);
+
+      onOpened.add(RemoteMessage(
+        sentTime: sentTime,
+        notification: announcement.notification,
+        data: announcement.data,
+      ));
+      await pumpEventQueue();
+
+      verify(() => local.insert(
+            id: 'g-1',
+            type: 'GLOBAL_ANNOUNCEMENT',
+            title: any(named: 'title'),
+            body: any(named: 'body'),
+            deepLink: null,
+            receivedAt: sentTime,
+          )).called(1);
+    });
+
+    test('other types tapped in background are not stored (unchanged)',
+        () async {
+      usePlatform(TargetPlatform.android);
+      await service.initialize(router);
+
+      onOpened.add(pushWithNotification);
+      await pumpEventQueue();
+
+      verify(() => router.push<Object?>('/products/p1')).called(1);
+      verifyNever(() => local.insert(
+            id: any(named: 'id'),
+            type: any(named: 'type'),
+            title: any(named: 'title'),
+            body: any(named: 'body'),
+            deepLink: any(named: 'deepLink'),
+            receivedAt: any(named: 'receivedAt'),
+          ));
+    });
+  });
+
   group('desktop', () {
     for (final platform in [TargetPlatform.linux, TargetPlatform.windows]) {
       test('$platform: every FCM call is a no-op', () async {

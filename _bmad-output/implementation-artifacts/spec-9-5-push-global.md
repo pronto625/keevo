@@ -2,9 +2,10 @@
 title: '9-5 (2/2) — Global push notifications from the super admin (FR82)'
 type: 'feature'
 created: '2026-10-13'
-status: 'ready-for-dev'
+status: 'done'
+baseline_revision: 'ba337ea2ddb3defa3ccb7984702d97b13bcc3d34'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-9-context.md'
 warnings: []
@@ -73,7 +74,49 @@ deferred: []
 
 ## Spec Change Log
 
+### 2026-10-13 — Orchestrator decision during review (no loopback)
+- Trigger: the AC « an owner opening the app's notifications sees the announcement » was unmet for announcements received in background and never tapped (no background isolate handler).
+- Decision: the app pulls its announcements from a new tenant endpoint `GET /api/v1/notifications/announcements?since=` on start and resume (inserted by id, never overwriting) instead of a background isolate writing to the encrypted Drift database; applied as a patch.
+
 ## Review Triage Log
+
+### 2026-10-13 — Review pass
+- verdicts: 37 findings — high 2, medium 10, low 18, false 3, maybe-false 0 (+ intent rows descriptive)
+- findings:
+  - `[medium]` `[patch]` (blind) rows stuck in SENDING forever — >15 min SENDING → FAILED « interrompu », purge no longer skips old SENDING.
+  - `[high]` `[patch]` (blind) estimate failure after insert → 500 while the push is scheduled → duplicate broadcast — estimate computed before insert, no row on failure.
+  - `[medium]` `[patch]` (blind) same device in several companies gets the push twice — token set across companies.
+  - `[medium]` `[patch]` (blind) big broadcast blocks the single scheduler thread — pool size 4, lock PT10M.
+  - `[high]` `[patch]` (blind) background announcements never stored unless tapped (AC unmet) — app fetches its announcements from a new tenant endpoint on start/resume, upsert by id.
+  - `[low]` `[patch]` (blind) company picker page-0 only, offers unreachable companies — server-side reachable search.
+  - `[false]` `[reject]` (blind) plan targets from `public.tenants.plan_type` — authoritative since 9-2 (synced on every plan change, realigned at startup); same source as the 9-2 alerts and 9-5 feed.
+  - `[low]` `[patch]` (blind) no audit trail — `[ADMIN AUDIT]` lines for schedule/cancel/outcome, title in the event log.
+  - `[low]` `[patch]` (blind) FAILED rows without reason/time — `failure_reason` + `sent_at` on terminal states, French labels.
+  - `[medium]` `[patch]` (blind) status card stops for scheduled sends — polls while SCHEDULED/SENDING with a cap.
+  - `[low]` `[patch]` (blind) stale server field errors — cleared on edit/target change.
+  - `[low]` `[patch]` (blind) history lacks targeted devices — « Appareils ciblés » column.
+  - `[low]` `[patch]` (blind) dialog stale estimate, no Escape/focus, no date bounds — fixed.
+  - `[low]` `[patch]` (blind) null-body details incomplete; cancel non-UUID untested — details for all fields; test.
+  - `[medium]` `[patch]` (edge) stuck SENDING — same as blind row 1.
+  - `[medium]` `[patch]` (edge) partial failure ends FAILED 0/0/0 — per-company catch, accumulated counts kept.
+  - `[medium]` `[patch]` (edge) empty audience marked SENT — FAILED `NO_RECIPIENT`.
+  - `[medium]` `[patch]` (edge) duplicate tokens — same as blind row 3.
+  - `[high]` `[patch]` (edge) estimate after insert — same as blind row 2.
+  - `[low]` `[patch]` (edge) trim vs strip on Unicode spaces — `strip()`.
+  - `[low]` `[patch]` (edge) browser clock vs server — polling no longer depends on the client clock comparison.
+  - `[low]` `[patch]` (edge) scheduled card never updates — same as blind status row.
+  - `[low]` `[patch]` (edge) card without dismiss — « Fermer » always shown.
+  - `[low]` `[patch]` (edge) picker offers KV-ADMIN / page 0 — same as blind picker row.
+  - `[low]` `[patch]` (edge) stale field errors — same as blind row.
+  - `[high]` `[patch]` (edge) background announcement not stored — same as blind row 5.
+  - `[low]` `[patch]` (edge) receivedAt = tap time — `sentTime`.
+  - `[high]` `[patch]` (edge, claim) AC « owner sees the announcement » unmet — same as blind row 5.
+  - `[low]` `[patch]` (gap) TenantContext during token cleanup unverified — assertion added.
+  - `[low]` `[patch]` (gap) `admin-notifications.ts` untested — client-mocked tests.
+  - `[low]` `[patch]` (gap) global-only tables never checked — one check for the whole set.
+  - `[medium]` `[patch]` (gap other) stuck SENDING — same as blind row 1.
+  - `[false]` `[reject]` (intent) per-tenant chunking vs global — chunking per company is required for per-schema token cleanup; FCM cost difference negligible.
+  - `[false]` `[reject]` (intent) two-instance scenario not run end to end — atomic UPDATE … RETURNING claim proven by a concurrent Postgres test; ShedLock covered by the lock coverage test.
 
 ## Verification
 
@@ -81,3 +124,20 @@ deferred: []
 - `cd keevo/backend && MAVEN_OPTS=-Xmx1g mvn -q -o test -Dtest='com.keevo.admin.**,com.keevo.messaging.**,com.keevo.architecture.**' -DforkCount=1 -DargLine=-Xmx1536m` -- expected: 0 failures
 - `cd keevo/app && flutter analyze && flutter test --concurrency=4 test/core/notification && flutter test --concurrency=4 test/features/notifications` -- expected: no new warning, green
 - `cd keevo/dashboard && npm run lint && npx tsc --noEmit && npm test && npm run build` -- expected: all succeed
+
+## Auto Run Result
+
+Status: done
+
+**Summary:** Story 9-5 part 2 delivered (FR82). Toor composes a global announcement on « Notifications » (title ≤ 80, body ≤ 200, target Tous / Premium / Essai / Gratuit / Un commerce via a server-side reachable-company search, now or scheduled ≤ 30 days, device estimate, Android/iOS previews, confirmation). `public.global_notifications` (V21) with failure reason and timestamps; a ShedLock job (every minute, scheduler pool 4) claims due rows atomically, sends FCM multicast in 500-token chunks per company with tokens de-duplicated across companies, cleans unregistered tokens in the right schema, ends SENT with counts or FAILED with a French-labelled reason, recovers rows stuck in SENDING; history 90 days with cancel. The app shows « Annonce Keevo » entries (foreground, tap, and a pull on start/resume from `/api/v1/notifications/announcements`). Admin actions logged `[ADMIN AUDIT]`.
+
+**Files changed:** backend `V21__global_notifications.sql`, `admin/notification/**`, `messaging/notification` (port `sendToTokens`/`isPushAvailable`, `PushSendResult`, FCM + logging adapters, `AnnouncementController`), schedulers, `ErrorCode.SERVICE_UNAVAILABLE` → 503, `application.yml` (scheduler pool), `TenantSchemaSyncService.globalOnlyTables()`; tests (unit, controllers, Postgres IT); app `fcm_service.dart`, notifications model/card, `RemoteAnnouncementDataSource`, `AnnouncementSyncService`, `LocalNotificationDataSource.insertIfAbsent`, `MainShell` lifecycle hook, sign-out prefs, `pubspec.yaml` 1.1.51+50 + tests; dashboard `types/global-notification.ts`, `lib/api/admin-notifications.ts`, `hooks/useGlobalNotifications.ts`, `components/notifications/*`, `app/notifications/page.tsx`, `lib/labels.ts`, `Sidebar.tsx` + tests.
+
+**Review:** 37 findings — patched 2 high entries (duplicate broadcast after a failing estimate; background announcements missing in the app), 10 medium and 18 low; deferred 0; rejected 5 (false 3, low with reasons). One orchestrator decision logged (announcements pull).
+
+**Follow-up review recommended:** true — highs were patched; unverified risk: FCM delivery and the app pull are tested with mocks/Postgres only, not with a real Firebase project and device.
+
+**Verification:** dashboard lint, tsc, `npm test` (53 files, 252 tests), build — green. Backend full chunked regression (13 packages, 3 263 tests) — 0 failures/errors. App `flutter analyze` 0 warning/error; `test/core` 521, `test/features/notifications` 24, `settings` 52, `auth` 104 — all passed.
+
+**Residual risks:** a phone registered in several companies receives one push but appears once per company in the in-app pull (same id → single row); FCM quotas not throttled beyond chunking.
+
