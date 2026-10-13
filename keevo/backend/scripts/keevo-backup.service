@@ -1,12 +1,29 @@
+# Keevo — PostgreSQL backup (oneshot, started daily by keevo-backup.timer)
+#
+# Story 10-7: the path is templated. __KEEVO_HOME__ is the deploy directory on the host
+# (e.g. /home/<deploy-user>/keevo); deploy-backend.yml substitutes it at install time:
+#   sed "s#__KEEVO_HOME__#${HOME}/keevo#g" keevo-backup.service | sudo tee /etc/systemd/system/keevo-backup.service
+# Never install this file with `cp` — the placeholder would stay as-is.
+#
+# - EnvironmentFile=- : a missing .env.backup does not stop the unit from starting;
+#   backup-db.sh then fails on the missing POSTGRES_* variables, which triggers OnFailure=.
+# - OnFailure= : any non-zero exit starts keevo-backup-alert@keevo-backup.service.service
+#   (webhook + journald), see backup-alert.sh.
+# - Wants= (not Requires=) docker: if Docker is down the unit still runs, backup-db.sh fails
+#   on `docker info` and the unit enters the failed state (Requires= would only skip the job,
+#   without OnFailure=).
+# - TimeoutStartSec=2h: a hung pg_dump / aws upload is killed and reported as a failure.
 [Unit]
 Description=Keevo PostgreSQL Backup
 After=docker.service
-Requires=docker.service
+Wants=docker.service
+OnFailure=keevo-backup-alert@%n.service
 
 [Service]
 Type=oneshot
-EnvironmentFile=/home/ubuntu/keevo/.env.backup
-ExecStart=/home/ubuntu/keevo/scripts/backup-db.sh
+TimeoutStartSec=2h
+EnvironmentFile=-__KEEVO_HOME__/.env.backup
+ExecStart=__KEEVO_HOME__/scripts/backup-db.sh
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=keevo-backup

@@ -31,7 +31,7 @@ import java.util.Map;
  *
  * <p><b>Single backend instance assumed</b>: the previous readings live in this instance's memory. With
  * several instances, ShedLock would run successive ticks on different instances and the deltas
- * (requests, 5xx, latency weights) would be wrong — see {@code docs/DEPLOYMENT_CHECKLIST.md} § 9.
+ * (requests, 5xx, latency weights) would be wrong — see {@code keevo/backend/docs/DEPLOYMENT_CHECKLIST.md} § 17.
  *
  * <p>When the database check fails the row is still attempted with {@code db_ok = false}; if the
  * insert itself fails the sample is missing, which the uptime counts as down.

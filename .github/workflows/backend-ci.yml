@@ -22,6 +22,22 @@ jobs:
       - name: Story 12.1 lint — JWT key permissions in deploy-backend.yml
         run: bash keevo/backend/scripts/grep-lint-story-12-1.sh
 
+      # Story 10-7 — backup alerting and ops scripts/workflows (pinned tool images).
+      - name: Story 10.7 test — backup failure alert and rendered units
+        run: bash keevo/backend/scripts/tests/backup-alert-test.sh
+
+      - name: Story 10.7 lint — shellcheck (backup scripts)
+        run: |
+          docker run --rm -v "${GITHUB_WORKSPACE}/keevo/backend/scripts:/mnt:ro" \
+            koalaman/shellcheck:v0.10.0@sha256:2097951f02e735b613f4a34de20c40f937a6c8f18ecb170612c88c34517221fb \
+            backup-db.sh backup-alert.sh render-backup-units.sh tests/backup-alert-test.sh
+
+      - name: Story 10.7 lint — actionlint (deploy workflows)
+        run: |
+          docker run --rm -v "${GITHUB_WORKSPACE}:/repo:ro" --workdir /repo \
+            rhysd/actionlint:1.7.7@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9 \
+            -no-color .github/workflows/deploy-staging.yml .github/workflows/deploy-backend.yml .github/workflows/backend-ci.yml
+
       - name: Set up Java 21
         uses: actions/setup-java@v4
         with:

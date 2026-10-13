@@ -141,7 +141,25 @@ Sources d'autorité : `plan-refonte-modulaire.md` (vision, décisions, roadmap) 
 **Valeur :** rendre le socle « production-safe » pour pouvoir refondre **sans risque** — migrations versionnées, secrets sécurisés, sauvegardes restaurables, staging, et filet ArchUnit. Sans cet épic, toute la refonte se ferait à l'aveugle.
 **Exigences couvertes :** MOD-NFR1, MOD-NFR3 (baseline *warning*), MOD-NFR11, MOD-NFR12 (backups/staging).
 
-### Epic 11 : Stabilisation du Socle & Dette (Phase 1 allégée)
+#### Story 10.8 : Exécution serveur des runbooks ops (prod & staging)
+
+> Clé tracker : `10-8-ops-runbook-execution-serveur` — créée le 2026-10-13 par la revue de 10-7 (items livrés côté dépôt, exécution serveur restante). Owner : agent ops (le déploiement backend est manuel).
+
+As a **exploitant**,
+I want **appliquer sur les serveurs les procédures livrées par 10.7 et vérifier leur effet**,
+So that **les garde-fous backups / staging / sécurité soient réellement actifs en production, pas seulement documentés**.
+
+**Items (routés depuis la revue 10-7, 2026-10-13) :**
+- [ ] [Deferred-from: review 10-7, 2026-10-13] TLS staging via le Traefik prod : réseau `keevo_edge`, routeur `keevo/ops/traefik/staging-router.yml`, DNS `staging.api.keevo.cm` — checklist `keevo/backend/docs/DEPLOYMENT_CHECKLIST.md` §15 ; vérifier le resolver réel (`letsencrypt` vs `mytlschallenge`) ; décider comment persister le routeur malgré la réécriture de `dynamic.yml` à chaque déploiement prod (décision owner).
+- [ ] [Deferred-from: review 10-7, 2026-10-13] Secrets staging dédiés créés dans GitHub (`STAGING_JWT_*_PEM`, `STAGING_DB_PASSWORD`, `STAGING_FIREBASE_CREDENTIALS`, optionnel `DB_PASSWORD` repo-level pour la garde) — §14.
+- [ ] [Deferred-from: review 10-7, 2026-10-13] S3 : politique IAM moindre privilège, versioning, Object Lock GOVERNANCE 30 j — §12 ; vérifier `aws s3 rm` → AccessDenied.
+- [ ] [Deferred-from: review 10-7, 2026-10-13] Alerte de backup : `.env.backup-alert`, test d'échec §11.3, heartbeat §11.5 (alerte si pas de ping en 26 h), `BACKUP_REQUIRE_S3=1`.
+- [ ] [Deferred-from: review 10-7 / v1s-15-9, 2026-10-13] Tenants `DELETED` hérités avec schéma / adhésions restants — §16 (requêtes de détection + nettoyage), confirmer la purge.
+- [ ] [Deferred-from: review 11-4, 2026-10-13] `DASHBOARD_ORIGIN` renseigné dans le `.env` prod avant le prochain déploiement (CORS explicite).
+
+**Interim AC :** **Given** la checklist §11–§16, **When** l'agent ops a exécuté chaque étape sur le serveur, **Then** chaque vérification indiquée (curl HTTPS staging 200, AccessDenied sur suppression S3, alerte reçue sur un échec simulé, 0 adhésion de tenant DELETED) est consignée avec sa date dans cette story.
+
+## Epic 11 : Stabilisation du Socle & Dette (Phase 1 allégée)
 **Valeur :** servir les tenants réels (< 100) de façon **fiable et diagnosticable** — observabilité de base + correction des bugs/sécurité consensuels. (Redis/HA différés : non requis sous ~500 tenants.)
 **Exigences couvertes :** MOD-NFR4, MOD-NFR6 + dette consensuelle (N+1, bug `DayClosureDeltaProvider`, RBAC brouillon, `DeviceToken` ownership, CORS prod, allow-list schéma) ; durcissement FR68/FR93.
 
@@ -324,26 +342,27 @@ So that **les garde-fous ops de 10.4 / 10.5 tiennent en production et qu'un stag
 
 **Owner decision — staging TLS via prod Traefik (copied verbatim from 10-5 Review Findings, 2026-06-19):**
 
-- [ ] [Review][Decision] **TLS staging — ACME HTTP-01 sur :8080 ne sera jamais validé** — **DÉCISION (Toor) : router via le Traefik prod.** Le Traefik prod (:80/:443) gère le FQDN + ACME staging puis proxy vers `keevo_staging_backend`. ⚠️ Implémentation = réécriture cross-stack du pipeline **prod** (non testable en review, à fort enjeu) → **non appliquée à l'aveugle**, consignée comme tâche deploy-time. Étapes concrètes :
+- [x] [Review][Decision] **TLS staging — ACME HTTP-01 sur :8080 ne sera jamais validé** — **DÉCISION (Toor) : router via le Traefik prod.** Le Traefik prod (:80/:443) gère le FQDN + ACME staging puis proxy vers `keevo_staging_backend`. ⚠️ Implémentation = réécriture cross-stack du pipeline **prod** (non testable en review, à fort enjeu) → **non appliquée à l'aveugle**, consignée comme tâche deploy-time. Étapes concrètes :
   1. **Réseau partagé** : créer un réseau Docker externe (ex. `keevo_edge`) ; y attacher le `traefik` prod ET le `keevo_staging_backend`.
   2. **Prod `traefik/dynamic.yml`** : ajouter un router `staging` (`Host(\`staging.api.keevo.cm\`)`, entrypoint `websecure`, `certResolver: letsencrypt`) + un service pointant `http://keevo_staging_backend:4500`.
   3. **Staging `deploy-staging.yml`** : retirer le Traefik staging + l'ACME + le mapping `:8443` (plus de TLS local) ; attacher le backend staging au réseau `keevo_edge` ; ne plus exposer publiquement le backend (accès uniquement via Traefik prod).
   4. **DNS** : `staging.api.keevo.cm` → IP du VPS (déjà :80/:443 prod).
   À appliquer + valider lors du 1er bring-up staging réel (touche la prod).
+  — ✅ étapes 1 et 3 : `deploy-staging.yml` + gabarit `keevo/ops/traefik/staging-router.yml` · 📋 runbook `keevo/backend/docs/DEPLOYMENT_CHECKLIST.md` §15 (étapes 1, 2, 4 côté serveur, vérification, rollback) — exécution serveur : 10-8
 
 **Items (routed 2026-10-11 from deferred-work):**
-- [ ] [Deferred-from: CR 10-5, 2026-06-19] Staging TLS via prod Traefik (owner decision) [traefik/dynamic.yml, deploy-staging.yml] — shared keevo_edge network + staging router; prerequisite for valid staging HTTPS
-- [ ] [Deferred-from: CR 10-5, 2026-06-19] Staging reuses prod JWT/Firebase/DB secrets [deploy-staging.yml] — staging compromise could forge prod tokens; dedicated keys
-- [ ] [Deferred-from: CR 10-5, 2026-06-19] workflow_dispatch without branch guard [.github/workflows/deploy-staging.yml:8] — check github.ref
-- [ ] [Deferred-from: CR 10-5, 2026-06-19] Unconditional firebase bind-mount + no .env guard [deploy-staging.yml:231] — conditional mount + [ -f .env ] || exit 1
-- [ ] [Deferred-from: CR 10-5, 2026-06-19] cancel-in-progress can cut a staging deploy mid-way [deploy-staging.yml:13] — disable cancellation on mutating steps
-- [ ] [Deferred-from: follow-up review v1s-15-9, 2026-10-13] Legacy DELETED tenants may still hold their schema, memberships and tokens [admin/tenant/application/service/AdminTenantService.java forceDelete] — before v1s-15-9 the admin force-delete only flipped the status, and the new forceDelete refuses DELETED tenants (TENANT_NOT_FOUND), so such leftovers can no longer be cleaned through the API. Settle on prod with `SELECT id, schema_name FROM public.tenants WHERE status = 'DELETED' AND to_regnamespace(schema_name) IS NOT NULL`; if rows exist, set them DELETION_PENDING with `deletion_scheduled_at = now()` and let the daily AccountDeletionScheduler run purge them (DROP IF EXISTS, memberships, orphan users, tokens). Severity medium (unverified).
-- [ ] [Deferred-from: CR 10-4, 2026-06-19] Backup systemd unit hardcodes /home/ubuntu [keevo/backend/scripts/keevo-backup.service:8-9] — template the path at deploy
-- [ ] [Deferred-from: CR 10-4, 2026-06-19] .env.backup not created/validated by deploy [keevo-backup.service, deploy-backend.yml] — EnvironmentFile=- + deploy-time WARN
-- [ ] [Deferred-from: CR 10-4, 2026-06-19] No alerting on backup failure [keevo-backup.service] — OnFailure= unit (email/webhook)
-- [ ] [Deferred-from: CR 10-4, 2026-06-19] S3 backups lack least-privilege IAM/versioning/Object-Lock [backup-db.sh / S3 config] — attacker on box can delete backups
-- [ ] [Deferred-from: CR 10-4, 2026-06-19] Restore --no-owner --no-acl loses grants [DEPLOYMENT_CHECKLIST §7] — document the re-grant step
-- [ ] [Deferred-from: CR 10-4, 2026-06-19] DEPLOYMENT_CHECKLIST §7 in root docs/ instead of keevo/backend/docs/ [docs/DEPLOYMENT_CHECKLIST.md vs keevo/backend/docs/DEPLOYMENT_CHECKLIST.md] — two checklists exist; pick one location
+- [x] [Deferred-from: CR 10-5, 2026-06-19] Staging TLS via prod Traefik (owner decision) [traefik/dynamic.yml, deploy-staging.yml] — shared keevo_edge network + staging router; prerequisite for valid staging HTTPS — ✅ `.github/workflows/deploy-staging.yml` (no staging Traefik/ACME, no `:8080/:8443`, backend on external `keevo_edge`) + `keevo/ops/traefik/staging-router.yml` · 📋 runbook `keevo/backend/docs/DEPLOYMENT_CHECKLIST.md` §15 — exécution serveur : 10-8
+- [x] [Deferred-from: CR 10-5, 2026-06-19] Staging reuses prod JWT/Firebase/DB secrets [deploy-staging.yml] — staging compromise could forge prod tokens; dedicated keys — ✅ `deploy-staging.yml` (`STAGING_JWT_*_PEM`, `STAGING_DB_PASSWORD`, `STAGING_FIREBASE_CREDENTIALS`, fail-fast secret check, prod JWT key refused) · 📋 runbook §14.1
+- [x] [Deferred-from: CR 10-5, 2026-06-19] workflow_dispatch without branch guard [.github/workflows/deploy-staging.yml:8] — check github.ref — ✅ `deploy-staging.yml` (job-level `if: github.ref == 'refs/heads/staging'` on both jobs)
+- [x] [Deferred-from: CR 10-5, 2026-06-19] Unconditional firebase bind-mount + no .env guard [deploy-staging.yml:231] — conditional mount + [ -f .env ] || exit 1 — ✅ `deploy-staging.yml` (Firebase compose override only when the staging secret is set, leftover file removed; `[ -f .env ] || { echo "missing .env"; exit 1; }`)
+- [x] [Deferred-from: CR 10-5, 2026-06-19] cancel-in-progress can cut a staging deploy mid-way [deploy-staging.yml:13] — disable cancellation on mutating steps — ✅ `deploy-staging.yml` (`concurrency.cancel-in-progress: false`)
+- [x] [Deferred-from: follow-up review v1s-15-9, 2026-10-13] Legacy DELETED tenants may still hold their schema, memberships and tokens [admin/tenant/application/service/AdminTenantService.java forceDelete] — before v1s-15-9 the admin force-delete only flipped the status, and the new forceDelete refuses DELETED tenants (TENANT_NOT_FOUND), so such leftovers can no longer be cleaned through the API. Settle on prod with `SELECT id, schema_name FROM public.tenants WHERE status = 'DELETED' AND to_regnamespace(schema_name) IS NOT NULL`; if rows exist, set them DELETION_PENDING with `deletion_scheduled_at = now()` and let the daily AccountDeletionScheduler run purge them (DROP IF EXISTS, memberships, orphan users, tokens). Severity medium (unverified). — 📋 runbook `keevo/backend/docs/DEPLOYMENT_CHECKLIST.md` §16 (detection query, `UPDATE … SET status='DELETION_PENDING', deletion_scheduled_at=now()`, purge confirmation, leftovers of already-dropped schemas) — exécution serveur : 10-8
+- [x] [Deferred-from: CR 10-4, 2026-06-19] Backup systemd unit hardcodes /home/ubuntu [keevo/backend/scripts/keevo-backup.service:8-9] — template the path at deploy — ✅ `keevo/backend/scripts/keevo-backup.service` (`__KEEVO_HOME__`, substituted by `sed` at install in `deploy-backend.yml`)
+- [x] [Deferred-from: CR 10-4, 2026-06-19] .env.backup not created/validated by deploy [keevo-backup.service, deploy-backend.yml] — EnvironmentFile=- + deploy-time WARN — ✅ `keevo-backup.service` (`EnvironmentFile=-`) + `deploy-backend.yml` (warning when `.env.backup` or the alert webhook is missing) · 📋 runbook §11.1
+- [x] [Deferred-from: CR 10-4, 2026-06-19] No alerting on backup failure [keevo-backup.service] — OnFailure= unit (email/webhook) — ✅ `keevo-backup.service` (`OnFailure=keevo-backup-alert@%n.service`) + `keevo-backup-alert@.service` + `backup-alert.sh` (journald + webhook) + `backup-db.sh` strict mode (Docker down, stale lock, `BACKUP_REQUIRE_S3`, `TimeoutStartSec=2h`) + success heartbeat + CI test `keevo/backend/scripts/tests/backup-alert-test.sh` · 📋 runbook §11.3 (alert test) and §11.5 (heartbeat monitor) — exécution serveur : 10-8
+- [x] [Deferred-from: CR 10-4, 2026-06-19] S3 backups lack least-privilege IAM/versioning/Object-Lock [backup-db.sh / S3 config] — attacker on box can delete backups — 📋 runbook `keevo/backend/docs/DEPLOYMENT_CHECKLIST.md` §12 (IAM policy without Delete, versioning + Object Lock GOVERNANCE 30 d) + lifecycle update in `BACKUP_RESTORE.md` §8 — exécution serveur : 10-8
+- [x] [Deferred-from: CR 10-4, 2026-06-19] Restore --no-owner --no-acl loses grants [DEPLOYMENT_CHECKLIST §7] — document the re-grant step — 📋 runbook `keevo/backend/docs/DEPLOYMENT_CHECKLIST.md` §13 (+ pointers in `BACKUP_RESTORE.md` §5 and §7)
+- [x] [Deferred-from: CR 10-4, 2026-06-19] DEPLOYMENT_CHECKLIST §7 in root docs/ instead of keevo/backend/docs/ [docs/DEPLOYMENT_CHECKLIST.md vs keevo/backend/docs/DEPLOYMENT_CHECKLIST.md] — two checklists exist; pick one location — ✅ single checklist `keevo/backend/docs/DEPLOYMENT_CHECKLIST.md`; root `docs/DEPLOYMENT_CHECKLIST.md` is a one-line pointer; cross-references fixed
 
 **Implementation Notes:**
 - Le routage TLS touche la stack **prod** (`traefik/dynamic.yml`) : à appliquer et valider lors du 1er bring-up staging réel, jamais à l'aveugle.

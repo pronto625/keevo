@@ -1,0 +1,22 @@
+# Keevo — backup failure alert (Story 10-7)
+#
+# Started by OnFailure= of keevo-backup.service; %i is the failed unit name.
+# __KEEVO_HOME__ is substituted at install time exactly like keevo-backup.service.
+#
+# The webhook settings are read from .env.backup, then from .env.backup-alert (which wins).
+# Keep them in .env.backup-alert so that an alert still goes out when .env.backup itself is
+# missing:
+#   BACKUP_ALERT_WEBHOOK_URL   — required to post (else the alert is only logged to journald)
+#   BACKUP_ALERT_WEBHOOK_TOKEN — optional, sent as "Authorization: Bearer …"
+#   BACKUP_ALERT_TO            — optional recipient (WhatsApp gateways such as WasenderAPI)
+[Unit]
+Description=Keevo backup failure alert for %i
+
+[Service]
+Type=oneshot
+EnvironmentFile=-__KEEVO_HOME__/.env.backup
+EnvironmentFile=-__KEEVO_HOME__/.env.backup-alert
+ExecStart=__KEEVO_HOME__/scripts/backup-alert.sh %i
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=keevo-backup-alert
