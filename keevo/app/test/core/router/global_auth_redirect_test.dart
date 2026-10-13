@@ -56,6 +56,12 @@ void main() {
           '/pos');
     });
 
+    // v1s-14-6 (FR7): « Aide & Tutoriels » is open to every role.
+    test('an employee reaches /settings/help', () async {
+      expect(await redirect('/settings/help', session: true, role: 'EMPLOYEE'),
+          isNull);
+    });
+
     // v1s-18-7: the action history, its detail and the stock movements
     // screen are owner-only.
     test('an employee is kept out of the action history routes', () async {

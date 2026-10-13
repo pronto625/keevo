@@ -23,6 +23,10 @@ class _TeamPageState extends ConsumerState<TeamPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final employeesAsync = ref.watch(employeeListProvider);
+    // v1s-14-6 (FR67): loaded beside the list, never blocks it — while
+    // loading or on failure the cards simply show no stats.
+    final activities =
+        ref.watch(employeeActivityMapProvider).valueOrNull ?? const {};
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
@@ -82,8 +86,10 @@ class _TeamPageState extends ConsumerState<TeamPage> {
               child: AppErrorWidget(
                 error: err,
                 title: 'Erreur de chargement',
-                onRetry: () =>
-                    ref.read(employeeListProvider.notifier).refresh(),
+                onRetry: () {
+                  ref.invalidate(employeeActivityMapProvider);
+                  ref.read(employeeListProvider.notifier).refresh();
+                },
               ),
             ),
             data: (employees) {
@@ -119,8 +125,11 @@ class _TeamPageState extends ConsumerState<TeamPage> {
                       padding: const EdgeInsets.only(bottom: 8),
                       child: EmployeeCard(
                         employee: employees[index],
-                        onActionComplete: () => ref
-                            .invalidate(employeeListProvider),
+                        activity: activities[employees[index].id],
+                        onActionComplete: () {
+                          ref.invalidate(employeeListProvider);
+                          ref.invalidate(employeeActivityMapProvider);
+                        },
                       ),
                     ),
                     childCount: employees.length,

@@ -6,6 +6,7 @@ import '../../../../core/sync/connectivity_service.dart';
 import '../../../../core/sync/sync_service.dart';
 import '../../domain/exception/employee_action_requires_connection_exception.dart';
 import '../../domain/model/create_employee_result.dart';
+import '../../domain/model/employee_activity.dart';
 import '../../domain/model/employee_model.dart';
 import '../../domain/repository/employee_repository.dart';
 import '../datasource/local_employee_datasource.dart';
@@ -204,6 +205,29 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
   Future<void> setPassword(String employeeId, String newPassword) =>
       _onlineOnly(
           () => _remote.setPassword(employeeId, newPassword), 'setPassword');
+
+  // ── v1s-14-6 — FR67 activity: server-only read, never cached ─────────
+
+  @override
+  Future<List<EmployeeActivity>> listActivity() =>
+      _onlineRead(_remote.listActivity, 'listActivity');
+
+  @override
+  Future<EmployeeActivity> getActivity(String employeeId) =>
+      _onlineRead(() => _remote.getActivity(employeeId), 'getActivity');
+
+  Future<T> _onlineRead<T>(Future<T> Function() call, String name) async {
+    if (!await _connectivity.isOnline()) {
+      throw const EmployeeActionRequiresConnectionException();
+    }
+    try {
+      return await call();
+    } on DioException catch (e) {
+      if (_isRefusal(e)) rethrow;
+      dev.log('EmployeeRepository.$name: backend unreachable: $e');
+      throw const EmployeeActionRequiresConnectionException();
+    }
+  }
 
   /// Runs a server-only action: a refusal (4xx) reaches the caller as-is, an
   /// unreachable server (offline, no answer, 5xx) becomes

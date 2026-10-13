@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../domain/model/create_employee_result.dart';
+import '../../domain/model/employee_activity.dart';
 import '../../domain/model/employee_model.dart';
 
 /// RemoteEmployeeDataSource — HTTP adapter for /api/v1/employees (Story 3.5).
@@ -128,5 +129,27 @@ class RemoteEmployeeDataSource {
       '/api/v1/employees/$employeeId/password',
       data: {'newPassword': newPassword},
     );
+  }
+
+  // ── v1s-14-6 — FR67 activity ──────────────────────────────────────────
+
+  /// GET /api/v1/employees/activity
+  Future<List<EmployeeActivity>> listActivity() async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/v1/employees/activity',
+    );
+    final data = response.data!['data'] as List<dynamic>;
+    return data
+        .map((e) => EmployeeActivity.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// GET /api/v1/employees/{id}/activity
+  Future<EmployeeActivity> getActivity(String employeeId) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/v1/employees/$employeeId/activity',
+    );
+    return EmployeeActivity.fromJson(
+        response.data!['data'] as Map<String, dynamic>);
   }
 }

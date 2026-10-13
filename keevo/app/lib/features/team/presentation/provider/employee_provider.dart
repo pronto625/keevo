@@ -1,3 +1,5 @@
+import 'dart:developer' as dev;
+
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/di/providers.dart';
@@ -6,6 +8,7 @@ import '../../data/datasource/local_employee_datasource.dart';
 import '../../data/datasource/remote_employee_datasource.dart';
 import '../../data/repository/employee_repository_impl.dart';
 import '../../domain/model/create_employee_result.dart';
+import '../../domain/model/employee_activity.dart';
 import '../../domain/model/employee_model.dart';
 import '../../domain/repository/employee_repository.dart';
 import '../../domain/usecase/create_employee_usecase.dart';
@@ -51,6 +54,30 @@ class EmployeeList extends _$EmployeeList {
     );
   }
 }
+
+// ── v1s-14-6 — FR67 employee activity (OWNER only) ───────────────────────
+
+/// Activity of every employee keyed by employee id, for the team cards.
+///
+/// Never blocks nor fails the team list: a non-OWNER session, an offline
+/// device or a server error all yield an empty map (cards show no stats).
+final employeeActivityMapProvider =
+    FutureProvider.autoDispose<Map<String, EmployeeActivity>>((ref) async {
+  try {
+    if (ref.watch(currentUserRoleProvider) != 'OWNER') return const {};
+    final list = await ref.watch(employeeRepositoryProvider).listActivity();
+    return {for (final a in list) a.employeeId: a};
+  } catch (e) {
+    dev.log('employeeActivityMapProvider: activity unavailable: $e');
+    return const {};
+  }
+});
+
+/// Activity of one employee, for the activity sheet (errors surface).
+final employeeActivityProvider = FutureProvider.autoDispose
+    .family<EmployeeActivity, String>((ref, employeeId) {
+  return ref.watch(employeeRepositoryProvider).getActivity(employeeId);
+});
 
 // ── Create employee ────────────────────────────────────────────────────────
 

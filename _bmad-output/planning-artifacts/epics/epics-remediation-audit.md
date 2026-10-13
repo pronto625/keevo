@@ -584,9 +584,11 @@ As a proprietor, I want in-app tutorials, WhatsApp invites, employee activity tr
 **Given** FR7 stub, FR65 temp-password-only, FR67 absent
 **When** implemented
 **Then**:
-- FR7: `video_player`/`chewie` + "Aide & Tutoriels" page (~2min FR videos per module)
-- FR65: `url_launcher` WhatsApp share/intent from `create_employee_page` (`wa.me` with temp-password)
-- FR67: `GET /api/v1/employees/{id}/activity` (OWNER) last login, today/week sales, active-session; `employee_card` stats; inactive>48h badge + WhatsApp reminder
+- [x] FR7: "Aide & Tutoriels" page (~2min FR videos per module) — done 2026-10-13 as external links (backend-configured URLs, opened outside the app; no `video_player`/`chewie`, no self-hosting)
+- [x] FR65: `url_launcher` WhatsApp share from `create_employee_page` — done 2026-10-13; `wa.me` message carries store, login phone and app link, **never the temp-password** (communicated separately, forced change at first login)
+- [x] FR67: `GET /api/v1/employees/{id}/activity` (OWNER) last login, today/week sales, active-session; `employee_card` stats; inactive>48h badge + WhatsApp reminder — done 2026-10-13 (+ bulk `GET /api/v1/employees/activity`; audit_log + sales + refresh_tokens, no new storage)
+
+**Status:** done 2026-10-13 — spec `_bmad-output/implementation-artifacts/spec-v1s-14-6-videos-invite-activity.md`.
 
 **Doc:** Epic 1 (FR7), Epic 3 Story 3.5 (FR65), Epic 8 Story 8.2 (FR67). **TDD:** `shouldPlayEmbeddedVideoTutorial()`, `shouldOpenWhatsAppShareLinkForInvite()`, `shouldShowEmployeeActivityStats()`.
 

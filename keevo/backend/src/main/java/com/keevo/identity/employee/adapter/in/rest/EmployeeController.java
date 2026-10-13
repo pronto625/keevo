@@ -40,6 +40,7 @@ public class EmployeeController {
     private final ChangeEmployeeRoleUseCase changeEmployeeRoleUseCase;
     private final SetEmployeePasswordUseCase setEmployeePasswordUseCase;
     private final EmployeeRoleResolver employeeRoleResolver;
+    private final GetEmployeeActivityUseCase getEmployeeActivityUseCase;
 
     public EmployeeController(CreateEmployeeUseCase createEmployeeUseCase,
                                ListEmployeesUseCase listEmployeesUseCase,
@@ -50,7 +51,8 @@ public class EmployeeController {
                                UpdateEmployeeUseCase updateEmployeeUseCase,
                                ChangeEmployeeRoleUseCase changeEmployeeRoleUseCase,
                                SetEmployeePasswordUseCase setEmployeePasswordUseCase,
-                               EmployeeRoleResolver employeeRoleResolver) {
+                               EmployeeRoleResolver employeeRoleResolver,
+                               GetEmployeeActivityUseCase getEmployeeActivityUseCase) {
         this.createEmployeeUseCase = createEmployeeUseCase;
         this.listEmployeesUseCase = listEmployeesUseCase;
         this.reassignStoreUseCase = reassignStoreUseCase;
@@ -61,6 +63,7 @@ public class EmployeeController {
         this.changeEmployeeRoleUseCase = changeEmployeeRoleUseCase;
         this.setEmployeePasswordUseCase = setEmployeePasswordUseCase;
         this.employeeRoleResolver = employeeRoleResolver;
+        this.getEmployeeActivityUseCase = getEmployeeActivityUseCase;
     }
 
     @Operation(summary = "Create a new employee")
@@ -220,6 +223,35 @@ public class EmployeeController {
         setEmployeePasswordUseCase.execute(
                 new SetEmployeePasswordCommand(actorId, employeeId, request.newPassword()));
         return ResponseEntity.ok(ApiResponseWrapper.ok(null));
+    }
+
+    // ── v1s-14-6 — FR67 employee activity (OWNER only) ───────────────────
+
+    @Operation(summary = "Activity of every employee (last login, sales today/this week, session)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Activity list returned"),
+            @ApiResponse(responseCode = "403", description = "Not an OWNER")
+    })
+    @GetMapping("/activity")
+    public ResponseEntity<ApiResponseWrapper<List<EmployeeActivityResponseDto>>> listActivity() {
+        CurrentActor.requireOwner("OWNER role required");
+        List<EmployeeActivityResponseDto> dtos = getEmployeeActivityUseCase.forAll().stream()
+                .map(EmployeeActivityResponseDto::fromDomain).toList();
+        return ResponseEntity.ok(ApiResponseWrapper.ok(dtos));
+    }
+
+    @Operation(summary = "Activity of one employee (last login, sales today/this week, session)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Activity returned"),
+            @ApiResponse(responseCode = "403", description = "Not an OWNER"),
+            @ApiResponse(responseCode = "404", description = "Employee not found")
+    })
+    @GetMapping("/{employeeId}/activity")
+    public ResponseEntity<ApiResponseWrapper<EmployeeActivityResponseDto>> getActivity(
+            @PathVariable UUID employeeId) {
+        CurrentActor.requireOwner("OWNER role required");
+        return ResponseEntity.ok(ApiResponseWrapper.ok(
+                EmployeeActivityResponseDto.fromDomain(getEmployeeActivityUseCase.forEmployee(employeeId))));
     }
 
     /**

@@ -326,9 +326,8 @@ class SettingsPage extends ConsumerWidget {
                       icon: Icons.help_outline_rounded,
                       iconColor: AppTheme.iconGrey,
                       title: 'Aide & Tutoriels',
-                      subtitle: 'Guides et questions fréquentes',
-                      onTap: () {},
-                      badge: 'Bientôt',
+                      subtitle: 'Vidéos courtes pour prendre Keevo en main',
+                      onTap: () => context.push('/settings/help'),
                     ),
                     const _Divider(),
                     _SettingsTile(

@@ -112,6 +112,12 @@ Widget _buildPage({
               ),
             ),
           ),
+          GoRoute(
+            path: '/settings/help',
+            builder: (_, __) => const Scaffold(
+              body: Center(child: Text('HelpPage')),
+            ),
+          ),
         ],
       ),
     ),
@@ -206,6 +212,38 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('FeedbackPage from=/'), findsOneWidget);
+      });
+    }
+  });
+
+  group('SettingsPage — Aide & Tutoriels (v1s-14-6, FR7)', () {
+    for (final role in ['OWNER', 'EMPLOYEE']) {
+      testWidgets('$role: the tile has no « Bientôt » badge and opens the '
+          'tutorials page', (tester) async {
+        await tester.pumpWidget(_buildPage(
+          mockFcmService: mockFcm,
+          mockTokenDataSource: mockTokenDs,
+          prefs: prefs,
+          role: role,
+        ));
+        await tester.pumpAndSettle();
+
+        await tester.scrollUntilVisible(
+          find.text('Aide & Tutoriels'),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.ensureVisible(find.text('Aide & Tutoriels'));
+        await tester.pumpAndSettle();
+        final tile = find.ancestor(
+            of: find.text('Aide & Tutoriels'), matching: find.byType(InkWell));
+        expect(
+            find.descendant(of: tile.first, matching: find.text('Bientôt')),
+            findsNothing);
+        await tester.tap(find.text('Aide & Tutoriels'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('HelpPage'), findsOneWidget);
       });
     }
   });

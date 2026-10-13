@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:keevo/core/di/providers.dart';
+import 'package:keevo/features/team/domain/model/employee_activity.dart';
 import 'package:keevo/features/team/domain/model/employee_model.dart';
 import 'package:keevo/features/team/domain/repository/employee_repository.dart';
 import 'package:keevo/features/team/presentation/page/team_page.dart';
@@ -68,9 +70,13 @@ void main() {
     when(() => mockStoreRepo.getStores(includeInactive: false))
         .thenAnswer((_) async => [store]);
     when(() => mockStoreRepo.syncFromRemote()).thenAnswer((_) async {});
+    when(() => mockEmpRepo.listActivity()).thenAnswer((_) async => []);
   });
 
-  Widget buildPage({List<EmployeeModel> employees = const []}) {
+  Widget buildPage({
+    List<EmployeeModel> employees = const [],
+    String? role,
+  }) {
     when(() => mockEmpRepo.listEmployees())
         .thenAnswer((_) async => employees);
 
@@ -78,6 +84,9 @@ void main() {
       overrides: [
         employeeRepositoryProvider.overrideWithValue(mockEmpRepo),
         storeRepositoryProvider.overrideWithValue(mockStoreRepo),
+        if (role != null) currentUserRoleProvider.overrideWithValue(role),
+        if (role != null)
+          currentUserIdProvider.overrideWith((ref) async => 'u-owner'),
       ],
       child: MaterialApp.router(
         routerConfig: GoRouter(routes: [
@@ -164,6 +173,51 @@ void main() {
         final text = tester.getRect(find.text(label));
         expect(back.overlaps(text), isFalse, reason: '$label overlaps back');
       }
+    });
+
+    // ── v1s-14-6 — FR67 activity on the cards ─────────────────────────
+    testWidgets('OWNER: active card shows today sales and the idle badge',
+        (tester) async {
+      when(() => mockEmpRepo.listActivity()).thenAnswer((_) async => [
+            EmployeeActivity(
+              employeeId: 'emp-1',
+              userId: 'u-1',
+              lastActivityAt:
+                  DateTime.now().subtract(const Duration(hours: 50)),
+              todaySalesCount: 2,
+              todaySalesAmount: 10000,
+              inactive: true,
+            ),
+          ]);
+      await tester.pumpWidget(
+          buildPage(employees: [activeEmployee], role: 'OWNER'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining("Aujourd'hui : 2 ventes"), findsOneWidget);
+      expect(find.text('Dernière activité : il y a 2 j'), findsOneWidget);
+      expect(find.text('Sans activité 48 h+'), findsOneWidget);
+    });
+
+    testWidgets('activity failure: list renders as before, no error UI',
+        (tester) async {
+      when(() => mockEmpRepo.listActivity())
+          .thenThrow(Exception('offline'));
+      await tester.pumpWidget(
+          buildPage(employees: [activeEmployee], role: 'OWNER'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Jean Mbida'), findsOneWidget);
+      expect(find.textContaining("Aujourd'hui"), findsNothing);
+      expect(find.text('Erreur de chargement'), findsNothing);
+    });
+
+    testWidgets('EMPLOYEE session: activity never requested', (tester) async {
+      await tester.pumpWidget(
+          buildPage(employees: [activeEmployee], role: 'EMPLOYEE'));
+      await tester.pumpAndSettle();
+
+      verifyNever(() => mockEmpRepo.listActivity());
+      expect(find.textContaining("Aujourd'hui"), findsNothing);
     });
   });
 }

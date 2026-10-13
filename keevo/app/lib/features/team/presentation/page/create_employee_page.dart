@@ -93,6 +93,8 @@ class _CreateEmployeePageState extends ConsumerState<CreateEmployeePage> {
                   '${result.employee.firstName} ${result.employee.lastName}',
               storeName: _selectedStore?.name ?? '',
               temporaryPassword: result.temporaryPassword,
+              invitePhone: result.employee.phoneNumber ?? _completePhone,
+              firstName: result.employee.firstName,
             ).then((_) {
               if (!mounted) return;
               // B2: use go() fallback when pop() is unavailable (e.g. GoRouter
