@@ -2,6 +2,7 @@
 
 import type { AdminProductListItem, AdminProductPage } from "@/types/catalog";
 import { formatXAFFull, formatDate } from "@/lib/format";
+import { planFilterLabel } from "@/lib/labels";
 
 interface ProductTableProps {
   data: AdminProductPage | undefined;
@@ -30,7 +31,7 @@ function stockColorClass(qty: number): string {
 
 const COLUMNS = [
   "Produit",
-  "Tenant",
+  "Entreprise",
   "Plan",
   "Catégorie",
   "Prix",
@@ -102,12 +103,12 @@ export function ProductTable({
                   <td className="px-4 py-3">
                     <span
                       className={`px-2 py-0.5 rounded text-xs font-medium ${
-                        item.tenantPlan === "PAID"
+                        item.tenantPlan !== "FREE"
                           ? "bg-yellow-100 text-yellow-800"
                           : "bg-gray-100 text-gray-600"
                       }`}
                     >
-                      {item.tenantPlan}
+                      {planFilterLabel(item.tenantPlan)}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-gray-600">

@@ -126,6 +126,32 @@ class AdminCatalogControllerTest {
                 .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("keevo-products-")));
     }
 
+    @Test
+    @DisplayName("9-1 completion — CSV is French: BOM, ';', French headers/labels, dd/MM/yyyy, no id, no raw code")
+    void exportProducts_csvIsFrenchWithoutIds() throws Exception {
+        setupFilterAs("ROLE_SUPER_ADMIN");
+        AdminProductListItem paid = new AdminProductListItem(UUID.randomUUID().toString(), "Riz; 5kg",
+                UUID.randomUUID().toString(), "Boutique Awa", "PAID", "kv_abc123", null, 12000L, 0, "DRAFT",
+                Instant.parse("2026-10-12T23:30:00Z"));
+        when(adminCatalogService.execute(any(com.keevo.admin.catalog.domain.port.in.ListProductsQuery.class)))
+                .thenReturn(new PageImpl<>(List.of(sampleProduct(), paid)));
+
+        byte[] body = mockMvc.perform(get("/api/v1/admin/catalog/products/export"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray();
+        String csv = new String(body, java.nio.charset.StandardCharsets.UTF_8);
+
+        org.assertj.core.api.Assertions.assertThat(csv)
+                .startsWith("\uFEFFProduit;Entreprise;Plan;Catégorie;Prix (XAF);Stock;Statut;Dernière mise à jour\r\n")
+                .contains("Savon Lux;Cosmos Beauté;Gratuit;Hygiène;1500;23;Actif;")
+                // 23:30Z on the 12th is the 13th in Africa/Douala (UTC+1)
+                .contains("\"Riz; 5kg\";Boutique Awa;Premium et essai;;12000;0;Brouillon;13/10/2026")
+                .doesNotContainPattern("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+                .doesNotContain("kv_abc123")
+                .doesNotContainPattern("\\b(FREE|PAID|ACTIVE|DRAFT|ARCHIVED)\\b")
+                .doesNotContain("product_id");
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private AdminProductListItem sampleProduct() {

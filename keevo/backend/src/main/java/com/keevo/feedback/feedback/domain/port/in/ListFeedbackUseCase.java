@@ -12,11 +12,25 @@ public interface ListFeedbackUseCase {
 
     Page<Feedback> list(ListFeedbackQuery query);
 
+    /** Number of feedback matching the filters of {@code query} (paging ignored) — sidebar badge. */
+    long count(ListFeedbackQuery query);
+
     /**
+     * Filters are ANDed (spec 9-1 completion); results are newest first.
+     *
      * @param page          zero-based page index
      * @param size          requested page size (capped by the service)
-     * @param priority      optional filter; takes precedence over {@code screenContext}
-     * @param screenContext optional filter, applied when {@code priority} is absent
+     * @param priority      optional filter (HIGH | NORMAL)
+     * @param screenContext optional filter (exact screen route)
+     * @param type          optional filter (feedback type, case-insensitive)
+     * @param handled       true = handled only, false = unhandled only, null = all
      */
-    record ListFeedbackQuery(int page, int size, String priority, String screenContext) {}
+    record ListFeedbackQuery(int page, int size, String priority, String screenContext,
+                             String type, Boolean handled) {
+
+        /** Unfiltered on type and handled state. */
+        public ListFeedbackQuery(int page, int size, String priority, String screenContext) {
+            this(page, size, priority, screenContext, null, null);
+        }
+    }
 }

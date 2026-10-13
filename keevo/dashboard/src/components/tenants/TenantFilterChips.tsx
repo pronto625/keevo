@@ -1,6 +1,6 @@
 "use client";
 
-import { tenantStatusLabel } from "@/lib/labels";
+import { planFilterLabel, tenantStatusLabel } from "@/lib/labels";
 import type { TenantFilters } from "@/types/tenant";
 
 interface TenantFilterChipsProps {
@@ -8,18 +8,24 @@ interface TenantFilterChipsProps {
   onClear: (key: keyof TenantFilters) => void;
 }
 
+/** `2026-10-01` → `01/10/2026`. */
+function frDate(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return y && m && d ? `${d}/${m}/${y}` : iso;
+}
+
 export function TenantFilterChips({ filters, onClear }: TenantFilterChipsProps) {
   const chips: { label: string; key: keyof TenantFilters }[] = [];
 
   if (filters.search) chips.push({ label: `"${filters.search}"`, key: "search" });
   if (filters.plan !== "ALL")
-    chips.push({ label: `Plan: ${filters.plan === "PAID" ? "Premium et essai" : "Gratuit"}`, key: "plan" });
+    chips.push({ label: `Plan : ${planFilterLabel(filters.plan)}`, key: "plan" });
   if (filters.status !== "ALL")
-    chips.push({ label: `Statut: ${tenantStatusLabel(filters.status)}`, key: "status" });
-  if (filters.registeredFrom) chips.push({ label: `Depuis: ${filters.registeredFrom}`, key: "registeredFrom" });
-  if (filters.registeredTo) chips.push({ label: `Jusqu'au: ${filters.registeredTo}`, key: "registeredTo" });
-  if (filters.lastActivityFrom) chips.push({ label: `Activité depuis: ${filters.lastActivityFrom}`, key: "lastActivityFrom" });
-  if (filters.lastActivityTo) chips.push({ label: `Activité jusqu'au: ${filters.lastActivityTo}`, key: "lastActivityTo" });
+    chips.push({ label: `Statut : ${tenantStatusLabel(filters.status)}`, key: "status" });
+  if (filters.registeredFrom) chips.push({ label: `Inscrite depuis le ${frDate(filters.registeredFrom)}`, key: "registeredFrom" });
+  if (filters.registeredTo) chips.push({ label: `Inscrite jusqu'au ${frDate(filters.registeredTo)}`, key: "registeredTo" });
+  if (filters.lastActivityFrom) chips.push({ label: `Activité depuis le ${frDate(filters.lastActivityFrom)}`, key: "lastActivityFrom" });
+  if (filters.lastActivityTo) chips.push({ label: `Activité jusqu'au ${frDate(filters.lastActivityTo)}`, key: "lastActivityTo" });
 
   if (chips.length === 0) return null;
 
@@ -34,7 +40,7 @@ export function TenantFilterChips({ filters, onClear }: TenantFilterChipsProps) 
           <button
             onClick={() => onClear(chip.key)}
             className="hover:text-blue-900 font-bold"
-            aria-label={`Supprimer filtre ${chip.label}`}
+            aria-label={`Retirer le filtre ${chip.label}`}
           >
             ×
           </button>

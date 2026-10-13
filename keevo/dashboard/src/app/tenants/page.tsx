@@ -27,7 +27,7 @@ export default function TenantsPage() {
   return (
     <AdminLayout>
       <div className="space-y-4">
-        <h1 className="text-xl font-bold text-gray-800">Gestion des Tenants</h1>
+        <h1 className="text-xl font-bold text-gray-800">Gestion des entreprises</h1>
 
         <PlanAlertsBanner
           alerts={alerts.data}

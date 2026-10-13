@@ -522,4 +522,4 @@ Claude Sonnet 4.6 (GitHub Copilot)
 
 ### Deferred items routed 2026-10-13
 
-- [ ] [Deferred-from: review spec-11-5-correctifs-performance-n1, 2026-10-13] Tenant list still runs 2 queries per tenant (storeCount, lastActivityAt) [keevo/backend/src/main/java/com/keevo/admin/tenant/application/service/AdminTenantService.java#enrichWithCrossSchemaMetrics] — one query per schema returning both values; pin the query count in AdminTenantServiceTest.
+- [x] [Deferred-from: review spec-11-5-correctifs-performance-n1, 2026-10-13] Tenant list still runs 2 queries per tenant (storeCount, lastActivityAt) [keevo/backend/src/main/java/com/keevo/admin/tenant/application/service/AdminTenantService.java#enrichWithCrossSchemaMetrics] — one query per schema returning both values; pin the query count in AdminTenantServiceTest. — **closed by spec 9-1 completion (2026-10-13)**: one SELECT per schema returns store count, last activity and owner name; pinned in `AdminTenantServiceTest.listTenants_oneCrossSchemaQueryPerTenant`.

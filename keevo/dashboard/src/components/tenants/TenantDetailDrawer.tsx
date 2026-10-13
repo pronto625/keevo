@@ -7,8 +7,18 @@ import {
   forceDelete,
   getTenantDetail,
 } from "@/lib/api/admin-tenants";
-import { planLabel, tenantStatusLabel } from "@/lib/labels";
-import type { TenantDetail } from "@/types/tenant";
+import {
+  auditActionLabel,
+  auditEntityTypeLabel,
+  lastActivityDayLabel,
+  OWNER_LABEL,
+  planLabel,
+  UNNAMED_TENANT_LABEL,
+  storeTypeLabel,
+  tenantStatusLabel,
+  userRoleLabel,
+} from "@/lib/labels";
+import type { AuditEvent, TenantDetail } from "@/types/tenant";
 import { PlanSection } from "./PlanSection";
 
 interface TenantDetailDrawerProps {
@@ -19,6 +29,20 @@ interface TenantDetailDrawerProps {
 function formatDate(iso: string | null) {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("fr-FR");
+}
+
+function formatDateTime(iso: string | null) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${d.toLocaleDateString("fr-FR")} ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+/** « Prix modifié — Savon » ; without entity label, the action label only (never an id). */
+export function auditLineTitle(ev: AuditEvent): string {
+  const action = auditActionLabel(ev.action);
+  const label = ev.entityLabel?.trim();
+  return label ? `${action} — ${label}` : action;
 }
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -66,9 +90,10 @@ export function TenantDetailDrawer({ tenantId, onClose }: TenantDetailDrawerProp
       <aside className="fixed right-0 top-0 h-full w-[600px] bg-white shadow-2xl z-50 flex flex-col">
         {/* Header */}
         <header className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white">
-          <h2 className="text-base font-semibold text-gray-900">Détail tenant</h2>
+          <h2 className="text-base font-semibold text-gray-900">Détail de l&apos;entreprise</h2>
           <button
             onClick={onClose}
+            aria-label="Fermer"
             className="text-gray-400 hover:text-gray-700 text-2xl leading-none font-light"
           >
             &times;
@@ -94,13 +119,15 @@ export function TenantDetailDrawer({ tenantId, onClose }: TenantDetailDrawerProp
                   Profil
                 </h3>
                 <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-                  <Row label="Code" value={<span className="font-mono text-blue-700">{data.tenant.code}</span>} />
-                  <Row label="Nom" value={data.tenant.name} />
-                  <Row label="Propriétaire" value={data.tenant.ownerPhone} />
+                  <Row label="Nom" value={data.tenant.name || UNNAMED_TENANT_LABEL} />
+                  <Row label="Propriétaire" value={data.tenant.ownerName || OWNER_LABEL} />
+                  <Row label="Téléphone" value={data.tenant.ownerPhone || "—"} />
                   <Row label="Plan" value={
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      (data.subscription?.planType ?? data.tenant.plan) !== "FREE"
+                      (data.subscription?.planType ?? data.tenant.plan) === "PREMIUM"
                         ? "bg-purple-100 text-purple-800"
+                        : (data.subscription?.planType ?? data.tenant.plan) === "PREMIUM_TRIAL"
+                        ? "bg-blue-100 text-blue-800"
                         : "bg-gray-100 text-gray-700"
                     }`}>{planLabel(data.subscription?.planType ?? data.tenant.plan)}</span>
                   } />
@@ -109,7 +136,7 @@ export function TenantDetailDrawer({ tenantId, onClose }: TenantDetailDrawerProp
                       data.tenant.status === "ACTIVE"
                         ? "bg-green-100 text-green-800"
                         : data.tenant.status === "DELETION_PENDING"
-                        ? "bg-amber-100 text-amber-800"
+                        ? "bg-orange-100 text-orange-800"
                         : "bg-red-100 text-red-800"
                     }`}>{tenantStatusLabel(data.tenant.status)}</span>
                   } />
@@ -129,14 +156,14 @@ export function TenantDetailDrawer({ tenantId, onClose }: TenantDetailDrawerProp
 
               {/* DELETION_PENDING actions */}
               {data.tenant.status === "DELETION_PENDING" && (
-                <section className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                  <p className="text-sm text-amber-800 font-medium mb-3">
+                <section className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <p className="text-sm text-orange-800 font-medium mb-3">
                     ⚠️ Suppression planifiée le {formatDate(data.tenant.deletionScheduledAt)}
                   </p>
                   <div className="flex gap-3">
                     <button
                       onClick={() => setConfirmAction("cancel")}
-                      className="px-4 py-2 bg-white border border-amber-400 text-amber-700 text-sm rounded-lg hover:bg-amber-50 font-medium"
+                      className="px-4 py-2 bg-white border border-orange-400 text-orange-700 text-sm rounded-lg hover:bg-orange-50 font-medium"
                     >
                       Annuler suppression
                     </button>
@@ -170,7 +197,7 @@ export function TenantDetailDrawer({ tenantId, onClose }: TenantDetailDrawerProp
                       {data.stores.map((s) => (
                         <tr key={s.id}>
                           <td className="py-2 text-gray-900 font-medium">{s.name}</td>
-                          <td className="py-2 text-gray-500">{s.type}</td>
+                          <td className="py-2 text-gray-500">{storeTypeLabel(s.type)}</td>
                           <td className="py-2 text-right text-gray-900">
                             {s.totalRevenue.toLocaleString("fr-FR")}
                           </td>
@@ -194,15 +221,15 @@ export function TenantDetailDrawer({ tenantId, onClose }: TenantDetailDrawerProp
                       <tr className="border-b border-gray-200">
                         <th className="text-left py-2 text-xs font-medium text-gray-500 uppercase">Nom</th>
                         <th className="text-left py-2 text-xs font-medium text-gray-500 uppercase">Rôle</th>
-                        <th className="text-left py-2 text-xs font-medium text-gray-500 uppercase">Dernière connexion</th>
+                        <th className="text-left py-2 text-xs font-medium text-gray-500 uppercase">Dernière activité</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {data.employees.map((emp) => (
-                        <tr key={emp.id}>
+                      {data.employees.map((emp, i) => (
+                        <tr key={`${emp.role}-${emp.name}-${i}`}>
                           <td className="py-2 text-gray-900 font-medium">{emp.name}</td>
-                          <td className="py-2 text-gray-500">{emp.role}</td>
-                          <td className="py-2 text-gray-600">{formatDate(emp.lastLoginAt)}</td>
+                          <td className="py-2 text-gray-500">{userRoleLabel(emp.role)}</td>
+                          <td className="py-2 text-gray-600">{lastActivityDayLabel(emp.lastActivityAt)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -213,22 +240,24 @@ export function TenantDetailDrawer({ tenantId, onClose }: TenantDetailDrawerProp
               {/* Journal d'audit */}
               <section className="bg-white rounded-lg border border-gray-200 p-4">
                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                  Journal d&apos;audit ({data.auditLog.total} événements)
+                  Journal d&apos;activité — 30 derniers jours ({data.auditLog.total}{" "}
+                  {data.auditLog.total > 1 ? "événements" : "événement"})
                 </h3>
                 {data.auditLog.events.length === 0 ? (
                   <p className="text-sm text-gray-400">Aucun événement</p>
                 ) : (
                   <>
                     <div className="space-y-1 max-h-72 overflow-y-auto">
-                      {data.auditLog.events.map((ev) => (
-                        <div key={ev.id} className="text-xs py-2 border-b border-gray-100 flex gap-2">
-                          <span className="text-gray-400 shrink-0">
-                            {formatDate(ev.occurredAt)}
-                          </span>
-                          <span className="text-gray-700 font-medium">{ev.eventType}</span>
-                          {ev.details && (
-                            <span className="text-gray-500 truncate">— {ev.details}</span>
-                          )}
+                      {data.auditLog.events.map((ev, i) => (
+                        <div key={`${ev.occurredAt}-${i}`} className="text-xs py-2 border-b border-gray-100" data-testid="audit-line">
+                          <div className="flex gap-2">
+                            <span className="text-gray-400 shrink-0">{formatDateTime(ev.occurredAt)}</span>
+                            <span className="text-gray-700 font-medium">{auditLineTitle(ev)}</span>
+                          </div>
+                          <div className="text-gray-500 mt-0.5">
+                            {auditEntityTypeLabel(ev.entityType)} · par {ev.actorName}
+                            {ev.storeName ? ` · ${ev.storeName}` : ""}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -267,8 +296,8 @@ export function TenantDetailDrawer({ tenantId, onClose }: TenantDetailDrawerProp
             </h3>
             <p className="text-sm text-gray-500 mb-4">
               {confirmAction === "cancel"
-                ? "Le tenant sera remis en statut Actif."
-                : "Cette action est irréversible. Le tenant sera immédiatement supprimé."}
+                ? "L'entreprise sera remise en statut Actif."
+                : "Cette action est irréversible. L'entreprise sera immédiatement supprimée."}
             </p>
             <div className="flex gap-3 justify-end">
               <button

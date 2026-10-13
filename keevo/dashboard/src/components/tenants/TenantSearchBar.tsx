@@ -15,7 +15,7 @@ export function TenantSearchBar({ value, onChange }: TenantSearchBarProps) {
       </span>
       <input
         type="search"
-        placeholder="Rechercher par nom, téléphone ou code…"
+        placeholder="Rechercher par nom d'entreprise ou téléphone"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="pl-9 pr-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 text-sm w-80 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"

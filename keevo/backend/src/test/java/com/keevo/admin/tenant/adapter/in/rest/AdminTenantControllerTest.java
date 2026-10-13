@@ -66,7 +66,12 @@ class AdminTenantControllerTest {
         mockMvc.perform(get("/api/v1/admin/tenants"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items").isArray())
-                .andExpect(jsonPath("$.data.totalCount").value(1));
+                .andExpect(jsonPath("$.data.totalCount").value(1))
+                // 9-1 completion — readable contract: owner name, real plan, no tenant code
+                .andExpect(jsonPath("$.data.items[0].name").value("Boutique Test"))
+                .andExpect(jsonPath("$.data.items[0].ownerName").value("Awa Diallo"))
+                .andExpect(jsonPath("$.data.items[0].plan").value("PREMIUM_TRIAL"))
+                .andExpect(jsonPath("$.data.items[0].code").doesNotExist());
 
         verify(adminTenantService).execute(any(com.keevo.admin.tenant.domain.port.in.ListTenantsQuery.class));
     }
@@ -111,14 +116,87 @@ class AdminTenantControllerTest {
         verify(adminTenantService).execute(any(com.keevo.admin.tenant.domain.port.in.GetTenantDetailQuery.class));
     }
 
+    @Test
+    @DisplayName("9-1 — GET /tenants/{id}/detail: employees and audit lines carry names and labels, no ids")
+    void getTenantDetail_contractHasNoIdentifiers() throws Exception {
+        setupFilterAs("ROLE_SUPER_ADMIN");
+        var detail = new com.keevo.admin.tenant.domain.model.AdminTenantDetail(sampleItem(), List.of(),
+                List.of(new com.keevo.admin.tenant.domain.model.AdminEmployeeInfo(
+                        "Awa Diallo", "EMPLOYEE", java.time.LocalDate.of(2026, 10, 12))),
+                List.of(new com.keevo.admin.tenant.domain.model.AdminAuditEvent("PRICE_CHANGED", "Product",
+                        "Savon", "Awa Diallo", "Boutique Centre", Instant.parse("2026-10-12T09:00:00Z"))),
+                1L);
+        when(adminTenantService.execute(any(com.keevo.admin.tenant.domain.port.in.GetTenantDetailQuery.class)))
+                .thenReturn(detail);
+
+        mockMvc.perform(get("/api/v1/admin/tenants/{id}/detail", TENANT_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.tenant.code").doesNotExist())
+                .andExpect(jsonPath("$.data.employees[0].name").value("Awa Diallo"))
+                .andExpect(jsonPath("$.data.employees[0].lastActivityAt").value("2026-10-12"))
+                .andExpect(jsonPath("$.data.employees[0].id").doesNotExist())
+                .andExpect(jsonPath("$.data.auditLog.events[0].action").value("PRICE_CHANGED"))
+                .andExpect(jsonPath("$.data.auditLog.events[0].entityLabel").value("Savon"))
+                .andExpect(jsonPath("$.data.auditLog.events[0].actorName").value("Awa Diallo"))
+                .andExpect(jsonPath("$.data.auditLog.events[0].storeName").value("Boutique Centre"))
+                .andExpect(jsonPath("$.data.auditLog.events[0].id").doesNotExist())
+                .andExpect(jsonPath("$.data.auditLog.events[0].actorId").doesNotExist())
+                .andExpect(jsonPath("$.data.auditLog.events[0].details").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("9-1 — GET /tenants with an unknown plan → 422 VALIDATION_ERROR")
+    void listTenants_unknownPlan_returns422() throws Exception {
+        setupFilterAs("ROLE_SUPER_ADMIN");
+        when(adminTenantService.execute(any(com.keevo.admin.tenant.domain.port.in.ListTenantsQuery.class)))
+                .thenThrow(new DomainException(ErrorCode.VALIDATION_ERROR, "plan"));
+
+        mockMvc.perform(get("/api/v1/admin/tenants").param("plan", "GOLD"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.domainCode").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    @DisplayName("9-1 — date filters accept the dashboard's calendar days (Africa/Douala, inclusive) and ISO instants")
+    void listTenants_dateFilters_parsed() throws Exception {
+        setupFilterAs("ROLE_SUPER_ADMIN");
+        when(adminTenantService.execute(any(com.keevo.admin.tenant.domain.port.in.ListTenantsQuery.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        mockMvc.perform(get("/api/v1/admin/tenants")
+                        .param("registeredFrom", "2026-10-01")
+                        .param("lastActivityFrom", "2026-10-01T08:00:00Z")
+                        .param("lastActivityTo", "2026-10-13"))
+                .andExpect(status().isOk());
+
+        var captor = org.mockito.ArgumentCaptor.forClass(com.keevo.admin.tenant.domain.port.in.ListTenantsQuery.class);
+        verify(adminTenantService).execute(captor.capture());
+        var q = captor.getValue();
+        org.assertj.core.api.Assertions.assertThat(q.registeredFrom()).isEqualTo(Instant.parse("2026-09-30T23:00:00Z"));
+        org.assertj.core.api.Assertions.assertThat(q.lastActivityFrom()).isEqualTo(Instant.parse("2026-10-01T08:00:00Z"));
+        org.assertj.core.api.Assertions.assertThat(q.lastActivityTo()).isEqualTo(Instant.parse("2026-10-13T22:59:59.999999999Z"));
+        org.assertj.core.api.Assertions.assertThat(q.registeredTo()).isNull();
+    }
+
+    @Test
+    @DisplayName("9-1 — malformed date filter → 422 VALIDATION_ERROR")
+    void listTenants_badDate_returns422() throws Exception {
+        setupFilterAs("ROLE_SUPER_ADMIN");
+
+        mockMvc.perform(get("/api/v1/admin/tenants").param("lastActivityFrom", "hier"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.domainCode").value("VALIDATION_ERROR"));
+        verify(adminTenantService, never()).execute(any(com.keevo.admin.tenant.domain.port.in.ListTenantsQuery.class));
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private AdminTenantListItem sampleItem() {
         return new AdminTenantListItem(
                 TENANT_ID, "KV-001", "Boutique Test", "+237600000001",
-                "FREE", "ACTIVE",
+                "PREMIUM_TRIAL", "ACTIVE",
                 Instant.now(), null,
-                0, 0, null
+                0, 0, null, "Awa Diallo"
         );
     }
 

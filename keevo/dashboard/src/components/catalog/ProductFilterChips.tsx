@@ -1,5 +1,6 @@
 "use client";
 
+import { planFilterLabel } from "@/lib/labels";
 import type { ProductFilters } from "@/types/catalog";
 
 interface ProductFilterChipsProps {
@@ -28,13 +29,13 @@ export function ProductFilterChips({
   if (filters.search)
     chips.push({ label: `"${filters.search}"`, key: "search" });
   if (filters.tenantId)
-    chips.push({ label: "Tenant: sélectionné", key: "tenantId" });
+    chips.push({ label: "Entreprise : sélectionnée", key: "tenantId" });
   if (filters.stockLevel !== "ALL")
     chips.push({ label: STOCK_LABELS[filters.stockLevel] ?? filters.stockLevel, key: "stockLevel" });
   if (filters.status !== "ALL")
     chips.push({ label: STATUS_LABELS[filters.status] ?? filters.status, key: "status" });
   if (filters.plan !== "ALL")
-    chips.push({ label: `Plan: ${filters.plan}`, key: "plan" });
+    chips.push({ label: `Plan : ${planFilterLabel(filters.plan)}`, key: "plan" });
 
   if (chips.length === 0) return null;
 

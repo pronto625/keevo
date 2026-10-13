@@ -1,7 +1,7 @@
 "use client";
 
 import type { TenantListItem, TenantPage } from "@/types/tenant";
-import { planLabel, tenantStatusLabel } from "@/lib/labels";
+import { OWNER_LABEL, UNNAMED_TENANT_LABEL, planLabel, tenantStatusLabel } from "@/lib/labels";
 
 interface TenantTableProps {
   data: TenantPage | undefined;
@@ -12,9 +12,12 @@ interface TenantTableProps {
   onSelect: (tenantId: string) => void;
 }
 
-function daysUntil(iso: string): number {
-  const ms = new Date(iso).getTime() - Date.now();
-  return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+/** « Suppression dans N jours » (singular at 1); a date already past → « Suppression imminente ». */
+export function deletionCountdown(iso: string, now: number = Date.now()): string {
+  const ms = new Date(iso).getTime() - now;
+  if (!(ms > 0)) return "Suppression imminente";
+  const days = Math.ceil(ms / (1000 * 60 * 60 * 24));
+  return `Suppression dans ${days} ${days > 1 ? "jours" : "jour"}`;
 }
 
 function formatDate(iso: string | null): string {
@@ -22,9 +25,15 @@ function formatDate(iso: string | null): string {
   return new Date(iso).toLocaleDateString("fr-FR");
 }
 
+const PLAN_BADGE: Record<string, string> = {
+  FREE: "bg-gray-100 text-gray-700",
+  PREMIUM_TRIAL: "bg-blue-100 text-blue-800",
+  PREMIUM: "bg-purple-100 text-purple-800",
+};
+
 const STATUS_BADGE: Record<string, string> = {
   ACTIVE: "bg-green-100 text-green-800",
-  DELETION_PENDING: "bg-amber-100 text-amber-800",
+  DELETION_PENDING: "bg-orange-100 text-orange-800",
   SUSPENDED: "bg-red-100 text-red-800",
 };
 
@@ -44,8 +53,8 @@ export function TenantTable({
     <div>
       <p className="text-sm text-gray-500 mb-2">
         {totalCount > 0
-          ? `Affichage ${start}–${end} sur ${totalCount} tenants`
-          : "Aucun tenant trouvé"}
+          ? `Affichage ${start}–${end} sur ${totalCount} ${totalCount > 1 ? "entreprises" : "entreprise"}`
+          : "Aucune entreprise trouvée"}
       </p>
 
       <div className="overflow-x-auto rounded border border-gray-200">
@@ -53,8 +62,8 @@ export function TenantTable({
           <thead className="bg-gray-50">
             <tr>
               {[
-                "Code",
-                "Nom",
+                "Entreprise",
+                "Propriétaire",
                 "Téléphone",
                 "Plan",
                 "Statut",
@@ -82,7 +91,7 @@ export function TenantTable({
             ) : !data?.items?.length ? (
               <tr>
                 <td colSpan={9} className="px-4 py-8 text-center text-gray-400">
-                  Aucun résultat
+                  Aucune entreprise
                 </td>
               </tr>
             ) : (
@@ -90,29 +99,26 @@ export function TenantTable({
                 <tr
                   key={item.id}
                   onClick={() => onSelect(item.id)}
-                  className={`cursor-pointer hover:bg-gray-50 ${
+                  data-deletion-pending={item.status === "DELETION_PENDING" ? "true" : undefined}
+                  className={`cursor-pointer ${
                     item.status === "DELETION_PENDING"
-                      ? "bg-amber-50 border-l-2 border-amber-400"
-                      : ""
+                      ? "bg-orange-50 border-l-4 border-orange-400 hover:bg-orange-100"
+                      : "hover:bg-gray-50"
                   }`}
                 >
-                  <td className="px-4 py-3 font-mono text-xs">{item.code}</td>
                   <td className="px-4 py-3 font-medium">
-                    {item.name}
+                    {item.name || UNNAMED_TENANT_LABEL}
                     {item.status === "DELETION_PENDING" &&
                       item.deletionScheduledAt && (
-                        <span className="ml-2 text-xs text-amber-600">
-                          Suppression dans {daysUntil(item.deletionScheduledAt)} j
+                        <span className="ml-2 text-xs font-medium text-orange-700">
+                          {deletionCountdown(item.deletionScheduledAt)}
                         </span>
                       )}
                   </td>
-                  <td className="px-4 py-3">{item.ownerPhone}</td>
+                  <td className="px-4 py-3">{item.ownerName || OWNER_LABEL}</td>
+                  <td className="px-4 py-3">{item.ownerPhone || "—"}</td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      item.plan !== "FREE"
-                        ? "bg-purple-100 text-purple-800"
-                        : "bg-gray-100 text-gray-700"
-                    }`}>
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${PLAN_BADGE[item.plan] ?? "bg-gray-100 text-gray-700"}`}>
                       {planLabel(item.plan)}
                     </span>
                   </td>

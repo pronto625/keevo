@@ -17,6 +17,13 @@ export function isCode(value: string): boolean {
   return !hexRuns.some((run) => /[0-9]/.test(run));
 }
 
+// Fallback labels shared by every page (one constant each — mirrors the backend AdminLabels).
+export const OWNER_LABEL = "Propriétaire";
+export const EMPLOYEE_LABEL = "Employé";
+export const UNKNOWN_USER_LABEL = "Utilisateur inconnu";
+export const UNNAMED_TENANT_LABEL = "Entreprise sans nom";
+export const DELETED_TENANT_LABEL = "Entreprise supprimée";
+
 function own(map: Record<string, string>, key: string): string | undefined {
   return Object.hasOwn(map, key) ? map[key] : undefined;
 }
@@ -241,8 +248,8 @@ export function syncStatusLabel(code: string | null | undefined): string {
 export function deviceUserLabel(userName: string | null | undefined, userRole: string | null | undefined): string {
   const name = userName?.trim();
   if (name) return name;
-  if (userRole === "OWNER") return "Propriétaire";
-  return "Utilisateur inconnu";
+  if (userRole === "OWNER") return OWNER_LABEL;
+  return UNKNOWN_USER_LABEL;
 }
 
 /**
@@ -403,4 +410,235 @@ export function featureLabel(code: string | null | undefined): string {
 export function cohortWeekLabel(weekStart: string | null | undefined): string {
   const [y, m, d] = (weekStart ?? "").split("-");
   return y && m && d ? `Sem. du ${d}/${m}/${y}` : "—";
+}
+
+// ── Spec 9-1 completion — Entreprises page and « Retours utilisateurs » inbox ─────────────────
+
+/** Plan filter of the Entreprises page (select options, chips). `PAID` = legacy « Premium et essai ». */
+export const TENANT_PLAN_FILTERS = ["ALL", "FREE", "PREMIUM_TRIAL", "PREMIUM"] as const;
+
+export function planFilterLabel(code: string | null | undefined): string {
+  if (code === "ALL") return "Tous";
+  if (code === "PAID") return "Premium et essai";
+  return planLabel(code);
+}
+
+// Copied from keevo/app/lib/features/audit/domain/audit_labels.dart (auditActionLabels, v1s-18-7),
+// plus the server-only codes the admin log can contain (PRICE_CHANGED).
+const AUDIT_ACTION_LABELS: Record<string, string> = {
+  ACCOUNT_DELETION_CANCELLED: "Suppression du compte annulée",
+  ACCOUNT_DELETION_REQUESTED: "Suppression du compte demandée",
+  CATEGORY_ACTIVATED: "Catégorie activée",
+  CATEGORY_CREATED: "Catégorie créée",
+  CATEGORY_DEACTIVATED: "Catégorie désactivée",
+  CATEGORY_RENAMED: "Catégorie renommée",
+  CLIENT_ARCHIVED: "Client archivé",
+  CLIENT_CREATED: "Client créé",
+  DATA_EXPORTED: "Données exportées",
+  DAY_CLOSED: "Journée clôturée",
+  EMPLOYEE_CREATED: "Employé ajouté",
+  EMPLOYEE_PASSWORD_SET_BY_OWNER: "Mot de passe défini",
+  EMPLOYEE_ROLE_CHANGED: "Rôle modifié",
+  EMPLOYEE_UPDATED: "Employé modifié",
+  INVENTORY_COUNT_SAVED: "Comptage enregistré",
+  INVENTORY_REPORT_GENERATED: "Rapport d'inventaire",
+  INVENTORY_SESSION_CANCELLED: "Inventaire annulé",
+  INVENTORY_SESSION_CREATED: "Inventaire lancé",
+  INVENTORY_VALIDATED: "Inventaire validé",
+  ONBOARDING_COMPLETED: "Configuration terminée",
+  PASSWORD_RESET: "Mot de passe réinitialisé",
+  PASSWORD_RESET_REQUESTED: "Réinitialisation demandée",
+  PRICE_CHANGED: "Prix modifié",
+  PRICE_OVERRIDDEN: "Prix modifié en caisse",
+  PRODUCT_ACTIVATED: "Produit activé",
+  PRODUCT_ARCHIVED: "Produit archivé",
+  PRODUCT_CREATED: "Produit créé",
+  PRODUCT_UPDATED: "Produit modifié",
+  SALE_AUTO_VALIDATED: "Vente validée automatiquement",
+  SALE_CANCELLED: "Vente annulée",
+  SALE_COMPLETED: "Vente enregistrée",
+  SALE_CORRECTED: "Vente corrigée",
+  SALE_MANUALLY_VALIDATED: "Vente validée",
+  SALE_PENDING_VALIDATION: "Vente en attente",
+  STOCK_ADJUSTED: "Mouvement de stock",
+  STOCK_FORCED_ZERO: "Stock forcé à zéro",
+  STOCK_THRESHOLD_BREACHED: "Alerte de stock bas",
+  STORE_CREATED: "Boutique créée",
+  STORE_DEACTIVATED: "Boutique désactivée",
+  STORE_UPDATED: "Boutique modifiée",
+  SUPPLIER_ARCHIVED: "Fournisseur archivé",
+  SUPPLIER_CREATED: "Fournisseur créé",
+  USER_AUTHENTICATED: "Connexion",
+  USER_REGISTERED: "Inscription",
+};
+
+/** Audit action → French title; an unknown code is humanized, never shown raw. */
+export function auditActionLabel(code: string | null | undefined): string {
+  return lookup(AUDIT_ACTION_LABELS, code, "Action");
+}
+
+// Copied from keevo/app/lib/features/audit/domain/audit_labels.dart (auditEntityTypeLabels).
+const AUDIT_ENTITY_TYPE_LABELS: Record<string, string> = {
+  Category: "Catégorie",
+  Client: "Client",
+  DayClosure: "Clôture de journée",
+  Employee: "Employé",
+  Export: "Export de données",
+  InventoryCount: "Comptage d'inventaire",
+  InventorySession: "Inventaire",
+  PriceOverride: "Prix de vente",
+  Product: "Produit",
+  Sale: "Vente",
+  StockAlert: "Alerte de stock",
+  StockLevel: "Niveau de stock",
+  StockMovement: "Mouvement de stock",
+  Store: "Boutique",
+  Supplier: "Fournisseur",
+  Tenant: "Compte",
+  User: "Compte utilisateur",
+};
+
+/** Audited object type (`Product`, `StockLevel`…) → French noun; unknown → « Élément ». */
+export function auditEntityTypeLabel(code: string | null | undefined): string {
+  const key = code?.trim();
+  if (!key) return "Élément";
+  const known = own(AUDIT_ENTITY_TYPE_LABELS, key);
+  if (known) return known;
+  // PascalCase → « Stock level », UPPER_SNAKE → humanized; anything else stays generic.
+  if (/^[A-Z][a-zA-Z]*$/.test(key)) return humanizeCode(key.replace(/([a-z])([A-Z])/g, "$1_$2"));
+  return isCode(key) ? humanizeCode(key) : "Élément";
+}
+
+const STORE_TYPE_LABELS: Record<string, string> = {
+  STORE: "Boutique",
+  WAREHOUSE: "Entrepôt",
+};
+
+export function storeTypeLabel(code: string | null | undefined): string {
+  return lookup(STORE_TYPE_LABELS, code, "—");
+}
+
+// Mirrors keevo/app/lib/features/feedback/domain/model/feedback_type.dart.
+const FEEDBACK_TYPE_LABELS: Record<string, string> = {
+  SUGGESTION: "Suggestion",
+  BUG: "Problème signalé",
+  PRAISE: "Compliment",
+};
+
+/** Feedback type, case-insensitive (`bug` / `BUG`); any unknown type (code or free text) → « Autre ». */
+export function feedbackTypeLabel(code: string | null | undefined): string {
+  const key = code?.trim().toUpperCase();
+  return (key && own(FEEDBACK_TYPE_LABELS, key)) || "Autre";
+}
+
+export const FEEDBACK_TYPES = ["SUGGESTION", "BUG", "PRAISE"] as const;
+
+const PRIORITY_LABELS: Record<string, string> = {
+  HIGH: "Haute",
+  NORMAL: "Normale",
+};
+
+export function priorityLabel(code: string | null | undefined): string {
+  return lookup(PRIORITY_LABELS, code, "—");
+}
+
+const PLATFORM_LABELS: Record<string, string> = {
+  ANDROID: "Android",
+  IOS: "iOS",
+  WEB: "Web",
+};
+
+export function platformLabel(code: string | null | undefined): string {
+  return lookup(PLATFORM_LABELS, code, "—");
+}
+
+const UUID_SEGMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Segments of the app routes (keevo/app/lib/core/router/app_router.dart).
+const SCREEN_SEGMENT_LABELS: Record<string, string> = {
+  audit: "Historique des actions",
+  entry: "Détail",
+  "stock-movements": "Mouvements de stock",
+  auth: "Connexion",
+  "change-password": "Mot de passe",
+  "forgot-password": "Mot de passe oublié",
+  login: "Connexion",
+  register: "Inscription",
+  "reset-password": "Réinitialisation du mot de passe",
+  clients: "Clients",
+  new: "Nouveau",
+  edit: "Modification",
+  dashboard: "Tableau de bord",
+  store: "Boutique",
+  stores: "Boutiques",
+  exports: "Exports",
+  local: "Sur l'appareil",
+  inventory: "Inventaire",
+  counting: "Comptage",
+  "gap-report": "Rapport d'écarts",
+  notifications: "Notifications",
+  onboarding: "Configuration",
+  sector: "Secteur",
+  "shop-name": "Nom de la boutique",
+  pos: "Caisse",
+  checkout: "Paiement",
+  pending: "Ventes en attente",
+  "sales-history": "Historique des ventes",
+  success: "Vente terminée",
+  products: "Produits",
+  import: "Import",
+  reports: "Rapports",
+  boutiques: "Boutiques",
+  history: "Historique",
+  rentabilite: "Rentabilité",
+  settings: "Paramètres",
+  account: "Compte",
+  delete: "Suppression",
+  categories: "Catégories",
+  feedback: "Avis",
+  help: "Aide",
+  subscription: "Abonnement",
+  sync: "Synchronisation",
+  conflicts: "Conflits",
+  team: "Équipe",
+  splash: "Démarrage",
+  stock: "Stock",
+  overview: "Vue d'ensemble",
+  transfers: "Transferts",
+  suppliers: "Fournisseurs",
+  blocked: "Bloquée",
+  "tenant-picker": "Choix de l'entreprise",
+  terms: "Conditions d'utilisation",
+  view: "Lecture",
+  home: "Accueil",
+};
+
+/**
+ * Screen of a feedback, from the app route (`/products/<uuid>/edit`): ids, numbers and query
+ * strings are dropped, known segments are translated (« Produits › Modification »), unknown ones
+ * humanized.
+ */
+export function screenLabel(route: string | null | undefined): string {
+  const path = route?.split(/[?#]/)[0]?.trim();
+  if (!path) return "—";
+  const parts = path
+    .split("/")
+    .filter((s) => s && !UUID_SEGMENT.test(s) && !/\d/.test(s) && !s.startsWith(":"))
+    .map((s) => own(SCREEN_SEGMENT_LABELS, s.toLowerCase()) ?? humanizeCode(s.replace(/-/g, "_")));
+  return parts.length ? parts.join(" › ") : "Accueil";
+}
+
+/** Last active day (`yyyy-MM-dd`): « Aujourd'hui », « Hier », else dd/MM/yyyy; null → « Jamais ». */
+export function lastActivityDayLabel(day: string | null | undefined, today: Date = new Date()): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(day ?? "");
+  if (!match) return "Jamais";
+  const [, y, m, d] = match;
+  const key = (dt: Date) =>
+    `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+  const todayKey = key(today);
+  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+  const value = `${y}-${m}-${d}`;
+  if (value === todayKey) return "Aujourd'hui";
+  if (value === key(yesterday)) return "Hier";
+  return `${d}/${m}/${y}`;
 }
