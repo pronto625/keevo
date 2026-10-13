@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -137,6 +138,45 @@ void main() {
 
     expect(done, 0);
     expect(find.text('Accès refusé'), findsOneWidget);
+  });
+
+  testWidgets(
+      'v1s-14-13: reactivation refused by the plan limit opens the plan sheet, '
+      'no snackbar, no success', (tester) async {
+    var done = 0;
+    when(() => empRepo.reactivateEmployee(any())).thenThrow(DioException(
+      requestOptions: RequestOptions(path: '/api/v1/employees/emp-1/reactivate'),
+      type: DioExceptionType.badResponse,
+      response: Response(
+        requestOptions:
+            RequestOptions(path: '/api/v1/employees/emp-1/reactivate'),
+        statusCode: 403,
+        data: {
+          'error': 'Forbidden',
+          'code': 403,
+          'domainCode': 'PLAN_LIMIT_EXCEEDED',
+          'details': {'entity': 'employees', 'limit': '3', 'current': '3'},
+        },
+      ),
+    ));
+    await pumpCard(tester,
+        build(employee(status: 'INACTIVE'), onDone: () => done++));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(EmployeeCard));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Réactiver l'accès"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Réactiver'));
+    await tester.pumpAndSettle();
+
+    expect(done, 0);
+    expect(
+        find.text(
+            'Vous avez atteint la limite de 3 employés sur votre plan gratuit'),
+        findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
+    expect(find.textContaining('PLAN_LIMIT_EXCEEDED'), findsNothing);
   });
 
   testWidgets('reassign failure shows an error and does not report success',

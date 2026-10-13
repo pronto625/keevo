@@ -3,7 +3,7 @@ baseline_commit: 6a0efea
 ---
 # Story 14.13: Corriger l'enforcement des limites du plan Free (FR16) — enum obsolète + chemin de création produit non gardé
 
-Status: in-progress
+Status: done
 
 <!-- V1-stabilization track — tag A (patch V1, non release-blocker mais impact monétisation direct).
      Branche : v1-stabilization (HEAD 6a0efea).
@@ -114,4 +114,5 @@ N/A — no debugging required.
 
 ### Deferred items routed 2026-10-13
 
-- [ ] [Deferred-from: build-auto review v1s-13-13, 2026-10-13] Employee reactivation bypasses the plan limit [keevo/backend/src/main/java/com/keevo/identity/employee/application/service/ReactivateEmployeeService.java:56-57] — `updateStatus(..., ACTIVE)` with no `PlanLimitGuard.checkEmployeeLimit` and no `employee-limit:<schema>` lock, so a deactivated employee can be reactivated past the FREE cap (and race a concurrent create at max−1). Settle by taking `transactionLock.lock("employee-limit:" + schema)` then `checkEmployeeLimit(plan, countActiveEmployees())` before the status update (same pattern as CreateEmployeeService since v1s-13-13), with an InOrder unit test and an entry in SchedulerLockCoverageTest.
+- [x] [Deferred-from: build-auto review v1s-13-13, 2026-10-13] Employee reactivation bypasses the plan limit [keevo/backend/src/main/java/com/keevo/identity/employee/application/service/ReactivateEmployeeService.java:56-57] — `updateStatus(..., ACTIVE)` with no `PlanLimitGuard.checkEmployeeLimit` and no `employee-limit:<schema>` lock, so a deactivated employee can be reactivated past the FREE cap (and race a concurrent create at max−1). Settle by taking `transactionLock.lock("employee-limit:" + schema)` then `checkEmployeeLimit(plan, countActiveEmployees())` before the status update (same pattern as CreateEmployeeService since v1s-13-13), with an InOrder unit test and an entry in SchedulerLockCoverageTest.
+  - Resolved 2026-10-13 (spec-v1s-14-13-reactivate-employee-plan-limit.md): `employee-limit:<schema>` lock taken first, plan check (same rule and `PLAN_LIMIT_EXCEEDED` as creation) when the target is not already ACTIVE; InOrder unit test, SchedulerLockCoverageTest entry, real-PostgreSQL race test; app employee card opens the French plan sheet.
