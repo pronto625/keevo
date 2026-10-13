@@ -318,3 +318,89 @@ export function monthLabel(month: string | null | undefined, short = false): str
   if (!name) return "—";
   return short ? `${MONTH_SHORT_NAMES[index]} ${match[1].slice(2)}` : `${name} ${match[1]}`;
 }
+
+// Story 9-4 — « Analytics » page.
+export const ANALYTICS_LABELS = {
+  dau: "Utilisateurs actifs aujourd'hui",
+  mau: "Utilisateurs actifs (30 derniers jours)",
+  dauMau: "Taux d'engagement (actifs du jour / actifs 30 jours)",
+  totalTenants: "Entreprises",
+  totalStores: "Boutiques",
+  activeStores: "Boutiques actives (30 jours)",
+  totalProducts: "Produits",
+  totalCompletedSales: "Ventes réalisées",
+  totalGmv: "Volume de ventes total",
+  newTenants: "Nouvelles entreprises",
+  cumulativeTenants: "Entreprises (cumul)",
+  salesCount: "Ventes",
+  gmv: "Volume de ventes",
+  monthlyActiveUsers: "Utilisateurs actifs du mois",
+  geographyTitle: "Répartition géographique des entreprises",
+  geographyHint: "D'après l'indicatif du téléphone du propriétaire",
+  retentionTitle: "Rétention des entreprises par semaine d'inscription",
+  cohort: "Semaine d'inscription",
+  cohortSize: "Entreprises",
+  topStoresTitle: "Top 20 des boutiques par volume de ventes",
+  store: "Boutique",
+  tenant: "Entreprise",
+  transactions: "Transactions",
+  averageBasket: "Panier moyen",
+  growth: "Évolution",
+  newStore: "Nouveau",
+  adoptionTitle: "Adoption des fonctionnalités (entreprises actives sur 30 jours)",
+  noData: "Aucune donnée",
+  retentionLegend: "— : semaine pas encore terminée",
+} as const;
+
+export const ANALYTICS_TABS = [
+  { id: "overview", label: "Vue d'ensemble" },
+  { id: "retention", label: "Rétention" },
+  { id: "top-stores", label: "Top boutiques" },
+  { id: "adoption", label: "Adoption" },
+] as const;
+
+const COUNTRY_LABELS: Record<string, string> = {
+  CM: "Cameroun",
+  CI: "Côte d'Ivoire",
+  SN: "Sénégal",
+  GA: "Gabon",
+  CG: "Congo",
+  CD: "RD Congo",
+  BJ: "Bénin",
+  TG: "Togo",
+  BF: "Burkina Faso",
+  ML: "Mali",
+  NE: "Niger",
+  TD: "Tchad",
+  CF: "Centrafrique",
+  GQ: "Guinée équatoriale",
+  FR: "France",
+  OTHER: "Autre",
+  UNKNOWN: "Inconnu",
+};
+
+/** Country of the analytics geography (ISO code / OTHER / UNKNOWN); an unmapped code → « Autre ». */
+export function countryLabel(code: string | null | undefined): string {
+  const key = code?.trim().toUpperCase();
+  if (!key) return "Inconnu";
+  return own(COUNTRY_LABELS, key) ?? "Autre";
+}
+
+const FEATURE_LABELS: Record<string, string> = {
+  SALES: "Ventes",
+  INVENTORY: "Inventaires",
+  TRANSFERS: "Transferts",
+  WHATSAPP_REPORTS: "Rapports WhatsApp",
+  STOCK_ALERTS: "Alertes stock",
+  OFFLINE_SYNC: "Synchronisation hors ligne",
+};
+
+export function featureLabel(code: string | null | undefined): string {
+  return lookup(FEATURE_LABELS, code, "—");
+}
+
+/** `2026-09-28` (Monday) → « Sem. du 28/09/2026 ». */
+export function cohortWeekLabel(weekStart: string | null | undefined): string {
+  const [y, m, d] = (weekStart ?? "").split("-");
+  return y && m && d ? `Sem. du ${d}/${m}/${y}` : "—";
+}

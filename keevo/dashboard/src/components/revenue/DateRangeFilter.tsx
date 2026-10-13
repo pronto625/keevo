@@ -6,14 +6,28 @@ interface DateRangeFilterProps {
   to: string;
   onFromChange: (value: string) => void;
   onToChange: (value: string) => void;
-  /** Back to the current month. */
+  /** Back to the page's default range. */
   onReset: () => void;
-  /** French error of the current range (from `revenueRangeError`), null when valid. */
+  /** French error of the current range (from the page's range validator), null when valid. */
   error: string | null;
+  /** Label of the reset button (default « Ce mois-ci »). */
+  resetLabel?: string;
 }
 
-/** Story 9-3 — range of the « Revenus » KPIs (default current month, max 24 months). */
-export function DateRangeFilter({ from, to, onFromChange, onToChange, onReset, error }: DateRangeFilterProps) {
+/**
+ * Inclusive « Du / Au » date range with a reset button and the French error of the range. Shared by the
+ * « Revenus » KPIs (9-3) and the « Top boutiques » ranking of « Statistiques » (9-4); each page owns
+ * its defaults and validation rules.
+ */
+export function DateRangeFilter({
+  from,
+  to,
+  onFromChange,
+  onToChange,
+  onReset,
+  error,
+  resetLabel = "Ce mois-ci",
+}: DateRangeFilterProps) {
   return (
     <div className="bg-white rounded-lg shadow p-4">
       <div className="flex flex-wrap items-end gap-4" role="group" aria-label="Période">
@@ -42,7 +56,7 @@ export function DateRangeFilter({ from, to, onFromChange, onToChange, onReset, e
           onClick={onReset}
           className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50"
         >
-          Ce mois-ci
+          {resetLabel}
         </button>
         {error && (
           <p role="alert" className="text-sm text-red-600 pb-1">

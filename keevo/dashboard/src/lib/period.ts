@@ -81,14 +81,21 @@ export function plusMonths(iso: string, months: number): string {
   return `${String(year).padStart(4, "0")}-${pad(month1)}-${pad(day)}`;
 }
 
-/** French error for an invalid revenue range, or null when it can be queried. */
-export function revenueRangeError(from: string, to: string): string | null {
-  if (!from || !to) return "Choisissez une date de début et une date de fin.";
-  if (toUtcDay(from) === null || toUtcDay(to) === null) return "Dates invalides.";
+/** French error when a date of a valid ISO range is outside 2000..9999 (backend 422), else null. */
+export function yearBoundError(from: string, to: string): string | null {
   const years = [Number(from.slice(0, 4)), Number(to.slice(0, 4))];
   if (years.some((y) => y < MIN_REVENUE_YEAR || y > MAX_REVENUE_YEAR)) {
     return `Les dates doivent être comprises entre ${MIN_REVENUE_YEAR} et ${MAX_REVENUE_YEAR}.`;
   }
+  return null;
+}
+
+/** French error for an invalid revenue range, or null when it can be queried. */
+export function revenueRangeError(from: string, to: string): string | null {
+  if (!from || !to) return "Choisissez une date de début et une date de fin.";
+  if (toUtcDay(from) === null || toUtcDay(to) === null) return "Dates invalides.";
+  const yearError = yearBoundError(from, to);
+  if (yearError) return yearError;
   // ISO dates compare as strings.
   if (from > to) return "La date de début doit précéder la date de fin.";
   // Same rule as the backend: to < from.plusMonths(24).
@@ -96,4 +103,28 @@ export function revenueRangeError(from: string, to: string): string | null {
     return `La période ne peut pas dépasser ${MAX_REVENUE_RANGE_MONTHS} mois.`;
   }
   return null;
+}
+
+// Story 9-4 — « Top boutiques » range of the « Analytics » page (default last 30 days, WAT).
+
+/** `iso` + n days (UTC arithmetic on the calendar date: no time-zone shift). */
+export function plusDays(iso: string, days: number): string {
+  const t = Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000;
+  return new Date(t).toISOString().slice(0, 10);
+}
+
+/** The last `days` days ending today in Africa/Douala (inclusive). */
+export function lastDaysRange(days: number, now: Date = new Date()): { from: string; to: string } {
+  const to = todayInDouala(now);
+  return { from: plusDays(to, -(days - 1)), to };
+}
+
+/**
+ * French error of the « Top boutiques » range, or null — same rules as the backend: valid ISO dates,
+ * years 2000..9999, from ≤ to, at most 366 days (otherwise 422 VALIDATION_ERROR).
+ */
+export function topStoresRangeError(from: string, to: string): string | null {
+  if (!from || !to) return "Choisissez une date de début et une date de fin.";
+  if (toUtcDay(from) === null || toUtcDay(to) === null) return "Dates invalides.";
+  return yearBoundError(from, to) ?? customRangeError(from, to);
 }

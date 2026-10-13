@@ -2,9 +2,10 @@
 title: '9-4 — Platform analytics (super admin): DAU/MAU, cohorts, top stores, feature adoption, growth, geography'
 type: 'feature'
 created: '2026-10-13'
-status: 'ready-for-dev'
+status: 'done'
+baseline_revision: '59cc78e211808089905c41edcb068b6141de765d'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-9-context.md'
 warnings: [oversized]
@@ -77,8 +78,58 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-10-13 — Review pass
+- verdicts: 34 findings — high 0, medium 7, low 20, false 3, maybe-false 0 (+ intent rows descriptive)
+- findings:
+  - `[medium]` `[patch]` (blind) purge (400 d) shorter than 24-month growth — retention 760 days.
+  - `[medium]` `[patch]` (blind) survivorship bias in growth/retention — history built from all tenants ever created (KV-ADMIN excluded).
+  - `[low]` `[patch]` (blind) DAU/MAU include the system tenant — platform join.
+  - `[low]` `[patch]` (blind) two meanings of MAU — distinct French labels (30 derniers jours vs du mois).
+  - `[low]` `[patch]` (blind) in-progress week counted — null until the week ends, legend.
+  - `[low]` `[reject]` (blind) background/sync calls counted as activity — spec definition: « a user who made ≥ 1 authenticated API call »; a sync push is the user's app in use.
+  - `[low]` `[reject]` (blind) partial results unreported — broken schemas are rare (provisioning gate); WARN logs; same decision as 9-7.
+  - `[low]` `[reject]` (blind) no cost control on cross-schema scans — Phase 1 (< 200 tenants) accepted by the spec; React Query staleTime 60 s.
+  - `[low]` `[patch]` (blind) rethrow coverage misses retention/adoption — added.
+  - `[low]` `[reject]` (blind) adoption tenant dropped from denominator when its query fails — same rarity reasoning; logged.
+  - `[low]` `[patch]` (blind) phone formats without `+` — `00`/bare international normalized.
+  - `[low]` `[patch]` (blind) warehouses in top stores — `type = 'STORE'`.
+  - `[low]` `[patch]` (blind) `#` rank after client sort — server GMV rank kept.
+  - `[medium]` `[patch]` (blind) English labels « Analytics », « Ratio DAU / MAU » — French labels (« Statistiques », « Taux d'engagement »…).
+  - `[low]` `[patch]` (blind) stale DateRangeFilter docs — generic.
+  - `[low]` `[patch]` (blind) tabs a11y — ids, aria-controls/labelledby, arrow keys; URL tab state rejected (not required).
+  - `[medium]` `[patch]` (blind) test-only 5-arg JwtAuthFilter constructor can silently disable tracking — removed; tests pass a recorder.
+  - `[medium]` `[patch]` (edge) purge vs growth — same as blind row 1.
+  - `[low]` `[patch]` (edge) in-progress week — same as blind row 5.
+  - `[low]` `[reject]` (edge) one feature table failing drops the tenant — same as blind row 10.
+  - `[low]` `[patch]` (edge) future-dated sales counted — upper bound start of tomorrow.
+  - `[low]` `[reject]` (edge) totalTenants includes skipped tenants — total is a count of public tenants; a skipped schema still is a tenant.
+  - `[false]` `[reject]` (edge, claim) totals inconsistent with 9-7 — spec defines analytics over non-DELETED tenants, 9-7 over ACTIVE tenants; different, documented scopes (the AC says « consistent », not equal).
+  - `[medium]` `[patch]` (gap) DISTINCT users never exercised on real SQL — multi-day/multi-tenant user seeded.
+  - `[low]` `[patch]` (gap) null contract asserted with doesNotExist — key present and null.
+  - `[low]` `[patch]` (gap) « Actualiser » untested — page test.
+  - `[low]` `[patch]` (gap other) client year bounds — added.
+  - `[false]` `[reject]` (intent) recording tested in pieces — filter → recorder wiring now forced by the single constructor; real insert covered by `UserActivityRecorderPostgresIntegrationTest`.
+  - `[false]` `[reject]` (intent) readings a–f — retention `weeks` = columns (12 rows) keeps the spec's « up to 12 rows »; WhatsApp recipient phone is the owner phone resolver; SENT reports are WhatsApp/email deliveries (channel column absent) — documented choices.
+
 ## Verification
 
 **Commands:**
 - `cd keevo/backend && MAVEN_OPTS=-Xmx1g mvn -q -o test -Dtest='com.keevo.admin.**,com.keevo.shared.infrastructure.security.**,com.keevo.shared.infrastructure.activity.**,com.keevo.architecture.**' -DforkCount=1 -DargLine=-Xmx1536m` -- expected: 0 failures
 - `cd keevo/dashboard && npm run lint && npx tsc --noEmit && npm test && npm run build` -- expected: all succeed
+
+## Auto Run Result
+
+Status: done
+
+**Summary:** Story 9-4 delivered. Authenticated API activity is recorded once per (user, tenant, WAT day) in `public.user_daily_activity` (V18) by an async, deduplicated `UserActivityRecorder` wired into `JwtAuthFilter` (SUPER_ADMIN skipped, failures isolated, purge after 760 days under ShedLock). Module `com.keevo.admin.analytics` serves overview (active users today / 30 days, engagement rate, tenants, stores, active stores, products, sales, GMV), growth (up to 24 months, history including since-deleted tenants), geography (owner phone country code, normalized), weekly retention cohorts (finished weeks only), top 20 stores (STORE type, growth vs previous period, « Nouveau ») and feature adoption. Dashboard « Statistiques » page with 4 accessible tabs, French labels, recharts, sortable top-stores table keeping the GMV rank.
+
+**Files changed:** backend `V18__user_daily_activity.sql`, `shared/infrastructure/activity/{UserActivityRecorder,UserActivityPurgeJob}.java`, `JwtAuthFilter` (single constructor with recorder), `TenantSchemaSyncService` global tables, `admin/analytics/**`; tests (unit, controller, 2 Postgres ITs, filter, purge, `SchedulerLockCoverageTest`); dashboard `types/analytics.ts`, `lib/api/admin-analytics.ts`, `hooks/useAnalytics.ts`, `components/analytics/*`, `app/analytics/page.tsx`, `lib/{labels,period}.ts`, `components/revenue/DateRangeFilter.tsx`, `Sidebar.tsx` + tests.
+
+**Review:** 34 findings — patched 7 medium entries and 15 low (grouped); deferred 0; rejected 12 (false 3, low with reasons).
+
+**Follow-up review recommended:** true — 7 medium entries patched; unverified risk: history-vs-current tenant scoping (growth/retention include DELETED, current KPIs exclude them) is unit-tested and covered by one IT seed, not on production-like data.
+
+**Verification:** dashboard lint, tsc, `npm test` (31 files, 162 tests), build — green. Backend: full chunked regression after the filter change (13 packages, 3 060 tests, 0 failures) and after the review patches shared 525, admin 299, identity 373, architecture 6 — 0 failures/errors.
+
+**Residual risks:** cross-schema loops are O(tenants) per request (Phase 1); activity includes background sync calls (spec definition).
+

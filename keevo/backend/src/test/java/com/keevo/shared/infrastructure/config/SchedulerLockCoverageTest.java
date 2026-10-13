@@ -9,6 +9,7 @@ import com.keevo.messaging.notification.application.listener.StockModificationNo
 import com.keevo.messaging.notification.application.scheduler.SalesTrendDetectionScheduler;
 import com.keevo.reporting.report.application.service.ReportDeliveryRetryService;
 import com.keevo.reporting.report.application.service.WeeklyReportScheduler;
+import com.keevo.shared.infrastructure.activity.UserActivityPurgeJob;
 import com.keevo.shared.infrastructure.persistence.SyncKeysetIndexJob;
 import com.keevo.shared.infrastructure.scheduling.AccountDeletionScheduler;
 import com.keevo.shared.infrastructure.scheduling.PlanExpiryReminderScheduler;
@@ -60,7 +61,8 @@ class SchedulerLockCoverageTest {
             Map.entry(SyncErrorLogCleanupJob.class, Duration.ofDays(1)),
             Map.entry(ExportPurgeScheduler.class, Duration.ofHours(1)), // v1s-18-1
             Map.entry(SyncKeysetIndexJob.class, Duration.ofDays(1)), // 11-5
-            Map.entry(PlanExpiryReminderScheduler.class, Duration.ofDays(1))); // 9-2
+            Map.entry(PlanExpiryReminderScheduler.class, Duration.ofDays(1)), // 9-2
+            Map.entry(UserActivityPurgeJob.class, Duration.ofDays(1))); // 9-4
 
     /** In-memory sweeps: must run on every instance → never locked. */
     private static final List<Class<?>> IN_MEMORY_SWEEPS = List.of(

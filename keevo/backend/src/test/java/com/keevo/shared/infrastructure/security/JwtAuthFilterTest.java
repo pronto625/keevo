@@ -61,7 +61,8 @@ class JwtAuthFilterTest {
         // v1s-15-7 item 13: the default filter carries the mocked JdbcTemplate (no null trap
         // for EMPLOYEE-branch tests).
         filter = new JwtAuthFilter(jwtTokenProvider, new ObjectMapper(),
-                tenantSchemaSyncService, jdbcTemplate, tokenRevocationPort);
+                tenantSchemaSyncService, jdbcTemplate, tokenRevocationPort,
+                mock(com.keevo.shared.infrastructure.activity.UserActivityRecorder.class));
     }
 
     // ── Missing Authorization header ───────────────────────────────────────
@@ -655,5 +656,57 @@ class JwtAuthFilterTest {
         verify(filterChain).doFilter(request, response);
         assertThat(response.getStatus()).isEqualTo(200);
         verifyNoInteractions(jwtTokenProvider, tenantSchemaSyncService);
+    }
+
+    // ── Story 9-4 — user activity tracking ────────────────────────────────
+
+    @Test
+    @DisplayName("9-4 — successful authentication records the user's activity (user, schema, role) before the chain")
+    void successfulAuth_recordsActivity() throws Exception {
+        com.keevo.shared.infrastructure.activity.UserActivityRecorder recorder =
+                mock(com.keevo.shared.infrastructure.activity.UserActivityRecorder.class);
+        filter = new JwtAuthFilter(jwtTokenProvider, new ObjectMapper(),
+                tenantSchemaSyncService, jdbcTemplate, tokenRevocationPort, recorder);
+        UUID userId = UUID.randomUUID();
+        stubOwnerToken("owner.jwt", userId);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilterInternal(ownerRequest("owner.jwt"), response, filterChain);
+
+        verify(recorder).record(userId, "kv_abc123", "OWNER");
+        verify(filterChain).doFilter(any(), any());
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    @DisplayName("9-4 — a recorder failure never affects the request")
+    void recorderFailure_requestServedNormally() throws Exception {
+        com.keevo.shared.infrastructure.activity.UserActivityRecorder recorder =
+                mock(com.keevo.shared.infrastructure.activity.UserActivityRecorder.class);
+        doThrow(new IllegalStateException("boom")).when(recorder).record(any(), any(), any());
+        filter = new JwtAuthFilter(jwtTokenProvider, new ObjectMapper(),
+                tenantSchemaSyncService, jdbcTemplate, tokenRevocationPort, recorder);
+        stubOwnerToken("owner.jwt", UUID.randomUUID());
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilterInternal(ownerRequest("owner.jwt"), response, filterChain);
+
+        verify(filterChain).doFilter(any(), any());
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    @DisplayName("9-4 — rejected token: nothing recorded")
+    void rejectedToken_recordsNothing() throws Exception {
+        com.keevo.shared.infrastructure.activity.UserActivityRecorder recorder =
+                mock(com.keevo.shared.infrastructure.activity.UserActivityRecorder.class);
+        filter = new JwtAuthFilter(jwtTokenProvider, new ObjectMapper(),
+                tenantSchemaSyncService, jdbcTemplate, tokenRevocationPort, recorder);
+        when(jwtTokenProvider.parseToken("expired.jwt"))
+                .thenThrow(new ExpiredJwtException(null, null, "Token expired"));
+
+        filter.doFilterInternal(ownerRequest("expired.jwt"), new MockHttpServletResponse(), filterChain);
+
+        verifyNoInteractions(recorder);
     }
 }
