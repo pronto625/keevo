@@ -5,11 +5,25 @@ created: '2026-10-11'
 status: 'done'
 baseline_revision: 'dc43a5994410fa842f9cf34753002c9f67c55373'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-13-context.md'
 warnings: ['multiple-goals', 'oversized']
-deferred: []
+deferred:
+  - summary: >-
+      Store and employee plan limits are still count-then-save without a lock.
+    evidence: |-
+      CreateStoreService / CreateStoreSyncHandler / CreateEmployeeService count then PlanLimitGuard then save; two concurrent creates at max-1 both pass. Same TOCTOU 13.9 closed for products, outside its 12 enumerated items. Routed to v1s-13-13-residual-check-then-act-races.
+    location: >-
+      keevo/backend/src/main/java/com/keevo/store/store/application/service/CreateStoreService.java:56
+    severity: medium
+  - summary: >-
+      Weekly-report already-generated guard is check-then-act (scheduler vs manual trigger).
+    evidence: |-
+      WeeklyReportScheduler builds generatedStoreIds from a read then generates; ReportController.triggerWeekly can run concurrently. Routed to v1s-13-13-residual-check-then-act-races.
+    location: >-
+      keevo/backend/src/main/java/com/keevo/reporting/report/application/service/WeeklyReportScheduler.java
+    severity: low
 ---
 
 <intent-contract>
@@ -136,6 +150,41 @@ Backend (`keevo/backend/`, Java under `src/main/java/com/keevo/`):
   - `[false]` `[reject]` validateSale REST behaviour changed — intended: it is the other side of the cancel/validate race (matrix row "Cancel pending vs concurrent validate").
   - `[false]` `[reject]` No end-to-end concurrent use-case test — primitives proven on PostgreSQL + lock-order unit tests + transactional-boundary reflection test, as the AC states; already covered by the Verification Gap patches.
 
+### 2026-10-13 — Review pass (follow-up)
+- verdicts: 31 findings — high 0, medium 3, low 23, false 5, maybe-false 0
+- findings:
+  - `[false]` `[reject]` (intent) diff carries other stories' hunks (13-10/13-11/14-17/15-9/15-11/18-x) — follow-up diff spans baseline→current code; those hunks are reviewed in their own passes.
+  - `[low]` `[reject]` (intent) races proven below the concurrency surface (mocked lock + post-commit state, primitives on PG) — carried from the first pass: lock placement is pinned per use case, the primitives are proven on PostgreSQL.
+  - `[low]` `[reject]` (intent) "two instances, same tick" not tested on real jobs — the ShedLock provider refusal is proven on PG and every job's annotation is pinned by `SchedulerLockCoverageTest`; the context path is booted by `TransferPersistenceIntegrationTest`.
+  - `[low]` `[reject]` (intent) ReportDeliveryRetry `lockAtMostFor=PT15M` vs "5-min → PT4M" — carried: deliberate (fixedDelay job, bound only matters on crash).
+  - `[false]` `[reject]` (intent) deactivation guard outside the matrix — the intent's item is "last-owner anti-lockout"; carried first-pass patch.
+  - `[false]` `[reject]` (intent) validateSale reordering beyond the sync guard — required by the matrix row "Cancel pending vs concurrent validate (REST)".
+  - `[false]` `[reject]` (intent) expired-but-unflushed window keeps collecting — consistent with "never lost", documented in code.
+  - `[false]` `[reject]` (blind) patch not limited to 13.9 — same as the intent row.
+  - `[low]` `[patch]` (blind) last-owner guard fails open when tenant/membership cannot be resolved — fails closed now: no TenantContext → IllegalStateException, unknown tenant → `TENANT_NOT_FOUND`, before any write; test added.
+  - `[low]` `[patch]` (blind) guard ignores whether the target's OWNER membership is active (idempotent deactivation of an already-inactive owner refused) — `filter(isActive)` before the role check; test added.
+  - `[low]` `[patch]` (blind) deactivation answers "Impossible de rétrograder…" — `CANNOT_DEMOTE_LAST_OWNER` message reworded to « Impossible de retirer le dernier propriétaire actif du compte » (true for demotion and deactivation; app sync label already says « retirer »).
+  - `[low]` `[reject]` (blind) owner count ignores `users.is_active` — no flow disables an OWNER's user row while keeping the membership active (deactivation flips the membership).
+  - `[medium]` `[defer]` (blind) store/employee plan limits still count-then-save — outside the 12 enumerated items; routed to v1s-13-13-residual-check-then-act-races.
+  - `[low]` `[reject]` (blind) fixedDelay retry runs once per instance — single backend instance today; attempts are capped by MAX_ATTEMPTS.
+  - `[low]` `[reject]` (blind) failed send still consumes the 4 h cooldown — pre-existing semantics (cooldown was upserted before dispatch before 13.9), unchanged.
+  - `[low]` `[defer]` (blind) weekly-report guard check-then-act (scheduler vs manual trigger / run > PT50M) — routed to v1s-13-13-residual-check-then-act-races.
+  - `[low]` `[reject]` (blind) no use-case concurrency test on PostgreSQL — carried (same as intent row).
+  - `[low]` `[reject]` (blind) ShedLock proxy not proven at runtime — standard `@EnableSchedulerLock` AOP on Spring beans; the shipped config boots in `TransferPersistenceIntegrationTest`.
+  - `[low]` `[reject]` (blind) coverage scan misses `@Schedules`/`SchedulingConfigurer` — none exist in `src/main` (grep).
+  - `[low]` `[reject]` (blind) "one lock per transaction" not enforced — documented contract, no caller takes two keys today; enforcement adds machinery for a non-existent case.
+  - `[low]` `[patch]` (blind) product-created notification can fire before the product transaction commits (CreateProductUseCase now `@Transactional`) — listener is `@TransactionalEventListener(AFTER_COMMIT, fallbackExecution = true)`; reflection test.
+  - `[low]` `[reject]` (blind) tick log lacks store/closure counts — carried.
+  - `[low]` `[reject]` (blind) ShedLock version duplicated in pom — cosmetic.
+  - `[low]` `[patch]` (edge) inactive OWNER membership guarded — grouped with the blind row.
+  - `[medium]` `[patch]` (edge) `deactivateByUserId` deactivated the user's memberships in EVERY tenant (and reactivation re-enabled them all) — a user who also belongs to or owns another shop lost access there, invisibly to the per-tenant guard. Port now `deactivate/reactivate(userId, tenantId)`; both services scope to the current tenant (fail closed); tests assert only the current tenant's membership changes.
+  - `[low]` `[reject]` (edge) `product-limit:null` key when TenantContext is null — unreachable: the JWT filter and the sync push always set the tenant.
+  - `[low]` `[patch]` (edge) async notification for a rolled-back product — grouped with the blind AFTER_COMMIT row.
+  - `[low]` `[patch]` (verification) draft clientId path: lock before idempotency lookup not pinned — `CreateDraftProductUseCaseTest.withClientId_locksBeforeIdempotencyLookup` (InOrder lock → findById, no name check/save).
+  - `[medium]` `[defer]` (verification) store/employee plan-limit adoption gap — grouped with the blind row, v1s-13-13.
+  - `[low]` `[patch]` (verification other) inactive membership — grouped with the blind row.
+  - `[low]` `[patch]` (verification other) misleading error text — grouped with the blind row.
+
 ## Design Notes
 
 - Why advisory locks over UNIQUE+catch: a constraint violation inside the shared sync transaction marks it rollback-only and needs a second transaction to re-read; `pg_advisory_xact_lock` serialises the critical section in place, leaves no schema change in the 100s of tenant schemas, and is released automatically on commit/rollback (also on crash — connection drop). Keys hashed with `hashtextextended(key, 0)` (bigint, PG ≥ 11).
@@ -152,6 +201,9 @@ Backend (`keevo/backend/`, Java under `src/main/java/com/keevo/`):
       return w;
   });
   ```
+
+- **Audit inside the product transaction (follow-up decision 2026-10-13):** `CreateProductUseCase` is `@Transactional` since 13.9, so the synchronous `AuditEventListener` runs inside it; an audit write failure (REQUIRES_NEW, throws) now aborts the creation. Accepted: the architecture requires "audit on every mutation" (Observer, immutable trail), CreateDraftProductUseCase and every sync op already had this contract, and before 13.9 the same failure returned a 500 AFTER the product was committed (client retry → duplicate product). The audit row itself stays audit-on-attempt (REQUIRES_NEW commits even if the product tx later rolls back). The async notification, in contrast, now waits for AFTER_COMMIT.
+- **Membership (de)activation is tenant-scoped (follow-up 2026-10-13):** an employee deactivation/reactivation only touches the membership of the current tenant; refresh tokens are still revoked user-wide (forces a re-login elsewhere, no lockout).
 
 ## Verification
 
@@ -193,3 +245,16 @@ Status: done
 - Advisory lock waits are unbounded (no lock_timeout), same as existing row locks.
 - Product creation REST path now runs the synchronous audit listener inside the product transaction.
 
+### Follow-up review pass — 2026-10-13
+
+**Summary:** fresh 4-layer review of the post-review patches (last-owner guard on deactivation, claim-first validateSale, product audit in the product transaction). validateSale claim-first confirmed pinned (`verifyNoInteractions(stockOperationService)` on the lost race). Deactivation guard hardened (active membership only, fail closed on an unresolved tenant) and membership (de)activation scoped to the current tenant — it used to cut the user's access to every other shop. Product-created notification moved to AFTER_COMMIT; the audit-in-transaction behaviour is kept and recorded as a decision (Design Notes). Last-owner message reworded for both demotion and deactivation.
+
+**Files changed:** `UserMembershipRepository` + adapter (`deactivate/reactivate(userId, tenantId)`), `DeactivateEmployeeService`, `ReactivateEmployeeService`, `GlobalExceptionHandler` (message), `ProductCreationNotificationListener`; tests `DeactivateEmployeeServiceTest`, `ReactivateEmployeeServiceTest`, `CreateDraftProductUseCaseTest`, `ProductCreationNotificationListenerTest`.
+
+**Review findings:** 31 (0 high, 3 medium, 23 low, 5 false). Patched: 1 medium entry (tenant-scoped membership) + 5 low entries (fail-closed guard, active-membership guard, message, AFTER_COMMIT notification, draft lock-order test). Deferred: 2 entries → v1s-13-13-residual-check-then-act-races (store/employee plan limits — medium; weekly report scheduler vs manual trigger — low). Rejected: see the 2026-10-13 triage entry.
+
+**Follow-up review recommended: false** — follow-up pass, no high patched (patched: 0 high, 1 medium, 5 low).
+
+**Verification:** targeted classes (Deactivate/Reactivate/CreateDraft/ProductCreationNotificationListener/GlobalExceptionHandler/SchedulerLockCoverage/ChangeEmployeeRole) 68 tests green; batches `identity` 366, `catalog` 395, `messaging` 126, `shared` 472 — 0 failure.
+
+**Residual risks:** store/employee plan-limit races and weekly-report double generation until v1s-13-13; refresh tokens of a deactivated employee are revoked user-wide (re-login needed in other shops).

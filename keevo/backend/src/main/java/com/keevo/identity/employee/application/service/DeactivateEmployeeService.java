@@ -1,5 +1,7 @@
 package com.keevo.identity.employee.application.service;
 
+import com.keevo.identity.auth.domain.model.Tenant;
+import com.keevo.identity.auth.domain.model.UserTenantMembership;
 import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.TokenRevocationPort;
@@ -20,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.UUID;
 
 /**
  * DeactivateEmployeeService — Revokes employee access (Story 3.5 AC7).
@@ -61,15 +64,23 @@ public class DeactivateEmployeeService implements DeactivateEmployeeUseCase {
         Employee employee = employeeRepository.findById(command.employeeId())
                 .orElseThrow(() -> new DomainException(ErrorCode.EMPLOYEE_NOT_FOUND));
 
-        // 1b. Story 13.9 anti-lockout: deactivating an employee row whose membership in this
-        // tenant is OWNER must not leave the tenant without an active owner. Same per-tenant
+        // 1b. Story 13.9 anti-lockout: deactivating an employee row whose ACTIVE membership in
+        // this tenant is OWNER must not leave the tenant without an active owner. Same per-tenant
         // lock as ChangeEmployeeRoleService so a concurrent demotion/deactivation is serialised.
+        // Fail closed: the tenant must resolve (the JWT filter always sets it).
         String currentSchema = TenantContext.getCurrentTenant();
-        boolean isOwner = currentSchema != null && tenantRepository.findBySchemaName(currentSchema)
-                .flatMap(t -> membershipRepository.findByUserIdAndTenantId(employee.getUserId(), t.getId()))
+        if (currentSchema == null) {
+            throw new IllegalStateException(
+                    "TenantContext required to deactivate employee " + employee.getUserId());
+        }
+        UUID tenantId = tenantRepository.findBySchemaName(currentSchema)
+                .map(Tenant::getId)
+                .orElseThrow(() -> new DomainException(ErrorCode.TENANT_NOT_FOUND));
+        boolean isActiveOwner = membershipRepository.findByUserIdAndTenantId(employee.getUserId(), tenantId)
+                .filter(UserTenantMembership::isActive)
                 .map(m -> "OWNER".equals(m.getRole()))
                 .orElse(false);
-        if (isOwner) {
+        if (isActiveOwner) {
             transactionLock.lock("owners:" + currentSchema);
             if (userRepository.findOwnersByTenantSchemaName(currentSchema).size() <= 1) {
                 throw new DomainException(ErrorCode.CANNOT_DEMOTE_LAST_OWNER);
@@ -79,8 +90,9 @@ public class DeactivateEmployeeService implements DeactivateEmployeeUseCase {
         // 2. Set status INACTIVE
         employeeRepository.updateStatus(command.employeeId(), EmployeeStatus.INACTIVE);
 
-        // 3. Deactivate membership
-        membershipRepository.deactivateByUserId(employee.getUserId());
+        // 3. Deactivate the membership of THIS tenant only (v1s-13-9 follow-up: the user may
+        // belong to — or own — other shops, which must keep their access).
+        membershipRepository.deactivate(employee.getUserId(), tenantId);
 
         // 4. Revoke refresh tokens
         refreshTokenRepository.revokeAllByUserId(employee.getUserId());

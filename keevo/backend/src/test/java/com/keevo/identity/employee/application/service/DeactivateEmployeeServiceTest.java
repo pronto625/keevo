@@ -64,6 +64,7 @@ class DeactivateEmployeeServiceTest {
     UUID employeeId;
     UUID userId;
     Employee employee;
+    Tenant tenant;
 
     @BeforeEach
     void setUp() {
@@ -75,6 +76,11 @@ class DeactivateEmployeeServiceTest {
         // DeactivateEmployeeService now requires a TenantContext to scope session revocation
         // (Story 12.2) — mirrors the real HTTP call environment where the filter sets it.
         TenantContext.setCurrentTenant("kv_abc123");
+        // v1s-13-9 follow-up: the service resolves the current tenant (fail closed) to scope the
+        // membership deactivation to it.
+        tenant = new Tenant(UUID.randomUUID(), "TEST", "kv_abc123", "Test Shop",
+                TenantStatus.ACTIVE, PlanType.FREE, Instant.now());
+        lenient().when(tenantRepository.findBySchemaName("kv_abc123")).thenReturn(Optional.of(tenant));
     }
 
     @AfterEach
@@ -103,7 +109,7 @@ class DeactivateEmployeeServiceTest {
 
         deactivateEmployeeService.execute(new DeactivateEmployeeCommand(actorId, employeeId));
 
-        verify(membershipRepository).deactivateByUserId(userId);
+        verify(membershipRepository).deactivate(eq(userId), eq(tenant.getId()));
     }
 
     @Test
@@ -166,10 +172,7 @@ class DeactivateEmployeeServiceTest {
     // ── Story 13.9: anti-lockout on deactivation of an OWNER membership ─────────
 
     private Tenant stubTenantWithRole(String role) {
-        Tenant tenant = new Tenant(UUID.randomUUID(), "TEST", "kv_abc123", "Test Shop",
-                TenantStatus.ACTIVE, PlanType.FREE, Instant.now());
         when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
-        when(tenantRepository.findBySchemaName("kv_abc123")).thenReturn(Optional.of(tenant));
         when(membershipRepository.findByUserIdAndTenantId(userId, tenant.getId()))
                 .thenReturn(Optional.of(UserTenantMembership.create(userId, tenant.getId(), role)));
         return tenant;
@@ -192,7 +195,7 @@ class DeactivateEmployeeServiceTest {
 
         verify(transactionLock).lock("owners:kv_abc123");
         verify(employeeRepository, never()).updateStatus(any(), any());
-        verify(membershipRepository, never()).deactivateByUserId(any());
+        verify(membershipRepository, never()).deactivate(any(), any());
         verifyNoInteractions(refreshTokenRepository, tokenRevocationPort, eventPublisher);
     }
 
@@ -209,7 +212,7 @@ class DeactivateEmployeeServiceTest {
         inOrder.verify(transactionLock).lock("owners:kv_abc123");
         inOrder.verify(userRepository).findOwnersByTenantSchemaName("kv_abc123");
         inOrder.verify(employeeRepository).updateStatus(employeeId, EmployeeStatus.INACTIVE);
-        verify(membershipRepository).deactivateByUserId(userId);
+        verify(membershipRepository).deactivate(eq(userId), eq(tenant.getId()));
     }
 
     @Test
@@ -222,5 +225,47 @@ class DeactivateEmployeeServiceTest {
         verifyNoInteractions(transactionLock);
         verify(userRepository, never()).findOwnersByTenantSchemaName(any());
         verify(employeeRepository).updateStatus(employeeId, EmployeeStatus.INACTIVE);
+    }
+    // ── v1s-13-9 follow-up review ─────────────────────────────────────────────
+
+    @Test
+    @DisplayName("follow-up: OWNER membership already inactive → no lock, no owner count, deactivation proceeds")
+    void execute_inactiveOwnerMembership_notGuarded() {
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        UserTenantMembership inactiveOwner = new UserTenantMembership(
+                UUID.randomUUID(), userId, tenant.getId(), "OWNER", false, Instant.now());
+        when(membershipRepository.findByUserIdAndTenantId(userId, tenant.getId()))
+                .thenReturn(Optional.of(inactiveOwner));
+
+        deactivateEmployeeService.execute(new DeactivateEmployeeCommand(actorId, employeeId));
+
+        verifyNoInteractions(transactionLock);
+        verify(userRepository, never()).findOwnersByTenantSchemaName(any());
+        verify(membershipRepository).deactivate(userId, tenant.getId());
+    }
+
+    @Test
+    @DisplayName("follow-up: only the current tenant's membership is deactivated (other shops keep access)")
+    void execute_deactivatesCurrentTenantMembershipOnly() {
+        stubTenantWithRole("EMPLOYEE");
+
+        deactivateEmployeeService.execute(new DeactivateEmployeeCommand(actorId, employeeId));
+
+        verify(membershipRepository).deactivate(userId, tenant.getId());
+        verify(membershipRepository, never()).deactivate(eq(userId), argThat(id -> !tenant.getId().equals(id)));
+    }
+
+    @Test
+    @DisplayName("follow-up: unknown tenant → TENANT_NOT_FOUND, nothing changed (fail closed)")
+    void execute_unknownTenant_failsClosed() {
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        when(tenantRepository.findBySchemaName("kv_abc123")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> deactivateEmployeeService.execute(new DeactivateEmployeeCommand(actorId, employeeId)))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getErrorCode())
+                .isEqualTo(ErrorCode.TENANT_NOT_FOUND);
+        verify(employeeRepository, never()).updateStatus(any(), any());
+        verify(membershipRepository, never()).deactivate(any(), any());
     }
 }

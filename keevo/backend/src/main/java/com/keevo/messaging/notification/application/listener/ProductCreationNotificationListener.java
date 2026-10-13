@@ -11,6 +11,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.event.EventListener;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -83,8 +85,11 @@ public class ProductCreationNotificationListener {
 
     // ── ACTIVE product (Story 14.10) ────────────────────────────────────
 
+    // v1s-13-9 follow-up: CreateProductUseCase is now @Transactional, so the event is published
+    // before commit — notify only once the product is committed (fallbackExecution keeps
+    // non-transactional publishers working).
     @Async
-    @EventListener
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onProductCreated(ProductCreatedEvent event) {
         if (!"EMPLOYEE".equals(event.actorRole())) {
             log.debug("[PRODUCT-NOTIF] Skipping — actor is not EMPLOYEE (role={})", event.actorRole());

@@ -486,6 +486,20 @@ As a Toor, I want tenant-schema provisioning to be consistent (single validation
 
 **AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision).
 
+## Story 13.13: Courses check-then-act résiduelles (plafonds de plan, rapport hebdo) — **[A]**
+
+As a Toor, I want the remaining count-then-save and check-then-generate sections serialised like the product plan limit, so that concurrent requests cannot exceed a plan limit or produce a duplicate weekly report.
+
+**Scope:** apply the v1s-13-9 pattern (`TransactionLockPort`, per-tenant / per-store key, inside `@Transactional`) to the store and employee plan-limit checks and to weekly-report generation (scheduler vs manual trigger). Tracker key: `v1s-13-13-residual-check-then-act-races`.
+
+**Refs:** Story 13.9 (TransactionLockPort, ShedLock), Story 13.11 (WeeklyReportWindowResolver), FR52, plan limits (PlanLimitGuard). **Refonte absorption:** re-appliquer dans `store` / `identity` / `reporting`.
+
+**Items (routed 2026-10-13 from the v1s-13-9 follow-up review):**
+- [ ] [Deferred-from: follow-up review v1s-13-9, 2026-10-13] Store and employee plan limits are count → save without a lock [store/store/application/service/CreateStoreService.java:56, sync/sync/application/handler/CreateStoreSyncHandler.java:92, identity/employee/application/service/CreateEmployeeService.java:85-87] — two concurrent creates at max-1 both pass `PlanLimitGuard`; take `store-limit:<schema>` / `employee-limit:<schema>` before the count (check the sync handler runs inside a transaction — the lock adapter is MANDATORY), InOrder lock → count → save tests, add the entry points to `SchedulerLockCoverageTest.lockTakingUseCasesAreTransactional`.
+- [ ] [Deferred-from: follow-up review v1s-13-9, 2026-10-13] Weekly report "already generated" guard is check-then-act [reporting/report/application/service/WeeklyReportScheduler.java, adapter/in/rest/ReportController.java triggerWeekly] — the ShedLocked scheduler and an owner's manual trigger (or a run outlasting PT50M) can both generate the same store/week; take a `weekly-report:<storeId>:<sunday>` advisory lock around check + generate (or a unique index on store/type/report_date in the tenant DDL + sync).
+
+**AC (interim):** every item above is resolved or explicitly rejected with a reason recorded next to it (tick the box and note the commit / decision); concurrent creates at the limit leave exactly one success (lock-order unit tests; optional multi-connection test).
+
 ---
 
 # Epic 14: Récupération scope V1 — Gaps fonctionnels (Pistes A/B/C)

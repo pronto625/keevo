@@ -361,4 +361,17 @@ class ProductCreationNotificationListenerTest {
 
         verify(whatsAppPort).sendReport(eq("+237600000001"), anyString());
     }
+    @Test
+    @DisplayName("v1s-13-9 follow-up: product-created notification runs AFTER_COMMIT (fallback for non-tx publishers)")
+    void onProductCreated_isAfterCommitListener() throws Exception {
+        var m = ProductCreationNotificationListener.class.getMethod("onProductCreated",
+                com.keevo.catalog.product.domain.event.ProductCreatedEvent.class);
+        var ann = m.getAnnotation(org.springframework.transaction.event.TransactionalEventListener.class);
+        org.assertj.core.api.Assertions.assertThat(ann).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(ann.phase())
+                .isEqualTo(org.springframework.transaction.event.TransactionPhase.AFTER_COMMIT);
+        org.assertj.core.api.Assertions.assertThat(ann.fallbackExecution()).isTrue();
+        org.assertj.core.api.Assertions.assertThat(
+                m.isAnnotationPresent(org.springframework.context.event.EventListener.class)).isFalse();
+    }
 }

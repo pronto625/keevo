@@ -226,4 +226,24 @@ class CreateDraftProductUseCaseTest {
             verify(productRepository, never()).save(any());
         }
     }
+    @Test
+    @DisplayName("v1s-13-9 follow-up: with a clientId, the tenant lock precedes the idempotency lookup")
+    void withClientId_locksBeforeIdempotencyLookup() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            UUID clientId = UUID.randomUUID();
+            Product existing = fakeSaved("Chapeau");
+            when(productRepository.findById(clientId)).thenReturn(Optional.of(existing));
+
+            Product result = useCase.execute(new CreateDraftProductUseCase.CreateDraftCommand(
+                    clientId, "Chapeau", null, categoryId, 5000, 0, 0, actorId, "EMPLOYEE", "Loïc"));
+
+            assertEquals(existing, result);
+            org.mockito.InOrder inOrder = inOrder(transactionLock, productRepository);
+            inOrder.verify(transactionLock).lock("product-limit:kv_test");
+            inOrder.verify(productRepository).findById(clientId);
+            verify(productRepository, never()).existsByName(any());
+            verify(productRepository, never()).save(any());
+        }
+    }
 }
