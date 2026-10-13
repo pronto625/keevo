@@ -61,6 +61,9 @@ keevo/app/ios/Flutter/Flutter.podspec
 keevo/app/ios/Flutter/Generated.xcconfig
 keevo/app/ios/Flutter/ephemeral/
 keevo/app/ios/Runner.xcworkspace/xcshareddata/
+# Per-deployment Firebase iOS config (v1s-16-2 / v1s-16-18). The Android
+# google-services.json stays tracked (existing project choice).
+keevo/app/ios/Runner/GoogleService-Info.plist
 # Web build
 keevo/app/web/
 
