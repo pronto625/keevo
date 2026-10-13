@@ -42,6 +42,12 @@ class QuickAddProductIntegrationTest {
     @Mock private InventoryCountRepository countRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private com.keevo.store.store.domain.port.out.StoreRepository storeRepository;
+    // v1s-14-13: plan-limit collaborators (active FREE plan under the cap)
+    @Mock private com.keevo.subscription.plan.domain.port.out.ProductCountPort productCountPort;
+    @Mock private com.keevo.subscription.plan.domain.port.out.SubscriptionRepository subscriptionRepository;
+    @Mock private com.keevo.subscription.plan.application.service.PlanLimitGuard planLimitGuard;
+    @Mock private com.keevo.shared.application.port.TransactionLockPort transactionLock;
+    @Mock private com.keevo.subscription.plan.domain.model.Subscription freeSubscription;
 
     private QuickAddProductService service;
 
@@ -54,8 +60,12 @@ class QuickAddProductIntegrationTest {
     void setUp() {
         service = new QuickAddProductService(
                 sessionRepository, productRepository, stockLevelRepository,
-                countRepository, eventPublisher, storeRepository);
+                countRepository, eventPublisher, storeRepository,
+                productCountPort, subscriptionRepository, planLimitGuard, transactionLock);
         TenantContext.setCurrentTenant("tenant_integration");
+        lenient().when(freeSubscription.getPlanType())
+                .thenReturn(com.keevo.identity.auth.domain.model.PlanType.FREE);
+        lenient().when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(freeSubscription));
     }
 
     @AfterEach

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,6 +16,7 @@ import 'package:keevo/features/inventory/presentation/widget/quick_add_product_s
 class _FakeQuickAddNotifier extends QuickAddProductNotifier {
   QuickAddResult? resultToReturn;
   bool shouldReturnNull = false; // simulates dedup
+  Object? errorToThrow; // simulates a rethrown server refusal
 
   @override
   FutureOr<void> build() {}
@@ -28,6 +30,10 @@ class _FakeQuickAddNotifier extends QuickAddProductNotifier {
     int? sellingPrice,
   }) async {
     state = const AsyncLoading();
+    if (errorToThrow != null) {
+      state = const AsyncData(null);
+      throw errorToThrow!;
+    }
     if (shouldReturnNull) {
       state = const AsyncData(null);
       return null;
@@ -94,15 +100,21 @@ void main() {
       fakeNotifier = _FakeQuickAddNotifier();
     });
 
+    // Value returned by showQuickAddProductSheet once the sheet closes.
+    Object? sheetReturn = 'pending';
+
     Future<void> openSheet(WidgetTester tester,
         {List<Override> extraOverrides = const []}) async {
+      sheetReturn = 'pending';
       await tester.pumpWidget(_wrap(
         Builder(
           builder: (ctx) => ElevatedButton(
-            onPressed: () => showQuickAddProductSheet(
-              context: ctx,
-              sessionId: 'session-001',
-            ),
+            onPressed: () async {
+              sheetReturn = await showQuickAddProductSheet(
+                context: ctx,
+                sessionId: 'session-001',
+              );
+            },
             child: const Text('Ouvrir'),
           ),
         ),
@@ -225,6 +237,88 @@ void main() {
       // Dedup dialog should appear
       expect(find.text('Produit existant'), findsOneWidget);
       expect(find.text("Compter l'existant"), findsOneWidget);
+    });
+
+    // ── v1s-14-13: FREE plan product limit ───────────────────────────────
+
+    Future<void> fillAndSubmit(WidgetTester tester) async {
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Nom du produit'), 'Robe Wax L');
+      await tester.pump();
+      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Vêtements').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Quantité physique'), '3');
+      await tester.pump();
+      await tester.tap(find.text('Créer le produit'));
+      await tester.pumpAndSettle();
+    }
+
+    DioException refusal(int status, Map<String, dynamic> body) {
+      final options = RequestOptions(path: '/inventory/sessions/s/quick-add');
+      return DioException(
+        requestOptions: options,
+        type: DioExceptionType.badResponse,
+        message: 'This exception was thrown because the response has a '
+            'status code of $status',
+        response: Response(
+            requestOptions: options, statusCode: status, data: body),
+      );
+    }
+
+    testWidgets(
+        'v1s-14-13 — 403 PLAN_LIMIT_EXCEEDED opens the French plan sheet, '
+        'no code, no snackbar, no result', (tester) async {
+      fakeNotifier.errorToThrow = refusal(403, {
+        'error': 'Limite de produits atteinte',
+        'code': 403,
+        'domainCode': 'PLAN_LIMIT_EXCEEDED',
+        'details': {'entity': 'products', 'limit': 500, 'current': 500},
+      });
+
+      await openSheet(tester);
+      await fillAndSubmit(tester);
+
+      expect(
+          find.text('Vous avez atteint la limite de 500 produits '
+              'sur votre plan gratuit'),
+          findsOneWidget);
+      expect(find.textContaining('PLAN_LIMIT_EXCEEDED'), findsNothing);
+      expect(find.byType(SnackBar), findsNothing);
+
+      // Dismiss the plan sheet, then the quick-add sheet: no result passed.
+      await tester.tap(find.text('Plus tard'));
+      await tester.pumpAndSettle();
+      expect(find.text('Nouveau produit'), findsOneWidget);
+      await tester.tap(find.text('Annuler'));
+      await tester.pumpAndSettle();
+      expect(sheetReturn, isNull);
+    });
+
+    testWidgets(
+        'v1s-14-13 — other 4xx shows a French message, never « Erreur réseau »',
+        (tester) async {
+      fakeNotifier.errorToThrow = refusal(404, {
+        // Real backend text carries the session UUID: never shown.
+        'error': 'Session d\'inventaire introuvable : '
+            '3f2b9c1e-8a4d-4f6b-9c2e-1a2b3c4d5e6f',
+        'code': 404,
+        'domainCode': 'INVENTORY_SESSION_NOT_FOUND',
+      });
+
+      await openSheet(tester);
+      await fillAndSubmit(tester);
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(
+          find.text('Une erreur inattendue est survenue. Réessayez plus tard.'),
+          findsOneWidget);
+      expect(find.textContaining('3f2b9c1e'), findsNothing);
+      expect(find.textContaining('Erreur réseau'), findsNothing);
+      expect(find.textContaining('status code'), findsNothing);
+      expect(find.textContaining('limite'), findsNothing);
     });
   });
 }

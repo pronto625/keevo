@@ -123,6 +123,55 @@ void main() {
       expect(result, isNull);
     });
 
+    test(
+        'v1s-14-13 — quickAdd online 403 PLAN_LIMIT_EXCEEDED rethrows, '
+        'nothing written offline', () async {
+      final refusal = DioException(
+        requestOptions: RequestOptions(path: ''),
+        response: Response(
+          requestOptions: RequestOptions(path: ''),
+          statusCode: 403,
+          data: {
+            'error': 'Limite de produits atteinte',
+            'code': 403,
+            'domainCode': 'PLAN_LIMIT_EXCEEDED',
+            'details': {'entity': 'products', 'limit': 500, 'current': 500},
+          },
+        ),
+        type: DioExceptionType.badResponse,
+      );
+      when(() => mockDatasource.quickAdd(
+            sessionId: any(named: 'sessionId'),
+            name: any(named: 'name'),
+            categoryId: any(named: 'categoryId'),
+            physicalQty: any(named: 'physicalQty'),
+          )).thenThrow(refusal);
+
+      final container = buildContainer();
+      addTearDown(container.dispose);
+
+      final notifier =
+          container.read(quickAddProductNotifierProvider.notifier);
+      await expectLater(
+        notifier.quickAdd(
+          sessionId: 'session-001',
+          name: 'Robe Wax L',
+          categoryId: 'cat-001',
+          physicalQty: 3,
+        ),
+        throwsA(same(refusal)),
+      );
+
+      expect(await db.select(db.products).get(), isEmpty);
+      expect(await db.select(db.stockLevels).get(), isEmpty);
+      expect(await db.select(db.inventoryCounts).get(), isEmpty);
+      verifyNever(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          ));
+    });
+
     test('quickAdd caches locally in Drift after online success', () async {
       when(() => mockDatasource.quickAdd(
             sessionId: any(named: 'sessionId'),

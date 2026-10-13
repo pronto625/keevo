@@ -9,6 +9,7 @@ import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 
 import '../../../catalog/presentation/provider/category_provider.dart';
+import '../../../settings/presentation/widget/plan_limit_bottom_sheet.dart';
 import '../../data/datasource/remote_quick_add_datasource.dart';
 import '../provider/quick_add_product_provider.dart';
 
@@ -332,10 +333,18 @@ class _QuickAddProductSheetState
       if (!mounted) return;
       _showDedupDialog(_nameController.text.trim());
     } on DioException catch (e) {
+      dev.log('QuickAddSheet refused: status=${e.response?.statusCode}',
+          name: 'QuickAddSheet', error: e);
       if (!mounted) return;
+      // v1s-14-13: FREE plan product cap reached → plan sheet, never a code.
+      final data = e.response?.data;
+      if (data is Map && data['domainCode'] == 'PLAN_LIMIT_EXCEEDED') {
+        showPlanLimitBottomSheet(context: context, entity: 'products');
+        return;
+      }
       messenger.showSnackBar(
         SnackBar(
-          content: Text('Erreur réseau : ${e.message ?? 'connexion perdue'}'),
+          content: Text(appErrorMessage(e)),
           behavior: SnackBarBehavior.floating,
         ),
       );
