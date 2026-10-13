@@ -94,4 +94,55 @@ void main() {
       expect(events.length, 50);
     });
   });
+
+  group('v1s-16-20: history titles and messages are French, true and readable',
+      () {
+    test('titles: never raw codes or English', () {
+      expect(syncEventTitle('PUSH', 'FAILED'), 'Envoi des données échoué');
+      expect(syncEventTitle('PULL', 'SUCCESS'), 'Réception des données réussie');
+      expect(syncEventTitle('OTHER', 'SUCCESS'), 'Synchronisation réussie');
+      expect(syncEventTitle('OTHER', 'WEIRD_STATUS'), 'Synchronisation');
+      expect(syncEventTitle(kSyncEventAbandon, 'ABANDONED'),
+          'Opération abandonnée');
+    });
+
+    test('PUSH / PULL failures with technical text → connection message', () {
+      const connection = 'Problème de connexion — nouvel essai automatique';
+      expect(syncEventMessage('PUSH', 'FAILED', '423 gate: 8 days stale'),
+          connection);
+      expect(
+          syncEventMessage('PULL', 'FAILED',
+              'DioException [connection error]: The connection errored'),
+          connection);
+      expect(syncEventMessage('PUSH', 'FAILED', kSyncPushFailedMessage),
+          kSyncPushFailedMessage);
+    });
+
+    test('diagnostics: legacy English translated, legacy OK stays true', () {
+      expect(
+          syncEventMessage(
+              'DIAGNOSTIC', 'WARN', 'server unreachable, JWT expired/invalid'),
+          'serveur injoignable, session expirée, reconnectez-vous');
+      expect(
+          syncEventMessage('DIAGNOSTIC', 'OK',
+              'Server reachable, JWT valid — sync issue may be transient'),
+          'Serveur joignable, session valide');
+    });
+
+    test('ABANDON keeps the readable label, drops the code', () {
+      expect(
+          syncEventMessage(kSyncEventAbandon, 'ABANDONED',
+              'Enregistrement de vente du 11/10 — 13 000 FCFA '
+                  '(Refusé par le serveur (SOME_UNKNOWN_CODE))'),
+          'Enregistrement de vente du 11/10 — 13 000 FCFA '
+          '(Refusé par le serveur)');
+      expect(syncEventMessage(kSyncEventAbandon, 'ABANDONED', 'SOME_CODE'),
+          'Opération refusée par le serveur, abandonnée');
+    });
+
+    test('readable labels with ordinary words are kept (word boundaries)', () {
+      expect(syncEventMessage('PUSH', 'FAILED', 'Serveurs occupés, Errorless'),
+          'Serveurs occupés, Errorless');
+    });
+  });
 }

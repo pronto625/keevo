@@ -12,6 +12,8 @@ import 'package:keevo/features/catalog/domain/usecase/get_stock_level_usecase.da
 import 'package:keevo/features/catalog/presentation/page/stock_history_page.dart';
 import 'package:keevo/features/catalog/presentation/provider/stock_provider.dart';
 
+import '../../../../helpers/no_technical_text.dart';
+
 class _FakeStockRepository implements StockRepository {
   final List<StockMovementModel> movements;
   final historyCalls = <String?>[];
@@ -102,5 +104,40 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.historyCalls.length, 2);
+  });
+
+  testWidgets(
+      'v1s-16-20 guard: inventory notes and unknown movement types are readable',
+      (tester) async {
+    const uuid = '7f1c2b4e-2b9a-4c1e-9d0f-0a1b2c3d4e5f';
+    await _pump(tester, [
+      StockMovementModel(
+        id: uuid,
+        productId: uuid,
+        storeId: uuid,
+        movementType: 'ADJUSTMENT',
+        quantityBefore: 5,
+        quantityDelta: -1,
+        quantityAfter: 4,
+        actorId: uuid,
+        occurredAt: DateTime(2026, 3, 1),
+        notes: 'INVENTORY:$uuid',
+      ),
+      StockMovementModel(
+        id: 'm2',
+        productId: 'p1',
+        storeId: 's1',
+        movementType: 'SOME_NEW_TYPE',
+        quantityBefore: 4,
+        quantityDelta: 1,
+        quantityAfter: 5,
+        actorId: 'u1',
+        occurredAt: DateTime(2026, 3, 2),
+      ),
+    ]);
+
+    expect(find.text('Ajustement d\'inventaire'), findsOneWidget);
+    expect(find.textContaining('Some new type'), findsWidgets);
+    expectNoTechnicalText(tester);
   });
 }

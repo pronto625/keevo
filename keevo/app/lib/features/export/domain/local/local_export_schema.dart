@@ -7,7 +7,13 @@
 /// same datasets, column keys, French labels, types and code → label maps.
 /// When the contract file changes, update this catalogue until the app test
 /// passes again.
+///
+/// v1s-16-20 — no technical data in a file: no id column, unknown codes
+/// humanized, file / zip entry names from the French label ([exportSlug]).
 library;
+
+import '../../../audit/domain/audit_format.dart';
+import '../../../audit/domain/audit_labels.dart';
 
 /// Cell type of an export column (server `ExportColumnType`).
 enum LocalColumnType {
@@ -72,11 +78,56 @@ const exportStockLow = 'Stock bas';
 const exportStockOk = 'OK';
 
 /// French label of [code] in [labels]: `null` stays `null`, an unknown code
-/// falls back to the raw code (server `ExportValues.frLabel`).
+/// is humanized (`KIOSK` → « Kiosk »), never written raw (server
+/// `ExportValues.frLabel`).
 String? exportLabel(Map<String, String>? labels, String? code) {
   if (code == null) return null;
-  return labels?[code] ?? code;
+  return labels?[code] ?? AuditFormat.humanize(code);
 }
+
+/// Readable reference of a sale (server `ExportValues.saleReference`):
+/// « Vente du 12/10/2026 à 14:32:05 — Boutique Centre » in WAT, without the
+/// store part when unknown. Shared by `sales` and `sale_items`.
+String? exportSaleReference(DateTime? occurredAt, String? store) {
+  if (occurredAt == null) return null;
+  final w = AuditFormat.toWat(occurredAt);
+  String two(int v) => v.toString().padLeft(2, '0');
+  final ref = 'Vente du ${two(w.day)}/${two(w.month)}/${w.year} à '
+      '${two(w.hour)}:${two(w.minute)}:${two(w.second)}';
+  final s = store?.trim();
+  return s == null || s.isEmpty ? ref : '$ref — $s';
+}
+
+const _accents = {
+  'à': 'a', 'á': 'a', 'â': 'a', 'ä': 'a', 'ã': 'a', 'å': 'a', //
+  'ç': 'c',
+  'è': 'e', 'é': 'e', 'ê': 'e', 'ë': 'e',
+  'ì': 'i', 'í': 'i', 'î': 'i', 'ï': 'i',
+  'ñ': 'n',
+  'ò': 'o', 'ó': 'o', 'ô': 'o', 'ö': 'o', 'õ': 'o',
+  'ù': 'u', 'ú': 'u', 'û': 'u', 'ü': 'u',
+  'ý': 'y', 'ÿ': 'y',
+  'œ': 'oe', 'æ': 'ae',
+};
+
+/// ASCII file-name part of a French label (server `ExportValues.slug`):
+/// « Journal d'audit » → `journal-d-audit`; `null` when nothing remains.
+String? exportSlug(String? label) {
+  if (label == null) return null;
+  final ascii = label
+      .toLowerCase()
+      .split('')
+      .map((c) => _accents[c] ?? c)
+      .join();
+  final s = ascii
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+      .replaceAll(RegExp(r'^-+|-+$'), '');
+  return s.isEmpty ? null : s;
+}
+
+/// File / zip entry name part of dataset [key]: the slug of its French label.
+String exportDatasetSlug(String key) =>
+    exportSlug(localExportDataset(key)?.label) ?? 'export';
 
 /// Datasets in the server catalogue order.
 const localExportCatalog = <LocalExportDataset>[
@@ -86,7 +137,6 @@ const localExportCatalog = <LocalExportDataset>[
     storeFilter: true,
     periodFilter: false,
     columns: [
-      LocalExportColumn('id', 'Identifiant', LocalColumnType.text),
       LocalExportColumn('sku', 'Référence', LocalColumnType.text),
       LocalExportColumn('name', 'Nom', LocalColumnType.text),
       LocalExportColumn('category', 'Catégorie', LocalColumnType.text),
@@ -111,7 +161,6 @@ const localExportCatalog = <LocalExportDataset>[
     storeFilter: false,
     periodFilter: false,
     columns: [
-      LocalExportColumn('id', 'Identifiant', LocalColumnType.text),
       LocalExportColumn('name', 'Nom', LocalColumnType.text),
       LocalExportColumn('parent', 'Catégorie parente', LocalColumnType.text),
       LocalExportColumn('active', 'Active', LocalColumnType.boolean),
@@ -125,11 +174,7 @@ const localExportCatalog = <LocalExportDataset>[
     storeFilter: true,
     periodFilter: false,
     columns: [
-      LocalExportColumn(
-          'storeId', 'Identifiant boutique', LocalColumnType.text),
       LocalExportColumn('store', 'Boutique', LocalColumnType.text),
-      LocalExportColumn(
-          'productId', 'Identifiant produit', LocalColumnType.text),
       LocalExportColumn('sku', 'Référence', LocalColumnType.text),
       LocalExportColumn('product', 'Produit', LocalColumnType.text),
       LocalExportColumn('category', 'Catégorie', LocalColumnType.text),
@@ -151,7 +196,6 @@ const localExportCatalog = <LocalExportDataset>[
     storeFilter: true,
     periodFilter: true,
     columns: [
-      LocalExportColumn('id', 'Identifiant', LocalColumnType.text),
       LocalExportColumn('occurredAt', 'Date', LocalColumnType.datetime),
       LocalExportColumn('store', 'Boutique', LocalColumnType.text),
       LocalExportColumn('sku', 'Référence', LocalColumnType.text),
@@ -172,7 +216,6 @@ const localExportCatalog = <LocalExportDataset>[
     storeFilter: true,
     periodFilter: true,
     columns: [
-      LocalExportColumn('id', 'Identifiant', LocalColumnType.text),
       LocalExportColumn('occurredAt', 'Date', LocalColumnType.datetime),
       LocalExportColumn(
           'sourceStore', 'Boutique d\'origine', LocalColumnType.text),
@@ -192,7 +235,8 @@ const localExportCatalog = <LocalExportDataset>[
     storeFilter: true,
     periodFilter: true,
     columns: [
-      LocalExportColumn('id', 'Identifiant', LocalColumnType.text),
+      LocalExportColumn(
+          'reference', 'Référence de la vente', LocalColumnType.text),
       LocalExportColumn('occurredAt', 'Date', LocalColumnType.datetime),
       LocalExportColumn('store', 'Boutique', LocalColumnType.text),
       LocalExportColumn('employee', 'Vendeur', LocalColumnType.text),
@@ -211,14 +255,12 @@ const localExportCatalog = <LocalExportDataset>[
     storeFilter: true,
     periodFilter: true,
     columns: [
-      LocalExportColumn('saleId', 'Vente', LocalColumnType.text),
+      LocalExportColumn('sale', 'Vente', LocalColumnType.text),
       LocalExportColumn('occurredAt', 'Date', LocalColumnType.datetime),
       LocalExportColumn('store', 'Boutique', LocalColumnType.text),
       LocalExportColumn('employee', 'Vendeur', LocalColumnType.text),
       LocalExportColumn(
           'saleStatus', 'Statut de la vente', LocalColumnType.text),
-      LocalExportColumn(
-          'productId', 'Identifiant produit', LocalColumnType.text),
       LocalExportColumn('sku', 'Référence', LocalColumnType.text),
       LocalExportColumn('product', 'Produit', LocalColumnType.text),
       LocalExportColumn('quantity', 'Quantité', LocalColumnType.integer),
@@ -235,7 +277,6 @@ const localExportCatalog = <LocalExportDataset>[
     storeFilter: true,
     periodFilter: true,
     columns: [
-      LocalExportColumn('id', 'Identifiant', LocalColumnType.text),
       LocalExportColumn('closureDate', 'Jour', LocalColumnType.date),
       LocalExportColumn('closedAt', 'Clôturée le', LocalColumnType.datetime),
       LocalExportColumn('store', 'Boutique', LocalColumnType.text),
@@ -263,7 +304,6 @@ const localExportCatalog = <LocalExportDataset>[
     storeFilter: true,
     periodFilter: true,
     columns: [
-      LocalExportColumn('id', 'Identifiant', LocalColumnType.text),
       LocalExportColumn('startedAt', 'Commencé le', LocalColumnType.datetime),
       LocalExportColumn('store', 'Boutique', LocalColumnType.text),
       LocalExportColumn('scope', 'Périmètre', LocalColumnType.text),
@@ -284,14 +324,11 @@ const localExportCatalog = <LocalExportDataset>[
     storeFilter: true,
     periodFilter: true,
     columns: [
-      LocalExportColumn('sessionId', 'Inventaire', LocalColumnType.text),
       LocalExportColumn('sessionStartedAt', 'Date de l\'inventaire',
           LocalColumnType.datetime),
       LocalExportColumn('store', 'Boutique', LocalColumnType.text),
       LocalExportColumn(
           'sessionStatus', 'Statut de l\'inventaire', LocalColumnType.text),
-      LocalExportColumn(
-          'productId', 'Identifiant produit', LocalColumnType.text),
       LocalExportColumn('product', 'Produit', LocalColumnType.text),
       LocalExportColumn('variant', 'Variante', LocalColumnType.text),
       LocalExportColumn(
@@ -308,7 +345,6 @@ const localExportCatalog = <LocalExportDataset>[
     storeFilter: false,
     periodFilter: false,
     columns: [
-      LocalExportColumn('id', 'Identifiant', LocalColumnType.text),
       LocalExportColumn('name', 'Nom', LocalColumnType.text),
       LocalExportColumn('phone', 'Téléphone', LocalColumnType.text),
       LocalExportColumn('email', 'E-mail', LocalColumnType.text),
@@ -329,7 +365,6 @@ const localExportCatalog = <LocalExportDataset>[
     storeFilter: false,
     periodFilter: false,
     columns: [
-      LocalExportColumn('id', 'Identifiant', LocalColumnType.text),
       LocalExportColumn('name', 'Nom', LocalColumnType.text),
       LocalExportColumn('phone', 'Téléphone', LocalColumnType.text),
       LocalExportColumn('email', 'E-mail', LocalColumnType.text),
@@ -345,7 +380,6 @@ const localExportCatalog = <LocalExportDataset>[
     storeFilter: true,
     periodFilter: false,
     columns: [
-      LocalExportColumn('id', 'Identifiant', LocalColumnType.text),
       LocalExportColumn('firstName', 'Prénom', LocalColumnType.text),
       LocalExportColumn('lastName', 'Nom', LocalColumnType.text),
       LocalExportColumn('phone', 'Téléphone', LocalColumnType.text),
@@ -360,7 +394,6 @@ const localExportCatalog = <LocalExportDataset>[
     storeFilter: true,
     periodFilter: false,
     columns: [
-      LocalExportColumn('id', 'Identifiant', LocalColumnType.text),
       LocalExportColumn('name', 'Nom', LocalColumnType.text),
       LocalExportColumn('type', 'Type', LocalColumnType.text),
       LocalExportColumn('address', 'Adresse', LocalColumnType.text),
@@ -375,7 +408,6 @@ const localExportCatalog = <LocalExportDataset>[
     storeFilter: true,
     periodFilter: true,
     columns: [
-      LocalExportColumn('id', 'Identifiant', LocalColumnType.text),
       LocalExportColumn('reportDate', 'Date du rapport', LocalColumnType.date),
       LocalExportColumn('type', 'Type', LocalColumnType.text),
       LocalExportColumn('store', 'Boutique', LocalColumnType.text),
@@ -397,20 +429,16 @@ const localExportCatalog = <LocalExportDataset>[
     periodFilter: true,
     criteria: ['action', 'entityId', 'entityType', 'q', 'userId'],
     columns: [
-      LocalExportColumn('id', 'Identifiant', LocalColumnType.text),
       LocalExportColumn('occurredAt', 'Date', LocalColumnType.datetime),
       LocalExportColumn('actor', 'Auteur', LocalColumnType.text),
       LocalExportColumn('actorRole', 'Rôle', LocalColumnType.text),
       LocalExportColumn('action', 'Action', LocalColumnType.text),
       LocalExportColumn('entityType', 'Type d\'objet', LocalColumnType.text),
-      LocalExportColumn(
-          'entityId', 'Identifiant de l\'objet', LocalColumnType.text),
       LocalExportColumn('entityLabel', 'Objet', LocalColumnType.text),
       LocalExportColumn('store', 'Boutique', LocalColumnType.text),
       LocalExportColumn('source', 'Source', LocalColumnType.text),
-      LocalExportColumn('deviceId', 'Appareil', LocalColumnType.text),
-      LocalExportColumn('valueBefore', 'Avant', LocalColumnType.text),
-      LocalExportColumn('valueAfter', 'Après', LocalColumnType.text),
+      LocalExportColumn('changes', 'Changements', LocalColumnType.text),
+      LocalExportColumn('details', 'Détails', LocalColumnType.text),
     ],
   ),
 ];
@@ -421,6 +449,10 @@ const exportLabels = <String, Map<String, String>>{
   'products.status': {
     'ACTIVE': 'Actif',
     'DRAFT': 'Brouillon',
+  },
+  'stores.type': {
+    'STORE': 'Boutique',
+    'WAREHOUSE': 'Entrepôt',
   },
   'stock_movements.type': {
     'ADJUSTMENT': 'Ajustement',
@@ -488,4 +520,6 @@ const exportLabels = <String, Map<String, String>>{
     'SYNC': 'Synchronisé',
     'SYSTEM': 'Système',
   },
+  'audit_log.action': auditActionLabels,
+  'audit_log.entityType': auditEntityTypeLabels,
 };

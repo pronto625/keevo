@@ -17,6 +17,7 @@ import com.keevo.reporting.export.domain.port.out.ExportJobRepository;
 import com.keevo.reporting.export.domain.port.out.ExportRenderer;
 import com.keevo.shared.application.port.export.ExportDatasetProvider;
 import com.keevo.shared.application.port.export.ExportFilter;
+import com.keevo.shared.infrastructure.export.ExportValues;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.subscription.plan.domain.model.Subscription;
@@ -140,7 +141,7 @@ public class ExportService implements RequestExportUseCase, ListExportsUseCase, 
         rateLimiter.acquireRequest(tenantSchema);
 
         Instant now = Instant.now(clock);
-        String fileName = fileName(request, renderer, now);
+        String fileName = fileName(providers, renderer, now);
         String contentType = renderer.contentType(providers.size());
 
         if (!premium) { // background is Premium: the count would be unused
@@ -254,9 +255,14 @@ public class ExportService implements RequestExportUseCase, ListExportsUseCase, 
         return (s.isPremium() || s.isPremiumTrial()) && s.isActive();
     }
 
-    static String fileName(ExportRequest request, ExportRenderer renderer, Instant now) {
-        int n = request.datasets().size();
-        String name = n == 1 ? request.datasets().get(0) : "export";
+    /**
+     * {@code keevo-<french label slug>-<stamp>.<ext>} for one dataset ({@code keevo-ventes-…}),
+     * {@code keevo-export-…} for several (v1s-16-20: no dataset key in a name the user sees).
+     */
+    static String fileName(List<ExportDatasetProvider> providers, ExportRenderer renderer, Instant now) {
+        int n = providers.size();
+        String slug = n == 1 ? ExportValues.slug(providers.get(0).label()) : null;
+        String name = slug != null ? slug : "export";
         return "keevo-" + name + "-" + FILE_STAMP.format(now.atZone(WAT)) + "." + renderer.extension(n);
     }
 

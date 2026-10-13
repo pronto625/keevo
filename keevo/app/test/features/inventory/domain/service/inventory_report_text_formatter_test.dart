@@ -53,6 +53,12 @@ void main() {
     generatedAt: DateTime(2025, 1, 15, 14, 30),
   );
 
+  test('v1s-16-20: detailed report shows the French scope, never FULL', () {
+    final text = formatDetailedTextReport(report, 'Awa');
+    expect(text, contains('Périmètre : Complet'));
+    expect(text, isNot(contains('FULL')));
+  });
+
   test('WhatsApp format matches expected emoji pattern', () {
     final text = formatWhatsAppReport(report, 'Jean');
 

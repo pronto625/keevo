@@ -8,12 +8,14 @@ import com.keevo.shared.infrastructure.export.NativeKeysetExportDataset;
 import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 
 import static com.keevo.shared.infrastructure.export.ExportValues.actorJoins;
 import static com.keevo.shared.infrastructure.export.ExportValues.actorNameSelect;
 import static com.keevo.shared.infrastructure.export.ExportValues.frLabel;
+import static com.keevo.shared.infrastructure.export.ExportValues.saleReference;
 import static com.keevo.shared.infrastructure.export.ExportValues.str;
 import static com.keevo.shared.infrastructure.export.ExportValues.toInstant;
 import static com.keevo.shared.infrastructure.export.ExportValues.toLong;
@@ -29,7 +31,7 @@ public class SalesExportDatasetProvider extends NativeKeysetExportDataset {
     static final String KEY = "sales";
 
     private static final List<ExportColumn> COLUMNS = List.of(
-            new ExportColumn("id", "Identifiant", ExportColumnType.TEXT),
+            new ExportColumn("reference", "Référence de la vente", ExportColumnType.TEXT),
             new ExportColumn("occurredAt", "Date", ExportColumnType.DATETIME),
             new ExportColumn("store", "Boutique", ExportColumnType.TEXT),
             new ExportColumn("employee", "Vendeur", ExportColumnType.TEXT),
@@ -54,7 +56,7 @@ public class SalesExportDatasetProvider extends NativeKeysetExportDataset {
 
     @Override
     protected String selectList(ExportFilter filter) {
-        return "CAST(s.id AS text), " + SaleLabels.SALE_DATE + ", st.name, " + actorNameSelect("a")
+        return SaleLabels.SALE_DATE + ", st.name, " + actorNameSelect("a")
                 + ", cl.name, s.status, s.payment_mode,"
                 + " (SELECT COALESCE(SUM(si.quantity), 0) FROM sale_items si WHERE si.sale_id = s.id),"
                 + " s.discount_amount, s.total_amount";
@@ -83,8 +85,10 @@ public class SalesExportDatasetProvider extends NativeKeysetExportDataset {
 
     @Override
     protected List<Object> mapRow(Object[] r) {
-        return Arrays.asList(str(r[0]), toInstant(r[1]), str(r[2]), str(r[3]), str(r[4]),
-                frLabel(SaleLabels.STATUS, r[5]), frLabel(SaleLabels.PAYMENT_MODE, r[6]),
-                toLong(r[7]), toLong(r[8]), toLong(r[9]));
+        Instant occurredAt = toInstant(r[0]);
+        String store = str(r[1]);
+        return Arrays.asList(saleReference(occurredAt, store), occurredAt, store, str(r[2]), str(r[3]),
+                frLabel(SaleLabels.STATUS, r[4]), frLabel(SaleLabels.PAYMENT_MODE, r[5]),
+                toLong(r[6]), toLong(r[7]), toLong(r[8]));
     }
 }

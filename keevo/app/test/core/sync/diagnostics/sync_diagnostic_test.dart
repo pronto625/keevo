@@ -91,7 +91,7 @@ void main() {
       final events = await eventLogger.getHistory();
       expect(events, hasLength(1));
       expect(events.first.status, 'WARN');
-      expect(events.first.errorMessage, contains('server unreachable'));
+      expect(events.first.errorMessage, contains('serveur injoignable'));
     });
 
     test('jwtExpired → logs WARN with "JWT expired/invalid"', () async {
@@ -113,7 +113,7 @@ void main() {
       final events = await eventLogger.getHistory();
       expect(events, hasLength(1));
       expect(events.first.status, 'WARN');
-      expect(events.first.errorMessage, contains('JWT expired/invalid'));
+      expect(events.first.errorMessage, contains('session expirée'));
     });
 
     test('cooldown 6h — second run within cooldown is skipped', () async {

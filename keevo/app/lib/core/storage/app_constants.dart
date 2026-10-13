@@ -75,3 +75,7 @@ const String kActiveStoreIdKey = 'active_store_id';
 /// locale detection was rejected (Cameroonian devices often report fr_FR,
 /// which would pre-select France) — the picker lets the user change it.
 const String kDefaultPhoneCountryCode = 'CM';
+
+/// Secure-storage key of this install's sync device id (written by the sync
+/// service, read to tell « Cet appareil » apart — v1s-16-20).
+const String kDeviceIdKey = 'keevo_device_id';

@@ -51,11 +51,12 @@ class LocalCsvWriter {
     await _call(['start', dir.path]);
   }
 
-  /// Opens `<key>.csv` and writes the BOM and the header row.
+  /// Opens `<label slug>.csv` (« journal-d-audit.csv », never the dataset
+  /// key — v1s-16-20) and writes the BOM and the header row.
   Future<void> beginDataset(String key, List<LocalExportColumn> columns) =>
       _call([
         'begin',
-        key,
+        exportDatasetSlug(key),
         [for (final c in columns) c.label],
         [for (final c in columns) c.type.index],
       ]);

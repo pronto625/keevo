@@ -101,18 +101,20 @@ class _ConflictTile extends StatelessWidget {
               fontSize: 12,
               color: Theme.of(context).colorScheme.onSurfaceVariant)),
       children: [
-        if (conflict.conflictData != null)
+        // v1s-16-20: readable rows only (no key, id or code).
+        if (conflict.detailRows.isNotEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: conflict.conflictData!.entries
-                  .map((e) => Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Text('${e.key}: ${e.value}',
-                            style: const TextStyle(fontSize: 13)),
-                      ))
-                  .toList(),
+              children: [
+                for (final (label, value) in conflict.detailRows)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text('$label : $value',
+                        style: const TextStyle(fontSize: 13)),
+                  ),
+              ],
             ),
           ),
       ],

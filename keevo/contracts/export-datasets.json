@@ -8,11 +8,6 @@
       "criteria" : [ ],
       "columns" : [
         {
-          "key" : "id",
-          "label" : "Identifiant",
-          "type" : "TEXT"
-        },
-        {
           "key" : "sku",
           "label" : "Référence",
           "type" : "TEXT"
@@ -87,11 +82,6 @@
       "criteria" : [ ],
       "columns" : [
         {
-          "key" : "id",
-          "label" : "Identifiant",
-          "type" : "TEXT"
-        },
-        {
           "key" : "name",
           "label" : "Nom",
           "type" : "TEXT"
@@ -126,18 +116,8 @@
       "criteria" : [ ],
       "columns" : [
         {
-          "key" : "storeId",
-          "label" : "Identifiant boutique",
-          "type" : "TEXT"
-        },
-        {
           "key" : "store",
           "label" : "Boutique",
-          "type" : "TEXT"
-        },
-        {
-          "key" : "productId",
-          "label" : "Identifiant produit",
           "type" : "TEXT"
         },
         {
@@ -200,11 +180,6 @@
       "criteria" : [ ],
       "columns" : [
         {
-          "key" : "id",
-          "label" : "Identifiant",
-          "type" : "TEXT"
-        },
-        {
           "key" : "occurredAt",
           "label" : "Date",
           "type" : "DATETIME"
@@ -264,11 +239,6 @@
       "criteria" : [ ],
       "columns" : [
         {
-          "key" : "id",
-          "label" : "Identifiant",
-          "type" : "TEXT"
-        },
-        {
           "key" : "occurredAt",
           "label" : "Date",
           "type" : "DATETIME"
@@ -323,8 +293,8 @@
       "criteria" : [ ],
       "columns" : [
         {
-          "key" : "id",
-          "label" : "Identifiant",
+          "key" : "reference",
+          "label" : "Référence de la vente",
           "type" : "TEXT"
         },
         {
@@ -382,7 +352,7 @@
       "criteria" : [ ],
       "columns" : [
         {
-          "key" : "saleId",
+          "key" : "sale",
           "label" : "Vente",
           "type" : "TEXT"
         },
@@ -404,11 +374,6 @@
         {
           "key" : "saleStatus",
           "label" : "Statut de la vente",
-          "type" : "TEXT"
-        },
-        {
-          "key" : "productId",
-          "label" : "Identifiant produit",
           "type" : "TEXT"
         },
         {
@@ -450,11 +415,6 @@
       "periodFilter" : true,
       "criteria" : [ ],
       "columns" : [
-        {
-          "key" : "id",
-          "label" : "Identifiant",
-          "type" : "TEXT"
-        },
         {
           "key" : "closureDate",
           "label" : "Jour",
@@ -530,11 +490,6 @@
       "criteria" : [ ],
       "columns" : [
         {
-          "key" : "id",
-          "label" : "Identifiant",
-          "type" : "TEXT"
-        },
-        {
           "key" : "startedAt",
           "label" : "Commencé le",
           "type" : "DATETIME"
@@ -594,11 +549,6 @@
       "criteria" : [ ],
       "columns" : [
         {
-          "key" : "sessionId",
-          "label" : "Inventaire",
-          "type" : "TEXT"
-        },
-        {
           "key" : "sessionStartedAt",
           "label" : "Date de l'inventaire",
           "type" : "DATETIME"
@@ -611,11 +561,6 @@
         {
           "key" : "sessionStatus",
           "label" : "Statut de l'inventaire",
-          "type" : "TEXT"
-        },
-        {
-          "key" : "productId",
-          "label" : "Identifiant produit",
           "type" : "TEXT"
         },
         {
@@ -662,11 +607,6 @@
       "periodFilter" : false,
       "criteria" : [ ],
       "columns" : [
-        {
-          "key" : "id",
-          "label" : "Identifiant",
-          "type" : "TEXT"
-        },
         {
           "key" : "name",
           "label" : "Nom",
@@ -722,11 +662,6 @@
       "criteria" : [ ],
       "columns" : [
         {
-          "key" : "id",
-          "label" : "Identifiant",
-          "type" : "TEXT"
-        },
-        {
           "key" : "name",
           "label" : "Nom",
           "type" : "TEXT"
@@ -765,11 +700,6 @@
       "periodFilter" : false,
       "criteria" : [ ],
       "columns" : [
-        {
-          "key" : "id",
-          "label" : "Identifiant",
-          "type" : "TEXT"
-        },
         {
           "key" : "firstName",
           "label" : "Prénom",
@@ -810,11 +740,6 @@
       "criteria" : [ ],
       "columns" : [
         {
-          "key" : "id",
-          "label" : "Identifiant",
-          "type" : "TEXT"
-        },
-        {
           "key" : "name",
           "label" : "Nom",
           "type" : "TEXT"
@@ -853,11 +778,6 @@
       "periodFilter" : true,
       "criteria" : [ ],
       "columns" : [
-        {
-          "key" : "id",
-          "label" : "Identifiant",
-          "type" : "TEXT"
-        },
         {
           "key" : "reportDate",
           "label" : "Date du rapport",
@@ -924,11 +844,6 @@
       ],
       "columns" : [
         {
-          "key" : "id",
-          "label" : "Identifiant",
-          "type" : "TEXT"
-        },
-        {
           "key" : "occurredAt",
           "label" : "Date",
           "type" : "DATETIME"
@@ -954,11 +869,6 @@
           "type" : "TEXT"
         },
         {
-          "key" : "entityId",
-          "label" : "Identifiant de l'objet",
-          "type" : "TEXT"
-        },
-        {
           "key" : "entityLabel",
           "label" : "Objet",
           "type" : "TEXT"
@@ -974,18 +884,13 @@
           "type" : "TEXT"
         },
         {
-          "key" : "deviceId",
-          "label" : "Appareil",
+          "key" : "changes",
+          "label" : "Changements",
           "type" : "TEXT"
         },
         {
-          "key" : "valueBefore",
-          "label" : "Avant",
-          "type" : "TEXT"
-        },
-        {
-          "key" : "valueAfter",
-          "label" : "Après",
+          "key" : "details",
+          "label" : "Détails",
           "type" : "TEXT"
         }
       ]
@@ -995,6 +900,10 @@
     "products.status" : {
       "ACTIVE" : "Actif",
       "DRAFT" : "Brouillon"
+    },
+    "stores.type" : {
+      "STORE" : "Boutique",
+      "WAREHOUSE" : "Entrepôt"
     },
     "stock_movements.type" : {
       "ADJUSTMENT" : "Ajustement",
@@ -1061,6 +970,70 @@
       "ONLINE" : "En ligne",
       "SYNC" : "Synchronisé",
       "SYSTEM" : "Système"
+    },
+    "audit_log.action" : {
+      "ACCOUNT_DELETION_CANCELLED" : "Suppression du compte annulée",
+      "ACCOUNT_DELETION_REQUESTED" : "Suppression du compte demandée",
+      "CATEGORY_ACTIVATED" : "Catégorie activée",
+      "CATEGORY_CREATED" : "Catégorie créée",
+      "CATEGORY_DEACTIVATED" : "Catégorie désactivée",
+      "CATEGORY_RENAMED" : "Catégorie renommée",
+      "CLIENT_ARCHIVED" : "Client archivé",
+      "CLIENT_CREATED" : "Client créé",
+      "DATA_EXPORTED" : "Données exportées",
+      "DAY_CLOSED" : "Journée clôturée",
+      "EMPLOYEE_CREATED" : "Employé ajouté",
+      "EMPLOYEE_PASSWORD_SET_BY_OWNER" : "Mot de passe défini",
+      "EMPLOYEE_ROLE_CHANGED" : "Rôle modifié",
+      "EMPLOYEE_UPDATED" : "Employé modifié",
+      "INVENTORY_COUNT_SAVED" : "Comptage enregistré",
+      "INVENTORY_REPORT_GENERATED" : "Rapport d'inventaire",
+      "INVENTORY_SESSION_CANCELLED" : "Inventaire annulé",
+      "INVENTORY_SESSION_CREATED" : "Inventaire lancé",
+      "INVENTORY_VALIDATED" : "Inventaire validé",
+      "ONBOARDING_COMPLETED" : "Configuration terminée",
+      "PASSWORD_RESET" : "Mot de passe réinitialisé",
+      "PASSWORD_RESET_REQUESTED" : "Réinitialisation demandée",
+      "PRICE_OVERRIDDEN" : "Prix modifié en caisse",
+      "PRODUCT_ACTIVATED" : "Produit activé",
+      "PRODUCT_ARCHIVED" : "Produit archivé",
+      "PRODUCT_CREATED" : "Produit créé",
+      "PRODUCT_UPDATED" : "Produit modifié",
+      "SALE_AUTO_VALIDATED" : "Vente validée automatiquement",
+      "SALE_CANCELLED" : "Vente annulée",
+      "SALE_COMPLETED" : "Vente enregistrée",
+      "SALE_CORRECTED" : "Vente corrigée",
+      "SALE_MANUALLY_VALIDATED" : "Vente validée",
+      "SALE_PENDING_VALIDATION" : "Vente en attente",
+      "STOCK_ADJUSTED" : "Mouvement de stock",
+      "STOCK_FORCED_ZERO" : "Stock forcé à zéro",
+      "STOCK_THRESHOLD_BREACHED" : "Alerte de stock bas",
+      "STORE_CREATED" : "Boutique créée",
+      "STORE_DEACTIVATED" : "Boutique désactivée",
+      "STORE_UPDATED" : "Boutique modifiée",
+      "SUPPLIER_ARCHIVED" : "Fournisseur archivé",
+      "SUPPLIER_CREATED" : "Fournisseur créé",
+      "USER_AUTHENTICATED" : "Connexion",
+      "USER_REGISTERED" : "Inscription"
+    },
+    "audit_log.entityType" : {
+      "Category" : "Catégorie",
+      "Client" : "Client",
+      "DayClosure" : "Clôture de journée",
+      "Employee" : "Employé",
+      "Export" : "Export de données",
+      "InventoryCount" : "Comptage d'inventaire",
+      "InventorySession" : "Inventaire",
+      "PriceOverride" : "Prix de vente",
+      "Product" : "Produit",
+      "Sale" : "Vente",
+      "StockAlert" : "Alerte de stock",
+      "StockLevel" : "Niveau de stock",
+      "StockMovement" : "Mouvement de stock",
+      "Store" : "Boutique",
+      "Supplier" : "Fournisseur",
+      "Tenant" : "Compte",
+      "User" : "Compte utilisateur"
     }
   },
   "constants" : {
@@ -1069,6 +1042,147 @@
       "Rupture",
       "Stock bas",
       "OK"
+    ]
+  },
+  "audit" : {
+    "fields" : {
+      "activated" : "Activée",
+      "active" : "Active",
+      "adjustmentCount" : "Ajustements",
+      "appliedPrice" : "Prix appliqué",
+      "archived" : "Archivé",
+      "availableQuantity" : "Quantité disponible",
+      "barcode" : "Code-barres",
+      "buyPrice" : "Prix d'achat",
+      "cancelledAt" : "Annulée le",
+      "cataloguePrice" : "Prix catalogue",
+      "categoriesCreated" : "Catégories créées",
+      "costPrice" : "Prix de revient",
+      "createdAt" : "Créé le",
+      "currentQuantity" : "Quantité actuelle",
+      "deactivated" : "Désactivée",
+      "description" : "Description",
+      "discountAmount" : "Remise",
+      "ecart" : "Écart",
+      "fieldsChanged" : "Champs modifiés",
+      "firstName" : "Prénom",
+      "forcedReset" : "Changement de mot de passe imposé",
+      "format" : "Format",
+      "from" : "Du",
+      "itemsSnapshot" : "Articles",
+      "lastName" : "Nom de famille",
+      "lowStockThreshold" : "Seuil d'alerte",
+      "mode" : "Mode",
+      "movementType" : "Type de mouvement",
+      "name" : "Nom",
+      "newName" : "Nouveau nom",
+      "phoneNumber" : "Téléphone",
+      "physical" : "Stock compté",
+      "price" : "Prix",
+      "productName" : "Produit",
+      "productSku" : "Référence",
+      "purchasePrice" : "Prix d'achat",
+      "quantity" : "Quantité",
+      "quantityAfter" : "Quantité après",
+      "quantityBefore" : "Quantité avant",
+      "quantityChange" : "Variation",
+      "requestedQuantity" : "Quantité demandée",
+      "role" : "Rôle",
+      "rowCount" : "Nombre de lignes",
+      "scheduledDeletionAt" : "Suppression prévue le",
+      "sectorType" : "Secteur",
+      "sellingPrice" : "Prix de vente",
+      "sku" : "Référence",
+      "status" : "Statut",
+      "storeId" : "Boutique",
+      "storeName" : "Boutique",
+      "tenantCode" : "Code du compte",
+      "theoretical" : "Stock théorique",
+      "threshold" : "Seuil d'alerte",
+      "to" : "Au",
+      "totalAmount" : "Montant total",
+      "totalRevenue" : "Chiffre d'affaires",
+      "totalSales" : "Nombre de ventes",
+      "transportCost" : "Frais de transport",
+      "type" : "Type",
+      "unit" : "Unité",
+      "unitPrice" : "Prix unitaire",
+      "updatedAt" : "Modifié le"
+    },
+    "values" : {
+      "ACTIVE" : "Actif",
+      "ADJUSTMENT" : "Ajustement",
+      "BACKGROUND" : "Préparé en arrière-plan",
+      "BOOKS_STATIONERY" : "Librairie & Fournitures scolaires",
+      "CANCELLED" : "Annulé(e)",
+      "CASH" : "Espèces",
+      "CATEGORY" : "Par catégorie",
+      "CLOTHING" : "Vêtements & Shopping",
+      "COMPLETED" : "Terminé(e)",
+      "CONFLICT" : "En conflit",
+      "DIRECT" : "Téléchargement direct",
+      "DIRECT_INCOMPLETE" : "Téléchargement interrompu",
+      "DRAFT" : "Brouillon",
+      "ELECTRONICS" : "Électronique & Smartphones",
+      "EMPLOYEE" : "Employé",
+      "FOOD_GROCERY" : "Alimentation",
+      "FULL" : "Complet",
+      "HARDWARE" : "Quincaillerie",
+      "HOME_APPLIANCES" : "Électroménager & Cuisine",
+      "INACTIVE" : "Inactif",
+      "INVENTORY" : "Inventaire",
+      "IN_PROGRESS" : "En cours",
+      "IN_TRANSIT" : "En transit",
+      "MANAGER" : "Gérant",
+      "MOBILE_MONEY" : "Mobile Money",
+      "OTHER" : "Autre",
+      "OWNER" : "Propriétaire",
+      "PARTIAL" : "Partiel",
+      "PENDING_SYNC" : "En attente de synchronisation",
+      "PENDING_VALIDATION" : "En attente de validation",
+      "PHARMACY" : "Pharmacie",
+      "PURCHASE" : "Réception",
+      "SALE" : "Vente",
+      "SALE_CANCELLED" : "Annulation de vente",
+      "STOCK_ENTRY" : "Entrée de stock",
+      "STORE" : "Boutique",
+      "TRANSFER_IN" : "Transfert (entrée)",
+      "TRANSFER_OUT" : "Transfert (sortie)",
+      "VALIDATED" : "Validé",
+      "WAREHOUSE" : "Entrepôt"
+    },
+    "context" : {
+      "forcedProducts" : "Produits forcés",
+      "isAutomatic" : "Déclenchement",
+      "justification" : "Justification",
+      "motif" : "Motif",
+      "note" : "Motif",
+      "notes" : "Motif",
+      "reason" : "Motif",
+      "scope" : "Périmètre"
+    },
+    "hiddenKeys" : [
+      "actorLabel",
+      "cancelledBy",
+      "criteria",
+      "datasets",
+      "ip",
+      "occurredAt",
+      "schemaName",
+      "tenantId"
+    ],
+    "codeKeys" : [
+      "mode",
+      "movementType",
+      "newRole",
+      "previousRole",
+      "role",
+      "scope",
+      "sectorType",
+      "source",
+      "status",
+      "storeType",
+      "type"
     ]
   }
 }

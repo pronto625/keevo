@@ -31,9 +31,7 @@ public class StockLevelsExportDatasetProvider extends NativeKeysetExportDataset 
     static final String OK = "OK";
 
     private static final List<ExportColumn> COLUMNS = List.of(
-            new ExportColumn("storeId", "Identifiant boutique", ExportColumnType.TEXT),
             new ExportColumn("store", "Boutique", ExportColumnType.TEXT),
-            new ExportColumn("productId", "Identifiant produit", ExportColumnType.TEXT),
             new ExportColumn("sku", "Référence", ExportColumnType.TEXT),
             new ExportColumn("product", "Produit", ExportColumnType.TEXT),
             new ExportColumn("category", "Catégorie", ExportColumnType.TEXT),
@@ -58,11 +56,17 @@ public class StockLevelsExportDatasetProvider extends NativeKeysetExportDataset 
     @Override public String label() { return "Stocks"; }
     @Override public List<ExportColumn> columns() { return COLUMNS; }
 
+    /** Store id, after the columns: the PDF groups by store id (two stores may share a name). */
+    @Override public List<String> internalKeys() { return INTERNAL; }
+
+    static final String INTERNAL_STORE_ID = "storeId";
+    private static final List<String> INTERNAL = List.of(INTERNAL_STORE_ID);
+
     @Override
     protected String selectList(ExportFilter filter) {
-        return "CAST(sl.store_id AS text), st.name, CAST(sl.product_id AS text), p.sku, p.name, c.name,"
+        return "st.name, p.sku, p.name, c.name,"
                 + " sl.quantity, COALESCE(NULLIF(sl.minimum_threshold, 0), p.minimum_threshold, 0),"
-                + " p.buy_price, p.archived, sl.updated_at";
+                + " p.buy_price, p.archived, sl.updated_at, CAST(sl.store_id AS text)";
     }
 
     @Override
@@ -84,14 +88,14 @@ public class StockLevelsExportDatasetProvider extends NativeKeysetExportDataset 
 
     @Override
     protected List<Object> mapRow(Object[] r) {
-        Long quantity = toLong(r[6]);
-        Long threshold = toLong(r[7]);
-        Long buyPrice = toLong(r[8]);
+        Long quantity = toLong(r[4]);
+        Long threshold = toLong(r[5]);
+        Long buyPrice = toLong(r[6]);
         long q = quantity != null ? quantity : 0L;
         long value = q <= 0 || buyPrice == null ? 0L : q * buyPrice;
-        return Arrays.asList(str(r[0]), str(r[1]), str(r[2]), str(r[3]), str(r[4]), str(r[5]),
+        return Arrays.asList(str(r[0]), str(r[1]), str(r[2]), str(r[3]),
                 quantity, threshold, stockStatus(q, threshold != null ? threshold : 0L), buyPrice, value,
-                toBool(r[9]), toInstant(r[10]));
+                toBool(r[7]), toInstant(r[8]), str(r[9]));
     }
 
     static String stockStatus(long quantity, long threshold) {

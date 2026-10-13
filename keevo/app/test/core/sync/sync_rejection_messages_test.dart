@@ -55,7 +55,7 @@ void main() {
 
     test('falls back to a generic message carrying the raw code', () {
       expect(friendlySyncRejectionReason('SOME_UNKNOWN_CODE'),
-          'Refusé par le serveur (SOME_UNKNOWN_CODE)');
+          'Refusé par le serveur');
     });
 
     test('handles a null reason', () {
@@ -77,7 +77,7 @@ void main() {
     });
 
     test('falls back to the raw operation string when unknown', () {
-      expect(friendlySyncOperationLabel('SOME_FUTURE_OP'), 'SOME_FUTURE_OP');
+      expect(friendlySyncOperationLabel('SOME_FUTURE_OP'), 'Opération');
     });
   });
 }

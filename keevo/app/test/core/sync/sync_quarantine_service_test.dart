@@ -9,6 +9,8 @@ import 'package:keevo/core/sync/sync_event_logger.dart';
 import 'package:keevo/core/sync/sync_quarantine_service.dart';
 import 'package:sqlite3/open.dart';
 
+import '../../helpers/no_technical_text.dart';
+
 void _overrideSqlite3ForLinuxTesting() {
   if (!Platform.isLinux) return;
   open.overrideFor(OperatingSystem.linux, () {
@@ -338,7 +340,7 @@ void main() {
     expect((await db.select(db.dayClosures).get()).map((c) => c.id), ['dc-2']);
   });
 
-  test('exportText describes the sale in French with the raw payload',
+  test('exportText describes the sale in French, without raw payload (v1s-16-20)',
       () async {
     await db.into(db.stores).insert(StoresCompanion.insert(
         id: 'store-ghost',
@@ -358,11 +360,37 @@ void main() {
     expect(text, contains('- Savon : 2 × 500 FCFA = 1 000 FCFA'));
     expect(text, contains('- Riz : 1 × 12 000 FCFA = 12 000 FCFA'));
     expect(text, contains('Total : 13 000 FCFA'));
-    expect(text, contains('Opérations liées : Validation de vente'));
-    expect(text, contains('Données brutes :'));
-    expect(text, contains('"operationId": "sale-op"'));
-    expect(text, contains('"p-ghost"'));
-    expect(text, contains('"operationId": "validate-op"'));
+    expect(text, contains('Paiement : Espèces'));
+    expect(text, contains('Opérations liées :'));
+    expect(text, contains('- Validation de vente du '));
+    expect(text, isNot(contains('Données brutes')));
+    expect(text, isNot(contains('sale-op')));
+    expect(text, isNot(contains('p-ghost')));
+    expect(text, isNot(contains('CASH')));
+    expectNoTechnicalString(text);
+  });
+
+  test('exportText: unnamed line with an unknown product, unknown payment mode',
+      () async {
+    await op('sale-op', 'CREATE_SALE', entityId: 'sale-1', payload: {
+      'saleId': 'sale-1',
+      'storeId': '7f1c2b4e-2b9a-4c1e-9d0f-0a1b2c3d4e5f',
+      'paymentMode': 'BANK_CARD',
+      'items': [
+        {
+          'productId': '0b1c2d3e-2b9a-4c1e-9d0f-0a1b2c3d4e5f',
+          'appliedUnitPrice': 500,
+          'quantity': 1,
+        },
+      ],
+    });
+
+    final text = await service.exportText('sale-op');
+
+    expect(text, contains('- Produit inconnu sur cet appareil : 1 × 500 FCFA'));
+    expect(text, contains('Boutique : Boutique inconnue sur cet appareil'));
+    expect(text, contains('Paiement : Bank card'));
+    expectNoTechnicalString(text);
   });
 
   test('exportText of a stock op names the local product, or says unknown',
@@ -375,7 +403,8 @@ void main() {
 
     expect(await service.exportText('adjust'), contains('Produit : Huile 1L'));
     expect(await service.exportText('entry'),
-        contains('Produit : Produit inconnu sur cet appareil (p-gone)'));
+        contains('Produit : Produit inconnu sur cet appareil'));
+    expect(await service.exportText('entry'), isNot(contains('p-gone')));
   });
 
   test('exportText names an unknown store and is empty when not quarantined',
@@ -384,7 +413,8 @@ void main() {
     await op('pending', 'CREATE_SALE', entityId: 'sale-2', quarantined: false);
 
     expect(await service.exportText('sale-op'),
-        contains('Boutique inconnue sur cet appareil (store-ghost)'));
+        contains('Boutique inconnue sur cet appareil'));
+    expect(await service.exportText('sale-op'), isNot(contains('store-ghost')));
     expect(await service.exportText('pending'), isEmpty);
   });
 }

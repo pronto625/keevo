@@ -204,8 +204,9 @@ class SyncQuarantineService {
   }
 
   /// *Exporter*: a French, human-readable description of the chain — what it
-  /// is, when, why it was refused, the store, the sale lines — followed by
-  /// the raw payloads, so the operation can be re-entered by hand.
+  /// is, when, why it was refused, the store, the sale lines, the payment —
+  /// so the operation can be re-entered by hand. No raw payload, id or code
+  /// (v1s-16-20): the ids stay in the local queue for Renvoyer/Rattacher.
   Future<String> exportText(String opId) async {
     final chain = await chainOf(opId);
     if (chain.isEmpty) return '';
@@ -232,7 +233,10 @@ class SyncQuarantineService {
       if (lines.isNotEmpty) {
         buf.writeln('Articles :');
         for (final l in lines) {
-          buf.writeln('- ${l.name} : ${l.quantity} × '
+          final name = l.name == _unnamedLine && l.productId != null
+              ? await _productLabel(l.productId!)
+              : l.name;
+          buf.writeln('- $name : ${l.quantity} × '
               '${formatQuarantineAmount(l.unitPrice)} = '
               '${formatQuarantineAmount(l.total)}');
         }
@@ -244,16 +248,12 @@ class SyncQuarantineService {
       final total = await _saleTotal(head);
       if (total != null) buf.writeln('Total : ${formatQuarantineAmount(total)}');
       final mode = payload['paymentMode'] as String?;
-      if (mode != null) buf.writeln('Paiement : $mode');
+      if (mode != null) buf.writeln('Paiement : ${paymentModeLabel(mode)}');
     } else {
       var productName = payload['productName'] as String?;
       final productId = payload['productId'] as String?;
       if (productName == null && productId != null) {
-        final product = await (_db.select(_db.products)
-              ..where((t) => t.id.equals(productId)))
-            .getSingleOrNull();
-        productName =
-            product?.name ?? 'Produit inconnu sur cet appareil ($productId)';
+        productName = await _productLabel(productId);
       }
       final quantity = payload['quantity'] ?? payload['quantityDelta'];
       if (productName != null) buf.writeln('Produit : $productName');
@@ -261,34 +261,47 @@ class SyncQuarantineService {
     }
 
     if (chain.length > 1) {
-      buf.writeln('Opérations liées : '
-          '${chain.skip(1).map((o) => friendlySyncOperationLabel(o.operation)).join(', ')}');
-    }
-
-    buf
-      ..writeln()
-      ..writeln('Données brutes :');
-    const encoder = JsonEncoder.withIndent('  ');
-    for (final op in chain) {
-      buf.writeln(encoder.convert({
-        'operation': op.operation,
-        'operationId': op.id,
-        'entityId': op.entityId,
-        'createdAt': op.createdAt.toUtc().toIso8601String(),
-        'reason': op.lastError,
-        'payload': _payloadOf(op),
-      }));
+      buf.writeln('Opérations liées :');
+      for (final op in chain.skip(1)) {
+        buf.writeln('- ${friendlySyncOperationLabel(op.operation)} du '
+            '${_date(_occurredAt(op))}');
+      }
     }
     return buf.toString();
   }
 
-  /// Local store name of [storeId], or a "boutique inconnue" label.
+  /// Local store name of [storeId], or a "boutique inconnue" label (never
+  /// the id).
   Future<String> storeLabel(String storeId) async {
     final store = await (_db.select(_db.stores)
           ..where((t) => t.id.equals(storeId)))
         .getSingleOrNull();
-    return store?.name ?? 'Boutique inconnue sur cet appareil ($storeId)';
+    return store?.name ?? 'Boutique inconnue sur cet appareil';
   }
+
+  /// Local product name of [productId], or a "produit inconnu" label (never
+  /// the id).
+  Future<String> _productLabel(String productId) async {
+    final product = await (_db.select(_db.products)
+          ..where((t) => t.id.equals(productId)))
+        .getSingleOrNull();
+    return product?.name ?? 'Produit inconnu sur cet appareil';
+  }
+
+  /// French label of a sale payment mode (`CASH` → « Espèces »); an unknown
+  /// mode is humanized, never shown raw.
+  static String paymentModeLabel(String mode) => switch (mode) {
+        'CASH' => 'Espèces',
+        'MOBILE_MONEY' => 'Mobile Money',
+        _ => _humanize(mode),
+      };
+
+  static String _humanize(String code) {
+    final s = code.replaceAll('_', ' ').trim().toLowerCase();
+    return s.isEmpty ? code : s[0].toUpperCase() + s.substring(1);
+  }
+
+  static const _unnamedLine = 'Article';
 
   /// The sale lines of a queued `CREATE_SALE` payload.
   static List<QuarantinedSaleLine> saleLinesOf(SyncQueueData op) {
@@ -299,7 +312,7 @@ class SyncQuarantineService {
         if (item is Map)
           QuarantinedSaleLine(
             productId: item['productId'] as String?,
-            name: (item['productName'] as String?) ?? 'Article',
+            name: (item['productName'] as String?) ?? _unnamedLine,
             quantity: (item['quantity'] as num?)?.toInt() ?? 0,
             unitPrice: ((item['appliedUnitPrice'] ??
                         item['catalogueUnitPrice']) as num?)

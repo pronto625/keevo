@@ -300,7 +300,8 @@ class _JobCard extends StatelessWidget {
     final status = job.effectiveStatus(now);
     final title = job.datasets.isEmpty
         ? 'Export'
-        : job.datasets.map((k) => labels[k] ?? k).join(', ');
+        // v1s-16-20: an unknown dataset key reads « Export », never the key.
+        : job.datasets.map((k) => labels[k] ?? 'Export').join(', ');
     final format = job.exportFormat?.label ?? job.format;
     final store = job.storeId == null
         ? 'Toutes les boutiques'

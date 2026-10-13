@@ -1263,18 +1263,20 @@ As a Toor, I want the Next.js Super Admin dashboard to build and to be guarded b
 **Scope :** passer en revue tout ce qu'un utilisateur final voit et retirer ou traduire les données techniques : UUID et identifiants, codes bruts (actions d'audit comme `CATEGORY_RENAMED`, statuts `PENDING_VALIDATION`, sources `ONLINE/SYNC/SYSTEM`, types de mouvement, codes d'erreur), noms de tables/colonnes/classes, identifiants d'appareil bruts, JSON. Les remplacer par des libellés français compréhensibles (nom du produit, de la boutique, de l'employé, « Vente du 12/10 à 14:32 », « Téléphone de Awa ») ; omettre le champ quand aucun libellé n'existe. Les id restent permis en interne (requêtes, navigation, noms de fichiers techniques non affichés). La règle devient permanente (PRD/UX) et un garde-fou automatisé empêche les régressions.
 
 **Items :**
-- [ ] Exports serveur CSV/XLSX (18-1/18-2) : retirer les colonnes d'identifiants (id de produit, de vente, de boutique, d'employé, de session…) ou les remplacer par des références lisibles ; traduire en français les codes encore bruts (actions du journal d'audit notamment) ; mettre à jour le contrat `keevo/contracts/export-datasets.json`, le test golden `ExportDatasetCatalogTest` et `ExportContractFileTest`.
-- [ ] Modèles PDF (18-3) : même règle (aucun id, aucun code).
-- [ ] Export CSV local hors ligne (18-5) : rester aligné sur le contrat mis à jour.
-- [ ] Historique des actions et son détail (18-7) : aucun id d'entité, aucun code de source/action brut, appareil affiché par un nom lisible (ou omis) ; avant/après sans clés techniques ni JSON.
-- [ ] Autres écrans de l'app : messages d'erreur et de rejet de sync, écran des opérations bloquées (16-15), réglages de synchronisation, détails de vente/stock/transfert, notifications : aucun UUID ni code brut affiché.
-- [ ] Garde-fou : test automatisé (app et/ou backend) qui détecte un UUID ou un code SNAKE_CASE dans les chaînes affichées des écrans clés et dans les en-têtes/valeurs d'export de test.
-- [ ] Inscrire la règle dans prd.md (exigence non fonctionnelle) et ux-design-specification.md.
+- [x] Exports serveur CSV/XLSX (18-1/18-2) : retirer les colonnes d'identifiants (id de produit, de vente, de boutique, d'employé, de session…) ou les remplacer par des références lisibles ; traduire en français les codes encore bruts (actions du journal d'audit notamment) ; mettre à jour le contrat `keevo/contracts/export-datasets.json`, le test golden `ExportDatasetCatalogTest` et `ExportContractFileTest`.
+- [x] Modèles PDF (18-3) : même règle (aucun id, aucun code).
+- [x] Export CSV local hors ligne (18-5) : rester aligné sur le contrat mis à jour.
+- [x] Historique des actions et son détail (18-7) : aucun id d'entité, aucun code de source/action brut, appareil affiché par un nom lisible (ou omis) ; avant/après sans clés techniques ni JSON.
+- [x] Autres écrans de l'app : messages d'erreur et de rejet de sync, écran des opérations bloquées (16-15), réglages de synchronisation, détails de vente/stock/transfert, notifications : aucun UUID ni code brut affiché.
+- [x] Garde-fou : test automatisé (app et/ou backend) qui détecte un UUID ou un code SNAKE_CASE dans les chaînes affichées des écrans clés et dans les en-têtes/valeurs d'export de test.
+- [x] Inscrire la règle dans prd.md (exigence non fonctionnelle) et ux-design-specification.md.
 
 **AC intérimaires :**
 - Given un export (CSV, XLSX, PDF, local) de n'importe quel jeu, When on l'ouvre, Then aucune colonne ni cellule ne contient d'UUID ou de code technique brut.
 - Given l'historique des actions et le détail d'une action, When le propriétaire les consulte, Then il ne voit que des libellés français compréhensibles.
 - Given un nouveau texte affiché contenant un UUID ou un code brut, When les tests tournent, Then le garde-fou échoue.
+
+**Delivered 2026-10-13 (v1s-16-20, spec-v1s-16-20-no-technical-data-in-ui.md):** ids removed from every export (sale reference « Vente du … — Boutique »), shared French label table `AuditLabels` in the contract, audit « Changements »/« Détails », French file names, PDF ids via hidden `internalKeys()`, app screens cleaned, guards backend (CSV/XLSX/PDF) + app (`no_technical_text.dart`), NFR35 + UX anti-pattern 7.
 
 # Epic 18: Export de données & Audit détaillé (Piste V1, tag C)
 

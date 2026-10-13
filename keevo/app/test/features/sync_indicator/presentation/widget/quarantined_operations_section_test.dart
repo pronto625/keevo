@@ -12,6 +12,8 @@ import 'package:keevo/core/sync/sync_trigger_notifier.dart';
 import 'package:keevo/features/sync_indicator/presentation/widget/quarantined_operations_section.dart';
 import 'package:mocktail/mocktail.dart';
 
+import '../../../../helpers/no_technical_text.dart';
+
 class _MockQuarantine extends Mock implements SyncQuarantineService {}
 
 class _FakeTrigger extends SyncTriggerNotifier {
@@ -141,6 +143,8 @@ void main() {
     for (final action in ['Renvoyer', 'Exporter', 'Rattacher', 'Abandonner']) {
       expect(find.text(action), findsOneWidget, reason: action);
     }
+    // v1s-16-20: no operation / rejection code or id on the card.
+    expectNoTechnicalText(tester);
   });
 
   testWidgets('EMPLOYEE: Renvoyer and Exporter only', (tester) async {

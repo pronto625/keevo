@@ -6,6 +6,77 @@ import '../storage/app_database.dart';
 /// Event type of an abandoned quarantined operation (v1s-16-15).
 const kSyncEventAbandon = 'ABANDON';
 
+/// History messages of a failed push / pull (v1s-16-20): shown to the user
+/// in « Historique de synchronisation », so French and without exception
+/// text (the technical detail goes to `dev.log` only).
+const kSyncPushFailedMessage =
+    'Envoi des données impossible pour le moment — nouvel essai automatique';
+const kSyncPullFailedMessage =
+    'Réception des données impossible pour le moment — nouvel essai automatique';
+
+/// French title of a sync history entry (v1s-16-20): never the raw
+/// `PUSH — FAILED` codes, never English.
+String syncEventTitle(String type, String status) {
+  return switch ((type, status)) {
+    ('PUSH', 'SUCCESS') => 'Envoi des données réussi',
+    ('PUSH', 'FAILED') => 'Envoi des données échoué',
+    ('PULL', 'SUCCESS') => 'Réception des données réussie',
+    ('PULL', 'FAILED') => 'Réception des données échouée',
+    ('DIAGNOSTIC', 'OK') => 'Diagnostic : tout va bien',
+    ('DIAGNOSTIC', 'WARN') => 'Diagnostic : un problème a été détecté',
+    (kSyncEventAbandon, _) => 'Opération abandonnée',
+    (_, 'SUCCESS') => 'Synchronisation réussie',
+    (_, 'FAILED') => 'Synchronisation échouée',
+    (_, 'OK') => 'Synchronisation : tout va bien',
+    (_, 'WARN') => 'Synchronisation : un problème a été détecté',
+    _ => 'Synchronisation',
+  };
+}
+
+/// Technical text a user must not read: exception / class names, HTTP or
+/// gate vocabulary, a UUID, a SNAKE_CASE code or JSON (word-bounded).
+final _technicalMessage = RegExp(
+    r'\w*Exception\b|\bError\b|\bDio\b|\bhttps?\b|status code|\bgate\b'
+    r'|\bstale\b|\bServer\b|\bJWT\b|\bnull\b'
+    r'|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-|\b[A-Z][A-Z0-9]*(_[A-Z0-9]+)+\b'
+    r'|\{"|\["');
+
+/// Message of a sync history entry as shown to the user (v1s-16-20), or
+/// `null` when nothing readable can be said. Entries logged before this rule
+/// may hold an exception text, an HTTP code, English diagnostics or codes:
+/// the replacement depends on the event, so it never says something false.
+String? syncEventMessage(String type, String status, String message) {
+  const legacy = {
+    'server unreachable': 'serveur injoignable',
+    'JWT expired/invalid': 'session expirée, reconnectez-vous',
+  };
+  var text = message;
+  legacy.forEach((k, v) => text = text.replaceAll(k, v));
+  if (!_technicalMessage.hasMatch(text)) return text;
+  switch ((type, status)) {
+    case ('DIAGNOSTIC', 'OK'):
+      return 'Serveur joignable, session valide';
+    case ('DIAGNOSTIC', _):
+      return 'Un problème de connexion a été détecté';
+    case (kSyncEventAbandon, _):
+      // Keep the readable part of the label (operation, date, amount).
+      final cleaned = text
+          .replaceAll(RegExp(r'\b[A-Z][A-Z0-9]*(_[A-Z0-9]+)+\b'), '')
+          .replaceAll(RegExp(
+              r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'),
+              '')
+          .replaceAll(RegExp(r'\s*\(\s*\)'), '')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      return cleaned.isEmpty || _technicalMessage.hasMatch(cleaned)
+          ? 'Opération refusée par le serveur, abandonnée'
+          : cleaned;
+    case ('PUSH' || 'PULL', 'FAILED'):
+      return 'Problème de connexion — nouvel essai automatique';
+  }
+  return null;
+}
+
 /// Logs sync events to local Drift sync_events table.
 /// Prunes entries older than the 50 most recent on every insert.
 class SyncEventLogger {

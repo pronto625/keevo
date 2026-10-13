@@ -516,6 +516,7 @@ Keevo est une application hybride Mobile (Flutter) + Desktop (Tauri 2.0) avec un
 - **NFR25:** L'application doit supporter les tailles de police adaptatives pour les utilisateurs avec des difficultés visuelles
 - **NFR26:** Toute l'interface doit être en français (V1), avec architecture i18n prête pour l'anglais (V2)
 - **NFR27:** L'onboarding complet (inscription → première vente) ne doit pas dépasser 10 minutes
+- **NFR35:** Aucune donnée technique visible par l'utilisateur final (règle permanente, story 16.20) : aucun identifiant (UUID), aucun code brut (actions d'audit comme `CATEGORY_RENAMED`, statuts comme `PENDING_VALIDATION`, sources `ONLINE`/`SYNC`/`SYSTEM`, types de mouvement, codes d'erreur), aucun nom de table, de colonne ou de classe, aucun identifiant d'appareil brut et aucun JSON — ni à l'écran (dont messages de rejet de synchronisation, « Opérations bloquées », notifications, historique des actions et son détail avant/après), ni dans un fichier exporté (CSV/XLSX/PDF serveur, CSV local hors ligne, noms de fichiers). Chaque valeur est remplacée par un libellé français lisible (nom du produit, de la boutique, de l'employé, « Vente du 12/10/2026 à 14:32:05 — Boutique Centre », « Appareil de Awa »), un code inconnu est humanisé, et un champ sans libellé lisible est omis. Les identifiants restent permis en interne (requêtes, navigation, filtres, base de données, API). Des tests de garde automatisés (en-têtes et cellules d'export côté serveur, écrans clés côté app) échouent dès qu'un UUID ou un code SNAKE_CASE apparaît.
 
 ### Intégration
 

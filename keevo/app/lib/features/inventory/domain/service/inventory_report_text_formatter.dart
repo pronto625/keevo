@@ -1,4 +1,5 @@
 import '../../domain/model/inventory_gap_report_model.dart';
+import '../../domain/model/inventory_scope.dart';
 
 /// Formats the inventory gap report as emoji-rich WhatsApp text.
 /// Mirrors InventoryReportTextFormatter.java on the backend.
@@ -54,7 +55,7 @@ String formatDetailedTextReport(
   buf.writeln('Boutique : ${report.storeName}');
   buf.writeln('Date : $date — $time');
   buf.writeln('Généré par : $actorName');
-  buf.writeln('Périmètre : ${report.scope}');
+  buf.writeln('Périmètre : ${inventoryScopeLabel(report.scope)}');
   buf.writeln();
 
   buf.writeln('RÉSUMÉ');

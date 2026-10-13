@@ -35,6 +35,16 @@ public interface ExportDatasetProvider {
     /** Column schema, in row order. */
     List<ExportColumn> columns();
 
+    /**
+     * Internal values appended to each row after the {@link #columns()} values, in this order
+     * (Story v1s-16-20): ids a PDF model needs to group or look rows up. They are never written to
+     * a file — the CSV / XLSX renderers only write {@link #columns()} — and are not part of the
+     * export contract.
+     */
+    default List<String> internalKeys() {
+        return List.of();
+    }
+
     /** Number of rows matching {@code filter} (decides direct vs background export). */
     long count(ExportFilter filter);
 

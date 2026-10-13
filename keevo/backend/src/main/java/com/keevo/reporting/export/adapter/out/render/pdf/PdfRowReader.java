@@ -54,6 +54,10 @@ final class PdfRowReader {
         for (int i = 0; i < columns.size(); i++) {
             index.put(columns.get(i).key(), i);
         }
+        List<String> internal = provider.internalKeys(); // hidden ids after the columns (v1s-16-20)
+        for (int i = 0; i < internal.size(); i++) {
+            index.put(internal.get(i), columns.size() + i);
+        }
         long read = 0;
         String cursor = null;
         do {

@@ -10,7 +10,9 @@ import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
+import static com.keevo.shared.infrastructure.export.ExportValues.frLabel;
 import static com.keevo.shared.infrastructure.export.ExportValues.str;
 import static com.keevo.shared.infrastructure.export.ExportValues.toBool;
 import static com.keevo.shared.infrastructure.export.ExportValues.toInstant;
@@ -25,8 +27,9 @@ public class StoresExportDatasetProvider extends NativeKeysetExportDataset {
 
     static final String KEY = "stores";
 
+    static final Map<String, String> TYPES = Map.of("STORE", "Boutique", "WAREHOUSE", "Entrepôt");
+
     private static final List<ExportColumn> COLUMNS = List.of(
-            new ExportColumn("id", "Identifiant", ExportColumnType.TEXT),
             new ExportColumn("name", "Nom", ExportColumnType.TEXT),
             new ExportColumn("type", "Type", ExportColumnType.TEXT),
             new ExportColumn("address", "Adresse", ExportColumnType.TEXT),
@@ -59,7 +62,7 @@ public class StoresExportDatasetProvider extends NativeKeysetExportDataset {
 
     @Override
     protected String selectList(ExportFilter filter) {
-        return "CAST(s.id AS text), s.name, s.type, s.address, s.phone, s.is_active, s.created_at";
+        return "s.name, s.type, s.address, s.phone, s.is_active, s.created_at";
     }
 
     @Override
@@ -79,6 +82,6 @@ public class StoresExportDatasetProvider extends NativeKeysetExportDataset {
 
     @Override
     protected List<Object> mapRow(Object[] r) {
-        return Arrays.asList(str(r[0]), str(r[1]), str(r[2]), str(r[3]), str(r[4]), toBool(r[5]), toInstant(r[6]));
+        return Arrays.asList(str(r[0]), frLabel(TYPES, r[1]), str(r[2]), str(r[3]), toBool(r[4]), toInstant(r[5]));
     }
 }

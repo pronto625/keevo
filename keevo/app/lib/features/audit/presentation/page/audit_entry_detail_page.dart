@@ -135,16 +135,14 @@ class _DetailBody extends ConsumerWidget {
           children: [
             _Line('Nom', actorName),
             _Line('Rôle', role),
-            _Line('Appareil',
-                AuditPresenter.deviceLabel(entry.deviceId) ?? 'Non renseigné'),
+            if (AuditPresenter.deviceLabel(entry) case final device?)
+              _Line('Appareil', device),
           ],
         ),
         _Section(
           title: 'Quoi',
           children: [
             _Line('Action', info.label),
-            if (!AuditPresenter.isKnownAction(entry.action))
-              _Line('Code', entry.action),
           ],
         ),
         _Section(

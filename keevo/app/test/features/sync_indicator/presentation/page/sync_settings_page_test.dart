@@ -9,7 +9,10 @@ import 'package:keevo/core/sync/sync_status.dart';
 import 'package:keevo/core/sync/sync_status_provider.dart';
 import 'package:keevo/core/sync/domain/sync_conflict_provider.dart';
 import 'package:keevo/features/sync_indicator/presentation/page/sync_settings_page.dart';
+import 'package:keevo/core/sync/domain/sync_conflict.dart';
 import 'package:mocktail/mocktail.dart';
+
+import '../../../../helpers/no_technical_text.dart';
 
 /// Story 5.5 — Task 7.5: SyncSettingsPage widget tests.
 void main() {
@@ -27,6 +30,7 @@ void main() {
           activeDevicesProvider.overrideWith((ref) => Future.value([
                 {'deviceId': 'test-device', 'lastPushAt': '2024-01-01T00:00:00Z'},
               ])),
+          currentDeviceIdProvider.overrideWith((ref) async => 'test-device'),
           syncHistoryProvider.overrideWith((ref) => Future.value([])),
           pendingSyncQueueProvider.overrideWith((ref) => Future.value([])),
           pendingSyncCountProvider.overrideWith((ref) => Future.value(0)),
@@ -56,7 +60,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Appareils actifs'), findsOneWidget);
-      expect(find.text('test-device'), findsOneWidget);
+      // v1s-16-20: whose device it is, never its id.
+      expect(find.text('Cet appareil'), findsOneWidget);
+      expect(find.text('test-device'), findsNothing);
     });
 
     testWidgets(
@@ -93,6 +99,93 @@ void main() {
       await tester.tap(find.text('File d\'attente'));
       await tester.pumpAndSettle();
       expect(find.text('Aucune opération en attente'), findsOneWidget);
+    });
+
+    testWidgets(
+        'v1s-16-20 guard: devices, history, conflicts and queue show no id, '
+        'code, exception text or JSON', (tester) async {
+      _setPhoneSize(tester);
+      const uuid = '7f1c2b4e-2b9a-4c1e-9d0f-0a1b2c3d4e5f';
+      final at = DateTime(2026, 10, 11, 9);
+      final conflict = SyncConflict(
+        id: uuid,
+        operationId: uuid,
+        operationType: 'UPDATE_PRODUCT',
+        entityId: uuid,
+        entityType: 'PRODUCT',
+        conflictType: 'LAST_WRITE_WINS',
+        strategy: 'LAST_WRITE_WINS',
+        conflictData: {
+          'entityType': 'PRODUCT',
+          'entityId': uuid,
+          'overwrittenTimestamp': '2026-10-11T08:00:00Z',
+          'nested': {'a': 1},
+        },
+        resolvedAt: at,
+      );
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          activeDevicesProvider.overrideWith((ref) => Future.value([
+                {'deviceId': uuid, 'userId': uuid, 'lastPushAt': ''},
+                {'deviceId': 'other-$uuid', 'lastPushAt': ''},
+              ])),
+          currentDeviceIdProvider.overrideWith((ref) async => uuid),
+          syncHistoryProvider.overrideWith((ref) => Future.value([
+                SyncEvent(
+                    id: '1',
+                    type: 'PUSH',
+                    status: 'FAILED',
+                    operationCount: 0,
+                    errorMessage: 'DioException [bad response]: status code '
+                        '500 for $uuid',
+                    createdAt: at),
+                SyncEvent(
+                    id: '2',
+                    type: 'SOME_TYPE',
+                    status: 'SOME_STATUS',
+                    operationCount: 0,
+                    errorMessage: '423 gate: 8 days stale',
+                    createdAt: at),
+              ])),
+          pendingSyncQueueProvider.overrideWith((ref) => Future.value([
+                SyncQueueData(
+                    id: uuid,
+                    operation: 'SOME_FUTURE_OP',
+                    payload: '{"productId":"$uuid"}',
+                    createdAt: at,
+                    synced: false,
+                    retryCount: 1,
+                    entityId: uuid,
+                    lastError: 'SOME_UNKNOWN_CODE'),
+              ])),
+          pendingSyncCountProvider.overrideWith((ref) => Future.value(1)),
+          quarantinedSyncQueueProvider.overrideWith((ref) => Future.value([])),
+          syncConflictsProvider.overrideWith((ref) => Future.value([conflict])),
+          syncStatusProvider.overrideWith(
+              (ref) => Stream.value(SyncStatus.online)),
+        ],
+        child: const MaterialApp(home: SyncSettingsPage()),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.text('Cet appareil'), findsOneWidget);
+      expect(find.text('Autre appareil'), findsOneWidget);
+      expect(find.text('Envoi des données échoué'), findsOneWidget);
+      expectNoTechnicalText(tester);
+
+      await tester.tap(find.text('Conflits'));
+      await tester.pumpAndSettle();
+      expectNoTechnicalText(tester);
+      await tester.tap(find.textContaining('Modification écrasée'));
+      await tester.pumpAndSettle();
+      expect(find.text('Détail du conflit'), findsOneWidget);
+      expectNoTechnicalText(tester);
+      Navigator.of(tester.element(find.text('Détail du conflit'))).pop();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('File d\'attente'));
+      await tester.pumpAndSettle();
+      expect(find.text('Opération'), findsOneWidget);
+      expectNoTechnicalText(tester);
     });
 
     testWidgets('shows FAB for force sync', (tester) async {

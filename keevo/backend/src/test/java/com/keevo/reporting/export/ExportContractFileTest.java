@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.shared.application.port.export.ExportColumn;
 import com.keevo.shared.application.port.export.ExportDatasetProvider;
+import com.keevo.shared.infrastructure.export.AuditLabels;
 import com.keevo.shared.infrastructure.export.ExportValues;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -52,6 +53,7 @@ class ExportContractFileTest {
 
     private static final String SALE = "com.keevo.commerce.sale.adapter.out.export.";
     private static final String INVENTORY = "com.keevo.inventory.counting.adapter.out.export.";
+    private static final String AUDIT_LABELS = "com.keevo.shared.infrastructure.export.AuditLabels";
 
     /** Contract label entry « dataset.columnKey » → (class, static field) holding the map. */
     private static final Map<String, String[]> LABEL_FIELDS = new LinkedHashMap<>();
@@ -59,6 +61,8 @@ class ExportContractFileTest {
     static {
         LABEL_FIELDS.put("products.status",
                 new String[]{"com.keevo.catalog.product.adapter.out.export.ProductsExportDatasetProvider", "STATUS"});
+        LABEL_FIELDS.put("stores.type",
+                new String[]{"com.keevo.store.store.adapter.out.export.StoresExportDatasetProvider", "TYPES"});
         LABEL_FIELDS.put("stock_movements.type",
                 new String[]{"com.keevo.catalog.stock.adapter.out.export.StockMovementsExportDatasetProvider", "TYPES"});
         LABEL_FIELDS.put("stock_transfers.status",
@@ -79,10 +83,25 @@ class ExportContractFileTest {
                 new String[]{"com.keevo.shared.infrastructure.export.AuditLogExportDatasetProvider", "ROLES"});
         LABEL_FIELDS.put("audit_log.source",
                 new String[]{"com.keevo.shared.infrastructure.export.AuditLogExportDatasetProvider", "SOURCES"});
+        LABEL_FIELDS.put("audit_log.action", new String[]{AUDIT_LABELS, "ACTIONS"});
+        LABEL_FIELDS.put("audit_log.entityType", new String[]{AUDIT_LABELS, "ENTITY_TYPES"});
+    }
+
+    /**
+     * Story v1s-16-20 — top-level {@code audit} section: the action history rendering table
+     * (field labels, code values, context labels, hidden keys) the app AuditPresenter mirrors.
+     */
+    private static final Map<String, String[]> AUDIT_FIELDS = new LinkedHashMap<>();
+
+    static {
+        AUDIT_FIELDS.put("fields", new String[]{AUDIT_LABELS, "FIELDS"});
+        AUDIT_FIELDS.put("values", new String[]{AUDIT_LABELS, "VALUES"});
+        AUDIT_FIELDS.put("context", new String[]{AUDIT_LABELS, "CONTEXT"});
     }
 
     /** Label holder classes that are not providers (scanned for unlisted maps too). */
-    private static final List<String> LABEL_CLASSES = List.of(SALE + "SaleLabels", INVENTORY + "InventoryLabels");
+    private static final List<String> LABEL_CLASSES = List.of(SALE + "SaleLabels", INVENTORY + "InventoryLabels",
+            AUDIT_LABELS);
 
     private static final String STOCK_LEVELS =
             "com.keevo.catalog.stock.adapter.out.export.StockLevelsExportDatasetProvider";
@@ -108,6 +127,7 @@ class ExportContractFileTest {
     void everyLabelMapIsListed() throws Exception {
         Set<String> listed = new LinkedHashSet<>();
         LABEL_FIELDS.values().forEach(f -> listed.add(f[0] + "#" + f[1]));
+        AUDIT_FIELDS.values().forEach(f -> listed.add(f[0] + "#" + f[1]));
         List<Class<?>> classes = new ArrayList<>();
         for (ExportDatasetProvider p : ExportDatasetCatalogTest.allProviders()) {
             classes.add(p.getClass());
@@ -167,10 +187,18 @@ class ExportContractFileTest {
                 readString(STOCK_LEVELS, "LOW_STOCK"),
                 readString(STOCK_LEVELS, "OK")));
 
+        Map<String, Object> audit = new LinkedHashMap<>();
+        for (Map.Entry<String, String[]> e : AUDIT_FIELDS.entrySet()) {
+            audit.put(e.getKey(), new TreeMap<>(readMap(e.getValue()[0], e.getValue()[1])));
+        }
+        audit.put("hiddenKeys", AuditLabels.HIDDEN_KEYS.stream().sorted().toList());
+        audit.put("codeKeys", AuditLabels.CODE_KEYS.stream().sorted().toList());
+
         Map<String, Object> contract = new LinkedHashMap<>();
         contract.put("datasets", datasets);
         contract.put("labels", labels);
         contract.put("constants", constants);
+        contract.put("audit", audit);
         return contract;
     }
 

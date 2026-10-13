@@ -40,10 +40,9 @@ class StockLevelWidget extends ConsumerWidget {
     final storesAsync = ref.watch(storeListNotifierProvider);
     final stores = storesAsync.valueOrNull ?? [];
 
-    // Helper: resolve store name from id, fallback to truncated id.
+    // Helper: resolve store name from id — never the id itself (v1s-16-20).
     String storeName(String id) {
-      return stores.where((s) => s.id == id).firstOrNull?.name
-          ?? (id.length > 8 ? '${id.substring(0, 8)}…' : id);
+      return stores.where((s) => s.id == id).firstOrNull?.name ?? 'Boutique';
     }
 
     // Resolve the effective storeId:

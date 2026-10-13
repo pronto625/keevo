@@ -43,7 +43,6 @@ public class ReportsExportDatasetProvider extends NativeKeysetExportDataset {
             DeliveryStatus.IN_APP_ONLY.name(), "Dans l'application uniquement");
 
     private static final List<ExportColumn> COLUMNS = List.of(
-            new ExportColumn("id", "Identifiant", ExportColumnType.TEXT),
             new ExportColumn("reportDate", "Date du rapport", ExportColumnType.DATE),
             new ExportColumn("type", "Type", ExportColumnType.TEXT),
             new ExportColumn("store", "Boutique", ExportColumnType.TEXT),
@@ -69,7 +68,7 @@ public class ReportsExportDatasetProvider extends NativeKeysetExportDataset {
 
     @Override
     protected String selectList(ExportFilter filter) {
-        return "CAST(r.id AS text), r.report_date, r.report_type, COALESCE(st.name, r.store_name), r.total_revenue,"
+        return "r.report_date, r.report_type, COALESCE(st.name, r.store_name), r.total_revenue,"
                 + " r.total_sales, r.is_automatic, r.actor_name, r.delivery_status, r.created_at, r.content";
     }
 
@@ -95,7 +94,7 @@ public class ReportsExportDatasetProvider extends NativeKeysetExportDataset {
 
     @Override
     protected List<Object> mapRow(Object[] r) {
-        return Arrays.asList(str(r[0]), toLocalDate(r[1]), frLabel(TYPES, r[2]), str(r[3]), toLong(r[4]),
-                toLong(r[5]), toBool(r[6]), str(r[7]), frLabel(DELIVERY, r[8]), toInstant(r[9]), str(r[10]));
+        return Arrays.asList(toLocalDate(r[0]), frLabel(TYPES, r[1]), str(r[2]), toLong(r[3]),
+                toLong(r[4]), toBool(r[5]), str(r[6]), frLabel(DELIVERY, r[7]), toInstant(r[8]), str(r[9]));
     }
 }

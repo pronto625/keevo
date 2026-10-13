@@ -26,7 +26,6 @@ public class CategoriesExportDatasetProvider extends NativeKeysetExportDataset {
     static final String KEY = "categories";
 
     private static final List<ExportColumn> COLUMNS = List.of(
-            new ExportColumn("id", "Identifiant", ExportColumnType.TEXT),
             new ExportColumn("name", "Nom", ExportColumnType.TEXT),
             new ExportColumn("parent", "Catégorie parente", ExportColumnType.TEXT),
             new ExportColumn("active", "Active", ExportColumnType.BOOLEAN),
@@ -47,7 +46,7 @@ public class CategoriesExportDatasetProvider extends NativeKeysetExportDataset {
 
     @Override
     protected String selectList(ExportFilter filter) {
-        return "CAST(c.id AS text), c.name, pc.name, c.is_active, c.is_custom, c.created_at";
+        return "c.name, pc.name, c.is_active, c.is_custom, c.created_at";
     }
 
     @Override
@@ -62,6 +61,6 @@ public class CategoriesExportDatasetProvider extends NativeKeysetExportDataset {
 
     @Override
     protected List<Object> mapRow(Object[] r) {
-        return Arrays.asList(str(r[0]), str(r[1]), str(r[2]), toBool(r[3]), toBool(r[4]), toInstant(r[5]));
+        return Arrays.asList(str(r[0]), str(r[1]), toBool(r[2]), toBool(r[3]), toInstant(r[4]));
     }
 }

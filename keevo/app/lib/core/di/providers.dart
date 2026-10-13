@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/api_service.dart';
+import '../storage/app_constants.dart';
 import '../storage/app_database.dart';
 import '../sync/connectivity_service.dart';
 import '../sync/connectivity_service_impl.dart';
@@ -63,6 +64,15 @@ final currentUserPhoneProvider = Provider<String?>((ref) {
 /// Used in audit trail to mark entries made by the current user as "Vous".
 final currentUserIdProvider = FutureProvider<String?>((ref) async {
   return ref.read(flutterSecureStorageProvider).read(key: 'user_id');
+});
+
+/// Sync device id of this install (secure storage `keevo_device_id`, written
+/// by the sync service). v1s-16-20: only used to tell « Cet appareil » from
+/// « Autre appareil » — never displayed. Auto-disposed: re-read each time the
+/// screen opens, so an id written lazily by the first sync is picked up.
+final currentDeviceIdProvider =
+    FutureProvider.autoDispose<String?>((ref) async {
+  return ref.read(flutterSecureStorageProvider).read(key: kDeviceIdKey);
 });
 
 /// Password change required flag — Story 3.5.

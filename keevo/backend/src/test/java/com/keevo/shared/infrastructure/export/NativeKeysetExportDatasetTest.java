@@ -164,7 +164,7 @@ class NativeKeysetExportDatasetTest {
         assertThat(ExportValues.toLong(3)).isEqualTo(3L);
         assertThat(ExportValues.toLocalDate(Date.valueOf("2026-10-12"))).isEqualTo(LocalDate.of(2026, 10, 12));
         assertThat(ExportValues.frLabel(Map.of("CASH", "Espèces"), "CASH")).isEqualTo("Espèces");
-        assertThat(ExportValues.frLabel(Map.of("CASH", "Espèces"), "BARTER")).isEqualTo("BARTER");
+        assertThat(ExportValues.frLabel(Map.of("CASH", "Espèces"), "BARTER")).isEqualTo("Barter"); // humanized (v1s-16-20)
         assertThat(ExportValues.frLabel(Map.of(), null)).isNull();
     }
 }

@@ -79,7 +79,8 @@ class LocalExportService {
   }
 }
 
-/// `keevo-donnees-appareil-<key|export>-<yyyyMMdd-HHmm WAT>.<csv|zip>` — the
+/// `keevo-donnees-appareil-<label slug|export>-<yyyyMMdd-HHmm WAT>.<csv|zip>`
+/// (`ventes`, never the dataset key — v1s-16-20) — the
 /// « données de cet appareil » marking travels in the file name (also the
 /// share subject). [singleKey] is `null` for a multi-dataset zip.
 String localExportFileName(String? singleKey, DateTime now) {
@@ -88,5 +89,6 @@ String localExportFileName(String? singleKey, DateTime now) {
   final stamp = '${w.year}${two(w.month)}${two(w.day)}-'
       '${two(w.hour)}${two(w.minute)}';
   final ext = singleKey == null ? 'zip' : 'csv';
-  return 'keevo-donnees-appareil-${singleKey ?? 'export'}-$stamp.$ext';
+  final name = singleKey == null ? 'export' : exportDatasetSlug(singleKey);
+  return 'keevo-donnees-appareil-$name-$stamp.$ext';
 }

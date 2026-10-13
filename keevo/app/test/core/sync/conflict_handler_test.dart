@@ -131,7 +131,8 @@ void main() {
 
       expect(conflict.conflictType, equals('LAST_WRITE_WINS'));
       expect(conflict.entityType, equals('product'));
-      expect(conflict.displayTitle, contains('product'));
+      // v1s-16-20: the French noun, never the raw type code.
+      expect(conflict.displayTitle, contains('Produit'));
     });
   });
 

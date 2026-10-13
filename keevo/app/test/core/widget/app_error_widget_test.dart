@@ -1,8 +1,11 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:keevo/core/widget/app_error_widget.dart';
 import 'package:keevo/core/widget/soft_icon_badge.dart';
+
+import '../../helpers/no_technical_text.dart';
 
 Widget _host(Widget child) => MaterialApp(home: Scaffold(body: child));
 
@@ -82,4 +85,75 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.byType(SingleChildScrollView), findsOneWidget);
   });
+
+  group('appErrorMessage — v1s-16-20: no technical data', () {
+    DioException dio(Object? body, {int status = 409}) => DioException(
+          requestOptions: RequestOptions(path: '/x'),
+          type: DioExceptionType.badResponse,
+          response: Response(
+              requestOptions: RequestOptions(path: '/x'),
+              statusCode: status,
+              data: body),
+        );
+
+    test('server message with a UUID → generic French message', () {
+      final msg = appErrorMessage(dio({
+        'message':
+            'Transfer 7f1c2b4e-2b9a-4c1e-9d0f-0a1b2c3d4e5f has status COMPLETED'
+      }));
+      expect(msg, isNot(contains('7f1c2b4e')));
+      expect(msg, isNot(contains('COMPLETED')));
+      expectNoTechnicalString(msg);
+    });
+
+    test('unknown domain code → generic, never « Erreur (CODE) »', () {
+      final msg = appErrorMessage(dio({'domainCode': 'SOME_NEW_CODE'}));
+      expect(msg, kAppGenericErrorMessage);
+    });
+
+    test('no body → no HTTP status code in the message', () {
+      final msg = appErrorMessage(dio(null, status: 500));
+      expect(msg, isNot(contains('500')));
+    });
+
+    test('app domain exception: its French message is shown', () {
+      expect(appErrorMessage(_DomainException('Client introuvable')),
+          'Client introuvable');
+      expect(
+          appErrorMessage(_DomainException('Erreur PLAN_LIMIT_EXCEEDED')),
+          kAppGenericErrorMessage);
+    });
+
+    test('body fields that are not Strings never throw', () {
+      expect(
+          appErrorMessage(dio({
+            'error': {'code': 'X'},
+            'message': ['a']
+          })),
+          isNotEmpty);
+      expect(appErrorMessage(dio({'domainCode': 42, 'message': 'Nom pris'})),
+          'Nom pris');
+    });
+
+    test('readable French server message is kept', () {
+      expect(appErrorMessage(dio({'message': 'Nom déjà utilisé'})),
+          'Nom déjà utilisé');
+    });
+
+    test('exception text (class name, codes) → generic message', () {
+      expect(appErrorMessage(const FormatException('bad')),
+          kAppGenericErrorMessage);
+      expect(appErrorMessage(Exception('PLAN_LIMIT_EXCEEDED')),
+          kAppGenericErrorMessage);
+      expect(appErrorMessage(Exception('Connexion perdue')), 'Connexion perdue');
+    });
+  });
+}
+
+class _DomainException implements Exception {
+  final String message;
+  _DomainException(this.message);
+
+  @override
+  String toString() => 'DomainException[X_CODE]: $message';
 }

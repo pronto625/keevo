@@ -8,12 +8,14 @@ import com.keevo.shared.infrastructure.export.NativeKeysetExportDataset;
 import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 
 import static com.keevo.shared.infrastructure.export.ExportValues.actorJoins;
 import static com.keevo.shared.infrastructure.export.ExportValues.actorNameSelect;
 import static com.keevo.shared.infrastructure.export.ExportValues.frLabel;
+import static com.keevo.shared.infrastructure.export.ExportValues.saleReference;
 import static com.keevo.shared.infrastructure.export.ExportValues.str;
 import static com.keevo.shared.infrastructure.export.ExportValues.toInstant;
 import static com.keevo.shared.infrastructure.export.ExportValues.toLong;
@@ -30,12 +32,11 @@ public class SaleItemsExportDatasetProvider extends NativeKeysetExportDataset {
     static final String KEY = "sale_items";
 
     private static final List<ExportColumn> COLUMNS = List.of(
-            new ExportColumn("saleId", "Vente", ExportColumnType.TEXT),
+            new ExportColumn("sale", "Vente", ExportColumnType.TEXT),
             new ExportColumn("occurredAt", "Date", ExportColumnType.DATETIME),
             new ExportColumn("store", "Boutique", ExportColumnType.TEXT),
             new ExportColumn("employee", "Vendeur", ExportColumnType.TEXT),
             new ExportColumn("saleStatus", "Statut de la vente", ExportColumnType.TEXT),
-            new ExportColumn("productId", "Identifiant produit", ExportColumnType.TEXT),
             new ExportColumn("sku", "Référence", ExportColumnType.TEXT),
             new ExportColumn("product", "Produit", ExportColumnType.TEXT),
             new ExportColumn("quantity", "Quantité", ExportColumnType.INTEGER),
@@ -58,8 +59,8 @@ public class SaleItemsExportDatasetProvider extends NativeKeysetExportDataset {
 
     @Override
     protected String selectList(ExportFilter filter) {
-        return "CAST(s.id AS text), " + SaleLabels.SALE_DATE + ", st.name, " + actorNameSelect("a")
-                + ", s.status, CAST(i.product_id AS text), p.sku, i.product_name, i.quantity,"
+        return SaleLabels.SALE_DATE + ", st.name, " + actorNameSelect("a")
+                + ", s.status, p.sku, i.product_name, i.quantity,"
                 + " i.catalogue_unit_price, i.applied_unit_price, i.subtotal";
     }
 
@@ -86,7 +87,10 @@ public class SaleItemsExportDatasetProvider extends NativeKeysetExportDataset {
 
     @Override
     protected List<Object> mapRow(Object[] r) {
-        return Arrays.asList(str(r[0]), toInstant(r[1]), str(r[2]), str(r[3]), frLabel(SaleLabels.STATUS, r[4]),
-                str(r[5]), str(r[6]), str(r[7]), toLong(r[8]), toLong(r[9]), toLong(r[10]), toLong(r[11]));
+        Instant occurredAt = toInstant(r[0]);
+        String store = str(r[1]);
+        return Arrays.asList(saleReference(occurredAt, store), occurredAt, store, str(r[2]),
+                frLabel(SaleLabels.STATUS, r[3]), str(r[4]), str(r[5]), toLong(r[6]), toLong(r[7]), toLong(r[8]),
+                toLong(r[9]));
     }
 }

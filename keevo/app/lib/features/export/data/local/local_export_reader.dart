@@ -1,8 +1,7 @@
-import 'dart:convert';
-
 import 'package:drift/drift.dart';
 
 import '../../../../core/storage/app_database.dart';
+import '../../../audit/domain/audit_format.dart';
 import '../../domain/local/local_export_schema.dart';
 
 /// Store / period filters of an on-device export. A dataset applies only the
@@ -23,7 +22,8 @@ typedef LocalExportRow = List<Object?>;
 /// LocalExportReader — pages every export dataset out of Drift (v1s-18-5).
 ///
 /// Same columns, order, filters and French labels as the server providers
-/// (18-2). Runs on the main isolate (the SQLCipher-opened database cannot be
+/// (18-2). v1s-16-20: ids are only read to join / aggregate, never written
+/// into a row. Runs on the main isolate (the SQLCipher-opened database cannot be
 /// used from a background isolate) in small pages: `LIMIT/OFFSET` over a
 /// total order ending in the row id, plus per-page id lookups for
 /// aggregates. Only small reference maps (stores, categories, actor names)
@@ -124,7 +124,6 @@ class LocalExportReader {
           (rows, refs) async => [
             for (final r in rows)
               [
-                r.read<String>('id'),
                 r.read<String>('name'),
                 refs.categories[r.readNullable<String>('parent_id')],
                 r.read<bool>('is_active'),
@@ -164,7 +163,6 @@ class LocalExportReader {
           (rows, refs) async => [
             for (final r in rows)
               [
-                r.read<String>('id'),
                 r.read<DateTime>('created_at'),
                 r.readNullable<String>('store_name'),
                 r.readNullable<String>('sku'),
@@ -175,7 +173,7 @@ class LocalExportReader {
                 r.readNullable<int>('quantity_delta'),
                 r.readNullable<int>('quantity_after'),
                 refs.actor(r.readNullable<String>('actor_id')),
-                r.readNullable<String>('reason'),
+                AuditFormat.notes(r.readNullable<String>('reason')),
               ],
           ],
         );
@@ -200,7 +198,6 @@ class LocalExportReader {
           (rows, refs) async => [
             for (final r in rows)
               [
-                r.read<String>('id'),
                 r.read<DateTime>('occurred_at'),
                 r.readNullable<String>('src_name') ??
                     _nonEmpty(r.readNullable<String>('source_store_name')),
@@ -213,7 +210,7 @@ class LocalExportReader {
                 exportLabel(exportLabels['stock_transfers.status'],
                     r.readNullable<String>('status')),
                 refs.actor(r.readNullable<String>('actor_id')),
-                r.readNullable<String>('notes'),
+                AuditFormat.notes(r.readNullable<String>('notes')),
               ],
           ],
         );
@@ -250,13 +247,13 @@ class LocalExportReader {
           (rows, refs) async => [
             for (final r in rows)
               [
-                r.read<String>('sale_id'),
+                exportSaleReference(r.read<DateTime>('sale_date'),
+                    r.readNullable<String>('store_name')),
                 r.read<DateTime>('sale_date'),
                 r.readNullable<String>('store_name'),
                 refs.actor(r.readNullable<String>('employee_id')),
                 exportLabel(exportLabels['sale_items.saleStatus'],
                     r.readNullable<String>('status')),
-                r.readNullable<String>('product_id'),
                 r.readNullable<String>('sku'),
                 r.readNullable<String>('product_name'),
                 r.readNullable<int>('quantity'),
@@ -282,7 +279,6 @@ class LocalExportReader {
           (rows, refs) async => [
             for (final r in rows)
               [
-                r.read<String>('id'),
                 // closureDate: the WAT date of closedAt (DATE cell) — an
                 // approximation: the server exports the stored
                 // closure_date, which the device does not keep.
@@ -350,7 +346,6 @@ class LocalExportReader {
           (rows, refs) async => [
             for (final r in rows)
               [
-                r.read<String>('id'),
                 r.readNullable<DateTime>('report_date'),
                 exportLabel(exportLabels['reports.type'],
                     r.readNullable<String>('report_type')),
@@ -394,7 +389,6 @@ class LocalExportReader {
           (rows, refs) async => [
             for (final r in rows)
               [
-                r.read<String>('id'),
                 r.readNullable<String>('first_name'),
                 r.readNullable<String>('last_name'),
                 r.readNullable<String>('phone_number'),
@@ -416,9 +410,9 @@ class LocalExportReader {
           (rows, refs) async => [
             for (final r in rows)
               [
-                r.read<String>('id'),
                 r.readNullable<String>('name'),
-                r.readNullable<String>('type'),
+                exportLabel(
+                    exportLabels['stores.type'], r.readNullable<String>('type')),
                 r.readNullable<String>('address'),
                 r.readNullable<String>('phone'),
                 r.readNullable<bool>('is_active'),
@@ -478,7 +472,6 @@ class LocalExportReader {
     return [
       for (final r in rows)
         [
-          r.read<String>('id'),
           r.readNullable<String>('sku'),
           r.readNullable<String>('name'),
           refs.categories[r.readNullable<String>('category_id')],
@@ -504,9 +497,7 @@ class LocalExportReader {
     final buyPrice = r.readNullable<int>('buy_price');
     final q = quantity ?? 0;
     return [
-      r.read<String>('store_id'),
       r.readNullable<String>('store_name'),
-      r.read<String>('product_id'),
       r.readNullable<String>('sku'),
       r.readNullable<String>('product_name'),
       refs.categories[r.readNullable<String>('category_id')],
@@ -541,7 +532,8 @@ class LocalExportReader {
     return [
       for (final r in rows)
         [
-          r.read<String>('id'),
+          exportSaleReference(r.read<DateTime>('sale_date'),
+              r.readNullable<String>('store_name')),
           r.read<DateTime>('sale_date'),
           r.readNullable<String>('store_name'),
           refs.actor(r.readNullable<String>('employee_id')),
@@ -581,7 +573,6 @@ class LocalExportReader {
     return [
       for (final r in rows)
         [
-          r.read<String>('id'),
           r.read<DateTime>('started_at'),
           r.readNullable<String>('store_name'),
           exportLabel(exportLabels['inventory_sessions.scope'],
@@ -602,12 +593,10 @@ class LocalExportReader {
     final theoretical = r.readNullable<int>('theoretical');
     final physical = r.readNullable<int>('physical');
     return [
-      r.read<String>('session_id'),
       r.read<DateTime>('started_at'),
       r.readNullable<String>('store_name'),
       exportLabel(exportLabels['inventory_counts.sessionStatus'],
           r.readNullable<String>('status')),
-      r.readNullable<String>('product_id'),
       r.readNullable<String>('product_name'),
       r.readNullable<String>('variant_label'),
       theoretical,
@@ -640,7 +629,6 @@ class LocalExportReader {
     return [
       for (final r in rows)
         [
-          r.read<String>('id'),
           r.readNullable<String>('name'),
           r.readNullable<String>('phone'),
           r.readNullable<String>('email'),
@@ -668,7 +656,6 @@ class LocalExportReader {
     return [
       for (final r in rows)
         [
-          r.read<String>('id'),
           r.readNullable<String>('name'),
           r.readNullable<String>('phone'),
           r.readNullable<String>('email'),
@@ -689,34 +676,33 @@ class LocalExportReader {
           'EMPLOYEE' => 'Un employé',
           _ => 'Un utilisateur',
         };
+    final label = r.readNullable<String>('entity_label');
+    final valueAfter = r.readNullable<String>('value_after');
+    final metadata = r.readNullable<String>('metadata');
+    // v1s-16-20 — server `AuditLogExportDatasetProvider.row`: French action
+    // and object type, readable « Changements » / « Détails », no id, device
+    // id or JSON.
     return [
-      r.read<String>('id'),
       r.read<DateTime>('occurred_at'),
       actor,
       // Other platform roles have no label (server behaviour).
       role == null ? null : exportLabels['audit_log.actorRole']![role],
-      r.readNullable<String>('action'),
-      r.readNullable<String>('entity_type'),
-      r.readNullable<String>('entity_id'),
-      r.readNullable<String>('entity_label'),
+      exportLabel(
+          exportLabels['audit_log.action'], r.readNullable<String>('action')),
+      exportLabel(exportLabels['audit_log.entityType'],
+          r.readNullable<String>('entity_type')),
+      label == null || AuditFormat.isTechnical(label) ? null : label,
       r.readNullable<String>('store_name'),
       exportLabel(
           exportLabels['audit_log.source'], r.readNullable<String>('source')),
-      r.readNullable<String>('device_id'),
-      r.readNullable<String>('value_before'),
-      r.readNullable<String>('value_after'),
+      AuditFormat.changesText(r.readNullable<String>('value_before'), valueAfter),
+      AuditFormat.detailsText(metadata, valueAfter),
     ];
   }
 
   static String? _actorLabel(String? metadata) {
-    if (metadata == null || metadata.trim().isEmpty) return null;
-    try {
-      final decoded = jsonDecode(metadata);
-      if (decoded is Map) {
-        final label = decoded['actorLabel'];
-        if (label is String && label.trim().isNotEmpty) return label.trim();
-      }
-    } catch (_) {}
+    final label = AuditFormat.decodeMap(metadata)['actorLabel'];
+    if (label is String && label.trim().isNotEmpty) return label.trim();
     return null;
   }
 

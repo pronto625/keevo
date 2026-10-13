@@ -39,7 +39,6 @@ class ExportDatasetCatalogTest {
     static {
         GOLDEN.put("products", """
                 Produits | store=true | period=false | criteria=
-                id:Identifiant:TEXT
                 sku:Référence:TEXT
                 name:Nom:TEXT
                 category:Catégorie:TEXT
@@ -55,7 +54,6 @@ class ExportDatasetCatalogTest {
                 updatedAt:Modifié le:DATETIME""");
         GOLDEN.put("categories", """
                 Catégories | store=false | period=false | criteria=
-                id:Identifiant:TEXT
                 name:Nom:TEXT
                 parent:Catégorie parente:TEXT
                 active:Active:BOOLEAN
@@ -63,9 +61,7 @@ class ExportDatasetCatalogTest {
                 createdAt:Créée le:DATETIME""");
         GOLDEN.put("stock_levels", """
                 Stocks | store=true | period=false | criteria=
-                storeId:Identifiant boutique:TEXT
                 store:Boutique:TEXT
-                productId:Identifiant produit:TEXT
                 sku:Référence:TEXT
                 product:Produit:TEXT
                 category:Catégorie:TEXT
@@ -78,7 +74,6 @@ class ExportDatasetCatalogTest {
                 updatedAt:Mis à jour le:DATETIME""");
         GOLDEN.put("stock_movements", """
                 Mouvements de stock | store=true | period=true | criteria=
-                id:Identifiant:TEXT
                 occurredAt:Date:DATETIME
                 store:Boutique:TEXT
                 sku:Référence:TEXT
@@ -91,7 +86,6 @@ class ExportDatasetCatalogTest {
                 notes:Notes:TEXT""");
         GOLDEN.put("stock_transfers", """
                 Transferts | store=true | period=true | criteria=
-                id:Identifiant:TEXT
                 occurredAt:Date:DATETIME
                 sourceStore:Boutique d'origine:TEXT
                 destinationStore:Boutique de destination:TEXT
@@ -103,7 +97,7 @@ class ExportDatasetCatalogTest {
                 notes:Notes:TEXT""");
         GOLDEN.put("sales", """
                 Ventes | store=true | period=true | criteria=
-                id:Identifiant:TEXT
+                reference:Référence de la vente:TEXT
                 occurredAt:Date:DATETIME
                 store:Boutique:TEXT
                 employee:Vendeur:TEXT
@@ -115,12 +109,11 @@ class ExportDatasetCatalogTest {
                 total:Montant total:AMOUNT_XAF""");
         GOLDEN.put("sale_items", """
                 Lignes de vente | store=true | period=true | criteria=
-                saleId:Vente:TEXT
+                sale:Vente:TEXT
                 occurredAt:Date:DATETIME
                 store:Boutique:TEXT
                 employee:Vendeur:TEXT
                 saleStatus:Statut de la vente:TEXT
-                productId:Identifiant produit:TEXT
                 sku:Référence:TEXT
                 product:Produit:TEXT
                 quantity:Quantité:INTEGER
@@ -129,7 +122,6 @@ class ExportDatasetCatalogTest {
                 subtotal:Sous-total:AMOUNT_XAF""");
         GOLDEN.put("day_closures", """
                 Clôtures | store=true | period=true | criteria=
-                id:Identifiant:TEXT
                 closureDate:Jour:DATE
                 closedAt:Clôturée le:DATETIME
                 store:Boutique:TEXT
@@ -145,7 +137,6 @@ class ExportDatasetCatalogTest {
                 topProductQuantity:Quantité meilleur produit:INTEGER""");
         GOLDEN.put("inventory_sessions", """
                 Inventaires | store=true | period=true | criteria=
-                id:Identifiant:TEXT
                 startedAt:Commencé le:DATETIME
                 store:Boutique:TEXT
                 scope:Périmètre:TEXT
@@ -158,11 +149,9 @@ class ExportDatasetCatalogTest {
                 totalGap:Écart total:INTEGER""");
         GOLDEN.put("inventory_counts", """
                 Comptages d'inventaire | store=true | period=true | criteria=
-                sessionId:Inventaire:TEXT
                 sessionStartedAt:Date de l'inventaire:DATETIME
                 store:Boutique:TEXT
                 sessionStatus:Statut de l'inventaire:TEXT
-                productId:Identifiant produit:TEXT
                 product:Produit:TEXT
                 variant:Variante:TEXT
                 theoretical:Stock théorique:INTEGER
@@ -172,7 +161,6 @@ class ExportDatasetCatalogTest {
                 countedBy:Compté par:TEXT""");
         GOLDEN.put("clients", """
                 Clients | store=false | period=false | criteria=
-                id:Identifiant:TEXT
                 name:Nom:TEXT
                 phone:Téléphone:TEXT
                 email:E-mail:TEXT
@@ -184,7 +172,6 @@ class ExportDatasetCatalogTest {
                 createdAt:Créé le:DATETIME""");
         GOLDEN.put("suppliers", """
                 Fournisseurs | store=false | period=false | criteria=
-                id:Identifiant:TEXT
                 name:Nom:TEXT
                 phone:Téléphone:TEXT
                 email:E-mail:TEXT
@@ -193,7 +180,6 @@ class ExportDatasetCatalogTest {
                 createdAt:Créé le:DATETIME""");
         GOLDEN.put("employees", """
                 Équipe | store=true | period=false | criteria=
-                id:Identifiant:TEXT
                 firstName:Prénom:TEXT
                 lastName:Nom:TEXT
                 phone:Téléphone:TEXT
@@ -202,7 +188,6 @@ class ExportDatasetCatalogTest {
                 createdAt:Ajouté le:DATETIME""");
         GOLDEN.put("stores", """
                 Boutiques | store=true | period=false | criteria=
-                id:Identifiant:TEXT
                 name:Nom:TEXT
                 type:Type:TEXT
                 address:Adresse:TEXT
@@ -211,7 +196,6 @@ class ExportDatasetCatalogTest {
                 createdAt:Créée le:DATETIME""");
         GOLDEN.put("reports", """
                 Rapports | store=true | period=true | criteria=
-                id:Identifiant:TEXT
                 reportDate:Date du rapport:DATE
                 type:Type:TEXT
                 store:Boutique:TEXT
@@ -224,19 +208,16 @@ class ExportDatasetCatalogTest {
                 content:Contenu:TEXT""");
         GOLDEN.put("audit_log", """
                 Journal d'audit | store=true | period=true | criteria=action,entityId,entityType,q,userId
-                id:Identifiant:TEXT
                 occurredAt:Date:DATETIME
                 actor:Auteur:TEXT
                 actorRole:Rôle:TEXT
                 action:Action:TEXT
                 entityType:Type d'objet:TEXT
-                entityId:Identifiant de l'objet:TEXT
                 entityLabel:Objet:TEXT
                 store:Boutique:TEXT
                 source:Source:TEXT
-                deviceId:Appareil:TEXT
-                valueBefore:Avant:TEXT
-                valueAfter:Après:TEXT""");
+                changes:Changements:TEXT
+                details:Détails:TEXT""");
     }
 
     /** Dataset keys in the documented order (also the order of the 18-5 contract file). */

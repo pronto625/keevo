@@ -438,8 +438,7 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
                 _FilterChip(
                   label: filter.entityType == null
                       ? 'Objet'
-                      : AuditPresenter.objectTypes[filter.entityType] ??
-                          filter.entityType!,
+                      : AuditPresenter.objectTypeLabel(filter.entityType!),
                   icon: Icons.category_outlined,
                   active: filter.entityType != null,
                   onTap: _pickObject,

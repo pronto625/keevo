@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/widget/app_error_widget.dart';
 import '../../domain/model/audit_entry_dto.dart';
+import '../audit_presenter.dart';
 import '../provider/audit_provider.dart';
 
 /// StockHistoryWidget — displays an entity's paginated audit trail.
@@ -217,8 +218,8 @@ class _AuditEntryTile extends StatelessWidget {
     required this.currentUserPhone,
   });
 
-  /// Returns the actor label: "Vous" with phone if current user,
-  /// the phone number from backend JOIN for other users, or fallback short ID.
+  /// Returns the actor label: "Vous" with phone if current user, else the
+  /// actor's name / phone (never an id — v1s-16-20), else « Un utilisateur ».
   String _actorLabel() {
     final isSelf = currentUserId != null &&
         entry.userId == currentUserId;
@@ -228,35 +229,13 @@ class _AuditEntryTile extends StatelessWidget {
       final phone = entry.actorPhone ?? currentUserPhone;
       return phone != null ? 'Vous ($phone)' : 'Vous';
     }
-    // actorPhone is resolved by the backend via LEFT JOIN public.users
-    final id = entry.userId;
-    return entry.actorPhone ??
-        (id.length > 8 ? id.substring(id.length - 8) : id);
+    return AuditPresenter.actorName(entry);
   }
 
-  /// Maps backend action codes to French section titles.
-  static String _actionLabel(String action) => switch (action) {
-        'USER_REGISTERED'         => 'Inscription',
-        'USER_AUTHENTICATED'      => 'Connexion',
-        'ONBOARDING_COMPLETED'    => 'Configuration boutique',
-        'PRODUCT_CREATED'         => 'Nouveau produit',
-        'PRODUCT_UPDATED'         => 'Produit modifié',
-        'PRODUCT_ARCHIVED'        => 'Produit archivé',
-        'PRICE_OVERRIDDEN'        => 'Prix de vente modifié',
-        'STOCK_ADJUSTED'          => 'Mouvement de stock',
-        'STOCK_THRESHOLD_BREACHED'=> 'Alerte stock',
-        'CLIENT_CREATED'          => 'Nouveau client',
-        'CLIENT_ARCHIVED'         => 'Client archivé',
-        'SUPPLIER_CREATED'        => 'Nouveau fournisseur',
-        'SUPPLIER_ARCHIVED'       => 'Fournisseur archivé',
-        'STORE_CREATED'           => 'Point de vente créé',
-        'STORE_UPDATED'           => 'Point de vente modifié',
-        'STORE_DEACTIVATED'       => 'Point de vente désactivé',
-        'SALE_COMPLETED'          => 'Vente enregistrée',
-        'TRANSFER_COMPLETED'      => 'Transfert effectué',
-        'STOCK_RECEIVED'          => 'Entrée de stock',
-        _ => action.replaceAll('_', ' ').toLowerCase(),
-      };
+  /// French title of an action code (shared catalogue; unknown codes are
+  /// humanized, never shown raw).
+  static String _actionLabel(String action) =>
+      AuditPresenter.actionInfo(action).label;
 
   /// Builds a human-readable description from the action + JSON payloads.
   static String _buildDescription(
@@ -299,7 +278,10 @@ class _AuditEntryTile extends StatelessWidget {
       case 'PRICE_OVERRIDDEN':
         final from = before['cataloguePrice'];
         final to   = after['appliedPrice'];
-        if (from != null && to != null) return 'Prix modifié : $from → $to FCFA';
+        if (from is num && to is num) {
+          return 'Prix modifié : ${AuditPresenter.formatXaf(from)} → '
+              '${AuditPresenter.formatXaf(to)}';
+        }
         return 'Prix de vente modifié';
 
       case 'STOCK_ADJUSTED':
@@ -359,6 +341,7 @@ class _AuditEntryTile extends StatelessWidget {
   static String _movementLabel(String? type) => switch (type) {
         'SALE'          => 'vendu',
         'PURCHASE'      => 'réceptionné',
+        'STOCK_ENTRY'   => 'réceptionné',
         'ADJUSTMENT'    => 'ajusté',
         'TRANSFER_OUT'  => 'transféré (sortie)',
         'TRANSFER_IN'   => 'transféré (entrée)',

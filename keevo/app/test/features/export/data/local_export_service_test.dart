@@ -71,14 +71,15 @@ void main() {
       now: DateTime.utc(2026, 10, 12, 23, 30),
     );
     expect(file.uri.pathSegments.last,
-        'keevo-donnees-appareil-sales-20261013-0030.csv');
+        'keevo-donnees-appareil-ventes-20261013-0030.csv');
     expect(file.parent.parent.path,
         '${temp.path}${Platform.pathSeparator}exports');
     final text = utf8.decode(file.readAsBytesSync().sublist(3));
     final lines = text.split('\r\n')..removeLast();
-    expect(lines.first, startsWith('Identifiant;Date;Boutique;Vendeur'));
+    expect(lines.first, startsWith('Référence de la vente;Date;Boutique;Vendeur'));
     expect(lines, hasLength(10001));
-    expect(lines[1], startsWith('sale-00000;01/09/2026 01:00:00;'));
+    expect(lines[1],
+        startsWith('Vente du 01/09/2026 à 01:00:00;01/09/2026 01:00:00;'));
     expect(progress, hasLength(20));
     expect(progress.last, 10000);
     for (var i = 1; i < progress.length; i++) {
@@ -139,7 +140,7 @@ void main() {
 
   test('file name marks « données de cet appareil » in WAT', () {
     expect(localExportFileName('products', DateTime.utc(2026, 10, 12, 22, 59)),
-        'keevo-donnees-appareil-products-20261012-2359.csv');
+        'keevo-donnees-appareil-produits-20261012-2359.csv');
     expect(localExportFileName(null, DateTime.utc(2026, 10, 12, 23, 0)),
         'keevo-donnees-appareil-export-20261013-0000.zip');
     expect(localExportCatalog, hasLength(16));

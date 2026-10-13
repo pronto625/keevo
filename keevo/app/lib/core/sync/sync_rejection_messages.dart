@@ -4,10 +4,9 @@
 /// The backend sends the raw `ErrorCode` enum name (see
 /// `AbstractSyncOperationHandler.mapDomainException` on the Java side) —
 /// this only covers the codes a queued offline operation can realistically
-/// be rejected with. An unrecognised UPPER_SNAKE code falls back to a generic
-/// message that still names the code (so nothing is silently swallowed); free
-/// text (an unmapped server exception message, e.g. "Product not found: …")
-/// is never shown raw.
+/// be rejected with. An unrecognised code or free text (an unmapped server
+/// exception message, e.g. "Product not found: …") falls back to a generic
+/// French message — never shown raw, never naming the code (v1s-16-20).
 String friendlySyncRejectionReason(String? reasonCode) {
   return switch (reasonCode) {
     'PRODUCT_NAME_ALREADY_EXISTS' => 'Un produit avec ce nom existe déjà',
@@ -55,7 +54,7 @@ String friendlySyncRejectionReason(String? reasonCode) {
     'UNAUTHORIZED' => 'Session expirée',
     null => 'Raison inconnue',
     String code when _errorCodePattern.hasMatch(code) =>
-      'Refusé par le serveur ($code)',
+      'Refusé par le serveur',
     String text when text.toLowerCase().contains('not found') =>
       'Élément introuvable sur le serveur',
     _ => 'Données refusées par le serveur',
@@ -66,7 +65,8 @@ String friendlySyncRejectionReason(String? reasonCode) {
 final _errorCodePattern = RegExp(r'^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$');
 
 /// Translates a `sync_queue.operation` value into a short French label for
-/// display in rejection notifications and the sync queue screen.
+/// display in rejection notifications and the sync queue screen. An unknown
+/// operation reads « Opération » — never the raw code (v1s-16-20).
 String friendlySyncOperationLabel(String operation) {
   return switch (operation) {
     'CREATE_PRODUCT' => 'Création de produit',
@@ -102,6 +102,6 @@ String friendlySyncOperationLabel(String operation) {
     'REACTIVATE_EMPLOYEE' => 'Réactivation d\'employé',
     'CREATE_EMPLOYEE' => 'Création d\'employé',
     'SUBMIT_FEEDBACK' => 'Envoi d\'un avis',
-    _ => operation,
+    _ => 'Opération',
   };
 }
