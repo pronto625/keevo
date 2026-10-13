@@ -90,8 +90,8 @@ class SubscriptionControllerTest {
     }
 
     @Test
-    @DisplayName("GET /subscription/me with SUPER_ADMIN role → 401 UNAUTHORIZED")
-    void getMySubscription_returns401_whenCalledBySuperAdmin() throws Exception {
+    @DisplayName("GET /subscription/me with SUPER_ADMIN role → 403 FORBIDDEN")
+    void getMySubscription_returns403_whenCalledBySuperAdmin() throws Exception {
         doAnswer(inv -> {
             var auth = new UsernamePasswordAuthenticationToken(
                     ACTOR_ID, null, List.of(new SimpleGrantedAuthority("ROLE_SUPER_ADMIN")));

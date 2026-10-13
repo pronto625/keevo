@@ -333,6 +333,34 @@ class AccountDeletionConcurrencyPostgresIntegrationTest extends FullContextInteg
     }
 
     @Test
+    @DisplayName("forceDelete whose routine fails keeps the committed expired marker: owner cancel refused, next run completes it")
+    void forceDelete_routineFails_markerCommittedThenRetried() {
+        Seed seed = seedTenant("ACTIVE", null);
+        TenantSchemaProvisioner failingProvisioner = mock(TenantSchemaProvisioner.class);
+        doThrow(new RuntimeException("simulated DROP failure"))
+                .when(failingProvisioner).dropSchemaForDeletion(anyString());
+        AdminTenantService service = new AdminTenantService(jdbc, scheduler(failingProvisioner, Clock.systemUTC()));
+
+        assertThatThrownBy(() -> service.forceDelete(seed.tenantId()))
+                .hasMessageContaining("simulated DROP failure");
+
+        // The marker auto-committed before the routine; the routine's own transaction rolled back.
+        assertThat(status(seed.tenantId())).isEqualTo("DELETION_PENDING");
+        assertThat(scheduledAt(seed.tenantId()).toInstant()).isBeforeOrEqualTo(Instant.now());
+        assertThat(schemaExists(seed.schema())).isTrue();
+        assertThat(count("SELECT count(*) FROM public.user_tenant_memberships WHERE tenant_id = ?", seed.tenantId())).isEqualTo(1);
+        verifyNoInteractions(whatsAppPort);
+
+        // Grace period over: the owner can no longer cancel it.
+        assertThatThrownBy(() -> accountDeletionService.cancelDeletion(seed.ownerId(), seed.schema()))
+                .satisfies(e -> assertThat(domainCode(e)).isEqualTo("DELETION_NOT_PENDING"));
+
+        // The next daily run (real clock) selects the expired marker and completes the deletion.
+        assertThat(scheduler(schemaProvisioner, Clock.systemUTC()).runTenantDeletion(seed.tenantId(), true)).isTrue();
+        assertFullyDeleted(seed);
+    }
+
+    @Test
     @DisplayName("forceDelete through the Spring bean is wired to the same routine")
     void forceDelete_bean_deletesTenant() {
         Seed seed = seedTenant("ACTIVE", null);

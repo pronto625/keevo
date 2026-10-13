@@ -338,6 +338,37 @@ class ProductSyncHandlerTest {
     }
 
     @Test
+    void handle_createDraftProduct_fractionalPriceVente_isRejectedNotTruncated() {
+        var draftId = UUID.randomUUID();
+        when(productRepository.findByName("Brouillon")).thenReturn(java.util.Optional.empty());
+        var op = new SyncOperation("op-int", "CREATE_DRAFT_PRODUCT", draftId.toString(),
+                Map.of("id", draftId.toString(), "name", "Brouillon", "priceVente", 1.5), Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).startsWith("Invalid priceVente");
+        verifyNoInteractions(createDraftProduct);
+    }
+
+    @Test
+    void handle_promoteProduct_fractionalOrOutOfRangePrices_areRejected() {
+        var productId = UUID.randomUUID();
+        for (var field : java.util.List.of("price", "buyPrice", "transportCost")) {
+            for (Object bad : java.util.List.of(1.5, 3e10)) {
+                var op = new SyncOperation("op-int", "PROMOTE_PRODUCT", productId.toString(),
+                        Map.of("productId", productId.toString(), "name", "Promoted", field, bad), Instant.now());
+
+                var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+                assertThat(result.status()).as(field + "=" + bad).isEqualTo(SyncOperationStatus.REJECTED);
+                assertThat(result.reason()).as(field + "=" + bad).startsWith("Invalid " + field);
+            }
+        }
+        verifyNoInteractions(updateProduct);
+    }
+
+    @Test
     void handle_createProduct_wholeDoublePrice_isAccepted() {
         var productId = UUID.randomUUID();
         var op = new SyncOperation("op-int", "CREATE_PRODUCT", productId.toString(),

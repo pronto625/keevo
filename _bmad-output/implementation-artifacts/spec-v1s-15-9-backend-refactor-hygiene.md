@@ -5,11 +5,25 @@ created: '2026-10-11'
 status: 'done'
 baseline_revision: 'f054bf5b0d3eace452a642989f8a70d0b5e7d7f9'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-15-context.md'
 warnings: [multiple-goals, oversized]
-deferred: []
+deferred:
+  - summary: >-
+      Inventory quick-add creates an ACTIVE product without the plan product limit (routed to v1s-14-13).
+    evidence: |-
+      QuickAddProductService.execute saves a Product with ProductStatus.ACTIVE and never takes the product-limit lock nor calls PlanLimitGuard.checkProductLimit, unlike CreateProductUseCase. Pre-existing, not caused by v1s-15-9.
+    location: >-
+      keevo/backend/src/main/java/com/keevo/inventory/counting/application/service/QuickAddProductService.java:85-95
+    severity: medium
+  - summary: >-
+      Legacy DELETED tenants from the old forceDelete may still hold their schema and memberships (routed to 10-7-ops-hardening-backups-staging).
+    evidence: |-
+      Before v1s-15-9 forceDelete only flipped the status; the new forceDelete refuses DELETED tenants. Settled by a prod query: status = 'DELETED' AND to_regnamespace(schema_name) IS NOT NULL.
+    location: >-
+      keevo/backend/src/main/java/com/keevo/admin/tenant/application/service/AdminTenantService.java forceDelete
+    severity: medium (unverified)
 ---
 
 <intent-contract>
@@ -189,6 +203,39 @@ Existing tests to update: `AccountDeletionServiceTest`, `AccountDeletionSchedule
   - `[false]` `[reject]` (edge-case) DeltaValues passes fractional/NaN through — every delta numeric column is INTEGER/BIGINT; decision recorded in Design Notes.
   - `[low]` `[reject]` (edge-case) actorRole() now returns "SUPER_ADMIN" — a SUPER_ADMIN has no tenant schema and cannot reach sync/product tenant endpoints; ProductController's removed findFirst copy already returned it.
 
+### 2026-10-13 — Follow-up review pass
+- verdicts: 28 findings — high 0, medium 4, low 16, false 7, maybe-false 1
+- scope: story-scoped diff (files of `237e13a6`, `baseline_revision` → current code), so later stories' edits on the same files (v1s-14-6, 14-15, 13-11, 13-13, 16-15, 18-1, 18-6) appear in it.
+- findings:
+  - `[low]` `[reject]` intent a: delta-number row tested at the helper only — every provider delegates to `DeltaValues.num/bool` in one line; `DeltaValuesTest` pins the contract.
+  - `[false]` `[reject]` intent b: integral row tested at the handler, not `/sync` — the handler is where the item's truncation lived; the controller only dispatches.
+  - `[medium]` `[patch]` intent c: forceDelete failure and its committed marker never run on PostgreSQL — grouped with verification-gap 1 (fix below). The forceDelete-vs-daily-run re-read stays covered by unit tests (low).
+  - `[low]` `[reject]` intent d: forceDelete may now answer DELETION_NOT_PENDING — pass-1 patch, documented in the javadoc; only on a concurrent cancel.
+  - `[false]` `[reject]` intent e: changes outside the contract (ListFeedback, Feedback guards, paginated, Wassender, QuickAdd, SecurityConfig exports path…) — brief items of 15-9 or later stories in the diff range; the exports path is v1s-18-1.
+  - `[false]` `[reject]` intent f: no evidence on the epic brief — the brief was ticked in `237e13a6` (outside the code diff).
+  - `[false]` `[reject]` blind 1: diff mixes other stories — diff range by construction (see scope).
+  - `[low]` `[patch]` blind 2: raw `(UUID) getPrincipal()` casts left — fixed in the two files the story migrated (`SubscriptionController`, `ProductImportController` → `CurrentActor.actorId()`); the other controllers listed are not named by the items (Never: no codebase-wide sweep).
+  - `[low]` `[reject]` blind 3: `assignedStoreId` fails open for an anonymous token — carried (pass 1, unreachable on protected paths).
+  - `[low]` `[reject]` blind 4: `actorId()` 500 on a non-UUID principal / FORBIDDEN vs UNAUTHORIZED — carried (pass 1).
+  - `[low]` `[reject]` blind 5: forceDelete overwrites SUSPENDED — carried (pass 1, needs a new column).
+  - `[low]` `[reject]` blind 6: application layer imports the infrastructure scheduler / CurrentActor — carried (pass 1, ArchUnit in warning mode).
+  - `[low]` `[reject]` blind 7: `requestDeletion` read-then-save, `Instant.now()`, DB vs app clock — pre-existing and outside the three races of the intent; the overwrite needs an admin suspension or force-delete in the same instant as the owner request; clock skew carried (pass 1).
+  - `[medium]` `[defer]` blind 8: quick-add during inventory creates an ACTIVE product with no plan limit — pre-existing (not touched by the guard reorder) → routed to v1s-14-13 (plan-limit enforcement owner, reopened in-progress).
+  - `[false]` `[reject]` blind 9: `DeltaValues` NaN / fractional / raw `archived` — carried (pass 1).
+  - `[low]` `[reject]` blind 10: `paginated` IllegalArgumentException maps to 500 — its only caller clamps inputs; a 500 on an impossible page is the intended loud failure.
+  - `[low]` `[reject]` blind 11: integral guard does not check sign; hand-written `discountAmount` ternary; `initialStockEntries` key — the item is truncation, sign checks belong to the use cases; the rest carried (pass 1).
+  - `[low]` `[reject]` blind 12: DeviceToken OWNER fallback, double auth lookup, ADMIN_TENANT_ID concat, feedback filter precedence, Spring `Page` in a port, no admin audit event — pre-existing or cosmetic; the OWNER fallback is the pre-existing default for a role-less token, which `JwtAuthFilter` never issues.
+  - `[low]` `[reject]` edge 1: SUSPENDED → force-delete fails → admin cancel → ACTIVE — carried (pass 1).
+  - `[maybe-false]` `[defer]` edge 2: legacy DELETED tenants with a leaked schema can no longer be force-deleted — depends on prod data → routed to 10-7-ops-hardening-backups-staging with the settling query (if true: medium).
+  - `[low]` `[reject]` edge 3: a failing store lookup in QuickAdd marks the transaction rollback-only — any PostgreSQL error aborts the transaction anyway; the label lookup cannot fail otherwise.
+  - `[low]` `[reject]` edge 4: `actorId()` non-UUID principal → 500 — carried (pass 1).
+  - `[low]` `[reject]` edge 5: anonymous token → unscoped store — carried (pass 1).
+  - `[medium]` `[patch]` verification-gap 1: a failed force-delete routine leaving its committed marker is untested — added `forceDelete_routineFails_markerCommittedThenRetried` (real PG: exception propagates, DELETION_PENDING with an expired date, schema and membership kept, no WhatsApp, owner cancel refused, the next daily routine completes it).
+  - `[medium]` `[patch]` verification-gap 2: integral guard untested on CREATE_DRAFT_PRODUCT / PROMOTE_PRODUCT / catalogueUnitPrice — added `handle_createDraftProduct_fractionalPriceVente_isRejectedNotTruncated`, `handle_promoteProduct_fractionalOrOutOfRangePrices_areRejected` (price, buyPrice, transportCost × 1.5, 3e10) and `SaleSyncHandlerTest.handle_fractionalCatalogueUnitPrice_isRejected`.
+  - `[false]` `[reject]` verification-gap other 1: diff includes other stories — see scope.
+  - `[false]` `[reject]` verification-gap other 2: Wassender `isConfigured` differs from the Code Map — deliberate pass-1 patch (blank token is not configured).
+  - `[low]` `[patch]` orchestrator check: the refusal tests added by v1s-15-7 exist for the four migrated controllers (DeviceToken anonymous 401; Subscription anonymous 401, no-authority 403, SUPER_ADMIN 403; ProductImport anonymous 401, no-role 403; AdminSubscription anonymous 401, OWNER/EMPLOYEE 403). One stale label: `SubscriptionControllerTest` said "SUPER_ADMIN → 401" while asserting 403 — renamed.
+
 ## Design Notes
 
 - **Owner cancel refuses an expired grace period.** This is new, but it is the cheapest correct way to close the forceDelete window: forceDelete must commit a marker before the DROP (the DROP is auto-commit). Without the date guard, an owner could cancel between the marker and the lock and turn a SUSPENDED tenant ACTIVE. A grace period that has expired is already due for deletion, so the scheduler may run at any moment and refusing the cancel matches the product rule of a 30-day window.
@@ -277,3 +324,17 @@ Status: done
 - The owner can no longer cancel once the grace period has expired. This is a new rule, recorded in Design Notes.
 - `DeltaStockStrategy` still narrows quantities with `intValue`. It only estimates conflicts; the handlers reject the operation.
 - GitHub Actions remains unverified: it ends in `startup_failure`, per project memory.
+
+### Follow-up review pass — 2026-10-13
+
+**Summary:** fresh four-layer review of the story-scoped diff. The CurrentActor migration of DeviceToken, Subscription, ProductImport and AdminSubscription is backed by v1s-15-7 refusal tests (401 anonymous, 403 wrong role, use case never called); the two raw principal casts still left in Subscription and ProductImport now go through `CurrentActor.actorId()`. The force-delete failure path and the integral guard on draft/promote/catalogue prices are now tested.
+
+**Files changed:** `SubscriptionController`, `ProductImportController` (CurrentActor.actorId); tests `AccountDeletionConcurrencyPostgresIntegrationTest` (+1), `ProductSyncHandlerTest` (+2), `SaleSyncHandlerTest` (+1), `SubscriptionControllerTest` (label).
+
+**Review findings:** 28 — 3 medium rows patched in 2 entries (intent c grouped with verification-gap 1), 2 low patched, 2 deferred and routed (quick-add plan limit → v1s-14-13; legacy DELETED tenants → 10-7-ops-hardening-backups-staging), the rest rejected with reasons in the triage log.
+
+**Follow-up review recommended: false** — no high entry patched in this follow-up pass.
+
+**Verification:** batches backend/sync 436, subscription 34, catalog 395, shared 494 — 0 failures, 0 errors. Targeted run — `AccountDeletionConcurrencyPostgresIntegrationTest` 12, `ProductSyncHandlerTest` 22, `SaleSyncHandlerTest` 24, `SubscriptionControllerTest` 6, `ProductImportControllerTest` 9, `ProductImportControllerSecurityTest` 3: 0 failures.
+
+**Residual risks:** the two routed items; owner `requestDeletion` remains read-then-save (narrow, pre-existing).
