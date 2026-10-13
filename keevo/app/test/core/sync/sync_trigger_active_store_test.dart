@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/core/sync/sync_event_logger.dart';
+import 'package:keevo/core/sync/sync_monitoring_providers.dart';
 import 'package:keevo/core/sync/sync_service.dart';
 import 'package:keevo/core/sync/sync_status_provider.dart';
 import 'package:keevo/core/sync/sync_trigger_notifier.dart';
@@ -58,5 +59,75 @@ void main() {
     await container.read(syncTriggerNotifierProvider.notifier).triggerSync();
 
     expect(container.read(activeStoreIdProvider), isNull);
+  });
+
+  // v1s-16-15 follow-up: a newly quarantined operation shows in the blocked
+  // count right after the push, even when the pull then fails.
+  test('a quarantined rejection refreshes the blocked count even if pull fails',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final sync = _MockSyncService();
+    final logger = _MockEventLogger();
+    when(() => logger.logPushSuccess(any())).thenAnswer((_) async {});
+    when(() => logger.logPushFailed(any())).thenAnswer((_) async {});
+    when(() => logger.logPullSuccess(any())).thenAnswer((_) async {});
+    when(() => logger.logPullFailed(any())).thenAnswer((_) async {});
+    var blocked = 0;
+    var listBuilds = 0;
+    var pendingBuilds = 0;
+    when(() => sync.push()).thenAnswer((_) async {
+      blocked = 1;
+      return [
+        {
+          'operationId': 'op-1',
+          'status': 'REJECTED',
+          'reason': 'INSUFFICIENT_STOCK',
+          'operation': 'CREATE_SALE',
+          'entityId': 'sale-1',
+          'quarantined': true,
+        }
+      ];
+    });
+    when(() => sync.pull()).thenThrow(Exception('offline'));
+
+    final container = ProviderContainer(overrides: [
+      sharedPreferencesProvider.overrideWithValue(prefs),
+      syncServiceProvider.overrideWithValue(sync),
+      syncEventLoggerProvider.overrideWithValue(logger),
+      connectivityStreamProvider.overrideWith(
+        (ref) => Stream.value([ConnectivityResult.wifi]),
+      ),
+      quarantinedSyncCountProvider.overrideWith((ref) async => blocked),
+      quarantinedSyncQueueProvider.overrideWith((ref) async {
+        listBuilds++;
+        return const [];
+      }),
+      pendingSyncCountProvider.overrideWith((ref) async {
+        pendingBuilds++;
+        return 0;
+      }),
+    ]);
+    addTearDown(container.dispose);
+    final sub = container.listen(quarantinedSyncCountProvider, (_, __) {});
+    addTearDown(sub.close);
+    final listSub = container.listen(quarantinedSyncQueueProvider, (_, __) {});
+    addTearDown(listSub.close);
+    final pendingSub = container.listen(pendingSyncCountProvider, (_, __) {});
+    addTearDown(pendingSub.close);
+    expect(await container.read(quarantinedSyncCountProvider.future), 0);
+    await container.read(quarantinedSyncQueueProvider.future);
+    await container.read(pendingSyncCountProvider.future);
+    final listBefore = listBuilds;
+    final pendingBefore = pendingBuilds;
+
+    await container.read(syncTriggerNotifierProvider.notifier).triggerSync();
+
+    expect(await container.read(quarantinedSyncCountProvider.future), 1);
+    // The blocked list and the pending count are recomputed too.
+    await container.read(quarantinedSyncQueueProvider.future);
+    await container.read(pendingSyncCountProvider.future);
+    expect(listBuilds, greaterThan(listBefore));
+    expect(pendingBuilds, greaterThan(pendingBefore));
   });
 }

@@ -113,6 +113,55 @@ class SyncQuarantineService {
         if (storeId != null) payload['storeId'] = storeId;
         await (_db.update(_db.syncQueue)..where((t) => t.id.equals(head.id)))
             .write(SyncQueueCompanion(payload: Value(jsonEncode(payload))));
+        // A chained validation still names the ghost products: a draft
+        // remapping / initial stock entry for a product the sale no longer
+        // has would be refused again (PRODUCT_NOT_FOUND) and re-quarantine
+        // the chain. The line now points to an existing product, which keeps
+        // its own stock: those entries are dropped.
+        // Any queued validation of the sale (chained, or queued since).
+        final validations = head.entityId == null || productIds.isEmpty
+            ? const <SyncQueueData>[]
+            : await (_db.select(_db.syncQueue)
+                  ..where((t) =>
+                      t.synced.equals(false) &
+                      t.entityId.equals(head.entityId!) &
+                      t.operation.equals('VALIDATE_SALE')))
+                .get();
+        for (final op in validations) {
+          final validate = Map<String, dynamic>.of(_payloadOf(op));
+          final dropped = <Object?>{...productIds.keys};
+          final remaps = validate['productIdRemappings'];
+          if (remaps is Map) {
+            final kept = <String, dynamic>{};
+            for (final MapEntry(:key, :value) in remaps.entries) {
+              if (productIds.containsKey(key) ||
+                  productIds.containsKey(value)) {
+                dropped.add(value);
+              } else {
+                kept['$key'] = value;
+              }
+            }
+            if (kept.isEmpty) {
+              validate.remove('productIdRemappings');
+            } else {
+              validate['productIdRemappings'] = kept;
+            }
+          }
+          final entries = validate['initialStockEntries'];
+          if (entries is Map) {
+            final kept = {
+              for (final MapEntry(:key, :value) in entries.entries)
+                if (!dropped.contains(key)) '$key': value,
+            };
+            if (kept.isEmpty) {
+              validate.remove('initialStockEntries');
+            } else {
+              validate['initialStockEntries'] = kept;
+            }
+          }
+          await (_db.update(_db.syncQueue)..where((t) => t.id.equals(op.id)))
+              .write(SyncQueueCompanion(payload: Value(jsonEncode(validate))));
+        }
 
         final saleId = head.entityId ?? payload['saleId'] as String?;
         if (saleId != null) {

@@ -8,6 +8,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/core/sync/rest_sync_service.dart';
+import 'package:keevo/core/sync/sync_event_logger.dart';
+import 'package:keevo/core/sync/sync_quarantine_service.dart';
 import 'package:keevo/features/catalog/data/datasource/remote_product_datasource.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1429,6 +1431,117 @@ void main() {
       expect((await db.select(db.stockTransfers).get()).map((t) => t.id),
           ['tr-ok']);
       expect(await queuedIds(), isEmpty);
+    });
+
+    // v1s-16-15 follow-up: the quarantine chain end to end on Drift — the
+    // sale is refused in batch 1, its validation (batch 2) joins the chain
+    // instead of being sent; « Rattacher » then a new push clears it, with
+    // the validation rid of the ghost product.
+    test('chain across batches, then re-attach and push again', () async {
+      await db.into(db.products).insert(ProductsCompanion.insert(
+          id: 'p-real', name: 'Savon', createdAt: now, updatedAt: now));
+      await insertPendingOp(
+          id: 'op-sale',
+          operation: 'CREATE_SALE',
+          entityId: 'sale-1',
+          payload: {
+            'saleId': 'sale-1',
+            'storeId': 'store-1',
+            'items': [
+              {'itemId': 'i-1', 'productId': 'p-ghost', 'quantity': 1},
+            ],
+          });
+      await fillers(55);
+      await insertPendingOp(
+          id: 'op-validate',
+          operation: 'VALIDATE_SALE',
+          entityId: 'sale-1',
+          payload: {
+            'saleId': 'sale-1',
+            'initialStockEntries': {'p-ghost': 3},
+          });
+      // Server: refuses anything still naming the ghost product.
+      server((o) => jsonEncode(o['payload']).contains('p-ghost')
+          ? ('REJECTED', 'PRODUCT_NOT_FOUND')
+          : ('APPLIED', null));
+
+      final first = await syncService.push();
+
+      expect(requests[1].containsKey('op-validate'), false,
+          reason: 'the validation joins the chain, it is not sent');
+      expect(first.where((r) => r['quarantined'] == true).map((r) => r['operation']),
+          ['CREATE_SALE']);
+      final quarantined = (await db.select(db.syncQueue).get())
+          .where((o) => o.quarantinedAt != null)
+          .map((o) => o.id);
+      expect(quarantined, containsAll(['op-sale', 'op-validate']));
+      expect(await syncService.hasPendingOperations(), false);
+
+      final quarantine = SyncQuarantineService(db, SyncEventLogger(db));
+      await quarantine.reattachSale('op-sale',
+          productIds: {'p-ghost': 'p-real'});
+      final second = await syncService.push();
+
+      expect(second, isEmpty);
+      expect(await queuedIds(), isEmpty);
+      expect(requests.last.keys, ['op-sale', 'op-validate']);
+      expect(requests.last['op-validate'], {'saleId': 'sale-1'},
+          reason: 'the ghost initial stock entry is gone');
+    });
+
+    test('abandon after a real quarantine removes the chain and the sale',
+        () async {
+      await db.into(db.sales).insert(SalesCompanion.insert(
+          id: 'sale-1',
+          storeId: 'store-1',
+          employeeId: 'u',
+          totalAmount: 500,
+          paymentMode: 'CASH',
+          createdAt: now));
+      await insertPendingOp(
+          id: 'op-sale',
+          operation: 'CREATE_SALE',
+          entityId: 'sale-1',
+          payload: {'saleId': 'sale-1', 'storeId': 'store-1'});
+      await insertPendingOp(
+          id: 'op-cancel', operation: 'CANCEL_SALE', entityId: 'sale-1');
+      server((o) => o['operationId'] == 'op-sale'
+          ? ('REJECTED', 'STORE_NOT_FOUND')
+          : ('REJECTED', 'SALE_NOT_FOUND'));
+
+      await syncService.push();
+      expect(await syncService.quarantinedOperationCount(), 2);
+
+      final quarantine = SyncQuarantineService(db, SyncEventLogger(db));
+      expect(await quarantine.abandon('op-cancel'), true);
+
+      expect(await queuedIds(), isEmpty);
+      expect(await db.select(db.sales).get(), isEmpty);
+      expect(await syncService.quarantinedOperationCount(), 0);
+    });
+
+    test('Renvoyer through the service: refused again → back in quarantine '
+        'with one new notice', () async {
+      await insertPendingOp(
+          id: 'op-sale',
+          operation: 'CREATE_SALE',
+          entityId: 'sale-1',
+          payload: {'saleId': 'sale-1', 'storeId': 'store-x'});
+      server((o) => ('REJECTED', 'STORE_NOT_FOUND'));
+      await syncService.push();
+      expect(await syncService.quarantinedOperationCount(), 1);
+
+      final quarantine = SyncQuarantineService(db, SyncEventLogger(db));
+      await quarantine.release('op-sale');
+      expect(await syncService.quarantinedOperationCount(), 0);
+      expect(await syncService.hasPendingOperations(), true);
+
+      final again = await syncService.push();
+
+      expect(requests.last.keys, ['op-sale'], reason: 'released → sent');
+      expect(again.where((r) => r['quarantined'] == true), hasLength(1));
+      expect(await syncService.quarantinedOperationCount(), 1);
+      expect(await syncService.hasPendingOperations(), false);
     });
   });
 }

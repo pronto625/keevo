@@ -221,6 +221,75 @@ void main() {
     expect((await row('validate-op'))!.quarantinedAt, isNull);
   });
 
+  // v1s-16-15 follow-up: the chained validation must not keep naming the
+  // ghost product (draft remapping / initial stock), or the server refuses
+  // it again and the chain goes straight back to quarantine.
+  test('reattachSale strips the ghost product from the chained validation',
+      () async {
+    await localSale();
+    await product('p-real', 'Savon de Marseille');
+    await op('sale-op', 'CREATE_SALE', entityId: 'sale-1', payload: salePayload);
+    await op('validate-op', 'VALIDATE_SALE', entityId: 'sale-1', payload: {
+      'saleId': 'sale-1',
+      'justification': 'ok',
+      'productIdRemappings': {'p-ghost': 'p-ghost-promoted', 'p-x': 'p-y'},
+      'initialStockEntries': {'p-ghost-promoted': 5, 'p-ghost': 3, 'p-y': 2},
+    });
+
+    await service.reattachSale('sale-op', productIds: {'p-ghost': 'p-real'});
+
+    final validate =
+        jsonDecode((await row('validate-op'))!.payload) as Map<String, dynamic>;
+    expect(validate['productIdRemappings'], {'p-x': 'p-y'});
+    expect(validate['initialStockEntries'], {'p-y': 2});
+    expect(validate['justification'], 'ok');
+    expect((await row('validate-op'))!.quarantinedAt, isNull);
+  });
+
+  test('reattachSale: a validation naming only the ghost loses both maps',
+      () async {
+    await localSale();
+    await product('p-real', 'Savon de Marseille');
+    await op('sale-op', 'CREATE_SALE', entityId: 'sale-1', payload: salePayload);
+    await op('validate-op', 'VALIDATE_SALE', entityId: 'sale-1', payload: {
+      'saleId': 'sale-1',
+      'initialStockEntries': {'p-ghost': 4},
+    });
+
+    await service.reattachSale('validate-op',
+        productIds: {'p-ghost': 'p-real'});
+
+    final validate =
+        jsonDecode((await row('validate-op'))!.payload) as Map<String, dynamic>;
+    expect(validate, {'saleId': 'sale-1'});
+  });
+
+  test(
+      'reattachSale: a remapping whose value is the re-attached product is '
+      'dropped with its initial stock; a non-quarantined validation too',
+      () async {
+    await localSale();
+    await product('p-real', 'Savon de Marseille');
+    await op('sale-op', 'CREATE_SALE', entityId: 'sale-1', payload: salePayload);
+    // Queued after the quarantine, not yet joined to the chain.
+    await op('validate-op', 'VALIDATE_SALE',
+        entityId: 'sale-1',
+        quarantined: false,
+        lastError: null,
+        payload: {
+          'saleId': 'sale-1',
+          'productIdRemappings': {'p-draft': 'p-ghost', 'p-x': 'p-y'},
+          'initialStockEntries': {'p-ghost': 4, 'p-y': 2},
+        });
+
+    await service.reattachSale('sale-op', productIds: {'p-ghost': 'p-real'});
+
+    final validate =
+        jsonDecode((await row('validate-op'))!.payload) as Map<String, dynamic>;
+    expect(validate['productIdRemappings'], {'p-x': 'p-y'});
+    expect(validate['initialStockEntries'], {'p-y': 2});
+  });
+
   test('reattachSale refuses anything but a sale', () async {
     await op('closure-op', 'CREATE_DAY_CLOSURE', entityId: 'dc-1');
 
