@@ -237,3 +237,16 @@ export function deviceNumberLabels(
   for (const ids of idsByUser.values()) ids.sort();
   return devices.map((d) => `Appareil ${idsByUser.get(d.userId ?? "")!.indexOf(d.deviceId) + 1}`);
 }
+
+// Story 9.7 — period selector of the « Activité » page.
+const PERIOD_LABELS: Record<string, string> = {
+  TODAY: "Aujourd'hui",
+  "7D": "7 jours",
+  "30D": "30 jours",
+  "90D": "90 jours",
+  CUSTOM: "Personnalisée",
+};
+
+export function periodLabel(code: string | null | undefined): string {
+  return lookup(PERIOD_LABELS, code, "—");
+}

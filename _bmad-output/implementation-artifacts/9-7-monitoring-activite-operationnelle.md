@@ -3,7 +3,7 @@ baseline_commit: 6a0efea
 ---
 # Story 9.7: Monitoring Activité Opérationnelle (Super Admin) — backend + frontend complets
 
-Status: ready-for-dev
+Status: done
 
 <!-- V1-stabilization track — tag A (release-blocker pour le build dashboard).
      Branche : v1-stabilization (HEAD 6a0efea).
@@ -47,31 +47,31 @@ Status: ready-for-dev
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Backend : créer le module `admin.operations` (AC1-AC4)**
-  - [ ] 1.1 Créer `com.keevo.admin.operations` (adapter/in/rest, adapter/in/rest/dto, application/service, domain/model, domain/port/in) — miroir exact de la structure `admin.sync_monitoring`.
-  - [ ] 1.2 `AdminOperationsController` : 4 endpoints (AC1-AC4), `requireSuperAdmin()` copié tel quel depuis `AdminSyncMonitoringController`.
-  - [ ] 1.3 `AdminOperationsService` : requêtes cross-schema via `JdbcTemplate`, en suivant le pattern `AdminTenantService` (`safeLoadSchemaName`, agrégation `SUM(total_amount) FROM <schema>.sales WHERE status='COMPLETED' AND occurred_at >= ?`, `MAX(occurred_at) FROM <schema>.audit_log` pour l'activité). **Ne pas dupliquer `AdminTenantService` — écrire les helpers JDBC nécessaires dans ce nouveau service** (le codebase ne factorise pas ces petits helpers entre services admin, cohérent avec le style existant).
-  - [ ] 1.4 Tests : `AdminOperationsServiceTest` (agrégation correcte, tenant sans schema résolu → skip gracieux, cohérent avec `safeCount`/`safeMaxInstant` de `AdminTenantService`), `AdminOperationsControllerTest` (`standaloneSetup`, 403 non-SUPER_ADMIN, 200 SUPER_ADMIN sur les 4 endpoints).
-- [ ] **Task 2 — Frontend : types + client API (AC5)**
-  - [ ] 2.1 `types/operations.ts` : `AdminOperationsOverview`, `GmvTrendPoint`, `TenantActivityRow`, `AdminTenantActivityPage`, `InactiveTenant`, `Period = 'TODAY' | '7D' | '30D' | '90D' | 'CUSTOM'`.
-  - [ ] 2.2 `lib/api/admin-operations.ts` : 4 fonctions, miroir exact de `lib/api/admin-catalog.ts` (structure `client.get<{data: T}>(...).then(r => r.data.data)`).
-- [ ] **Task 3 — Frontend : hook (AC6)**
-  - [ ] 3.1 `hooks/useOperations.ts` — miroir `useProducts.ts` (React Query + `useState` pour period/page/custom dates), `refresh()` = `queryClient.invalidateQueries` sur les 4 clés.
-- [ ] **Task 4 — Frontend : 5 composants (AC7)**
-  - [ ] 4.1 `components/operations/PeriodSelector.tsx`, `OperationsKpiCards.tsx`, `GmvTrendChart.tsx` (utiliser la lib de charts déjà présente dans le projet si une existe pour d'autres graphs admin — vérifier `package.json`/composants existants avant d'ajouter une nouvelle dépendance), `TenantActivityTable.tsx`, `InactiveTenantsSection.tsx` — style Tailwind miroir `components/catalog/*`.
-- [ ] **Task 5 — Vérification build (AC8)**
-  - [ ] 5.1 `npm run build` — 0 erreur `Module not found`. `npm run lint`/type-check si configuré.
-- [ ] **Task 6 — Documentation rétroactive**
-  - [ ] 6.1 Ajouter "Story 9.7" à `epic-9-super-admin-dashboard-toor.md` (elle n'y figure pas aujourd'hui) pour fermer le gap de traçabilité identifié par l'audit.
+- [x] **Task 1 — Backend : créer le module `admin.operations` (AC1-AC4)**
+  - [x] 1.1 Créer `com.keevo.admin.operations` (adapter/in/rest, adapter/in/rest/dto, application/service, domain/model, domain/port/in) — miroir exact de la structure `admin.sync_monitoring`.
+  - [x] 1.2 `AdminOperationsController` : 4 endpoints (AC1-AC4), `requireSuperAdmin()` copié tel quel depuis `AdminSyncMonitoringController`.
+  - [x] 1.3 `AdminOperationsService` : requêtes cross-schema via `JdbcTemplate`, en suivant le pattern `AdminTenantService` (`safeLoadSchemaName`, agrégation `SUM(total_amount) FROM <schema>.sales WHERE status='COMPLETED' AND occurred_at >= ?`, `MAX(occurred_at) FROM <schema>.audit_log` pour l'activité). **Ne pas dupliquer `AdminTenantService` — écrire les helpers JDBC nécessaires dans ce nouveau service** (le codebase ne factorise pas ces petits helpers entre services admin, cohérent avec le style existant).
+  - [x] 1.4 Tests : `AdminOperationsServiceTest` (agrégation correcte, tenant sans schema résolu → skip gracieux, cohérent avec `safeCount`/`safeMaxInstant` de `AdminTenantService`), `AdminOperationsControllerTest` (`standaloneSetup`, 403 non-SUPER_ADMIN, 200 SUPER_ADMIN sur les 4 endpoints).
+- [x] **Task 2 — Frontend : types + client API (AC5)**
+  - [x] 2.1 `types/operations.ts` : `AdminOperationsOverview`, `GmvTrendPoint`, `TenantActivityRow`, `AdminTenantActivityPage`, `InactiveTenant`, `Period = 'TODAY' | '7D' | '30D' | '90D' | 'CUSTOM'`.
+  - [x] 2.2 `lib/api/admin-operations.ts` : 4 fonctions, miroir exact de `lib/api/admin-catalog.ts` (structure `client.get<{data: T}>(...).then(r => r.data.data)`).
+- [x] **Task 3 — Frontend : hook (AC6)**
+  - [x] 3.1 `hooks/useOperations.ts` — miroir `useProducts.ts` (React Query + `useState` pour period/page/custom dates), `refresh()` = `queryClient.invalidateQueries` sur les 4 clés.
+- [x] **Task 4 — Frontend : 5 composants (AC7)**
+  - [x] 4.1 `components/operations/PeriodSelector.tsx`, `OperationsKpiCards.tsx`, `GmvTrendChart.tsx` (utiliser la lib de charts déjà présente dans le projet si une existe pour d'autres graphs admin — vérifier `package.json`/composants existants avant d'ajouter une nouvelle dépendance), `TenantActivityTable.tsx`, `InactiveTenantsSection.tsx` — style Tailwind miroir `components/catalog/*`.
+- [x] **Task 5 — Vérification build (AC8)**
+  - [x] 5.1 `npm run build` — 0 erreur `Module not found`. `npm run lint`/type-check si configuré.
+- [x] **Task 6 — Documentation rétroactive**
+  - [x] 6.1 Ajouter "Story 9.7" à `epic-9-super-admin-dashboard-toor.md` (elle n'y figure pas aujourd'hui) pour fermer le gap de traçabilité identifié par l'audit.
 
 ### Deferred items routed 2026-10-11
 
 Pour rétablir le build du dashboard (audit-coherence-2026-10-11 C1), la story v1s-17-1 a **remplacé** `app/monitoring/activity/page.tsx` par un placeholder « bientôt disponible » (aucun appel API). Le contrat figé ci-dessous (Dev Notes) reste la spec ; le fichier d'origine est récupérable via `git show e1f91c6:keevo/dashboard/src/app/monitoring/activity/page.tsx`. Travail additionnel à la reprise de cette story :
 
-- [ ] [Deferred-from: v1s-17-1-dashboard-build-ci, 2026-10-11] Restaurer `activity/page.tsx` depuis e1f91c6 (contrat ci-dessous) à la place du placeholder. Attention : la ligne `if (overviewQuery.isSuccess && !lastUpdated) setLastUpdated(...)` appelle setState pendant le rendu — à corriger (lint `Dashboard CI`) sans changer les props des composants.
-- [ ] [Deferred-from: v1s-17-1-dashboard-build-ci, 2026-10-11] Repasser l'entrée sidebar « Activité » à `comingSoon: false` (`components/layout/Sidebar.tsx`).
-- [ ] [Deferred-from: v1s-17-1-dashboard-build-ci, 2026-10-11] La CI `Dashboard CI` (`.github/workflows/dashboard-ci.yml` : lint + tsc + build) doit rester verte.
-- [ ] [Deferred-from: v1s-17-1-dashboard-build-ci, 2026-10-11] Décisions produit à confirmer avant de coder : définition du GMV, seuil d'inactivité (14 j par défaut).
+- [x] [Deferred-from: v1s-17-1-dashboard-build-ci, 2026-10-11] Restaurer `activity/page.tsx` depuis e1f91c6 (contrat ci-dessous) à la place du placeholder. Attention : la ligne `if (overviewQuery.isSuccess && !lastUpdated) setLastUpdated(...)` appelle setState pendant le rendu — à corriger (lint `Dashboard CI`) sans changer les props des composants.
+- [x] [Deferred-from: v1s-17-1-dashboard-build-ci, 2026-10-11] Repasser l'entrée sidebar « Activité » à `comingSoon: false` (`components/layout/Sidebar.tsx`).
+- [x] [Deferred-from: v1s-17-1-dashboard-build-ci, 2026-10-11] La CI `Dashboard CI` (`.github/workflows/dashboard-ci.yml` : lint + tsc + build) doit rester verte.
+- [x] [Deferred-from: v1s-17-1-dashboard-build-ci, 2026-10-11] Décisions produit à confirmer avant de coder : définition du GMV, seuil d'inactivité (14 j par défaut).
 
 ## Dev Notes
 
@@ -110,8 +110,45 @@ Pour rétablir le build du dashboard (audit-coherence-2026-10-11 C1), la story v
 
 ### Agent Model Used
 
+Claude Opus 5.5 (bmad-build-auto, spec `spec-9-7-monitoring-activite-operationnelle.md`)
+
 ### Debug Log References
+
+- `mvn -o test -Dtest='AdminOperations*Test'` — 45 tests, 0 failure (service unit 31, controller 10, PostgreSQL integration 4)
+- `mvn -o test -Dtest='com.keevo.admin.**'` — 97 tests, 0 failure; `-Dtest='com.keevo.architecture.**'` — 6 tests, 0 failure
+- Dashboard: `npm run lint`, `npx tsc --noEmit`, `npm test` (11 files / 58 tests), `npm run build` — all green
 
 ### Completion Notes List
 
+- **Product defaults kept (PO hypotheses, confirmed as defaults by the spec):** GMV = `SUM(total_amount)` of `sales` with `status = 'COMPLETED'` (CANCELLED and PENDING_VALIDATION excluded); orders = count of those sales; the period filters `COALESCE(occurred_at, created_at)`; periods `TODAY | 7D | 30D | 90D | CUSTOM` on Africa/Douala (WAT) day boundaries (half-open instant window); `CUSTOM` = inclusive ISO `from`/`to`, `from ≤ to`, ≤ 366 days, else 422 `VALIDATION_ERROR` (also for an unknown period, missing dates, `page < 0`, `pageSize` outside 1..100). Missing `period` defaults to `7D`. Last activity = MAX(latest sale time — any status —, latest `audit_log.occurred_at`); inactive = null or older than 14 days (exactly 14 days is still active); `daysSinceLastActivity` = whole 24 h periods. Active tenants = ≥ 1 COMPLETED sale in the period; new tenants = `public.tenants.created_at` in the period. Tenant table: 25 rows/page, GMV desc then name (case-insensitive, nulls last). Inactive list: never active first, then longest dormant, then name.
+- **Backend** `com.keevo.admin.operations` (controller, DTOs, `AdminOperationsService`, domain records, 4 use-case ports): only `public.tenants` with `status = 'ACTIVE'`, KV-ADMIN system tenant excluded, schema names gated by `TenantSchema.isValid`; one aggregated query per tenant schema per endpoint; a tenant whose query fails is skipped (logged with tenant id only). The service is deliberately **not** `@Transactional`: on PostgreSQL a failed statement aborts the whole transaction, which would silently zero every following tenant. Window bounds are bound as `OffsetDateTime` (timestamptz, independent of JVM/session time zone); trend groups by `(sale time AT TIME ZONE 'Africa/Douala')::date` and zero-fills missing days. Plan read from the tenant-schema `subscriptions` table (source of truth per epic context), falling back to `public.tenants.plan_type`. `Clock` injected (existing `ClockConfig` bean). Each controller method calls `CurrentActor.requireSuperAdmin()`; no write endpoint.
+- **Tests:** `AdminOperationsServiceTest` (mocked JdbcTemplate: WAT bounds incl. UTC/WAT day shift, 366-day limit, invalid periods, cross-tenant sums, active/new counts, skip on failure, invalid schema never interpolated, zero-filled trend, sorting/pagination, inactivity threshold and ordering); `AdminOperationsControllerTest` (`standaloneSetup` + `GlobalExceptionHandler`, 403 on the 4 endpoints for OWNER, 422 propagation, `jsonPath` on every field the dashboard reads); `AdminOperationsServiceIntegrationTest` (real PostgreSQL: COMPLETED-only GMV with CANCELLED/PENDING_VALIDATION/out-of-window sales, created_at fallback, WAT day grouping, MAX(sale, audit) = 15 days, unprovisioned schema skipped).
+- **Dashboard:** `types/operations.ts`, `lib/api/admin-operations.ts` (4 functions on the shared `client`), `hooks/useOperations.ts` (exact contract shape; custom dates as `yyyy-MM-dd` strings; queries disabled while a CUSTOM range is incomplete/invalid; `placeholderData` keeps the previous page/period on screen except while the range is invalid; changing a custom date resets the page; `refresh` invalidates the 4 queries), 5 components under `components/operations/`, `lib/period.ts` (client mirror of the CUSTOM rules, inline error in `PeriodSelector`), `periodLabel` added to `lib/labels.ts`. Plans via `planLabel`, tenant by name or « Sans nom », never ids/schema/raw codes; amounts in XAF.
+- **Page restored from e1f91c6** with the setState-during-render removed: `lastUpdated` is now derived from `overviewQuery.dataUpdatedAt`. The fixed props are unchanged; like 9-8, components take extra *used* optional props for the error/refresh states required by the epic (`isError`, `isFetching`, `onRetry`, and `isLoading` for `InactiveTenantsSection`): « Erreur de chargement » + « Réessayer » on first-load failure, stale-data warning on a failed refresh, « Actualiser » disabled while any query is in flight. Shared `LoadError`/`StaleDataWarning` reused from `components/sync/SyncErrorStates`.
+- **Review fixes:** per-tenant skip now limited to schema/SQL/data errors — connection/resource failures (`DataAccessResourceFailureException` incl. `CannotGetJdbcConnectionException`, `TransientDataAccessException`, `RecoverableDataAccessException`) are rethrown so the endpoint fails instead of answering zeros; store count limited to `type = 'STORE'`; tenants filtered out by `TenantSchema.isValid` logged (tenant id only); CUSTOM years outside 2000–9999 → 422. Dashboard: `rangeIncomplete` exposed by the hook, KPI cards / chart / tenant table show « Choisissez une période valide pour afficher les données » instead of empty states (inactive tenants are period-independent and keep their data); stale-data warning on chart, table and inactive section; page clamped to the last page when a refresh returns fewer pages (done in the tenants queryFn — an effect is rejected by the `set-state-in-effect` lint rule); tooltip shows GMV and number of sales; `2026-02-31`-style rollovers rejected client-side. Added page wiring test and GmvTrendChart test.
+- Sidebar « Activité » enabled (`comingSoon: false`). Task 6.1: the 9.7 section already existed in `epic-9-super-admin-dashboard-toor.md`; its story-file status line updated to done.
+
 ### File List
+
+- keevo/backend/src/main/java/com/keevo/admin/operations/adapter/in/rest/AdminOperationsController.java (new)
+- keevo/backend/src/main/java/com/keevo/admin/operations/adapter/in/rest/dto/{OperationsOverviewDto,GmvTrendPointDto,TenantActivityDto,TenantActivityPageDto,InactiveTenantDto}.java (new)
+- keevo/backend/src/main/java/com/keevo/admin/operations/application/service/AdminOperationsService.java (new)
+- keevo/backend/src/main/java/com/keevo/admin/operations/domain/model/{OperationsOverview,GmvTrendPoint,TenantActivity,TenantActivityPage,InactiveTenant}.java (new)
+- keevo/backend/src/main/java/com/keevo/admin/operations/domain/port/in/{OperationsPeriodQuery,GetOperationsOverviewUseCase,GetGmvTrendUseCase,ListTenantActivityUseCase,ListInactiveTenantsUseCase}.java (new)
+- keevo/backend/src/test/java/com/keevo/admin/operations/application/service/AdminOperationsServiceTest.java (new)
+- keevo/backend/src/test/java/com/keevo/admin/operations/application/service/AdminOperationsServiceIntegrationTest.java (new)
+- keevo/backend/src/test/java/com/keevo/admin/operations/adapter/in/rest/AdminOperationsControllerTest.java (new)
+- keevo/dashboard/src/types/operations.ts (new)
+- keevo/dashboard/src/lib/api/admin-operations.ts (new)
+- keevo/dashboard/src/lib/period.ts (new)
+- keevo/dashboard/src/lib/labels.ts (periodLabel)
+- keevo/dashboard/src/hooks/useOperations.ts (new)
+- keevo/dashboard/src/components/operations/{PeriodSelector,OperationsKpiCards,GmvTrendChart,TenantActivityTable,InactiveTenantsSection}.tsx (new)
+- keevo/dashboard/src/components/operations/__tests__/{PeriodSelector,OperationsKpiCards,TenantActivityTable,InactiveTenantsSection}.test.tsx (new)
+- keevo/dashboard/src/lib/__tests__/period.test.ts (new)
+- keevo/dashboard/src/components/operations/PeriodRequired.tsx (new)
+- keevo/dashboard/src/components/operations/__tests__/GmvTrendChart.test.tsx (new)
+- keevo/dashboard/src/app/monitoring/activity/__tests__/page.test.tsx (new)
+- keevo/dashboard/src/app/monitoring/activity/page.tsx (restored from e1f91c6, lastUpdated fix, error states)
+- keevo/dashboard/src/components/layout/Sidebar.tsx (« Activité » enabled)
+- _bmad-output/planning-artifacts/epics/epic-9-super-admin-dashboard-toor.md (9.7 status line)

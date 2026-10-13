@@ -21,7 +21,7 @@ export function Sidebar() {
 
   const monitoringItems = [
     { href: "/monitoring/products", label: "Catalogue Produits", comingSoon: false },
-    { href: "/monitoring/activity", label: "Activité", comingSoon: true },
+    { href: "/monitoring/activity", label: "Activité", comingSoon: false },
     { href: "/monitoring/sync", label: "Synchronisation", comingSoon: false },
   ];
 
