@@ -65,6 +65,58 @@ void main() {
       expect(find.text('Impossible de charger les données'), findsOneWidget);
     });
 
+    // v1s-16-11 follow-up: the overviews derive from the snapshot, so the
+    // retry must re-fetch the snapshot (real provider chain, no override).
+    testWidgets('Réessayer re-fetches the snapshot and shows the store',
+        (tester) async {
+      var calls = 0;
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          dashboardSnapshotProvider.overrideWith((_) async {
+            calls++;
+            if (calls == 1) throw StateError('network down');
+            return const DashboardSnapshot(
+              todayCA: 0,
+              yesterdayCA: 0,
+              dayBeforeYesterdayCA: 0,
+              trendPercent: 0,
+              totalTransactionsMonth: 0,
+              averageBasketMonth: 0,
+              prevMonthTransactions: 0,
+              prevMonthAverageBasket: 0,
+              lowStockCount: 0,
+              weeklyTopProducts: [],
+              weeklyWorstProducts: [],
+              dailyCALast30: [],
+              todaySalesCount: 0,
+              storeOverviews: [
+                StoreOverview(
+                  storeId: 's1',
+                  storeName: 'Boutique Akwa',
+                  todayCA: 35000,
+                  yesterdayCA: 30000,
+                  employeeCount: 5,
+                  statusLevel: StoreStatusLevel.stable,
+                ),
+              ],
+            );
+          }),
+        ],
+        child: const MaterialApp(
+          home: StoreDashboardPage(storeId: 's1'),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.text('Réessayer'), findsOneWidget);
+
+      await tester.tap(find.text('Réessayer'));
+      await tester.pumpAndSettle();
+
+      expect(calls, 2);
+      expect(find.text('Boutique Akwa'), findsOneWidget);
+      expect(find.text('Réessayer'), findsNothing);
+    });
+
     testWidgets('shows EN BAISSE badge for declining store', (tester) async {
       await tester.pumpWidget(ProviderScope(
         overrides: [

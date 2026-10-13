@@ -46,7 +46,9 @@ class StoreDashboardPage extends ConsumerWidget {
         error: (e, _) => AppErrorWidget(
           error: e,
           title: 'Impossible de charger les données',
-          onRetry: () => ref.invalidate(storeOverviewsProvider),
+          // storeOverviewsProvider is derived: the failure lives in the
+          // snapshot, which must be re-fetched (it cascades to the overviews).
+          onRetry: () => ref.invalidate(dashboardSnapshotProvider),
         ),
         data: (stores) {
           final store = stores.where((s) => s.storeId == storeId).firstOrNull;

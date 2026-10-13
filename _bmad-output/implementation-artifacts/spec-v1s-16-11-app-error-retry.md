@@ -130,6 +130,46 @@ deferred: []
   - `[false]` `[reject]` (intent c) silent `SizedBox.shrink()` branches (store dashboard sections, sales-history employee filter, reports closure state, report-history filter, checkout, pos_page:647, draft banner) not listed — they are optional decorations inside an already-loaded screen (filters, badges, secondary cards), not screen error states; justification recorded in the epic Story 16.11 item note.
   - `[false]` `[reject]` (intent d/e) `required onRetry` only guards `AppErrorWidget` users; epic context compiled in a separate commit — descriptive observations, no defect.
 
+### 2026-10-13 — Review pass (follow-up)
+- verdicts: 36 findings — high 2, medium 4, low 18, false 11, maybe-false 1
+- findings:
+  - `[false]` `[reject]` (blind) diff bundles other stories (16-13/16-20/18-x, version 1.1.46+45) — the follow-up diff runs from the baseline to the current tree by design; those hunks belong to their own stories.
+  - `[medium]` `[patch]` (blind) no feedback while a retry runs (`skipLoadingOnRefresh` keeps the AsyncError on screen) — `AppErrorWidget` is now stateful: the tap switches the button to « Nouvel essai… » (still tappable) until a new error instance arrives; widget test added.
+  - `[low]` `[patch]` (blind) `StockLevelWidget` passes a String, so the readable French 404 message of `recordEntry` is lost — `appErrorMessage` now shows a readable String and hides technical text; test added.
+  - `[low]` `[reject]` (blind) stock `error` field shared by levels/history/writes; invalidate drops the keepAlive notifier — pre-existing state shape (the old inline text also replaced the levels); rebuild reloads levels, history reloads on demand.
+  - `[false]` `[reject]` (blind) full-size state in the stock section contradicts « never touch inline states » — the stock block is a section of the product detail (intent: « full-page/section »), migrated deliberately in the first pass.
+  - `[low]` `[patch]` (blind) missing blank line in `app_error_retry_wiring_test.dart` — fixed.
+  - `[medium]` `[patch]` (blind) patched retries untested (catalog tab, day summary, stock level, team, contacts, POS page) — widget tests added: `catalog_page_test` (low-stock tab only reloads its provider), `day_summary_bottom_sheet_test` (same args, sheet stays open past the 5 s auto-dismiss), `stock_level_widget_test`, `team_page_test`, `contact_list_pages_test` (client + supplier: refresh, no new sync), `pos_page_test` (search error → Réessayer re-runs the same query and store).
+  - `[low]` `[reject]` (blind) « Réessayez plus tard » next to a « Réessayer » button — cosmetic copy, shared generic message used by SnackBars too.
+  - `[low]` `[reject]` (blind) profitability detail string-matching / retry on PRODUCT_NOT_FOUND — carried: same verdict as the 2026-10-11 row (harmless re-fetch).
+  - `[false]` `[reject]` (blind) retry button style not uniform with the old screens — the spec deliberately unifies on `FilledButton.tonalIcon`.
+  - `[low]` `[patch]` (blind) live region wraps the button — `Semantics(liveRegion)` now wraps only title + message; test added.
+  - `[low]` `[reject]` (blind) doubled insets under SafeArea — cosmetic 32 px padding.
+  - `[false]` `[reject]` (blind) leftover unused imports — `flutter analyze` 0 warning.
+  - `[high]` `[patch]` (edge) store dashboard retry invalidated the derived `storeOverviewsProvider`, which re-reads the cached failed `dashboardSnapshotProvider` → dead button — retry now invalidates `dashboardSnapshotProvider`; widget test through the real provider chain.
+  - `[low]` `[patch]` (edge) String error → generic message — same root cause as blind row 3.
+  - `[low]` `[reject]` (edge) shared stock error field — same as blind row 4.
+  - `[low]` `[patch]` (edge) Spring reason phrase (`{error: 'Not Found'}`) shown — reason phrases added to `_technical`; falls back to `message` or generic; test added.
+  - `[low]` `[patch]` (edge) codes with digits (`HTTP_404`) not filtered — regex accepts digits after `_`. Single-word upper-case codes rejected: would also hide French acronyms (TVA, XAF).
+  - `[medium]` `[patch]` (edge) `SocketException` / `SqliteException` / `PlatformException` English `message` shown — those types skip `_messageOf`; test added.
+  - `[low]` `[patch]` (edge) `Instance of 'X'` shown — added to `_technical`; test added.
+  - `[low]` `[patch]` (edge) Dio `unknown` wrapping a socket error says « le serveur n'a pas pu traiter » — mapped to the connection message; `cancel` rejected (only app-initiated, never rendered in an error state).
+  - `[medium]` `[patch]` (edge) no retry feedback — same as blind row 2.
+  - `[low]` `[reject]` (edge) day summary auto-dismiss not restarted after a successful retry — intentional: a user interaction stops the countdown (same as `_confirmClosure`); test asserts the sheet stays open with data.
+  - `[low]` `[reject]` (edge) empty `title`/`message` strings render blank — no caller passes an empty string.
+  - `[maybe-false]` `[reject]` (edge) PRICE_OVERRIDDEN prices serialized as strings lose their amounts — v1s-16-20 presenter code; would need a backend payload sample; if true only low.
+  - `[false]` `[reject]` (edge) TRANSFER_COMPLETED / STOCK_RECEIVED lost their French labels — no backend or app code emits these actions (grep).
+  - `[false]` `[reject]` (edge, claim) contacts retry no longer syncs — deliberate first-pass patch (a local load error is not fixed by a remote sync; the sync button keeps that role); now widget-tested.
+  - `[high]` `[patch]` (edge, claim) store dashboard retry targets the derived provider — same as edge row 1.
+  - `[false]` `[reject]` (edge, claim) pubspec 1.1.46+45 vs 1.1.20+19 — cumulative diff; 16-11 itself bumped to 1.1.20+19.
+  - `[medium]` `[patch]` (gap) six retry paths with no error → Réessayer test — same as blind row 7.
+  - `[low]` `[patch]` (gap) `TimeoutException` arm untested — assertion added.
+  - `[false]` `[reject]` (gap, other) review scope / out-of-date residual-risk text — scope by design; the residual-risk text is superseded by this pass's result.
+  - `[false]` `[reject]` (intent) diff mixes other stories — same as blind row 1.
+  - `[low]` `[reject]` (intent) account_page `_ErrorBanner`, sync devices row, cross-store sheet, debug page not migrated — carried: justified in Design Notes (already retries / one-line row / offline copy / debug-only).
+  - `[medium]` `[patch]` (intent) retry verified at provider seam on 4 of ~30 sites — same as blind row 7 (11 screens now tested through the page).
+  - `[low]` `[reject]` (intent) tiny-slot test uses a fixed box, not a real sliver — the layout (Center → SingleChildScrollView) is host-agnostic; existing sliver hosts are now exercised by the page tests above.
+
 ## Auto Run Result
 
 Status: done
@@ -145,3 +185,17 @@ Status: done
 **Verification:** `flutter analyze` 630 issues (= baseline, no new error/warning); `flutter test` 1356 passed, 1 failed (known baseline `offline_gate_banner_test`).
 
 **Residual risks:** client/supplier retry (`refresh()`) has no widget test (no test file exists for those pages); full-size error state inside the day-summary sheet and transfer-history sliver not checked on a device.
+
+### Follow-up pass 2026-10-13
+
+**Summary:** Store dashboard retry fixed (re-fetches the snapshot instead of the derived provider). `AppErrorWidget` gives tap feedback (« Nouvel essai… ») and announces only the explanation. `appErrorMessage` also hides IO/SQLite/platform English text, `Instance of`, HTTP reason phrases and digit codes, and shows readable String errors. Page-level retry tests added on 8 screens (POS search, clients, suppliers, catalog tab, day summary, stock level, team, store dashboard).
+
+**Files changed:** `keevo/app/lib/core/widget/app_error_widget.dart`, `keevo/app/lib/features/dashboard/presentation/page/store_dashboard_page.dart`, tests in `test/core/widget/`, `test/features/{pos,contact,catalog,dashboard,team}/…`, `keevo/app/pubspec.yaml` 1.1.47+46.
+
+**Review:** 36 findings — patched: 2 high (one root cause), 4 medium (2 root causes), 8 low; rejected 22 (reasons in the triage log); deferred 0.
+
+**Follow-up review recommended:** true by the rule (a high was patched) — risk: the store-dashboard retry fix; it is covered by a widget test through the real provider chain, so a further pass is optional.
+
+**Verification:** `flutter analyze` 0 error / 0 warning (626 infos). Lots: test/core 497 ✓, pos 247 ✓, contact 39 ✓, catalog 151 ✓, dashboard 95 ✓, team 123 ✓, audit 87 ✓, export 138 ✓, help 9 ✓, profitability 87 ✓, reports 44 ✓, settings 50 ✓, sync_indicator 63 ✓, inventory 189 ✓, notifications 16 ✓, stores 45 ✓.
+
+**Residual risks:** none new; error state in the day-summary sheet still not checked on a device.

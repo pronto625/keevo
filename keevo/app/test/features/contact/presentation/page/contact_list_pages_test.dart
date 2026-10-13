@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:keevo/features/contact/domain/model/client_model.dart';
+import 'package:keevo/features/contact/domain/model/supplier_model.dart';
 import 'package:keevo/features/contact/domain/repository/client_repository.dart';
 import 'package:keevo/features/contact/domain/repository/supplier_repository.dart';
 import 'package:keevo/features/contact/presentation/page/client_form_page.dart';
@@ -249,5 +250,83 @@ void main() {
 
     expect(find.text('Épicerie fine'), findsOneWidget);
     expect(find.text('Huile'), findsNothing);
+  });
+
+  // v1s-16-11 follow-up: « Réessayer » reloads the local list without
+  // starting a remote sync (the sync button keeps that role).
+  testWidgets('ClientListPage: Réessayer reloads the list, no new sync',
+      (tester) async {
+    final repo = _MockClientRepository();
+    var failing = true;
+    final now = DateTime(2026, 1, 1);
+    when(() => repo.getAll(includeArchived: any(named: 'includeArchived')))
+        .thenAnswer((_) async {
+      if (failing) throw StateError('database is locked');
+      return [
+        ClientModel(
+            id: 'c1',
+            name: 'Awa Diallo',
+            phone: '+237690000001',
+            createdAt: now,
+            updatedAt: now),
+      ];
+    });
+    when(() => repo.syncFromRemote()).thenThrow(Exception('offline'));
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [clientRepositoryProvider.overrideWithValue(repo)],
+      child: const MaterialApp(home: ClientListPage()),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Erreur de chargement'), findsOneWidget);
+    expect(find.textContaining('database'), findsNothing);
+    verify(() => repo.syncFromRemote()).called(1);
+
+    failing = false;
+    await tester.tap(find.text('Réessayer'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Awa Diallo'), findsOneWidget);
+    expect(find.text('Réessayer'), findsNothing);
+    verifyNever(() => repo.syncFromRemote());
+    expect(find.textContaining('Synchronisation impossible'), findsNothing);
+  });
+
+  testWidgets('SupplierListPage: Réessayer reloads the list, no new sync',
+      (tester) async {
+    final repo = _MockSupplierRepository();
+    var failing = true;
+    final now = DateTime(2026, 1, 1);
+    when(() => repo.getAll(includeArchived: any(named: 'includeArchived')))
+        .thenAnswer((_) async {
+      if (failing) throw StateError('database is locked');
+      return [
+        SupplierModel(
+            id: 's1',
+            name: 'Grossiste Mokolo',
+            phone: '+237690000002',
+            createdAt: now,
+            updatedAt: now),
+      ];
+    });
+    when(() => repo.syncFromRemote()).thenThrow(Exception('offline'));
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [supplierRepositoryProvider.overrideWithValue(repo)],
+      child: const MaterialApp(home: SupplierListPage()),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Erreur de chargement'), findsOneWidget);
+    verify(() => repo.syncFromRemote()).called(1);
+
+    failing = false;
+    await tester.tap(find.text('Réessayer'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Grossiste Mokolo'), findsOneWidget);
+    expect(find.text('Réessayer'), findsNothing);
+    verifyNever(() => repo.syncFromRemote());
   });
 }
