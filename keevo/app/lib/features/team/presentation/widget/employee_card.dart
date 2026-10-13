@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:intl/intl.dart';
+
 import '../../../../core/di/providers.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
 import '../../../stores/presentation/provider/store_provider.dart';
+import '../../domain/model/employee_activity.dart';
 import '../../domain/model/employee_model.dart';
 import '../provider/employee_provider.dart';
+import '../util/employee_whatsapp.dart';
+import 'employee_activity_sheet.dart';
 import 'set_password_bottom_sheet.dart';
 import 'temp_password_bottom_sheet.dart';
 
@@ -15,15 +20,27 @@ import 'temp_password_bottom_sheet.dart';
 ///
 /// Shows employee name, store, status badge, passwordChangeRequired badge.
 /// Tap shows bottom sheet with reassign/deactivate actions.
+///
+/// v1s-14-6 (FR67): with an [activity] (OWNER sessions only — the provider
+/// feeding it is empty otherwise) an active card shows today's sales and the
+/// last activity, plus a « Sans activité 48 h+ » badge when idle.
 class EmployeeCard extends ConsumerWidget {
   final EmployeeModel employee;
   final VoidCallback onActionComplete;
+  final EmployeeActivity? activity;
 
   const EmployeeCard({
     super.key,
     required this.employee,
     required this.onActionComplete,
+    this.activity,
   });
+
+  static final _currencyFmt = NumberFormat.currency(
+    locale: 'fr_FR',
+    symbol: 'XAF',
+    decimalDigits: 0,
+  );
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -57,7 +74,12 @@ class EmployeeCard extends ConsumerWidget {
         borderRadius: BorderRadius.circular(AppTheme.radiusL),
         child: InkWell(
         borderRadius: BorderRadius.circular(AppTheme.radiusL),
-        onTap: () => _showActions(context, ref, storeName),
+        onTap: () => _showActions(context, ref, storeName,
+            resolvedStoreName: storesAsync.valueOrNull
+                    ?.where((s) => s.id == employee.storeId)
+                    .firstOrNull
+                    ?.name ??
+                ''),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -99,13 +121,23 @@ class EmployeeCard extends ConsumerWidget {
                         color: cs.onSurfaceVariant,
                       ),
                     ),
+                    if (isActive && activity != null) ...[
+                      const SizedBox(height: 4),
+                      _ActivityStats(
+                        activity: activity!,
+                        currencyFmt: _currencyFmt,
+                      ),
+                    ],
                     const SizedBox(height: 6),
                     Wrap(
                       spacing: 6,
+                      runSpacing: 4,
                       children: [
                         _StatusBadge(isActive: isActive),
                         if (employee.passwordChangeRequired)
                           const _PwdBadge(),
+                        if (isActive && activity?.inactive == true)
+                          const _IdleBadge(),
                       ],
                     ),
                   ],
@@ -164,7 +196,10 @@ class EmployeeCard extends ConsumerWidget {
     }
   }
 
-  void _showActions(BuildContext context, WidgetRef ref, String storeName) {
+  /// [resolvedStoreName] is the real store name, or '' while stores are not
+  /// resolved — the only value that may travel in a WhatsApp text.
+  void _showActions(BuildContext context, WidgetRef ref, String storeName,
+      {required String resolvedStoreName}) {
     final isActive = employee.status == 'ACTIVE';
     final isOwner = ref.read(currentUserRoleProvider) == 'OWNER';
     // Already watched in build(), so the future has resolved by now.
@@ -206,6 +241,55 @@ class EmployeeCard extends ConsumerWidget {
               ),
             ),
             const Divider(height: 1),
+
+            // ── Activity (v1s-14-6, FR67 — OWNER only) ──────────────
+            if (isOwner) ...[
+              ListTile(
+                leading: Icon(Icons.insights_rounded,
+                    color: Theme.of(context).colorScheme.primary),
+                title: const Text('Voir l\'activité'),
+                subtitle: const Text('Dernière connexion, ventes'),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  showEmployeeActivitySheet(
+                    context: context,
+                    employee: employee,
+                    storeName: resolvedStoreName,
+                  );
+                },
+              ),
+              const Divider(indent: 56, height: 1),
+            ],
+
+            // ── WhatsApp invitation (v1s-14-6, FR65) — never a password ─
+            // Only while the temporary password is still pending: the text
+            // tells the employee to change it at first login.
+            if (isActive && isOwner && !isSelf &&
+                employee.passwordChangeRequired &&
+                (employee.phoneNumber?.trim().isNotEmpty ?? false)) ...[
+              ListTile(
+                leading: Icon(Icons.chat_outlined,
+                    color: Theme.of(context).colorScheme.primary),
+                title: const Text('Renvoyer l\'invitation WhatsApp'),
+                subtitle: const Text('Lien de l\'application et numéro de connexion'),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  final phone = employee.phoneNumber!.trim();
+                  openWhatsApp(
+                    ScaffoldMessenger.of(context),
+                    whatsAppUri(
+                      phone,
+                      buildInviteMessage(
+                        firstName: employee.firstName,
+                        storeName: resolvedStoreName,
+                        phone: phone,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const Divider(indent: 56, height: 1),
+            ],
 
             if (isActive && isOwner) ...[
               // ── Edit profile (Story 14.11, FR66) ────────────────────
@@ -454,21 +538,22 @@ class EmployeeCard extends ConsumerWidget {
                     .regeneratePassword(employee.id);
                 if (!context.mounted) return;
                 final storesAsync = ref.read(storeListNotifierProvider);
-                final sName = storesAsync.maybeWhen(
-                  data: (stores) =>
-                      stores
-                          .where((s) => s.id == result.employee.storeId)
-                          .firstOrNull
-                          ?.name ??
-                      'Boutique',
-                  orElse: () => 'Boutique',
-                );
+                final resolved = storesAsync.valueOrNull
+                    ?.where((s) => s.id == result.employee.storeId)
+                    .firstOrNull
+                    ?.name;
+                final sName = resolved ?? 'Boutique';
                 await showTempPasswordBottomSheet(
                   context: context,
                   employeeName:
                       '${result.employee.firstName} ${result.employee.lastName}',
                   storeName: sName,
                   temporaryPassword: result.temporaryPassword,
+                  invitePhone:
+                      result.employee.phoneNumber ?? employee.phoneNumber,
+                  // Never the « Boutique » placeholder in the WhatsApp text.
+                  inviteStoreName: resolved ?? '',
+                  firstName: result.employee.firstName,
                 );
                 onActionComplete();
               } catch (_) {
@@ -538,6 +623,61 @@ class _PwdBadge extends StatelessWidget {
           color: color,
         ),
       ),
+    );
+  }
+}
+
+/// « Sans activité 48 h+ » — ACTIVE employee idle for more than 48 h (FR67).
+class _IdleBadge extends StatelessWidget {
+  const _IdleBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.warningStrong;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        'Sans activité 48 h+',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
+    );
+  }
+}
+
+/// Today's sales and last activity of the card (FR67, OWNER only).
+class _ActivityStats extends StatelessWidget {
+  final EmployeeActivity activity;
+  final NumberFormat currencyFmt;
+
+  const _ActivityStats({required this.activity, required this.currencyFmt});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final count = activity.todaySalesCount;
+    final style = TextStyle(fontSize: 12, color: cs.onSurfaceVariant);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Aujourd\'hui : $count vente${count > 1 ? 's' : ''} · '
+          '${currencyFmt.format(activity.todaySalesAmount)}',
+          style: style,
+        ),
+        Text(
+          'Dernière activité : '
+          '${formatLastSeen(activity.lastActivityAt, DateTime.now())}',
+          style: style,
+        ),
+      ],
     );
   }
 }

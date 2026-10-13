@@ -1,4 +1,5 @@
 import '../model/create_employee_result.dart';
+import '../model/employee_activity.dart';
 import '../model/employee_model.dart';
 
 /// EmployeeRepository — Domain port for employee management (Story 3.5).
@@ -32,4 +33,14 @@ abstract class EmployeeRepository {
   Future<void> changeRole(String employeeId, String role);
 
   Future<void> setPassword(String employeeId, String newPassword);
+
+  // ── v1s-14-6 — FR67 activity (OWNER only, online only) ────────────
+
+  /// Activity of every employee. Offline / unreachable server →
+  /// `EmployeeActionRequiresConnectionException`.
+  Future<List<EmployeeActivity>> listActivity();
+
+  /// Activity of one employee. Offline / unreachable server →
+  /// `EmployeeActionRequiresConnectionException`.
+  Future<EmployeeActivity> getActivity(String employeeId);
 }

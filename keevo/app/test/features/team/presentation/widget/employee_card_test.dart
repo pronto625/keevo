@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +10,8 @@ import 'package:keevo/features/stores/domain/model/store_model.dart';
 import 'package:keevo/features/stores/domain/model/store_type.dart';
 import 'package:keevo/features/stores/domain/repository/store_repository.dart';
 import 'package:keevo/features/stores/presentation/provider/store_provider.dart';
+import 'package:keevo/features/team/domain/model/create_employee_result.dart';
+import 'package:keevo/features/team/domain/model/employee_activity.dart';
 import 'package:keevo/features/team/domain/model/employee_model.dart';
 import 'package:keevo/features/team/domain/repository/employee_repository.dart';
 import 'package:keevo/features/team/presentation/provider/employee_provider.dart';
@@ -252,5 +255,250 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(done, 1);
+  });
+
+  // ── v1s-14-6 — FR67 activity / FR65 invitation ───────────────────────
+
+  Widget buildWithActivity(EmployeeModel e, EmployeeActivity? a,
+          {String role = 'OWNER'}) =>
+      ProviderScope(
+        overrides: overrides(role: role),
+        child: MaterialApp(
+          home: Scaffold(
+            body: EmployeeCard(
+                employee: e, activity: a, onActionComplete: () {}),
+          ),
+        ),
+      );
+
+  EmployeeActivity activity({bool inactive = false, DateTime? lastActivity}) =>
+      EmployeeActivity(
+        employeeId: 'emp-1',
+        userId: 'u-1',
+        lastLoginAt: DateTime.now().subtract(const Duration(days: 1)),
+        lastActivityAt:
+            lastActivity ?? DateTime.now().subtract(const Duration(hours: 3)),
+        todaySalesCount: 2,
+        todaySalesAmount: 10000,
+        weekSalesCount: 3,
+        weekSalesAmount: 13000,
+        activeSession: true,
+        inactive: inactive,
+      );
+
+  testWidgets('shouldShowEmployeeActivityStats — today sales and last activity',
+      (tester) async {
+    await pumpCard(tester, buildWithActivity(employee(), activity()));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Aujourd\'hui : 2 ventes'), findsOneWidget);
+    expect(find.textContaining(RegExp(r'10\s000\sXAF')), findsOneWidget);
+    expect(find.text('Dernière activité : il y a 3 h'), findsOneWidget);
+    expect(find.text('Sans activité 48 h+'), findsNothing);
+  });
+
+  testWidgets('idle 48 h+ → « Sans activité 48 h+ » badge', (tester) async {
+    await pumpCard(tester, buildWithActivity(employee(), activity(inactive: true)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sans activité 48 h+'), findsOneWidget);
+  });
+
+  testWidgets('no activity → no stats line (list unaffected)', (tester) async {
+    await pumpCard(tester, buildWithActivity(employee(), null));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Aujourd\'hui'), findsNothing);
+    expect(find.text('Jean Mbida'), findsOneWidget);
+  });
+
+  testWidgets('deactivated employee → no stats, no idle badge', (tester) async {
+    await pumpCard(tester,
+        buildWithActivity(employee(status: 'INACTIVE'), activity(inactive: true)));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Aujourd\'hui'), findsNothing);
+    expect(find.text('Sans activité 48 h+'), findsNothing);
+  });
+
+  testWidgets('OWNER sheet: « Voir l\'activité » opens the activity sheet with '
+      'a WhatsApp reminder when idle', (tester) async {
+    when(() => empRepo.getActivity('emp-1'))
+        .thenAnswer((_) async => activity(inactive: true,
+            lastActivity: DateTime.now().subtract(const Duration(hours: 49))));
+    final e = employee().copyWith(phoneNumber: '+237690000001', passwordChangeRequired: true);
+    await pumpCard(tester, buildWithActivity(e, null));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(EmployeeCard));
+    await tester.pumpAndSettle();
+    expect(find.text('Renvoyer l\'invitation WhatsApp'), findsOneWidget);
+    await tester.tap(find.text('Voir l\'activité'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Activité de Jean Mbida'), findsOneWidget);
+    expect(find.textContaining(RegExp(r'^2 ventes · 10\s000\sXAF$')), findsOneWidget);
+    expect(find.textContaining(RegExp(r'^3 ventes · 13\s000\sXAF$')), findsOneWidget);
+    expect(find.text('il y a 1 j'), findsOneWidget);
+    expect(find.text('Connecté sur un appareil'), findsOneWidget);
+    expect(find.text('Relancer via WhatsApp'), findsOneWidget);
+  });
+
+  testWidgets('activity sheet error → AppErrorWidget, « Réessayer » re-fetches',
+      (tester) async {
+    var calls = 0;
+    when(() => empRepo.getActivity('emp-1')).thenAnswer((_) async {
+      calls++;
+      if (calls == 1) throw Exception('Cette action nécessite une connexion internet.');
+      return activity();
+    });
+    await pumpCard(tester, buildWithActivity(employee(), null));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(EmployeeCard));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Voir l\'activité'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Activité indisponible'), findsOneWidget);
+    await tester.tap(find.text('Réessayer'));
+    await tester.pumpAndSettle();
+
+    expect(calls, 2);
+    expect(find.text('Relancer via WhatsApp'), findsNothing);
+    expect(find.textContaining(RegExp(r'^2 ventes · 10\s000\sXAF$')), findsOneWidget);
+  });
+
+  testWidgets('« Renvoyer l\'invitation WhatsApp » opens wa.me without password',
+      (tester) async {
+    const channel = MethodChannel('plugins.flutter.io/url_launcher');
+    final launched = <String>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'launch') {
+        launched.add((call.arguments as Map)['url'] as String);
+        return true;
+      }
+      return false;
+    });
+    addTearDown(() => TestDefaultBinaryMessengerBinding
+        .instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null));
+    final e = employee().copyWith(phoneNumber: '+237690000001', passwordChangeRequired: true);
+    await pumpCard(tester, buildWithActivity(e, null));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(EmployeeCard));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Renvoyer l\'invitation WhatsApp'));
+    await tester.pumpAndSettle();
+
+    expect(launched, hasLength(1));
+    expect(launched.single, startsWith('https://wa.me/237690000001?text='));
+    final text = Uri.parse(launched.single).queryParameters['text']!;
+    expect(text, contains('Boutique A'));
+    expect(text.toLowerCase(), isNot(contains('mot de passe :')));
+  });
+
+  testWidgets('phone unknown (local cache) → no invitation action',
+      (tester) async {
+    await pumpCard(tester, buildWithActivity(employee(), null));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(EmployeeCard));
+    await tester.pumpAndSettle();
+    expect(find.text('Renvoyer l\'invitation WhatsApp'), findsNothing);
+  });
+
+  testWidgets('EMPLOYEE session: no activity nor invitation action',
+      (tester) async {
+    final e = employee().copyWith(phoneNumber: '+237690000001', passwordChangeRequired: true);
+    await pumpCard(tester, buildWithActivity(e, null, role: 'EMPLOYEE'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(EmployeeCard));
+    await tester.pumpAndSettle();
+    expect(find.text('Voir l\'activité'), findsNothing);
+    expect(find.text('Renvoyer l\'invitation WhatsApp'), findsNothing);
+    verifyNever(() => empRepo.getActivity(any()));
+  });
+
+  void mockLauncher(List<String> launched) {
+    const channel = MethodChannel('plugins.flutter.io/url_launcher');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'launch') {
+        launched.add((call.arguments as Map)['url'] as String);
+        return true;
+      }
+      return false;
+    });
+    addTearDown(() => TestDefaultBinaryMessengerBinding
+        .instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null));
+  }
+
+  testWidgets('password already changed → no « Renvoyer l\'invitation » action',
+      (tester) async {
+    final e = employee().copyWith(phoneNumber: '+237690000001');
+    await pumpCard(tester, buildWithActivity(e, null));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(EmployeeCard));
+    await tester.pumpAndSettle();
+    expect(find.text('Renvoyer l\'invitation WhatsApp'), findsNothing);
+    expect(find.text('Voir l\'activité'), findsOneWidget);
+  });
+
+  testWidgets('stores unresolved → invitation without the placeholder name',
+      (tester) async {
+    final launched = <String>[];
+    mockLauncher(launched);
+    when(() => storeRepo.getStores()).thenThrow(Exception('db'));
+    final e = employee().copyWith(
+        phoneNumber: '+237690000001', passwordChangeRequired: true);
+    await pumpCard(tester, buildWithActivity(e, null));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(EmployeeCard));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Renvoyer l\'invitation WhatsApp'));
+    await tester.pumpAndSettle();
+
+    final text = Uri.parse(launched.single).queryParameters['text']!;
+    expect(text, isNot(contains('Boutique inconnue')));
+    expect(text, isNot(contains('Chargement')));
+  });
+
+  testWidgets('regenerate password → « Inviter via WhatsApp » targets the '
+      'phone, never the temporary password', (tester) async {
+    final launched = <String>[];
+    mockLauncher(launched);
+    final e = employee().copyWith(phoneNumber: '+237690000001');
+    when(() => empRepo.regeneratePassword('emp-1'))
+        .thenAnswer((_) async => CreateEmployeeResult(
+              employee: e.copyWith(passwordChangeRequired: true),
+              temporaryPassword: 'TmpPass98765',
+            ));
+    await pumpCard(tester, buildWithActivity(e, null));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(EmployeeCard));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Regénérer le mot de passe'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Regénérer'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('TmpPass98765'), findsOneWidget);
+    await tester.tap(find.text('Inviter via WhatsApp'));
+    await tester.pumpAndSettle();
+
+    expect(launched, hasLength(1));
+    expect(launched.single, startsWith('https://wa.me/237690000001?text='));
+    expect(launched.single, isNot(contains('TmpPass98765')));
+    final text = Uri.parse(launched.single).queryParameters['text']!;
+    expect(text, contains('Boutique A'));
+    expect(text, isNot(contains('TmpPass98765')));
   });
 }

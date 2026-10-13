@@ -44,6 +44,7 @@ import '../../features/profitability/presentation/page/product_profitability_det
 import '../../features/auth/presentation/page/user_password_change_page.dart';
 import '../../features/account/presentation/page/delete_account_page.dart';
 import '../../features/feedback/presentation/page/feedback_form_page.dart';
+import '../../features/help/presentation/page/help_tutorials_page.dart';
 import '../../features/settings/presentation/page/account_page.dart';
 import '../../features/settings/presentation/page/settings_page.dart';
 import '../../features/settings/presentation/page/subscription_page.dart';
@@ -675,6 +676,11 @@ final GoRouter appRouter = GoRouter(
       builder: (_, state) => FeedbackFormPage(
         screenContext: state.uri.queryParameters['from'],
       ),
+    ),
+    // ── Settings > Aide & Tutoriels (v1s-14-6 FR7 — OWNER + EMPLOYEE) ────
+    GoRoute(
+      path: '/settings/help',
+      builder: (_, __) => const HelpTutorialsPage(),
     ),
     // ── Action history (v1s-18-7 — OWNER only via the `/audit` prefix) ───
     GoRoute(

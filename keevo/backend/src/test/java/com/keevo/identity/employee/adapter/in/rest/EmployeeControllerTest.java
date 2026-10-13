@@ -2,6 +2,7 @@ package com.keevo.identity.employee.adapter.in.rest;
 
 import com.keevo.identity.employee.domain.model.CreateEmployeeResult;
 import com.keevo.identity.employee.domain.model.Employee;
+import com.keevo.identity.employee.domain.model.EmployeeActivity;
 import com.keevo.identity.employee.domain.model.EmployeeStatus;
 import com.keevo.identity.employee.domain.port.in.*;
 import com.keevo.shared.domain.exception.DomainException;
@@ -47,6 +48,7 @@ class EmployeeControllerTest {
     @Mock ChangeEmployeeRoleUseCase changeEmployeeRoleUseCase;
     @Mock SetEmployeePasswordUseCase setEmployeePasswordUseCase;
     @Mock EmployeeRoleResolver employeeRoleResolver;
+    @Mock GetEmployeeActivityUseCase getEmployeeActivityUseCase;
 
     @InjectMocks EmployeeController employeeController;
 
@@ -343,5 +345,67 @@ class EmployeeControllerTest {
                                 """))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.domainCode").value("CANNOT_SET_OWN_PASSWORD"));
+    }
+
+    // ── v1s-14-6 — FR67 activity ─────────────────────────────────────────
+
+    private EmployeeActivity sampleActivity(boolean inactive) {
+        return new EmployeeActivity(employeeId, sampleEmployee.getUserId(),
+                Instant.parse("2026-10-12T08:00:00Z"), Instant.parse("2026-10-13T09:00:00Z"),
+                2, 10_000L, 3, 13_000L, true, inactive);
+    }
+
+    @Test
+    @DisplayName("GET /employees/{id}/activity returns 200 with the activity for an OWNER")
+    void shouldReturnEmployeeActivityForOwner() throws Exception {
+        when(getEmployeeActivityUseCase.forEmployee(employeeId)).thenReturn(sampleActivity(false));
+
+        mockMvc.perform(get("/api/v1/employees/" + employeeId + "/activity"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.employeeId").value(employeeId.toString()))
+                .andExpect(jsonPath("$.data.todaySalesCount").value(2))
+                .andExpect(jsonPath("$.data.todaySalesAmount").value(10000))
+                .andExpect(jsonPath("$.data.weekSalesCount").value(3))
+                .andExpect(jsonPath("$.data.weekSalesAmount").value(13000))
+                .andExpect(jsonPath("$.data.lastLoginAt").exists())
+                .andExpect(jsonPath("$.data.activeSession").value(true))
+                .andExpect(jsonPath("$.data.inactive").value(false));
+    }
+
+    @Test
+    @DisplayName("GET /employees/activity returns 200 with one entry per employee for an OWNER")
+    void shouldReturnAllEmployeesActivityForOwner() throws Exception {
+        when(getEmployeeActivityUseCase.forAll()).thenReturn(List.of(sampleActivity(true)));
+
+        mockMvc.perform(get("/api/v1/employees/activity"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].inactive").value(true));
+    }
+
+    @Test
+    @DisplayName("GET /employees/{id}/activity and /employees/activity return 403 for an EMPLOYEE")
+    void shouldReturn403ForEmployee() throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(actorId, null,
+                        List.of(new SimpleGrantedAuthority("ROLE_EMPLOYEE"))));
+
+        mockMvc.perform(get("/api/v1/employees/" + employeeId + "/activity"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/employees/activity"))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(getEmployeeActivityUseCase);
+    }
+
+    @Test
+    @DisplayName("GET /employees/{id}/activity returns 404 EMPLOYEE_NOT_FOUND for an unknown id")
+    void shouldReturn404ForUnknownEmployeeActivity() throws Exception {
+        UUID unknown = UUID.randomUUID();
+        when(getEmployeeActivityUseCase.forEmployee(unknown))
+                .thenThrow(new DomainException(ErrorCode.EMPLOYEE_NOT_FOUND));
+
+        mockMvc.perform(get("/api/v1/employees/" + unknown + "/activity"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.domainCode").value("EMPLOYEE_NOT_FOUND"));
     }
 }

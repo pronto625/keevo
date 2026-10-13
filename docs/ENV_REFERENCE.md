@@ -46,6 +46,12 @@
 | `WASSENDER_API_URL` | `https://www.wasenderapi.com` | `https://www.wasenderapi.com` |
 | `WASSENDER_API_TOKEN` | `628d5b5845e63ce015ad22f4e9915a2c19d7506dac270440e28c024c2fee6573` | ⚠️ **Régénérer le token** |
 | `ACME_EMAIL` | *(non défini)* | **Requis** — email pour Let's Encrypt |
+| `KEEVO_HELP_TUTORIAL_VENDRE_URL` | *(vide)* | Lien http(s) (YouTube…) de la vidéo « Vendre » — vide = « Bientôt disponible » |
+| `KEEVO_HELP_TUTORIAL_CATALOGUE_URL` | *(vide)* | Lien http(s) (YouTube…) de la vidéo « Catalogue & stock » — vide = « Bientôt disponible » |
+| `KEEVO_HELP_TUTORIAL_INVENTAIRE_URL` | *(vide)* | Lien http(s) (YouTube…) de la vidéo « Inventaire » — vide = « Bientôt disponible » |
+| `KEEVO_HELP_TUTORIAL_RAPPORTS_URL` | *(vide)* | Lien http(s) (YouTube…) de la vidéo « Rapports » — vide = « Bientôt disponible » |
+| `KEEVO_HELP_TUTORIAL_EQUIPE_URL` | *(vide)* | Lien http(s) (YouTube…) de la vidéo « Équipe » — vide = « Bientôt disponible » |
+| `KEEVO_HELP_TUTORIAL_HORS_LIGNE_URL` | *(vide)* | Lien http(s) (YouTube…) de la vidéo « Hors ligne & synchro » — vide = « Bientôt disponible » |
 
 ### Template `.env` prod
 
@@ -83,9 +89,23 @@ KEEVO_WHATSAPP_PROVIDER=wassender
 WASSENDER_API_URL=https://www.wasenderapi.com
 WASSENDER_API_TOKEN=<NOUVEAU_TOKEN>
 
+# Aide & Tutoriels (FR7) — liens externes, vide = « Bientôt disponible »
+KEEVO_HELP_TUTORIAL_VENDRE_URL=
+KEEVO_HELP_TUTORIAL_CATALOGUE_URL=
+KEEVO_HELP_TUTORIAL_INVENTAIRE_URL=
+KEEVO_HELP_TUTORIAL_RAPPORTS_URL=
+KEEVO_HELP_TUTORIAL_EQUIPE_URL=
+KEEVO_HELP_TUTORIAL_HORS_LIGNE_URL=
+
 # Let's Encrypt
 ACME_EMAIL=admin@<TON_DOMAINE>
 ```
+
+### Build de l'app mobile (`--dart-define`)
+
+| Flag | Défaut | Rôle |
+|------|--------|------|
+| `KEEVO_APP_DOWNLOAD_URL` | *(vide)* | Lien de téléchargement inséré dans l'invitation WhatsApp d'un employé (FR65). Vide = le message dit « Installez l'application Keevo » sans lien. Ex. : `flutter build apk --dart-define=KEEVO_APP_DOWNLOAD_URL=https://play.google.com/store/apps/details?id=…` |
 
 ---
 

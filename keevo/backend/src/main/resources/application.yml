@@ -99,6 +99,46 @@ keevo:
     stale-job-after: 2h
     pdf-max-rows: 2000            # v1s-18-3: data rows a PDF may hold (larger → 422 EXPORT_PDF_TOO_LARGE)
     pdf-max-closures: 31          # v1s-18-3: closures in one « Fin de journée » PDF
+  # Story v1s-14-6 (FR7) — « Aide & Tutoriels »: short French videos hosted externally (YouTube…).
+  # Blank / non-http(s) url = « Bientôt disponible » in the app. Publish a video by setting its env var.
+  help:
+    tutorials:
+      - id: vendre
+        module: Vendre
+        title: Enregistrer une vente
+        description: Encaisser une vente en quelques secondes, choisir le mode de paiement et annuler une erreur.
+        duration-seconds: 120
+        url: ${KEEVO_HELP_TUTORIAL_VENDRE_URL:}
+      - id: catalogue
+        module: Catalogue & stock
+        title: Gérer ses produits et son stock
+        description: Ajouter un produit, fixer ses prix et suivre les quantités en stock.
+        duration-seconds: 120
+        url: ${KEEVO_HELP_TUTORIAL_CATALOGUE_URL:}
+      - id: inventaire
+        module: Inventaire
+        title: Faire un inventaire
+        description: Compter le stock réel, repérer les écarts et valider l'inventaire.
+        duration-seconds: 120
+        url: ${KEEVO_HELP_TUTORIAL_INVENTAIRE_URL:}
+      - id: rapports
+        module: Rapports
+        title: Lire ses rapports
+        description: Chiffre d'affaires, bénéfices et rapport de fin de journée.
+        duration-seconds: 120
+        url: ${KEEVO_HELP_TUTORIAL_RAPPORTS_URL:}
+      - id: equipe
+        module: Équipe
+        title: Ajouter et suivre ses employés
+        description: Créer un compte employé, l'inviter via WhatsApp et suivre son activité.
+        duration-seconds: 120
+        url: ${KEEVO_HELP_TUTORIAL_EQUIPE_URL:}
+      - id: hors-ligne
+        module: Hors ligne & synchro
+        title: Travailler sans internet
+        description: Vendre hors connexion et comprendre la synchronisation au retour du réseau.
+        duration-seconds: 120
+        url: ${KEEVO_HELP_TUTORIAL_HORS_LIGNE_URL:}
   fcm:
     enabled: ${KEEVO_FCM_ENABLED:false}
     credentials-path: ${GOOGLE_APPLICATION_CREDENTIALS:}

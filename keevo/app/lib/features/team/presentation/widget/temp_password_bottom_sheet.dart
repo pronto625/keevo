@@ -3,16 +3,25 @@ import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
+import '../util/employee_whatsapp.dart';
 
 /// Shows the one-time temporary password bottom sheet (Story 3.5, AC1).
 ///
 /// Non-dismissible — user must tap "Continuer" to close.
 /// The temporary password is displayed ONCE and never persisted.
+///
+/// v1s-14-6 (FR65): when [invitePhone] is known, an « Inviter via WhatsApp »
+/// button opens a pre-filled `wa.me` invitation (store, phone, app link). The
+/// invitation NEVER contains the password — the owner communicates it
+/// separately and the employee changes it at first login.
 Future<void> showTempPasswordBottomSheet({
   required BuildContext context,
   required String employeeName,
   required String storeName,
   required String temporaryPassword,
+  String? invitePhone,
+  String? firstName,
+  String? inviteStoreName,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -21,10 +30,15 @@ Future<void> showTempPasswordBottomSheet({
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
+    // Taller content since the invite button: scroll on small screens.
+    isScrollControlled: true,
     builder: (ctx) => _TempPasswordSheet(
       employeeName: employeeName,
       storeName: storeName,
       temporaryPassword: temporaryPassword,
+      invitePhone: invitePhone,
+      firstName: firstName,
+      inviteStoreName: inviteStoreName,
     ),
   );
 }
@@ -33,11 +47,19 @@ class _TempPasswordSheet extends StatefulWidget {
   final String employeeName;
   final String storeName;
   final String temporaryPassword;
+  final String? invitePhone;
+  final String? firstName;
+
+  /// Store name for the WhatsApp text ('' = unknown); defaults to [storeName].
+  final String? inviteStoreName;
 
   const _TempPasswordSheet({
     required this.employeeName,
     required this.storeName,
     required this.temporaryPassword,
+    this.invitePhone,
+    this.firstName,
+    this.inviteStoreName,
   });
 
   @override
@@ -46,6 +68,18 @@ class _TempPasswordSheet extends StatefulWidget {
 
 class _TempPasswordSheetState extends State<_TempPasswordSheet> {
   bool _copied = false;
+
+  bool get _canInvite => (widget.invitePhone ?? '').trim().isNotEmpty;
+
+  Future<void> _invite() async {
+    final phone = widget.invitePhone!.trim();
+    final text = buildInviteMessage(
+      firstName: widget.firstName ?? '',
+      storeName: widget.inviteStoreName ?? widget.storeName,
+      phone: phone,
+    );
+    await openWhatsApp(ScaffoldMessenger.of(context), whatsAppUri(phone, text));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,6 +92,7 @@ class _TempPasswordSheetState extends State<_TempPasswordSheet> {
     return PopScope(
       canPop: false,
       child: SafeArea(
+        child: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
           child: Column(
@@ -163,7 +198,9 @@ class _TempPasswordSheetState extends State<_TempPasswordSheet> {
                     Expanded(
                       child: Text(
                         'Ce mot de passe ne sera plus affiché. '
-                        'Communiquez-le à l\'employé par vos propres moyens.',
+                        'Il n\'est jamais inclus dans l\'invitation WhatsApp : '
+                        'communiquez-le à l\'employé séparément. Il le changera '
+                        'à sa première connexion.',
                         style: TextStyle(
                           fontSize: 12,
                           color: warningColor,
@@ -175,6 +212,25 @@ class _TempPasswordSheetState extends State<_TempPasswordSheet> {
                 ),
               ),
               const SizedBox(height: 20),
+
+              // ── WhatsApp invitation (v1s-14-6, FR65) ──────────────
+              if (_canInvite) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _invite,
+                    icon: const Icon(Icons.chat_outlined, size: 18),
+                    label: const Text('Inviter via WhatsApp'),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusL),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
 
               // ── Continue button ───────────────────────────────────
               SizedBox(
@@ -192,6 +248,7 @@ class _TempPasswordSheetState extends State<_TempPasswordSheet> {
               ),
             ],
           ),
+        ),
         ),
       ),
     );
