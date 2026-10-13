@@ -406,6 +406,7 @@ development_status:
   v1s-16-17-feedback-fill-contrast: done  # 2026-10-12 done (bmad-build-auto, spec-v1s-16-17-feedback-fill-contrast.md) : SnackBars sur aplats fixes + contenu onBrand (snackBarTheme neutre #343A40/#3B4D63), succès successStrong, erreurs/danger errorStrong #C92A2A, speed-dial avant-plan par aplat, CTA désactivés surfaceContainerHighest + onSurfaceVariant, cs.error sombre #FF6B6B + onError #0D1B2A ; garde-fou feedback_fill_guard_test ; app 1.1.28+27 ; 1 passe de revue (22 constats, 0 reporté) | earlier: 2026-10-12 build-auto v1s-16-3 review — 4 items
   v1s-16-18-ios-release-identity: backlog  # 2026-10-12 build-auto v1s-16-2 review — 3 items
   v1s-16-19-dashboard-weekly-buckets: done  # 2026-10-12 done (bmad-build-auto, spec-v1s-16-19-dashboard-weekly-buckets.md) : 2/2 items résolus — seaux hebdo clés par lundi local (SQL+Dart), slots en champs calendaires (DST), horloge injectée ; backend DashboardService regroupé en WAT (AT TIME ZONE) + Clock ; séries distantes zero-fill côté app ; app 1.1.31+30 ; 1 passe de revue (25 constats, 6 patchés, 0 reporté) | 2026-10-12 build-auto v1s-15-8 review — 2 items
+  v1s-16-20-no-technical-data-in-ui: backlog  # 2026-10-13 demande utilisateur — aucune donnée technique (UUID, codes) visible : exports, historique des actions, écrans — 7 items
   v1s-epic-16-retrospective: optional
 
   # ─────────────────────────────────────────────────────────
