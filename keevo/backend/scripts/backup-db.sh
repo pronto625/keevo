@@ -22,8 +22,21 @@
 #   BACKUP_S3_BUCKET  — S3 bucket name (if unset, local-only backup)
 #   BACKUP_S3_PREFIX  — S3 key prefix (default: keevo/)
 #   BACKUP_LOCAL_DIR  — local backup directory (default: /var/backups/keevo)
+#   BACKUP_REQUIRE_S3 — "1" in prod: a missing BACKUP_S3_BUCKET is a failure (exit 1)
+#                       after the local backup is written
+#   BACKUP_HEARTBEAT_URL — pinged (GET) at the end of a successful run only
+#                       (healthchecks-style dead-man switch: the monitor alerts when
+#                       no ping arrives within 26 h — catches a disabled timer or a dead host)
+#   BACKUP_LOCK_STALE_SECONDS — lock age after which a held lock is reported as stale
+#                       (default: 21600 = 6 h)
+#
+# Exit status (Story 10-7): any failure exits non-zero (strict mode + ERR trap), so that
+# systemd's OnFailure= in keevo-backup.service starts the alert unit. The only exit 0
+# without a backup is "another backup is already running" (lock held for less than 6 h);
+# a lock held longer is reported as stale (exit 1 → alert).
 # ============================================================================
 set -euo pipefail
+trap 'echo "[BACKUP][ERROR] Unexpected failure at line ${LINENO} (exit $?): ${BASH_COMMAND}" >&2' ERR
 
 # ─── Configuration ───────────────────────────────────────────────────────────
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H-%M-%SZ")
@@ -37,23 +50,37 @@ RETENTION_DAYS=30
 # ─── Single-instance lock ─────────────────────────────────────────────────────
 # Prevent concurrent runs (timer + manual, or Persistent=true catch-up) from
 # launching two pg_dumps at once.
+# The lock file mtime records when the holder started (opened in append mode so that
+# a waiting run does not reset it); a lock older than the stale threshold means a stuck run.
 LOCK_FILE="${BACKUP_LOCK_FILE:-/tmp/keevo-backup.lock}"
-exec 9>"${LOCK_FILE}"
+LOCK_STALE_SECONDS="${BACKUP_LOCK_STALE_SECONDS:-21600}"
+exec 9>>"${LOCK_FILE}"
 if ! flock -n 9; then
-  echo "[BACKUP][WARN] Another backup is already running (lock: ${LOCK_FILE}) — skipping this run" >&2
+  lock_age=$(( $(date +%s) - $(stat -c %Y "${LOCK_FILE}") ))
+  if (( lock_age > LOCK_STALE_SECONDS )); then
+    echo "[BACKUP][ERROR] stale lock: ${LOCK_FILE} held for ${lock_age}s (> ${LOCK_STALE_SECONDS}s) — a previous backup is stuck, investigate" >&2
+    exit 1
+  fi
+  echo "[BACKUP][WARN] Another backup is already running (lock: ${LOCK_FILE}, ${lock_age}s) — skipping this run" >&2
   exit 0
 fi
+touch "${LOCK_FILE}"
 
 # ─── Validation ──────────────────────────────────────────────────────────────
 for var in POSTGRES_USER POSTGRES_DB; do
   if [[ -z "${!var:-}" ]]; then
-    echo "[BACKUP][ERROR] Required environment variable ${var} is not set" >&2
+    echo "[BACKUP][ERROR] Required environment variable ${var} is not set (is .env.backup present next to the scripts directory?)" >&2
     exit 1
   fi
 done
 
 if [[ "${MODE}" == "direct" && -z "${POSTGRES_PASSWORD:-}" ]]; then
   echo "[BACKUP][ERROR] POSTGRES_PASSWORD is required when BACKUP_MODE=direct" >&2
+  exit 1
+fi
+
+if [[ "${MODE}" == "docker-exec" ]] && ! docker info > /dev/null 2>&1; then
+  echo "[BACKUP][ERROR] Docker daemon is not reachable (docker info failed) — cannot dump ${CONTAINER}" >&2
   exit 1
 fi
 
@@ -125,6 +152,9 @@ if [[ -n "${BACKUP_S3_BUCKET:-}" ]]; then
     echo "[BACKUP][ERROR] S3 upload failed for ${S3_PATH}" >&2
     s3_failed=1
   fi
+elif [[ "${BACKUP_REQUIRE_S3:-0}" == "1" ]]; then
+  echo "[BACKUP][ERROR] BACKUP_S3_BUCKET not set but BACKUP_REQUIRE_S3=1 — local backup only, no off-site copy" >&2
+  s3_failed=1
 else
   echo "[BACKUP][WARN] BACKUP_S3_BUCKET not set — local backup only (not production-safe)"
 fi
@@ -137,8 +167,19 @@ echo "[BACKUP][INFO] Rotation done: ${ROTATED_COUNT} file(s) older than ${RETENT
 
 # Signal failure only after the local copy is safe and rotation has run.
 if [[ ${s3_failed} -ne 0 ]]; then
-  echo "[BACKUP][ERROR] Local backup kept but S3 upload failed — durability at risk, investigate" >&2
+  echo "[BACKUP][ERROR] Local backup kept but no off-site copy (S3 upload failed or bucket missing) — durability at risk, investigate" >&2
   exit 1
 fi
 
 echo "[BACKUP][INFO] Backup complete: ${FILENAME}"
+
+# ─── Success heartbeat (optional) ────────────────────────────────────────────
+# Only reached on success. A failed ping does not fail the backup: the monitor will
+# alert on the missing ping anyway.
+if [[ -n "${BACKUP_HEARTBEAT_URL:-}" ]]; then
+  if curl -fsS --max-time 10 --retry 3 -o /dev/null "${BACKUP_HEARTBEAT_URL}"; then
+    echo "[BACKUP][INFO] Heartbeat sent"
+  else
+    echo "[BACKUP][WARN] Heartbeat ping failed — the monitor will report a missed backup" >&2
+  fi
+fi

@@ -424,7 +424,7 @@ jobs:
           username: ${{ secrets.DEPLOY_SSH_USER }}
           key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
           port: ${{ secrets.DEPLOY_SSH_PORT || '22' }}
-          source: "keevo/backend/scripts/backup-db.sh,keevo/backend/scripts/keevo-backup.service,keevo/backend/scripts/keevo-backup.timer"
+          source: "keevo/backend/scripts/backup-db.sh,keevo/backend/scripts/backup-alert.sh,keevo/backend/scripts/render-backup-units.sh,keevo/backend/scripts/keevo-backup.service,keevo/backend/scripts/keevo-backup-alert@.service,keevo/backend/scripts/keevo-backup.timer"
           target: "keevo/scripts"
           strip_components: 3
 
@@ -439,17 +439,52 @@ jobs:
           script: |
             set -euo pipefail
             DEPLOY_DIR="${HOME}/keevo"
-            chmod +x "${DEPLOY_DIR}/scripts/backup-db.sh"
+            chmod +x "${DEPLOY_DIR}/scripts/backup-db.sh" "${DEPLOY_DIR}/scripts/backup-alert.sh" \
+                     "${DEPLOY_DIR}/scripts/render-backup-units.sh"
 
             # Install the committed systemd units (single source of truth).
-            sudo cp "${DEPLOY_DIR}/scripts/keevo-backup.service" /etc/systemd/system/
-            sudo cp "${DEPLOY_DIR}/scripts/keevo-backup.timer" /etc/systemd/system/
+            # Story 10-7: the service units carry the __KEEVO_HOME__ placeholder (no hardcoded
+            # /home/ubuntu). Render into a temp dir (escaped sed, placeholder check), verify,
+            # and only then move into /etc/systemd/system.
+            UNITS_TMP="$(mktemp -d)"
+            trap 'rm -rf "${UNITS_TMP}"' EXIT
+            "${DEPLOY_DIR}/scripts/render-backup-units.sh" "${DEPLOY_DIR}" "${DEPLOY_DIR}/scripts" "${UNITS_TMP}"
+            if command -v systemd-analyze > /dev/null 2>&1; then
+              cp "${UNITS_TMP}/keevo-backup-alert@.service" "${UNITS_TMP}/keevo-backup-alert@keevo-backup.service.service"
+              ( cd "${UNITS_TMP}" && SYSTEMD_UNIT_PATH="${UNITS_TMP}:" systemd-analyze verify \
+                  keevo-backup.service keevo-backup.timer keevo-backup-alert@keevo-backup.service.service )
+              rm -f "${UNITS_TMP}/keevo-backup-alert@keevo-backup.service.service"
+            fi
+            sudo install -m 644 "${UNITS_TMP}/keevo-backup.service" "${UNITS_TMP}/keevo-backup-alert@.service" \
+                 "${UNITS_TMP}/keevo-backup.timer" /etc/systemd/system/
             sudo systemctl daemon-reload
             sudo systemctl enable keevo-backup.timer
             sudo systemctl start keevo-backup.timer
 
             echo "✓ Backup timer installed (from committed scripts)."
             systemctl status keevo-backup.timer --no-pager || true
+
+            # Story 10-7: warn (do not fail the deploy) when the backup env file is missing —
+            # the timer would then fail every night (and raise the OnFailure alert).
+            if [ ! -f "${DEPLOY_DIR}/.env.backup" ]; then
+              echo "::warning::${DEPLOY_DIR}/.env.backup is missing — nightly backups will FAIL. Create it (keevo/backend/docs/DEPLOYMENT_CHECKLIST.md § Backups)."
+              echo "⚠ WARNING: ${DEPLOY_DIR}/.env.backup is missing — nightly backups will FAIL until it is created (see DEPLOYMENT_CHECKLIST.md § Backups)."
+            fi
+            if ! sudo grep -qsE '^BACKUP_ALERT_WEBHOOK_URL=[^"[:space:]]' "${DEPLOY_DIR}/.env.backup-alert" "${DEPLOY_DIR}/.env.backup"; then
+              echo "::warning::BACKUP_ALERT_WEBHOOK_URL not configured — backup failures are only logged to journald (DEPLOYMENT_CHECKLIST.md § Backups)."
+              echo "⚠ WARNING: BACKUP_ALERT_WEBHOOK_URL not configured — backup failures are only logged to journald (see DEPLOYMENT_CHECKLIST.md § Backups)."
+            fi
+
+            # Story 10-7: the prod deploy re-creates keevo_traefik (and rewrites traefik/dynamic.yml
+            # when it manages Traefik), which drops the staging routing. Re-attach the prod Traefik
+            # to keevo_edge (idempotent, only that attachment) and remind the operator.
+            if docker network inspect keevo_edge > /dev/null 2>&1; then
+              docker network connect keevo_edge keevo_traefik 2>/dev/null || true
+            fi
+            if [ -d "${HOME}/keevo-staging" ]; then
+              echo "::warning::Staging présent : le routeur staging et l'attache keevo_edge doivent être réappliqués (checklist §15)."
+              echo "⚠ WARNING: le routeur staging et l'attache keevo_edge doivent être réappliqués (DEPLOYMENT_CHECKLIST.md §15)."
+            fi
 
 # ─── Required GitHub Secrets ──────────────────────────────────────────────────
 # GHCR_PAT                — GitHub PAT, scope: read:packages
@@ -468,4 +503,6 @@ jobs:
 #                                    POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
 #                                    AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION
 #                                    BACKUP_S3_BUCKET, BACKUP_S3_PREFIX
-#                                    (see docs/DEPLOYMENT_CHECKLIST.md § Sauvegardes)
+#                                    (see keevo/backend/docs/DEPLOYMENT_CHECKLIST.md § Backups)
+#   .env.backup-alert             → optional, mode 600: BACKUP_ALERT_WEBHOOK_URL
+#                                    (+ BACKUP_ALERT_WEBHOOK_TOKEN, BACKUP_ALERT_TO)

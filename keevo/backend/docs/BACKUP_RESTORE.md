@@ -1,6 +1,9 @@
 # Keevo — Sauvegardes PostgreSQL & Procédure de Restauration
 
 > Document opérationnel pour les exploitants de la plateforme Keevo.
+>
+> Checklist de déploiement unique (secrets, installation des unités, alerte d'échec, protection S3,
+> re-grant après restauration) : [`DEPLOYMENT_CHECKLIST.md`](DEPLOYMENT_CHECKLIST.md) §11–§13.
 
 ---
 
@@ -99,10 +102,10 @@ export BACKUP_S3_PREFIX=keevo/
 
 ### 3.1 Fichier d'environnement `.env.backup`
 
-Créer sur le serveur `/home/ubuntu/keevo/.env.backup` (mode `600`) :
+Créer sur le serveur `~/keevo/.env.backup` (répertoire de l'utilisateur de déploiement, mode `600`) :
 
 ```bash
-sudo tee /home/ubuntu/keevo/.env.backup << 'EOF'
+tee ~/keevo/.env.backup > /dev/null << 'EOF'
 POSTGRES_USER=keevo
 POSTGRES_PASSWORD=<prod_password>
 POSTGRES_DB=keevo_prod
@@ -111,22 +114,37 @@ AWS_SECRET_ACCESS_KEY=<aws_secret>
 AWS_DEFAULT_REGION=eu-west-1
 BACKUP_S3_BUCKET=keevo-backups-prod
 BACKUP_S3_PREFIX=keevo/
+BACKUP_REQUIRE_S3=1
+BACKUP_HEARTBEAT_URL=<url_de_ping_optionnelle>
 EOF
 
-sudo chmod 600 /home/ubuntu/keevo/.env.backup
-sudo chown ubuntu:ubuntu /home/ubuntu/keevo/.env.backup
+chmod 600 ~/keevo/.env.backup
 ```
 
 > **⚠️ Sécurité :** Ce fichier contient des secrets. Il ne doit **jamais** être commité dans le repo.
 
+`BACKUP_REQUIRE_S3=1` (prod) : sans `BACKUP_S3_BUCKET`, la sauvegarde locale est faite puis le script
+sort en erreur (alerte). `BACKUP_HEARTBEAT_URL` (optionnel — supprimer la ligne si non utilisé) : ping de succès vers un moniteur qui
+alerte en l'absence de ping sous 26 h (`DEPLOYMENT_CHECKLIST.md` §11.5).
+
+Webhook d'alerte en cas d'échec : `~/keevo/.env.backup-alert` (mode `600`, `BACKUP_ALERT_WEBHOOK_URL`…),
+voir `DEPLOYMENT_CHECKLIST.md` §11.1. Les clés AWS doivent être celles de l'utilisateur IAM à
+moindre privilège de `DEPLOYMENT_CHECKLIST.md` §12.1 (pas de suppression possible).
+
 ### 3.2 Installation du systemd timer
 
-Le déploiement via GitHub Actions installe automatiquement le script et le timer. Pour une installation manuelle :
+Le déploiement via GitHub Actions installe automatiquement les scripts, les unités et le timer. Les
+unités `keevo-backup.service` et `keevo-backup-alert@.service` contiennent le marqueur
+`__KEEVO_HOME__` (chemin templaté, Story 10.7) : ne **jamais** les copier telles quelles avec `cp`.
+Installation manuelle :
 
 ```bash
-# Copier les fichiers
-sudo cp ~/keevo/scripts/keevo-backup.service /etc/systemd/system/
-sudo cp ~/keevo/scripts/keevo-backup.timer /etc/systemd/system/
+# Rendre les unités (remplace __KEEVO_HOME__, sed échappé, contrôle du marqueur) puis les installer
+UNITS_TMP="$(mktemp -d)"
+~/keevo/scripts/render-backup-units.sh "${HOME}/keevo" ~/keevo/scripts "${UNITS_TMP}"
+sudo install -m 644 "${UNITS_TMP}"/keevo-backup.service "${UNITS_TMP}"/keevo-backup-alert@.service \
+     "${UNITS_TMP}"/keevo-backup.timer /etc/systemd/system/
+rm -rf "${UNITS_TMP}"
 
 # Recharger systemd
 sudo systemctl daemon-reload
@@ -155,18 +173,35 @@ journalctl -u keevo-backup.service --since today
 # Attendu : [BACKUP][INFO] Backup complete: keevo_backup_YYYY-MM-DDTHH-MM-SSZ.dump
 ```
 
+Tout échec (`backup-db.sh` sort en code non nul) déclenche `OnFailure=` → `keevo-backup-alert@…`
+(journald + webhook). Tester l'alerte : `DEPLOYMENT_CHECKLIST.md` §11.3.
+
 ### 3.4 Alternative : cron (non recommandé)
 
-Si systemd n'est pas disponible, utiliser cron :
+Si systemd n'est pas disponible, utiliser la crontab **root** (comme l'unité systemd, qui tourne en
+root : écriture dans `/var/backups/keevo` et `/var/log`, accès Docker). Chemins absolus obligatoires
+(`~` y désigne `/root`) ; remplacer `<deploy-user>` :
 
 ```cron
-0 2 * * * /home/ubuntu/keevo/scripts/backup-db.sh >> /var/log/keevo-backup.log 2>&1
+0 2 * * * set -a; . /home/<deploy-user>/keevo/.env.backup; set +a; /home/<deploy-user>/keevo/scripts/backup-db.sh >> /var/log/keevo-backup.log 2>&1
 ```
 
 Installer avec :
 ```bash
-(crontab -l 2>/dev/null; echo "0 2 * * * /home/ubuntu/keevo/scripts/backup-db.sh >> /var/log/keevo-backup.log 2>&1") | crontab -
+DEPLOY_HOME="${HOME}"   # exécuté par l'utilisateur de déploiement
+(sudo crontab -l 2>/dev/null; echo "0 2 * * * set -a; . ${DEPLOY_HOME}/keevo/.env.backup; set +a; ${DEPLOY_HOME}/keevo/scripts/backup-db.sh >> /var/log/keevo-backup.log 2>&1") | sudo crontab -
 ```
+
+> - Sans systemd, pas d'alerte `OnFailure=` : surveiller `/var/log/keevo-backup.log` et configurer le
+>   heartbeat `BACKUP_HEARTBEAT_URL` (seul signal d'échec dans ce mode).
+> - Crontab utilisateur (non root) : passer `BACKUP_LOCAL_DIR=${HOME}/keevo/backups` et
+>   `BACKUP_LOCK_FILE=${HOME}/keevo/backup.lock`, et rediriger vers `${HOME}/keevo/backup.log` ;
+>   l'utilisateur doit être dans le groupe `docker`.
+> - `. .env.backup` lit le fichier **comme du shell** : guillemets retirés, `$` développé, espaces
+>   séparateurs, `#` en fin de ligne = commentaire. `EnvironmentFile=` (systemd) applique ses propres
+>   règles (pas de développement de `$`, un `# …` en fin de ligne fait partie de la valeur). Garder
+>   des valeurs simples — sans espace, `$`, guillemet ni commentaire en fin de ligne — pour qu'elles
+>   soient lues pareil dans les deux modes.
 
 ---
 
@@ -251,6 +286,10 @@ PGPASSWORD="${POSTGRES_PASSWORD}" pg_restore \
 > ```
 > Vérifier ensuite : `grep -c '^pg_restore: \(error\|warning\)' restore.log` doit renvoyer `0` (ne pas grepper `error` seul : les tables `sync_error_log` matchent).
 
+> **Droits après restauration :** le dump est pris en `--no-owner --no-acl`, la restauration ne
+> recrée ni propriétaires ni `GRANT`. Restaurer avec le rôle applicatif (`POSTGRES_USER` du backend),
+> sinon appliquer l'étape de re-grant de `DEPLOYMENT_CHECKLIST.md` §13.
+
 ### 5.3 Vérifier les schémas restaurés
 
 ```bash
@@ -270,9 +309,9 @@ Mettre à jour la configuration du backend staging pour pointer vers `keevo_rest
 POSTGRES_DB=keevo_restore
 ```
 
-Puis redémarrer :
+Puis recréer le backend (un `restart` ne relit pas le `.env`), via le wrapper écrit par le déploiement :
 ```bash
-docker compose -f docker-compose.staging.yml restart backend
+cd ~/keevo-staging && ./compose.sh up -d backend
 ```
 
 ---
@@ -284,8 +323,8 @@ docker compose -f docker-compose.staging.yml restart backend
 Après restauration sur staging, vérifier que l'application démarre correctement :
 
 ```bash
-# Vérifier le health endpoint (staging écoute sur port 8443 — voir STAGING.md)
-curl -sk https://${STAGING_APP_DOMAIN}:8443/actuator/health | python3 -m json.tool
+# Vérifier le health endpoint (staging servi par le Traefik prod — voir STAGING.md)
+curl -s https://staging.api.keevo.cm/actuator/health | python3 -m json.tool
 
 # Attendu :
 # {
@@ -304,7 +343,7 @@ curl -sk https://${STAGING_APP_DOMAIN}:8443/actuator/health | python3 -m json.to
 | **Résultat `/actuator/health`** | `HTTP 200 {"status":"UP"}` après 12 s, backend démarré sur la DB restaurée |
 | **Statut** | ✅ Validé — détail complet, durées et écarts de procédure en §10 |
 
-> **Note :** Le 2026-06-19 un premier test "DB-only" avait restauré le dump sans démarrer le backend. Le test du 2026-10-11 couvre le chemin complet restauration → backend booté → `/actuator/health UP` → login d'un utilisateur créé avant la sauvegarde. L'environnement staging dédié est disponible depuis la Story 10.5 — voir `STAGING.md` pour le smoke test sur staging réel (`https://${STAGING_APP_DOMAIN}:8443/actuator/health`).
+> **Note :** Le 2026-06-19 un premier test "DB-only" avait restauré le dump sans démarrer le backend. Le test du 2026-10-11 couvre le chemin complet restauration → backend booté → `/actuator/health UP` → login d'un utilisateur créé avant la sauvegarde. L'environnement staging dédié est disponible depuis la Story 10.5 — voir `STAGING.md` pour le smoke test sur staging réel (`https://staging.api.keevo.cm/actuator/health`).
 
 ---
 
@@ -346,6 +385,8 @@ docker exec -it keevo_postgres pg_restore \
 # ÉTAPE 6 : Vérifier
 docker exec -it keevo_postgres psql -U keevo -d keevo_prod -c \
   "SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'kv_%';"
+# + droits : restauré avec le rôle applicatif (keevo) → objets possédés par lui, rien à faire ;
+#   restauré avec un autre rôle → étape de re-grant, DEPLOYMENT_CHECKLIST.md §13
 
 # ÉTAPE 7 : Redémarrer le backend
 docker start keevo_backend
@@ -391,11 +432,22 @@ Appliquer via AWS Console ou CLI :
       ],
       "Expiration": {
         "Days": 90
+      },
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 7
+      },
+      "AbortIncompleteMultipartUpload": {
+        "DaysAfterInitiation": 7
       }
     }
   ]
 }
 ```
+
+> **Versioning + Object Lock (Story 10.7) :** le bucket est versionné avec un verrou GOVERNANCE de
+> 30 jours (`DEPLOYMENT_CHECKLIST.md` §12.2). L'expiration à 90 jours pose alors un *delete marker* ;
+> `NoncurrentVersionExpiration` supprime la version masquée 7 jours plus tard (verrou de 30 jours
+> expiré depuis longtemps), et `AbortIncompleteMultipartUpload` nettoie les envois interrompus.
 
 ### 8.2 Appliquer via AWS CLI
 
@@ -411,7 +463,9 @@ aws s3api put-bucket-lifecycle-configuration \
         "Transitions": [
           { "Days": 30, "StorageClass": "GLACIER" }
         ],
-        "Expiration": { "Days": 90 }
+        "Expiration": { "Days": 90 },
+        "NoncurrentVersionExpiration": { "NoncurrentDays": 7 },
+        "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
       }
     ]
   }'

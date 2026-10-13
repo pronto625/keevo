@@ -8,9 +8,11 @@ on:
   workflow_dispatch:
 
 # ─── Concurrency ──────────────────────────────────────────────────────────────
+# Story 10-7: the running deploy is never cancelled (it stops/starts containers on the
+# server); only the most recent pending run is kept (GitHub replaces an older pending run).
 concurrency:
   group: deploy-staging-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
@@ -20,6 +22,9 @@ jobs:
   # ─── Job 1 : Build & push Docker image to GHCR (staging tag) ───────────────
   build-and-push:
     name: Build & Push Docker image (staging)
+    # Story 10-7: a manual run (workflow_dispatch) from any branch other than `staging`
+    # runs no job at all — staging only ever receives the `staging` branch.
+    if: github.ref == 'refs/heads/staging'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -70,113 +75,191 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+
   # ─── Job 2 : Deploy staging stack on server ─────────────────────────────────
   deploy:
     name: Deploy to staging server
+    if: github.ref == 'refs/heads/staging'
     runs-on: ubuntu-latest
     needs: build-and-push
     environment: staging
 
     steps:
+      # Story 10-7: staging has its OWN secrets (never the prod JWT keys, DB password or
+      # Firebase account — a staging compromise must not be able to forge prod tokens).
+      # Fail fast, before touching the server, when a required one is missing.
+      - name: Check staging secrets
+        env:
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          STAGING_JWT_PRIVATE_KEY_PEM: ${{ secrets.STAGING_JWT_PRIVATE_KEY_PEM }}
+          STAGING_JWT_PUBLIC_KEY_PEM: ${{ secrets.STAGING_JWT_PUBLIC_KEY_PEM }}
+          STAGING_DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
+          STAGING_FIREBASE_CREDENTIALS: ${{ secrets.STAGING_FIREBASE_CREDENTIALS }}
+          # Prod values, only to refuse a staging copy of them. They are visible here because
+          # they are REPOSITORY-level secrets (an environment-scoped prod secret would read as
+          # empty, and the corresponding check is then skipped with a warning).
+          PROD_JWT_PRIVATE_KEY_PEM: ${{ secrets.JWT_PRIVATE_KEY_PEM }}
+          PROD_DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          missing=0
+          for name in STAGING_SSH_HOST STAGING_SSH_USER STAGING_SSH_PRIVATE_KEY GHCR_PAT \
+                      STAGING_JWT_PRIVATE_KEY_PEM STAGING_JWT_PUBLIC_KEY_PEM STAGING_DB_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing secret ${name} (environment 'staging') — see keevo/backend/docs/DEPLOYMENT_CHECKLIST.md § Staging bring-up"
+              missing=1
+            fi
+          done
+          # Public-key fingerprint of a private key (format-independent comparison).
+          fp_priv() { printf '%s\n' "$1" | openssl pkey -pubout 2>/dev/null | sha256sum | cut -d' ' -f1; }
+          fp_pub()  { printf '%s\n' "$1" | openssl pkey -pubin -pubout 2>/dev/null | sha256sum | cut -d' ' -f1; }
+          if [ -n "${STAGING_JWT_PRIVATE_KEY_PEM:-}" ] && [ -n "${STAGING_JWT_PUBLIC_KEY_PEM:-}" ]; then
+            staging_fp="$(fp_priv "${STAGING_JWT_PRIVATE_KEY_PEM}")"
+            if ! printf '%s\n' "${STAGING_JWT_PRIVATE_KEY_PEM}" | openssl pkey -noout 2>/dev/null; then
+              echo "::error::STAGING_JWT_PRIVATE_KEY_PEM is not a readable PEM private key"
+              missing=1
+            elif [ "${staging_fp}" != "$(fp_pub "${STAGING_JWT_PUBLIC_KEY_PEM}")" ]; then
+              echo "::error::STAGING_JWT_PUBLIC_KEY_PEM does not match STAGING_JWT_PRIVATE_KEY_PEM"
+              missing=1
+            fi
+            if [ -z "${PROD_JWT_PRIVATE_KEY_PEM:-}" ]; then
+              echo "::warning::prod JWT_PRIVATE_KEY_PEM not visible from this job — cannot check that staging uses a different key"
+            elif [ "${staging_fp}" = "$(fp_priv "${PROD_JWT_PRIVATE_KEY_PEM}")" ]; then
+              echo "::error::STAGING_JWT_PRIVATE_KEY_PEM is the prod JWT key — generate a dedicated staging key pair"
+              missing=1
+            fi
+          fi
+          if [ -z "${PROD_DB_PASSWORD:-}" ]; then
+            echo "::warning::prod DB_PASSWORD secret not visible from this job — cannot check that STAGING_DB_PASSWORD differs from prod"
+          elif [ "${STAGING_DB_PASSWORD:-}" = "${PROD_DB_PASSWORD}" ]; then
+            echo "::error::STAGING_DB_PASSWORD equals the prod DB password — use a dedicated value"
+            missing=1
+          fi
+          if [ -z "${STAGING_FIREBASE_CREDENTIALS:-}" ]; then
+            echo "::warning::STAGING_FIREBASE_CREDENTIALS not set — staging runs without push notifications (no Firebase mount)"
+          fi
+          exit "${missing}"
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         env:
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
           GH_ACTOR: ${{ github.actor }}
           IMAGE_REF: ${{ needs.build-and-push.outputs.image_ref }}
-          STAGING_APP_DOMAIN: ${{ secrets.STAGING_APP_DOMAIN }}
           JWT_PRIVATE_KEY_PEM: ${{ secrets.STAGING_JWT_PRIVATE_KEY_PEM }}
           JWT_PUBLIC_KEY_PEM: ${{ secrets.STAGING_JWT_PUBLIC_KEY_PEM }}
-          ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
+          STAGING_DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
+          STAGING_FIREBASE_CREDENTIALS: ${{ secrets.STAGING_FIREBASE_CREDENTIALS }}
         with:
           host: ${{ secrets.STAGING_SSH_HOST }}
           username: ${{ secrets.STAGING_SSH_USER }}
           key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
           port: ${{ secrets.STAGING_SSH_PORT || '22' }}
-          envs: GHCR_PAT,GH_ACTOR,IMAGE_REF,STAGING_APP_DOMAIN,JWT_PRIVATE_KEY_PEM,JWT_PUBLIC_KEY_PEM,ACME_EMAIL
+          envs: GHCR_PAT,GH_ACTOR,IMAGE_REF,JWT_PRIVATE_KEY_PEM,JWT_PUBLIC_KEY_PEM,STAGING_DB_PASSWORD,STAGING_FIREBASE_CREDENTIALS
 
           # ── Script that runs on the remote server ──────────────────────────────
-          # Prerequisites on server:
+          # Prerequisites on server (keevo/backend/docs/DEPLOYMENT_CHECKLIST.md § Staging bring-up):
           #   • Docker + Docker Compose plugin installed
           #   • ~/keevo-staging/.env  (copy from backend/.env.example, fill staging values;
-          #     POSTGRES_DB=keevo_staging, POSTGRES_HOST overridden by compose to "postgres")
-          #   • ~/keevo-staging/firebase-credentials.json  (Firebase service-account key)
-          #   • Ports 8080/8443 open in firewall (ufw allow 8080/tcp && ufw allow 8443/tcp)
+          #     POSTGRES_DB=keevo_staging; POSTGRES_PASSWORD comes from STAGING_DB_PASSWORD)
+          #   • deploy user in group keevo-jwt (GID 2001) — same host prerequisite as prod
+          #   • prod Traefik attached to the external network `keevo_edge` with the staging
+          #     router (keevo/ops/traefik/staging-router.yml). Staging runs NO Traefik of its own
+          #     and publishes NO port: it is reachable only through the prod Traefik.
           script: |
             set -euo pipefail
             DEPLOY_DIR="${HOME}/keevo-staging"
+            # Secrets written below (keys, Firebase JSON, .env.secrets) are private from creation.
+            umask 077
 
             mkdir -p "${DEPLOY_DIR}/keys"
             cd "${DEPLOY_DIR}"
 
+            [ -f .env ] || { echo "missing .env"; exit 1; }
+            for var in POSTGRES_DB POSTGRES_USER; do
+              grep -qE "^${var}=[^\"'[:space:]]" .env || {
+                echo "❌ .env must define a non-empty ${var} (staging database, never the prod one)" >&2; exit 1
+              }
+            done
+
+            # Host prerequisites BEFORE any chgrp (same as prod, deploy-backend.yml): the deploy
+            # user is in group 2001 and GID 2001 is keevo-jwt (not a colliding account).
+            case " $(id -G) " in
+              *" 2001 "*) ;;
+              *) echo "❌ deploy user is not in group 2001 (keevo-jwt) — run the host prerequisite (see deploy-backend.yml)" >&2; exit 1 ;;
+            esac
+            test "$(getent group 2001 | cut -d: -f1)" = "keevo-jwt" || {
+              echo "❌ GID 2001 is not 'keevo-jwt' on this host (collision?) — got: $(getent group 2001)" >&2; exit 1
+            }
+
             echo "→ Writing RSA key pair for JWT (staging)…"
             printf '%s\n' "${JWT_PRIVATE_KEY_PEM}" > keys/private_key.pem
             printf '%s\n' "${JWT_PUBLIC_KEY_PEM}"  > keys/public_key.pem
-            # NOTE: staging chmod 600 is NOT runtime-verified — the staging bring-up (TLS +
-            # non-root container key read) is deferred (deferred-work.md [10-5]). The prod
-            # workflow (deploy-backend.yml) uses the verified chgrp+640 strategy; staging will
-            # adopt the same when its bring-up is completed. Do NOT add a chown here without
-            # the matching host prerequisite + pre-flight assertions (see deploy-backend.yml).
-            # Private signing key must not be world-readable (other users on the host).
-            chmod 600 keys/private_key.pem
+
+            # Same strategy as prod: the non-root container (UID/GID 2001) reads the private key
+            # through GROUP 2001 (keevo-jwt), mode 640, never world-readable.
+            chgrp 2001 keys
+            chmod 750 keys
+            chgrp 2001 keys/private_key.pem keys/public_key.pem
+            chmod 640 keys/private_key.pem
             chmod 644 keys/public_key.pem
+
+            test "$(stat -c %a keys/private_key.pem)" = "640" || {
+              echo "❌ private_key.pem must be mode 640 (got $(stat -c %a keys/private_key.pem))" >&2; exit 1
+            }
+            docker run --rm -v "${DEPLOY_DIR}/keys:/keys:ro" --user 2001:2001 \
+              alpine:3.21.3@sha256:a8560b36e8b8210634f77d9f7f9efd7ffa463e380b75e2e74aff4511df3ef88c \
+              sh -c 'test -r /keys/private_key.pem' || {
+                echo "❌ container UID 2001 cannot read keys/private_key.pem — check group/dir perms" >&2; exit 1
+              }
+            echo "✓ staging private_key.pem mode 640, group=keevo-jwt(2001), container-readable OK"
+
+            # ── DB password (dedicated staging secret) ─────────────────────────
+            # Persisted in a mode-600 env file read by compose, so that manual operations
+            # (./compose.sh restart, up…) keep using it without the CI environment.
+            case "${STAGING_DB_PASSWORD}" in
+              *"'"*|*$'\n'*) echo "❌ STAGING_DB_PASSWORD must not contain a single quote or a newline" >&2; exit 1 ;;
+            esac
+            printf "POSTGRES_PASSWORD='%s'\n" "${STAGING_DB_PASSWORD}" > .env.secrets
+            chmod 600 .env.secrets
+
+            # ── Firebase (dedicated staging service account, optional) ──────────
+            # Mounted ONLY when the staging secret is set. A leftover file (e.g. a copy of the
+            # prod account) is removed so staging can never reuse the prod Firebase identity.
+            COMPOSE_FILES="-f docker-compose.staging.yml"
+            if [ -n "${STAGING_FIREBASE_CREDENTIALS:-}" ]; then
+              printf '%s\n' "${STAGING_FIREBASE_CREDENTIALS}" > firebase-credentials.json
+              chgrp 2001 firebase-credentials.json
+              chmod 640 firebase-credentials.json
+              cat > docker-compose.firebase.yml << FIREBASE
+            services:
+              backend:
+                environment:
+                  KEEVO_FCM_ENABLED: "true"
+                  GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase
+                volumes:
+                  - ./firebase-credentials.json:/run/secrets/firebase:ro
+            FIREBASE
+              chmod 644 docker-compose.firebase.yml
+              COMPOSE_FILES="${COMPOSE_FILES} -f docker-compose.firebase.yml"
+              echo "✓ firebase-credentials.json (staging) mode 640, mounted"
+            else
+              rm -f firebase-credentials.json docker-compose.firebase.yml
+              echo "⚠ STAGING_FIREBASE_CREDENTIALS not set — FCM disabled, no Firebase mount"
+            fi
 
             echo "→ Authenticating with GHCR…"
             echo "${GHCR_PAT}" | docker login ghcr.io -u "${GH_ACTOR}" --password-stdin
 
-            echo "→ Writing traefik-staging/dynamic.yml…"
-            mkdir -p traefik
-            cat > traefik/dynamic.yml << DYNAMIC
-            http:
-              routers:
-                staging-backend:
-                  rule: "Host(\`${STAGING_APP_DOMAIN}\`)"
-                  entryPoints:
-                    - websecure
-                  tls:
-                    certResolver: letsencrypt
-                  service: staging-backend
-
-              services:
-                staging-backend:
-                  loadBalancer:
-                    servers:
-                      - url: "http://keevo_staging_backend:4500"
-                    healthCheck:
-                      path: /actuator/health
-                      interval: 10s
-                      timeout: 5s
-            DYNAMIC
+            # Shared edge network with the prod Traefik (attaching the prod Traefik to it is a
+            # server step — see the checklist §15).
+            docker network inspect keevo_edge > /dev/null 2>&1 || docker network create keevo_edge
 
             echo "→ Writing docker-compose.staging.yml…"
             cat > docker-compose.staging.yml << COMPOSE
             services:
-
-              traefik:
-                image: traefik:v3.3
-                container_name: keevo_staging_traefik
-                restart: unless-stopped
-                mem_limit: 128m
-                mem_reservation: 64m
-                command:
-                  - --providers.file.filename=/etc/traefik/dynamic.yml
-                  - --providers.file.watch=true
-                  - --entrypoints.web.address=:8080
-                  - --entrypoints.websecure.address=:8443
-                  - --entrypoints.web.http.redirections.entryPoint.to=websecure
-                  - --entrypoints.web.http.redirections.entryPoint.scheme=https
-                  - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
-                  - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
-                  - --certificatesresolvers.letsencrypt.acme.email=\${ACME_EMAIL}
-                  - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
-                ports:
-                  - "8080:8080"
-                  - "8443:8443"
-                volumes:
-                  - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
-                  - traefik_staging_letsencrypt:/letsencrypt
-                networks:
-                  - keevo_staging_net
 
               postgres:
                 image: postgres:16-alpine
@@ -196,10 +279,10 @@ jobs:
                   - max_connections=30
                   - -c
                   - effective_cache_size=256MB
+                env_file: .env.secrets
                 environment:
                   POSTGRES_DB:       \${POSTGRES_DB}
                   POSTGRES_USER:     \${POSTGRES_USER}
-                  POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
                 volumes:
                   - postgres_staging_data:/var/lib/postgresql/data
                 healthcheck:
@@ -219,41 +302,93 @@ jobs:
                 depends_on:
                   postgres:
                     condition: service_healthy
-                env_file: .env
+                # .env.secrets last: the dedicated staging DB password wins over .env
+                env_file:
+                  - .env
+                  - .env.secrets
                 environment:
                   POSTGRES_HOST: postgres
                   POSTGRES_PORT: "5432"
                   SPRING_PROFILES_ACTIVE: staging
-                  GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase
+                  KEEVO_FCM_ENABLED: "false"
                   KEEVO_JWT_PRIVATE_KEY_PATH: file:/run/secrets/jwt/private_key.pem
                   KEEVO_JWT_PUBLIC_KEY_PATH: file:/run/secrets/jwt/public_key.pem
                 volumes:
-                  - ./firebase-credentials.json:/run/secrets/firebase:ro
                   - ./keys:/run/secrets/jwt:ro
+                # No published port: reachable only via the prod Traefik on keevo_edge.
                 networks:
                   - keevo_staging_net
+                  - keevo_edge
 
             volumes:
               postgres_staging_data:
-              traefik_staging_letsencrypt:
 
             networks:
               keevo_staging_net:
                 driver: bridge
+              keevo_edge:
+                external: true
             COMPOSE
+            chmod 644 docker-compose.staging.yml
+
+            # Wrapper with the full compose command (both files when Firebase is on) for
+            # manual operations: ./compose.sh ps | logs backend | restart backend | …
+            cat > compose.sh << WRAPPER
+            #!/usr/bin/env bash
+            # Generated by deploy-staging.yml — do not edit (rewritten on every deploy).
+            set -euo pipefail
+            cd "\$(dirname "\$0")"
+            export BACKEND_IMAGE='${IMAGE_REF}'
+            exec docker compose ${COMPOSE_FILES} "\$@"
+            WRAPPER
+            chmod 700 compose.sh
 
             echo "→ Stopping old staging stack…"
-            BACKEND_IMAGE="${IMAGE_REF}" docker compose -f docker-compose.staging.yml down --remove-orphans 2>/dev/null || true
+            ./compose.sh down --remove-orphans 2>/dev/null || true
+            # keevo_staging_traefik: legacy container from before 10-7 (own Traefik on :8080/:8443)
             docker rm -f keevo_staging_backend keevo_staging_traefik keevo_staging_postgres 2>/dev/null || true
 
             echo "→ Pulling new backend image…"
-            BACKEND_IMAGE="${IMAGE_REF}" docker compose -f docker-compose.staging.yml pull backend traefik
+            ./compose.sh pull backend
 
             echo "→ Starting / updating staging stack…"
-            BACKEND_IMAGE="${IMAGE_REF}" docker compose -f docker-compose.staging.yml up -d --remove-orphans
+            ./compose.sh up -d --remove-orphans
+
+            echo "→ Waiting for the staging backend to be healthy (max 120 s)…"
+            healthy=false
+            for _ in $(seq 1 24); do
+              if docker exec keevo_staging_backend wget -qO- http://localhost:4500/actuator/health 2>/dev/null \
+                   | grep -q '"status":"UP"'; then
+                healthy=true; break
+              fi
+              sleep 5
+            done
+            if ! ${healthy}; then
+              echo "❌ keevo_staging_backend not healthy after 120 s — last logs:" >&2
+              docker logs --tail 80 keevo_staging_backend >&2 || true
+              exit 1
+            fi
+            echo "✓ keevo_staging_backend /actuator/health UP"
+
+            # Informational only: is the prod Traefik on keevo_edge (staging reachable over HTTPS)?
+            if docker network inspect keevo_edge --format '{{range .Containers}}{{.Name}} {{end}}' | grep -qw keevo_traefik; then
+              echo "✓ prod Traefik (keevo_traefik) attached to keevo_edge"
+            else
+              echo "⚠ prod Traefik not attached to keevo_edge — staging is not reachable over HTTPS (checklist §15)"
+            fi
 
             echo "→ Pruning dangling images…"
             docker image prune -f
 
             echo "✓ Staging deploy complete."
-            BACKEND_IMAGE="${IMAGE_REF}" docker compose -f docker-compose.staging.yml ps
+            ./compose.sh ps
+
+# ─── Required GitHub Secrets (environment `staging`) ──────────────────────────
+# STAGING_SSH_HOST, STAGING_SSH_USER, STAGING_SSH_PRIVATE_KEY, STAGING_SSH_PORT (optional)
+# GHCR_PAT                      — read:packages (may be shared with prod)
+# STAGING_JWT_PRIVATE_KEY_PEM   — dedicated staging RSA private key (never the prod one)
+# STAGING_JWT_PUBLIC_KEY_PEM    — matching public key
+# STAGING_DB_PASSWORD           — staging PostgreSQL password (never the prod one)
+# STAGING_FIREBASE_CREDENTIALS  — optional, staging Firebase service-account JSON (content)
+# Read only for the "differs from prod" checks (repository-level secrets):
+# JWT_PRIVATE_KEY_PEM, DB_PASSWORD (optional — prod DB password; check skipped with a warning when unset)

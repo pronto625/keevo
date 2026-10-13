@@ -1,6 +1,10 @@
 # Keevo — Environnement de Staging
 
 > Documentation opérationnelle pour l'environnement de staging iso-prod.
+>
+> Story 10.7 : le staging n'a plus son propre Traefik ni de port publié — il est servi en HTTPS par
+> le **Traefik prod** via le réseau externe `keevo_edge`. Procédures serveur (mise en route, routeur
+> Traefik, secrets) : [`DEPLOYMENT_CHECKLIST.md`](DEPLOYMENT_CHECKLIST.md) §14 et §15.
 
 ---
 
@@ -23,7 +27,8 @@ L'environnement **staging** reproduit la production sur le même VPS, avec une i
 
 - **DB dédiée** (`keevo_staging`) — jamais le volume prod
 - **Conteneurs préfixés** `keevo_staging_*` — pas de collision avec `keevo_*` (prod)
-- **Traefik sur ports 8080/8443** — pas de conflit avec Traefik prod (80/443)
+- **Aucun Traefik ni port publié** — TLS terminé par le Traefik prod (80/443), routeur `staging`
+- **Secrets dédiés** (JWT, mot de passe DB, Firebase) — jamais ceux de la prod
 - **Profile Spring `staging`** — clone de `prod` sans `require-ssl`
 
 **Rôle du staging :**
@@ -45,17 +50,18 @@ L'environnement **staging** reproduit la production sur le même VPS, avec une i
 │  ┌──────────────────────────────┐  ┌──────────────────────────────┐ │
 │  │ PRODUCTION (~/keevo/)        │  │ STAGING (~/keevo-staging/)   │ │
 │  │                              │  │                              │ │
-│  │ keevo_traefik  (80/443)     │  │ keevo_staging_traefik (8080/ │ │
+│  │ keevo_traefik  (80/443) ─────┼──┼─► staging.api.keevo.cm        │ │
 │  │ keevo_postgres (internal)    │  │ keevo_staging_postgres       │ │
 │  │ keevo_backend  (:4500)      │  │ keevo_staging_backend (:4500)│ │
 │  │                              │  │                              │ │
 │  │ volume: postgres_data        │  │ volume: postgres_staging_data│ │
-│  │ network: keevo_net           │  │ network: keevo_staging_net   │ │
+│  │ network: keevo_net (+edge)   │  │ net: keevo_staging_net+edge  │ │
 │  │ profile: prod                │  │ profile: staging             │ │
 │  │ tag: latest                  │  │ tag: staging-latest          │ │
 │  └──────────────────────────────┘  └──────────────────────────────┘ │
 │                                                                     │
-│  Firewall: ports 80, 443, 8080, 8443 ouverts                      │
+│  Réseau externe keevo_edge : Traefik prod + keevo_staging_backend   │
+│  Firewall: ports 80, 443 uniquement (8080/8443 fermés)              │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -64,12 +70,12 @@ L'environnement **staging** reproduit la production sur le même VPS, avec une i
 | Ressource | Production | Staging |
 |---|---|---|
 | Répertoire | `~/keevo/` | `~/keevo-staging/` |
-| Traefik | `keevo_traefik` | `keevo_staging_traefik` |
+| Traefik | `keevo_traefik` | *(aucun — Traefik prod, routeur `staging`)* |
 | PostgreSQL | `keevo_postgres` | `keevo_staging_postgres` |
 | Backend | `keevo_backend` | `keevo_staging_backend` |
-| Réseau | `keevo_net` | `keevo_staging_net` |
+| Réseau | `keevo_net` | `keevo_staging_net` + `keevo_edge` (externe) |
 | Volume DB | `postgres_data` | `postgres_staging_data` |
-| Ports Traefik | 80 / 443 | 8080 / 8443 |
+| Ports publiés | 80 / 443 (Traefik) | aucun |
 | Tag image | `latest` | `staging-latest` |
 | Profile Spring | `prod` | `staging` |
 | Domaine | `api.keevo.cm` | `staging.api.keevo.cm` |
@@ -88,13 +94,16 @@ Créer un **environnement GitHub** nommé `staging` dans **Settings → Environm
 | `STAGING_SSH_USER` | Utilisateur SSH | `ubuntu` |
 | `STAGING_SSH_PRIVATE_KEY` | Clé SSH privée (ed25519) | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
 | `STAGING_SSH_PORT` | Port SSH (optionnel, défaut 22) | `22` |
-| `STAGING_APP_DOMAIN` | FQDN du domaine staging | `staging.api.keevo.cm` |
-| `STAGING_JWT_PRIVATE_KEY_PEM` | Clé RSA privée pour JWT (peut être différente de prod) | `-----BEGIN RSA PRIVATE KEY-----...` |
-| `STAGING_JWT_PUBLIC_KEY_PEM` | Clé RSA publique pour JWT | `-----BEGIN PUBLIC KEY-----...` |
-| `ACME_EMAIL` | Email Let's Encrypt (peut être partagé avec prod) | `admin@keevo.cm` |
+| `STAGING_JWT_PRIVATE_KEY_PEM` | Clé RSA privée JWT **dédiée** (jamais celle de prod — refusée par le workflow) | contenu PEM |
+| `STAGING_JWT_PUBLIC_KEY_PEM` | Clé RSA publique correspondante | contenu PEM |
+| `STAGING_DB_PASSWORD` | Mot de passe PostgreSQL staging (remplace celui du `.env`) | `openssl rand -hex 20` |
+| `STAGING_FIREBASE_CREDENTIALS` | Optionnel — JSON du compte de service Firebase **staging** (non défini → pas de montage, FCM désactivé) | contenu JSON |
 | `GHCR_PAT` | Personal Access Token GitHub avec scope `read:packages` (peut être partagé avec prod) | `ghp_XXXX...` |
 
-> **Note :** Les clés JWT staging peuvent être identiques à celles de prod pour simplifier, ou différentes pour isoler les tokens entre environnements.
+> **Note (Story 10.7) :** les clés JWT, le mot de passe DB et le compte Firebase du staging sont
+> **dédiés** : une compromission du staging ne doit jamais permettre de forger des tokens prod.
+> Le workflow échoue avant tout accès au serveur si un secret requis manque. `STAGING_APP_DOMAIN`
+> et `ACME_EMAIL` ne sont plus utilisés (le TLS est géré par le Traefik prod).
 
 ### Protection rules (optionnel)
 
@@ -113,7 +122,10 @@ Créer `~/keevo-staging/.env` en copiant depuis `backend/.env.example` et en ada
 # ~/keevo-staging/.env
 POSTGRES_DB=keevo_staging          # ⚠️ IMPORTANT : jamais keevo_prod
 POSTGRES_USER=keevo
-POSTGRES_PASSWORD=<staging_password>
+# POSTGRES_PASSWORD : fourni par le secret STAGING_DB_PASSWORD (prioritaire sur ce fichier)
+
+# CORS (Story 11.4) : origine du dashboard staging
+DASHBOARD_ORIGIN=https://<origine_dashboard_staging>
 
 # ⚠️ REQUIS — ProdSecretsValidator s'exécute aussi sous le profil `staging`.
 # Sans ADMIN_PASSWORD fort (≠ Admin@1234!), le backend refuse de démarrer.
@@ -138,18 +150,17 @@ LOG_LEVEL=WARN
 ```
 
 > **⚠️ Sécurité :** Le fichier `.env` contient des secrets. Mode `600` recommandé. Ne jamais commiter.
+> Sans `.env`, le déploiement s'arrête (`missing .env`).
 
 ### 4.2 Fichier Firebase
 
-Copier `firebase-credentials.json` dans `~/keevo-staging/` :
-
-```bash
-scp firebase-credentials.json ubuntu@<VPS_HOST>:~/keevo-staging/firebase-credentials.json
-```
+Écrit par le workflow depuis le secret `STAGING_FIREBASE_CREDENTIALS` (groupe 2001, mode `640`) et
+monté uniquement dans ce cas. **Ne pas** copier le fichier prod : sans secret, le workflow supprime
+tout `firebase-credentials.json` résiduel.
 
 ### 4.3 Clés JWT
 
-Les clés JWT sont écrites automatiquement par le workflow de déploiement depuis les secrets GitHub dans `~/keevo-staging/keys/`. Pas de configuration manuelle nécessaire.
+Les clés JWT sont écrites automatiquement par le workflow de déploiement depuis les secrets GitHub dans `~/keevo-staging/keys/`, avec la même stratégie que la prod (`chgrp 2001` + `640`, assertions avant démarrage). Prérequis hôte : l'utilisateur de déploiement est membre du groupe `keevo-jwt` (GID 2001), voir `DEPLOYMENT_CHECKLIST.md` §8.1.
 
 ---
 
@@ -162,10 +173,9 @@ Les clés JWT sont écrites automatiquement par le workflow de déploiement depu
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER
 
-# Ouvrir les ports staging dans le firewall
-sudo ufw allow 8080/tcp
-sudo ufw allow 8443/tcp
-sudo ufw reload
+# Aucun port staging à ouvrir (servi par le Traefik prod via keevo_edge).
+# Si un ancien staging avait ouvert 8080/8443 : les refermer
+sudo ufw delete allow 8080/tcp; sudo ufw delete allow 8443/tcp
 
 # Créer le répertoire staging
 mkdir -p ~/keevo-staging
@@ -196,9 +206,13 @@ cd ~/keevo-staging
 cp /path/to/repo/keevo/backend/.env.example .env
 nano .env   # Adapter les valeurs (POSTGRES_DB=keevo_staging !)
 
-# Copier les credentials Firebase
-cp ~/keevo/firebase-credentials.json .
+# Firebase : rien à copier (secret STAGING_FIREBASE_CREDENTIALS)
 ```
+
+### 5.4 bis Routage TLS via le Traefik prod
+
+Une seule fois, au premier bring-up réel (touche la prod) : `DEPLOYMENT_CHECKLIST.md` §15
+(réseau `keevo_edge`, routeur `keevo/ops/traefik/staging-router.yml`, DNS, vérification, rollback).
 
 ### 5.5 Branche Git
 
@@ -215,12 +229,12 @@ Le premier push sur `staging` déclenche automatiquement le workflow `deploy-sta
 
 ```bash
 # Vérifier que les conteneurs tournent
-ssh ubuntu@<VPS_HOST> "cd ~/keevo-staging && docker compose -f docker-compose.staging.yml ps"
+ssh ubuntu@<VPS_HOST> "cd ~/keevo-staging && ./compose.sh ps"
 
-# Attendu : 3 conteneurs Up (traefik, postgres, backend)
+# Attendu : 2 conteneurs Up (postgres, backend)
 
-# Vérifier le health endpoint
-curl -k https://staging.api.keevo.cm:8443/actuator/health
+# Vérifier le health endpoint (certificat valide, pas de -k)
+curl https://staging.api.keevo.cm/actuator/health
 # Attendu : {"status":"UP"}
 ```
 
@@ -233,7 +247,21 @@ curl -k https://staging.api.keevo.cm:8443/actuator/health
 3. Sélectionner la branche `staging`
 4. Cliquer sur **Run workflow**
 
-Le déploiement s'exécute avec les mêmes étapes qu'un push automatique.
+Le déploiement s'exécute avec les mêmes étapes qu'un push automatique. Lancé depuis une autre
+branche que `staging`, le workflow n'exécute **aucun** job. Le déploiement en cours n'est jamais
+annulé ; seul le lancement en attente le plus récent est conservé (un plus ancien en attente est
+remplacé). Le job échoue si `keevo_staging_backend` n'est pas sain sous 120 s.
+
+**Opérations manuelles sur le serveur** : toujours via `~/keevo-staging/compose.sh`, écrit à chaque
+déploiement (commande compose complète, avec le fichier Firebase s'il est actif ; mot de passe DB
+lu dans `.env.secrets`, mode `600`) :
+
+```bash
+cd ~/keevo-staging
+./compose.sh ps
+./compose.sh logs -f backend
+./compose.sh up -d backend      # après une modification du .env
+```
 
 **Use cases :**
 - Redéployer sans commit (ex. après changement de secrets)
@@ -248,11 +276,11 @@ Après chaque déploiement, vérifier :
 
 ```bash
 # Health check
-curl -k https://${STAGING_APP_DOMAIN}:8443/actuator/health
+curl https://staging.api.keevo.cm/actuator/health
 # Attendu : {"status":"UP"}
 
 # Vérifier les migrations Flyway
-curl -k https://${STAGING_APP_DOMAIN}:8443/actuator/flyway
+curl https://staging.api.keevo.cm/actuator/flyway
 # Attendu : migrations V0 (baseline) + V2 appliquées
 
 # Vérifier que la DB est bien staging (pas prod)
@@ -260,7 +288,8 @@ ssh ubuntu@<VPS_HOST> "docker exec keevo_staging_postgres psql -U keevo -d keevo
 # Attendu : keevo_staging
 ```
 
-> **Note :** Le port `:8443` est nécessaire car Traefik staging écoute sur 8443 (pas 443). Si le DNS pointe vers le domaine staging et que TLS est configuré, le port peut être omis via un reverse proxy.
+> **Note :** le staging est servi sur le port 443 standard par le Traefik prod (Story 10.7) ; le
+> backend staging ne publie aucun port (`docker port keevo_staging_backend` → vide).
 
 ---
 
