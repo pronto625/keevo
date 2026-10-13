@@ -4,7 +4,7 @@
 
 ## Goal
 
-Make the V1 Flutter app (pre-refactor line, shipped from `deploy`) solid enough for production while the modular refactor runs on its own branch. The epic collects mobile findings with no backend counterpart from the Flutter audits and later reviews: push-notification hygiene (FCM, iOS), dark mode and contrast, search quality, sync status and sync-rejection feedback, error-state recovery, residual UX bugs, iOS release identity, dashboard correctness, and a rule that end users never see technical data. Most stories are tag A (V1 patch shipped now). Tag C stories are also re-applied by the refactor. Every fix must be re-applied in Flutter by the refactor ("Refonte absorption").
+Make the V1 Flutter app (pre-refactor line, shipped from `deploy`) production-solid while the modular refactor proceeds separately. The epic gathers mobile findings from the Flutter audits and later reviews: push-notification hygiene (FCM, iOS), dark mode and contrast, search quality, sync status and sync-rejection feedback, error-state recovery, residual UX bugs, iOS release identity (store-shippable via TestFlight/App Store), dashboard correctness, and the rule that end users never see technical data. Most stories are tag A (V1 patch shipped now); tag C stories are also re-applied by the refactor. Every fix must later be re-applied in Flutter by the refactor ("Refonte absorption").
 
 ## Stories
 
@@ -31,38 +31,41 @@ Make the V1 Flutter app (pre-refactor line, shipped from `deploy`) solid enough 
 
 ## Requirements & Constraints
 
-- **Users and language:** target users have tech literacy of about 4/10. The UI is French-only in V1 (English/i18n is V2, so English requests are rejected with that reason). Critical actions are reachable in 3 taps or fewer. No accounting jargon, and no technical or frightening error messages: always a reassuring French message, with « Réessayer » where a retry makes sense.
-- **No technical data shown to users (16.20, permanent rule):** no UUIDs or ids, no raw codes (audit actions like `CATEGORY_RENAMED`, statuses like `PENDING_VALIDATION`, sources `ONLINE/SYNC/SYSTEM`, movement types, error codes), no table/column/class names, no raw device ids, no JSON. This applies to every screen, sync rejection message, the blocked-operations screen, notifications, server CSV/XLSX/PDF exports, the offline local CSV export, and the action history with its before/after detail. Replace each with a readable French label (product/store/employee name, « Vente du 12/10 à 14:32 », « Téléphone de Awa »), or omit the field when no label exists. Ids stay allowed internally (queries, navigation, file names that are not displayed). An automated guard must fail when a UUID or SNAKE_CASE code appears in the displayed strings of key screens or in test export headers/values. The rule must also be written into the PRD (as a non-functional requirement) and the UX spec.
-- **Offline-first:** the app works fully offline for 7 days. No sale is ever lost. A money or stock operation that the server refuses for good is never auto-deleted: it is quarantined (kept, no longer pushed, not counted as pending) and shown under « Opérations bloquées » with Renvoyer/Exporter for all roles, and Rattacher/Abandonner for OWNER only, after a successful export.
-- **Performance:** local search returns in under 500 ms on a 500-product catalog. The full catalog stays local (no pagination), shown in a lazy list.
-- **Accessibility:** WCAG AA contrast (≥ 4.5:1) checked in both light and dark mode. Adaptive font sizes. Semantics labels on status indicators.
-- **Export contract (16.20):** server exports, PDF templates and the offline local CSV share one column contract (`keevo/contracts/export-datasets.json`, with golden/contract tests on the backend). Any column change must update the contract and those tests together, so the local export stays aligned.
-- **Item-list stories:** stories built from routed review items have an interim AC: every item must be resolved, or explicitly rejected with a reason recorded next to it (tick the box and note the commit/decision). Deferred work is never left orphaned. It is routed to the story that owns it.
+- **Users and language:** tech literacy ~4/10. UI is French-only in V1 (i18n is V2). Critical actions in ≤ 3 taps. No accounting jargon; no technical or frightening errors — always a reassuring French message, with « Réessayer » where retry makes sense.
+- **No technical data shown (permanent rule):** no UUIDs/ids, raw codes (audit actions, statuses, sync sources, movement types, error codes), table/class names, raw device ids or JSON on any screen, sync-rejection message, blocked-operations screen, notification, server CSV/XLSX/PDF export, offline local CSV, or action-history detail. Use readable French labels or omit the field. Ids remain fine internally. An automated guard fails on UUID/SNAKE_CASE in displayed strings of key screens and export headers/values.
+- **Offline-first:** fully usable offline for 7 days; no sale is ever lost. Money/stock operations refused for good are quarantined (kept, not pushed, not counted pending) and shown under « Opérations bloquées » (Renvoyer/Exporter for all; Rattacher/Abandonner for OWNER after export).
+- **Performance:** local search < 500 ms on a 500-product catalog; full catalog stays local in a lazy list. Smooth on 2 GB RAM devices.
+- **Accessibility:** WCAG AA (≥ 4.5:1) in light and dark; adaptive font sizes / Dynamic Type; Semantics labels on status indicators.
+- **Platforms & stores:** Android 8+ (API 26) and iOS 14+. The app must satisfy Google Play and Apple App Store guidelines (permissions, privacy policy). iOS is an MVP platform from the same codebase.
+- **Export contract:** server exports, PDF templates and offline local CSV share one column contract (`keevo/contracts/export-datasets.json`) with backend golden/contract tests; change them together.
+- **Item-list stories:** interim AC — every routed item is resolved or explicitly rejected with a reason recorded next to it (tick the box, note commit/decision). Deferred work is never orphaned; it is routed to its owning story.
 
 ## Technical Decisions
 
-- **Flutter stack:** Riverpod 3 (`@riverpod`), go_router, Drift on SQLCipher, Material 3. Layout is feature-first Clean Architecture (`core/` plus `features/<x>/{data,domain,presentation}`). The domain layer has no framework dependencies.
-- **Write path:** when online, writes go to the backend first, then to the local cache (`synced:true`, no queue). When offline, writes go to Drift plus a `sync_queue` entry, pushed by `SyncTriggerNotifier` on reconnect. After every mutation the notifier calls `refresh()`/`invalidate()` so the UI updates immediately from Drift.
-- **Sync rejections:** a shared policy classifies each rejection as transient or terminal. A terminal rejection of a create rolls back the ghost local rows and their follow-up operations, and shows a SnackBar « … — annulé sur cet appareil ». Money/ledger operations (`CREATE_SALE`, `VALIDATE_SALE`, `CANCEL_SALE`, `CREATE_DAY_CLOSURE`) are quarantined (`sync_queue.quarantined_at`), never dropped. `PLAN_LIMIT_EXCEEDED` is terminal.
-- **Errors:** the single error state is `AppErrorWidget`, with `onRetry` required. Retry invalidates the exact provider that failed.
-- **Theming:** no literal colours outside `core/theme/app_theme.dart`. Use `ColorScheme`, `KeevoColors` or named `AppTheme` tokens, with the foreground following its fill (`onBrand` on fixed brand fills; `successStrong`/`errorStrong`/`warningStrong` fills for feedback). Guard tests (`no_hardcoded_colors_test`, `feedback_fill_guard_test`) enforce this. Show one shell banner at a time, in fixed priority order.
-- **Search:** use the shared helpers `core/storage/sql_like.dart` (LIKE escaping) and `core/storage/search_fold.dart` (Unicode case/accent fold in SQL, with an exact Dart mirror) for catalog, POS, contacts and multi-store search. Dedup by sync id, not by name.
-- **Dates/time:** inject clocks instead of using real time. Weekly buckets are keyed by the local Monday date and built from calendar fields, not `Duration` arithmetic.
-- **Testing:** use `ProviderContainer` + `mocktail` for providers and widget tests for UI behaviour. Run tests one folder at a time, never the full suite at once. `flutter analyze` must report no new warnings.
-- **Versioning:** each story that changes the app bumps `keevo/app/pubspec.yaml` (`1.1.x+n`).
+- **Flutter stack:** Riverpod 3 (`@riverpod`), go_router, Drift on SQLCipher, Material 3. Feature-first Clean Architecture (`core/` + `features/<x>/{data,domain,presentation}`); domain has no framework deps.
+- **App identity:** the project was meant to be created with org `com.keevo` (project name `keevo`); the Android `applicationId` and iOS bundle id are still the template `com.example.keevo`, which Apple rejects. One production reverse-DNS id must be shared by Android and iOS, decided before registering the Firebase iOS app (`GoogleService-Info.plist`). The iOS Runner (generated in 16.2 from the Flutter template) still has default icons/launch image, iPhone landscape allowed, and `aps-environment=development` for all configurations.
+- **Write path:** online → backend first, then local cache (`synced:true`); offline → Drift + `sync_queue`, pushed by `SyncTriggerNotifier` on reconnect. After a mutation, `refresh()`/`invalidate()` so UI updates from Drift.
+- **Sync rejections:** shared policy classifies transient vs terminal. Terminal rejection of a create rolls back ghost local rows and dependent ops (SnackBar « … — annulé sur cet appareil »). Money/ledger ops are quarantined (`sync_queue.quarantined_at`), never dropped. `PLAN_LIMIT_EXCEEDED` is terminal.
+- **Errors:** single error state `AppErrorWidget` with required `onRetry`, invalidating the exact failed provider.
+- **Theming:** no literal colours outside `core/theme/app_theme.dart`; use `ColorScheme`, `KeevoColors`, `AppTheme` tokens, foreground following its fill (`onBrand`; `successStrong`/`errorStrong`/`warningStrong`). Guarded by `no_hardcoded_colors_test` and `feedback_fill_guard_test`. One shell banner at a time, fixed priority.
+- **Search:** shared helpers `core/storage/sql_like.dart` (LIKE escaping) and `core/storage/search_fold.dart` (Unicode case/accent fold, SQL + Dart mirror). Dedup by sync id.
+- **Dates/time:** inject clocks; weekly buckets keyed by local Monday date, built from calendar fields.
+- **Testing:** `ProviderContainer` + `mocktail` for providers, widget tests for UI. Run tests one folder at a time, never the full suite. `flutter analyze` must add no new warnings. Device-only checks (iOS push, archives) go in a manual checklist.
+- **Versioning:** every change under `keevo/app/` bumps `keevo/app/pubspec.yaml` (`1.1.x+n`).
 
 ## UX & Interaction Patterns
 
-- Feedback: success = SnackBar with a light haptic that auto-dismisses. Errors never auto-dismiss and offer « Réessayer ». Messages are in French with a positive tone.
-- Offline mode is transparent and the default message is « tout va bien ». The sync indicator shows day 5 in amber (« En ligne (sync J-X) ») and day 6 in red (« ⚠ Sync urgente »). The loading state is neutral.
-- Traceability is framed as protection, never as surveillance. The action history and its detail must read as plain French (who did what, on what, when, where, before/after per field).
-- Destructive actions ask for confirmation. Non-destructive ones run immediately and show an « Annuler » undo for 5 s.
+- Success = SnackBar + light haptic, auto-dismiss. Errors never auto-dismiss and offer « Réessayer ». Positive French tone.
+- Offline is transparent (« tout va bien »); sync indicator amber at day 5 (« En ligne (sync J-X) »), red at day 6 (« ⚠ Sync urgente »).
+- Layout is mobile-first; tablets use portrait medium layout (POS + cart side by side). Brand look: Indigo Sky header gradient, "Soft/Modern" rebrand direction.
+- Traceability framed as protection, not surveillance; action history reads as plain French.
+- Destructive actions confirm; non-destructive ones run immediately with a 5 s « Annuler ».
 
 ## Cross-Story Dependencies
 
-- 16.12 → 16.15: sync-rejection handling feeds the blocked-operations quarantine. 16.20 must clean that screen and the rejection messages.
-- 16.4 → 16.14 → 16.16: these stack on one search path. Keep both the escaping and the folding.
-- 16.3 → 16.17: dark-mode tokens come before the feedback-fill contrast work.
-- 16.2 → 16.18: the iOS Runner was generated in 16.2. Its release identity (one reverse-DNS id shared by Android and iOS, Firebase iOS app, icons, `aps-environment`) needs a product decision.
-- 16.20 depends on Epic 18 (data export 18-1/18-2/18-3/18-5 and action history 18-7). It touches the backend export contract and tests, not just Flutter.
-- 16.6 is tied to Story 13.4 (offline store sync handlers on the backend).
+- 16.2 → 16.18: the iOS Runner and push wiring from 16.2 are the base for release identity; 16.18 needs a product decision on the reverse-DNS id (both platforms, then Firebase iOS app), brand icons, orientation matching Android, and production APNs (confirm on first TestFlight archive, else per-configuration entitlements).
+- 16.12 → 16.15: rejection handling feeds the quarantine; 16.20 cleaned that screen and the messages.
+- 16.4 → 16.14 → 16.16: one search path — keep both escaping and folding.
+- 16.3 → 16.17: dark-mode tokens precede feedback-fill contrast.
+- 16.20 depends on Epic 18 (data export, action history) and touches the backend export contract.
+- 16.6 ties to Story 13.4 (backend offline store sync handlers).
