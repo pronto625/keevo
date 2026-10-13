@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  auditActionLabel,
+  auditEntityTypeLabel,
+  feedbackTypeLabel,
+  lastActivityDayLabel,
+  planFilterLabel,
+  platformLabel,
+  priorityLabel,
+  screenLabel,
+  storeTypeLabel,
+} from "@/lib/labels";
+import {
   conflictTypeLabel,
   deviceNumberLabels,
   deviceUserLabel,
@@ -117,5 +128,49 @@ describe("plan management labels (Story 9-2)", () => {
     expect(paymentMethodLabel("BANK_TRANSFER")).toBe("Virement bancaire");
     expect(paymentMethodLabel("OTHER")).toBe("Autre");
     expect(paymentMethodLabel("CRYPTO_WALLET")).toBe("Crypto wallet");
+  });
+});
+
+describe("labels — spec 9-1 completion", () => {
+  it("audit actions mirror the app labels; unknown codes are humanized", () => {
+    expect(auditActionLabel("PRICE_CHANGED")).toBe("Prix modifié");
+    expect(auditActionLabel("PRODUCT_CREATED")).toBe("Produit créé");
+    expect(auditActionLabel("STOCK_THRESHOLD_BREACHED")).toBe("Alerte de stock bas");
+    expect(auditActionLabel("BRAND_NEW_ACTION")).toBe("Brand new action");
+    expect(auditActionLabel("3f2b1c4d-0000-4000-8000-0000000000aa")).toBe("Action");
+    expect(auditActionLabel(null)).toBe("Action");
+  });
+
+  it("audit entity types, store types, feedback type / priority / platform", () => {
+    expect(auditEntityTypeLabel("Product")).toBe("Produit");
+    expect(auditEntityTypeLabel("StockLevel")).toBe("Niveau de stock");
+    expect(auditEntityTypeLabel("GiftCard")).toBe("Gift card");
+    expect(auditEntityTypeLabel("x#1")).toBe("Élément");
+    expect(storeTypeLabel("WAREHOUSE")).toBe("Entrepôt");
+    expect(feedbackTypeLabel("bug")).toBe("Problème signalé");
+    expect(feedbackTypeLabel("PRAISE")).toBe("Compliment");
+    expect(feedbackTypeLabel("free text")).toBe("Autre");
+    expect(feedbackTypeLabel("OTHER")).toBe("Autre");
+    expect(feedbackTypeLabel("FEATURE_REQUEST")).toBe("Autre");
+    expect(priorityLabel("HIGH")).toBe("Haute");
+    expect(platformLabel("android")).toBe("Android");
+    expect(planFilterLabel("ALL")).toBe("Tous");
+    expect(planFilterLabel("PAID")).toBe("Premium et essai");
+    expect(planFilterLabel("PREMIUM_TRIAL")).toBe("Essai Premium");
+  });
+
+  it("screen label drops ids and translates route segments", () => {
+    expect(screenLabel("/products/3f2b1c4d-0000-4000-8000-0000000000aa/edit")).toBe("Produits › Modification");
+    expect(screenLabel("/pos/sales-history?x=1")).toBe("Caisse › Historique des ventes");
+    expect(screenLabel("/")).toBe("Accueil");
+    expect(screenLabel(null)).toBe("—");
+  });
+
+  it("last activity day: Aujourd'hui / Hier / date / Jamais", () => {
+    const today = new Date(2026, 9, 13, 15, 0);
+    expect(lastActivityDayLabel("2026-10-13", today)).toBe("Aujourd'hui");
+    expect(lastActivityDayLabel("2026-10-12", today)).toBe("Hier");
+    expect(lastActivityDayLabel("2026-09-30", today)).toBe("30/09/2026");
+    expect(lastActivityDayLabel(null, today)).toBe("Jamais");
   });
 });

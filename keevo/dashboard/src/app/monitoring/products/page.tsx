@@ -6,7 +6,7 @@ import { ProductFiltersPanel } from "@/components/catalog/ProductFilters";
 import { ProductFilterChips } from "@/components/catalog/ProductFilterChips";
 import { ProductTable } from "@/components/catalog/ProductTable";
 import { useProducts } from "@/hooks/useProducts";
-import { buildExportUrl } from "@/lib/api/admin-catalog";
+import { CatalogExportButton } from "@/components/catalog/CatalogExportButton";
 
 export default function ProductsPage() {
   const {
@@ -26,13 +26,7 @@ export default function ProductsPage() {
           <h1 className="text-xl font-bold text-gray-800">
             Catalogue Produits
           </h1>
-          <a
-            href={buildExportUrl(filters)}
-            download
-            className="px-3 py-1.5 text-sm bg-gray-800 text-white rounded hover:bg-gray-700 transition-colors"
-          >
-            ↓ Exporter CSV
-          </a>
+          <CatalogExportButton filters={filters} />
         </header>
 
         <CatalogSummaryCards

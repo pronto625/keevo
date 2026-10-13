@@ -10,7 +10,6 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
 import java.util.ArrayList;
@@ -46,7 +45,8 @@ public class AdminCatalogService implements ListProductsUseCase, GetCatalogSumma
     // ── ListProductsUseCase ───────────────────────────────────────────────────
 
     @Override
-    @Transactional(readOnly = true)
+    // Deliberately NOT @Transactional: each per-tenant statement autocommits, so one broken tenant
+    // schema cannot abort (25P02) the PostgreSQL transaction of the following tenants' queries.
     public Page<AdminProductListItem> execute(ListProductsQuery query) {
         List<TenantSchema> tenants = loadMatchingTenantSchemas(query);
 
@@ -79,7 +79,8 @@ public class AdminCatalogService implements ListProductsUseCase, GetCatalogSumma
     // ── GetCatalogSummaryUseCase ──────────────────────────────────────────────
 
     @Override
-    @Transactional(readOnly = true)
+    // Deliberately NOT @Transactional: each per-tenant statement autocommits, so one broken tenant
+    // schema cannot abort (25P02) the PostgreSQL transaction of the following tenants' queries.
     public AdminCatalogSummary execute() {
         List<TenantSchema> tenants = loadAllActiveSchemas();
 

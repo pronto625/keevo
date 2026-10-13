@@ -15,7 +15,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDate;
 
 @Tag(name = "Admin — Catalog", description = "Super Admin cross-tenant product catalog monitoring")
 @RestController
@@ -77,38 +76,12 @@ public class AdminCatalogController {
 
         Page<AdminProductListItem> allProducts = adminCatalogService.execute(query);
 
-        StringBuilder csv = new StringBuilder();
-        csv.append("product_id,product_name,tenant_name,plan,category,price_xaf,stock_quantity,status,last_updated\n");
-
-        for (AdminProductListItem item : allProducts.getContent()) {
-            csv.append(escapeCsv(item.id())).append(',')
-               .append(escapeCsv(item.name())).append(',')
-               .append(escapeCsv(item.tenantName())).append(',')
-               .append(escapeCsv(item.tenantPlan())).append(',')
-               .append(escapeCsv(item.categoryName() != null ? item.categoryName() : "")).append(',')
-               .append(item.price()).append(',')
-               .append(item.stockQuantity()).append(',')
-               .append(escapeCsv(item.status())).append(',')
-               .append(item.updatedAt() != null ? item.updatedAt().toString() : "")
-               .append('\n');
-        }
-
-        byte[] bytes = csv.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        String filename = "keevo-products-" + LocalDate.now() + ".csv";
+        byte[] bytes = ProductsCsvWriter.write(allProducts.getContent());
+        String filename = ProductsCsvWriter.filename(ProductsCsvWriter.today());
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
                 .header(HttpHeaders.CONTENT_TYPE, "text/csv; charset=UTF-8")
                 .body(bytes);
-    }
-
-    // ── Private helpers ────────────────────────────────────────────────────────
-
-    private String escapeCsv(String value) {
-        if (value == null) return "";
-        if (value.contains(",") || value.contains("\"") || value.contains("\n") || value.contains("\r")) {
-            return "\"" + value.replace("\"", "\"\"") + "\"";
-        }
-        return value;
     }
 }

@@ -4,11 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
+import { useUnhandledHighFeedbackCount } from "@/hooks/useFeedback";
 
 export function Sidebar() {
   const pathname = usePathname();
   const { logout } = useAuth();
   const router = useRouter();
+  const highFeedback = useUnhandledHighFeedbackCount();
+  const highCount = highFeedback.data ?? 0;
 
   const handleLogout = () => {
     logout();
@@ -16,9 +19,11 @@ export function Sidebar() {
   };
 
   const navItems = [
-    { href: "/tenants", label: "Tenants" },
-    { href: "/revenus", label: "Revenus" },
-    { href: "/analytics", label: "Statistiques" },
+    { href: "/tenants", label: "Entreprises", badge: 0 },
+    { href: "/revenus", label: "Revenus", badge: 0 },
+    { href: "/analytics", label: "Statistiques", badge: 0 },
+    // Spec 9-1 completion — badge = HIGH-priority feedback not handled yet.
+    { href: "/retours", label: "Retours utilisateurs", badge: highCount },
   ];
 
   const monitoringItems = [
@@ -41,11 +46,19 @@ export function Sidebar() {
           <Link
             key={item.href}
             href={item.href}
-            className={`block px-4 py-2 text-sm hover:bg-gray-700 ${
+            className={`flex items-center justify-between px-4 py-2 text-sm hover:bg-gray-700 ${
               pathname.startsWith(item.href) ? "bg-gray-700 font-medium" : ""
             }`}
           >
-            {item.label}
+            <span>{item.label}</span>
+            {item.badge > 0 && (
+              <span
+                className="ml-2 min-w-5 px-1.5 text-center text-xs font-semibold rounded-full bg-red-600 text-white"
+                aria-label={`${item.badge} ${item.badge > 1 ? "retours prioritaires non traités" : "retour prioritaire non traité"}`}
+              >
+                {item.badge > 99 ? "99+" : item.badge}
+              </span>
+            )}
           </Link>
         ))}
 

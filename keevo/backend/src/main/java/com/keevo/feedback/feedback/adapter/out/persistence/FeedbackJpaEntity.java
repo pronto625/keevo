@@ -42,6 +42,12 @@ public class FeedbackJpaEntity extends JpaBaseEntity {
     @Column(name = "priority", nullable = false, length = 10)
     private String priority;
 
+    @Column(name = "handled_at")
+    private Instant handledAt;
+
+    @Column(name = "handled_by")
+    private UUID handledBy;
+
     protected FeedbackJpaEntity() {}
 
     public FeedbackJpaEntity(UUID id, String type, String description,
@@ -69,4 +75,12 @@ public class FeedbackJpaEntity extends JpaBaseEntity {
     public String getScreenContext() { return screenContext; }
     public Instant getSubmittedAt()  { return submittedAt; }
     public String getPriority()      { return priority; }
+    public Instant getHandledAt()    { return handledAt; }
+    public UUID getHandledBy()       { return handledBy; }
+
+    /** Spec 9-1 completion — mark handled ({@code at} non-null) or not handled (both null). */
+    public void setHandled(Instant at, UUID by) {
+        this.handledAt = at;
+        this.handledBy = by;
+    }
 }

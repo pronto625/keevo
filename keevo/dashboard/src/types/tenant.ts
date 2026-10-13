@@ -1,7 +1,9 @@
 export interface TenantListItem {
+  /** Only used to open the drawer / call actions — never displayed. */
   id: string;
-  code: string;
   name: string;
+  /** Owner's first + last name, else « Propriétaire ». */
+  ownerName: string;
   ownerPhone: string;
   /** Plan code (labelled with planLabel). */
   plan: PlanType;
@@ -22,7 +24,8 @@ export interface TenantPage {
 
 export interface TenantFilters {
   search: string;
-  plan: 'ALL' | 'FREE' | 'PAID';
+  /** `PAID` (= trial + Premium) is still accepted by the backend for old links. */
+  plan: 'ALL' | 'FREE' | 'PREMIUM_TRIAL' | 'PREMIUM' | 'PAID';
   status: 'ALL' | 'ACTIVE' | 'DELETION_PENDING' | 'SUSPENDED';
   registeredFrom: string | null;
   registeredTo: string | null;
@@ -98,18 +101,26 @@ export interface StoreInfo {
 }
 
 export interface EmployeeInfo {
-  id: string;
+  /** Employee name, « Propriétaire » or « Employé » — no user id. */
   name: string;
+  /** Role code (labelled with userRoleLabel). */
   role: string;
-  lastLoginAt: string | null;
+  /** Last active day (yyyy-MM-dd) from the daily activity log; null = never. */
+  lastActivityAt: string | null;
 }
 
+/** One readable audit line — no entity id, no actor id. */
 export interface AuditEvent {
-  id: string;
-  eventType: string;
-  actorId: string;
-  occurredAt: string;
-  details: string;
+  /** Action code (labelled with auditActionLabel). */
+  action: string;
+  /** Audited object type (labelled with auditEntityTypeLabel). */
+  entityType: string;
+  entityLabel: string | null;
+  /** Employee name, « Propriétaire », « Système » or « Utilisateur inconnu ». */
+  actorName: string;
+  storeName: string | null;
+  /** Null for a malformed legacy row. */
+  occurredAt: string | null;
 }
 
 export interface AuditPage {

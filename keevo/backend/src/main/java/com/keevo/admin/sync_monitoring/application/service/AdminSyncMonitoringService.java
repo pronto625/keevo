@@ -5,7 +5,6 @@ import com.keevo.admin.sync_monitoring.domain.port.in.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -25,9 +24,11 @@ import java.util.Map;
  * <p>Key schema facts:
  * - {@code public.user_sync_state.tenant_id} stores the tenant schema name (e.g. "kv_abc123")
  * - {@code sync_operations_log} and {@code sync_conflicts_log} are per-tenant tables
+ *
+ * <p>Deliberately NOT {@code @Transactional}: each per-tenant statement autocommits, so one broken
+ * tenant schema cannot abort (25P02) the PostgreSQL transaction of the following tenants' queries.
  */
 @Service
-@Transactional(readOnly = true)
 public class AdminSyncMonitoringService
         implements GetSyncOverviewUseCase, ListTenantSyncHealthUseCase, GetSyncTenantDetailUseCase {
 

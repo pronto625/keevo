@@ -24,11 +24,22 @@ public final class Feedback {
     private final String screenContext;
     private final Instant submittedAt;
     private final String priority;
+    private final Instant handledAt;   // spec 9-1 completion — null while not handled
+    private final UUID handledBy;
 
     public Feedback(UUID id, String type, String description,
                     String tenantId, UUID userId,
                     String appVersion, String platform, String screenContext,
                     Instant submittedAt, String priority) {
+        this(id, type, description, tenantId, userId, appVersion, platform, screenContext,
+                submittedAt, priority, null, null);
+    }
+
+    public Feedback(UUID id, String type, String description,
+                    String tenantId, UUID userId,
+                    String appVersion, String platform, String screenContext,
+                    Instant submittedAt, String priority,
+                    Instant handledAt, UUID handledBy) {
         this.id = Objects.requireNonNull(id, "id");
         this.type = Objects.requireNonNull(type, "type");
         this.description = Objects.requireNonNull(description, "description");
@@ -39,6 +50,8 @@ public final class Feedback {
         this.screenContext = screenContext;
         this.submittedAt = Objects.requireNonNull(submittedAt, "submittedAt");
         this.priority = Objects.requireNonNull(priority, "priority");
+        this.handledAt = handledAt;
+        this.handledBy = handledBy;
     }
 
     public UUID getId()              { return id; }
@@ -51,4 +64,7 @@ public final class Feedback {
     public String getScreenContext() { return screenContext; }
     public Instant getSubmittedAt()  { return submittedAt; }
     public String getPriority()      { return priority; }
+    public Instant getHandledAt()    { return handledAt; }
+    public UUID getHandledBy()       { return handledBy; }
+    public boolean isHandled()       { return handledAt != null; }
 }

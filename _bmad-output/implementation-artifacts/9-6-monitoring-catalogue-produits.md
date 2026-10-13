@@ -596,4 +596,4 @@ claude-sonnet-4-5 (Cursor Agent)
 
 ### Deferred items routed 2026-10-13
 
-- [ ] [Deferred-from: build-auto 9-3 implementation, 2026-10-13] Catalog CSV export link sends no JWT [keevo/dashboard/src/lib/api/admin-catalog.ts:40] — the export is a plain `/api/backend/admin/catalog/products/export` link while the admin JWT lives in memory/sessionStorage (axios header), so the download gets 401; download through the authenticated axios client (blob) like the 9-3 churn export.
+- [x] [Deferred-from: build-auto 9-3 implementation, 2026-10-13] Catalog CSV export link sends no JWT [keevo/dashboard/src/lib/api/admin-catalog.ts:40] — the export is a plain `/api/backend/admin/catalog/products/export` link while the admin JWT lives in memory/sessionStorage (axios header), so the download gets 401; download through the authenticated axios client (blob) like the 9-3 churn export. — **closed by spec 9-1 completion (2026-10-13)**: `downloadProductsCsv` (authenticated axios blob, `keevo-products-YYYY-MM-DD.csv`) behind `CatalogExportButton`; tested in `components/catalog/__tests__/CatalogExportButton.test.tsx`.

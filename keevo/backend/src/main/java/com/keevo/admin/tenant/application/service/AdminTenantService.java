@@ -1,5 +1,6 @@
 package com.keevo.admin.tenant.application.service;
 
+import com.keevo.admin.AdminLabels;
 import com.keevo.shared.domain.PhoneNumbers;
 import com.keevo.admin.tenant.domain.model.*;
 import com.keevo.admin.tenant.domain.port.in.*;
@@ -10,6 +11,10 @@ import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.shared.infrastructure.scheduling.AccountDeletionScheduler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.RecoverableDataAccessException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -23,10 +28,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -59,6 +66,13 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
     private static final String ADMIN_TENANT_ID = "00000000-0000-0000-0000-000000000000";
     private static final int AUDIT_PAGE_SIZE = 50;
 
+    /** Accepted values of the list {@code plan} filter ({@code PAID} = legacy PREMIUM_TRIAL + PREMIUM). */
+    private static final Set<String> PLAN_FILTERS = Set.of("ALL", "FREE", "PREMIUM_TRIAL", "PREMIUM", "PAID");
+
+    /** Trimmed « first last » of an employees row aliased {@code e}; NULL when both are blank. */
+    private static final String EMPLOYEE_FULL_NAME =
+            "NULLIF(TRIM(CONCAT_WS(' ', TRIM(e.first_name), TRIM(e.last_name))), '')";
+
     private final JdbcTemplate jdbc;
     private final AccountDeletionScheduler accountDeletionScheduler;
 
@@ -70,7 +84,8 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
     // ── ListTenantsUseCase ────────────────────────────────────────────────────
 
     @Override
-    @Transactional(readOnly = true)
+    // Deliberately NOT @Transactional: each per-tenant statement autocommits, so one broken tenant
+    // schema cannot abort (25P02) the PostgreSQL transaction of the following tenants' queries.
     public Page<AdminTenantListItem> execute(ListTenantsQuery query) {
         List<Object> params = new ArrayList<>();
         String whereClause = buildWhereClause(query, params);
@@ -83,7 +98,26 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
                 + "    ON owner.id = m_owner.user_id "
                 + whereClause;
 
-        Long total = jdbc.queryForObject(countSql, Long.class, params.toArray());
+        long offset = (long) query.page() * query.pageSize();
+        Long total;
+        if (query.lastActivityFrom() != null || query.lastActivityTo() != null) {
+            // 9-1 AC3 — last activity = latest audit_log entry (same definition as the column). It
+            // lives in each tenant schema, so the candidates are pre-filtered per schema (one
+            // statement each, acceptable at Phase 1 volumes), then paginated on their ids.
+            List<UUID> active = tenantsActiveInRange(whereClause, params,
+                    query.lastActivityFrom(), query.lastActivityTo());
+            total = (long) active.size();
+            List<UUID> pageIds = active.stream().skip(offset).limit(query.pageSize()).toList();
+            if (pageIds.isEmpty()) {
+                return new PageImpl<>(List.of(), PageRequest.of(query.page(), query.pageSize()), total);
+            }
+            whereClause = whereClause + " AND t.id IN ("
+                    + pageIds.stream().map(x -> "?").collect(Collectors.joining(",")) + ")";
+            params.addAll(pageIds);
+            offset = 0;
+        } else {
+            total = jdbc.queryForObject(countSql, Long.class, params.toArray());
+        }
         if (total == null || total == 0) {
             return new PageImpl<>(List.of(), PageRequest.of(query.page(), query.pageSize()), 0L);
         }
@@ -107,7 +141,7 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
 
         List<Object> listParams = new ArrayList<>(params);
         listParams.add(query.pageSize());
-        listParams.add((long) query.page() * query.pageSize());
+        listParams.add(offset);
 
         List<AdminTenantListItem> items = jdbc.query(listSql, new TenantListRowMapper(), listParams.toArray());
 
@@ -126,7 +160,8 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
     // ── GetTenantDetailUseCase ────────────────────────────────────────────────
 
     @Override
-    @Transactional(readOnly = true)
+    // Deliberately NOT @Transactional: each per-tenant statement autocommits, so one broken tenant
+    // schema cannot abort (25P02) the PostgreSQL transaction of the following tenants' queries.
     public AdminTenantDetail execute(GetTenantDetailQuery query) {
         // Load summary from public schema
         String summarySql = "SELECT t.id, t.code, t.name, t.schema_name, t.plan_type, t.status, "
@@ -160,7 +195,7 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
             List<AdminStoreInfo> stores = loadStores(schemaName);
             List<AdminEmployeeInfo> employees = loadEmployees(schemaName, query.tenantId());
             long auditTotal = countAuditEvents(schemaName);
-            List<AdminAuditEvent> auditEvents = loadAuditEvents(schemaName, query.auditPage());
+            List<AdminAuditEvent> auditEvents = loadAuditEvents(schemaName, query.tenantId(), query.auditPage());
             AdminPlanInfo plan = loadPlan(schemaName, query.tenantId());
             return new AdminTenantDetail(summary, stores, employees, auditEvents, auditTotal, plan);
         } finally {
@@ -239,11 +274,13 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
             params.add(PhoneNumbers.normalize(q.search()));
         }
 
-        if (q.plan() != null && !q.plan().isBlank() && !q.plan().equals("ALL")) {
-            if ("PAID".equals(q.plan())) {
+        String plan = normalizePlanFilter(q.plan());
+        if (plan != null) {
+            if ("PAID".equals(plan)) {
                 sb.append(" AND t.plan_type IN ('PREMIUM', 'PREMIUM_TRIAL')");
             } else {
-                sb.append(" AND t.plan_type = 'FREE'");
+                sb.append(" AND t.plan_type = ?");
+                params.add(plan);
             }
         }
 
@@ -265,6 +302,50 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
     }
 
     /**
+     * Ids (newest tenant first) of the tenants matching the public filters whose last activity —
+     * the latest {@code audit_log} entry of their schema — falls in [{@code from}, {@code to}]. A
+     * tenant never active, with an invalid schema name or an unreadable schema is excluded.
+     */
+    private List<UUID> tenantsActiveInRange(String whereClause, List<Object> params, Instant from, Instant to) {
+        List<Map<String, Object>> candidates = jdbc.queryForList(
+                "SELECT t.id, t.schema_name FROM public.tenants t "
+                + "LEFT JOIN public.user_tenant_memberships m_owner "
+                + "    ON m_owner.tenant_id = t.id AND m_owner.role = 'OWNER' "
+                + "LEFT JOIN public.users owner ON owner.id = m_owner.user_id "
+                + whereClause
+                + " GROUP BY t.id ORDER BY t.created_at DESC",
+                params.toArray());
+        List<UUID> out = new ArrayList<>();
+        for (Map<String, Object> c : candidates) {
+            UUID id = UUID.fromString(c.get("id").toString());
+            Object schema = c.get("schema_name");
+            if (schema == null || !TenantSchema.isValid(schema.toString())) continue;
+            List<Map<String, Object>> rows = tenantRows(id,
+                    "SELECT MAX(occurred_at) AS last_activity FROM " + schema + ".audit_log");
+            Instant last = rows == null || rows.isEmpty() ? null : toInstant(rows.get(0).get("last_activity"));
+            if (last == null) continue;
+            if (from != null && last.isBefore(from)) continue;
+            if (to != null && last.isAfter(to)) continue;
+            out.add(id);
+        }
+        return out;
+    }
+
+    /**
+     * Plan filter: null/blank/ALL → null (no filter); FREE | PREMIUM_TRIAL | PREMIUM | PAID (legacy,
+     * = PREMIUM_TRIAL + PREMIUM) kept; anything else → 422 VALIDATION_ERROR.
+     */
+    private static String normalizePlanFilter(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        String plan = raw.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!PLAN_FILTERS.contains(plan)) {
+            throw new DomainException(ErrorCode.VALIDATION_ERROR,
+                    "plan must be one of ALL, FREE, PREMIUM_TRIAL, PREMIUM, PAID");
+        }
+        return "ALL".equals(plan) ? null : plan;
+    }
+
+    /**
      * Fills storeCount and lastActivityAt from the tenant's own schema. The schema name is
      * resolved by the caller (preloaded map for the list, {@link #loadSchemaName} for the detail),
      * so no per-item {@code schema_name} lookup is made here (Story 11.5). A null or invalid
@@ -273,21 +354,69 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
     private AdminTenantListItem enrichWithCrossSchemaMetrics(AdminTenantListItem item, String schemaName) {
         if (!TenantSchema.isValid(schemaName)) return item; // gate before SQL interpolation
 
-        int storeCount = safeCount("SELECT COUNT(*) FROM " + schemaName + ".stores WHERE is_active = true");
-        Instant lastActivity = safeMaxInstant("SELECT MAX(occurred_at) FROM " + schemaName + ".audit_log");
+        // Spec 9-1 completion (routed from 11-5) — TWO statements per tenant schema: store count +
+        // last activity together, then the owner's name on its own, so a broken employees table
+        // only loses the name (« Propriétaire »), never the metrics. The list costs 1 + 2N.
+        List<Map<String, Object>> rows = tenantRows(item.id(), "SELECT "
+                + "(SELECT COUNT(*) FROM " + schemaName + ".stores WHERE is_active = true) AS store_count, "
+                + "(SELECT MAX(occurred_at) FROM " + schemaName + ".audit_log) AS last_activity");
+        Map<String, Object> row = rows == null || rows.isEmpty() ? Map.of() : rows.get(0);
+        Object count = row.get("store_count");
+        Instant lastActivity = toInstant(row.get("last_activity"));
+
+        List<Map<String, Object>> ownerRows = tenantRows(item.id(),
+                "SELECT " + EMPLOYEE_FULL_NAME + " AS owner_name FROM " + schemaName + ".employees e "
+                + "JOIN public.user_tenant_memberships m ON m.user_id = e.user_id "
+                + "WHERE m.tenant_id = ? AND m.role = 'OWNER' "
+                + "ORDER BY e.created_at LIMIT 1", item.id());
+        Object owner = ownerRows == null || ownerRows.isEmpty() ? null : ownerRows.get(0).get("owner_name");
+        String ownerName = owner != null && !owner.toString().isBlank()
+                ? owner.toString().trim() : AdminLabels.OWNER;
 
         return new AdminTenantListItem(
                 item.id(), item.code(), item.name(), item.ownerPhone(),
                 item.plan(), item.status(),
                 item.registeredAt(), lastActivity,
-                storeCount, item.employeeCount(),
-                item.deletionScheduledAt()
+                count instanceof Number n ? n.intValue() : 0, item.employeeCount(),
+                item.deletionScheduledAt(), ownerName
         );
     }
 
     /**
+     * Runs a query against one tenant's schema. A schema / SQL / data error of this tenant only
+     * (missing table, broken schema…) yields {@code null} so the caller skips it; connection or
+     * resource failures (pool exhaustion, database down) are rethrown, never hidden as "skip".
+     */
+    private List<Map<String, Object>> tenantRows(UUID tenantId, String sql, Object... args) {
+        try {
+            return jdbc.queryForList(sql, args);
+        } catch (DataAccessException e) {
+            rethrowIfResourceFailure(e);
+            // tenant id only — never the schema name or SQL in logs
+            log.warn("Admin tenants: tenant {} schema query skipped ({})", tenantId, e.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    private static void rethrowIfResourceFailure(DataAccessException e) {
+        if (e instanceof DataAccessResourceFailureException
+                || e instanceof TransientDataAccessException
+                || e instanceof RecoverableDataAccessException) {
+            throw e;
+        }
+    }
+
+    private static Instant toInstant(Object value) {
+        if (value instanceof Timestamp ts) return ts.toInstant();
+        if (value instanceof java.time.OffsetDateTime odt) return odt.toInstant();
+        if (value instanceof Instant i) return i;
+        return null;
+    }
+
+    /**
      * Loads the schema names of a page of tenants in a single parameterized {@code IN (…)} query.
-     * A failure yields an empty map: the items are then kept with zero metrics, as before.
+     * A SQL/data failure yields an empty map (items kept with zero metrics); a connection or
+     * resource failure (database down, pool exhausted) is rethrown.
      */
     private Map<UUID, String> loadSchemaNames(List<UUID> ids) {
         if (ids.isEmpty()) return Map.of();
@@ -298,8 +427,10 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
                     (RowCallbackHandler) rs -> out.put(
                             UUID.fromString(rs.getString("id")), rs.getString("schema_name")),
                     ids.toArray());
-        } catch (Exception e) {
-            log.warn("Batched schema_name lookup failed for {} tenants — metrics left empty", ids.size(), e);
+        } catch (DataAccessException e) {
+            rethrowIfResourceFailure(e);
+            log.warn("Batched schema_name lookup failed for {} tenants — metrics left empty ({})",
+                    ids.size(), e.getClass().getSimpleName());
             return Map.of();
         }
         return out;
@@ -322,24 +453,6 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
         return s;
     }
 
-    private int safeCount(String sql) {
-        try {
-            Integer count = jdbc.queryForObject(sql, Integer.class);
-            return count != null ? count : 0;
-        } catch (Exception e) {
-            return 0;
-        }
-    }
-
-    private Instant safeMaxInstant(String sql) {
-        try {
-            Timestamp ts = jdbc.queryForObject(sql, Timestamp.class);
-            return ts != null ? ts.toInstant() : null;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
     private List<AdminStoreInfo> loadStores(String schema) {
         try {
             return jdbc.query(
@@ -350,30 +463,72 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
                             rs.getString("store_type"),
                             rs.getLong("total_revenue")
                     ));
-        } catch (Exception e) {
+        } catch (DataAccessException e) {
+            rethrowIfResourceFailure(e);
             return List.of();
         }
     }
 
+    /**
+     * Members of the tenant (OWNER, EMPLOYEE) read from {@code public.*} with their last active day
+     * from {@code public.user_daily_activity} (Story 9-4), then their names from
+     * {@code <schema>.employees} in a separate fail-soft statement: a broken tenant table only
+     * loses the names (« Propriétaire » / « Employé »), never the members. No user id leaves here.
+     */
     private List<AdminEmployeeInfo> loadEmployees(String schema, UUID tenantId) {
-        try {
-            return jdbc.query(
-                    "SELECT u.id::text, u.phone_number AS full_name, "
-                    + "m.role, NULL AS last_login_at "
-                    + "FROM public.user_tenant_memberships m "
-                    + "JOIN public.users u ON u.id = m.user_id "
-                    + "WHERE m.tenant_id = ? AND m.role IN ('OWNER','EMPLOYEE') "
-                    + "ORDER BY m.role, u.phone_number",
-                    (rs, row) -> new AdminEmployeeInfo(
-                            rs.getString("id"),
-                            rs.getString("full_name"),
-                            rs.getString("role"),
-                            null
-                    ),
-                    tenantId);
-        } catch (Exception e) {
-            return List.of();
+        record Member(UUID userId, String role, LocalDate lastDay) {}
+        List<Member> members = jdbc.query(
+                "SELECT m.user_id, m.role, "
+                + "(SELECT MAX(d.activity_date) FROM public.user_daily_activity d "
+                + "  WHERE d.user_id = m.user_id AND d.tenant_id = m.tenant_id) AS last_day "
+                + "FROM public.user_tenant_memberships m "
+                + "WHERE m.tenant_id = ? AND m.role IN ('OWNER','EMPLOYEE')",
+                (rs, row) -> {
+                    java.sql.Date day = rs.getDate("last_day");
+                    String uid = rs.getString("user_id");
+                    return new Member(uid != null ? UUID.fromString(uid) : null, rs.getString("role"),
+                            day != null ? day.toLocalDate() : null);
+                },
+                tenantId);
+        Map<UUID, String> names = loadEmployeeNames(schema, tenantId,
+                members.stream().map(Member::userId).filter(java.util.Objects::nonNull).toList());
+        return members.stream()
+                .map(m -> new AdminEmployeeInfo(memberName(names.get(m.userId()), m.role()), m.role(), m.lastDay()))
+                .sorted(java.util.Comparator
+                        .comparing((AdminEmployeeInfo e) -> "OWNER".equals(e.role()) ? 0 : 1)
+                        .thenComparing(AdminEmployeeInfo::name))
+                .toList();
+    }
+
+    /** Names (trimmed first + last) of the given users in the tenant's employees table; fail-soft. */
+    private Map<UUID, String> loadEmployeeNames(String schema, UUID tenantId, List<UUID> userIds) {
+        if (userIds.isEmpty()) return Map.of();
+        List<Map<String, Object>> rows = tenantRows(tenantId,
+                "SELECT e.user_id, " + EMPLOYEE_FULL_NAME + " AS full_name FROM " + schema + ".employees e "
+                + "WHERE e.user_id IN (" + userIds.stream().map(x -> "?").collect(Collectors.joining(",")) + ") "
+                + "ORDER BY e.created_at",
+                userIds.toArray());
+        Map<UUID, String> out = new HashMap<>();
+        if (rows == null) return out;
+        for (Map<String, Object> r : rows) {
+            Object uid = r.get("user_id");
+            Object name = r.get("full_name");
+            if (uid != null && name != null) out.putIfAbsent(UUID.fromString(uid.toString()), name.toString().trim());
         }
+        return out;
+    }
+
+    /** Stored name, else « Propriétaire » for an owner, « Employé » for an employee. */
+    static String memberName(String fullName, String role) {
+        if (fullName != null && !fullName.isBlank()) return fullName.trim();
+        return "OWNER".equals(role) ? AdminLabels.OWNER : AdminLabels.EMPLOYEE;
+    }
+
+    /** Audit actor: « Système » for a SYSTEM event, else the employee name, « Propriétaire », or unknown. */
+    static String actorName(String source, String fullName, boolean isOwner) {
+        if ("SYSTEM".equals(source)) return AdminLabels.SYSTEM;
+        if (fullName != null && !fullName.isBlank()) return fullName.trim();
+        return isOwner ? AdminLabels.OWNER : AdminLabels.UNKNOWN_USER;
     }
 
     /** Story 9-2 — current subscription (first row by created_at), null when unreadable. */
@@ -388,7 +543,8 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
                                 exp != null ? exp.toInstant() : null);
                     });
             return rows.isEmpty() ? null : rows.get(0);
-        } catch (Exception e) {
+        } catch (DataAccessException e) {
+            rethrowIfResourceFailure(e);
             // tenant id only — never the schema name or SQL in logs
             log.warn("Tenant detail: subscription of tenant {} unreadable", tenantId, e);
             return null;
@@ -402,31 +558,64 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
                     + "WHERE occurred_at >= NOW() - INTERVAL '30 days'",
                     Long.class);
             return count != null ? count : 0L;
-        } catch (Exception e) {
+        } catch (DataAccessException e) {
+            rethrowIfResourceFailure(e);
             return 0L;
         }
     }
 
-    private List<AdminAuditEvent> loadAuditEvents(String schema, int page) {
+    /**
+     * Audit lines of the last 30 days, newest first, from the enriched audit log (v1s-18-6): action
+     * and entity type codes (labelled by the dashboard), {@code entity_label}, store name and actor
+     * name — never {@code entity_id} nor {@code user_id}.
+     */
+    private List<AdminAuditEvent> loadAuditEvents(String schema, UUID tenantId, int page) {
+        record AuditRow(String action, String entityType, String entityLabel, String source,
+                        UUID userId, boolean isOwner, String storeName, Instant occurredAt) {}
+        List<AuditRow> rows;
         try {
-            return jdbc.query(
-                    "SELECT id::text, action AS event_type, user_id::text AS actor_id, occurred_at, "
-                    + "entity_type || ' #' || entity_id::text AS details "
-                    + "FROM " + schema + ".audit_log "
-                    + "WHERE occurred_at >= NOW() - INTERVAL '30 days' "
-                    + "ORDER BY occurred_at DESC "
+            rows = jdbc.query(
+                    "SELECT a.action, a.entity_type, a.entity_label, a.occurred_at, a.source, a.user_id, "
+                    + "st.name AS store_name, "
+                    + "EXISTS (SELECT 1 FROM public.user_tenant_memberships m "
+                    + "        WHERE m.user_id = a.user_id AND m.tenant_id = ? AND m.role = 'OWNER') AS actor_is_owner "
+                    + "FROM " + schema + ".audit_log a "
+                    + "LEFT JOIN " + schema + ".stores st ON st.id = a.store_id "
+                    + "WHERE a.occurred_at >= NOW() - INTERVAL '30 days' "
+                    + "ORDER BY a.occurred_at DESC "
                     + "LIMIT ? OFFSET ?",
-                    (rs, row) -> new AdminAuditEvent(
-                            rs.getString("id"),
-                            rs.getString("event_type"),
-                            rs.getString("actor_id"),
-                            rs.getTimestamp("occurred_at").toInstant(),
-                            rs.getString("details")
-                    ),
-                    AUDIT_PAGE_SIZE, (long) page * AUDIT_PAGE_SIZE);
-        } catch (Exception e) {
+                    (rs, row) -> {
+                        Timestamp at = rs.getTimestamp("occurred_at");
+                        String uid = rs.getString("user_id");
+                        return new AuditRow(
+                                rs.getString("action"),
+                                rs.getString("entity_type"),
+                                blankToNull(rs.getString("entity_label")),
+                                rs.getString("source"),
+                                uid != null ? UUID.fromString(uid) : null,
+                                rs.getBoolean("actor_is_owner"),
+                                blankToNull(rs.getString("store_name")),
+                                at != null ? at.toInstant() : null);
+                    },
+                    tenantId, AUDIT_PAGE_SIZE, (long) page * AUDIT_PAGE_SIZE);
+        } catch (DataAccessException e) {
+            rethrowIfResourceFailure(e);
+            log.warn("Tenant detail: audit log of tenant {} unreadable ({})", tenantId, e.getClass().getSimpleName());
             return List.of();
         }
+        // Actor names in a separate fail-soft statement: a broken employees table keeps the lines.
+        Map<UUID, String> names = loadEmployeeNames(schema, tenantId, rows.stream()
+                .filter(r -> !"SYSTEM".equals(r.source()))
+                .map(AuditRow::userId).filter(java.util.Objects::nonNull).distinct().toList());
+        return rows.stream()
+                .map(r -> new AdminAuditEvent(r.action(), r.entityType(), r.entityLabel(),
+                        actorName(r.source(), r.userId() != null ? names.get(r.userId()) : null, r.isOwner()),
+                        r.storeName(), r.occurredAt()))
+                .toList();
+    }
+
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() ? null : s.trim();
     }
 
     // ── RowMapper ─────────────────────────────────────────────────────────────

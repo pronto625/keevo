@@ -20,7 +20,9 @@ import org.springframework.jdbc.core.RowMapper;
 
 import java.sql.ResultSet;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -58,11 +60,18 @@ class AdminTenantServiceTest {
             }
             return null;
         }).when(jdbcTemplate).query(contains("WHERE id IN"), any(RowCallbackHandler.class), any(Object[].class));
-        // Stub cross-schema count queries (called with no args)
-        lenient().when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class)))
-                .thenReturn(0);
-        lenient().when(jdbcTemplate.queryForObject(anyString(), eq(java.sql.Timestamp.class)))
-                .thenReturn(null);
+        // Stub the single per-schema metrics query (spec 9-1 completion): 0 stores, no activity
+        lenient().when(jdbcTemplate.queryForList(contains(".stores"), any(Object[].class)))
+                .thenReturn(List.of(metrics(0, null, null)));
+    }
+
+    /** One row of the per-schema metrics query. */
+    private static Map<String, Object> metrics(int stores, java.sql.Timestamp lastActivity, String ownerName) {
+        Map<String, Object> row = new HashMap<>();
+        row.put("store_count", (long) stores);
+        row.put("last_activity", lastActivity);
+        row.put("owner_name", ownerName);
+        return row;
     }
 
     // ── listTenants ───────────────────────────────────────────────────────────
@@ -148,7 +157,8 @@ class AdminTenantServiceTest {
                 buildItem(UUID.randomUUID(), "FREE", "SUSPENDED"));
         when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(3L);
         when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class))).thenReturn(rows);
-        when(jdbcTemplate.queryForObject(contains("kv_abc123.stores"), eq(Integer.class))).thenReturn(2);
+        when(jdbcTemplate.queryForList(contains("kv_abc123.stores"), any(Object[].class)))
+                .thenReturn(List.of(metrics(2, null, null)));
 
         Page<AdminTenantListItem> result = service.execute(
                 new ListTenantsQuery(null, null, null, null, null, null, null, 0, 25));
@@ -182,18 +192,19 @@ class AdminTenantServiceTest {
                     assertThat(it.storeCount()).isZero();
                     assertThat(it.lastActivityAt()).isNull();
                 });
-        verify(jdbcTemplate, never()).queryForObject(contains(".stores"), eq(Integer.class));
+        verify(jdbcTemplate, never()).queryForList(contains(".stores"), any(Object[].class));
     }
 
     @Test
-    @DisplayName("11.5 — batched schema lookup fails → items kept with zero metrics, no cross-schema query")
+    @DisplayName("11.5 — batched schema lookup SQL error → items kept with zero metrics, no cross-schema query")
     void listTenants_batchedLookupFails_keepsItemsWithZeroMetrics() {
         UUID a = UUID.randomUUID();
         UUID b = UUID.randomUUID();
         when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(2L);
         when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class)))
                 .thenReturn(List.of(buildItem(a, "FREE", "ACTIVE"), buildItem(b, "PREMIUM", "ACTIVE")));
-        doThrow(new org.springframework.dao.DataAccessResourceFailureException("db down")).when(jdbcTemplate)
+        doThrow(new org.springframework.jdbc.BadSqlGrammarException("x", "sql", new java.sql.SQLException("bad")))
+                .when(jdbcTemplate)
                 .query(contains("WHERE id IN"), any(RowCallbackHandler.class), any(Object[].class));
 
         Page<AdminTenantListItem> result = service.execute(
@@ -204,7 +215,21 @@ class AdminTenantServiceTest {
             assertThat(it.storeCount()).isZero();
             assertThat(it.lastActivityAt()).isNull();
         });
-        verify(jdbcTemplate, never()).queryForObject(contains(".stores"), eq(Integer.class));
+        verify(jdbcTemplate, never()).queryForList(contains(".stores"), any(Object[].class));
+    }
+
+    @Test
+    @DisplayName("9-1 — batched schema lookup: database down is rethrown, never shown as zeros")
+    void listTenants_batchedLookupDbDown_rethrown() {
+        when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(1L);
+        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class)))
+                .thenReturn(List.of(buildItem(UUID.randomUUID(), "FREE", "ACTIVE")));
+        doThrow(new org.springframework.dao.DataAccessResourceFailureException("db down")).when(jdbcTemplate)
+                .query(contains("WHERE id IN"), any(RowCallbackHandler.class), any(Object[].class));
+
+        assertThatThrownBy(() -> service.execute(
+                new ListTenantsQuery(null, null, null, null, null, null, null, 0, 25)))
+                .isInstanceOf(org.springframework.dao.DataAccessResourceFailureException.class);
     }
 
     @Test
@@ -215,7 +240,8 @@ class AdminTenantServiceTest {
                 .thenReturn(List.of(buildItem(id, "FREE", "ACTIVE")));
         when(jdbcTemplate.queryForObject(contains("SELECT schema_name FROM public.tenants"), eq(String.class),
                 any(Object[].class))).thenReturn("kv_abc123");
-        when(jdbcTemplate.queryForObject(contains("kv_abc123.stores"), eq(Integer.class))).thenReturn(3);
+        when(jdbcTemplate.queryForList(contains("kv_abc123.stores"), any(Object[].class)))
+                .thenReturn(List.of(metrics(3, null, null)));
 
         var detail = service.execute(new com.keevo.admin.tenant.domain.port.in.GetTenantDetailQuery(id, 0));
 
@@ -352,8 +378,306 @@ class AdminTenantServiceTest {
                 .isInstanceOf(DomainException.class)
                 .extracting(e -> ((DomainException) e).getErrorCode())
                 .isEqualTo(ErrorCode.TENANT_NOT_FOUND);
-        verify(jdbcTemplate, never()).queryForObject(contains("DROP"), eq(Integer.class));
-        verify(jdbcTemplate, never()).queryForObject(contains("DROP"), eq(java.sql.Timestamp.class));
+        verify(jdbcTemplate, never()).queryForList(contains("DROP"), any(Object[].class));
         assertThat(com.keevo.shared.infrastructure.persistence.TenantContext.getCurrentTenant()).isNull();
+    }
+
+    // ── Spec 9-1 completion ───────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("9-1 — plan filter PREMIUM_TRIAL is bound as a parameter (trial ≠ Premium)")
+    void listTenants_planFilterTrial_bindsPlan() {
+        when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(0L);
+
+        service.execute(new ListTenantsQuery(null, "PREMIUM_TRIAL", null, null, null, null, null, 0, 25));
+
+        verify(jdbcTemplate).queryForObject(contains("AND t.plan_type = ?"), eq(Long.class), eq("PREMIUM_TRIAL"));
+    }
+
+    @Test
+    @DisplayName("9-1 — plan filter PREMIUM and FREE are exact; legacy PAID still means trial + Premium")
+    void listTenants_planFilterPremiumAndLegacyPaid() {
+        when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(0L);
+
+        service.execute(new ListTenantsQuery(null, "PREMIUM", null, null, null, null, null, 0, 25));
+        verify(jdbcTemplate).queryForObject(contains("AND t.plan_type = ?"), eq(Long.class), eq("PREMIUM"));
+
+        service.execute(new ListTenantsQuery(null, "free", null, null, null, null, null, 0, 25));
+        verify(jdbcTemplate).queryForObject(contains("AND t.plan_type = ?"), eq(Long.class), eq("FREE"));
+
+        service.execute(new ListTenantsQuery(null, "PAID", null, null, null, null, null, 0, 25));
+        verify(jdbcTemplate).queryForObject(contains("t.plan_type IN ('PREMIUM', 'PREMIUM_TRIAL')"),
+                eq(Long.class), any(Object[].class));
+
+        service.execute(new ListTenantsQuery(null, "ALL", null, null, null, null, null, 0, 25));
+        verify(jdbcTemplate, times(3)).queryForObject(contains("plan_type"), eq(Long.class), any(Object[].class));
+    }
+
+    @Test
+    @DisplayName("9-1 — unknown plan filter → 422 VALIDATION_ERROR, no query")
+    void listTenants_unknownPlan_validationError() {
+        assertThatThrownBy(() -> service.execute(
+                new ListTenantsQuery(null, "GOLD", null, null, null, null, null, 0, 25)))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    @DisplayName("9-1 (routed from 11-5) — exactly TWO cross-schema statements per tenant: metrics, owner name")
+    void listTenants_twoCrossSchemaStatementsPerTenant() {
+        List<AdminTenantListItem> rows = List.of(
+                buildItem(UUID.randomUUID(), "FREE", "ACTIVE"),
+                buildItem(UUID.randomUUID(), "PREMIUM", "ACTIVE"),
+                buildItem(UUID.randomUUID(), "PREMIUM_TRIAL", "ACTIVE"));
+        when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(3L);
+        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class))).thenReturn(rows);
+        java.sql.Timestamp last = java.sql.Timestamp.from(Instant.parse("2026-10-12T08:00:00Z"));
+        when(jdbcTemplate.queryForList(contains("kv_abc123.stores"), any(Object[].class)))
+                .thenReturn(List.of(metrics(4, last, null)));
+        stubOwnerName("  Awa Diallo ");
+
+        Page<AdminTenantListItem> result = service.execute(
+                new ListTenantsQuery(null, null, null, null, null, null, null, 0, 25));
+
+        // 1 count + 1 list + 1 batched schema lookup + 2N (=6) cross-schema statements, nothing else:
+        // store count + last activity together, the owner name apart (a broken employees table
+        // must not lose the metrics).
+        verify(jdbcTemplate, times(6)).queryForList(anyString(), any(Object[].class));
+        verify(jdbcTemplate, times(3)).queryForList(contains("kv_abc123.stores"), any(Object[].class));
+        verify(jdbcTemplate, times(3)).queryForList(contains("AS owner_name"), any(Object[].class));
+        verify(jdbcTemplate, times(1)).queryForObject(anyString(), eq(Long.class), any(Object[].class));
+        verify(jdbcTemplate, times(1)).query(anyString(), any(RowMapper.class), any(Object[].class));
+        verify(jdbcTemplate, times(1)).query(anyString(), any(RowCallbackHandler.class), any(Object[].class));
+        verifyNoMoreInteractions(jdbcTemplate);
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate, atLeastOnce()).queryForList(sql.capture(), any(Object[].class));
+        assertThat(sql.getAllValues()).anySatisfy(q -> assertThat(q).contains("kv_abc123.stores")
+                .contains("kv_abc123.audit_log").doesNotContain("employees"));
+        assertThat(sql.getAllValues()).anySatisfy(q -> assertThat(q).contains("kv_abc123.employees")
+                .contains("role = 'OWNER'").doesNotContain("stores"));
+        assertThat(result.getContent()).allSatisfy(it -> {
+            assertThat(it.storeCount()).isEqualTo(4);
+            assertThat(it.lastActivityAt()).isEqualTo(last.toInstant());
+            assertThat(it.ownerName()).isEqualTo("Awa Diallo");
+        });
+    }
+
+    @Test
+    @DisplayName("9-1 — owner without a stored name → « Propriétaire »")
+    void listTenants_ownerWithoutName_isProprietaire() {
+        when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(1L);
+        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class)))
+                .thenReturn(List.of(buildItem(UUID.randomUUID(), "FREE", "ACTIVE")));
+
+        Page<AdminTenantListItem> result = service.execute(
+                new ListTenantsQuery(null, null, null, null, null, null, null, 0, 25));
+
+        assertThat(result.getContent()).singleElement()
+                .extracting(AdminTenantListItem::ownerName).isEqualTo("Propriétaire");
+    }
+
+    @Test
+    @DisplayName("9-1 — broken employees table only loses the owner name, never the metrics")
+    void listTenants_brokenEmployees_keepsMetrics() {
+        when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(1L);
+        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class)))
+                .thenReturn(List.of(buildItem(UUID.randomUUID(), "FREE", "ACTIVE")));
+        when(jdbcTemplate.queryForList(contains(".stores"), any(Object[].class)))
+                .thenReturn(List.of(metrics(2, null, null)));
+        when(jdbcTemplate.queryForList(contains("AS owner_name"), any(Object[].class)))
+                .thenThrow(new org.springframework.jdbc.BadSqlGrammarException("x", "sql",
+                        new java.sql.SQLException("relation employees does not exist")));
+
+        Page<AdminTenantListItem> result = service.execute(
+                new ListTenantsQuery(null, null, null, null, null, null, null, 0, 25));
+
+        assertThat(result.getContent()).singleElement().satisfies(it -> {
+            assertThat(it.storeCount()).isEqualTo(2);
+            assertThat(it.ownerName()).isEqualTo("Propriétaire");
+        });
+    }
+
+    @Test
+    @DisplayName("9-1 — last-activity filter keeps only tenants whose latest audit entry is in range, then pages")
+    void listTenants_lastActivityFilter_preFiltersPerSchema() {
+        UUID inRange = UUID.randomUUID();
+        UUID tooOld = UUID.randomUUID();
+        UUID never = UUID.randomUUID();
+        when(jdbcTemplate.queryForList(contains("GROUP BY t.id ORDER BY t.created_at DESC"), any(Object[].class)))
+                .thenReturn(List.of(
+                        row("id", inRange.toString(), "schema_name", "kv_aaa111"),
+                        row("id", tooOld.toString(), "schema_name", "kv_bbb222"),
+                        row("id", never.toString(), "schema_name", "kv_ccc333")));
+        when(jdbcTemplate.queryForList(contains("kv_aaa111.audit_log"), any(Object[].class)))
+                .thenReturn(List.of(row("last_activity", java.sql.Timestamp.from(Instant.parse("2026-10-05T10:00:00Z")))));
+        when(jdbcTemplate.queryForList(contains("kv_bbb222.audit_log"), any(Object[].class)))
+                .thenReturn(List.of(row("last_activity", java.sql.Timestamp.from(Instant.parse("2026-08-01T10:00:00Z")))));
+        when(jdbcTemplate.queryForList(contains("kv_ccc333.audit_log"), any(Object[].class)))
+                .thenReturn(List.of(row("last_activity", null)));
+        when(jdbcTemplate.query(contains("AND t.id IN (?)"), any(RowMapper.class), any(Object[].class)))
+                .thenReturn(List.of(buildItem(inRange, "FREE", "ACTIVE")));
+
+        Page<AdminTenantListItem> result = service.execute(new ListTenantsQuery(null, null, null, null, null,
+                Instant.parse("2026-10-01T00:00:00Z"), Instant.parse("2026-10-13T00:00:00Z"), 0, 25));
+
+        assertThat(result.getTotalElements()).isEqualTo(1L);
+        assertThat(result.getContent()).extracting(AdminTenantListItem::id).containsExactly(inRange);
+        verify(jdbcTemplate).query(contains("AND t.id IN (?)"), any(RowMapper.class), any(Object[].class));
+        verify(jdbcTemplate, never()).queryForObject(contains("SELECT COUNT(*)"), eq(Long.class), any(Object[].class));
+    }
+
+    @Test
+    @DisplayName("9-1 — a tenant's own schema error is skipped; a connection failure is rethrown")
+    void listTenants_schemaErrorSkipped_resourceFailureRethrown() {
+        when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(1L);
+        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class)))
+                .thenReturn(List.of(buildItem(UUID.randomUUID(), "FREE", "ACTIVE")));
+        when(jdbcTemplate.queryForList(contains(".stores"), any(Object[].class)))
+                .thenThrow(new org.springframework.jdbc.BadSqlGrammarException("x", "sql",
+                        new java.sql.SQLException("relation does not exist")));
+
+        Page<AdminTenantListItem> result = service.execute(
+                new ListTenantsQuery(null, null, null, null, null, null, null, 0, 25));
+        assertThat(result.getContent()).singleElement().satisfies(it -> {
+            assertThat(it.storeCount()).isZero();
+            assertThat(it.ownerName()).isEqualTo("Propriétaire");
+        });
+
+        reset(jdbcTemplate);
+        setUp();
+        when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(1L);
+        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class)))
+                .thenReturn(List.of(buildItem(UUID.randomUUID(), "FREE", "ACTIVE")));
+        when(jdbcTemplate.queryForList(contains(".stores"), any(Object[].class)))
+                .thenThrow(new org.springframework.jdbc.CannotGetJdbcConnectionException("pool exhausted"));
+
+        assertThatThrownBy(() -> service.execute(
+                new ListTenantsQuery(null, null, null, null, null, null, null, 0, 25)))
+                .isInstanceOf(org.springframework.jdbc.CannotGetJdbcConnectionException.class);
+    }
+
+    @Test
+    @DisplayName("9-1 — detail employees: trimmed names, « Propriétaire » fallback, last active day, no id")
+    void tenantDetail_employeesHaveNamesAndLastActivity() throws Exception {
+        UUID id = stubDetail();
+        UUID owner = UUID.randomUUID();
+        UUID awa = UUID.randomUUID();
+        UUID nameless = UUID.randomUUID();
+        answerRows("user_daily_activity", List.of(
+                row("user_id", owner.toString(), "role", "OWNER"),
+                row("user_id", awa.toString(), "role", "EMPLOYEE", "last_day", java.sql.Date.valueOf("2026-10-12")),
+                row("user_id", nameless.toString(), "role", "EMPLOYEE")));
+        when(jdbcTemplate.queryForList(contains("kv_abc123.employees e WHERE e.user_id IN"), any(Object[].class)))
+                .thenReturn(List.of(row("user_id", awa.toString(), "full_name", " Awa Diallo ")));
+
+        var detail = service.execute(new com.keevo.admin.tenant.domain.port.in.GetTenantDetailQuery(id, 0));
+
+        assertThat(detail.employees()).extracting(com.keevo.admin.tenant.domain.model.AdminEmployeeInfo::name)
+                .containsExactly("Propriétaire", "Awa Diallo", "Employé");
+        assertThat(detail.employees().get(1).lastActivityAt()).isEqualTo(java.time.LocalDate.of(2026, 10, 12));
+        assertThat(detail.employees().get(0).lastActivityAt()).isNull();
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate, times(2)).query(sql.capture(), any(RowMapper.class), eq(id));
+        // members come from public.* only; names from the tenant schema in a separate statement
+        assertThat(sql.getAllValues().get(1)).contains("MAX(d.activity_date)").doesNotContain("employees")
+                .doesNotContain("u.phone_number");
+    }
+
+    @Test
+    @DisplayName("9-1 — broken employees table keeps every member (« Propriétaire » / « Employé »)")
+    void tenantDetail_brokenEmployees_keepsMembers() throws Exception {
+        UUID id = stubDetail();
+        answerRows("user_daily_activity", List.of(
+                row("user_id", UUID.randomUUID().toString(), "role", "OWNER"),
+                row("user_id", UUID.randomUUID().toString(), "role", "EMPLOYEE")));
+        when(jdbcTemplate.queryForList(contains(".employees e WHERE e.user_id IN"), any(Object[].class)))
+                .thenThrow(new org.springframework.jdbc.BadSqlGrammarException("x", "sql",
+                        new java.sql.SQLException("relation employees does not exist")));
+
+        var detail = service.execute(new com.keevo.admin.tenant.domain.port.in.GetTenantDetailQuery(id, 0));
+
+        assertThat(detail.employees()).extracting(com.keevo.admin.tenant.domain.model.AdminEmployeeInfo::name)
+                .containsExactly("Propriétaire", "Employé");
+    }
+
+    @Test
+    @DisplayName("9-1 — detail audit: action + entity label + actor name, never entity_id / user_id")
+    void tenantDetail_auditLinesAreReadable() throws Exception {
+        UUID id = stubDetail();
+        Instant at = Instant.parse("2026-10-12T09:00:00Z");
+        UUID awa = UUID.randomUUID();
+        when(jdbcTemplate.queryForList(contains("kv_abc123.employees e WHERE e.user_id IN"), any(Object[].class)))
+                .thenReturn(List.of(row("user_id", awa.toString(), "full_name", "Awa Diallo")));
+        answerRows("kv_abc123.audit_log a", List.of(
+                row("action", "PRICE_CHANGED", "entity_type", "Product", "entity_label", "Savon",
+                        "source", "ONLINE", "user_id", awa.toString(), "store_name", "Boutique Centre",
+                        "occurred_at", java.sql.Timestamp.from(at)),
+                row("action", "STOCK_THRESHOLD_BREACHED", "entity_type", "StockAlert", "entity_label", " ",
+                        "source", "SYSTEM", "occurred_at", java.sql.Timestamp.from(at)),
+                row("action", "PRODUCT_CREATED", "entity_type", "Product", "actor_is_owner", true,
+                        "occurred_at", java.sql.Timestamp.from(at)),
+                row("action", "PRODUCT_CREATED", "entity_type", "Product",
+                        "user_id", UUID.randomUUID().toString())));
+
+        var detail = service.execute(new com.keevo.admin.tenant.domain.port.in.GetTenantDetailQuery(id, 0));
+
+        assertThat(detail.auditEvents()).extracting(com.keevo.admin.tenant.domain.model.AdminAuditEvent::actorName)
+                .containsExactly("Awa Diallo", "Système", "Propriétaire", "Utilisateur inconnu");
+        var first = detail.auditEvents().get(0);
+        assertThat(first.action()).isEqualTo("PRICE_CHANGED");
+        assertThat(first.entityLabel()).isEqualTo("Savon");
+        assertThat(first.storeName()).isEqualTo("Boutique Centre");
+        assertThat(detail.auditEvents().get(1).entityLabel()).isNull();
+        // a null occurred_at never turns the drawer into a 500
+        assertThat(detail.auditEvents().get(3).occurredAt()).isNull();
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate).query(sql.capture(), any(RowMapper.class), eq(id), eq(50), eq(0L));
+        assertThat(sql.getValue()).contains("a.entity_label").doesNotContain("entity_id")
+                .doesNotContain("employees");
+    }
+
+    private void stubOwnerName(String name) {
+        when(jdbcTemplate.queryForList(contains("AS owner_name"), any(Object[].class)))
+                .thenReturn(List.of(row("owner_name", name)));
+    }
+
+    /** Detail of one tenant on schema kv_abc123; returns its id. */
+    private UUID stubDetail() {
+        UUID id = UUID.randomUUID();
+        when(jdbcTemplate.query(contains("WHERE t.id = ?"), any(RowMapper.class), any(Object[].class)))
+                .thenReturn(List.of(buildItem(id, "FREE", "ACTIVE")));
+        when(jdbcTemplate.queryForObject(contains("SELECT schema_name FROM public.tenants"), eq(String.class),
+                any(Object[].class))).thenReturn("kv_abc123");
+        return id;
+    }
+
+    /** Runs the RowMapper of the matching query over mocked rows (absent column → null / false). */
+    @SuppressWarnings("unchecked")
+    private void answerRows(String sqlFragment, List<Map<String, Object>> rows) throws Exception {
+        doAnswer(inv -> {
+            RowMapper<Object> mapper = inv.getArgument(1);
+            List<Object> out = new java.util.ArrayList<>();
+            for (int i = 0; i < rows.size(); i++) {
+                Map<String, Object> r = rows.get(i);
+                ResultSet rs = mock(ResultSet.class);
+                when(rs.getString(anyString())).thenAnswer(a -> {
+                    Object v = r.get(a.<String>getArgument(0));
+                    return v == null ? null : v.toString();
+                });
+                when(rs.getDate(anyString())).thenAnswer(a -> r.get(a.<String>getArgument(0)));
+                when(rs.getTimestamp(anyString())).thenAnswer(a -> r.get(a.<String>getArgument(0)));
+                when(rs.getBoolean(anyString())).thenAnswer(a -> Boolean.TRUE.equals(r.get(a.<String>getArgument(0))));
+                out.add(mapper.mapRow(rs, i));
+            }
+            return out;
+        }).when(jdbcTemplate).query(contains(sqlFragment), any(RowMapper.class), any(Object[].class));
+    }
+
+    private static Map<String, Object> row(Object... kv) {
+        Map<String, Object> m = new HashMap<>();
+        for (int i = 0; i < kv.length; i += 2) m.put((String) kv[i], kv[i + 1]);
+        return m;
     }
 }

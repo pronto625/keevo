@@ -3,6 +3,7 @@ package com.keevo.admin.tenant.adapter.in.rest.dto;
 import com.keevo.admin.tenant.domain.model.*;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -25,16 +26,19 @@ public record AdminTenantDetailDto(
         }
     }
 
-    public record EmployeeInfoDto(String id, String name, String role, Instant lastLoginAt) {
+    /** Spec 9-1 completion — name + role + last activity day (user_daily_activity); no user id. */
+    public record EmployeeInfoDto(String name, String role, LocalDate lastActivityAt) {
         public static EmployeeInfoDto from(AdminEmployeeInfo e) {
-            return new EmployeeInfoDto(e.id(), e.name(), e.role(), e.lastLoginAt());
+            return new EmployeeInfoDto(e.name(), e.role(), e.lastActivityAt());
         }
     }
 
-    public record AuditEventDto(String id, String eventType, String actorId,
-                                Instant occurredAt, String details) {
+    /** Spec 9-1 completion — readable audit line: no entity id, no actor id. */
+    public record AuditEventDto(String action, String entityType, String entityLabel,
+                                String actorName, String storeName, Instant occurredAt) {
         public static AuditEventDto from(AdminAuditEvent a) {
-            return new AuditEventDto(a.id(), a.eventType(), a.actorId(), a.occurredAt(), a.details());
+            return new AuditEventDto(a.action(), a.entityType(), a.entityLabel(),
+                    a.actorName(), a.storeName(), a.occurredAt());
         }
     }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { planFilterLabel } from "@/lib/labels";
 import { useQuery } from "@tanstack/react-query";
 import { getTenants } from "@/lib/api/admin-tenants";
 import type { ProductFilters } from "@/types/catalog";
@@ -44,13 +45,13 @@ export function ProductFiltersPanel({ filters, onUpdate }: ProductFiltersProps) 
         />
       </div>
 
-      {/* Tenant */}
+      {/* Entreprise */}
       <select
         value={filters.tenantId}
         onChange={(e) => onUpdate("tenantId", e.target.value)}
         className="text-sm border border-gray-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
       >
-        <option value="">Tous les tenants</option>
+        <option value="">Toutes les entreprises</option>
         {tenantsQuery.data?.items.map((t) => (
           <option key={t.id} value={t.id}>
             {t.name}
@@ -95,8 +96,8 @@ export function ProductFiltersPanel({ filters, onUpdate }: ProductFiltersProps) 
         className="text-sm border border-gray-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
       >
         <option value="ALL">Plan (tous)</option>
-        <option value="FREE">FREE</option>
-        <option value="PAID">PAID</option>
+        <option value="FREE">{planFilterLabel("FREE")}</option>
+        <option value="PAID">{planFilterLabel("PAID")}</option>
       </select>
     </div>
   );

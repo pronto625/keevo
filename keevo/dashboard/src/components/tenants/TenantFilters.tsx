@@ -1,6 +1,6 @@
 "use client";
 
-import { tenantStatusLabel } from "@/lib/labels";
+import { TENANT_PLAN_FILTERS, planFilterLabel, tenantStatusLabel } from "@/lib/labels";
 import type { TenantFilters } from "@/types/tenant";
 
 interface TenantFiltersProps {
@@ -18,21 +18,25 @@ export function TenantFiltersPanel({ filters, onUpdate }: TenantFiltersProps) {
   return (
     <div className="flex flex-wrap gap-3 items-end">
       <div>
-        <label className={labelClass}>Plan</label>
+        <label className={labelClass} htmlFor="tenant-filter-plan">Plan</label>
         <select
+          id="tenant-filter-plan"
           value={filters.plan}
           onChange={(e) => onUpdate("plan", e.target.value as TenantFilters["plan"])}
           className={selectClass}
         >
-          <option value="ALL">Tous</option>
-          <option value="FREE">Gratuit</option>
-          <option value="PAID">Premium et essai</option>
+          {TENANT_PLAN_FILTERS.map((p) => (
+            <option key={p} value={p}>{planFilterLabel(p)}</option>
+          ))}
+          {/* Legacy filter (old links): kept selectable only while active. */}
+          {filters.plan === "PAID" && <option value="PAID">{planFilterLabel("PAID")}</option>}
         </select>
       </div>
 
       <div>
-        <label className={labelClass}>Statut</label>
+        <label className={labelClass} htmlFor="tenant-filter-status">Statut</label>
         <select
+          id="tenant-filter-status"
           value={filters.status}
           onChange={(e) => onUpdate("status", e.target.value as TenantFilters["status"])}
           className={selectClass}

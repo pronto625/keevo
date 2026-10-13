@@ -5,11 +5,14 @@ import java.util.UUID;
 
 /**
  * AdminTenantListItemDto — serializable DTO for one tenant row in the admin list.
+ *
+ * <p>The tenant code is deliberately not exposed (« no technical data in UI »); {@code id} is only
+ * used by the dashboard to open the drawer and call actions, never displayed.
  */
 public record AdminTenantListItemDto(
         UUID id,
-        String code,
         String name,
+        String ownerName,
         String ownerPhone,
         String plan,
         String status,
@@ -21,7 +24,7 @@ public record AdminTenantListItemDto(
 ) {
     public static AdminTenantListItemDto from(com.keevo.admin.tenant.domain.model.AdminTenantListItem item) {
         return new AdminTenantListItemDto(
-                item.id(), item.code(), item.name(), item.ownerPhone(),
+                item.id(), item.name(), item.ownerName(), item.ownerPhone(),
                 item.plan(), item.status(),
                 item.registeredAt(), item.lastActivityAt(),
                 item.storeCount(), item.employeeCount(),
