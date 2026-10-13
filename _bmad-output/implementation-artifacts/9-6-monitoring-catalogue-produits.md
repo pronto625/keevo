@@ -593,3 +593,7 @@ claude-sonnet-4-5 (Cursor Agent)
 - **Curl tests story 9.6** : 13/13 PASS (T1–T12 + T8b)
 - **Non-regression** : 5/5 PASS (NR-1 à NR-5)
 - **Unit tests** : 10/10 GREEN (`AdminCatalogControllerTest` + `AdminCatalogServiceTest`)
+
+### Deferred items routed 2026-10-13
+
+- [ ] [Deferred-from: build-auto 9-3 implementation, 2026-10-13] Catalog CSV export link sends no JWT [keevo/dashboard/src/lib/api/admin-catalog.ts:40] — the export is a plain `/api/backend/admin/catalog/products/export` link while the admin JWT lives in memory/sessionStorage (axios header), so the download gets 401; download through the authenticated axios client (blob) like the 9-3 churn export.

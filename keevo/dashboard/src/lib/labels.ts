@@ -277,3 +277,44 @@ const PERIOD_LABELS: Record<string, string> = {
 export function periodLabel(code: string | null | undefined): string {
   return lookup(PERIOD_LABELS, code, "—");
 }
+
+// Story 9-3 — « Revenus » page.
+export const REVENUE_LABELS = {
+  mrr: "MRR",
+  arr: "ARR",
+  payingTenants: "Entreprises payantes",
+  freeTenants: "Entreprises gratuites",
+  trialTenants: "Entreprises en essai",
+  premiumTenants: "Entreprises Premium",
+  conversionRate: "Conversion essai → Premium",
+  churnRate: "Taux de churn",
+  churnRateRange: "Taux de churn sur la période",
+  newPayingTenants: "Nouveaux payants",
+  revenueCollected: "Encaissé sur la période",
+  chartMrr: "MRR",
+  chartPaying: "Entreprises payantes",
+  chartNew: "Nouveaux payants",
+  chartChurned: "Entreprises perdues",
+  churnTitle: "Entreprises perdues",
+  churnEmpty: "Aucune entreprise perdue ce mois-ci",
+  exportCsv: "Exporter CSV",
+} as const;
+
+const MONTH_NAMES = [
+  "janvier", "février", "mars", "avril", "mai", "juin",
+  "juillet", "août", "septembre", "octobre", "novembre", "décembre",
+];
+const MONTH_SHORT_NAMES = [
+  "janv.", "févr.", "mars", "avr.", "mai", "juin",
+  "juil.", "août", "sept.", "oct.", "nov.", "déc.",
+];
+
+/** `2026-10` → « octobre 2026 » (short: « oct. 26 »). */
+export function monthLabel(month: string | null | undefined, short = false): string {
+  const match = /^(\d{4})-(\d{2})$/.exec(month?.trim() ?? "");
+  if (!match) return "—";
+  const index = Number(match[2]) - 1;
+  const name = MONTH_NAMES[index];
+  if (!name) return "—";
+  return short ? `${MONTH_SHORT_NAMES[index]} ${match[1].slice(2)}` : `${name} ${match[1]}`;
+}
