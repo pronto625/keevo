@@ -1358,12 +1358,21 @@ class RestSyncService implements SyncService {
     if (movements.isEmpty) return;
     for (final m in movements) {
       final map = m as Map<String, dynamic>;
-      // INSERT OR IGNORE — movements are immutable
+      // Movements are immutable on the server, which is the source of truth for a
+      // given id. v1s-13-13: an owner cancel/correction is also written locally under
+      // the server's deterministic id (cashier as actor, no reason, local quantities),
+      // so the pulled row overwrites those fields; `synced_at` (purge clock) is kept.
       await _database.customStatement(
-        'INSERT OR IGNORE INTO stock_movements (id, product_id, variant_id, '
+        'INSERT INTO stock_movements (id, product_id, variant_id, '
         'store_id, type, quantity_before, quantity_delta, quantity_after, '
         'actor_id, reason, synced, created_at) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)',
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?) '
+        'ON CONFLICT(id) DO UPDATE SET product_id = excluded.product_id, '
+        'variant_id = excluded.variant_id, store_id = excluded.store_id, '
+        'type = excluded.type, quantity_before = excluded.quantity_before, '
+        'quantity_delta = excluded.quantity_delta, '
+        'quantity_after = excluded.quantity_after, actor_id = excluded.actor_id, '
+        'reason = excluded.reason, synced = 1, created_at = excluded.created_at',
         [
           map['id'],
           map['productId'],

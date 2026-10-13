@@ -192,7 +192,15 @@ public class WeeklyReportGenerator extends AbstractReportGenerator
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    afterCommitTx.executeWithoutResult(status -> action.run());
+                    // The report is already committed: a failure here (status save, opening the
+                    // REQUIRES_NEW transaction) must neither reach the caller (manual trigger loop)
+                    // nor skip the next synchronization. A report left PENDING is picked up by
+                    // ReportDeliveryRetryService once stale.
+                    try {
+                        afterCommitTx.executeWithoutResult(status -> action.run());
+                    } catch (RuntimeException e) {
+                        log.error("After-commit weekly report step failed: {}", e.getMessage(), e);
+                    }
                 }
             });
         } else {

@@ -358,13 +358,16 @@ void main() {
             .getSingle())
         .quantity;
 
-    /// Same statement as RestSyncService._upsertStockMovements (the pull).
+    /// Simplified copy of RestSyncService._upsertStockMovements (the pull); the real
+    /// statement is pinned by rest_sync_service_pull_test.dart.
     Future<void> pullMovement(String id, String type, int delta) =>
         db.customStatement(
-          'INSERT OR IGNORE INTO stock_movements (id, product_id, variant_id, '
+          'INSERT INTO stock_movements (id, product_id, variant_id, '
           'store_id, type, quantity_before, quantity_delta, quantity_after, '
           'actor_id, reason, synced, created_at) '
-          'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)',
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?) '
+          'ON CONFLICT(id) DO UPDATE SET actor_id = excluded.actor_id, '
+          'reason = excluded.reason, synced = 1',
           [
             id, 'prod-1', null, 'store-1', type, 0, delta, 0, 'owner-1',
             'server', DateTime(2026).toIso8601String(),
