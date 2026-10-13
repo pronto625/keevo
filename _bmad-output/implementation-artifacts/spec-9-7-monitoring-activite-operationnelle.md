@@ -2,9 +2,10 @@
 title: '9-7 — Operational activity monitoring (super admin): GMV, trend, tenant activity, inactive tenants'
 type: 'feature'
 created: '2026-10-13'
-status: 'ready-for-dev'
+status: 'done'
+baseline_revision: '7668dba2ad7fd6ac0bbaee9247c2c37295e5c0d5'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-9-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/9-7-monitoring-activite-operationnelle.md'
@@ -70,9 +71,64 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-10-13 — Review pass
+- verdicts: 41 findings — high 0, medium 5, low 18, false 9, maybe-false 2 (+ intent rows descriptive)
+- findings:
+  - `[low]` `[reject]` (blind) tenants whose per-schema query fails vanish without a partial flag — provisioning gate (v1s-13-12) makes broken schemas rare; resource failures now fail the request (edge row 1), a `partial` field would add API surface for a rare case.
+  - `[low]` `[reject]` (blind) broken schema dropped from the inactive list — same rarity; listing it as « Jamais active » would be wrong too; WARN log added for filtered schemas.
+  - `[false]` `[reject]` (blind) brand-new tenants listed as inactive — spec matrix row « Never active → listed, Jamais »; a never-activated signup is the onboarding risk Toor wants to see.
+  - `[false]` `[reject]` (blind) plan can be an expired/cancelled subscription — one subscription row per tenant (`Subscription` javadoc), expiry downgrades it nightly.
+  - `[low]` `[reject]` (blind) last activity counts non-completed sales — any recorded sale is usage activity; GMV stays COMPLETED-only as specified.
+  - `[low]` `[reject]` (blind) 4×N queries, in-memory pagination, no cache — accepted Phase 1 (< 200 tenants) in the epic context.
+  - `[medium]` `[patch]` (blind) incomplete CUSTOM range reads as « no activity » — hook exposes a range-incomplete flag; sections show « Choisissez une période valide… ».
+  - `[medium]` `[patch]` (blind) failed refresh unnoticed in chart/table/inactive — `StaleDataWarning` when data && isError.
+  - `[low]` `[patch]` (blind) page never clamped — clamped to totalPages − 1 on data.
+  - `[low]` `[patch]` (blind) tooltip dead branch, orderCount hidden — tooltip shows GMV and number of sales.
+  - `[medium]` `[patch]` (blind) missing tests chart/hook/page — `GmvTrendChart.test.tsx`, `activity/__tests__/page.test.tsx`.
+  - `[maybe-false]` `[reject]` (blind) integration test time-dependent — seeds are « yesterday » and « 10 days ago » against a 7D window: both stay on their side at any hour; would need a 23:30 UTC seed to matter (low if true).
+  - `[low]` `[reject]` (blind) 14 days / 366 days duplicated in UI text — constants change only by PO decision; text update is a one-liner then.
+  - `[false]` `[reject]` (blind) story/spec/sprint status disagree — orchestrator finalizes them in this commit.
+  - `[false]` `[reject]` (blind) PO decisions ticked without sign-off — the story file states the defaults; the spec records them as decided from the docs (user instruction: decide from the docs).
+  - `[maybe-false]` `[reject]` (blind) GMV gross vs net of discount — `sales.total_amount` is the amount after discount (`Sale` computes total − discount); low if true.
+  - `[medium]` `[patch]` (edge) DB outage answered 200 with zeros — only per-tenant SQL/schema errors are skipped; resource/connection failures rethrown; tests.
+  - `[low]` `[reject]` (edge) broken tenant hidden from dormant list — same as blind row 2.
+  - `[low]` `[reject]` (edge) auxiliary subquery failure drops a tenant row while overview counts it — same rarity reasoning.
+  - `[low]` `[patch]` (edge) warehouses counted as stores — `type = 'STORE'`.
+  - `[false]` `[reject]` (edge) lapsed subscription shown — same as blind row 4.
+  - `[false]` `[reject]` (edge) new tenant flagged inactive — same as blind row 3.
+  - `[low]` `[patch]` (edge) out-of-range CUSTOM year returns zeros — years outside 2000–9999 → 422.
+  - `[low]` `[reject]` (edge) backend page ≥ totalPages returns empty — UI clamps; an empty page past the end is a valid answer.
+  - `[low]` `[patch]` (edge) invalid schema filtered silently — WARN log with tenant id.
+  - `[false]` `[reject]` (edge) suspended tenants not counted as new — spec: only ACTIVE tenants are considered.
+  - `[low]` `[patch]` (edge) UI page past totalPages — same as blind row 9.
+  - `[medium]` `[patch]` (edge) disabled queries read as empty data — same as blind row 7.
+  - `[medium]` `[patch]` (edge) stale table/chart/inactive without warning — same as blind row 8 (3 rows).
+  - `[low]` `[patch]` (edge) `2026-02-31` accepted client-side — ISO round-trip check.
+  - `[low]` `[patch]` (gap) plan subquery not pinned on real SQL — exact `PREMIUM_TRIAL` assertion.
+  - `[medium]` `[patch]` (gap) page/hook wiring untested — page test.
+  - `[low]` `[patch]` (gap) GmvTrendChart states untested — chart test.
+  - `[false]` `[reject]` (intent) R1–R4 readings and surfaces — descriptive; 403 at filter chain is pinned by existing `SecurityConfig` admin-path tests (v1s-12-3); page wiring gap patched; server 422 never reaches the UI because the client validates the same rules.
+
 ## Verification
 
 **Commands:**
 - `cd keevo/dashboard && npm run lint && npx tsc --noEmit && npm test && npm run build` -- expected: all succeed
 - `cd keevo/backend && MAVEN_OPTS=-Xmx1g mvn -q -o test -Dtest='AdminOperations*Test' -DforkCount=1 -DargLine=-Xmx1536m` -- expected: 0 failures
 - `cd keevo/backend && MAVEN_OPTS=-Xmx1g mvn -q -o test -Dtest='com.keevo.admin.**,com.keevo.architecture.**' -DforkCount=1 -DargLine=-Xmx1536m` -- expected: 0 failures
+
+## Auto Run Result
+
+Status: done
+
+**Summary:** Story 9-7 delivered. Backend module `com.keevo.admin.operations` — 4 SUPER_ADMIN GET endpoints (overview, trend, tenants, inactive-tenants) with WAT day windows, `TODAY|7D|30D|90D|CUSTOM` (422 on invalid ranges), COMPLETED-sales GMV, 14-day inactivity, per-tenant SQL errors skipped but DB/connection failures surfaced, plan read from the tenant subscription. Dashboard « Activité » page restored and enabled: KPI cards, recharts GMV trend (tooltip GMV + ventes), paginated tenant activity, dormant tenants, period selector with client-side range validation, « Choisissez une période valide… » state, stale-data warnings with retry, page clamping.
+
+**Files changed:** `keevo/backend/src/main/java/com/keevo/admin/operations/**` (new), `keevo/backend/src/test/java/com/keevo/admin/operations/**` (unit, controller, Testcontainers integration); dashboard `types/operations.ts`, `lib/api/admin-operations.ts`, `lib/period.ts`, `lib/labels.ts` (`periodLabel`), `hooks/useOperations.ts`, `components/operations/*` (+ `PeriodRequired.tsx`), `app/monitoring/activity/page.tsx`, `components/layout/Sidebar.tsx`, tests; story file and epic 9.7 status.
+
+**Review:** 41 findings — patched 5 medium entries (DB outage as zeros, incomplete range as empty data, missing stale warnings, page/hook wiring test, missing chart tests) and 9 low; deferred 0; rejected 22 (false 9, maybe-false 2, low with reasons).
+
+**Follow-up review recommended:** true — 5 medium entries patched; unverified risk: the classification of which `DataAccessException` subtypes skip a tenant vs fail the request was only unit-tested with mocks, not against a real connection loss.
+
+**Verification:** dashboard lint, tsc, `npm test` (13 files, 71 tests), build — green. Backend `com.keevo.admin.**,com.keevo.architecture.**` — 112 tests, 0 failures/errors (incl. `AdminOperationsServiceIntegrationTest`).
+
+**Residual risks:** per-tenant loop is O(tenants) per request (accepted Phase 1); components import error states from `components/sync`.
+

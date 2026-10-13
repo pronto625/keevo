@@ -214,7 +214,7 @@ As Toor (super admin),
 I want an « Activité Opérationnelle » dashboard showing global and per-tenant GMV, recent activity per tenant and inactive tenants,
 So that I can spot tenants drifting away (churn risk) and follow platform traction without querying the database by hand.
 
-*Story file: `_bmad-output/implementation-artifacts/9-7-monitoring-activite-operationnelle.md` (ready-for-dev — backend module `admin.operations` and frontend still to build).*
+*Story file: `_bmad-output/implementation-artifacts/9-7-monitoring-activite-operationnelle.md` (done — backend module `admin.operations` + dashboard page `monitoring/activity`).*
 
 **Decided defaults:** GMV = sum of `total_amount` of `COMPLETED` sales (XAF) over the period; a tenant is inactive when its last activity (latest sale or `audit_log` entry, the 9.1 definition) is missing or older than 14 days. Period = `TODAY | 7D | 30D | 90D | CUSTOM`; `CUSTOM` requires `from` and `to` (ISO dates, both inclusive, `from ≤ to`, at most 366 days), otherwise 422 `VALIDATION_ERROR`.
 
