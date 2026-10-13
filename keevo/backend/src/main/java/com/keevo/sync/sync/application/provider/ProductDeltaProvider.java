@@ -12,6 +12,9 @@ import java.util.*;
 @Component
 public class ProductDeltaProvider implements DeltaEntityProvider {
 
+    /** Keyset cursor of the delta pull; the {@code products} sync keyset index leads with it (Story 11.5). */
+    static final String CURSOR = "updated_at";
+
     private final EntityManager em;
 
     public ProductDeltaProvider(EntityManager em) {
@@ -27,7 +30,7 @@ public class ProductDeltaProvider implements DeltaEntityProvider {
     public Page queryDeltaPage(Instant since, Position after, int limit) {
         var page = DeltaPageQuery.fetch(em,
                 "id, name, price, buy_price, transport_cost, sku, category_id, description, photo_url, archived, status, stock_quantity, created_at, updated_at",
-                "products", "updated_at", since, after, limit);
+                "products", CURSOR, since, after, limit);
         return new Page(page.rows().stream().map(this::mapRow).toList(), page.next());
     }
 

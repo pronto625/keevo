@@ -31,19 +31,26 @@ class DayClosureDeltaProviderTest {
     void entityKey_returnsDayClosures() { assertThat(provider.entityKey()).isEqualTo("dayClosures"); }
 
     @Test
-    void queryDelta_withSince_returnsOnlyRecentClosures() {
+    void queryDelta_withSince_mapsCountToTotalSalesAndRevenueToTotalRevenue() {
+        // Story 11.5 AC5 regression: row[4] = total_sales (COUNT of completed sales),
+        // row[5] = total_revenue (XAF) — the revenue must never be the duplicated count.
         when(em.createNativeQuery(anyString())).thenReturn(query);
         when(query.setParameter(eq("since"), any())).thenReturn(query);
         when(query.setMaxResults(anyInt())).thenReturn(query);
         var now = Timestamp.from(Instant.now());
         Object[] row = {UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), now,
-                50000, 10, 40000, 10000};
+                12, 50000, 40000, 10000, false, now};
         when(query.getResultList()).thenReturn(Collections.singletonList(row));
 
         var result = provider.queryDelta(Instant.parse("2026-03-20T10:00:00Z"));
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0)).containsEntry("totalSales", 50000);
-        assertThat(result.get(0)).doesNotContainKey("totalTransactions");
-        assertThat(result.get(0)).containsEntry("totalRevenue", 10);
+
+        assertThat(result).singleElement().satisfies(map -> {
+            assertThat(map).containsEntry("totalSales", 12);
+            assertThat(map).containsEntry("totalRevenue", 50000);
+            assertThat(map).containsEntry("cashTotal", 40000);
+            assertThat(map).containsEntry("mobileMoneyTotal", 10000);
+            assertThat(map).doesNotContainKey("totalTransactions");
+        });
     }
 }
+

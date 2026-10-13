@@ -9,6 +9,7 @@ import com.keevo.messaging.notification.application.listener.StockModificationNo
 import com.keevo.messaging.notification.application.scheduler.SalesTrendDetectionScheduler;
 import com.keevo.reporting.report.application.service.ReportDeliveryRetryService;
 import com.keevo.reporting.report.application.service.WeeklyReportScheduler;
+import com.keevo.shared.infrastructure.persistence.SyncKeysetIndexJob;
 import com.keevo.shared.infrastructure.scheduling.AccountDeletionScheduler;
 import com.keevo.shared.infrastructure.scheduling.SubscriptionExpiryScheduler;
 import com.keevo.sync.sync.application.service.SyncErrorLogCleanupJob;
@@ -56,7 +57,8 @@ class SchedulerLockCoverageTest {
             WeeklyReportScheduler.class, Duration.ofHours(1),
             ReportDeliveryRetryService.class, Duration.ofMinutes(20),
             SyncErrorLogCleanupJob.class, Duration.ofDays(1),
-            ExportPurgeScheduler.class, Duration.ofHours(1)); // v1s-18-1
+            ExportPurgeScheduler.class, Duration.ofHours(1), // v1s-18-1
+            SyncKeysetIndexJob.class, Duration.ofDays(1)); // 11-5
 
     /** In-memory sweeps: must run on every instance → never locked. */
     private static final List<Class<?>> IN_MEMORY_SWEEPS = List.of(

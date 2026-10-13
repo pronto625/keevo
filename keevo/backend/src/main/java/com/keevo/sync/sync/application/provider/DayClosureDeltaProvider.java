@@ -12,6 +12,9 @@ import java.util.*;
 @Component
 public class DayClosureDeltaProvider implements DeltaEntityProvider {
 
+    /** Keyset cursor of the delta pull; the {@code day_closures} sync keyset index leads with it (Story 11.5). */
+    static final String CURSOR = "received_at";
+
     private final EntityManager em;
 
     public DayClosureDeltaProvider(EntityManager em) {
@@ -27,7 +30,7 @@ public class DayClosureDeltaProvider implements DeltaEntityProvider {
     public Page queryDeltaPage(Instant since, Position after, int limit) {
         var page = DeltaPageQuery.fetch(em,
                 "id, store_id, actor_id, closed_at, total_sales, total_revenue, cash_amount, momo_amount, is_automatic",
-                "day_closures", "received_at", since, after, limit);
+                "day_closures", CURSOR, since, after, limit);
         return new Page(page.rows().stream().map(this::mapRow).toList(), page.next());
     }
 

@@ -88,7 +88,7 @@ class DeltaPageQueryTest {
         DeltaPageQuery.fetch(em, "id, name", "products", "updated_at", SINCE, after, 1000);
 
         assertThat(capturedSql()).contains(
-                "AND (updated_at > :afterCursor OR (updated_at = :afterCursor AND CAST(id AS text) > :afterId))");
+                "AND (updated_at, CAST(id AS text)) > (:afterCursor, :afterId)");
         verify(query).setParameter("afterCursor", Timestamp.from(after.cursor()));
         verify(query).setParameter("afterId", "b");
     }

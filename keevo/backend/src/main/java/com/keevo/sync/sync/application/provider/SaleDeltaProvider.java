@@ -13,6 +13,9 @@ import java.util.*;
 @Component
 public class SaleDeltaProvider implements DeltaEntityProvider {
 
+    /** Keyset cursor of the delta pull; the {@code sales} sync keyset index leads with it (Story 11.5). */
+    static final String CURSOR = "updated_at";
+
     private final EntityManager em;
 
     public SaleDeltaProvider(EntityManager em) {
@@ -32,7 +35,7 @@ public class SaleDeltaProvider implements DeltaEntityProvider {
                 "id, store_id, employee_id, client_id, total_amount, " +
                 "COALESCE(discount_amount, 0) AS discount_amount, payment_mode, " +
                 "COALESCE(status, 'COMPLETED') AS status, occurred_at, created_at",
-                "sales", "updated_at", since, after, limit);
+                "sales", CURSOR, since, after, limit);
         List<Object[]> saleRows = page.rows();
 
         if (saleRows.isEmpty()) return new Page(List.of(), page.next());
