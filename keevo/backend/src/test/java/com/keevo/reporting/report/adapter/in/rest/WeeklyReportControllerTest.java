@@ -164,8 +164,10 @@ class WeeklyReportControllerTest {
 
         var captor = org.mockito.ArgumentCaptor.forClass(GenerateWeeklyReportUseCase.WeeklyReportCommand.class);
         verify(weeklyReportGenerator).generateWeeklyReport(captor.capture());
-        org.assertj.core.api.Assertions.assertThat(captor.getValue().weekEnd()).isEqualTo(fixedNow);
-        org.assertj.core.api.Assertions.assertThat(captor.getValue().receivedUntil()).isEqualTo(fixedNow);
+        // v1s-13-13: anchored on now − commit-safety margin (5 s).
+        Instant anchor = fixedNow.minusSeconds(5);
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().weekEnd()).isEqualTo(anchor);
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().receivedUntil()).isEqualTo(anchor);
     }
     @Test
     void POST_triggerWeekly_skipsStoresWhoseWeekIsAlreadyGenerated() throws Exception {

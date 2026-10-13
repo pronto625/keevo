@@ -11,6 +11,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/storage/app_database.dart' hide Sale, SaleItem;
 import 'package:keevo/core/sync/connectivity_service.dart';
+import 'package:keevo/core/sync/stock_movement_ids.dart';
 import 'package:keevo/core/sync/sync_service.dart';
 import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
 import 'package:keevo/features/pos/data/datasource/local_sale_datasource.dart';
@@ -21,6 +22,7 @@ import 'package:keevo/features/pos/domain/model/payment_mode_enum.dart';
 import 'package:keevo/features/pos/domain/model/sale_model.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:sqlite3/open.dart';
+import 'package:uuid/uuid.dart';
 
 class MockLocalSaleDataSource extends Mock implements LocalSaleDataSource {}
 class MockRemoteSaleDataSource extends Mock implements RemoteSaleDataSource {}
@@ -605,18 +607,21 @@ void main() {
         throwsA(isA<OfflineActionNotSupportedException>()),
       );
 
-      verifyNever(() => mockRemoteDb.correctSale(any(), any(), any()));
+      verifyNever(() => mockRemoteDb.correctSale(any(), any(), any(),
+          correctionId: any(named: 'correctionId')));
     });
 
     test('correctSale_online_callsRemote', () async {
       when(() => mockConnectivityDb.isOnline()).thenAnswer((_) async => true);
-      when(() => mockRemoteDb.correctSale(any(), any(), any()))
+      when(() => mockRemoteDb.correctSale(any(), any(), any(),
+              correctionId: any(named: 'correctionId')))
           .thenAnswer((_) async {});
 
       await repoWithDb.correctSale('sale-x', 'Erreur de quantité scannée', {'item-1': 2});
 
       verify(() => mockRemoteDb.correctSale(
-          'sale-x', 'Erreur de quantité scannée', {'item-1': 2})).called(1);
+          'sale-x', 'Erreur de quantité scannée', {'item-1': 2},
+          correctionId: any(named: 'correctionId'))).called(1);
     });
 
     test(
@@ -624,7 +629,8 @@ void main() {
         () async {
       await seedSale('sale-correct-online', 'COMPLETED');
       when(() => mockConnectivityDb.isOnline()).thenAnswer((_) async => true);
-      when(() => mockRemoteDb.correctSale(any(), any(), any()))
+      when(() => mockRemoteDb.correctSale(any(), any(), any(),
+              correctionId: any(named: 'correctionId')))
           .thenAnswer((_) async {});
 
       await repoWithDb.correctSale(
@@ -744,12 +750,50 @@ void main() {
     test('correct online applies the quantity delta to the local stock',
         () async {
       await seed('s2', 'COMPLETED');
-      when(() => remote.correctSale(any(), any(), any()))
+      when(() => remote.correctSale(any(), any(), any(),
+              correctionId: any(named: 'correctionId')))
           .thenAnswer((_) async {});
 
       await repo.correctSale('s2', 'Erreur de quantité', {'item-1': 1});
 
       expect(await stock(), 9);
+    });
+
+    // v1s-13-13: the same correctionId goes to the backend and derives the local
+    // ADJUSTMENT movement id, so the pulled server movement coincides with it.
+    test('correct online sends a correctionId and writes the derived movement id',
+        () async {
+      await seed('s6', 'COMPLETED');
+      when(() => remote.correctSale(any(), any(), any(),
+              correctionId: any(named: 'correctionId')))
+          .thenAnswer((_) async {});
+
+      await repo.correctSale('s6', 'Erreur de quantité', {'item-1': 1});
+
+      final correctionId = verify(() => remote.correctSale(
+              's6', 'Erreur de quantité', {'item-1': 1},
+              correctionId: captureAny(named: 'correctionId')))
+          .captured
+          .single as String;
+      expect(Uuid.isValidUUID(fromString: correctionId), isTrue);
+      final movements = await (db.select(db.stockMovements)
+            ..where((m) => m.type.equals('ADJUSTMENT')))
+          .get();
+      expect(movements.map((m) => m.id),
+          [saleCorrectionMovementId(correctionId, 'item-1')]);
+    });
+
+    test('cancel COMPLETED online writes the derived SALE_CANCELLED movement id',
+        () async {
+      await seed('s7', 'COMPLETED');
+      when(() => remote.cancelSale(any(), any())).thenAnswer((_) async {});
+
+      await repo.cancelSale('s7', 'Erreur de scan article');
+
+      final movements = await (db.select(db.stockMovements)
+            ..where((m) => m.type.equals('SALE_CANCELLED')))
+          .get();
+      expect(movements.map((m) => m.id), [saleCancelledMovementId('item-1')]);
     });
 
     test('validate PENDING online decrements the local stock', () async {

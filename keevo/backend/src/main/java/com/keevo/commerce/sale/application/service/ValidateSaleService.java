@@ -9,6 +9,7 @@ import com.keevo.commerce.sale.domain.port.in.CancelPendingSaleUseCase;
 import com.keevo.commerce.sale.domain.port.in.GetPendingSalesUseCase;
 import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
+import com.keevo.shared.domain.DeterministicIds;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -180,10 +181,13 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
                     throw lostCompletedRace(sale.getId());
                 }
                 for (SaleItem item : sale.getItems()) {
+                    // v1s-13-13: deterministic id (same on the device), so the pull does not
+                    // add a second SALE_CANCELLED row to the history.
                     stockOperationService.recordOperation(
                             item.getProductId(), item.getVariantId(), sale.getStoreId(),
                             MovementType.SALE_CANCELLED, item.getQuantity(),
-                            command.actorId(), "Annulation vente " + sale.getId());
+                            command.actorId(), "Annulation vente " + sale.getId(),
+                            DeterministicIds.saleCancelledMovementId(item.getId()), false);
                 }
                 eventPublisher.publishEvent(new SaleCancelledEvent(
                         sale.getId(), command.actorId(), command.justification(),

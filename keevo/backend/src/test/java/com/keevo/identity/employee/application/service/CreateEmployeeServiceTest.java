@@ -15,16 +15,20 @@ import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.port.in.CreateEmployeeCommand;
 import com.keevo.identity.employee.domain.port.out.EmployeeCountPort;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
+import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.subscription.plan.application.service.PlanLimitGuard;
 import com.keevo.subscription.plan.domain.model.Subscription;
 import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -57,6 +61,7 @@ class CreateEmployeeServiceTest {
     @Mock TenantRepository tenantRepository;
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock PasswordEncoder passwordEncoder;
+    @Mock TransactionLockPort transactionLock;
 
     @InjectMocks CreateEmployeeService createEmployeeService;
 
@@ -70,6 +75,38 @@ class CreateEmployeeServiceTest {
         storeId = UUID.randomUUID();
         premiumSubscription = mock(Subscription.class);
         lenient().when(premiumSubscription.getPlanType()).thenReturn(PlanType.PREMIUM_TRIAL);
+    }
+
+    @AfterEach
+    void tearDown() {
+        TenantContext.clear();
+    }
+
+    @Test
+    @DisplayName("v1s-13-13: execute() takes the per-tenant employee-limit lock before the count and the saves")
+    void execute_locksBeforeCountAndSaves() {
+        TenantContext.setCurrentTenant("kv_test01");
+        when(userRepository.existsByPhoneNumber(anyString())).thenReturn(false);
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(premiumSubscription));
+        when(employeeCountPort.countActiveEmployees()).thenReturn(2);
+        when(passwordEncoder.encode(anyString())).thenReturn("$2a$12$hashedpassword");
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(tenantRepository.findBySchemaName("kv_test01")).thenReturn(Optional.of(
+                new Tenant(UUID.randomUUID(), "KV-TEST01", "kv_test01", TenantStatus.ACTIVE, PlanType.PREMIUM_TRIAL, Instant.now())));
+        when(membershipRepository.save(any(UserTenantMembership.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(employeeRepository.save(any(Employee.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        createEmployeeService.execute(new CreateEmployeeCommand(
+                actorId, "+237690000009", "Awa", "Mbarga", storeId));
+
+        InOrder order = inOrder(transactionLock, employeeCountPort, planLimitGuard,
+                userRepository, membershipRepository, employeeRepository);
+        order.verify(transactionLock).lock("employee-limit:kv_test01");
+        order.verify(employeeCountPort).countActiveEmployees();
+        order.verify(planLimitGuard).checkEmployeeLimit(PlanType.PREMIUM_TRIAL, 2);
+        order.verify(userRepository).save(any(User.class));
+        order.verify(membershipRepository).save(any(UserTenantMembership.class));
+        order.verify(employeeRepository).save(any(Employee.class));
     }
 
     @Test

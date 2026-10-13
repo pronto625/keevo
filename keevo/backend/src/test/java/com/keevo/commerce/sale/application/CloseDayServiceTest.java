@@ -255,7 +255,10 @@ class CloseDayServiceTest {
         assertThat(event.windowStart()).isAfter(previous);
         assertThat(java.time.Duration.between(previous, event.windowStart()).toMillis()).isLessThan(1);
         assertThat(event.lateFrom()).isEqualTo(previousReceived);
-        assertThat(event.receivedUntil()).isBetween(event.windowEnd(), Instant.now());
+        // v1s-13-13: received until now − commit-safety margin.
+        assertThat(event.receivedUntil()).isBetween(
+                event.windowEnd().minus(ClosureWindow.COMMIT_SAFETY_MARGIN),
+                Instant.now().minus(ClosureWindow.COMMIT_SAFETY_MARGIN));
         verify(saleRepository).findForClosure(STORE_ID, event.window());
     }
 
@@ -372,8 +375,37 @@ class CloseDayServiceTest {
         var result = fixedClockService().closeDay(new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, true));
 
         assertThat(result.getClosedAt()).isEqualTo(FIXED_NOW);
-        assertThat(result.getReceivedAt()).isEqualTo(FIXED_NOW);
+        // v1s-13-13: the persisted arrival anchor is now − 5 s (commit-safety margin).
+        assertThat(result.getReceivedAt()).isEqualTo(FIXED_NOW.minusSeconds(5));
         verify(dayClosureRepository).existsByStoreIdAndDate(STORE_ID, LocalDate.of(2026, 10, 14));
+    }
+
+    // v1s-13-13 — commit lag: a sale stamped at T ≤ now but committed after this closure's
+    // queries is not covered here when T > now − 5 s, and is covered by the next closure
+    // (lateFrom = this closure's persisted receivedAt) — exactly once.
+    @Test
+    void commitLag_saleStampedJustBeforeClosure_landsInTheNextClosureOnly() {
+        when(dayClosureRepository.existsByStoreIdAndDate(eq(STORE_ID), any(LocalDate.class)))
+                .thenReturn(false);
+        when(saleRepository.findForClosure(eq(STORE_ID), any())).thenReturn(List.of());
+
+        DayClosure closure = fixedClockService().closeDay(new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, true));
+        var eventCaptor = ArgumentCaptor.forClass(DayClosedEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        ClosureWindow window = eventCaptor.getValue().window();
+        assertThat(window.receivedUntil()).isEqualTo(FIXED_NOW.minusSeconds(5));
+
+        Instant lagging = FIXED_NOW.minusSeconds(1);
+        assertThat(window.covers(lagging, lagging)).isFalse();
+        ClosureWindow next = ClosureWindow.forClosure(
+                FIXED_NOW.plus(java.time.Duration.ofDays(1)),
+                ClosureWindow.receivedLimit(FIXED_NOW.plus(java.time.Duration.ofDays(1))),
+                java.util.Optional.of(closure));
+        assertThat(next.covers(lagging, lagging)).isTrue();
+        // A sale received before the margin stays in this closure only.
+        Instant onTime = FIXED_NOW.minusSeconds(6);
+        assertThat(window.covers(onTime, onTime)).isTrue();
+        assertThat(next.covers(onTime, onTime)).isFalse();
     }
 
     @Test

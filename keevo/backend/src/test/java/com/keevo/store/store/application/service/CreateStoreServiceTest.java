@@ -1,8 +1,10 @@
 package com.keevo.store.store.application.service;
 
 import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.store.domain.model.StoreType;
 import com.keevo.store.store.domain.port.in.CreateStoreCommand;
@@ -10,11 +12,13 @@ import com.keevo.store.store.domain.port.out.StoreRepository;
 import com.keevo.subscription.plan.application.service.PlanLimitGuard;
 import com.keevo.subscription.plan.domain.model.Subscription;
 import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -40,6 +44,7 @@ class CreateStoreServiceTest {
     @Mock SubscriptionRepository subscriptionRepository;
     @Mock PlanLimitGuard planLimitGuard;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock TransactionLockPort transactionLock;
 
     @InjectMocks CreateStoreService createStoreService;
 
@@ -54,6 +59,46 @@ class CreateStoreServiceTest {
         lenient().when(freeSubscription.getPlanType()).thenReturn(PlanType.FREE);
         premiumSubscription = mock(Subscription.class);
         lenient().when(premiumSubscription.getPlanType()).thenReturn(PlanType.PREMIUM_TRIAL);
+    }
+
+    @AfterEach
+    void tearDown() {
+        TenantContext.clear();
+    }
+
+    @Test
+    @DisplayName("v1s-13-13: execute() takes the per-tenant store-limit lock before the count and the save")
+    void execute_locksBeforeCountAndSave() {
+        TenantContext.setCurrentTenant("kv_abc123");
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(freeSubscription));
+        when(storeRepository.countActive()).thenReturn(0);
+        when(storeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        createStoreService.execute(new CreateStoreCommand("Boutique", StoreType.STORE, null, null, actorId));
+
+        InOrder order = inOrder(transactionLock, subscriptionRepository, storeRepository, planLimitGuard);
+        order.verify(transactionLock).lock("store-limit:kv_abc123");
+        order.verify(subscriptionRepository).findActivePlan();
+        order.verify(storeRepository).countActive();
+        order.verify(planLimitGuard).checkStoreLimit(PlanType.FREE, 0);
+        order.verify(storeRepository).save(any());
+    }
+
+    @Test
+    @DisplayName("v1s-13-13: a plan-limit refusal happens under the lock and saves nothing")
+    void execute_planLimitRefusedUnderLock_noSave() {
+        TenantContext.setCurrentTenant("kv_abc123");
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(freeSubscription));
+        when(storeRepository.countActive()).thenReturn(1);
+        doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "stores limit reached"))
+                .when(planLimitGuard).checkStoreLimit(PlanType.FREE, 1);
+
+        assertThatThrownBy(() -> createStoreService.execute(
+                new CreateStoreCommand("Boutique", StoreType.STORE, null, null, actorId)))
+                .isInstanceOf(DomainException.class);
+
+        verify(transactionLock).lock("store-limit:kv_abc123");
+        verify(storeRepository, never()).save(any());
     }
 
     @Test

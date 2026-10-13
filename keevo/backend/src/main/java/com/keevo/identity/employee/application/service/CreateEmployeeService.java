@@ -14,6 +14,7 @@ import com.keevo.identity.employee.domain.port.in.CreateEmployeeCommand;
 import com.keevo.identity.employee.domain.port.in.CreateEmployeeUseCase;
 import com.keevo.identity.employee.domain.port.out.EmployeeCountPort;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
+import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -44,6 +45,7 @@ public class CreateEmployeeService implements CreateEmployeeUseCase {
     private final TenantRepository tenantRepository;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
+    private final TransactionLockPort transactionLock;
 
     public CreateEmployeeService(UserRepository userRepository,
                                   UserMembershipRepository membershipRepository,
@@ -53,7 +55,8 @@ public class CreateEmployeeService implements CreateEmployeeUseCase {
                                   SubscriptionRepository subscriptionRepository,
                                   TenantRepository tenantRepository,
                                   PasswordEncoder passwordEncoder,
-                                  ApplicationEventPublisher eventPublisher) {
+                                  ApplicationEventPublisher eventPublisher,
+                                  TransactionLockPort transactionLock) {
         this.userRepository = userRepository;
         this.membershipRepository = membershipRepository;
         this.employeeRepository = employeeRepository;
@@ -63,6 +66,7 @@ public class CreateEmployeeService implements CreateEmployeeUseCase {
         this.tenantRepository = tenantRepository;
         this.passwordEncoder = passwordEncoder;
         this.eventPublisher = eventPublisher;
+        this.transactionLock = transactionLock;
     }
 
     @Override
@@ -80,7 +84,10 @@ public class CreateEmployeeService implements CreateEmployeeUseCase {
             throw new DomainException(ErrorCode.USER_ALREADY_EXISTS, "phone number already registered");
         }
 
-        // 2. Enforce plan limit
+        // 2. Enforce plan limit — v1s-13-13: per-tenant lock BEFORE the count so two concurrent
+        // creates at max−1 cannot both pass (the JdbcTemplate count sees the winner's commit,
+        // which happens before the lock is released).
+        transactionLock.lock("employee-limit:" + TenantContext.getCurrentTenant());
         var subscription = subscriptionRepository.findActivePlan()
                 .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND));
         int currentCount = employeeCountPort.countActiveEmployees();

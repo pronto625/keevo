@@ -1,5 +1,6 @@
 package com.keevo.store.store.application.service;
 
+import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -33,21 +34,28 @@ public class CreateStoreService implements CreateStoreUseCase {
     private final SubscriptionRepository subscriptionRepository;
     private final PlanLimitGuard planLimitGuard;
     private final ApplicationEventPublisher eventPublisher;
+    private final TransactionLockPort transactionLock;
 
     public CreateStoreService(
             StoreRepository storeRepository,
             SubscriptionRepository subscriptionRepository,
             PlanLimitGuard planLimitGuard,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            TransactionLockPort transactionLock) {
         this.storeRepository = storeRepository;
         this.subscriptionRepository = subscriptionRepository;
         this.planLimitGuard = planLimitGuard;
         this.eventPublisher = eventPublisher;
+        this.transactionLock = transactionLock;
     }
 
     @Override
     @Transactional
     public Store execute(CreateStoreCommand command) {
+        // v1s-13-13: serialise count → save per tenant so two concurrent creates at max−1
+        // cannot both pass the plan limit (lock held until commit; shared with CREATE_STORE sync).
+        transactionLock.lock("store-limit:" + TenantContext.getCurrentTenant());
+
         // 1. Load current plan and check store limit
         var planType = subscriptionRepository.findActivePlan()
                 .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND,

@@ -216,7 +216,9 @@ class ValidateSaleServiceTest {
 
     @Test
     void cancelPendingSale_completedSale_restoresStockAndCancels() {
-        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(completedSale(3L)));
+        Sale sale = completedSale(3L);
+        UUID itemId = sale.getItems().get(0).getId();
+        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(sale));
         when(saleRepository.updateStatusIfCurrent(SALE_ID, SaleStatus.COMPLETED, 3L, SaleStatus.CANCELLED))
                 .thenReturn(true);
 
@@ -228,9 +230,11 @@ class ValidateSaleServiceTest {
         verify(saleRepository, never()).updateStatusIfCurrent(SALE_ID, SaleStatus.COMPLETED, SaleStatus.CANCELLED);
         // completedSale() has exactly 1 item, quantity=1 → recordOperation called once,
         // delta must be POSITIVE (restoration), not negative.
+        // v1s-13-13: deterministic movement id (same on the device) → one history row after pull.
         verify(stockOperationService, times(1)).recordOperation(
                 eq(PRODUCT_A), any(), eq(STORE_ID), eq(MovementType.SALE_CANCELLED),
-                eq(1), eq(ACTOR_ID), any());
+                eq(1), eq(ACTOR_ID), any(),
+                eq(com.keevo.shared.domain.DeterministicIds.saleCancelledMovementId(itemId)), eq(false));
 
         var eventCaptor = ArgumentCaptor.forClass(Object.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());

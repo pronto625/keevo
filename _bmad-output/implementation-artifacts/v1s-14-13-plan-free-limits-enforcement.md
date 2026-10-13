@@ -3,7 +3,7 @@ baseline_commit: 6a0efea
 ---
 # Story 14.13: Corriger l'enforcement des limites du plan Free (FR16) — enum obsolète + chemin de création produit non gardé
 
-Status: done
+Status: in-progress
 
 <!-- V1-stabilization track — tag A (patch V1, non release-blocker mais impact monétisation direct).
      Branche : v1-stabilization (HEAD 6a0efea).
@@ -111,3 +111,7 @@ N/A — no debugging required.
 - [x] [Review][Defer][LOW] **D4: Ordre des validations `CreateProductUseCase` vs `CreateDraftProductUseCase`** — Dans `CreateProductUseCase`, le check plan est **après** name/SKU validation. Dans `CreateDraftProductUseCase`, il est **avant**. Incohérence de pattern — pas d'impact fonctionnel, du travail est effectué en vain quand la limite est atteinte. — deferred, cosmetic
 
 **Dismissed** (10) : enum versioning (D1 already decided), test boundary cases (nice-to-have), SUBSCRIPTION_NOT_FOUND test (edge case), PREMIUM_TRIAL test (trivial path), lenient() test smell (verify present), call order test (strict stubbing covers it), Product allocation before guard (cosmetic), negative count validation (defensive coding), migration backfill (AC2 decided), test coverage improvement (separate story).
+
+### Deferred items routed 2026-10-13
+
+- [ ] [Deferred-from: build-auto review v1s-13-13, 2026-10-13] Employee reactivation bypasses the plan limit [keevo/backend/src/main/java/com/keevo/identity/employee/application/service/ReactivateEmployeeService.java:56-57] — `updateStatus(..., ACTIVE)` with no `PlanLimitGuard.checkEmployeeLimit` and no `employee-limit:<schema>` lock, so a deactivated employee can be reactivated past the FREE cap (and race a concurrent create at max−1). Settle by taking `transactionLock.lock("employee-limit:" + schema)` then `checkEmployeeLimit(plan, countActiveEmployees())` before the status update (same pattern as CreateEmployeeService since v1s-13-13), with an InOrder unit test and an entry in SchedulerLockCoverageTest.

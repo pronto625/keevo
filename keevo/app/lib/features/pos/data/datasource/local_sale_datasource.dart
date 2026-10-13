@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/storage/app_database.dart' hide Sale, SaleItem;
+import '../../../../core/sync/stock_movement_ids.dart';
 import '../../domain/model/sale_model.dart';
 
 /// LocalSaleDataSource — persists sale data in Drift (SQLCipher).
@@ -174,10 +175,15 @@ class LocalSaleDataSource {
   /// corrected item's subtotal from its existing unitPrice, and the sale's
   /// totalAmount as the sum of all item subtotals minus the existing
   /// discountAmount — mirrors CorrectSaleService's server-side recalculation.
+  ///
+  /// [correctionId] (v1s-13-13) is the id sent with the correction request:
+  /// each ADJUSTMENT movement gets the id the backend derives from it, so the
+  /// pull does not add a second row. Null (legacy) → random movement ids.
   Future<void> updateItemQuantities(
     String saleId,
-    Map<String, int> itemQuantities,
-  ) async {
+    Map<String, int> itemQuantities, {
+    String? correctionId,
+  }) async {
     await _db.transaction(() async {
       final saleRow = await (_db.select(_db.sales)
             ..where((s) => s.id.equals(saleId)))
@@ -193,7 +199,10 @@ class LocalSaleDataSource {
         if (item == null) continue;
         if (adjustStock && item.quantity != entry.value) {
           await _adjustStock(item.productId, saleRow!.storeId,
-              item.quantity - entry.value, 'ADJUSTMENT', saleRow.employeeId, now);
+              item.quantity - entry.value, 'ADJUSTMENT', saleRow.employeeId, now,
+              movementId: correctionId != null
+                  ? saleCorrectionMovementId(correctionId, item.id)
+                  : const Uuid().v4());
         }
         await (_db.update(_db.saleItems)
               ..where((i) => i.id.equals(entry.key)))
@@ -236,7 +245,8 @@ class LocalSaleDataSource {
             .get();
         for (final item in items) {
           await _adjustStock(item.productId, sale.storeId, item.quantity,
-              'SALE_CANCELLED', sale.employeeId, now);
+              'SALE_CANCELLED', sale.employeeId, now,
+              movementId: saleCancelledMovementId(item.id));
         }
       }
       await (_db.update(_db.sales)..where((s) => s.id.equals(saleId)))
@@ -245,9 +255,20 @@ class LocalSaleDataSource {
   }
 
   /// Add [delta] (may be negative, floored at 0) to a product's stock level
-  /// and record the matching movement.
+  /// and record the matching movement [movementId].
+  ///
+  /// v1s-13-13: the id is the one the backend writes for the same operation.
+  /// If that movement is already here, the pull got there first (it also
+  /// refreshed the stock levels from the server), so the delta is NOT applied
+  /// again. `insertOnConflictUpdate` stays the race guard inside the Drift
+  /// transaction.
   Future<void> _adjustStock(String productId, String storeId, int delta,
-      String type, String actorId, DateTime now) async {
+      String type, String actorId, DateTime now,
+      {required String movementId}) async {
+    final existing = await (_db.select(_db.stockMovements)
+          ..where((m) => m.id.equals(movementId)))
+        .getSingleOrNull();
+    if (existing != null) return;
     final rows = await (_db.select(_db.stockLevels)
           ..where((s) => s.productId.equals(productId) & s.storeId.equals(storeId)))
         .get();
@@ -261,8 +282,10 @@ class LocalSaleDataSource {
       quantity: Value(qAfter),
       updatedAt: Value(now),
     ));
-    await _db.into(_db.stockMovements).insert(StockMovementsCompanion.insert(
-      id: const Uuid().v4(),
+    await _db
+        .into(_db.stockMovements)
+        .insertOnConflictUpdate(StockMovementsCompanion.insert(
+      id: movementId,
       productId: productId,
       storeId: storeId,
       type: type,
@@ -271,6 +294,10 @@ class LocalSaleDataSource {
       quantityBefore: Value(qBefore),
       quantityAfter: Value(qAfter),
       createdAt: now,
+      // Written only after the server confirmed the operation: the row mirrors
+      // a server movement (same id), so it is synced and purgeable.
+      synced: const Value(true),
+      syncedAt: Value(now),
     ));
   }
 

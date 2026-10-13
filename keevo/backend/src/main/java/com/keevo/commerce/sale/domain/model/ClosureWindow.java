@@ -1,5 +1,6 @@
 package com.keevo.commerce.sale.domain.model;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
@@ -38,6 +39,23 @@ public record ClosureWindow(Instant start, Instant end, Instant lateFrom, Instan
         Objects.requireNonNull(end, "end must not be null");
         lateFrom = lateFrom != null ? lateFrom : NEVER;
         receivedUntil = receivedUntil != null ? receivedUntil : NEVER;
+    }
+
+    /**
+     * Commit-safety margin (v1s-13-13): a sale's {@code createdAt} is stamped before its
+     * transaction commits, so a sale stamped just before a closure/report ran may become
+     * visible only after its queries. The arrival limit of a closure/report is therefore
+     * {@code now − margin}, persisted as the anchor the next one chains on: a sale received in
+     * the last {@code margin} is counted by the next closure/report as a late arrival.
+     * Residual: a sale whose stamping-to-commit exceeds the margin (sale transactions are
+     * single-operation, well under a second).
+     */
+    public static final Duration COMMIT_SAFETY_MARGIN = Duration.ofSeconds(5);
+
+    /** The arrival limit ({@code receivedUntil}) of a closure/report generated at {@code now}. */
+    public static Instant receivedLimit(Instant now) {
+        Objects.requireNonNull(now, "now must not be null");
+        return now.minus(COMMIT_SAFETY_MARGIN);
     }
 
     /** Day closures are dated in West Africa Time (UTC+1, no DST). */

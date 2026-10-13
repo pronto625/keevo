@@ -9,8 +9,19 @@ import java.util.UUID;
  */
 public interface CorrectSaleUseCase {
 
+    /**
+     * @param correctionId per-request id sent by the app (v1s-13-13), from which the ADJUSTMENT
+     *                     movement ids are derived ({@code DeterministicIds.saleCorrectionMovementId});
+     *                     null (older app) → random movement ids.
+     */
     record CorrectSaleCommand(UUID saleId, UUID actorId, UUID assignedStoreId,
-                              String justification, Map<UUID, Integer> itemQuantities) {}
+                              String justification, Map<UUID, Integer> itemQuantities,
+                              UUID correctionId) {
+        public CorrectSaleCommand(UUID saleId, UUID actorId, UUID assignedStoreId,
+                                  String justification, Map<UUID, Integer> itemQuantities) {
+            this(saleId, actorId, assignedStoreId, justification, itemQuantities, null);
+        }
+    }
 
     void correctSale(CorrectSaleCommand command);
 }

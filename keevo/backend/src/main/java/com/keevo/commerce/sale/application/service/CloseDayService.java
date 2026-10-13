@@ -92,8 +92,11 @@ public class CloseDayService implements CloseDayUseCase {
         // Step 2: The closure covers the sales made since the previous closure, plus the
         // sales made before it but received after it (offline devices syncing late), so
         // that every sale belongs to exactly one closure (see ClosureWindow).
-        // One definition shared with the « Fin de journée » PDF (v1s-18-3); received now.
-        ClosureWindow window = ClosureWindow.forClosure(closedAt, now, previous);
+        // One definition shared with the « Fin de journée » PDF (v1s-18-3). Received until
+        // now − commit-safety margin (v1s-13-13): a sale stamped just before now but not yet
+        // committed is left to the next closure, which chains on this persisted receivedAt.
+        Instant receivedAt = ClosureWindow.receivedLimit(now);
+        ClosureWindow window = ClosureWindow.forClosure(closedAt, receivedAt, previous);
         List<Sale> sales = saleRepository.findForClosure(command.storeId(), window);
 
         // Step 3: Build summary
@@ -110,7 +113,7 @@ public class CloseDayService implements CloseDayUseCase {
                 summary,
                 command.isAutomatic(),
                 command.tenantId(),
-                now
+                receivedAt
         );
         dayClosureRepository.save(closure);
 

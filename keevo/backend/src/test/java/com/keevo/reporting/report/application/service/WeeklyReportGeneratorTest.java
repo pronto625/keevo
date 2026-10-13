@@ -15,12 +15,14 @@ import com.keevo.reporting.report.domain.model.WeeklyReportData;
 import com.keevo.reporting.report.domain.port.in.GenerateWeeklyReportUseCase;
 import com.keevo.reporting.report.domain.port.in.GenerateWeeklyReportUseCase.WeeklyReportCommand;
 import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
+import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.store.domain.model.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -51,6 +53,8 @@ class WeeklyReportGeneratorTest {
     @Mock private WeeklyReportFormatter formatter;
     @Mock private StoreRepository storeRepository;
     @Mock private OwnerRecipientResolver ownerRecipientResolver;
+    @Mock private TransactionLockPort transactionLock;
+    @Mock private org.springframework.transaction.PlatformTransactionManager transactionManager;
 
     private WeeklyReportGenerator generator;
     private UUID storeId;
@@ -63,7 +67,8 @@ class WeeklyReportGeneratorTest {
     void setUp() {
         generator = new WeeklyReportGenerator(
                 reportRepository, whatsAppPort, multiStoreSummaryService,
-                builder, formatter, storeRepository, ownerRecipientResolver);
+                builder, formatter, storeRepository, ownerRecipientResolver, transactionLock,
+                transactionManager);
         storeId = UUID.randomUUID();
         command = new WeeklyReportCommand(
                 storeId, "kv_test01", true,
@@ -246,7 +251,8 @@ class WeeklyReportGeneratorTest {
                 new User(UUID.randomUUID(), "   ", "hash", Role.OWNER, true, Instant.now())));
         WeeklyReportGenerator realResolverGenerator = new WeeklyReportGenerator(
                 reportRepository, whatsAppPort, multiStoreSummaryService,
-                builder, formatter, storeRepository, new OwnerRecipientResolverAdapter(userRepository));
+                builder, formatter, storeRepository, new OwnerRecipientResolverAdapter(userRepository),
+                transactionLock, transactionManager);
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
         when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))
                 .thenReturn(sampleWeeklyData());
@@ -256,5 +262,107 @@ class WeeklyReportGeneratorTest {
 
         assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.IN_APP_ONLY);
         verify(whatsAppPort, never()).sendReport(anyString(), anyString());
+    }
+
+    // ── v1s-13-13: scheduler vs manual trigger ─────────────────────────────────
+
+    @Test
+    void generateWeeklyReport_locksStoreWeekBeforeDataCollectionAndIdempotencyRead() {
+        when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
+        when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))
+                .thenReturn(sampleWeeklyData());
+        when(formatter.format(any(WeeklyReportData.class))).thenReturn("Rapport");
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(anyString())).thenReturn(Optional.empty());
+
+        generator.generateWeeklyReport(command);
+
+        // weekEnd 2026-03-29T22:59:59Z = Sunday 23:59:59 WAT → key dated by the Sunday.
+        InOrder order = inOrder(transactionLock, storeRepository, builder, reportRepository);
+        order.verify(transactionLock).lock("weekly-report:" + storeId + ":" + SUNDAY);
+        order.verify(storeRepository).findById(storeId);
+        order.verify(builder).build(any(), any(), anyString(), any(), anyString(), anyBoolean());
+        order.verify(reportRepository).findByKey(storeId, SUNDAY, ReportType.WEEKLY, null);
+        order.verify(reportRepository, atLeastOnce()).save(any());
+    }
+
+    @Test
+    void generateWeeklyReport_loserAfterLock_returnsExistingReport_noSecondSaveNorSend() {
+        EndOfDayReport existing = mock(EndOfDayReport.class);
+        when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
+        when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))
+                .thenReturn(sampleWeeklyData());
+        when(reportRepository.findByKey(storeId, SUNDAY, ReportType.WEEKLY, null))
+                .thenReturn(Optional.of(existing));
+
+        EndOfDayReport report = generator.generateWeeklyReport(command);
+
+        assertThat(report).isSameAs(existing);
+        verify(transactionLock).lock("weekly-report:" + storeId + ":" + SUNDAY);
+        verify(reportRepository, never()).save(any());
+        verifyNoInteractions(whatsAppPort);
+    }
+
+    @Test
+    void generateWeeklyReport_isTransactionalEntryPoint() throws Exception {
+        // The call to generateReport is a self-invocation: the lock (MANDATORY) needs this
+        // method itself to open the transaction.
+        assertThat(WeeklyReportGenerator.class
+                .getMethod("generateWeeklyReport", WeeklyReportCommand.class)
+                .isAnnotationPresent(org.springframework.transaction.annotation.Transactional.class))
+                .isTrue();
+    }
+
+    @Test
+    void generateWeeklyReport_inTransaction_sendsWhatsAppOnlyAfterCommit() {
+        when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
+        when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))
+                .thenReturn(sampleWeeklyData());
+        when(formatter.format(any(WeeklyReportData.class))).thenReturn("Rapport");
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone("kv_test01")).thenReturn(Optional.of("+237600072001"));
+
+        org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+        try {
+            EndOfDayReport report = generator.generateWeeklyReport(command);
+
+            verifyNoInteractions(whatsAppPort);
+            verifyNoInteractions(multiStoreSummaryService);
+            assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.PENDING);
+
+            org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(org.springframework.transaction.support.TransactionSynchronization::afterCommit);
+
+            verify(whatsAppPort).sendReport(eq("+237600072001"), anyString());
+            verify(multiStoreSummaryService).checkAndGenerateCombinedSummary(any());
+            // Each deferred action runs in its own REQUIRES_NEW transaction (committed).
+            verify(transactionManager, times(2)).getTransaction(argThat(d ->
+                    d.getPropagationBehavior()
+                            == org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW));
+            verify(transactionManager, times(2)).commit(any());
+            assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.SENT);
+        } finally {
+            org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void generateWeeklyReport_inTransaction_rolledBack_neverSends() {
+        when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
+        when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))
+                .thenReturn(sampleWeeklyData());
+        when(formatter.format(any(WeeklyReportData.class))).thenReturn("Rapport");
+
+        org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+        try {
+            generator.generateWeeklyReport(command);
+
+            org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(s -> s.afterCompletion(
+                            org.springframework.transaction.support.TransactionSynchronization.STATUS_ROLLED_BACK));
+
+            verifyNoInteractions(whatsAppPort);
+            verifyNoInteractions(multiStoreSummaryService);
+        } finally {
+            org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 }

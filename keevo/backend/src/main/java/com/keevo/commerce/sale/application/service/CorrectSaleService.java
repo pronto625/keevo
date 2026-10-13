@@ -6,6 +6,7 @@ import com.keevo.catalog.stock.domain.service.StockOperationService;
 import com.keevo.commerce.sale.domain.model.*;
 import com.keevo.commerce.sale.domain.port.in.CorrectSaleUseCase;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
+import com.keevo.shared.domain.DeterministicIds;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -101,10 +102,16 @@ public class CorrectSaleService implements CorrectSaleUseCase {
             SaleItem after = correctedItems.get(i);
             if (after.getQuantity() == before.getQuantity()) continue;
             // Decrease → restore stock (positive delta); increase → decrement (negative delta).
+            // v1s-13-13: id derived from the app's correctionId + item id (same on the device),
+            // so the pull does not add a second ADJUSTMENT row; null (older app) → random id.
+            UUID movementId = command.correctionId() != null
+                    ? DeterministicIds.saleCorrectionMovementId(command.correctionId(), before.getId())
+                    : null;
             stockOperationService.recordOperation(
                     before.getProductId(), before.getVariantId(), sale.getStoreId(),
                     MovementType.ADJUSTMENT, -(after.getQuantity() - before.getQuantity()),
-                    command.actorId(), "Correction vente " + sale.getId());
+                    command.actorId(), "Correction vente " + sale.getId(),
+                    movementId, false);
         }
 
         Sale correctedSale = new Sale(sale.getId(), sale.getStoreId(), sale.getEmployeeId(),
