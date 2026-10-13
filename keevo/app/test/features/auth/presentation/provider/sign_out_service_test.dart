@@ -1,4 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:keevo/features/auth/domain/repository/token_storage.dart';
+import 'package:keevo/features/account/domain/model/deletion_pending_status.dart';
+import 'package:keevo/features/account/presentation/provider/account_deletion_provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/settings/domain/model/subscription_info.dart';
@@ -25,6 +28,8 @@ class _MockAuthRepository extends Mock implements AuthRepository {}
 class _MockFcm extends Mock implements FcmService {}
 
 class _MockDeviceTokens extends Mock implements RemoteDeviceTokenDataSource {}
+
+class _MockTokenStorage extends Mock implements TokenStorage {}
 
 void main() {
   late _MockSync sync;
@@ -210,6 +215,52 @@ void main() {
 
       await c.read(signOutServiceProvider).signOut();
       await c.read(subscriptionInfoProvider.future);
+
+      expect(fetches, 2);
+    });
+
+    // v1s-16-13 follow-up: an unreadable refresh token must not keep the
+    // session alive (the forced password change would loop back).
+    test('a failing refresh-token read still clears the session', () async {
+      final tokens = _MockTokenStorage();
+      when(() => tokens.getRefreshToken()).thenThrow(Exception('keystore'));
+      final c = ProviderContainer(overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        syncServiceProvider.overrideWithValue(sync),
+        authRepositoryProvider.overrideWithValue(auth),
+        fcmServiceProvider.overrideWithValue(fcm),
+        remoteDeviceTokenDataSourceProvider.overrideWithValue(deviceTokens),
+        tokenStorageProvider.overrideWithValue(tokens),
+      ]);
+      addTearDown(c.dispose);
+
+      await c.read(signOutServiceProvider).signOut();
+
+      expect(await storage.read(key: 'jwt_token'), isNull);
+      expect(await storage.read(key: 'refresh_token'), isNull);
+      verifyNever(() => auth.logout(any()));
+    });
+
+    // v1s-16-13 follow-up: nor this tenant's deletion banner.
+    test('invalidates the account-deletion status', () async {
+      var fetches = 0;
+      final c = ProviderContainer(overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        syncServiceProvider.overrideWithValue(sync),
+        authRepositoryProvider.overrideWithValue(auth),
+        fcmServiceProvider.overrideWithValue(fcm),
+        remoteDeviceTokenDataSourceProvider
+            .overrideWithValue(_MockDeviceTokens()),
+        deletionPendingStatusProvider.overrideWith((ref) async {
+          fetches++;
+          return const DeletionPendingStatus();
+        }),
+      ]);
+      addTearDown(c.dispose);
+      await c.read(deletionPendingStatusProvider.future);
+
+      await c.read(signOutServiceProvider).signOut();
+      await c.read(deletionPendingStatusProvider.future);
 
       expect(fetches, 2);
     });

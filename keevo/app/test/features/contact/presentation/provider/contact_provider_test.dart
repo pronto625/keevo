@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo/features/contact/domain/model/client_model.dart';
 import 'package:keevo/features/contact/domain/repository/client_repository.dart';
 import 'package:keevo/features/contact/domain/repository/supplier_repository.dart';
 import 'package:keevo/features/contact/presentation/provider/contact_provider.dart';
@@ -35,6 +38,51 @@ void main() {
       await notifier.syncFromRemote();
 
       verify(() => repo.getAll(includeArchived: true)).called(1);
+    });
+
+    // v1s-16-13 follow-up: a slower earlier search finishing last must not
+    // overwrite the latest one.
+    test('out-of-order search results: the latest query wins', () async {
+      final slow = Completer<List<ClientModel>>();
+      final now = DateTime(2026);
+      ClientModel c(String name) => ClientModel(
+          id: name, name: name, phone: '6', createdAt: now, updatedAt: now);
+      when(() => repo.search('a', includeArchived: any(named: 'includeArchived')))
+          .thenAnswer((_) => slow.future);
+      when(() => repo.search('al', includeArchived: any(named: 'includeArchived')))
+          .thenAnswer((_) async => [c('Ali')]);
+      await container.read(clientListNotifierProvider.future);
+      final notifier = container.read(clientListNotifierProvider.notifier);
+
+      final first = notifier.search('a');
+      await notifier.search('al');
+      slow.complete([c('Awa'), c('Ali')]);
+      await first;
+
+      expect(container.read(clientListNotifierProvider).value!.map((x) => x.name),
+          ['Ali']);
+    });
+
+    // v1s-16-13 follow-up: the app-wide sync cycle invalidates the list
+    // provider (`_invalidateAllProviders`); the search and the archived
+    // toggle must survive that rebuild, not only the notifier's own sync.
+    test('provider invalidation (sync cycle) keeps the search and toggle',
+        () async {
+      when(() => repo.search(any(),
+              includeArchived: any(named: 'includeArchived')))
+          .thenAnswer((_) async => []);
+      await container.read(clientListNotifierProvider.future);
+      final notifier = container.read(clientListNotifierProvider.notifier);
+      await notifier.refresh(includeArchived: true);
+      await notifier.search('ali');
+      clearInteractions(repo);
+
+      container.invalidate(clientListNotifierProvider);
+      await container.read(clientListNotifierProvider.future);
+
+      verify(() => repo.search('ali', includeArchived: true)).called(1);
+      verifyNever(
+          () => repo.getAll(includeArchived: any(named: 'includeArchived')));
     });
 
     test('empty search after showing archived keeps includeArchived', () async {

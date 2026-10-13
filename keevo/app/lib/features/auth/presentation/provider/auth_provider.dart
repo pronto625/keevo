@@ -101,8 +101,10 @@ final sessionRefresherProvider = Provider<SessionRefresher>((ref) {
 @visibleForTesting
 void showSuspendedSessionNotice(
     NoticeThrottle throttle, ScaffoldMessengerState? messenger) {
-  if (!throttle.tryAcquire()) return;
-  messenger?.showSnackBar(
+  // No messenger mounted yet (splash, route transition): do not use up the
+  // window with nothing shown.
+  if (messenger == null || !throttle.tryAcquire()) return;
+  messenger.showSnackBar(
     const SnackBar(
       content: Text('Votre accès a été suspendu, veuillez vous reconnecter.'),
     ),

@@ -5,6 +5,7 @@ import '../../../../core/di/providers.dart';
 import '../../../../core/storage/app_constants.dart';
 import '../../../../core/storage/app_database.dart';
 import '../../../../core/storage/secure_storage_provider.dart';
+import '../../../account/presentation/provider/account_deletion_provider.dart';
 import '../../../pos/presentation/provider/cart_provider.dart';
 import '../../../settings/presentation/provider/account_status_provider.dart';
 import '../../../settings/presentation/provider/subscription_info_provider.dart';
@@ -82,6 +83,10 @@ class SessionClaimsApplier {
     // Only when mounted: Ref.invalidate mounts (and fetches) it in debug.
     if (newSession && _ref.exists(subscriptionInfoProvider)) {
       _ref.invalidate(subscriptionInfoProvider);
+    }
+    // Same for the account-deletion banner (cached per process).
+    if (newSession && _ref.exists(deletionPendingStatusProvider)) {
+      _ref.invalidate(deletionPendingStatusProvider);
     }
   }
 

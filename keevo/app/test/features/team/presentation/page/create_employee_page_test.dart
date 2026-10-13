@@ -116,6 +116,43 @@ void main() {
         )).called(1);
   });
 
+  // v1s-16-13 follow-up: the plan-limit sheet states the FREE limit (3
+  // employees, PlanType.FREE), never the old hard-coded 5.
+  testWidgets('plan limit shows « limite de 3 employés »', (tester) async {
+    when(() => empRepo.createEmployee(
+          firstName: any(named: 'firstName'),
+          lastName: any(named: 'lastName'),
+          phoneNumber: any(named: 'phoneNumber'),
+          storeId: any(named: 'storeId'),
+        )).thenThrow(Exception('PLAN_LIMIT_EXCEEDED'));
+    await tester.binding.setSurfaceSize(const Size(800, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        employeeRepositoryProvider.overrideWithValue(empRepo),
+        storeRepositoryProvider.overrideWithValue(storeRepo),
+      ],
+      child: const MaterialApp(home: CreateEmployeePage()),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextFormField).at(0), 'Jean');
+    await tester.enterText(find.byType(TextFormField).at(1), 'Mbida');
+    await tester.enterText(
+        find.descendant(
+            of: find.byType(IntlPhoneField), matching: find.byType(TextField)),
+        '699123456');
+    await tester.tap(find.byType(DropdownButtonFormField<StoreModel>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Boutique A').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Créer l'employé"));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Vous avez atteint la limite de 3 employés'),
+        findsOneWidget);
+  });
+
   // Changing the country after typing fires no onChanged: the number must
   // still be judged (with the current country) at submit, not rejected.
   testWidgets('a valid number still submits after a country change',

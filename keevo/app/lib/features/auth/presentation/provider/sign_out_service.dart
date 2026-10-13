@@ -5,6 +5,7 @@ import '../../../../core/di/providers.dart';
 import '../../../../core/storage/app_constants.dart';
 import '../../../../core/storage/secure_storage_provider.dart';
 import '../../../notifications/presentation/provider/notification_provider.dart';
+import '../../../account/presentation/provider/account_deletion_provider.dart';
 import '../../../pos/presentation/provider/cart_provider.dart';
 import '../../../settings/presentation/provider/account_status_provider.dart';
 import '../../../settings/presentation/provider/subscription_info_provider.dart';
@@ -36,7 +37,14 @@ class SignOutService {
 
   Future<void> signOut() async {
     // Server calls first, while the tokens are still attached to requests.
-    final refreshToken = await _ref.read(tokenStorageProvider).getRefreshToken();
+    // An unreadable storage must not keep the session alive: the secrets
+    // are still cleared below.
+    String? refreshToken;
+    try {
+      refreshToken = await _ref.read(tokenStorageProvider).getRefreshToken();
+    } catch (e) {
+      debugPrint('[Auth] Refresh token read on sign-out failed: $e');
+    }
     if (refreshToken != null) {
       try {
         await _ref.read(authRepositoryProvider).logout(refreshToken);
@@ -97,6 +105,10 @@ class SignOutService {
     // when mounted: Ref.invalidate mounts (and fetches) it in debug.
     if (_ref.exists(subscriptionInfoProvider)) {
       _ref.invalidate(subscriptionInfoProvider);
+    }
+    // Same for the account-deletion banner (cached per process).
+    if (_ref.exists(deletionPendingStatusProvider)) {
+      _ref.invalidate(deletionPendingStatusProvider);
     }
   }
 }

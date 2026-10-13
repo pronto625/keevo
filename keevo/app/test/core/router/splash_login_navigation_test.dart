@@ -15,6 +15,8 @@ import 'package:keevo/core/router/session_presence_cache.dart';
 import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/core/sync/sync_trigger_notifier.dart';
 import 'package:keevo/features/auth/presentation/page/auth_page.dart';
+import 'package:keevo/features/auth/presentation/page/forgot_password_page.dart';
+import 'package:keevo/features/onboarding/presentation/page/terms_page.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 
 void _overrideSqlite3ForLinuxTesting() {
@@ -57,6 +59,14 @@ class _SignedInCache extends SessionPresenceCache {
     calls++;
     return true;
   }
+}
+
+/// Signed out (healthy storage, nothing stored).
+class _SignedOutCache extends SessionPresenceCache {
+  _SignedOutCache() : super(const FlutterSecureStorage());
+
+  @override
+  Future<bool> hasSession() async => false;
 }
 
 class _IdleSync extends SyncTriggerNotifier {
@@ -128,6 +138,79 @@ void main() {
     }
     expect(cache.calls, callsAfterSecond);
 
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  Future<void> settle(WidgetTester tester) async {
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+  }
+
+  String location() => appRouter.routerDelegate.currentConfiguration.uri.path;
+
+  Future<void> pumpApp(WidgetTester tester,
+      {required SessionPresenceCache cache,
+      required FlutterSecureStorage storage}) async {
+    final db = AppDatabase.forTesting();
+    addTearDown(db.close);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        appDatabaseProvider.overrideWithValue(db),
+        flutterSecureStorageProvider.overrideWithValue(storage),
+        sessionPresenceCacheProvider.overrideWithValue(cache),
+        syncTriggerNotifierProvider.overrideWith(_IdleSync.new),
+      ],
+      child: MaterialApp.router(routerConfig: appRouter),
+    ));
+    await settle(tester);
+  }
+
+  testWidgets('session without a stored role: an owner-only deep link never '
+      'opens, the splash decides', (tester) async {
+    SharedPreferences.setMockInitialValues({}); // no user_role
+    await pumpApp(tester,
+        cache: _SignedInCache(), storage: const _BrokenStorage());
+
+    appRouter.go('/dashboard');
+    await settle(tester);
+
+    // Splash re-ran (and, storage broken, fell back to the login form).
+    expect(location(), '/auth/login');
+    expect(find.byType(AuthPage), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('signed out: reset-password without its phone restarts at '
+      'forgot-password; /terms/view is reachable', (tester) async {
+    FlutterSecureStorage.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({
+      'onboarding_seen': true,
+      'terms_accepted': true,
+    });
+    await pumpApp(tester,
+        cache: _SignedOutCache(), storage: const FlutterSecureStorage());
+    expect(location(), '/auth/login');
+
+    appRouter.go('/auth/reset-password');
+    await settle(tester);
+    expect(location(), '/auth/forgot-password');
+    expect(find.byType(ForgotPasswordPage), findsOneWidget);
+
+    appRouter.go('/auth/reset-password', extra: {'phoneNumber': '  '});
+    await settle(tester);
+    expect(location(), '/auth/forgot-password');
+
+    appRouter.go('/terms/view?section=privacy');
+    await settle(tester);
+    expect(location(), '/terms/view');
+    expect(tester.widget<TermsPage>(find.byType(TermsPage)).readOnly, true);
+
+    // Opened without a stack (deep link): back lets the splash decide —
+    // signed out here, so the login form (never the register form).
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await settle(tester);
+    expect(location(), '/auth/login');
     await tester.pumpWidget(const SizedBox());
   });
 }
