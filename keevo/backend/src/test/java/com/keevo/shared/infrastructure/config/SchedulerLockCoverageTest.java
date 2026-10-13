@@ -13,6 +13,8 @@ import com.keevo.shared.infrastructure.activity.UserActivityPurgeJob;
 import com.keevo.shared.infrastructure.persistence.SyncKeysetIndexJob;
 import com.keevo.shared.infrastructure.scheduling.AccountDeletionScheduler;
 import com.keevo.shared.infrastructure.scheduling.PlanExpiryReminderScheduler;
+import com.keevo.shared.infrastructure.scheduling.PlatformHealthSampleScheduler;
+import com.keevo.shared.infrastructure.scheduling.SyncSilenceAlertScheduler;
 import com.keevo.shared.infrastructure.scheduling.SubscriptionExpiryScheduler;
 import com.keevo.sync.sync.application.service.SyncErrorLogCleanupJob;
 import net.javacrumbs.shedlock.core.LockProvider;
@@ -62,7 +64,9 @@ class SchedulerLockCoverageTest {
             Map.entry(ExportPurgeScheduler.class, Duration.ofHours(1)), // v1s-18-1
             Map.entry(SyncKeysetIndexJob.class, Duration.ofDays(1)), // 11-5
             Map.entry(PlanExpiryReminderScheduler.class, Duration.ofDays(1)), // 9-2
-            Map.entry(UserActivityPurgeJob.class, Duration.ofDays(1))); // 9-4
+            Map.entry(UserActivityPurgeJob.class, Duration.ofDays(1)), // 9-4
+            Map.entry(PlatformHealthSampleScheduler.class, Duration.ofMinutes(5)), // 9-5
+            Map.entry(SyncSilenceAlertScheduler.class, Duration.ofDays(1))); // 9-5
 
     /** In-memory sweeps: must run on every instance → never locked. */
     private static final List<Class<?>> IN_MEMORY_SWEEPS = List.of(

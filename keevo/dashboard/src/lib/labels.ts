@@ -542,6 +542,17 @@ export function priorityLabel(code: string | null | undefined): string {
   return lookup(PRIORITY_LABELS, code, "—");
 }
 
+// Story 9-5 — severity of the platform alerts feed.
+const ALERT_SEVERITY_LABELS: Record<string, string> = {
+  HIGH: "Haute",
+  MEDIUM: "Moyenne",
+  LOW: "Basse",
+};
+
+export function alertSeverityLabel(code: string | null | undefined): string {
+  return lookup(ALERT_SEVERITY_LABELS, code, "—");
+}
+
 const PLATFORM_LABELS: Record<string, string> = {
   ANDROID: "Android",
   IOS: "iOS",

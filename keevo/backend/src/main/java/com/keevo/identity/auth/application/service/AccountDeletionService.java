@@ -18,7 +18,6 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoUnit;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -77,7 +76,7 @@ public class AccountDeletionService {
                     "Account deletion is not available while the account is suspended");
         }
 
-        Instant deletionDate = Instant.now().plus(30, ChronoUnit.DAYS);
+        Instant deletionDate = Instant.now().plus(AccountDeletionPolicy.GRACE_PERIOD);
         Tenant updated = tenant.withStatus(TenantStatus.DELETION_PENDING, deletionDate);
         tenantRepository.save(updated);
 
