@@ -22,18 +22,35 @@ class NotificationCard extends StatelessWidget {
     final isUnread = !notification.isRead;
 
     final (icon, color) = _typeVisual(notification.type);
+    final typeLabel = notification.typeLabel;
+    final title = Text(
+      notification.title,
+      style: TextStyle(
+        fontWeight: isUnread ? FontWeight.w700 : FontWeight.w500,
+        color: theme.colorScheme.onSurface,
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
 
     return ListTile(
       leading: SoftIconBadge(icon: icon, color: color),
-      title: Text(
-        notification.title,
-        style: TextStyle(
-          fontWeight: isUnread ? FontWeight.w700 : FontWeight.w500,
-          color: theme.colorScheme.onSurface,
-        ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
+      title: typeLabel == null
+          ? title
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  typeLabel,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                title,
+              ],
+            ),
       subtitle: Text(
         notification.body,
         maxLines: 2,
@@ -67,6 +84,10 @@ class NotificationCard extends StatelessWidget {
         'TREND_DOWN' => (Icons.trending_down_rounded, AppTheme.errorColor),
         'TREND_UP' => (Icons.trending_up_rounded, AppTheme.success),
         'DAILY_REPORT' || 'WEEKLY_REPORT' => (Icons.bar_chart_rounded, null),
+        NotificationModel.globalAnnouncementType => (
+            Icons.campaign_rounded,
+            null
+          ),
         _ => (Icons.notifications_outlined, null),
       };
 

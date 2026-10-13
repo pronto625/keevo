@@ -95,6 +95,7 @@ class SignOutService {
     await prefs.remove(kUserPhoneKey);
     await prefs.remove(kPasswordChangeRequiredKey);
     await prefs.remove(kOnboardingWizardSeenKey);
+    await prefs.remove(kAnnouncementsFetchedAtKey);
 
     _ref.read(cartProvider.notifier).clearCart();
     _ref.invalidate(currentUserRoleProvider);

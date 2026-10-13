@@ -4,7 +4,9 @@ import '../../../../core/di/providers.dart';
 import '../../../../core/notification/fcm_service.dart';
 import '../../../../features/auth/presentation/provider/auth_provider.dart';
 import '../../data/datasource/local_notification_datasource.dart';
+import '../../data/datasource/remote_announcement_datasource.dart';
 import '../../data/datasource/remote_device_token_datasource.dart';
+import '../../data/repository/announcement_sync_service.dart';
 import '../../data/repository/notification_repository_impl.dart';
 import '../../domain/model/notification_model.dart';
 import '../../domain/repository/notification_repository.dart';
@@ -19,6 +21,16 @@ final localNotificationDataSourceProvider =
 final remoteDeviceTokenDataSourceProvider =
     Provider<RemoteDeviceTokenDataSource>((ref) {
   return RemoteDeviceTokenDataSource(dio: ref.watch(dioProvider));
+});
+
+/// Story 9-5 — Keevo announcements fetched on app start / resume.
+final announcementSyncServiceProvider =
+    Provider<AnnouncementSyncService>((ref) {
+  return AnnouncementSyncService(
+    remote: RemoteAnnouncementDataSource(dio: ref.watch(dioProvider)),
+    local: ref.watch(localNotificationDataSourceProvider),
+    prefs: ref.watch(sharedPreferencesProvider),
+  );
 });
 
 final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {

@@ -38,6 +38,23 @@ void main() {
       expect(read.id, 'n-2');
     });
 
+    test('GLOBAL_ANNOUNCEMENT: megaphone and « Annonce Keevo » (Story 9-5)',
+        () {
+      final model = NotificationModel(
+        id: 'g', type: 'GLOBAL_ANNOUNCEMENT',
+        title: 'T', body: 'B', receivedAt: DateTime.now(),
+      );
+      expect(model.typeIcon, '📣');
+      expect(model.typeLabel, 'Annonce Keevo');
+      expect(
+        NotificationModel(
+          id: 's', type: 'STOCK_ALERT',
+          title: 'T', body: 'B', receivedAt: DateTime.now(),
+        ).typeLabel,
+        isNull,
+      );
+    });
+
     test('typeIcon returns correct emoji', () {
       expect(
         NotificationModel(

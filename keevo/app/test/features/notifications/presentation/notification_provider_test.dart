@@ -1,11 +1,19 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo/core/di/providers.dart';
+import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
+import 'package:keevo/features/notifications/data/datasource/local_notification_datasource.dart';
+import 'package:keevo/features/notifications/data/repository/announcement_sync_service.dart';
 import 'package:keevo/features/notifications/domain/repository/notification_repository.dart';
 import 'package:keevo/features/notifications/presentation/provider/notification_provider.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class MockNotificationRepository extends Mock
     implements NotificationRepository {}
+
+class _MockLocal extends Mock implements LocalNotificationDataSource {}
 
 void main() {
   late MockNotificationRepository mockRepo;
@@ -64,5 +72,20 @@ void main() {
       // Called only once because FutureProvider caches the result
       verify(() => mockRepo.markAllAsRead()).called(1);
     });
+  });
+
+  test('announcementSyncServiceProvider wires dio, local datasource and prefs '
+      '(Story 9-5)', () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final container = ProviderContainer(overrides: [
+      sharedPreferencesProvider.overrideWithValue(prefs),
+      dioProvider.overrideWithValue(Dio()),
+      localNotificationDataSourceProvider.overrideWithValue(_MockLocal()),
+    ]);
+    addTearDown(container.dispose);
+
+    expect(container.read(announcementSyncServiceProvider),
+        isA<AnnouncementSyncService>());
   });
 }

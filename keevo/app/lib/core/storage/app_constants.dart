@@ -14,6 +14,10 @@ const String kTermsAcceptedKey = 'terms_accepted';
 // a newly registered user through the wizard before reaching the POS.
 const String kOnboardingWizardSeenKey = 'onboarding_wizard_seen';
 
+/// Story 9-5 — latest `sentAt` of the Keevo announcements already fetched
+/// (ISO-8601 UTC); cleared on sign-out.
+const String kAnnouncementsFetchedAtKey = 'announcements_fetched_at';
+
 // Written only by the wizard itself when it completes. Wins over an
 // onboardingCompleted=false claim: the registration token says false and lives
 // until it is renewed, which may not have happened yet (offline).

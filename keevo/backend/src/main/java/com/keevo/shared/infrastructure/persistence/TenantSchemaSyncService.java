@@ -40,7 +40,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p><b>Tables NOT synced to tenant schemas (global-only):</b> {@code tenants},
  * {@code tenant_payments}, {@code tenant_plan_events}, {@code plan_expiry_reminders},
  * {@code user_daily_activity}, {@code platform_health_samples}, {@code admin_alert_acks},
- * {@code sync_silence_notices}.
+ * {@code sync_silence_notices}, {@code global_notifications}.
  *
  * <p>Architecture: shared infrastructure — zero knowledge of business domain.
  */
@@ -63,7 +63,14 @@ public class TenantSchemaSyncService {
             // Story 9-4 — platform analytics activity tracking (public only)
             "user_daily_activity",
             // Story 9-5 — system health samples, admin alert acks, sync silence notices (public only)
-            "platform_health_samples", "admin_alert_acks", "sync_silence_notices");
+            "platform_health_samples", "admin_alert_acks", "sync_silence_notices",
+            // Story 9-5 (2/2) — global push notifications of the super admin (public only)
+            "global_notifications");
+
+    /** The public tables never mirrored into tenant schemas (read-only view, used by tests). */
+    public static Set<String> globalOnlyTables() {
+        return GLOBAL_ONLY_TABLES;
+    }
 
     /**
      * Tables that are tenant-schema-specific (not mirrored from {@code public}) but MUST

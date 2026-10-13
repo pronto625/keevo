@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -33,6 +35,9 @@ class MainShell extends ConsumerStatefulWidget {
 }
 
 class _MainShellState extends ConsumerState<MainShell> {
+  /// Story 9-5 — fetches the Keevo announcements again when the app resumes.
+  AppLifecycleListener? _lifecycle;
+
   /// OWNER tab routes — full navigation (5 tabs: Dashboard / Caisse / Catalogue / Rapports / Plus)
   static const _ownerRoutes = ['/dashboard', '/pos', '/products', '/reports', '/settings'];
 
@@ -53,7 +58,22 @@ class _MainShellState extends ConsumerState<MainShell> {
       _checkAutoClosureNotifications();
       _checkMissedDayClosure();
       _initFcm();
+      _syncAnnouncements();
     });
+    _lifecycle = AppLifecycleListener(onResume: _syncAnnouncements);
+  }
+
+  @override
+  void dispose() {
+    _lifecycle?.dispose();
+    super.dispose();
+  }
+
+  /// Story 9-5 — stores the Keevo announcements not received / tapped as
+  /// pushes. Best-effort: never throws, skipped offline.
+  void _syncAnnouncements() {
+    if (!mounted) return;
+    unawaited(ref.read(announcementSyncServiceProvider).sync());
   }
 
   /// Initialise Firebase Messaging et enregistre le token FCM sur le backend.

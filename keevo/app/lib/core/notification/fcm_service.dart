@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -7,9 +9,15 @@ import 'package:uuid/uuid.dart';
 
 import '../../features/notifications/data/datasource/local_notification_datasource.dart';
 import '../../features/notifications/data/datasource/remote_device_token_datasource.dart';
+import '../../features/notifications/domain/model/notification_model.dart';
 
 const _kChannelId = 'keevo_notifications';
 const _kChannelName = 'Keevo Notifications';
+
+/// Announcement broadcast by the Keevo team to every merchant (Story 9-5,
+/// FR82). It has no deep link of its own: a tap opens the notifications list.
+const kGlobalAnnouncementType = NotificationModel.globalAnnouncementType;
+const kNotificationsRoute = '/notifications';
 
 /// Thin seam over the static Firebase / FirebaseMessaging APIs so
 /// [FcmService] can be unit-tested (v1s-16-2).
@@ -360,7 +368,7 @@ class FcmService {
     debugPrint('[FCM] Foreground message: ${message.messageId}');
 
     // Store locally
-    _storeNotification(message);
+    unawaited(_storeNotification(message));
 
     // Show local notification
     final notification = message.notification;
@@ -383,7 +391,7 @@ class FcmService {
             presentSound: true,
           ),
         ),
-        payload: message.data['deepLink'] as String?,
+        payload: _tapRoute(message),
       );
     }
 
@@ -391,30 +399,57 @@ class FcmService {
     _onMessage?.call(message);
   }
 
-  void _onTap(RemoteMessage message, GoRouter router) {
+  /// Route opened when the notification is tapped: its deep link, or the
+  /// notifications list for a Keevo announcement.
+  static String? _tapRoute(RemoteMessage message) {
     final deepLink = message.data['deepLink'] as String?;
-    if (deepLink != null && deepLink.isNotEmpty) {
+    if (deepLink != null && deepLink.isNotEmpty) return deepLink;
+    if (message.data['type'] == kGlobalAnnouncementType) {
+      return kNotificationsRoute;
+    }
+    return null;
+  }
+
+  void _onTap(RemoteMessage message, GoRouter router) {
+    final route = _tapRoute(message);
+    if (route != null) {
       // Use push() so OS back button returns to the previous screen.
-      router.push(deepLink);
+      router.push(route);
+    }
+
+    final notifId = message.data['id'] as String?;
+    if (message.data['type'] == kGlobalAnnouncementType) {
+      // Received while the app was in background / killed: not stored yet.
+      unawaited(_storeThenMarkRead(message, notifId));
+      return;
     }
 
     // Mark as read if we have an ID
-    final notifId = message.data['id'] as String?;
     if (notifId != null) {
       _localNotifications.markAsRead(notifId);
     }
   }
 
-  void _storeNotification(RemoteMessage message) {
+  Future<void> _storeThenMarkRead(RemoteMessage message, String? id) async {
+    try {
+      await _storeNotification(message);
+      if (id != null) await _localNotifications.markAsRead(id);
+    } catch (e) {
+      debugPrint('[FCM] Failed to store tapped announcement: $e');
+    }
+  }
+
+  Future<void> _storeNotification(RemoteMessage message) {
     final data = message.data;
     final notification = message.notification;
-    _localNotifications.insert(
+    return _localNotifications.insert(
       id: data['id'] as String? ?? const Uuid().v4(),
       type: data['type'] as String? ?? 'GENERAL',
       title: notification?.title ?? data['title'] as String? ?? 'Notification',
       body: notification?.body ?? data['body'] as String? ?? '',
       deepLink: data['deepLink'] as String?,
-      receivedAt: DateTime.now(),
+      // Send time, not tap time: a push tapped hours later keeps its place.
+      receivedAt: message.sentTime ?? DateTime.now(),
     );
   }
 }

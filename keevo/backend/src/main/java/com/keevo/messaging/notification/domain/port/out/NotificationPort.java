@@ -1,6 +1,7 @@
 package com.keevo.messaging.notification.domain.port.out;
 
 import com.keevo.messaging.notification.domain.model.NotificationPayload;
+import com.keevo.messaging.notification.domain.model.PushSendResult;
 
 import java.util.List;
 import java.util.UUID;
@@ -36,5 +37,24 @@ public interface NotificationPort {
      * @param payload   rich notification payload
      */
     void notifyUsers(String tenantId, List<UUID> userIds, NotificationPayload payload);
-}
 
+    /**
+     * True when push notifications can actually be delivered (FCM configured and initialised).
+     * Story 9-5 — a global push is marked FAILED instead of SENT when this is false.
+     */
+    boolean isPushAvailable();
+
+    /**
+     * Counted multicast send to explicit device tokens of one tenant (Story 9-5, global push):
+     * chunks of at most {@value #MULTICAST_CHUNK_SIZE} tokens; tokens FCM reports as unregistered are
+     * deleted from the tenant's {@code device_tokens}. Never throws: a chunk that throws is counted in
+     * {@link PushSendResult#failedChunks()} with all its tokens as failures.
+     *
+     * @param tenantId tenant schema name (token cleanup runs in that schema)
+     * @param tokens   device tokens; empty list → {@link PushSendResult#EMPTY}
+     */
+    PushSendResult sendToTokens(String tenantId, List<String> tokens, NotificationPayload payload);
+
+    /** FCM multicast limit. */
+    int MULTICAST_CHUNK_SIZE = 500;
+}

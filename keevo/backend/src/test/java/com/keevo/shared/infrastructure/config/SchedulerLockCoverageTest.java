@@ -12,6 +12,8 @@ import com.keevo.reporting.report.application.service.WeeklyReportScheduler;
 import com.keevo.shared.infrastructure.activity.UserActivityPurgeJob;
 import com.keevo.shared.infrastructure.persistence.SyncKeysetIndexJob;
 import com.keevo.shared.infrastructure.scheduling.AccountDeletionScheduler;
+import com.keevo.shared.infrastructure.scheduling.GlobalNotificationPurgeJob;
+import com.keevo.shared.infrastructure.scheduling.GlobalNotificationScheduler;
 import com.keevo.shared.infrastructure.scheduling.PlanExpiryReminderScheduler;
 import com.keevo.shared.infrastructure.scheduling.PlatformHealthSampleScheduler;
 import com.keevo.shared.infrastructure.scheduling.SyncSilenceAlertScheduler;
@@ -66,7 +68,10 @@ class SchedulerLockCoverageTest {
             Map.entry(PlanExpiryReminderScheduler.class, Duration.ofDays(1)), // 9-2
             Map.entry(UserActivityPurgeJob.class, Duration.ofDays(1)), // 9-4
             Map.entry(PlatformHealthSampleScheduler.class, Duration.ofMinutes(5)), // 9-5
-            Map.entry(SyncSilenceAlertScheduler.class, Duration.ofDays(1))); // 9-5
+            Map.entry(SyncSilenceAlertScheduler.class, Duration.ofDays(1)), // 9-5
+            // 9-5 (2/2): every minute, but lockAtMostFor 10 min for large broadcasts (claim is atomic anyway)
+            Map.entry(GlobalNotificationScheduler.class, Duration.ofMinutes(15)),
+            Map.entry(GlobalNotificationPurgeJob.class, Duration.ofDays(1))); // 9-5 (2/2)
 
     /** In-memory sweeps: must run on every instance → never locked. */
     private static final List<Class<?>> IN_MEMORY_SWEEPS = List.of(

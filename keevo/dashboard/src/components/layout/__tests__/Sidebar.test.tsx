@@ -36,6 +36,7 @@ describe("Sidebar (spec 9-1 completion)", () => {
     renderSidebar();
 
     expect(screen.getByRole("link", { name: "Entreprises" })).toHaveAttribute("href", "/tenants");
+    expect(screen.getByRole("link", { name: "Notifications" })).toHaveAttribute("href", "/notifications");
     expect(await screen.findByLabelText("3 retours prioritaires non traités")).toHaveTextContent("3");
     expect(screen.getByRole("link", { name: /Retours utilisateurs/ })).toHaveAttribute("href", "/retours");
     expect(document.body.textContent?.toLowerCase()).not.toContain("tenant");
