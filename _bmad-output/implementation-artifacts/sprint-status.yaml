@@ -179,7 +179,7 @@ development_status:
   # Epic 9: Super Admin Dashboard (Toor)
   # ─────────────────────────────────────────────────────────
   epic-9: in-progress
-  9-1-gestion-des-tenants: in-progress  # 2026-10-13 rouverte : 1 item routé depuis la revue 11-5 (N+1 métriques par tenant) + finalisation back office (libellés, noms, retours utilisateurs)
+  9-1-gestion-des-tenants: in-progress  # 2026-10-13 build-auto spec-9-1-gestion-tenants-completion.md | rouverte : 1 item routé depuis la revue 11-5 (N+1 métriques par tenant) + finalisation back office (libellés, noms, retours utilisateurs)
   9-2-activation-plan-payant: done  # 2026-10-13 done (bmad-build-auto, spec-9-2-activation-plan-payant.md) : V1 back office (demande utilisateur) — activation Premium + paiements, retour Gratuit, suspension/réactivation, historique des plans, rappels WhatsApp, alertes | # 2026-10-11 : endpoint AdminSubscriptionController /activate existe (1.6), pas d'UI — sprint-change-proposal-2026-10-11 / audit-coherence-2026-10-11 | ⤳ superseded par 16-4 (console modules) / 16-2
   9-3-dashboard-revenus: done  # 2026-10-13 done (bmad-build-auto, spec-9-3-dashboard-revenus.md) : V1 back office — MRR/ARR, payants/gratuits/essai, conversion, churn + CSV, tendance 12 mois |  # ⤳ superseded par 15-7 (dashboard refonte)
   9-4-analytics-plateforme: done  # 2026-10-13 done (bmad-build-auto, spec-9-4-analytics-plateforme.md) : V1 back office — suivi d activité (V18), DAU/MAU, croissance, géographie, cohortes, top boutiques, adoption |  # ⤳ superseded par 15-7 (dashboard refonte)
