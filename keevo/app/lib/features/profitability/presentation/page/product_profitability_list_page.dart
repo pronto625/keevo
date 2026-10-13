@@ -4,11 +4,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/sync/sync_status.dart';
 import '../../../../core/sync/sync_status_provider.dart';
-import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import '../../domain/model/product_profitability_model.dart';
 import '../provider/profitability_providers.dart';
+import '../widget/offline_data_banner.dart';
 import '../widget/period_filter_chips.dart';
 import '../widget/profitability_row.dart';
 import '../widget/sort_chips.dart';
@@ -103,7 +103,7 @@ class ProductProfitabilityListPage extends ConsumerWidget {
 
           // ── Offline banner (AC10) ─────────────────────────────────────────
           if (isOffline)
-            const SliverToBoxAdapter(child: _OfflineBanner()),
+            const SliverToBoxAdapter(child: OfflineDataBanner()),
 
           // ── Data ──────────────────────────────────────────────────────────
           dataAsync.when(
@@ -156,41 +156,6 @@ class ProductProfitabilityListPage extends ConsumerWidget {
             },
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ── Offline banner ───────────────────────────────────────────────────────────
-
-class _OfflineBanner extends StatelessWidget {
-  const _OfflineBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    // Fond ambre dilué : sur l'ancien fond ambre plein, l'icône et le texte
-    // (eux aussi ambre) étaient invisibles.
-    final accent =
-        cs.brightness == Brightness.dark ? cs.warning : AppTheme.onWarning;
-    return ColoredBox(
-      color: cs.warningContainer,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          children: [
-            Icon(Icons.cloud_off_outlined, size: 16, color: accent),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Mode hors ligne — données du dernier sync affiché',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: accent,
-                    ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

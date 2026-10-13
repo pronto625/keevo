@@ -523,6 +523,12 @@ As a proprietor, I want a sales leaderboard ranking employees (FR44, hidden for 
 
 **Doc:** Epic 4 Story 4.6 artifact. **TDD:** `shouldRankEmployeesByRevenue()`, `shouldReturn403ForEmployee()`.
 
+**Status:** ✅ done 2026-10-13 (spec-v1s-14-2-leaderboard.md)
+- [x] `GET /api/v1/reporting/leaderboard` OWNER-only, EMPLOYEE → 403 (`shouldReturn403ForEmployee`)
+- [x] Ranking CA / sales count / avg basket via Strategy mirroring `StoreRankingStrategy` (`shouldRankEmployeesByRevenue`)
+- [x] Flutter OWNER-only « Équipe » tab + metric toggle, Drift offline fallback
+- [x] Employee opt-in setting (Story 4.6) routed → refonte 17-2
+
 ## Story 14.3: FR79 — Dashboard revenus (MRR/churn/conversion) — **[B]**
 
 As a Toor, I want a revenue dashboard (FR79).

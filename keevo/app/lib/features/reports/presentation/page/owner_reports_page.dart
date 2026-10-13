@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../export/domain/model/export_models.dart';
 import '../../../export/presentation/widget/export_entry_button.dart';
 import '../../../profitability/presentation/page/product_profitability_list_page.dart';
+import '../../../profitability/presentation/page/seller_leaderboard_page.dart';
 import '../../../profitability/presentation/page/store_performance_page.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import 'report_history_page.dart';
@@ -12,12 +13,12 @@ import 'reports_page.dart';
 
 /// OwnerReportsPage — AC7 of Story 7.4.
 ///
-/// 4-tab tabbed reports hub for OWNER role:
+/// 5-tab tabbed reports hub for OWNER role:
 ///   📋 Jour         — existing ReportsPage (day-close summary + closure)
 ///   🕐 Historique   — existing ReportHistoryPage
 ///   📈 Rentabilité  — ProductProfitabilityListPage (Story 7.4)
 ///   🏪 Boutiques    — StorePerformancePage (Story 7.4)
-///   📝 Brouillons   — PendingSalesPage
+///   👥 Équipe       — SellerLeaderboardPage (FR44, v1s-14-2 — OWNER only)
 ///
 /// Uses a StatefulWidget with an explicit TabController to keep it stable across
 /// provider-driven rebuilds, preventing GlobalKey conflicts that can arise when
@@ -26,13 +27,15 @@ import 'reports_page.dart';
 /// EMPLOYEE route `/reports` points to [EmployeeReportsPage] (Jour + Brouillons).
 class OwnerReportsPage extends ConsumerStatefulWidget {
   /// Tab opened first (AC7 deep links): 0 Jour, 1 Historique,
-  /// 2 Rentabilité (`/reports/rentabilite`), 3 Boutiques (`/reports/boutiques`).
+  /// 2 Rentabilité (`/reports/rentabilite`), 3 Boutiques (`/reports/boutiques`),
+  /// 4 Équipe.
   final int initialTab;
 
   const OwnerReportsPage({super.key, this.initialTab = 0});
 
   static const tabRentabilite = 2;
   static const tabBoutiques = 3;
+  static const tabEquipe = 4;
 
   @override
   ConsumerState<OwnerReportsPage> createState() => _OwnerReportsPageState();
@@ -46,9 +49,9 @@ class _OwnerReportsPageState extends ConsumerState<OwnerReportsPage>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 4,
+      length: 5,
       vsync: this,
-      initialIndex: widget.initialTab.clamp(0, 3),
+      initialIndex: widget.initialTab.clamp(0, 4),
     );
   }
 
@@ -109,6 +112,7 @@ class _OwnerReportsPageState extends ConsumerState<OwnerReportsPage>
             Tab(icon: Icon(Icons.history_outlined), text: 'Historique'),
             Tab(icon: Icon(Icons.trending_up_outlined), text: 'Rentabilité'),
             Tab(icon: Icon(Icons.storefront_outlined), text: 'Boutiques'),
+            Tab(icon: Icon(Icons.groups_outlined), text: 'Équipe'),
           ],
         ),
       ),
@@ -126,6 +130,9 @@ class _OwnerReportsPageState extends ConsumerState<OwnerReportsPage>
               child: ProductProfitabilityListPage(storeId: activeStoreId)),
           const _KeepAliveTab(
               key: ValueKey('tab-boutiques'), child: StorePerformancePage()),
+          _KeepAliveTab(
+              key: const ValueKey('tab-equipe'),
+              child: SellerLeaderboardPage(storeId: activeStoreId)),
         ],
       ),
     );

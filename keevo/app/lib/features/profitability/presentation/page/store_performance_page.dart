@@ -3,12 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/sync/sync_status.dart';
 import '../../../../core/sync/sync_status_provider.dart';
-import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import '../../domain/model/product_profitability_model.dart';
 import '../provider/profitability_providers.dart';
+import '../widget/offline_data_banner.dart';
 import '../widget/period_filter_chips.dart';
+import '../widget/ranking_metric_toggle.dart';
 import '../widget/store_performance_row.dart';
 
 /// StorePerformancePage — AC5, AC6 of Story 7.4.
@@ -83,7 +84,7 @@ class StorePerformancePage extends ConsumerWidget {
                           .state = s,
                     ),
                     const SizedBox(height: 4),
-                    _MetricToggle(
+                    RankingMetricToggle(
                       selected: metric,
                       onChanged: (m) =>
                           ref.read(selectedMetricProvider.notifier).state = m,
@@ -96,7 +97,7 @@ class StorePerformancePage extends ConsumerWidget {
 
           // ── Offline banner (AC10) ─────────────────────────────────────────
           if (isOffline)
-            const SliverToBoxAdapter(child: _OfflineBanner()),
+            const SliverToBoxAdapter(child: OfflineDataBanner()),
 
           // ── Data ──────────────────────────────────────────────────────────
           dataAsync.when(
@@ -138,95 +139,6 @@ class StorePerformancePage extends ConsumerWidget {
             },
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ── Metric toggle ─────────────────────────────────────────────────────────────
-
-class _MetricToggle extends StatelessWidget {
-  final RankingMetric selected;
-  final ValueChanged<RankingMetric> onChanged;
-
-  const _MetricToggle({required this.selected, required this.onChanged});
-
-  static const _options = [
-    (RankingMetric.ca, 'CA'),
-    (RankingMetric.salesCount, 'Ventes'),
-    (RankingMetric.avgBasket, 'Panier Moyen'),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        children: _options.map((pair) {
-          final (option, label) = pair;
-          final isSelected = selected == option;
-          final theme = Theme.of(context);
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              label: Text(label),
-              selected: isSelected,
-              onSelected: (_) => onChanged(option),
-              selectedColor: theme.colorScheme.primary,
-              backgroundColor: theme.colorScheme.surface,
-              showCheckmark: false,
-              shape: const StadiumBorder(),
-              side: BorderSide(
-                color: isSelected
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.outlineVariant,
-              ),
-              labelStyle: TextStyle(
-                color: isSelected
-                    ? theme.colorScheme.onPrimary
-                    : theme.colorScheme.onSurfaceVariant,
-                fontWeight:
-                    isSelected ? FontWeight.w600 : FontWeight.normal,
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-}
-
-// ── Offline banner ───────────────────────────────────────────────────────────
-
-class _OfflineBanner extends StatelessWidget {
-  const _OfflineBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    // Fond ambre dilué : sur l'ancien fond ambre plein, l'icône et le texte
-    // (eux aussi ambre) étaient invisibles.
-    final accent =
-        cs.brightness == Brightness.dark ? cs.warning : AppTheme.onWarning;
-    return ColoredBox(
-      color: cs.warningContainer,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          children: [
-            Icon(Icons.cloud_off_outlined, size: 16, color: accent),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Mode hors ligne — données du dernier sync affiché',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: accent,
-                    ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
