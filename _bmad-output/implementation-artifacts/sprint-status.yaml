@@ -181,7 +181,7 @@ development_status:
   epic-9: in-progress
   9-1-gestion-des-tenants: in-progress  # 2026-10-13 rouverte : 1 item routé depuis la revue 11-5 (N+1 métriques par tenant) + finalisation back office (libellés, noms, retours utilisateurs)
   9-2-activation-plan-payant: done  # 2026-10-13 done (bmad-build-auto, spec-9-2-activation-plan-payant.md) : V1 back office (demande utilisateur) — activation Premium + paiements, retour Gratuit, suspension/réactivation, historique des plans, rappels WhatsApp, alertes | # 2026-10-11 : endpoint AdminSubscriptionController /activate existe (1.6), pas d'UI — sprint-change-proposal-2026-10-11 / audit-coherence-2026-10-11 | ⤳ superseded par 16-4 (console modules) / 16-2
-  9-3-dashboard-revenus: backlog   # ⤳ superseded par 15-7 (dashboard refonte)
+  9-3-dashboard-revenus: in-progress  # 2026-10-13 build-auto spec-9-3-dashboard-revenus.md (V1 back office, demande utilisateur) |  # ⤳ superseded par 15-7 (dashboard refonte)
   9-4-analytics-plateforme: backlog   # ⤳ superseded par 15-7 (dashboard refonte)
   9-5-sante-systeme-alertes-notifications-push-globales: backlog   # ⤳ superseded par 17-5
   9-6-monitoring-catalogue-produits: done  # 2026-05-21 — code review PASSED | H1: escapeCsv() +\r fix | NR: null sort NPE fix in listTenantSyncHealth() (37 tenants w/ null name) | 13/13 curl tests PASS | 5/5 non-regression PASS | 10/10 unit tests GREEN
