@@ -38,7 +38,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * is needed. Raw JDBC is intentional and correct for this use case.
  *
  * <p><b>Tables NOT synced to tenant schemas (global-only):</b> {@code tenants},
- * {@code tenant_payments}, {@code tenant_plan_events}, {@code plan_expiry_reminders}.
+ * {@code tenant_payments}, {@code tenant_plan_events}, {@code plan_expiry_reminders},
+ * {@code user_daily_activity}.
  *
  * <p>Architecture: shared infrastructure — zero knowledge of business domain.
  */
@@ -57,7 +58,9 @@ public class TenantSchemaSyncService {
     private static final Set<String> GLOBAL_ONLY_TABLES = Set.of(
             "tenants",
             // Story 9-2 — super-admin plan management (public only, reference public.tenants)
-            "tenant_payments", "tenant_plan_events", "plan_expiry_reminders");
+            "tenant_payments", "tenant_plan_events", "plan_expiry_reminders",
+            // Story 9-4 — platform analytics activity tracking (public only)
+            "user_daily_activity");
 
     /**
      * Tables that are tenant-schema-specific (not mirrored from {@code public}) but MUST

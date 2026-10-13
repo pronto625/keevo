@@ -68,7 +68,8 @@ class JwtAuthFilterRevocationCacheTest {
         revocation = new CachedTokenRevocationAdapter(
                 new JdbcTokenRevocationAdapter(revocationJdbc), Clock.systemUTC());
         filter = new JwtAuthFilter(jwtTokenProvider, new ObjectMapper(),
-                tenantSchemaSyncService, filterJdbc, revocation);
+                tenantSchemaSyncService, filterJdbc, revocation,
+                org.mockito.Mockito.mock(com.keevo.shared.infrastructure.activity.UserActivityRecorder.class));
 
         when(revocationJdbc.queryForObject(anyString(), any(RowMapper.class), eq(userId), eq(TENANT)))
                 .thenAnswer(inv -> committedCutoff.get());

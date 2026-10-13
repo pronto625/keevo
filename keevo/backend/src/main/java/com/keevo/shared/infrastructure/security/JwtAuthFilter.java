@@ -2,6 +2,7 @@ package com.keevo.shared.infrastructure.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.identity.auth.domain.port.out.TokenRevocationPort;
+import com.keevo.shared.infrastructure.activity.UserActivityRecorder;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaSyncService;
@@ -83,17 +84,21 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private final TenantSchemaSyncService tenantSchemaSyncService;
     private final JdbcTemplate jdbcTemplate;
     private final TokenRevocationPort tokenRevocationPort;
+    /** Story 9-4 — DAU/MAU tracking (asynchronous, never throws). */
+    private final UserActivityRecorder userActivityRecorder;
 
     public JwtAuthFilter(JwtTokenProvider jwtTokenProvider,
                          ObjectMapper objectMapper,
                          TenantSchemaSyncService tenantSchemaSyncService,
                          JdbcTemplate jdbcTemplate,
-                         TokenRevocationPort tokenRevocationPort) {
+                         TokenRevocationPort tokenRevocationPort,
+                         UserActivityRecorder userActivityRecorder) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.objectMapper = objectMapper;
         this.tenantSchemaSyncService = tenantSchemaSyncService;
         this.jdbcTemplate = jdbcTemplate;
         this.tokenRevocationPort = tokenRevocationPort;
+        this.userActivityRecorder = java.util.Objects.requireNonNull(userActivityRecorder, "userActivityRecorder");
     }
 
     /**
@@ -254,6 +259,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             }
             SecurityContextHolder.getContext().setAuthentication(auth);
 
+            // Story 9-4 — DAU/MAU: authentication succeeded, record the user's activity of the day.
+            // Asynchronous and deduplicated in memory (no DB write on this thread); SUPER_ADMIN skipped.
+            recordActivity(userId, tenantId, role);
+
             filterChain.doFilter(request, response);
 
         } catch (ExpiredJwtException e) {
@@ -264,6 +273,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             // MANDATORY: clear ThreadLocal to prevent tenant leakage in thread-pool
             TenantContext.clear();
             SecurityContextHolder.clearContext();
+        }
+    }
+
+    private void recordActivity(UUID userId, String tenantSchema, String role) {
+        try {
+            userActivityRecorder.record(userId, tenantSchema, role);
+        } catch (RuntimeException e) {
+            // The recorder never throws; belt and braces — tracking must never affect the request.
+            log.debug("User activity recording skipped ({})", e.getClass().getSimpleName());
         }
     }
 
