@@ -225,7 +225,7 @@ void main() {
 
     test(
         'validateAndDecrementStock: a SALE movement already pulled with the '
-        'item id does not abort the validation', () async {
+        'item id is kept and stock is not decremented twice', () async {
       await stockProd1(10);
       await ds.insertAll(pendingSale());
       await db.into(db.stockMovements).insert(StockMovementsCompanion.insert(
@@ -244,6 +244,42 @@ void main() {
       final movements = await db.select(db.stockMovements).get();
       expect(movements, hasLength(1));
       expect(movements.single.id, 'item-p1');
+      // v1s-13-10 follow-up: the pulled server row wins (its createdAt kept)
+      // and the pulled stock level (10) already includes it.
+      expect(movements.single.createdAt, DateTime(2026));
+      final level = await (db.select(db.stockLevels)
+            ..where((l) => l.id.equals('sl-prod-1')))
+          .getSingle();
+      expect(level.quantity, 10);
+    });
+
+    test(
+        'cascadeValidatePendingSales: a SALE movement already pulled is kept, '
+        'no second decrement', () async {
+      await stockProd1(10);
+      await ds.insertAll(pendingSale());
+      await db.into(db.stockMovements).insert(StockMovementsCompanion.insert(
+            id: 'item-p1',
+            productId: 'prod-1',
+            storeId: 'store-1',
+            type: 'SALE',
+            quantityDelta: -3,
+            actorId: 'emp-1',
+            createdAt: DateTime(2026),
+          ));
+
+      final validated =
+          await ds.cascadeValidatePendingSales('prod-1', 'store-1', 'actor-1');
+
+      expect(validated, 1);
+      expect(await saleStatus('sale-p'), 'COMPLETED');
+      final movements = await db.select(db.stockMovements).get();
+      expect(movements, hasLength(1));
+      expect(movements.single.createdAt, DateTime(2026));
+      final level = await (db.select(db.stockLevels)
+            ..where((l) => l.id.equals('sl-prod-1')))
+          .getSingle();
+      expect(level.quantity, 10);
     });
 
     test('cascadeValidatePendingSales: SALE movement id is the sale item id',

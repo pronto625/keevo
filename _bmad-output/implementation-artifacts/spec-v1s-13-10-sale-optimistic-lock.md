@@ -5,11 +5,18 @@ created: '2026-10-11'
 status: 'done'
 baseline_revision: '502965056e301c8a22b5901d6f97ab2981dc26d5'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-13-context.md'
 warnings: [oversized]
-deferred: []
+deferred:
+  - summary: >-
+      SALE_CANCELLED and ADJUSTMENT movements still get random ids (backend and app), so a pull after an owner cancel/correct duplicates the history row.
+    evidence: |-
+      ValidateSaleService (cancel) / CorrectSaleService call the 7-arg recordOperation (random id); the app's _adjustStock uses Uuid().v4(). Outside the intent (SALE movements only). Routed to v1s-13-13-residual-check-then-act-races.
+    location: >-
+      keevo/app/lib/features/pos/data/datasource/local_sale_datasource.dart (_adjustStock)
+    severity: medium
 ---
 
 <intent-contract>
@@ -116,6 +123,41 @@ App (`keevo/app/`):
   - `[false]` `[reject]` (intent) concurrent-cascade app test serialises — reviewer's mutation run showed it fails without the conditional claim, so it does prove the claim.
   - `[false]` `[reject]` (intent) scope additions (saveAndFlush, version bump on CAS, app refresh, pubspec bump) — all required by the spec/project conventions.
 
+### 2026-10-13 — Review pass (follow-up)
+- verdicts: 31 findings — high 0, medium 4, low 14, false 13, maybe-false 0
+- findings:
+  - `[low]` `[reject]` (intent) correction rollback of ADJUSTMENTs and the 409 body not exercised end to end — carried: stale save proven on PostgreSQL, propagation inside the `@Transactional` service by unit test, mapping by `GlobalExceptionHandlerTest`.
+  - `[low]` `[reject]` (intent) cancel-after-correction "no stock restored" only mocked — carried: the versioned claim is proven on PG; `verifyNoInteractions(stockOperationService)` pins the service.
+  - `[low]` `[reject]` (intent) `remapItemProductIds` does not bump `sales.version` — only runs inside PENDING validation, whose claims are status-only by design (Design Notes).
+  - `[low]` `[reject]` (intent) no pull round-trip test — carried (pull upsert-by-id from v1s-13-8).
+  - `[false]` `[reject]` (intent) app manual validation reads then checks instead of a conditional claim — it runs inside one Drift transaction (SQLite single writer), so nothing interleaves.
+  - `[false]` `[reject]` (intent) 409 page handler beyond the intent — carried: the 13-1 convention for the HTTP surface the intent names.
+  - `[false]` `[reject]` (intent) cancel path throws `DomainException(OPTIMISTIC_LOCK)`, not the DAO exception — same 409 `OPTIMISTIC_LOCK` body.
+  - `[false]` `[reject]` (intent) patch carries other stories' hunks — follow-up diff = baseline→current code.
+  - `[low]` `[patch]` (verification) 409 resync test never set `_locallyUpdated` nor a failing pull — two widget tests: correction then 409 with the server now CANCELLED → page shows the server state (mutation-checked: fails without the override reset); pull throwing → error shown and sale re-read.
+  - `[false]` `[reject]` (verification other) review base — same as the scope row.
+  - `[false]` `[reject]` (blind) diff wider than 13-10 — same.
+  - `[false]` `[reject]` (blind) `pubspec.yaml` bump missing — the review diff filtered `.yaml`; the story commit bumped it. This follow-up bumps 1.1.40+39 → 1.1.41+40.
+  - `[false]` `[reject]` (blind) patch depends on code it does not include — those symbols exist in the tree (v1s-13-8 / 18-6).
+  - `[low]` `[reject]` (blind) correction checks the version after the ADJUSTMENT writes (a stock error can mask the sale conflict) — needs two owners correcting/cancelling the same sale at once; the losing transaction still rolls back entirely; a versioned claim first is new surface for a rare case.
+  - `[medium]` `[defer]` (blind) SALE_CANCELLED/ADJUSTMENT movements keep random ids → duplicate history after a pull — outside the intent (SALE only); routed to v1s-13-13-residual-check-then-act-races.
+  - `[medium]` `[patch]` (blind) `insertOnConflictUpdate` overwrote a pulled server SALE movement with local values — app validate + cascade now skip an item whose SALE movement (id = item id) is already cached: the server row is kept and stock is not decremented twice; plain insert otherwise; tests for both paths.
+  - `[low]` `[patch]` (blind) 409 resync awaits an unbounded pull while the owner buttons are disabled — `pull().timeout(15 s)` (caught like any pull failure); widget test with a hanging pull.
+  - `[low]` `[patch]` (blind) app 409 test gaps — grouped with the verification row (correct-409 / non-409 share the same catch; not duplicated).
+  - `[low]` `[reject]` (blind) integration-test gaps (remap bump, right version wrong status, Javadoc V1–V12) — remap: see intent row; wrong status is the same SQL predicate; Javadoc cosmetic.
+  - `[low]` `[reject]` (blind) Code Map/Tasks still name `OptimisticLockingFailureException` — the fix would be a spec edit; the triage log already records the change.
+  - `[low]` `[reject]` (blind) leftover non-atomic `updateStatus` / default 3-arg CAS — carried.
+  - `[false]` `[reject]` (blind) `lostCompletedRace` misreports a missing sale — carried: sales are never deleted.
+  - `[false]` `[reject]` (edge) async notification for ADJUSTMENTs later rolled back — `StockModificationNotificationListener` skips non-EMPLOYEE actors and cancel/correct are OWNER-only.
+  - `[low]` `[reject]` (edge) backend cascade INSUFFICIENT_STOCK when 0 < stock < qty — carried (pre-existing, PENDING path unreachable from current clients).
+  - `[medium]` `[patch]` (edge) pulled movement + still-PENDING local sale → double decrement — grouped with the insertOnConflictUpdate row.
+  - `[medium]` `[patch]` (edge) pulled server row overwritten — grouped with the same row.
+  - `[low]` `[reject]` (edge) local SALE movement quantities differ from the backend's `effectiveDecrement` — the pull replaces the row by id when the server has one; when the server skipped it (0 stock) the local row is a cosmetic history line.
+  - `[low]` `[patch]` (edge) hanging pull keeps buttons disabled — grouped with the timeout row.
+  - `[false]` `[reject]` (edge) sale deleted between claim and re-read — carried.
+  - `[false]` `[reject]` (edge claim) exception type vs spec — same as the intent row.
+  - `[false]` `[reject]` (edge claim) pubspec — same as the blind row.
+
 ## Design Notes
 
 - Why the cancel claim checks the version, not just the status: a correction does not change the status, so a status-only CAS lets a cancel that read pre-correction items restore the wrong quantities. The PENDING claims stay status-only: PENDING items change only through the validator's own remap in the same transaction.
@@ -150,3 +192,17 @@ App (`keevo/app/`):
 **Verification:** backend `mvn test` = 2149 tests, 7 failures + 29 errors, exactly the 10 baseline classes (no new failure); targeted classes green (incl. Testcontainers PostgreSQL 16 integration test). `flutter test` = 1336 passed, 1 failed (known `offline_gate_banner_test`). `flutter analyze` = 630 issues, identical to pre-change count, none in touched files.
 
 **Residual risks:** concurrent stale-screen corrections remain last-write-wins (version not exposed to clients); backend cascade can still throw INSUFFICIENT_STOCK when 0 < stock < qty (pre-existing, PENDING path unreachable from current clients).
+
+### Follow-up review pass — 2026-10-13
+
+**Summary:** fresh 4-layer review focused on the post-review app path « pull + re-read on 409 ». The reset of the local override is now proven by a widget test (correction, then a 409 with the server sale CANCELLED → the page shows CANCELLED; mutation-checked), as are a failing and a hanging pull (pull bounded to 15 s). App validation/cascade no longer overwrite a pulled server SALE movement nor decrement stock a second time when that movement is already cached. App 1.1.41+40.
+
+**Files changed:** `keevo/app/lib/features/pos/presentation/page/sale_detail_page.dart` (pull timeout), `keevo/app/lib/features/pos/data/datasource/local_sale_datasource.dart` (pulled movement wins), `keevo/app/pubspec.yaml`; tests `sale_detail_page_test.dart` (+3), `local_sale_datasource_test.dart` (+1, 1 strengthened).
+
+**Review findings:** 31 (0 high, 4 medium, 14 low, 13 false). Patched: 1 medium entry (pulled movement) + 2 low entries (409 tests, pull timeout). Deferred: 1 medium → v1s-13-13-residual-check-then-act-races (deterministic SALE_CANCELLED/ADJUSTMENT ids). Rejected: see the 2026-10-13 triage entry.
+
+**Follow-up review recommended: false** — follow-up pass, no high patched (patched: 0 high, 1 medium, 2 low).
+
+**Verification:** `sale_detail_page_test.dart` + `local_sale_datasource_test.dart` green; app batch `test/features/pos` 233 tests, 0 failure; `flutter analyze` 0 error / 0 warning (625 infos).
+
+**Residual risks:** duplicate SALE_CANCELLED/ADJUSTMENT history rows after a pull until v1s-13-13; concurrent stale-screen corrections stay last-write-wins.

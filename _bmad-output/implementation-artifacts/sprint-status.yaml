@@ -354,7 +354,7 @@ development_status:
   v1s-13-10-sale-optimistic-lock: done  # 2026-10-11 (commit 5cb755a) : 3/3 items clos — @Version sur Sale (V12 + DDL tenant), annulation COMPLETED versionnée (409 OPTIMISTIC_LOCK), correction versionnée (saveAndFlush), mouvements SALE de validation id = id de ligne (backend + app), cascade conditionnelle, app pull+relecture sur 409 ; app 1.1.18+17 ; 1 passe de revue (7 patchs), 0 routé ; spec-v1s-13-10-sale-optimistic-lock.md | 2026-10-11 +1 item routé depuis v1s-13-8 (SALE movement ids validate/cascade) | 2026-10-11 deferred-work redistribution — 2 items
   v1s-13-11-closure-report-windows: done  # 2026-10-11 build-auto (19efbc8) — décisions D1–D3 (PRD FR51/52/90), Clock CloseDayService, fenêtre hebdo chaînée, avertissement app ; spec-v1s-13-11-closure-report-windows.md
   v1s-13-12-schema-provisioning-hygiene: done  # 2026-10-11 build-auto (fb880b6) — TenantSchema gate unique, DDL_USERS complet, sync boot SmartLifecycle + ERROR visibles, V13 CHECK idempotents, migration SALE_CANCELLED tenants existants ; spec-v1s-13-12-schema-provisioning-hygiene.md
-  v1s-13-13-residual-check-then-act-races: backlog  # 2026-10-13 revue de suivi v1s-13-9 (followup-backend-12-13) — 2 items (plafonds boutiques/employés, rapport hebdo manuel vs planifié)
+  v1s-13-13-residual-check-then-act-races: backlog  # 2026-10-13 revue de suivi v1s-13-9 (followup-backend-12-13) — 3 items (plafonds boutiques/employés, rapport hebdo manuel vs planifié ; + revue v1s-13-10 : ids aléatoires SALE_CANCELLED/ADJUSTMENT)
   v1s-epic-13-retrospective: optional
 
   v1s-epic-14-functional-gaps-v1: in-progress         # remediation Epic 14 — subset tag A/C (B exclu = refonte) ; 2026-07-22 — première story créée (v1s-14-5)
