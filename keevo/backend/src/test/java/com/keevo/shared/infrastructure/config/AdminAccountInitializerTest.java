@@ -218,4 +218,28 @@ class AdminAccountInitializerTest {
             verify(userRepo, times(1)).save(any(UserJpaEntity.class));
         }
     }
+
+    // ── v1s-12-12 follow-up — unprefixed ADMIN_PHONE is normalised ─────────
+
+    @Test
+    @DisplayName("unprefixed ADMIN_PHONE: lookup and insert use the canonical '+' form")
+    void unprefixedAdminPhoneIsNormalised() {
+        AdminAccountInitializer unprefixed = new AdminAccountInitializer(
+                tenantRepo, userRepo, membershipRepo, passwordEncoder,
+                new AdminProperties("237600000000", "Admin@1234!"));
+        when(tenantRepo.existsById(AdminAccountInitializer.ADMIN_TENANT_ID)).thenReturn(true);
+        when(userRepo.findByPhoneNumber("+237600000000")).thenReturn(Optional.empty());
+        when(passwordEncoder.encode(anyString())).thenReturn("$2a$10$hashedPassword");
+        when(userRepo.save(any(UserJpaEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(membershipRepo.findByUserIdAndTenantId(any(), any())).thenReturn(Optional.empty());
+        when(membershipRepo.save(any(UserTenantMembershipJpaEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        unprefixed.run(args);
+
+        verify(userRepo).findByPhoneNumber("+237600000000");
+        verify(userRepo, never()).findByPhoneNumber("237600000000");
+        ArgumentCaptor<UserJpaEntity> captor = ArgumentCaptor.forClass(UserJpaEntity.class);
+        verify(userRepo).save(captor.capture());
+        assertThat(captor.getValue().getPhoneNumber()).isEqualTo("+237600000000");
+    }
 }

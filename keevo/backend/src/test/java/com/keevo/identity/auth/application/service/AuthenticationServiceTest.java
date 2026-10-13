@@ -119,6 +119,23 @@ class AuthenticationServiceTest {
         verify(userRepository, times(1)).findMembershipsWithTenantInfo(userId);
     }
 
+    @Test
+    @DisplayName("v1s-12-12: unprefixed / spaced phone is normalised to '+<digits>' before lookup")
+    void should_normalise_unprefixed_phone_before_lookup() {
+        UUID userId = UUID.randomUUID();
+        User user = buildUser(userId, "+22670000001", "$2a$12$hash", 0, null);
+        when(userRepository.findByPhoneNumber("+22670000001")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("SecurePass1!", user.getPasswordHash())).thenReturn(true);
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.findMembershipsWithTenantInfo(userId)).thenReturn(List.of());
+
+        LoginSessionResult result = authService.authenticate(
+                new AuthenticateUserCommand("226 70 00 00 01", "SecurePass1!", null));
+
+        assertThat(result.loginToken()).isNotBlank();
+        verify(userRepository).findByPhoneNumber("+22670000001");
+    }
+
     // ── Invalid credentials ────────────────────────────────────────────────
 
     @Test

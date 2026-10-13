@@ -5,7 +5,7 @@ created: '2026-10-11'
 status: 'done'
 baseline_revision: 'efbbf81dcf4a9f152dd1fc8d35b556be9552f3d8'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-12-context.md'
 warnings: [oversized, multiple-goals]
@@ -167,6 +167,45 @@ deferred:
   - `[low]` `[patch]` (verification) admin tenant search not normalised — `owner.phone_number IN (raw, normalised)`; AdminTenantServiceTest asserts params.
   - `[low]` `[reject]` (verification) sync gate tests log a race WARN from Mockito's default `false` — test-log noise only, no behaviour.
 
+### 2026-10-13 — Review pass (follow-up)
+- verdicts: 35 findings — high 0, medium 0, low 25, false 10, maybe-false 0
+- findings:
+  - `[false]` `[reject]` (intent) oversized password answers 422 `VALIDATION_ERROR`/`VALIDATION_FAILED` or 401, not 400 — carried: deviation accepted at first review (Design Notes), invariant "never 500" holds.
+  - `[low]` `[defer]` (intent) "10 parallel / 2 parallel" rows tested sequentially — carried: routed to v1s-15-11.
+  - `[low]` `[reject]` (intent) forgot-password afterCommit simulated by hand, no HTTP 200 test — afterCommit ordering is Spring-guaranteed; the unit test proves the send runs only in afterCommit and that a failure is swallowed.
+  - `[low]` `[reject]` (intent) future-iat check not Clock-driven — carried: wall-clock offsets suffice, no defect.
+  - `[low]` `[patch]` (intent) login phone normalisation untested — grouped with verification row; `AuthenticationServiceTest.should_normalise_unprefixed_phone_before_lookup` added.
+  - `[low]` `[reject]` (intent) suspended-delete / employee DB error tested below the endpoint — the 403/500 mappings are the existing handler's, covered by `GlobalExceptionHandlerTest` / `JwtAuthFilterTest`.
+  - `[false]` `[reject]` (intent) diff bundles other stories' changes — deliberate for the follow-up: diff = baseline→current code on the story's files; those hunks belong to v1s-13-9/15-9/18-1/18-6, reviewed in their own passes.
+  - `[false]` `[reject]` (intent) `ClockConfig` created although the intent says "existing bean"; extra additions (employee phone pattern, admin search, TenantSchema message) — carried: recorded in Design Notes / first-pass patches.
+  - `[false]` `[reject]` (blind) diff base looks wrong — same as intent row above.
+  - `[low]` `[reject]` (blind) V10 skipped colliding rows become unreachable — carried: collision needs both forms registered; documented manual merge.
+  - `[low]` `[reject]` (blind) `normalize` turns `00237…`/`0699…` into `+00…`/`+0…` — carried: the app always sends `+<dial><national>`; cosmetic for hand-crafted calls.
+  - `[low]` `[reject]` (blind) login normalisation dead behind `LoginRequest` E.164 pattern; CreateEmployee checks the raw pattern before normalising — defensive only, no user-visible harm (the app never sends spaces).
+  - `[low]` `[reject]` (blind) Caffeine tickers use wall-clock `clock.millis()` — carried: NTP steps rare, worst case extends a TTL by the step.
+  - `[low]` `[reject]` (blind) `JwtTokenProvider` ignores the Clock bean — carried (same as intent row).
+  - `[false]` `[reject]` (blind) no negative test for the 60 s skew past `exp` — `JwtTokenProviderTest` "parseToken throws ExpiredJwtException for token expired beyond the 60 s skew" exists.
+  - `[low]` `[reject]` (blind) `SECURITY` logger has no dedicated appender — it logs at WARN through the root appender, so probing is visible in production logs; a separate appender is ops configuration, not a defect.
+  - `[low]` `[reject]` (blind) 401 entry point empty body / 403 body untested / duplicated French text — carried for 401 and text; the 403 JSON body is asserted by `SecurityConfigAdminPathEnforcementTest`.
+  - `[low]` `[reject]` (blind) rate limiter per instance; null phone shares a bucket — single backend instance today (ShedLock is a guard, not a scale-out); null is carried false (DTO @NotBlank).
+  - `[false]` `[reject]` (blind) hourly bucket counts minute-rejected taps — carried: identical to the pre-existing semantics.
+  - `[false]` `[reject]` (blind) `OWNER_GUARD` does not prevent a push applied under a foreign device — carried: ops are authorised by the actor's JWT/tenant; the device row is bookkeeping.
+  - `[low]` `[reject]` (blind) forgot-password timing still differs (WhatsApp call on the request thread) — pre-existing; the intent explicitly keeps the timing unchanged.
+  - `[low]` `[patch]` (blind) `AdminAccountInitializer` normalisation untested — grouped with verification row; `unprefixedAdminPhoneIsNormalised` added.
+  - `[low]` `[patch]` (verification) login normalisation regression gap — test added (unprefixed + spaced input → lookup on `+22670000001`).
+  - `[low]` `[patch]` (verification) admin phone normalisation regression gap — test added (exact `findByPhoneNumber("+237600000000")`, saved phone canonical).
+  - `[low]` `[reject]` (edge) wall-clock ticker vs NFR12 — carried.
+  - `[low]` `[reject]` (edge) >100k phones evict a live bucket — carried.
+  - `[false]` `[reject]` (edge) null phone bucket — carried.
+  - `[low]` `[reject]` (edge) leading 0/00 stored as `+0…` — carried (same as blind row).
+  - `[low]` `[reject]` (edge) V10 skipped rows silent — carried.
+  - `[false]` `[reject]` (edge) `AdminTenantService.forceDelete` `queryForObject` throws when the row vanished — tenants are soft-deleted (status `DELETED`), the row always exists.
+  - `[low]` `[reject]` (edge) SUSPENDED tenant force-deleted, routine fails, admin cancels → ACTIVE — SUPER_ADMIN-only explicit action (v1s-15-9 code), the admin can re-suspend; not reachable by the owner.
+  - `[false]` `[reject]` (edge) push race applies the batch — carried.
+  - `[low]` `[patch]` (edge) OTP send failure logs `e.getMessage()`, which provider errors (Twilio "The 'To' number +…") can fill with the phone — now logs the exception class only.
+  - `[low]` `[reject]` (edge) double-submit loser sees `CODE_LOCKED` — carried: message-only difference on a race.
+  - `[low]` `[reject]` (edge) Clock-driven TTL claim vs non-monotonic ticker — carried (grouped with ticker row).
+
 ## Design Notes
 
 - **Password cap = 72, not 128:** Spring Security 6.5 `BCrypt.hashpw` throws `IllegalArgumentException("password cannot be more than 72 bytes")`; a 128 cap would still 500. DTOs cap chars at 72; `ResetPasswordService` checks UTF-8 bytes.
@@ -200,3 +239,16 @@ Status: done
 
 **Residual risks:** V10 leaves colliding/space-formatted phones for manual merge; rate-limit buckets can be evicted under a >100k-number flood; cross-instance revocation still ≤5 min (NFR12).
 
+### Follow-up review pass — 2026-10-13
+
+**Summary:** fresh 4-layer review (blind, edge, verification-gap, intent) of baseline→current code on the story's files. Orchestrator-flagged risk (revocation-cache invalidation reworked after review, tested only at adapter level) is now covered at the filter surface: `JwtAuthFilterRevocationCacheTest` drives the real `JwtAuthFilter` over the real `CachedTokenRevocationAdapter` + `JdbcTokenRevocationAdapter` (only `JdbcTemplate` mocked): warm cache → revoke inside an open synchronization → concurrent request re-caches the old cutoff → commit → next request 401 `SESSION_REVOKED`. Mutation-checked: disabling the afterCommit invalidation makes it fail (200 instead of 401).
+
+**Files changed:** `RequestPasswordResetService.java` (OTP failure log without provider message — PII); tests `AuthenticationServiceTest` (login normalisation), `AdminAccountInitializerTest` (unprefixed ADMIN_PHONE), new `JwtAuthFilterRevocationCacheTest`.
+
+**Review findings:** 35 (0 high, 0 medium, 25 low, 10 false). Patched: 4 low entries (login normalisation test, admin normalisation test, OTP log PII; grouped rows share fixes). Deferred: 1 carried (concurrency → v1s-15-11). Rejected: see the 2026-10-13 triage entry, mostly carried from the first pass.
+
+**Follow-up review recommended: false** — follow-up pass, no high patched (patched: 0 high, 0 medium, 3 low entries).
+
+**Verification:** `JwtAuthFilterRevocationCacheTest, AuthenticationServiceTest, AdminAccountInitializerTest, RequestPasswordResetServiceTest, CachedTokenRevocationAdapterTest, JwtAuthFilterTest` — 66 tests green; batches `identity` 362 / 0 failure, `shared` 468 / 0 failure.
+
+**Residual risks:** unchanged from the first pass (V10 manual merge, rate-limit eviction under flood, ≤5 min cross-instance revocation).
