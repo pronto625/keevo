@@ -118,25 +118,25 @@ public class AdminSyncMonitoringService
         TenantSchemaRef tenant = loadTenantById(query.tenantId().toString());
         TenantSchema.validate(tenant.schemaName()); // request path: loadTenantById() already refuses invalid rows
 
-        List<AdminDeviceInfo> rawDevices = safeQuery(
+        List<AdminDeviceInfo> rawDevices = safeQuery(tenant.id(),
                 "SELECT device_id, user_id, last_push_at, last_pull_at, updated_at "
                 + "FROM public.user_sync_state WHERE tenant_id = ? ORDER BY last_push_at DESC NULLS LAST",
                 deviceMapper(), tenant.schemaName());
 
-        List<AdminSyncFailedOp> failedOps = safeQuery(
+        List<AdminSyncFailedOp> failedOps = safeQuery(tenant.id(),
                 "SELECT operation_type, error_reason, processed_at "
                 + "FROM " + tenant.schemaName() + ".sync_operations_log "
                 + "WHERE status = 'FAILED' ORDER BY processed_at DESC LIMIT 10",
                 failedOpMapper());
 
-        List<AdminSyncConflict> conflicts = safeQuery(
+        List<AdminSyncConflict> conflicts = safeQuery(tenant.id(),
                 "SELECT entity_type, conflict_type, strategy, resolved_at "
                 + "FROM " + tenant.schemaName() + ".sync_conflicts_log "
                 + "ORDER BY resolved_at DESC LIMIT 10",
                 conflictMapper());
 
-        // Last on purpose: inside this read-only transaction a failed statement aborts every later
-        // one on PostgreSQL, so the optional label lookups must not run before the sections above.
+        // Optional label lookups: each statement autocommits (service not transactional), so a failing
+        // lookup only leaves the labels null and never affects the sections above.
         List<AdminDeviceInfo> devices = withUserLabels(rawDevices, tenant);
 
         return new AdminSyncTenantDetail(
@@ -150,30 +150,30 @@ public class AdminSyncMonitoringService
      * 9-8: human label of each device's user — employee name (tenant schema) and membership role.
      * Resolved by user_id in two lookups separate from the device query: a failing lookup (missing
      * table, bad cast…) only leaves {@code userName}/{@code userRole} null, never drops devices.
-     * Roles (public) run before names (tenant schema): a failed statement aborts the transaction.
+     * Only an active membership yields a role; an employee's ACTIVE row wins over older inactive ones.
      * Schema name already validated by {@code loadTenantById} (TenantSchema.isValid).
      */
     private List<AdminDeviceInfo> withUserLabels(List<AdminDeviceInfo> devices, TenantSchemaRef tenant) {
         if (devices.isEmpty() || !TenantSchema.isValid(tenant.schemaName())) return devices;
 
         Map<String, String> roles = new HashMap<>();
-        safeQuery(
+        safeQuery(tenant.id(),
                 "SELECT DISTINCT ON (m.user_id) m.user_id::text AS user_id, m.role AS user_role "
                 + "FROM public.user_tenant_memberships m "
-                + "WHERE m.tenant_id = ?::uuid "
+                + "WHERE m.tenant_id = ?::uuid AND m.is_active "
                 + "AND m.user_id IN (SELECT s.user_id FROM public.user_sync_state s WHERE s.tenant_id = ?) "
-                + "ORDER BY m.user_id, m.is_active DESC, (m.role = 'OWNER') DESC",
+                + "ORDER BY m.user_id, (m.role = 'OWNER') DESC",
                 (rs, row) -> new String[]{rs.getString("user_id"), rs.getString("user_role")},
                 tenant.id(), tenant.schemaName())
                 .forEach(r -> roles.put(r[0], blankToNull(r[1])));
 
         Map<String, String> names = new HashMap<>();
-        safeQuery(
+        safeQuery(tenant.id(),
                 "SELECT DISTINCT ON (e.user_id) e.user_id::text AS user_id, "
                 + "NULLIF(TRIM(CONCAT_WS(' ', TRIM(e.first_name), TRIM(e.last_name))), '') AS user_name "
                 + "FROM " + tenant.schemaName() + ".employees e "
                 + "WHERE e.user_id IN (SELECT s.user_id FROM public.user_sync_state s WHERE s.tenant_id = ?) "
-                + "ORDER BY e.user_id, e.created_at",
+                + "ORDER BY e.user_id, (e.status = 'ACTIVE') DESC, e.created_at, e.id",
                 (rs, row) -> new String[]{rs.getString("user_id"), rs.getString("user_name")},
                 tenant.schemaName())
                 .forEach(r -> names.put(r[0], blankToNull(r[1])));
@@ -248,10 +248,12 @@ public class AdminSyncMonitoringService
         }
     }
 
-    private <T> List<T> safeQuery(String sql, RowMapper<T> mapper, Object... args) {
+    private <T> List<T> safeQuery(String tenantId, String sql, RowMapper<T> mapper, Object... args) {
         try {
             return jdbc.query(sql, mapper, args);
         } catch (Exception e) {
+            // Tenant id only, never the schema name or SQL (may embed it).
+            log.warn("Sync monitoring: tenant {} detail query failed ({})", tenantId, e.getClass().getSimpleName());
             return List.of();
         }
     }

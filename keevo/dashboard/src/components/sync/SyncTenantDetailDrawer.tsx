@@ -123,13 +123,13 @@ export function SyncTenantDetailDrawer({ tenantId, onClose }: SyncTenantDetailDr
                     <tr className="border-b border-gray-200">
                       <Th>Appareil</Th>
                       <Th>Utilisateur</Th>
-                      <Th>Dernier push</Th>
-                      <Th>Dernier pull</Th>
+                      <Th>Dernier envoi</Th>
+                      <Th>Dernière réception</Th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {data.devices.map((d, i) => (
-                      <tr key={`${d.deviceId}-${i}`}>
+                      <tr key={d.deviceId}>
                         <td className="py-2 pr-2 text-gray-900">{deviceNames[i]}</td>
                         <td className="py-2 pr-2 text-gray-700">
                           {deviceUserLabel(d.userName, d.userRole)}

@@ -131,7 +131,8 @@ class AdminOperationsServiceIntegrationTest extends PostgresIntegrationTest {
 
         assertThat(overview.totalGmv()).isGreaterThanOrEqualTo(1500L);
         assertThat(overview.activeTenantsCount()).isGreaterThanOrEqualTo(1);
-        assertThat(overview.newTenantsCount()).isGreaterThanOrEqualTo(3);
+        // active + dormant tenants are new; the broken tenant is skipped everywhere (follow-up 9-7)
+        assertThat(overview.newTenantsCount()).isGreaterThanOrEqualTo(2);
     }
 
     @Test

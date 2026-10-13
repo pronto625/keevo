@@ -128,7 +128,7 @@ class AdminSyncMonitoringControllerTest {
                 .andExpect(jsonPath("$.data.devices[0].lastPullAt").value(PULL_AT.toString()))
                 .andExpect(jsonPath("$.data.devices[0].updatedAt").value(UPDATED_AT.toString()))
                 .andExpect(jsonPath("$.data.devices[0].userName").value("Awa Diallo"))
-                .andExpect(jsonPath("$.data.devices[0].userRole").value("CASHIER"))
+                .andExpect(jsonPath("$.data.devices[0].userRole").value("EMPLOYEE"))
                 .andExpect(jsonPath("$.data.recentFailedOps[0].operationType").value("CREATE_SALE"))
                 .andExpect(jsonPath("$.data.recentFailedOps[0].errorReason").value("PRODUCT_NOT_FOUND"))
                 .andExpect(jsonPath("$.data.recentFailedOps[0].processedAt").value(PUSH_AT.toString()))
@@ -167,7 +167,7 @@ class AdminSyncMonitoringControllerTest {
         return new AdminSyncTenantDetail(
                 TENANT_ID.toString(), "Boutique Test", "PREMIUM_TRIAL",
                 List.of(new AdminDeviceInfo("device-001", USER_ID.toString(), PUSH_AT, PULL_AT, UPDATED_AT,
-                        "Awa Diallo", "CASHIER")),
+                        "Awa Diallo", "EMPLOYEE")),
                 List.of(new AdminSyncFailedOp("CREATE_SALE", "PRODUCT_NOT_FOUND", PUSH_AT)),
                 List.of(new AdminSyncConflict("PRODUCT", "UPDATE_UPDATE", "LAST_WRITE_WINS", PULL_AT)));
     }

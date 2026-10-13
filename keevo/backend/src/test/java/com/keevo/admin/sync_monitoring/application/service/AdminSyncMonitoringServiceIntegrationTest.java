@@ -30,8 +30,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Story 9-8 — the device label lookups of {@link AdminSyncMonitoringService} on a real PostgreSQL
  * (Flyway-migrated public + one provisioned tenant schema).
  *
- * <p>Runs outside the test transaction ({@code NOT_SUPPORTED}) so the service opens its own
- * read-only transaction, as in production: a failed lookup aborts that transaction on PostgreSQL.
+ * <p>Runs outside the test transaction ({@code NOT_SUPPORTED}) so each service statement
+ * autocommits, as in production (the service is not transactional).
  * Data is committed with unique ids / schema and removed after each test.
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
@@ -120,6 +120,33 @@ class AdminSyncMonitoringServiceIntegrationTest extends PostgresIntegrationTest 
         assertThat(byDeviceId(detail).get(ownerPhone).userRole()).isEqualTo("OWNER");
     }
 
+    @Test
+    @DisplayName("an older INACTIVE employee row loses to a newer ACTIVE one")
+    void detail_prefersActiveEmployeeRow() {
+        UUID rehired = UUID.randomUUID();
+        String rehiredPhone = UUID.randomUUID().toString();
+        device(rehiredPhone, rehired, NOW.minusSeconds(10_800));
+        employeeRow(rehired, "Ancien", "Nom", NOW.minusSeconds(172_800), "INACTIVE");
+        employeeRow(rehired, "Nouveau", "Nom", NOW, "ACTIVE");
+
+        AdminSyncTenantDetail detail = service.execute(new GetSyncTenantDetailQuery(tenantId));
+
+        assertThat(byDeviceId(detail).get(rehiredPhone).userName()).isEqualTo("Nouveau Nom");
+    }
+
+    @Test
+    @DisplayName("an inactive (removed) membership yields no role, even OWNER")
+    void detail_inactiveMembership_noRole() {
+        UUID removed = UUID.randomUUID();
+        String removedPhone = UUID.randomUUID().toString();
+        device(removedPhone, removed, NOW.minusSeconds(10_800));
+        membership(removed, "OWNER", false);
+
+        AdminSyncTenantDetail detail = service.execute(new GetSyncTenantDetailQuery(tenantId));
+
+        assertThat(byDeviceId(detail).get(removedPhone).userRole()).isNull();
+    }
+
     private static Map<String, AdminDeviceInfo> byDeviceId(AdminSyncTenantDetail detail) {
         return detail.devices().stream().collect(Collectors.toMap(AdminDeviceInfo::deviceId, Function.identity()));
     }
@@ -130,8 +157,12 @@ class AdminSyncMonitoringServiceIntegrationTest extends PostgresIntegrationTest 
     }
 
     private void employeeRow(UUID userId, String first, String last, Instant createdAt) {
-        jdbc.update("INSERT INTO \"" + schema + "\".employees (user_id, store_id, first_name, last_name, created_at) "
-                + "VALUES (?, ?, ?, ?, ?)", userId, UUID.randomUUID(), first, last, Timestamp.from(createdAt));
+        employeeRow(userId, first, last, createdAt, "ACTIVE");
+    }
+
+    private void employeeRow(UUID userId, String first, String last, Instant createdAt, String status) {
+        jdbc.update("INSERT INTO \"" + schema + "\".employees (user_id, store_id, first_name, last_name, created_at, status) "
+                + "VALUES (?, ?, ?, ?, ?, ?)", userId, UUID.randomUUID(), first, last, Timestamp.from(createdAt), status);
     }
 
     private void membership(UUID userId, String role, boolean active) {
