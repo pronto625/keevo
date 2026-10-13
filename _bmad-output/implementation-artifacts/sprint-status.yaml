@@ -180,7 +180,7 @@ development_status:
   # ─────────────────────────────────────────────────────────
   epic-9: in-progress
   9-1-gestion-des-tenants: in-progress  # 2026-10-13 rouverte : 1 item routé depuis la revue 11-5 (N+1 métriques par tenant) + finalisation back office (libellés, noms, retours utilisateurs)
-  9-2-activation-plan-payant: backlog  # 2026-10-11 : endpoint AdminSubscriptionController /activate existe (1.6), pas d'UI — sprint-change-proposal-2026-10-11 / audit-coherence-2026-10-11 | ⤳ superseded par 16-4 (console modules) / 16-2
+  9-2-activation-plan-payant: in-progress  # 2026-10-13 build-auto spec-9-2-activation-plan-payant.md (V1 back office, demande utilisateur 2026-10-13 : back office complet avant la refonte) | # 2026-10-11 : endpoint AdminSubscriptionController /activate existe (1.6), pas d'UI — sprint-change-proposal-2026-10-11 / audit-coherence-2026-10-11 | ⤳ superseded par 16-4 (console modules) / 16-2
   9-3-dashboard-revenus: backlog   # ⤳ superseded par 15-7 (dashboard refonte)
   9-4-analytics-plateforme: backlog   # ⤳ superseded par 15-7 (dashboard refonte)
   9-5-sante-systeme-alertes-notifications-push-globales: backlog   # ⤳ superseded par 17-5
