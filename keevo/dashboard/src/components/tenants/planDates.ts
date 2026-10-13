@@ -40,3 +40,12 @@ export function addDays(isoDate: string, days: number): string {
   const date = new Date(Date.UTC(y, m - 1, d + days));
   return date.toISOString().slice(0, 10);
 }
+
+/** yyyy-MM-dd + n years; 29/02 falls back to 28/02 in a non-leap year (same as the backend). */
+export function addYears(isoDate: string, years: number): string {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const year = y + years;
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const day = m === 2 && d === 29 && !leap ? 28 : d;
+  return `${String(year).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}

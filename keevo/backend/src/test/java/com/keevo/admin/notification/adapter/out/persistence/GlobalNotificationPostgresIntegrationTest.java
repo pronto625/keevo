@@ -271,6 +271,10 @@ class GlobalNotificationPostgresIntegrationTest extends PostgresIntegrationTest 
                 "SELECT table_name FROM information_schema.tables WHERE table_schema = ?", String.class,
                 t.schemaName());
         assertThat(tables).isNotEmpty().doesNotContainAnyElementsOf(TenantSchemaSyncService.globalOnlyTables());
+        // explicit names: a table dropped from the global-only list by mistake would still be caught here
+        assertThat(tables).doesNotContain("tenants", "tenant_payments", "tenant_plan_events", "plan_expiry_reminders",
+                "user_daily_activity", "platform_health_samples", "admin_alert_acks", "sync_silence_notices",
+                "global_notifications");
     }
 
     @Test

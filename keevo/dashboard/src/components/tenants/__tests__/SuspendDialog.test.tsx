@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SuspendDialog } from "@/components/tenants/SuspendDialog";
 
-function setup(reasonRequired: boolean) {
+function setup(reasonRequired: boolean, serverError: string | null = null, serverReasonError: string | null = null) {
   const onConfirm = vi.fn();
   render(
     <SuspendDialog
@@ -12,6 +12,8 @@ function setup(reasonRequired: boolean) {
       confirmLabel="Suspendre"
       reasonRequired={reasonRequired}
       isPending={false}
+      serverError={serverError}
+      serverReasonError={serverReasonError}
       onConfirm={onConfirm}
       onCancel={vi.fn()}
     />,
@@ -39,5 +41,16 @@ describe("SuspendDialog", () => {
     expect(screen.getByLabelText("Motif (facultatif)")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Suspendre" }));
     expect(onConfirm).toHaveBeenCalledWith("");
+  });
+
+  it("shows the server's general error at the top and its reason error under the input, inside the dialog", async () => {
+    const { user } = setup(true, "Action impossible dans l'état actuel du compte", "Motif requis (3 à 500 caractères)");
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toContainElement(screen.getByRole("alert"));
+    expect(screen.getByRole("alert")).toHaveTextContent("Action impossible dans l'état actuel du compte");
+    expect(screen.getByText("Motif requis (3 à 500 caractères)")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Motif"), "x");
+    expect(screen.queryByText("Motif requis (3 à 500 caractères)")).not.toBeInTheDocument();
   });
 });

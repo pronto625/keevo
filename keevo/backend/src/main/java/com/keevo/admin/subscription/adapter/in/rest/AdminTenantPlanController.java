@@ -6,6 +6,7 @@ import com.keevo.admin.subscription.adapter.in.rest.dto.PlanAlertDto;
 import com.keevo.admin.subscription.adapter.in.rest.dto.PlanStateDto;
 import com.keevo.admin.subscription.adapter.in.rest.dto.SuspendTenantRequest;
 import com.keevo.admin.subscription.adapter.in.rest.dto.TenantPaymentDto;
+import com.keevo.admin.subscription.adapter.in.rest.dto.VoidPaymentRequest;
 import com.keevo.admin.subscription.domain.model.PaymentMethod;
 import com.keevo.admin.subscription.domain.port.in.ActivatePremiumCommand;
 import com.keevo.admin.subscription.domain.port.in.ActivatePremiumUseCase;
@@ -16,8 +17,11 @@ import com.keevo.admin.subscription.domain.port.in.ListTenantPaymentsUseCase;
 import com.keevo.admin.subscription.domain.port.in.ReactivateTenantUseCase;
 import com.keevo.admin.subscription.domain.port.in.SuspendTenantCommand;
 import com.keevo.admin.subscription.domain.port.in.SuspendTenantUseCase;
+import com.keevo.admin.subscription.domain.port.in.VoidTenantPaymentCommand;
+import com.keevo.admin.subscription.domain.port.in.VoidTenantPaymentUseCase;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.domain.time.KeevoZones;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.subscription.plan.domain.port.in.CurrentPlan;
@@ -60,19 +64,22 @@ public class AdminTenantPlanController {
     private final ReactivateTenantUseCase reactivateTenantUseCase;
     private final ListTenantPaymentsUseCase listTenantPaymentsUseCase;
     private final ListPlanAlertsUseCase listPlanAlertsUseCase;
+    private final VoidTenantPaymentUseCase voidTenantPaymentUseCase;
 
     public AdminTenantPlanController(ActivatePremiumUseCase activatePremiumUseCase,
                                      DowngradeToFreeUseCase downgradeToFreeUseCase,
                                      SuspendTenantUseCase suspendTenantUseCase,
                                      ReactivateTenantUseCase reactivateTenantUseCase,
                                      ListTenantPaymentsUseCase listTenantPaymentsUseCase,
-                                     ListPlanAlertsUseCase listPlanAlertsUseCase) {
+                                     ListPlanAlertsUseCase listPlanAlertsUseCase,
+                                     VoidTenantPaymentUseCase voidTenantPaymentUseCase) {
         this.activatePremiumUseCase = activatePremiumUseCase;
         this.downgradeToFreeUseCase = downgradeToFreeUseCase;
         this.suspendTenantUseCase = suspendTenantUseCase;
         this.reactivateTenantUseCase = reactivateTenantUseCase;
         this.listTenantPaymentsUseCase = listTenantPaymentsUseCase;
         this.listPlanAlertsUseCase = listPlanAlertsUseCase;
+        this.voidTenantPaymentUseCase = voidTenantPaymentUseCase;
     }
 
     @Operation(summary = "Activate / renew Premium after an off-platform payment",
@@ -134,6 +141,22 @@ public class AdminTenantPlanController {
                 listTenantPaymentsUseCase.listPayments(tenantId).stream().map(TenantPaymentDto::from).toList()));
     }
 
+    @Operation(summary = "Void a payment entered by mistake (kept in the history, excluded from every count)",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @PostMapping("/tenants/{tenantId}/payments/{paymentId}/void")
+    public ResponseEntity<ApiResponseWrapper<Void>> voidPayment(
+            @PathVariable UUID tenantId,
+            @PathVariable UUID paymentId,
+            @Valid @RequestBody(required = false) VoidPaymentRequest request) {
+        CurrentActor.requireSuperAdmin();
+        if (request == null) {
+            throw invalid("reason", "Motif requis");
+        }
+        voidTenantPaymentUseCase.voidPayment(new VoidTenantPaymentCommand(
+                CurrentActor.actorId(), tenantId, paymentId, request.reason()));
+        return ResponseEntity.ok(ApiResponseWrapper.ok(null));
+    }
+
     @Operation(summary = "Plans expiring within 7 days and plans expired in the last 7 days",
             security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/subscriptions/alerts")
@@ -163,7 +186,7 @@ public class AdminTenantPlanController {
         }
         try {
             return LocalDate.parse(value)
-                    .atStartOfDay(com.keevo.admin.subscription.application.service.AdminPlanService.WAT).toInstant();
+                    .atStartOfDay(KeevoZones.WAT).toInstant();
         } catch (DateTimeParseException e) {
             throw invalid("paidAt", "Date de paiement invalide");
         }

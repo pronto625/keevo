@@ -64,7 +64,8 @@ class AdminTenantSuspensionServiceTest {
     @DisplayName("suspend ACTIVE: status SUSPENDED, every member session revoked, event published")
     void suspend_active() {
         tenant("ACTIVE");
-        when(jdbc.update(AdminTenantSuspensionService.SUSPEND_SQL, TENANT)).thenReturn(1);
+        when(jdbc.update(AdminTenantSuspensionService.SUSPEND_SQL, java.sql.Timestamp.from(NOW), "fraude", ACTOR, TENANT))
+                .thenReturn(1);
         UUID owner = UUID.randomUUID();
         UUID employee = UUID.randomUUID();
         members(owner, employee);
@@ -73,14 +74,15 @@ class AdminTenantSuspensionServiceTest {
 
         verify(revocation).revokeAllSessions(owner, SCHEMA);
         verify(revocation).revokeAllSessions(employee, SCHEMA);
-        verify(publisher).publishEvent(new TenantSuspendedEvent(ACTOR, TENANT, "fraude", NOW));
+        verify(publisher).publishEvent(new TenantSuspendedEvent(ACTOR, TENANT, SCHEMA, "fraude", NOW));
     }
 
     @Test
     @DisplayName("suspend DELETION_PENDING (conditional UPDATE matches nothing) → 409 INVALID_STATE, no revocation")
     void suspend_deletionPending() {
         tenant("DELETION_PENDING");
-        when(jdbc.update(AdminTenantSuspensionService.SUSPEND_SQL, TENANT)).thenReturn(0);
+        when(jdbc.update(AdminTenantSuspensionService.SUSPEND_SQL, java.sql.Timestamp.from(NOW), "fraude", ACTOR, TENANT))
+                .thenReturn(0);
 
         assertThatThrownBy(() -> service.suspend(new SuspendTenantCommand(ACTOR, TENANT, "fraude")))
                 .extracting(e -> ((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.INVALID_STATE);
@@ -102,6 +104,11 @@ class AdminTenantSuspensionServiceTest {
     void suspendSql_isConditional() {
         assertThat(AdminTenantSuspensionService.SUSPEND_SQL).contains("status = 'SUSPENDED'").contains("AND status = 'ACTIVE'");
         assertThat(AdminTenantSuspensionService.REACTIVATE_SQL).contains("status = 'ACTIVE'").contains("AND status = 'SUSPENDED'");
+        // suspension trace written on suspend, cleared on reactivation
+        assertThat(AdminTenantSuspensionService.SUSPEND_SQL)
+                .contains("suspended_at = ?").contains("suspended_reason = ?").contains("suspended_by = ?");
+        assertThat(AdminTenantSuspensionService.REACTIVATE_SQL)
+                .contains("suspended_at = NULL").contains("suspended_reason = NULL").contains("suspended_by = NULL");
     }
 
     @Test
@@ -115,7 +122,7 @@ class AdminTenantSuspensionServiceTest {
         service.reactivate(ACTOR, TENANT);
 
         verify(revocation).revokeAllSessions(owner, SCHEMA);
-        verify(publisher).publishEvent(new TenantReactivatedEvent(ACTOR, TENANT, NOW));
+        verify(publisher).publishEvent(new TenantReactivatedEvent(ACTOR, TENANT, SCHEMA, NOW));
     }
 
     @Test

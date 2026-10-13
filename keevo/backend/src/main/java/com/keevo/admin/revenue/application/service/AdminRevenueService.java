@@ -57,7 +57,8 @@ public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenue
 
     static final String PAYMENTS_SQL =
             "SELECT p.tenant_id, p.amount_xaf, p.paid_at, p.period_start, p.period_end "
-            + "FROM public.tenant_payments p JOIN public.tenants t ON t.id = p.tenant_id WHERE " + IN_SCOPE;
+            + "FROM public.tenant_payments p JOIN public.tenants t ON t.id = p.tenant_id WHERE " + IN_SCOPE
+            + " AND p.voided_at IS NULL"; // a voided payment (9-2 correction) never counts
 
     static final String EVENTS_SQL =
             "SELECT e.tenant_id, e.from_plan, e.to_plan, e.cause, e.occurred_at "

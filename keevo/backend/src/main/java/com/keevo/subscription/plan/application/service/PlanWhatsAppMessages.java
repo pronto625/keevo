@@ -1,17 +1,19 @@
 package com.keevo.subscription.plan.application.service;
 
+import com.keevo.identity.auth.domain.model.PlanType;
+
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneId;
+import static com.keevo.shared.domain.time.KeevoZones.WAT;
 import java.time.format.DateTimeFormatter;
 
 /**
- * PlanWhatsAppMessages — owner-facing WhatsApp texts of the plan lifecycle (Story 9-2).
+ * PlanWhatsAppMessages — owner-facing WhatsApp texts of the plan lifecycle and of the account
+ * suspension / reactivation (Story 9-2).
  * Dates are rendered {@code dd/MM/yyyy} in WAT ({@code Africa/Douala}).
  */
 public final class PlanWhatsAppMessages {
 
-    public static final ZoneId WAT = ZoneId.of("Africa/Douala");
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     static final String DOWNGRADED =
@@ -19,6 +21,11 @@ public final class PlanWhatsAppMessages {
     static final String EXPIRED =
             "Votre abonnement Keevo Premium a expiré : votre compte est passé au plan Gratuit. "
             + "Vos données sont conservées.";
+    static final String TRIAL_EXPIRED =
+            "Votre essai Keevo Premium est terminé : votre compte est passé au plan Gratuit. "
+            + "Vos données sont conservées.";
+    static final String SUSPENDED = "Votre compte Keevo est suspendu. Contactez le support Keevo.";
+    static final String REACTIVATED = "Votre compte Keevo est réactivé.";
 
     private PlanWhatsAppMessages() {}
 
@@ -33,6 +40,19 @@ public final class PlanWhatsAppMessages {
 
     public static String expired() {
         return EXPIRED;
+    }
+
+    /** Expiry text by expired plan: a trial end is not an expired paid subscription. */
+    public static String expired(PlanType previousPlan) {
+        return previousPlan == PlanType.PREMIUM_TRIAL ? TRIAL_EXPIRED : EXPIRED;
+    }
+
+    public static String suspended() {
+        return SUSPENDED;
+    }
+
+    public static String reactivated() {
+        return REACTIVATED;
     }
 
     public static String reminder(LocalDate expiryDate) {

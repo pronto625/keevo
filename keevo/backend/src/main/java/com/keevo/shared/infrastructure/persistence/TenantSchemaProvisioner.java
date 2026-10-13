@@ -666,7 +666,12 @@ public class TenantSchemaProvisioner {
 
         /** Non-blocking DDL on an existing schema (must run in autocommit). */
         String createConcurrentlySql(String schema) {
-            return "CREATE INDEX CONCURRENTLY IF NOT EXISTS " + name
+            return createConcurrentlySql(schema, name);
+        }
+
+        /** Same DDL under another index name (temporary index of a swap rebuild). */
+        String createConcurrentlySql(String schema, String indexName) {
+            return "CREATE INDEX CONCURRENTLY IF NOT EXISTS " + indexName
                     + " ON \"" + TenantSchema.validate(schema) + "\"." + table + " (" + keys() + ")";
         }
 
@@ -1177,8 +1182,15 @@ public class TenantSchemaProvisioner {
             try {
                 stmt.execute(index.createSql());
                 if (savepoint != null) conn.releaseSavepoint(savepoint);
-            } catch (SQLException e) {
-                if (savepoint != null) conn.rollback(savepoint);
+            } catch (SQLException | RuntimeException e) {
+                if (savepoint != null) {
+                    try {
+                        conn.rollback(savepoint);
+                    } catch (SQLException | RuntimeException rollbackFailure) {
+                        log.warn("Keyset index {}: rollback to savepoint failed on schema {}",
+                                index.name(), schemaName, rollbackFailure);
+                    }
+                }
                 log.warn("Keyset index {} not created on schema {} — left to SyncKeysetIndexJob",
                         index.name(), schemaName, e);
             }

@@ -9,11 +9,14 @@ import com.keevo.admin.subscription.domain.port.in.DowngradeToFreeCommand;
 import com.keevo.admin.subscription.domain.port.in.DowngradeToFreeUseCase;
 import com.keevo.admin.subscription.domain.port.in.ListPlanAlertsUseCase;
 import com.keevo.admin.subscription.domain.port.in.ListTenantPaymentsUseCase;
+import com.keevo.admin.subscription.domain.port.in.VoidTenantPaymentCommand;
+import com.keevo.admin.subscription.domain.port.in.VoidTenantPaymentUseCase;
 import com.keevo.admin.subscription.domain.port.out.TenantPaymentRepository;
 import com.keevo.identity.auth.domain.model.PlanType;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
+import static com.keevo.shared.domain.time.KeevoZones.WAT;
 import com.keevo.subscription.plan.domain.model.PlanChangeCause;
 import com.keevo.subscription.plan.domain.model.event.PlanActivatedEvent;
 import com.keevo.subscription.plan.domain.model.event.PlanDowngradedEvent;
@@ -37,7 +40,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -56,7 +58,8 @@ import java.util.UUID;
  *       covered period at the current Premium expiry when it is later than today. The owner
  *       WhatsApp goes out after commit ({@link PlanActivatedEvent}).</li>
  *   <li><b>Downgrade to FREE</b>: same unit of work, FREE limits, no expiry ({@link PlanDowngradedEvent}).</li>
- *   <li><b>Payments</b>: history newest first. <b>Alerts</b>: Premium/Trial expiring within 7 WAT
+ *   <li><b>Payments</b>: history newest first; a payment entered by mistake is voided (kept, excluded
+ *       from every count, including the renewal « current end »). <b>Alerts</b>: Premium/Trial expiring within 7 WAT
  *       days, and expiry downgrades of the last 7 days.</li>
  * </ul>
  *
@@ -64,13 +67,15 @@ import java.util.UUID;
  */
 @Service
 public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFreeUseCase,
-        ListTenantPaymentsUseCase, ListPlanAlertsUseCase {
+        ListTenantPaymentsUseCase, ListPlanAlertsUseCase, VoidTenantPaymentUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(AdminPlanService.class);
 
-    public static final ZoneId WAT = ZoneId.of("Africa/Douala");
     static final int NOTE_MAX = 500;
     static final int ALERT_WINDOW_DAYS = 7;
+    static final int REASON_MIN = 3;
+    /** Farthest Premium expiry accepted: a typo must not grant decades. */
+    static final int MAX_EXPIRY_YEARS = 3;
     /** Tolerated clock skew for a payment time sent by the dashboard. */
     static final Duration PAID_AT_SKEW = Duration.ofMinutes(5);
     /** Oldest payment date accepted. */
@@ -137,10 +142,11 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
 
         // Renewal: a still-running Premium is extended from the day after its current expiry
         // (the last covered day is never paid twice); the new expiry must be strictly later.
+        // An expiry granted by a since-voided payment does not count (typo correction).
         LocalDate periodStart = today;
         if (current.planType() == PlanType.PREMIUM && current.expiresAt() != null) {
-            LocalDate currentEnd = LocalDate.ofInstant(current.expiresAt(), WAT);
-            if (!currentEnd.isBefore(today)) {
+            LocalDate currentEnd = effectiveCurrentEnd(tenant.id(), LocalDate.ofInstant(current.expiresAt(), WAT));
+            if (currentEnd != null && !currentEnd.isBefore(today)) {
                 if (!cmd.expiresAt().isAfter(currentEnd)) {
                     throw validation("expiresAt", "La date d'expiration doit être postérieure à l'échéance actuelle ("
                             + FR_DATE.format(currentEnd) + ")");
@@ -196,7 +202,40 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
                 current.planType(), reason, now));
     }
 
+    /**
+     * The subscription end, unless it was granted by a payment voided since and no counted payment
+     * covers it: then the latest end among the counted payments (null when none).
+     */
+    private LocalDate effectiveCurrentEnd(UUID tenantId, LocalDate subscriptionEnd) {
+        List<TenantPayment> payments = paymentRepository.findByTenant(tenantId);
+        boolean grantedByVoided = payments.stream()
+                .anyMatch(p -> p.isVoided() && p.periodEnd().equals(subscriptionEnd));
+        boolean coveredByCounted = payments.stream()
+                .anyMatch(p -> !p.isVoided() && !p.periodEnd().isBefore(subscriptionEnd));
+        if (!grantedByVoided || coveredByCounted) return subscriptionEnd;
+        return payments.stream().filter(p -> !p.isVoided()).map(TenantPayment::periodEnd)
+                .max(Comparator.naturalOrder()).orElse(null);
+    }
+
     // ── Payments ──────────────────────────────────────────────────────────────
+
+    @Override
+    @Transactional
+    public void voidPayment(VoidTenantPaymentCommand cmd) {
+        String reason = cmd.reason() == null ? "" : cmd.reason().trim();
+        if (reason.length() < REASON_MIN || reason.length() > NOTE_MAX) {
+            throw validation("reason", "Motif requis (3 à 500 caractères)");
+        }
+        TargetTenant tenant = tenantLookup.load(cmd.tenantId());
+        TenantPayment payment = paymentRepository.findById(tenant.id(), cmd.paymentId())
+                .orElseThrow(() -> new DomainException(ErrorCode.NOT_FOUND, "Paiement introuvable"));
+        if (payment.isVoided()
+                || !paymentRepository.voidPayment(tenant.id(), payment.id(), cmd.actorId(), reason, clock.instant())) {
+            throw new DomainException(ErrorCode.INVALID_STATE, "Payment already voided: " + payment.id());
+        }
+        log.info("[ADMIN AUDIT] Payment voided: actor={} tenant={} payment={} amountXaf={} periodEnd={} reason={}",
+                cmd.actorId(), tenant.id(), payment.id(), payment.amountXaf(), payment.periodEnd(), reason);
+    }
 
     @Override
     @Transactional(readOnly = true)
@@ -257,6 +296,9 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
         if (cmd.expiresAt() == null) throw validation("expiresAt", "Date d'expiration requise");
         if (!cmd.expiresAt().isAfter(today)) {
             throw validation("expiresAt", "La date d'expiration doit être postérieure à aujourd'hui");
+        }
+        if (cmd.expiresAt().isAfter(today.plusYears(MAX_EXPIRY_YEARS))) {
+            throw validation("expiresAt", "Date d'expiration trop lointaine");
         }
         if (cmd.amountXaf() <= 0) {
             throw validation("amountXaf", "Le montant doit être supérieur à 0");

@@ -46,6 +46,8 @@ public final class RevenueMetrics {
     static final String TRIAL = "PREMIUM_TRIAL";
     static final String EXPIRY = "EXPIRY";
     static final Set<String> CHURN_CAUSES = Set.of(EXPIRY, "ADMIN_DOWNGRADE");
+    /** Correction of a stale public plan (9-2 realign job): not a plan change, ignored by churn and conversion. */
+    static final String REALIGNMENT = "REALIGNMENT";
 
     private final List<RevenuePayment> payments;
     private final Map<UUID, List<PlanChange>> eventsByTenant;
@@ -157,6 +159,7 @@ public final class RevenueMetrics {
         eventsByTenant.forEach((tenant, events) -> {
             PlanChange lastChurn = null;
             for (PlanChange e : events) {
+                if (REALIGNMENT.equals(e.cause())) continue;
                 if (!inRange(watDate(e.occurredAt()), from, to)) continue;
                 if (isChurn(e)) {
                     lastChurn = e;
@@ -208,6 +211,7 @@ public final class RevenueMetrics {
             PlanChange firstActivation = null;
             PlanChange trialEnd = null;
             for (PlanChange e : events) {
+                if (REALIGNMENT.equals(e.cause())) continue;
                 if (trialStart == null) {
                     if (TRIAL.equals(e.toPlan())) trialStart = e;
                     continue; // nothing before the trial start counts

@@ -5,7 +5,7 @@ created: '2026-10-13'
 status: 'done'
 baseline_revision: '8700dd45b4bbecbcae9efbe116d0c3c8c73aeb28'
 review_loop_iteration: 1
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-11-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/11-5-correctifs-performance-n1-bug-index.md'
@@ -138,6 +138,16 @@ deferred: []
   - `[low]` `[patch]` (gap other) schemas not dropped — same as cleanup row.
   - `[false]` `[reject]` (intent) A/B/C/D readings — descriptive; B2 (unscoped `findByStatus`) is not this story's surface (the spec names `findByStoreIdAndStatus`, the owner flow has near-zero traffic per its javadoc).
   - `[false]` `[reject]` (intent) failure scope of the batched lookup — accepted, logged with cause.
+
+
+### 2026-10-14 — Follow-up review pass (4 reviewers on 2fb… → 5d6d20cb diff, triaged against current code)
+- verdicts: high 0, medium 3, low 9, false/reject 4
+- findings:
+  - `[medium]` `[patch]` (edge) a valid index with another definition was dropped before its replacement existed — rebuilt CONCURRENTLY under `<name>_tmp`, then swapped (drop old + rename); INVALID leftovers still drop → create.
+  - `[medium]` `[patch]` (edge) after a `ConnectionAbortedException` the remaining indexes of the schema were reported "unchanged" — current + remaining counted FAILED.
+  - `[medium]` `[patch]` (gap) 5 h budget only checked per schema — also checked before each index (`ensureIndexes(schema, startedAt)`).
+  - `[low]` `[patch]` pending sales ordered by `occurredAt` only → `ORDER BY s.occurredAt, s.id`; `pg_class.relkind` check (a non-index relation holding the name → WARN + FAILED); shared ShedLock constants for annotation and `runAtStartup`; provisioner catches `SQLException | RuntimeException` per index with a guarded savepoint rollback; `statement_timeout` reset asserted; random `kv_[a-z0-9]{6}` schemas in ITs; store counts asserted per tenant; `TenantSchema.validate` before the swap SQL (guard test).
+  - `[false]` `[reject]` keyset index on every provider table at startup is too slow — background job with budget, by design (loopback decision).
 
 ## Verification
 

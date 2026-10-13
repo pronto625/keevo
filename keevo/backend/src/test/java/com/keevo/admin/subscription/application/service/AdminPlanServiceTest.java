@@ -159,8 +159,44 @@ class AdminPlanServiceTest {
         // same day as the current expiry: a retry would record a payment covering zero days
         assertValidationError(() -> service.activatePremium(activation(TODAY.plusDays(40), 10_000, PaymentMethod.CASH)),
                 "expiresAt");
-        verifyNoInteractions(payments, publisher);
+        verify(payments, never()).insert(any());
+        verifyNoInteractions(publisher);
         verify(changePlan, never()).changePlan(any());
+    }
+
+    @Test
+    @DisplayName("renewal: an expiry granted by a since-voided payment no longer blocks a shorter, corrected date")
+    void activate_renewal_ignoresVoidedPaymentEnd() {
+        tenant("ACTIVE");
+        LocalDate typoEnd = TODAY.plusYears(2);
+        LocalDate countedEnd = TODAY.plusDays(5);
+        when(changePlan.currentPlan(SCHEMA)).thenReturn(Optional.of(
+                new CurrentPlan(PlanType.PREMIUM, AdminPlanService.endOfDayWat(typoEnd))));
+        when(changePlan.changePlan(any())).thenReturn(new CurrentPlan(PlanType.PREMIUM, null));
+        when(payments.findByTenant(TENANT)).thenReturn(List.of(
+                payment(TODAY.minusDays(20), typoEnd, Instant.parse("2026-10-12T09:00:00Z")),
+                payment(TODAY.minusDays(25), countedEnd, null)));
+
+        service.activatePremium(activation(TODAY.plusDays(35), 10_000, PaymentMethod.CASH));
+
+        ArgumentCaptor<TenantPayment> payment = ArgumentCaptor.forClass(TenantPayment.class);
+        verify(payments).insert(payment.capture());
+        assertThat(payment.getValue().periodStart()).isEqualTo(countedEnd.plusDays(1));
+    }
+
+    @Test
+    @DisplayName("expiresAt more than 3 years after today → « Date d'expiration trop lointaine »; exactly 3 years accepted")
+    void activate_expiryTooFar() {
+        assertThatThrownBy(() -> service.activatePremium(activation(TODAY.plusYears(3).plusDays(1), 10, PaymentMethod.CASH)))
+                .satisfies(e -> assertThat(((DomainException) e).getDetails())
+                        .containsEntry("expiresAt", "Date d'expiration trop lointaine"));
+        verifyNoInteractions(lookup, changePlan, payments, publisher);
+
+        tenant("ACTIVE");
+        when(changePlan.currentPlan(SCHEMA)).thenReturn(Optional.of(new CurrentPlan(PlanType.FREE, null)));
+        when(changePlan.changePlan(any())).thenReturn(new CurrentPlan(PlanType.FREE, null));
+        service.activatePremium(activation(TODAY.plusYears(3), 10, PaymentMethod.CASH));
+        verify(payments).insert(any());
     }
 
     @Test
@@ -267,6 +303,49 @@ class AdminPlanServiceTest {
         when(payments.findByTenant(TENANT)).thenReturn(List.of(p));
 
         assertThat(service.listPayments(TENANT)).containsExactly(p);
+    }
+
+    @Test
+    @DisplayName("void: counted payment → voided with the trimmed reason and the clock time")
+    void void_ok() {
+        tenant("ACTIVE");
+        UUID id = UUID.randomUUID();
+        when(payments.findById(TENANT, id)).thenReturn(Optional.of(new TenantPayment(id, TENANT, 10_000,
+                PaymentMethod.CASH, NOW, TODAY, TODAY.plusDays(30), null, ACTOR)));
+        when(payments.voidPayment(TENANT, id, ACTOR, "Erreur de saisie", NOW)).thenReturn(true);
+
+        service.voidPayment(new com.keevo.admin.subscription.domain.port.in.VoidTenantPaymentCommand(
+                ACTOR, TENANT, id, "  Erreur de saisie "));
+
+        verify(payments).voidPayment(TENANT, id, ACTOR, "Erreur de saisie", NOW);
+    }
+
+    @Test
+    @DisplayName("void: reason < 3 / > 500 → 422; unknown payment → 404 NOT_FOUND; already voided → 409 INVALID_STATE")
+    void void_errors() {
+        UUID id = UUID.randomUUID();
+        for (String reason : new String[]{null, " ab ", "x".repeat(501)}) {
+            assertValidationError(() -> service.voidPayment(
+                    new com.keevo.admin.subscription.domain.port.in.VoidTenantPaymentCommand(ACTOR, TENANT, id, reason)),
+                    "reason");
+        }
+        verifyNoInteractions(lookup, payments);
+
+        tenant("ACTIVE");
+        var cmd = new com.keevo.admin.subscription.domain.port.in.VoidTenantPaymentCommand(ACTOR, TENANT, id, "Erreur");
+        when(payments.findById(TENANT, id)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.voidPayment(cmd))
+                .extracting(e -> ((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.NOT_FOUND);
+
+        when(payments.findById(TENANT, id)).thenReturn(Optional.of(payment(TODAY, TODAY.plusDays(30), NOW)));
+        assertThatThrownBy(() -> service.voidPayment(cmd))
+                .extracting(e -> ((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.INVALID_STATE);
+        verify(payments, never()).voidPayment(any(), any(), any(), any(), any());
+    }
+
+    private static TenantPayment payment(LocalDate start, LocalDate end, Instant voidedAt) {
+        return new TenantPayment(UUID.randomUUID(), TENANT, 10_000, PaymentMethod.CASH, NOW.minusSeconds(86_400),
+                start, end, null, ACTOR, voidedAt, voidedAt != null ? "Erreur de saisie" : null);
     }
 
     // ── Alerts ────────────────────────────────────────────────────────────────

@@ -12,5 +12,10 @@ public enum PlanChangeCause {
     /** Nightly job downgraded an expired PREMIUM / PREMIUM_TRIAL to FREE. */
     EXPIRY,
     /** Tenant registration (starts on PREMIUM_TRIAL). */
-    REGISTRATION
+    REGISTRATION,
+    /**
+     * One-shot correction of a stale {@code public.tenants.plan_type} by {@code PlanTypeRealignJob}
+     * (not a real plan change at that time: ignored by 9-3 churn and conversion).
+     */
+    REALIGNMENT
 }

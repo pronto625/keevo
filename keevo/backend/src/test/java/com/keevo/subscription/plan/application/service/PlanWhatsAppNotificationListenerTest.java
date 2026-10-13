@@ -68,6 +68,17 @@ class PlanWhatsAppNotificationListenerTest {
     }
 
     @Test
+    @DisplayName("trial expiry → « Votre essai Keevo Premium est terminé … » (not the paid-subscription text)")
+    void trialExpired() {
+        when(resolver.resolveOwnerWhatsAppPhone(SCHEMA)).thenReturn(Optional.of(PHONE));
+
+        listener.onExpired(new PlanExpiredEvent(TENANT, SCHEMA, PlanType.PREMIUM_TRIAL, Instant.now()));
+
+        verify(whatsApp).sendReport(PHONE,
+                "Votre essai Keevo Premium est terminé : votre compte est passé au plan Gratuit. Vos données sont conservées.");
+    }
+
+    @Test
     @DisplayName("no owner phone → nothing sent")
     void noPhone() {
         when(resolver.resolveOwnerWhatsAppPhone(SCHEMA)).thenReturn(Optional.empty());

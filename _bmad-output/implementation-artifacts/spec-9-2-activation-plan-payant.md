@@ -5,7 +5,7 @@ created: '2026-10-13'
 status: 'done'
 baseline_revision: 'a9b47f5a84ba02c4446aea9dc7a0243247cc8185'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-9-context.md'
 warnings: [oversized]
@@ -150,6 +150,19 @@ deferred: []
   - `[false]` `[reject]` (intent) R3b manual downgrades absent from alerts — matrix row ties « expired » alerts to expiry.
   - `[false]` `[reject]` (intent) R3c legacy endpoint without WhatsApp — Boundaries keep it as-is except history/public plan.
   - `[false]` `[reject]` (intent) R3f short renewal rejected — a renewal ending before the current expiry would shorten a paid period; consistent with the renewal rule.
+
+
+### 2026-10-14 — Follow-up review pass (4 reviewers on 07f… → 7d94e9df diff, triaged against current code)
+- verdicts: high 0, medium 6, low 14, false/reject 5
+- findings:
+  - `[medium]` `[patch]` (intent) suspension left no trace and no owner message — V22 `tenants.suspended_at/reason/by`, drawer « Suspendu le … — motif : … », owner WhatsApp on suspend/reactivate (after commit, failures logged).
+  - `[medium]` `[patch]` (blind) a mistyped payment could not be corrected — `POST …/payments/{id}/void` (reason 3–500, 404/409, `[ADMIN AUDIT]`), voided rows excluded from 9-3 revenue and from the renewal "current end".
+  - `[medium]` `[patch]` (edge) `expiresAt` unbounded — > 3 years → 422 « Date d'expiration trop lointaine » (client `max` too).
+  - `[medium]` `[patch]` (edge) realign job changed `public.tenants.plan_type` without an event — single CTE writes a `REALIGNMENT` event (CHECK extended); revenue metrics ignore it for conversion and churn.
+  - `[medium]` `[patch]` (blind) trial expiry message said « Premium expiré » — `PlanWhatsAppMessages.expired(previousPlan)`: « Votre essai Keevo Premium est terminé… ».
+  - `[medium]` `[patch]` (blind) activation had no confirmation step — summary (amount, method, date, covered period) with « Modifier » / « Confirmer l'activation ».
+  - `[low]` `[patch]` dialog errors rendered inside the dialog; « Plan illisible pour le moment » + « Réessayer »; alerts banner capped at 5 with « Voir les N autres »; shared `KeevoZones.WAT`; tests (detail subscription REST, unreadable plan, payments newest first, `admin-tenants.test.ts`, explicit global-only table names).
+  - `[false]` `[reject]` void should also roll back the expiry — by design the plan end is unchanged; the admin voids then re-activates (dialog says so).
 
 ## Verification
 

@@ -11,6 +11,8 @@ import com.keevo.admin.subscription.domain.port.in.ListTenantPaymentsUseCase;
 import com.keevo.admin.subscription.domain.port.in.ReactivateTenantUseCase;
 import com.keevo.admin.subscription.domain.port.in.SuspendTenantCommand;
 import com.keevo.admin.subscription.domain.port.in.SuspendTenantUseCase;
+import com.keevo.admin.subscription.domain.port.in.VoidTenantPaymentCommand;
+import com.keevo.admin.subscription.domain.port.in.VoidTenantPaymentUseCase;
 import com.keevo.identity.auth.domain.model.PlanType;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -59,6 +61,7 @@ class AdminTenantPlanControllerTest {
     @MockitoBean ReactivateTenantUseCase reactivateTenant;
     @MockitoBean ListTenantPaymentsUseCase listPayments;
     @MockitoBean ListPlanAlertsUseCase listAlerts;
+    @MockitoBean VoidTenantPaymentUseCase voidPayment;
     @MockitoBean JwtAuthFilter jwtAuthFilter;
 
     private static final UUID ADMIN_ID = UUID.randomUUID();
@@ -244,7 +247,7 @@ class AdminTenantPlanControllerTest {
     // ── Reads ─────────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("GET /payments → history contract, recorder shown as « Super admin », no ids")
+    @DisplayName("GET /payments → history contract, recorder shown as « Super admin », only the payment id (action target)")
     void payments_contract() throws Exception {
         as("ROLE_SUPER_ADMIN");
         UUID recorder = UUID.randomUUID();
@@ -262,8 +265,73 @@ class AdminTenantPlanControllerTest {
                 .andExpect(jsonPath("$.data[0].periodEnd").value("2026-11-12"))
                 .andExpect(jsonPath("$.data[0].note").value("espèces"))
                 .andExpect(jsonPath("$.data[0].recordedByLabel").value("Super admin"))
-                .andExpect(content().string(not(containsString(recorder.toString()))))
-                .andExpect(content().string(not(containsString(paymentId.toString()))));
+                .andExpect(jsonPath("$.data[0].id").value(paymentId.toString()))
+                .andExpect(jsonPath("$.data[0].voidedAt").doesNotExist())
+                .andExpect(content().string(not(containsString(recorder.toString()))));
+    }
+
+    @Test
+    @DisplayName("GET /payments → a voided payment carries its void date and reason")
+    void payments_voided() throws Exception {
+        as("ROLE_SUPER_ADMIN");
+        when(listPayments.listPayments(TENANT)).thenReturn(List.of(new TenantPayment(UUID.randomUUID(), TENANT,
+                10_000, PaymentMethod.CASH, Instant.parse("2026-10-13T09:00:00Z"),
+                LocalDate.of(2026, 10, 13), LocalDate.of(2026, 11, 12), null, UUID.randomUUID(),
+                Instant.parse("2026-10-14T09:00:00Z"), "Erreur de saisie")));
+
+        mockMvc.perform(get(BASE + "/payments", TENANT))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].voidedAt").value("2026-10-14T09:00:00Z"))
+                .andExpect(jsonPath("$.data[0].voidReason").value("Erreur de saisie"));
+    }
+
+    // ── Void payment ──────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("POST /payments/{id}/void with reason → 200, command carries actor, tenant, payment, reason")
+    void void_ok() throws Exception {
+        as("ROLE_SUPER_ADMIN");
+        UUID paymentId = UUID.randomUUID();
+
+        mockMvc.perform(post(BASE + "/payments/{paymentId}/void", TENANT, paymentId)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Erreur de saisie\"}"))
+                .andExpect(status().isOk());
+
+        verify(voidPayment).voidPayment(new VoidTenantPaymentCommand(ADMIN_ID, TENANT, paymentId, "Erreur de saisie"));
+    }
+
+    @Test
+    @DisplayName("POST /payments/{id}/void: no body / short reason → 422; unknown → 404; already voided → 409; OWNER → 403")
+    void void_errors() throws Exception {
+        as("ROLE_SUPER_ADMIN");
+        UUID paymentId = UUID.randomUUID();
+        String path = BASE + "/payments/{paymentId}/void";
+
+        mockMvc.perform(post(path, TENANT, paymentId).contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.domainCode").value("VALIDATION_ERROR"));
+        mockMvc.perform(post(path, TENANT, paymentId).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"ab\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.details.reason").exists());
+        verifyNoInteractions(voidPayment);
+
+        doThrow(new DomainException(ErrorCode.NOT_FOUND, "Paiement introuvable")).when(voidPayment).voidPayment(any());
+        mockMvc.perform(post(path, TENANT, paymentId).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"Erreur\"}"))
+                .andExpect(status().isNotFound());
+
+        doThrow(new DomainException(ErrorCode.INVALID_STATE, "x")).when(voidPayment).voidPayment(any());
+        mockMvc.perform(post(path, TENANT, paymentId).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"Erreur\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.domainCode").value("INVALID_STATE"));
+
+        as("ROLE_OWNER");
+        mockMvc.perform(post(path, TENANT, paymentId).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"Erreur\"}"))
+                .andExpect(status().isForbidden());
+        verify(voidPayment, times(2)).voidPayment(any());
     }
 
     @Test

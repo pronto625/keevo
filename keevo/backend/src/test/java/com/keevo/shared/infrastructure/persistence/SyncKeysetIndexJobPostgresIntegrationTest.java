@@ -60,7 +60,7 @@ class SyncKeysetIndexJobPostgresIntegrationTest extends PostgresIntegrationTest 
     @Test
     @DisplayName("provision(): every keyset index exists, valid, with the definition the job expects")
     void provisionCreatesKeysetIndexes() {
-        String schema = provision("kv_ksj001");
+        String schema = provision(randomSchema());
 
         Map<String, String> defs = keysetIndexes(schema);
         assertThat(defs).hasSize(INDEX_COUNT);
@@ -74,7 +74,8 @@ class SyncKeysetIndexJobPostgresIntegrationTest extends PostgresIntegrationTest 
     @Test
     @DisplayName("existing populated schema: built CONCURRENTLY while a concurrent insert goes through; 2nd run idempotent")
     void jobBuildsIndexesWithoutBlockingWrites() throws Exception {
-        String schema = provision("kv_ksj002");
+        String schema = provision(randomSchema());
+        String defaultTimeout = statementTimeout();
         dropKeysetIndexes(schema);
         jdbc.update("INSERT INTO \"" + schema + "\".clients (name, phone) "
                 + "SELECT 'Client ' || g, '+2376' || lpad(g::text, 8, '0') FROM generate_series(1, 2000) g");
@@ -110,12 +111,14 @@ class SyncKeysetIndexJobPostgresIntegrationTest extends PostgresIntegrationTest 
         assertThat(invalidKeysetIndexes(schema)).isZero();
 
         assertThat(job().ensureIndexes(schema)).isEqualTo(new SyncKeysetIndexJob.Result(0, 0, INDEX_COUNT, 0, 0));
+        // the 15-minute build timeout never leaks into the pool
+        assertThat(statementTimeout()).isEqualTo(defaultTimeout);
     }
 
     @Test
     @DisplayName("an INVALID leftover index and a wrong-definition index are dropped and rebuilt")
     void jobRepairsInvalidAndWrongIndexes() {
-        String schema = provision("kv_ksj003");
+        String schema = provision(randomSchema());
         // interrupted concurrent build → INVALID index (simulated through the catalog)
         jdbc.update("UPDATE pg_index SET indisvalid = false WHERE indexrelid = ?::regclass",
                 schema + ".idx_products_sync_keyset");
@@ -132,34 +135,50 @@ class SyncKeysetIndexJobPostgresIntegrationTest extends PostgresIntegrationTest 
                 .endsWith("sales USING btree (updated_at, ((id)::text))");
         assertThat(keysetIndexes(schema).get("idx_products_sync_keyset"))
                 .endsWith("products USING btree (updated_at, ((id)::text))");
+        // the swap leaves no temporary index behind
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM pg_indexes WHERE schemaname = ? AND indexname LIKE ?",
+                Integer.class, schema, "%" + SyncKeysetIndexJob.TEMP_SUFFIX)).isZero();
+    }
+
+    @Test
+    @DisplayName("a non-index relation holding the index name is counted failed, never as created")
+    void nonIndexRelationHoldingTheNameFails() {
+        String schema = provision(randomSchema());
+        jdbc.execute("DROP INDEX \"" + schema + "\".idx_reports_sync_keyset");
+        jdbc.execute("CREATE SEQUENCE \"" + schema + "\".idx_reports_sync_keyset");
+
+        assertThat(job().ensureIndexes(schema))
+                .isEqualTo(new SyncKeysetIndexJob.Result(0, 0, INDEX_COUNT - 1, 0, 1));
+        assertThat(keysetIndexes(schema)).hasSize(INDEX_COUNT - 1).doesNotContainKey("idx_reports_sync_keyset");
     }
 
     @Test
     @DisplayName("runAll(): an ACTIVE tenant gets its indexes back; DELETED and schema-less tenants are ignored")
     void runAllCoversActiveTenantsOnly() {
-        String active = provision("kv_ksj004");
-        String deleted = provision("kv_ksj005");
+        String active = provision(randomSchema());
+        String deleted = provision(randomSchema());
+        String missing = randomSchema();
         dropKeysetIndexes(active);
         dropKeysetIndexes(deleted);
-        registerTenant(active, "KV-KSJ004", "ACTIVE");
-        registerTenant(deleted, "KV-KSJ005", "DELETED");
-        registerTenant("kv_ksj006", "KV-KSJ006", "ACTIVE"); // schema never created
-        schemas.add("kv_ksj006");
+        registerTenant(active, "ACTIVE");
+        registerTenant(deleted, "DELETED");
+        registerTenant(missing, "ACTIVE"); // schema never created
+        schemas.add(missing);
 
         job().runAll();
 
         assertThat(keysetIndexes(active)).hasSize(INDEX_COUNT);
         assertThat(keysetIndexes(deleted)).isEmpty();
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = 'kv_ksj006'",
-                Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = ?",
+                Integer.class, missing)).isZero();
     }
 
     @Test
     @DisplayName("runAll(): no schema is started once the run budget is spent")
     void runAllStopsAtBudget() {
-        String schema = provision("kv_ksj007");
+        String schema = provision(randomSchema());
         dropKeysetIndexes(schema);
-        registerTenant(schema, "KV-KSJ007", "ACTIVE");
+        registerTenant(schema, "ACTIVE");
         SyncKeysetIndexJob job = job();
         job.runBudget = java.time.Duration.ZERO;
 
@@ -175,7 +194,7 @@ class SyncKeysetIndexJobPostgresIntegrationTest extends PostgresIntegrationTest 
         withBogus.addAll(TenantSchemaProvisioner.SYNC_KEYSET_INDEXES);
         provisioner.syncKeysetIndexes = withBogus;
 
-        String schema = provision("kv_ksj008");
+        String schema = provision(randomSchema());
 
         assertThat(keysetIndexes(schema)).hasSize(INDEX_COUNT).doesNotContainKey("idx_bogus_sync_keyset");
     }
@@ -183,7 +202,7 @@ class SyncKeysetIndexJobPostgresIntegrationTest extends PostgresIntegrationTest 
     @Test
     @DisplayName("a table missing from the schema is counted as skipped, not failed")
     void missingTableSkipped() {
-        String schema = provision("kv_ksj009");
+        String schema = provision(randomSchema());
         jdbc.execute("DROP TABLE \"" + schema + "\".reports CASCADE");
 
         assertThat(job().ensureIndexes(schema))
@@ -208,7 +227,21 @@ class SyncKeysetIndexJobPostgresIntegrationTest extends PostgresIntegrationTest 
         return schema;
     }
 
-    private void registerTenant(String schema, String code, String status) {
+    /** Random valid tenant schema name, so reruns and parallel suites never collide. */
+    private static String randomSchema() {
+        String alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+        java.util.concurrent.ThreadLocalRandom r = java.util.concurrent.ThreadLocalRandom.current();
+        StringBuilder sb = new StringBuilder("kv_");
+        for (int i = 0; i < 6; i++) sb.append(alphabet.charAt(r.nextInt(alphabet.length())));
+        return sb.toString();
+    }
+
+    private String statementTimeout() {
+        return jdbc.queryForObject("SHOW statement_timeout", String.class);
+    }
+
+    private void registerTenant(String schema, String status) {
+        String code = "KV-" + schema.substring(3).toUpperCase();
         UUID id = UUID.randomUUID();
         tenantIds.add(id);
         jdbc.update("INSERT INTO public.tenants (id, created_at, updated_at, code, max_employees, max_products, "

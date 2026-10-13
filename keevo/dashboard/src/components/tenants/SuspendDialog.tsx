@@ -10,13 +10,17 @@ interface SuspendDialogProps {
   reasonRequired: boolean;
   destructive?: boolean;
   isPending: boolean;
+  /** General error of the last server answer, shown at the top of the dialog. */
+  serverError?: string | null;
+  /** Server error of the reason field (422 `details.reason`), shown under the input. */
+  serverReasonError?: string | null;
   onConfirm: (reason: string) => void;
   onCancel: () => void;
 }
 
 /**
- * Confirmation dialog with a free-text reason (Story 9-2): « Suspendre » (reason required) and
- * « Repasser en Gratuit » (reason optional).
+ * Confirmation dialog with a free-text reason (Story 9-2): « Suspendre » and « Annuler ce paiement »
+ * (reason required), « Repasser en Gratuit » (reason optional). Server errors stay in the dialog.
  */
 export function SuspendDialog({
   title,
@@ -25,11 +29,21 @@ export function SuspendDialog({
   reasonRequired,
   destructive = false,
   isPending,
+  serverError = null,
+  serverReasonError = null,
   onConfirm,
   onCancel,
 }: SuspendDialogProps) {
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // the server's reason error is hidden once the reason is edited (shown again on a new answer)
+  const [reasonEdited, setReasonEdited] = useState(false);
+  const [prevServerReasonError, setPrevServerReasonError] = useState(serverReasonError);
+  if (prevServerReasonError !== serverReasonError) {
+    setPrevServerReasonError(serverReasonError);
+    setReasonEdited(false);
+  }
+  const reasonError = error ?? (reasonEdited ? null : serverReasonError);
 
   const confirm = () => {
     const r = reason.trim();
@@ -56,6 +70,11 @@ export function SuspendDialog({
         <h3 id="reason-dialog-title" className="font-semibold text-gray-900 mb-2">
           {title}
         </h3>
+        {serverError && (
+          <p role="alert" className="text-sm rounded-lg px-3 py-2 mb-3 bg-red-50 text-red-700 border border-red-200">
+            {serverError}
+          </p>
+        )}
         <p className="text-sm text-gray-500 mb-4">{description}</p>
         <label htmlFor="reason-dialog-input" className="block text-xs font-medium text-gray-600 mb-1">
           {reasonRequired ? "Motif" : "Motif (facultatif)"}
@@ -65,10 +84,13 @@ export function SuspendDialog({
           rows={3}
           maxLength={500}
           value={reason}
-          onChange={(e) => setReason(e.target.value)}
+          onChange={(e) => {
+            setReason(e.target.value);
+            setReasonEdited(true);
+          }}
           className="w-full border border-gray-300 rounded-lg bg-white text-gray-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
-        {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+        {reasonError && <p className="text-xs text-red-600 mt-1">{reasonError}</p>}
         <div className="flex gap-3 justify-end mt-4">
           <button
             type="button"

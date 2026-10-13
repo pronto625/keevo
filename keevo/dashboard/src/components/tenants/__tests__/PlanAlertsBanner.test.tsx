@@ -45,6 +45,27 @@ describe("PlanAlertsBanner", () => {
     expect(onRetry).toHaveBeenCalled();
   });
 
+  it("shows 5 alerts, then « Voir les N autres » toggles the rest", async () => {
+    const many: PlanAlert[] = Array.from({ length: 7 }, (_, i) => ({
+      tenantId: A, tenantName: `Boutique ${i + 1}`, kind: "EXPIRING", plan: "PREMIUM", daysLeft: i + 1,
+      expiresAt: null, occurredAt: null,
+    }));
+    const user = userEvent.setup();
+    render(<PlanAlertsBanner alerts={many} />);
+
+    expect(screen.getByText(/Boutique 5 —/)).toBeInTheDocument();
+    expect(screen.queryByText(/Boutique 6 —/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Voir les 2 autres" }));
+    expect(screen.getByText(/Boutique 7 —/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Voir moins" }));
+    expect(screen.queryByText(/Boutique 6 —/)).not.toBeInTheDocument();
+  });
+
+  it("no toggle with 5 alerts or fewer", () => {
+    render(<PlanAlertsBanner alerts={ALERTS} />);
+    expect(screen.queryByRole("button", { name: /Voir/ })).not.toBeInTheDocument();
+  });
+
   it("renders nothing without alerts", () => {
     const { container } = render(<PlanAlertsBanner alerts={[]} />);
     expect(container).toBeEmptyDOMElement();

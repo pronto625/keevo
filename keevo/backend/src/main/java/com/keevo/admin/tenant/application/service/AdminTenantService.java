@@ -197,7 +197,8 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
             long auditTotal = countAuditEvents(schemaName, query.tenantId());
             List<AdminAuditEvent> auditEvents = loadAuditEvents(schemaName, query.tenantId(), query.auditPage());
             AdminPlanInfo plan = loadPlan(schemaName, query.tenantId());
-            return new AdminTenantDetail(summary, stores, employees, auditEvents, auditTotal, plan);
+            AdminSuspensionInfo suspension = loadSuspension(query.tenantId());
+            return new AdminTenantDetail(summary, stores, employees, auditEvents, auditTotal, plan, suspension);
         } finally {
             TenantContext.setCurrentTenant(previousTenant);
         }
@@ -540,6 +541,19 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
     }
 
     /** Story 9-2 — current subscription (first row by created_at), null when unreadable. */
+    /** Story 9-2 — suspension trace from {@code public.tenants}; null when not suspended. */
+    private AdminSuspensionInfo loadSuspension(UUID tenantId) {
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT suspended_at, suspended_reason FROM public.tenants "
+                + "WHERE id = ? AND status = 'SUSPENDED' AND suspended_at IS NOT NULL", tenantId);
+        if (rows == null || rows.isEmpty()) return null;
+        Object at = rows.get(0).get("suspended_at");
+        Instant suspendedAt = at instanceof Timestamp ts ? ts.toInstant()
+                : at instanceof java.time.OffsetDateTime odt ? odt.toInstant() : null;
+        return suspendedAt == null ? null
+                : new AdminSuspensionInfo(suspendedAt, (String) rows.get(0).get("suspended_reason"));
+    }
+
     private AdminPlanInfo loadPlan(String schema, UUID tenantId) {
         if (!TenantSchema.isValid(schema)) { // fail-soft like the SQL errors below; no SQL built
             log.warn("Tenant detail: tenant {} section skipped (invalid schema name)", tenantId);

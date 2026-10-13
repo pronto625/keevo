@@ -28,6 +28,8 @@ import java.util.UUID;
  * {@code SuspensionBanner}. Status transitions are conditional UPDATEs (ACTIVE → SUSPENDED,
  * SUSPENDED → ACTIVE); any other state answers 409 {@code INVALID_STATE}. Then every membership
  * of the tenant gets its sessions revoked, so the next token refresh carries the new status.
+ * The suspension date, reason and actor are kept on {@code public.tenants} until reactivation; the
+ * owner is told on WhatsApp after commit ({@code TenantStatusWhatsAppNotificationListener}).
  */
 @Service
 public class AdminTenantSuspensionService implements SuspendTenantUseCase, ReactivateTenantUseCase {
@@ -37,11 +39,15 @@ public class AdminTenantSuspensionService implements SuspendTenantUseCase, React
     static final int REASON_MIN = 3;
     static final int REASON_MAX = 500;
 
+    /** Also keeps a lasting trace of the suspension (who, when, why), shown in the admin drawer. */
     static final String SUSPEND_SQL =
-            "UPDATE public.tenants SET status = 'SUSPENDED', updated_at = NOW() "
+            "UPDATE public.tenants SET status = 'SUSPENDED', updated_at = NOW(), "
+            + "suspended_at = ?, suspended_reason = ?, suspended_by = ? "
             + "WHERE id = ? AND status = 'ACTIVE'";
+    /** Clears the suspension trace. */
     static final String REACTIVATE_SQL =
-            "UPDATE public.tenants SET status = 'ACTIVE', updated_at = NOW() "
+            "UPDATE public.tenants SET status = 'ACTIVE', updated_at = NOW(), "
+            + "suspended_at = NULL, suspended_reason = NULL, suspended_by = NULL "
             + "WHERE id = ? AND status = 'SUSPENDED'";
     static final String MEMBERS_SQL =
             "SELECT DISTINCT user_id FROM public.user_tenant_memberships WHERE tenant_id = ?";
@@ -70,14 +76,16 @@ public class AdminTenantSuspensionService implements SuspendTenantUseCase, React
             throw AdminPlanService.validation("reason", "Motif requis (3 à 500 caractères)");
         }
         TargetTenant tenant = tenantLookup.load(cmd.tenantId());
-        if (jdbc.update(SUSPEND_SQL, tenant.id()) == 0) {
+        java.time.Instant now = clock.instant();
+        if (jdbc.update(SUSPEND_SQL, java.sql.Timestamp.from(now), reason, cmd.actorId(), tenant.id()) == 0) {
             throw new DomainException(ErrorCode.INVALID_STATE,
                     "Tenant " + tenant.id() + " cannot be suspended from status " + tenant.status());
         }
         int revoked = revokeAllMemberSessions(tenant);
         log.info("[ADMIN AUDIT] Tenant suspended: actor={} tenant={} sessionsRevoked={} reason={}",
                 cmd.actorId(), tenant.id(), revoked, reason);
-        eventPublisher.publishEvent(new TenantSuspendedEvent(cmd.actorId(), tenant.id(), reason, clock.instant()));
+        eventPublisher.publishEvent(new TenantSuspendedEvent(cmd.actorId(), tenant.id(), tenant.schemaName(),
+                reason, now));
     }
 
     @Override
@@ -91,7 +99,8 @@ public class AdminTenantSuspensionService implements SuspendTenantUseCase, React
         int revoked = revokeAllMemberSessions(tenant);
         log.info("[ADMIN AUDIT] Tenant reactivated: actor={} tenant={} sessionsRevoked={}",
                 actorId, tenant.id(), revoked);
-        eventPublisher.publishEvent(new TenantReactivatedEvent(actorId, tenant.id(), clock.instant()));
+        eventPublisher.publishEvent(new TenantReactivatedEvent(actorId, tenant.id(), tenant.schemaName(),
+                clock.instant()));
     }
 
     private int revokeAllMemberSessions(TargetTenant tenant) {

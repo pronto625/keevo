@@ -75,6 +75,10 @@ export async function getTenantPayments(tenantId: string): Promise<TenantPayment
   return res.data.data;
 }
 
+export async function voidPayment(tenantId: string, paymentId: string, reason: string): Promise<void> {
+  await client.post(`/admin/tenants/${tenantId}/payments/${paymentId}/void`, { reason });
+}
+
 export async function getPlanAlerts(): Promise<PlanAlert[]> {
   const res = await client.get<{ data: PlanAlert[] }>("/admin/subscriptions/alerts");
   return res.data.data;

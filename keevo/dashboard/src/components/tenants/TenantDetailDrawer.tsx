@@ -59,7 +59,7 @@ export function TenantDetailDrawer({ tenantId, onClose }: TenantDetailDrawerProp
   const [confirmAction, setConfirmAction] = useState<"cancel" | "force" | null>(null);
   const queryClient = useQueryClient();
 
-  const { data, isLoading, error } = useQuery<TenantDetail>({
+  const { data, isLoading, error, refetch } = useQuery<TenantDetail>({
     queryKey: ["tenant-detail", tenantId, auditPage],
     queryFn: () => getTenantDetail(tenantId, auditPage),
   });
@@ -152,6 +152,8 @@ export function TenantDetailDrawer({ tenantId, onClose }: TenantDetailDrawerProp
                 tenantId={tenantId}
                 status={data.tenant.status}
                 subscription={data.subscription ?? null}
+                suspension={data.suspension ?? null}
+                onRetryPlan={() => void refetch()}
               />
 
               {/* DELETION_PENDING actions */}

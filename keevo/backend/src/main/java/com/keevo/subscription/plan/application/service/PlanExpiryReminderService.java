@@ -4,6 +4,7 @@ import com.keevo.identity.auth.domain.model.PlanType;
 import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
+import com.keevo.shared.domain.time.KeevoZones;
 import com.keevo.subscription.plan.domain.port.in.SendPlanExpiryRemindersUseCase;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -84,7 +85,7 @@ public class PlanExpiryReminderService implements SendPlanExpiryRemindersUseCase
     /** @return number of reminders sent by this run */
     @Override
     public int execute() {
-        LocalDate today = LocalDate.now(clock.withZone(PlanWhatsAppMessages.WAT));
+        LocalDate today = LocalDate.now(clock.withZone(KeevoZones.WAT));
         int sent = 0;
         for (Map<String, Object> tenant : jdbc.queryForList(FETCH_TENANTS)) {
             String schema = (String) tenant.get("schema_name");
@@ -130,7 +131,7 @@ public class PlanExpiryReminderService implements SendPlanExpiryRemindersUseCase
         java.time.Instant instant = exp instanceof Timestamp ts ? ts.toInstant()
                 : exp instanceof java.time.OffsetDateTime odt ? odt.toInstant() : (java.time.Instant) exp;
         return Optional.of(new Expiry(PlanType.valueOf((String) row.get("plan_type")),
-                instant.atZone(PlanWhatsAppMessages.WAT).toLocalDate()));
+                instant.atZone(KeevoZones.WAT).toLocalDate()));
     }
 
     /** @return true when the message was handed to WhatsApp */

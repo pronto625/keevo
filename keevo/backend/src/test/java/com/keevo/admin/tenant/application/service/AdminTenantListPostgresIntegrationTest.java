@@ -44,6 +44,7 @@ class AdminTenantListPostgresIntegrationTest extends PostgresIntegrationTest {
     private final List<UUID> tenantIds = new ArrayList<>();
     private final List<String> schemas = new ArrayList<>();
     private final List<UUID> userIds = new ArrayList<>();
+    private final java.util.Map<UUID, String> schemaOf = new java.util.HashMap<>();
 
     @AfterEach
     void cleanUp() {
@@ -57,39 +58,44 @@ class AdminTenantListPostgresIntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
-    @DisplayName("two tenants, one active store each → storeCount == 1 for both")
+    @DisplayName("two tenants with different store counts → each row reads its own schema")
     void listResolvesEachTenantSchema() {
         String tag = "Boutique KSA " + UUID.randomUUID().toString().substring(0, 8);
-        UUID a = tenant("kv_ksa001", "KV-KSA001", tag + " A");
-        UUID b = tenant("kv_ksa002", "KV-KSA002", tag + " B");
+        UUID a = tenant(tag + " A");
+        UUID b = tenant(tag + " B");
+        // a second active store on B only: a mixed-up schema lookup would show
+        jdbc.update("INSERT INTO \"" + schemaOf.get(b) + "\".stores (name, type, is_active) VALUES ('Boutique 2', 'STORE', true)");
 
         AdminTenantService service = new AdminTenantService(jdbc, mock(AccountDeletionScheduler.class));
         Page<AdminTenantListItem> page = service.execute(
                 new ListTenantsQuery(tag, null, null, null, null, null, null, 0, 25));
 
         assertThat(page.getContent()).extracting(AdminTenantListItem::id).containsExactlyInAnyOrder(a, b);
-        assertThat(page.getContent()).extracting(AdminTenantListItem::storeCount).containsOnly(1);
+        java.util.Map<UUID, Integer> storeCounts = page.getContent().stream()
+                .collect(java.util.stream.Collectors.toMap(AdminTenantListItem::id, it -> (int) it.storeCount()));
+        assertThat(storeCounts).containsEntry(a, 1).containsEntry(b, 2);
     }
 
     @Test
     @DisplayName("9-1 — real SQL: owner name in the list, employee names + last activity, readable audit line")
     void listAndDetailAreReadable() {
         String tag = "Boutique KSB " + UUID.randomUUID().toString().substring(0, 8);
-        UUID tenantId = tenant("kv_ksb001", "KV-KSB001", tag);
+        UUID tenantId = tenant(tag);
+        String sb = schemaOf.get(tenantId);
         UUID owner = member(tenantId, "OWNER");
         UUID employee = member(tenantId, "EMPLOYEE");
-        UUID storeId = jdbc.queryForObject("SELECT id FROM kv_ksb001.stores LIMIT 1", UUID.class);
-        jdbc.update("UPDATE kv_ksb001.stores SET name = 'Boutique Centre' WHERE id = ?", storeId);
-        jdbc.update("INSERT INTO kv_ksb001.employees (user_id, store_id, first_name, last_name) VALUES (?, ?, ' Awa ', 'Diallo')",
+        UUID storeId = jdbc.queryForObject("SELECT id FROM " + sb + ".stores LIMIT 1", UUID.class);
+        jdbc.update("UPDATE " + sb + ".stores SET name = 'Boutique Centre' WHERE id = ?", storeId);
+        jdbc.update("INSERT INTO " + sb + ".employees (user_id, store_id, first_name, last_name) VALUES (?, ?, ' Awa ', 'Diallo')",
                 owner, storeId);
-        jdbc.update("INSERT INTO kv_ksb001.employees (user_id, store_id, first_name, last_name) VALUES (?, ?, 'Moussa', 'Kane')",
+        jdbc.update("INSERT INTO " + sb + ".employees (user_id, store_id, first_name, last_name) VALUES (?, ?, 'Moussa', 'Kane')",
                 employee, storeId);
         jdbc.update("INSERT INTO public.user_daily_activity (user_id, tenant_id, activity_date) VALUES (?, ?, CURRENT_DATE - 1)",
                 employee, tenantId);
-        jdbc.update("INSERT INTO kv_ksb001.audit_log (id, action, entity_id, entity_type, occurred_at, user_id, "
+        jdbc.update("INSERT INTO " + sb + ".audit_log (id, action, entity_id, entity_type, occurred_at, user_id, "
                 + "store_id, entity_label, source) VALUES (?, 'PRODUCT_UPDATED', ?, 'Product', now(), ?, ?, 'Savon', 'ONLINE')",
                 UUID.randomUUID(), UUID.randomUUID(), employee, storeId);
-        jdbc.update("INSERT INTO kv_ksb001.audit_log (id, action, entity_id, entity_type, occurred_at, user_id, source) "
+        jdbc.update("INSERT INTO " + sb + ".audit_log (id, action, entity_id, entity_type, occurred_at, user_id, source) "
                 + "VALUES (?, 'STOCK_THRESHOLD_BREACHED', ?, 'StockAlert', now() - interval '1 hour', ?, 'SYSTEM')",
                 UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
 
@@ -120,16 +126,17 @@ class AdminTenantListPostgresIntegrationTest extends PostgresIntegrationTest {
     @DisplayName("9-1 — a tenant with a broken schema (employees dropped) does not blank the next tenant's data")
     void brokenTenantDoesNotBlankTheNextOne() {
         String tag = "Boutique KSC " + UUID.randomUUID().toString().substring(0, 8);
-        UUID healthy = tenant("kv_ksc001", "KV-KSC001", tag + " saine");
-        UUID broken = tenant("kv_ksc002", "KV-KSC002", tag + " cassée");
+        UUID healthy = tenant(tag + " saine");
+        UUID broken = tenant(tag + " cassée");
+        String healthySchema = schemaOf.get(healthy);
         // the broken one is listed first (newest first)
         jdbc.update("UPDATE public.tenants SET created_at = now() + interval '1 minute' WHERE id = ?", broken);
         UUID owner = member(healthy, "OWNER");
-        UUID storeId = jdbc.queryForObject("SELECT id FROM kv_ksc001.stores LIMIT 1", UUID.class);
-        jdbc.update("INSERT INTO kv_ksc001.employees (user_id, store_id, first_name, last_name) VALUES (?, ?, 'Awa', 'Diallo')",
+        UUID storeId = jdbc.queryForObject("SELECT id FROM " + healthySchema + ".stores LIMIT 1", UUID.class);
+        jdbc.update("INSERT INTO " + healthySchema + ".employees (user_id, store_id, first_name, last_name) VALUES (?, ?, 'Awa', 'Diallo')",
                 owner, storeId);
         member(broken, "OWNER");
-        jdbc.execute("DROP TABLE kv_ksc002.employees");
+        jdbc.execute("DROP TABLE " + schemaOf.get(broken) + ".employees");
 
         Page<AdminTenantListItem> page = springService.execute(
                 new ListTenantsQuery(tag, null, null, null, null, null, null, 0, 25));
@@ -150,13 +157,13 @@ class AdminTenantListPostgresIntegrationTest extends PostgresIntegrationTest {
     @DisplayName("9-1 — last-activity filter keeps only tenants whose latest audit entry is in range")
     void lastActivityFilter() {
         String tag = "Boutique KSD " + UUID.randomUUID().toString().substring(0, 8);
-        UUID recent = tenant("kv_ksd001", "KV-KSD001", tag + " récente");
-        UUID old = tenant("kv_ksd002", "KV-KSD002", tag + " ancienne");
-        tenant("kv_ksd003", "KV-KSD003", tag + " jamais");
-        jdbc.update("INSERT INTO kv_ksd001.audit_log (id, action, entity_id, entity_type, occurred_at, user_id) "
+        UUID recent = tenant(tag + " récente");
+        UUID old = tenant(tag + " ancienne");
+        tenant(tag + " jamais");
+        jdbc.update("INSERT INTO " + schemaOf.get(recent) + ".audit_log (id, action, entity_id, entity_type, occurred_at, user_id) "
                 + "VALUES (?, 'PRODUCT_CREATED', ?, 'Product', now() - interval '2 days', ?)",
                 UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
-        jdbc.update("INSERT INTO kv_ksd002.audit_log (id, action, entity_id, entity_type, occurred_at, user_id) "
+        jdbc.update("INSERT INTO " + schemaOf.get(old) + ".audit_log (id, action, entity_id, entity_type, occurred_at, user_id) "
                 + "VALUES (?, 'PRODUCT_CREATED', ?, 'Product', now() - interval '40 days', ?)",
                 UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
 
@@ -181,7 +188,18 @@ class AdminTenantListPostgresIntegrationTest extends PostgresIntegrationTest {
         return userId;
     }
 
-    private UUID tenant(String schema, String code, String name) {
+    /** Random valid tenant schema name, so reruns and parallel suites never collide. */
+    private static String randomSchema() {
+        String alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+        java.util.concurrent.ThreadLocalRandom r = java.util.concurrent.ThreadLocalRandom.current();
+        StringBuilder sb = new StringBuilder("kv_");
+        for (int i = 0; i < 6; i++) sb.append(alphabet.charAt(r.nextInt(alphabet.length())));
+        return sb.toString();
+    }
+
+    private UUID tenant(String name) {
+        String schema = randomSchema();
+        String code = "KV-" + schema.substring(3).toUpperCase();
         schemas.add(schema);
         provisioner.provision("tenant-" + schema, schema); // seeds one active store
         UUID id = UUID.randomUUID();
@@ -189,6 +207,7 @@ class AdminTenantListPostgresIntegrationTest extends PostgresIntegrationTest {
         jdbc.update("INSERT INTO public.tenants (id, created_at, updated_at, code, name, max_employees, max_products, "
                 + "max_stores, plan_type, schema_name, status) "
                 + "VALUES (?, now(), now(), ?, ?, 1, 1, 1, 'FREE', ?, 'ACTIVE')", id, code, name, schema);
+        schemaOf.put(id, schema);
         return id;
     }
 }
