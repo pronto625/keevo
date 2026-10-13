@@ -2,6 +2,7 @@ package com.keevo.catalog.contact.adapter.out.persistence;
 
 import com.keevo.catalog.contact.domain.port.out.ClientSalesStatsPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -37,6 +38,10 @@ public class ClientSalesStatsAdapter implements ClientSalesStatsPort {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public long countSalesByClient(UUID clientId) {
         String schema = TenantContext.getCurrentTenant();
+        if (!TenantSchema.isValid(schema)) { // same 0 fallback as a query error, but no SQL is built
+            log.warn("Client sales stats: invalid tenant schema in context — 0 returned");
+            return 0L;
+        }
         try {
             Long count = jdbcTemplate.queryForObject(
                     "SELECT COUNT(*) FROM \"" + schema + "\".sales WHERE client_id = ?",
@@ -52,6 +57,10 @@ public class ClientSalesStatsAdapter implements ClientSalesStatsPort {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public long totalSpentByClient(UUID clientId) {
         String schema = TenantContext.getCurrentTenant();
+        if (!TenantSchema.isValid(schema)) { // same 0 fallback as a query error, but no SQL is built
+            log.warn("Client sales stats: invalid tenant schema in context — 0 returned");
+            return 0L;
+        }
         try {
             Long total = jdbcTemplate.queryForObject(
                     "SELECT COALESCE(SUM(total_amount), 0) FROM \"" + schema + "\".sales WHERE client_id = ?",

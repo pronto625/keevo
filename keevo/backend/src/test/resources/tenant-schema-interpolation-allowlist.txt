@@ -1,0 +1,13 @@
+# Story 11.4 AC7 — reviewed exceptions for TenantSchemaInterpolationGuardTest.
+# Format:  path/relative/to/src/main/java.java :: exact substring of the flagged line   # reason
+# Add an entry ONLY when the interpolated value is not a tenant schema name, or is a
+# compile-time constant, and say why. A tenant schema must go through TenantSchema instead.
+
+# Not SQL — HTTP header / file names (the detector matches `+ x + ".csv"` and `\"" + x + "\"`).
+com/keevo/admin/catalog/adapter/in/rest/AdminCatalogController.java :: "attachment; filename=\"" + filename + "\""   # Content-Disposition header
+com/keevo/admin/catalog/adapter/in/rest/ProductsCsvWriter.java :: return "keevo-products-" + today + ".csv";   # export file name
+com/keevo/admin/revenue/adapter/in/rest/AdminRevenueController.java :: "attachment; filename=\"" + ChurnCsvWriter.filename(report) + "\""   # Content-Disposition header
+com/keevo/admin/revenue/adapter/in/rest/ChurnCsvWriter.java :: return "keevo-churn-" + report.month() + ".csv";   # export file name
+
+# Not executed SQL — strips the schema qualifier from a pg_get_indexdef string for comparison.
+com/keevo/shared/infrastructure/persistence/SyncKeysetIndexJob.java :: return definition.replace(" ON " + schema + ".", " ON ")   # string comparison only

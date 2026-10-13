@@ -62,6 +62,18 @@ class SessionTokenIssuerTest {
     }
 
     @Test
+    void invalidSchema_throwsBeforeAnyJdbcOrRefreshToken() {
+        // Story 11.4 AC7: request path — the schema never reaches SQL, nothing is persisted.
+        Tenant bad = new Tenant(UUID.randomUUID(), "KV-ABC123", "public", TenantStatus.ACTIVE,
+                PlanType.FREE, Instant.now());
+
+        assertThatThrownBy(() -> issuer.issue(USER_ID, bad, "EMPLOYEE"))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(jdbcTemplate);
+        verify(refreshTokenRepository, never()).save(any());
+    }
+
+    @Test
     void employeeToken_carriesStoreAndRealTenantStatus() {
         UUID store = UUID.randomUUID();
         onboardingDone(true);

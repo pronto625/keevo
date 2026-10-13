@@ -1,5 +1,8 @@
 package com.keevo.catalog.contact.adapter.out.persistence;
 
+import com.keevo.shared.infrastructure.persistence.TenantContext;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,6 +15,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -25,6 +29,26 @@ class ClientSalesStatsAdapterTest {
     @InjectMocks ClientSalesStatsAdapter adapter;
 
     private static final UUID CLIENT_ID = UUID.randomUUID();
+
+    @BeforeEach
+    void setTenant() {
+        TenantContext.setCurrentTenant("kv_abc123");
+    }
+
+    @AfterEach
+    void clearTenant() {
+        TenantContext.clear();
+    }
+
+    @Test
+    @DisplayName("Story 11.4 AC7: an invalid tenant schema returns 0 without building any SQL")
+    void should_return_zero_without_sql_when_schema_invalid() {
+        TenantContext.setCurrentTenant("public");
+
+        assertThat(adapter.countSalesByClient(CLIENT_ID)).isZero();
+        assertThat(adapter.totalSpentByClient(CLIENT_ID)).isZero();
+        verifyNoInteractions(jdbcTemplate);
+    }
 
     @Test
     @DisplayName("countSalesByClient() returns count from JDBC query")

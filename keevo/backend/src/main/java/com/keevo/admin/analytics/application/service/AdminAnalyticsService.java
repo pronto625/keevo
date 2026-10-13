@@ -126,6 +126,7 @@ public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGr
         long stores = 0, activeStores = 0, products = 0, sales = 0, gmv = 0;
         for (TenantRef tenant : queryable(tenants)) {
             String s = tenant.schemaName();
+            if (!TenantSchema.isValid(s)) { skipInvalid(tenant); continue; } // queryable() filters; re-checked at use
             Map<String, Object> row = safeSingleRow(tenant,
                     "SELECT (SELECT COUNT(*) FROM " + s + ".stores WHERE is_active = true AND type = 'STORE') AS store_count, "
                     + "(SELECT COUNT(*) FROM " + s + ".stores st WHERE st.is_active = true AND st.type = 'STORE' "
@@ -174,6 +175,7 @@ public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGr
         // from the schemas that still exist (a DELETED tenant's schema is dropped).
         List<TenantRef> tenants = loadTenants();
         for (TenantRef tenant : queryable(current(tenants))) {
+            if (!TenantSchema.isValid(tenant.schemaName())) { skipInvalid(tenant); continue; }
             List<Map<String, Object>> rows = safeRows(tenant,
                     "SELECT to_char(" + SALE_TIME + " AT TIME ZONE '" + WAT.getId() + "', 'YYYY-MM') AS month, "
                     + "COUNT(*) AS sales_count, COALESCE(SUM(total_amount), 0) AS gmv "
@@ -320,6 +322,7 @@ public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGr
         List<TopStore> stores = new ArrayList<>();
         for (TenantRef tenant : queryable(current(loadTenants()))) {
             String s = tenant.schemaName();
+            if (!TenantSchema.isValid(s)) { skipInvalid(tenant); continue; } // queryable() filters; re-checked at use
             String saleTime = "COALESCE(sa.occurred_at, sa.created_at)";
             List<Map<String, Object>> rows = safeRows(tenant,
                     "SELECT st.name AS store_name, "
@@ -412,6 +415,7 @@ public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGr
         for (TenantRef tenant : queryable(current(loadTenants()))) {
             if (!activeIds.contains(tenant.id())) continue;
             String s = tenant.schemaName();
+            if (!TenantSchema.isValid(s)) { skipInvalid(tenant); continue; } // queryable() filters; re-checked at use
             Map<String, Object> row = safeSingleRow(tenant,
                     "SELECT EXISTS (SELECT 1 FROM " + s + ".sales WHERE status = 'COMPLETED' AND "
                     + SALE_TIME + " >= ? AND " + SALE_TIME + " < ?) AS sales, "
@@ -477,6 +481,10 @@ public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGr
     /** Current platform tenants (current-state KPIs): not DELETED. */
     private static List<TenantRef> current(List<TenantRef> tenants) {
         return tenants.stream().filter(t -> !t.deleted()).toList();
+    }
+
+    private static void skipInvalid(TenantRef tenant) {
+        log.warn("Platform analytics: tenant {} skipped (invalid schema name)", tenant.id());
     }
 
     /** Tenants whose schema name may be interpolated in SQL. */

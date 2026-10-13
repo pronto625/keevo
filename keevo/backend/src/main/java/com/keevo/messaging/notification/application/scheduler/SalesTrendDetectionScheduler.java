@@ -85,6 +85,10 @@ public class SalesTrendDetectionScheduler {
     }
 
     private void processTenant(String schema) {
+        if (!TenantSchema.isValid(schema)) { // detectTrends() filters; re-checked once per tenant
+            log.warn("[TREND] Tenant skipped (invalid schema name)");
+            return;
+        }
         TenantPreferences prefs = tenantPreferencesRepository.findByCurrentTenant().orElse(null);
         if (prefs == null || !prefs.trendNotificationEnabled()) {
             log.debug("[TREND] Trend notifications disabled for tenant={}", schema);
@@ -105,6 +109,7 @@ public class SalesTrendDetectionScheduler {
     }
 
     private void analyzeStoreTrend(String schema, Store store, int currentHour) {
+        if (!TenantSchema.isValid(schema)) return; // processTenant() already skipped + logged it
         String qualifiedSales = "\"" + schema + "\".sales";
 
         // Count sales in the just-completed hour (cron fires at HH:00 UTC; the window

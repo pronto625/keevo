@@ -86,6 +86,7 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
                     && tenant.createdAt().isBefore(window.end())) {
                 newTenants++;
             }
+            if (!TenantSchema.isValid(tenant.schemaName())) { skipInvalid(tenant); continue; }
             Map<String, Object> row = safeSingleRow(tenant,
                     "SELECT COALESCE(SUM(total_amount), 0) AS gmv, COUNT(*) AS order_count "
                     + "FROM " + tenant.schemaName() + ".sales WHERE " + IN_WINDOW,
@@ -110,6 +111,7 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
         }
 
         for (TenantRef tenant : loadActiveTenants()) {
+            if (!TenantSchema.isValid(tenant.schemaName())) { skipInvalid(tenant); continue; }
             List<Map<String, Object>> rows = safeRows(tenant,
                     "SELECT CAST((" + SALE_TIME + ") AT TIME ZONE '" + WAT.getId() + "' AS DATE) AS day, "
                     + "COALESCE(SUM(total_amount), 0) AS gmv, COUNT(*) AS order_count "
@@ -146,6 +148,7 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
         List<TenantActivity> rows = new ArrayList<>();
         for (TenantRef tenant : loadActiveTenants()) {
             String s = tenant.schemaName();
+            if (!TenantSchema.isValid(s)) { skipInvalid(tenant); continue; } // loadActiveTenants() filters; re-checked at use
             Map<String, Object> row = safeSingleRow(tenant,
                     "WITH w AS (SELECT COALESCE(SUM(total_amount), 0) AS gmv, COUNT(*) AS order_count "
                     + "FROM " + s + ".sales WHERE " + IN_WINDOW + ") "
@@ -184,6 +187,7 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
 
         for (TenantRef tenant : loadActiveTenants()) {
             String s = tenant.schemaName();
+            if (!TenantSchema.isValid(s)) { skipInvalid(tenant); continue; } // loadActiveTenants() filters; re-checked at use
             Map<String, Object> row = safeSingleRow(tenant,
                     "SELECT (SELECT MAX(" + SALE_TIME + ") FROM " + s + ".sales) AS last_sale_at, "
                     + "(SELECT MAX(occurred_at) FROM " + s + ".audit_log) AS last_audit_at, "
@@ -263,6 +267,10 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
     // ── Tenant loading & JDBC helpers ─────────────────────────────────────────
 
     private record TenantRef(String id, String schemaName, String name, String planType, Instant createdAt) {}
+
+    private static void skipInvalid(TenantRef tenant) {
+        log.warn("Operations monitoring: tenant {} skipped (invalid schema name)", tenant.id());
+    }
 
     private List<TenantRef> loadActiveTenants() {
         return jdbc.queryForList(

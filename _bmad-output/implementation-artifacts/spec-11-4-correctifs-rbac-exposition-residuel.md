@@ -2,9 +2,10 @@
 title: '11-4 — RBAC & exposure residual: CORS allow-list, schema-name validation everywhere'
 type: 'bugfix'
 created: '2026-10-13'
-status: 'ready-for-dev'
+status: 'done'
+baseline_revision: '2fb57429b23866ce53be98a6fee11e43ea6b7e6b'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-11-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/11-4-correctifs-rbac-exposition.md'
@@ -67,9 +68,54 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-10-13 — Review pass
+- verdicts: 41 findings — high 1, medium 9, low 22, false 4, maybe-false 0 (+ intent rows descriptive)
+- findings:
+  - `[high]` `[patch]` (intent/edge/gap) untouched `CorsConfig` still registers wildcard origins with credentials on `/**` — deleted; full-chain MockMvc CORS test added.
+  - `[medium]` `[patch]` (blind) credentials kept on for a bearer-token API — `allowCredentials(false)`.
+  - `[medium]` `[patch]` (blind) hardening fails open on an unexpected profile — localhost only for default/dev/local/test.
+  - `[low]` `[patch]` (blind/edge) `DASHBOARD_ORIGIN` values unchecked (placeholder, scheme, path, pattern) — strict origin format, dropped entries warned.
+  - `[low]` `[patch]` (blind) two WARNs, misleading `[FailFast]` prefix — single WARN.
+  - `[medium]` `[patch]` (blind) tenant-detail helpers throw instead of degrading — validation inside the fail-soft path.
+  - `[low]` `[reject]` (blind) `IllegalArgumentException` → generic 500 — a corrupt stored schema is a server-side fault; the generic French 500 is the intended surface, the log carries the stack.
+  - `[low]` `[patch]` (blind) silent loop skips — WARN with tenant id.
+  - `[medium]` `[patch]` (blind/gap) comment satisfies the guard — comments ignored, pointer comments replaced by real checks, same-identifier rule, self-checks.
+  - `[low]` `[patch]` (blind/edge) detector misses `append(...)` / split concatenation; stale allow-list; working directory; vacuous scan — patterns added, stale-entry and scanned-count assertions, robust root.
+  - `[low]` `[patch]` (blind) connection leak when `applySearchPath` throws — connection closed.
+  - `[low]` `[patch]` (blind) owner cancel test lacks `APPLIED`; old EMPLOYEE queued cancels — assertion added; queued ops are quarantined with the existing French « Action non autorisée » (rejected as extra work).
+  - `[low]` `[patch]` (blind) v1s-12-8 artifact contradicts code — dated supersession note.
+  - `[false]` `[reject]` (blind) statuses disagree — orchestrator finalizes.
+  - `[low]` `[reject]` (blind) regression evidence incomplete — orchestrator runs the full chunked regression.
+  - `[low]` `[patch]` (blind) device-token signature misstated in notes — corrected.
+  - `[low]` `[patch]` (blind) CORS/validator tests too thin — WARN captured, trailing slash/case/profile cases.
+  - `[medium]` `[patch]` (edge) count adapters now throw where they returned 0 — fallback 0 + WARN, no SQL.
+  - `[low]` `[patch]` (edge) no rollback on RuntimeException in sync blocks — rollback added.
+  - `[low]` `[patch]` (edge) shadowed import in AdminCatalogService — removed.
+  - `[false]` `[reject]` (edge) employee offline cancel leaves local state cancelled — the app's cancel UI is OWNER-only (`pending_sale_detail_page`, `sale_detail_page` routes guarded), employees never queue CANCEL_SALE.
+  - `[medium]` `[patch]` (gap) login with invalid schema untested — `SessionTokenIssuerTest` case.
+  - `[false]` `[reject]` (intent) CancelSaleSyncHandler R-H1 vs R-H2 — FR90 « Un propriétaire peut annuler », v1s-13-5 AC4 EMPLOYEE → 403: R-H2 is the documented rule.
+  - `[false]` `[reject]` (intent) env binding of DASHBOARD_ORIGIN untested — `Environment.getProperty` and `@Value` read the same relaxed-binding source; the chain test sets it as a property.
+
 ## Verification
 
 **Commands:**
 - `cd keevo/backend && MAVEN_OPTS=-Xmx1g mvn -q -o test -Dtest='com.keevo.shared.**' -DforkCount=1 -DargLine=-Xmx1536m` -- expected: 0 failures
 - `cd keevo/backend && MAVEN_OPTS=-Xmx1g mvn -q -o test -Dtest='com.keevo.sync.**' -DforkCount=1 -DargLine=-Xmx1536m` -- expected: 0 failures
 - then one package at a time for each touched package (`admin`, `messaging`, `subscription`, `identity`, `catalog`) -- expected: 0 failures
+
+## Auto Run Result
+
+Status: done
+
+**Summary:** Story 11-4 closed. CORS: a single source (`SecurityConfig`; the legacy MVC `CorsConfig` wildcard is deleted), explicit origins from `DASHBOARD_ORIGIN` (strict `http(s)://host[:port]`, placeholder and wildcards dropped), `http://localhost:3000` only for default/dev/local/test profiles, no credentials (bearer API), one startup WARN when unset; proven through the real filter chain. Schema names: every SQL interpolation site validates the schema with `TenantSchema` (request paths throw before any SQL, loops skip with a WARN carrying the tenant id, fail-soft sites keep their fallback), enforced by a source guard test that requires a real check on the same identifier (comments no longer count, stale allow-list entries fail). `CancelSaleSyncHandler`: OWNER-only like REST (FR90, v1s-13-5), superseding v1s-12-8's employee case (note added there).
+
+**Files changed:** backend `SecurityConfig`, `ProdSecretsValidator`, `CorsConfig` (deleted), ~40 interpolation sites across admin/sync/messaging/subscription/identity/catalog/shared, `SchemaAwareMultiTenantConnectionProvider`, `TenantSchemaSyncService`, `CancelSaleSyncHandler`; tests `SecurityConfigCorsTest`, `SecurityConfigCorsChainTest`, `ProdSecretsValidatorTest`, `TenantSchemaInterpolationGuardTest` + allow-list, adapter/handler/issuer tests; `.env.example`, both deployment checklists; story files 11-4 and v1s-12-8.
+
+**Review:** 41 findings — patched 1 high (wildcard credentialed CORS still registered), 9 medium and 22 low entries (grouped); deferred 0; rejected 9 (false 4, low with reasons).
+
+**Follow-up review recommended:** true — a high was patched; unverified risk: the source-scan guard is a heuristic (20-line window, same identifier), not data-flow analysis.
+
+**Verification:** backend full chunked regression — admin 476, architecture 6, catalog 396, commerce 232, feedback 44, identity 374, inventory 165, messaging 131, reporting 375, shared 544, store 42, subscription 61, sync 441 — 0 failures/errors.
+
+**Residual risks:** `DASHBOARD_ORIGIN` must be set in the prod `.env` before the next deploy for any browser page calling the API directly (the dashboard proxy and the mobile app are unaffected).
+

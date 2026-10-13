@@ -211,6 +211,7 @@ public class SyncKeysetIndexJob {
     }
 
     private Outcome ensureIndex(Connection conn, String schema, SyncKeysetIndex index) {
+        if (!TenantSchema.isValid(schema)) return Outcome.SKIPPED; // ensureIndexes() already skipped + logged it
         try (Statement stmt = conn.createStatement()) {
             if (!tableExists(conn, schema, index.table())) {
                 log.debug("SyncKeysetIndexJob: {}.{} missing — index {} skipped", schema, index.table(), index.name());

@@ -106,7 +106,7 @@ public class MultiStoreStockRepositoryAdapter implements MultiStoreStockReposito
     @Override
     @Transactional(readOnly = true)
     public List<StoreStockSummary> getStoreOverviews() {
-        return jdbc.query(String.format(SQL_STORE_OVERVIEW_TPL, schema()), (rs, rowNum) -> new StoreStockSummary(
+        return jdbc.query(String.format(SQL_STORE_OVERVIEW_TPL, TenantSchema.validate(schema())), (rs, rowNum) -> new StoreStockSummary(
             UUID.fromString(rs.getString("store_id")),
             rs.getString("store_name"),
             StoreType.valueOf(rs.getString("store_type")),
@@ -121,7 +121,7 @@ public class MultiStoreStockRepositoryAdapter implements MultiStoreStockReposito
     public Page<StoreProductStockEntry> getStoreStockDetail(
             UUID storeId, boolean sortLowFirst, boolean lowOnly, Pageable pageable) {
 
-        String s = schema();
+        String s = TenantSchema.validate(schema()); // schema() already throws IllegalStateException when invalid
         String baseSql  = String.format(
                 sortLowFirst ? SQL_STORE_DETAIL_SORT_LOW_TPL : SQL_STORE_DETAIL_SORT_NAME_TPL, s);
         if (lowOnly) {
@@ -147,7 +147,7 @@ public class MultiStoreStockRepositoryAdapter implements MultiStoreStockReposito
             },
             storeId.toString());
 
-        String countSql = String.format(SQL_STORE_DETAIL_COUNT_TPL, s);
+        String countSql = String.format(SQL_STORE_DETAIL_COUNT_TPL, TenantSchema.validate(s));
         if (lowOnly) {
             countSql += " AND sl.quantity <= COALESCE(NULLIF(p.minimum_threshold, 0), 5)";
         }
@@ -177,7 +177,7 @@ public class MultiStoreStockRepositoryAdapter implements MultiStoreStockReposito
     @Transactional(readOnly = true)
     public List<CrossStoreAvailabilityEntry> getProductAvailability(UUID productId) {
         Instant now = Instant.now();
-        return jdbc.query(String.format(SQL_PRODUCT_AVAILABILITY_TPL, schema()),
+        return jdbc.query(String.format(SQL_PRODUCT_AVAILABILITY_TPL, TenantSchema.validate(schema())),
                 (rs, rowNum) -> {
                     int qty       = rs.getInt("quantity");
                     int threshold = rs.getInt("minimum_threshold");

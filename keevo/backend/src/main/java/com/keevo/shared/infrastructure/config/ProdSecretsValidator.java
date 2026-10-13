@@ -36,6 +36,8 @@ import java.util.Set;
  *   <li>{@code KEEVO_WHATSAPP_PROVIDER} — the tokens of the selected provider are present and
  *       not placeholders ({@code wassender}: URL + token; {@code twilio}: SID + auth token;
  *       {@code failover}: both). Twilio also requires {@code TWILIO_FROM_NUMBER}. {@code noop}/unset stays legal and only logs a WARN.</li>
+ *   <li>{@code DASHBOARD_ORIGIN} — WARN only (never fails): when unset, CORS allows no browser
+ *       origin in prod/staging (Story 11.4 AC5).</li>
  * </ul>
  *
  * <p>{@link ProdSecretsValidatorOrdering} makes every {@code DataSource} depend on this bean, so
@@ -86,6 +88,7 @@ public class ProdSecretsValidator {
     private final String twilioAccountSid;
     private final String twilioAuthToken;
     private final String twilioFromNumber;
+    private final String dashboardOrigin;
 
     public ProdSecretsValidator(
             AdminProperties adminProperties,
@@ -97,7 +100,8 @@ public class ProdSecretsValidator {
             @Value("${keevo.whatsapp.wassender.api-token:}") String wassenderApiToken,
             @Value("${keevo.whatsapp.twilio.account-sid:}") String twilioAccountSid,
             @Value("${keevo.whatsapp.twilio.auth-token:}") String twilioAuthToken,
-            @Value("${keevo.whatsapp.twilio.from-number:}") String twilioFromNumber) {
+            @Value("${keevo.whatsapp.twilio.from-number:}") String twilioFromNumber,
+            @Value("${DASHBOARD_ORIGIN:}") String dashboardOrigin) {
         this.adminProperties = adminProperties;
         this.jwtPrivateKeyPath = jwtPrivateKeyPath;
         this.jwtPublicKeyPath = jwtPublicKeyPath;
@@ -108,6 +112,7 @@ public class ProdSecretsValidator {
         this.twilioAccountSid = twilioAccountSid;
         this.twilioAuthToken = twilioAuthToken;
         this.twilioFromNumber = twilioFromNumber;
+        this.dashboardOrigin = dashboardOrigin;
     }
 
     @PostConstruct
@@ -117,7 +122,18 @@ public class ProdSecretsValidator {
         validateAdminPassword();
         validateJwtKeys();
         validateWhatsAppProvider();
+        checkDashboardOrigin();
         log.info("[FailFast] Production secrets validation passed.");
+    }
+
+    /** Story 11.4 AC5 — warn (not fail): without DASHBOARD_ORIGIN no browser origin passes CORS. */
+    private void checkDashboardOrigin() {
+        if (dashboardOrigin == null || dashboardOrigin.isBlank()) {
+            log.warn("[CORS] DASHBOARD_ORIGIN is not set — CORS will refuse every browser origin. "
+                    + "Set it to the dashboard URL(s), comma-separated, if a browser calls the API directly.");
+        } else {
+            log.info("[CORS] DASHBOARD_ORIGIN configured");
+        }
     }
 
     private void validateDatabasePassword() {

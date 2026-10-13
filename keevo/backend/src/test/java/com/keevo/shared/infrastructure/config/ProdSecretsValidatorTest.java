@@ -14,7 +14,14 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
+import java.util.List;
 import java.util.Set;
+
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import org.slf4j.LoggerFactory;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -85,6 +92,7 @@ class ProdSecretsValidatorTest {
         private String twilioSid = "";
         private String twilioToken = "";
         private String twilioFrom = "";
+        private String dashboardOrigin = "https://admin.keevo.cm";
 
         Builder adminPassword(String v) { adminPassword = v; return this; }
         Builder privateKey(String v) { privKey = v; return this; }
@@ -96,11 +104,13 @@ class ProdSecretsValidatorTest {
             twilioSid = sid; twilioToken = token; twilioFrom = "+14155238886"; return this;
         }
         Builder twilioFrom(String v) { twilioFrom = v; return this; }
+        Builder dashboardOrigin(String v) { dashboardOrigin = v; return this; }
 
         ProdSecretsValidator build() {
             return new ProdSecretsValidator(
                     new AdminProperties("+237600000000", adminPassword), privKey, pubKey,
-                    dbPassword, provider, wassenderUrl, wassenderToken, twilioSid, twilioToken, twilioFrom);
+                    dbPassword, provider, wassenderUrl, wassenderToken, twilioSid, twilioToken, twilioFrom,
+                    dashboardOrigin);
         }
     }
 
@@ -538,5 +548,45 @@ class ProdSecretsValidatorTest {
 
             assertThatCode(validator::validate).doesNotThrowAnyException();
         }
+
+        @ParameterizedTest(name = "Story 11.4: missing DASHBOARD_ORIGIN only warns [{0}]")
+        @NullAndEmptySource
+        @ValueSource(strings = {"   "})
+        void missingDashboardOriginOnlyWarns(String origin) {
+            var validator = builder().dashboardOrigin(origin).build();
+
+            List<String> warnings = captureWarnings(() ->
+                    assertThatCode(validator::validate).doesNotThrowAnyException());
+
+            assertThat(warnings).filteredOn(m -> m.contains("DASHBOARD_ORIGIN")).hasSize(1)
+                    .allSatisfy(m -> assertThat(m).doesNotContain("[FailFast]"));
+        }
+
+        @Test
+        @DisplayName("Story 11.4: no DASHBOARD_ORIGIN warning when it is configured")
+        void configuredDashboardOriginDoesNotWarn() {
+            var validator = builder().dashboardOrigin("https://admin.keevo.cm").build();
+
+            List<String> warnings = captureWarnings(validator::validate);
+
+            assertThat(warnings).noneMatch(m -> m.contains("DASHBOARD_ORIGIN"));
+        }
+    }
+
+    /** WARN messages logged by ProdSecretsValidator while {@code action} runs. */
+    private static List<String> captureWarnings(Runnable action) {
+        Logger logger = (Logger) LoggerFactory.getLogger(ProdSecretsValidator.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            action.run();
+        } finally {
+            logger.detachAppender(appender);
+        }
+        return appender.list.stream()
+                .filter(e -> e.getLevel() == Level.WARN)
+                .map(ILoggingEvent::getFormattedMessage)
+                .toList();
     }
 }

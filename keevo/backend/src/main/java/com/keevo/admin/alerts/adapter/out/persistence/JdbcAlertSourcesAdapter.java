@@ -110,6 +110,10 @@ public class JdbcAlertSourcesAdapter implements AlertSourcesPort {
         Timestamp at = Timestamp.from(expiredBefore);
         List<ExpiredPlan> out = new ArrayList<>();
         for (LiveTenant t : liveTenants()) {
+            if (!TenantSchema.isValid(t.schema())) { // liveTenants() already filters; re-checked at use
+                log.warn("Alerts: company {} skipped (invalid schema name)", t.id());
+                continue;
+            }
             List<Map<String, Object>> rows = perCompany(t, () ->
                     jdbc.queryForList(String.format(EXPIRED_NOT_FREE_SQL, t.schema()), at));
             if (rows == null || rows.isEmpty()) continue;
@@ -126,6 +130,10 @@ public class JdbcAlertSourcesAdapter implements AlertSourcesPort {
         int companies = 0;
         Instant latest = null;
         for (LiveTenant t : liveTenants()) {
+            if (!TenantSchema.isValid(t.schema())) { // liveTenants() already filters; re-checked at use
+                log.warn("Alerts: company {} skipped (invalid schema name)", t.id());
+                continue;
+            }
             Map<String, Object> row = perCompany(t, () ->
                     jdbc.queryForMap(String.format(REPORT_FAILURES_SQL, t.schema()), from));
             if (row == null) continue;

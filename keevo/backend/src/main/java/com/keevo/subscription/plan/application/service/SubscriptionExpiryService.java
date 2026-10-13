@@ -129,7 +129,10 @@ public class SubscriptionExpiryService implements DowngradeExpiredTrialsUseCase 
 
     /** One tenant, inside its own transaction: downgrade + public plan + history + event. */
     private int downgrade(UUID tenantId, String schema) {
-        // Schema name validated against the regex above — safe to interpolate.
+        if (!TenantSchema.isValid(schema)) { // run loop filters; re-checked at use
+            log.warn("Subscription expiry: tenant {} skipped (invalid schema name)", tenantId);
+            return 0;
+        }
         @SuppressWarnings("SqlSourceToSinkFlow")
         List<String> previousPlans = jdbcTemplate.queryForList(
                 String.format(DOWNGRADE_SQL, schema), String.class,

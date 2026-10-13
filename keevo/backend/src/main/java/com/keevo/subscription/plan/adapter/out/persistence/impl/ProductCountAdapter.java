@@ -2,6 +2,7 @@ package com.keevo.subscription.plan.adapter.out.persistence.impl;
 
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.subscription.plan.domain.port.out.ProductCountPort;
+import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -42,6 +43,10 @@ public class ProductCountAdapter implements ProductCountPort {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public int countActiveProducts() {
         String schema = TenantContext.getCurrentTenant();
+        if (!TenantSchema.isValid(schema)) { // same 0 fallback as a missing table, but no SQL is built
+            log.warn("Product count: invalid tenant schema in context — 0 returned");
+            return 0;
+        }
         try {
             Integer count = jdbcTemplate.queryForObject(
                     "SELECT COUNT(*) FROM \"" + schema + "\".products WHERE status = 'ACTIVE'",

@@ -63,7 +63,7 @@ public class ChangeTenantPlanService implements ChangeTenantPlanUseCase {
                 .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
                         "No subscription for tenant " + cmd.tenantId()));
         PlanType plan = cmd.newPlan();
-        jdbc.update(String.format(UPDATE_PLAN_SQL, cmd.schemaName()),
+        jdbc.update(String.format(UPDATE_PLAN_SQL, TenantSchema.validate(cmd.schemaName())),
                 plan.name(),
                 plan.getMaxStores(), plan.getMaxProducts(), plan.getMaxEmployees(),
                 cmd.expiresAt() != null ? Timestamp.from(cmd.expiresAt()) : null,

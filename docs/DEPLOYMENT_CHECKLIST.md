@@ -75,6 +75,9 @@ ACME_EMAIL=<votre@email.com>            # pour Let's Encrypt
 # ─── Spring ───────────────────────────────────────────────────
 SPRING_PROFILES_ACTIVE=prod
 APP_PORT=4500
+# CORS (Story 11.4) : origines navigateur autorisées, séparées par des virgules.
+# En prod : seules ces origines (pas de localhost:3000, jamais "*"). Vide → aucune origine navigateur (WARN au boot).
+DASHBOARD_ORIGIN=https://<domaine_dashboard>
 LOG_LEVEL=WARN
 FLYWAY_ENABLED=true
 

@@ -667,7 +667,7 @@ public class TenantSchemaProvisioner {
         /** Non-blocking DDL on an existing schema (must run in autocommit). */
         String createConcurrentlySql(String schema) {
             return "CREATE INDEX CONCURRENTLY IF NOT EXISTS " + name
-                    + " ON \"" + schema + "\"." + table + " (" + keys() + ")";
+                    + " ON \"" + TenantSchema.validate(schema) + "\"." + table + " (" + keys() + ")";
         }
 
         /**
@@ -1009,12 +1009,14 @@ public class TenantSchemaProvisioner {
     // ── Private steps ─────────────────────────────────────────────────────────
 
     private void createSchema(Connection conn, String schemaName) throws SQLException {
+        TenantSchema.validate(schemaName); // provision() already validated it; re-checked at use
         try (Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE SCHEMA IF NOT EXISTS \"" + schemaName + "\"");
         }
     }
 
     private void createTables(Connection conn, String schemaName) throws SQLException {
+        TenantSchema.validate(schemaName); // provision() already validated it; re-checked at use
         try (Statement stmt = conn.createStatement()) {
             stmt.execute("SET search_path TO \"" + schemaName + "\"");
             stmt.execute(DDL_USERS);
@@ -1184,6 +1186,7 @@ public class TenantSchemaProvisioner {
     }
 
     private void seedData(Connection conn, String schemaName) throws SQLException {
+        TenantSchema.validate(schemaName); // provision() already validated it; re-checked at use
         try (Statement stmt = conn.createStatement()) {
             stmt.execute("SET search_path TO \"" + schemaName + "\"");
             stmt.execute(SEED_ROLES);

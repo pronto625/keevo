@@ -132,6 +132,7 @@ public class DeltaStockStrategy implements ConflictResolutionStrategy {
     }
 
     private Integer queryCurrentStock(String tenantId, String productId, String variantId, String storeId) {
+        if (!TenantSchema.isValid(tenantId)) return null; // no conflict evaluated, same as evaluate()
         try {
             String variantClause = variantId != null
                     ? " AND variant_id = CAST(?3 AS uuid)"
@@ -150,6 +151,7 @@ public class DeltaStockStrategy implements ConflictResolutionStrategy {
     }
 
     private String resolveProductName(String tenantId, String productId) {
+        if (!TenantSchema.isValid(tenantId)) return "Unknown"; // same fallback as a failed lookup
         try {
             Object result = entityManager.createNativeQuery(
                             "SELECT name FROM \"" + tenantId + "\".products WHERE id = CAST(?1 AS uuid)")

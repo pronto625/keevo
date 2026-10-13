@@ -224,7 +224,8 @@ public class TenantSchemaSyncService {
                 conn.commit();
                 log.debug("Schema sync complete for '{}'", tenantSchema);
 
-            } catch (SQLException e) {
+            } catch (SQLException | RuntimeException e) {
+                // RuntimeException too (e.g. TenantSchema.validate): never leave the transaction open
                 conn.rollback();
                 throw e;
             }
@@ -240,6 +241,7 @@ public class TenantSchemaSyncService {
      */
     private void ensureRequiredTenantTables(Connection conn, String tenantSchema)
             throws SQLException {
+        TenantSchema.validate(tenantSchema); // callers gate (syncIfNeeded no-op / syncNow throws); re-checked at use
         Set<String> existing = getTablesInSchema(conn, tenantSchema);
         for (java.util.Map.Entry<String, String> entry : REQUIRED_TENANT_TABLES_DDL.entrySet()) {
             if (!existing.contains(entry.getKey())) {
@@ -259,6 +261,7 @@ public class TenantSchemaSyncService {
      * Story 2.4: uq_products_name (functional unique index on lower(name)).
      */
     private void ensureRequiredIndexes(Connection conn, String tenantSchema) throws SQLException {
+        TenantSchema.validate(tenantSchema); // callers gate (syncIfNeeded no-op / syncNow throws); re-checked at use
         try (Statement stmt = conn.createStatement()) {
             stmt.execute("SET search_path TO \"" + tenantSchema + "\"");
             // Story v1s-13-12 — users lockout columns (DDL_USERS now carries them for new tenants)
@@ -341,6 +344,7 @@ public class TenantSchemaSyncService {
 
     private void createTableLike(Connection conn, String tenantSchema, String tableName)
             throws SQLException {
+        TenantSchema.validate(tenantSchema); // callers gate (syncIfNeeded no-op / syncNow throws); re-checked at use
         // LIKE ... INCLUDING ALL copies: column defs, NOT NULL, CHECK constraints,
         // defaults (gen_random_uuid(), NOW(), etc.), indexes, storage.
         // FK references are intentionally NOT copied (tenant tables use internal UUIDs).
@@ -356,6 +360,7 @@ public class TenantSchemaSyncService {
 
     private void syncColumns(Connection conn, String tenantSchema, String tableName)
             throws SQLException {
+        TenantSchema.validate(tenantSchema); // callers gate (syncIfNeeded no-op / syncNow throws); re-checked at use
         Set<String> sourceColumns = getColumnsInTable(conn, SOURCE_SCHEMA, tableName);
         Set<String> tenantColumns = getColumnsInTable(conn, tenantSchema, tableName);
 

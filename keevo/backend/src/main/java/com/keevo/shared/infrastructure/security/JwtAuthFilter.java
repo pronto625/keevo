@@ -205,12 +205,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             tenantSchemaSyncService.syncIfNeeded(tenantId);
 
             // Story 3.5 — EMPLOYEE runtime guards (DB-backed, runs AFTER TenantContext is set).
-            // `schema` was validated above for ALL roles (Story 12-5 defense-in-depth).
+            // `schema` was validated above for ALL roles (Story 12-5 defense-in-depth); re-checked at use.
             if ("EMPLOYEE".equals(role)) {
                 try {
                     Map<String, Object> empRow = jdbcTemplate.queryForMap(
                             "SELECT store_id, status, password_change_required FROM \""
-                            + schema + "\".employees WHERE user_id = ? LIMIT 1", userId);
+                            + TenantSchema.validate(schema) + "\".employees WHERE user_id = ? LIMIT 1", userId);
 
                     if ("INACTIVE".equals(empRow.get("status"))) {
                         writeError(response, "ACCOUNT_INACTIVE");

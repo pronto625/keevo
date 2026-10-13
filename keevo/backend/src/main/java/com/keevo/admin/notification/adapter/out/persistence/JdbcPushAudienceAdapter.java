@@ -91,8 +91,13 @@ public class JdbcPushAudienceAdapter implements PushAudiencePort {
 
     @Override
     public List<String> deviceTokens(PushTargetTenant tenant) {
+        String schema = tenant.schemaName();
+        if (!TenantSchema.isValid(schema)) { // audience filtering gates too; re-checked at use
+            log.warn("Global push: company {} skipped (invalid schema name)", tenant.id());
+            return List.of();
+        }
         try {
-            return jdbc.queryForList("SELECT token FROM " + tenant.schemaName() + ".device_tokens ORDER BY token",
+            return jdbc.queryForList("SELECT token FROM " + schema + ".device_tokens ORDER BY token",
                     String.class);
         } catch (DataAccessResourceFailureException | TransientDataAccessException
                  | RecoverableDataAccessException e) {

@@ -2,6 +2,7 @@ package com.keevo.subscription.plan.adapter.out.persistence.impl;
 
 import com.keevo.identity.employee.domain.port.out.EmployeeCountPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -22,7 +23,7 @@ public class EmployeeCountAdapter implements EmployeeCountPort {
 
     @Override
     public int countActiveEmployees() {
-        String schema = TenantContext.getCurrentTenant();
+        String schema = TenantSchema.validate(TenantContext.getCurrentTenant());
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM \"" + schema + "\".employees WHERE status = 'ACTIVE'",
                 Integer.class);
