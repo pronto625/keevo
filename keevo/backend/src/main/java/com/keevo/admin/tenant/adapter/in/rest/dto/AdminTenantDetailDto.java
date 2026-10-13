@@ -12,8 +12,12 @@ public record AdminTenantDetailDto(
         AdminTenantListItemDto tenant,
         List<StoreInfoDto> stores,
         List<EmployeeInfoDto> employees,
-        AuditPageDto auditLog
+        AuditPageDto auditLog,
+        SubscriptionDto subscription
 ) {
+
+    /** Story 9-2 — current plan from the tenant schema; null when it could not be read. */
+    public record SubscriptionDto(String planType, Instant expiresAt) {}
 
     public record StoreInfoDto(String id, String name, String type, long totalRevenue) {
         public static StoreInfoDto from(AdminStoreInfo s) {
@@ -43,7 +47,10 @@ public record AdminTenantDetailDto(
         AuditPageDto auditLog = new AuditPageDto(events, detail.auditTotalCount(), auditPage);
         return new AdminTenantDetailDto(
                 AdminTenantListItemDto.from(detail.summary()),
-                stores, employees, auditLog
+                stores, employees, auditLog,
+                detail.plan() != null
+                        ? new SubscriptionDto(detail.plan().planType(), detail.plan().expiresAt())
+                        : null
         );
     }
 }

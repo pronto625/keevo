@@ -6,7 +6,10 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.subscription.plan.domain.model.Subscription;
+import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.subscription.plan.domain.model.PlanChangeCause;
 import com.keevo.subscription.plan.domain.model.SubscriptionStatus;
+import com.keevo.subscription.plan.domain.port.out.PlanChangeRecorder;
 import com.keevo.subscription.plan.domain.port.in.ActivatePlanCommand;
 import com.keevo.subscription.plan.domain.port.in.ActivatePlanUseCase;
 import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
@@ -17,6 +20,8 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
+
+import java.util.UUID;
 
 /**
  * ActivatePlanService — Activates or upgrades a tenant plan (Super Admin only).
@@ -37,6 +42,10 @@ import org.springframework.transaction.support.TransactionTemplate;
  * already-bound session. Fix: call {@link TenantContext#setCurrentTenant} FIRST, then delegate JPA
  * work to a {@link TransactionTemplate} with {@code PROPAGATION_REQUIRES_NEW} — this suspends the
  * OEMIV session and opens a fresh Hibernate session that reads the updated TenantContext.
+ *
+ * <p><b>Story 9-2:</b> inside the same REQUIRES_NEW transaction, {@code public.tenants.plan_type}
+ * is synced and a {@code tenant_plan_events} row is written (cause ADMIN_DOWNGRADE for FREE,
+ * ADMIN_ACTIVATION otherwise). The endpoint contract is unchanged.
  */
 @Service
 public class ActivatePlanService implements ActivatePlanUseCase {
@@ -46,13 +55,15 @@ public class ActivatePlanService implements ActivatePlanUseCase {
     private final SubscriptionRepository subscriptionRepository;
     private final TenantRepository tenantRepository;
     private final TransactionTemplate requiresNewTemplate;
+    private final PlanChangeRecorder planChangeRecorder;
 
     /** Production constructor — Spring injects the {@link PlatformTransactionManager}. */
     @org.springframework.beans.factory.annotation.Autowired
     public ActivatePlanService(SubscriptionRepository subscriptionRepository,
                                TenantRepository tenantRepository,
-                               PlatformTransactionManager transactionManager) {
-        this(subscriptionRepository, tenantRepository, buildTemplate(transactionManager));
+                               PlatformTransactionManager transactionManager,
+                               PlanChangeRecorder planChangeRecorder) {
+        this(subscriptionRepository, tenantRepository, buildTemplate(transactionManager), planChangeRecorder);
     }
 
     /**
@@ -61,10 +72,12 @@ public class ActivatePlanService implements ActivatePlanUseCase {
      */
     ActivatePlanService(SubscriptionRepository subscriptionRepository,
                         TenantRepository tenantRepository,
-                        TransactionTemplate requiresNewTemplate) {
+                        TransactionTemplate requiresNewTemplate,
+                        PlanChangeRecorder planChangeRecorder) {
         this.subscriptionRepository = subscriptionRepository;
         this.tenantRepository = tenantRepository;
         this.requiresNewTemplate = requiresNewTemplate;
+        this.planChangeRecorder = planChangeRecorder;
     }
 
     private static TransactionTemplate buildTemplate(PlatformTransactionManager tm) {
@@ -107,6 +120,16 @@ public class ActivatePlanService implements ActivatePlanUseCase {
 
                 subscriptionRepository.save(updated);
 
+                // Story 9-2 — global plan view + history in the same transaction, only for a real
+                // plan change (an expiry-only update writes no history row).
+                if (current.getPlanType() != command.newPlan()) {
+                    planChangeRecorder.syncPublicPlanType(tenant.getId(), command.newPlan());
+                    planChangeRecorder.recordEvent(tenant.getId(), current.getPlanType(), command.newPlan(),
+                            command.newPlan() == PlanType.FREE
+                                    ? PlanChangeCause.ADMIN_DOWNGRADE : PlanChangeCause.ADMIN_ACTIVATION,
+                            parseActor(command.actorId()), null);
+                }
+
                 log.info("Plan activated: schema={} newPlan={} actor={}",
                         schemaName, command.newPlan(), command.actorId());
                 return null;
@@ -114,6 +137,15 @@ public class ActivatePlanService implements ActivatePlanUseCase {
         } finally {
             // Step 4: Always restore the caller's tenant context (SUPER_ADMIN = null/public)
             TenantContext.setCurrentTenant(previousTenant);
+        }
+    }
+
+    private static UUID parseActor(String actorId) {
+        if (actorId == null) return null;
+        try {
+            return UUID.fromString(actorId);
+        } catch (IllegalArgumentException e) {
+            return null;
         }
     }
 }

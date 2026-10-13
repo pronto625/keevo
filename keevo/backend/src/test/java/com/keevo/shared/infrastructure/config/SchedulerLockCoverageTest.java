@@ -11,6 +11,7 @@ import com.keevo.reporting.report.application.service.ReportDeliveryRetryService
 import com.keevo.reporting.report.application.service.WeeklyReportScheduler;
 import com.keevo.shared.infrastructure.persistence.SyncKeysetIndexJob;
 import com.keevo.shared.infrastructure.scheduling.AccountDeletionScheduler;
+import com.keevo.shared.infrastructure.scheduling.PlanExpiryReminderScheduler;
 import com.keevo.shared.infrastructure.scheduling.SubscriptionExpiryScheduler;
 import com.keevo.sync.sync.application.service.SyncErrorLogCleanupJob;
 import net.javacrumbs.shedlock.core.LockProvider;
@@ -48,17 +49,18 @@ class SchedulerLockCoverageTest {
      * lock may outlive the delay; it gets PT15M so a slow batch is never resent by another
      * instance, bounded here at 20 min.
      */
-    private static final Map<Class<?>, Duration> LOCKED_JOBS = Map.of(
-            DayClosureAutoScheduler.class, Duration.ofHours(1),
-            AccountDeletionScheduler.class, Duration.ofDays(1),
-            SalesTrendDetectionScheduler.class, Duration.ofHours(1),
-            AuthTokenCleanupJob.class, Duration.ofDays(1),
-            SubscriptionExpiryScheduler.class, Duration.ofDays(1),
-            WeeklyReportScheduler.class, Duration.ofHours(1),
-            ReportDeliveryRetryService.class, Duration.ofMinutes(20),
-            SyncErrorLogCleanupJob.class, Duration.ofDays(1),
-            ExportPurgeScheduler.class, Duration.ofHours(1), // v1s-18-1
-            SyncKeysetIndexJob.class, Duration.ofDays(1)); // 11-5
+    private static final Map<Class<?>, Duration> LOCKED_JOBS = Map.ofEntries(
+            Map.entry(DayClosureAutoScheduler.class, Duration.ofHours(1)),
+            Map.entry(AccountDeletionScheduler.class, Duration.ofDays(1)),
+            Map.entry(SalesTrendDetectionScheduler.class, Duration.ofHours(1)),
+            Map.entry(AuthTokenCleanupJob.class, Duration.ofDays(1)),
+            Map.entry(SubscriptionExpiryScheduler.class, Duration.ofDays(1)),
+            Map.entry(WeeklyReportScheduler.class, Duration.ofHours(1)),
+            Map.entry(ReportDeliveryRetryService.class, Duration.ofMinutes(20)),
+            Map.entry(SyncErrorLogCleanupJob.class, Duration.ofDays(1)),
+            Map.entry(ExportPurgeScheduler.class, Duration.ofHours(1)), // v1s-18-1
+            Map.entry(SyncKeysetIndexJob.class, Duration.ofDays(1)), // 11-5
+            Map.entry(PlanExpiryReminderScheduler.class, Duration.ofDays(1))); // 9-2
 
     /** In-memory sweeps: must run on every instance → never locked. */
     private static final List<Class<?>> IN_MEMORY_SWEEPS = List.of(

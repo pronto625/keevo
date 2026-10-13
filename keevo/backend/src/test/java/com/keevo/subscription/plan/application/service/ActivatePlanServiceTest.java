@@ -8,7 +8,9 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.subscription.plan.domain.model.Subscription;
 import com.keevo.subscription.plan.domain.model.SubscriptionStatus;
 import com.keevo.subscription.plan.domain.port.in.ActivatePlanCommand;
+import com.keevo.subscription.plan.domain.port.out.PlanChangeRecorder;
 import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
+import com.keevo.subscription.plan.domain.model.PlanChangeCause;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -43,6 +45,7 @@ class ActivatePlanServiceTest {
     @Mock SubscriptionRepository subscriptionRepository;
     @Mock TenantRepository tenantRepository;
     @Mock TransactionTemplate requiresNewTemplate;
+    @Mock PlanChangeRecorder planChangeRecorder;
 
     ActivatePlanService service;
 
@@ -71,7 +74,8 @@ class ActivatePlanServiceTest {
         }).when(requiresNewTemplate).execute(any(TransactionCallback.class));
 
         // Use the package-private test constructor
-        service = new ActivatePlanService(subscriptionRepository, tenantRepository, requiresNewTemplate);
+        service = new ActivatePlanService(subscriptionRepository, tenantRepository, requiresNewTemplate,
+                planChangeRecorder);
     }
 
     @Test
@@ -171,5 +175,51 @@ class ActivatePlanServiceTest {
     private Subscription freeSub() {
         return new Subscription(UUID.randomUUID(), PlanType.FREE, SubscriptionStatus.ACTIVE,
                 1, 500, 3, Instant.now(), null);
+    }
+
+    // ── Story 9-2: legacy endpoint keeps public.tenants.plan_type + plan history in step ──
+
+    @Test
+    @DisplayName("9-2: activation syncs public plan_type and records an ADMIN_ACTIVATION event")
+    void execute_recordsPlanChange() {
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(freeSub()));
+        when(subscriptionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        UUID actor = UUID.randomUUID();
+
+        service.execute(new ActivatePlanCommand(actor.toString(), SCHEMA_NAME, PlanType.PREMIUM,
+                Instant.now().plus(30, ChronoUnit.DAYS)));
+
+        verify(planChangeRecorder).syncPublicPlanType(TENANT_UUID, PlanType.PREMIUM);
+        verify(planChangeRecorder).recordEvent(TENANT_UUID, PlanType.FREE, PlanType.PREMIUM,
+                PlanChangeCause.ADMIN_ACTIVATION, actor, null);
+    }
+
+    @Test
+    @DisplayName("9-2: legacy activation to FREE records an ADMIN_DOWNGRADE event (non-UUID actor → null)")
+    void execute_toFree_recordsDowngrade() {
+        Subscription premium = new Subscription(UUID.randomUUID(), PlanType.PREMIUM, SubscriptionStatus.ACTIVE,
+                Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE, Instant.now(), Instant.now());
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(premium));
+        when(subscriptionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.execute(new ActivatePlanCommand("admin", SCHEMA_NAME, PlanType.FREE, null));
+
+        verify(planChangeRecorder).syncPublicPlanType(TENANT_UUID, PlanType.FREE);
+        verify(planChangeRecorder).recordEvent(TENANT_UUID, PlanType.PREMIUM, PlanType.FREE,
+                PlanChangeCause.ADMIN_DOWNGRADE, null, null);
+    }
+
+    @Test
+    @DisplayName("9-2: an expiry-only update (same plan) writes no event and no public plan update")
+    void execute_samePlan_noEvent() {
+        Subscription premium = new Subscription(UUID.randomUUID(), PlanType.PREMIUM, SubscriptionStatus.ACTIVE,
+                Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE, Instant.now(), Instant.now());
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(premium));
+        when(subscriptionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.execute(new ActivatePlanCommand("admin", SCHEMA_NAME, PlanType.PREMIUM,
+                Instant.now().plus(60, ChronoUnit.DAYS)));
+
+        verifyNoInteractions(planChangeRecorder);
     }
 }

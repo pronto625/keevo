@@ -13,8 +13,16 @@ public record AdminTenantDetail(
         List<AdminStoreInfo> stores,
         List<AdminEmployeeInfo> employees,
         List<AdminAuditEvent> auditEvents,
-        long auditTotalCount
+        long auditTotalCount,
+        AdminPlanInfo plan
 ) {
+
+    /** Detail without subscription info (plan unreadable). */
+    public AdminTenantDetail(AdminTenantListItem summary, List<AdminStoreInfo> stores,
+                             List<AdminEmployeeInfo> employees, List<AdminAuditEvent> auditEvents,
+                             long auditTotalCount) {
+        this(summary, stores, employees, auditEvents, auditTotalCount, null);
+    }
 
     /** Convenience factory for tests — empty detail with only the summary row. */
     public static AdminTenantDetail empty(AdminTenantListItem summary) {

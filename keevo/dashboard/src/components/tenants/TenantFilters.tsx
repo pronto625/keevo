@@ -1,5 +1,6 @@
 "use client";
 
+import { tenantStatusLabel } from "@/lib/labels";
 import type { TenantFilters } from "@/types/tenant";
 
 interface TenantFiltersProps {
@@ -24,8 +25,8 @@ export function TenantFiltersPanel({ filters, onUpdate }: TenantFiltersProps) {
           className={selectClass}
         >
           <option value="ALL">Tous</option>
-          <option value="FREE">FREE</option>
-          <option value="PAID">PAID</option>
+          <option value="FREE">Gratuit</option>
+          <option value="PAID">Premium et essai</option>
         </select>
       </div>
 
@@ -37,9 +38,9 @@ export function TenantFiltersPanel({ filters, onUpdate }: TenantFiltersProps) {
           className={selectClass}
         >
           <option value="ALL">Tous</option>
-          <option value="ACTIVE">ACTIVE</option>
-          <option value="DELETION_PENDING">DELETION_PENDING</option>
-          <option value="SUSPENDED">SUSPENDED</option>
+          <option value="ACTIVE">{tenantStatusLabel("ACTIVE")}</option>
+          <option value="DELETION_PENDING">{tenantStatusLabel("DELETION_PENDING")}</option>
+          <option value="SUSPENDED">{tenantStatusLabel("SUSPENDED")}</option>
         </select>
       </div>
 

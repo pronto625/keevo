@@ -7,6 +7,8 @@ import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
+import com.keevo.subscription.plan.domain.model.PlanChangeCause;
+import com.keevo.subscription.plan.domain.port.out.PlanChangeRecorder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -37,11 +39,46 @@ class TenantFactoryTest {
     @Mock
     private TenantSchemaProvisioner schemaProvisioner;
 
+    @Mock
+    private PlanChangeRecorder planChangeRecorder;
+
     private TenantFactory tenantFactory;
 
     @BeforeEach
     void setUp() {
-        tenantFactory = new TenantFactory(codeGenerator, tenantRepository, schemaProvisioner);
+        tenantFactory = new TenantFactory(codeGenerator, tenantRepository, schemaProvisioner, planChangeRecorder);
+    }
+
+    @Test
+    @DisplayName("Story 9-2: a failing REGISTRATION event drops the provisioned schema and propagates")
+    void create_registrationEventFailure_dropsSchema() {
+        String code = "KV-REG999";
+        UUID id = UUID.randomUUID();
+        Tenant savedTenant = new Tenant(id, code, Tenant.schemaNameFromCode(code),
+                TenantStatus.ACTIVE, PlanType.PREMIUM_TRIAL, Instant.now());
+        when(codeGenerator.generate()).thenReturn(code);
+        when(tenantRepository.save(any(Tenant.class))).thenReturn(savedTenant);
+        doThrow(new RuntimeException("db")).when(planChangeRecorder).recordEvent(any(), any(), any(), any(), any(), any());
+
+        assertThatThrownBy(() -> tenantFactory.create()).hasMessage("db");
+
+        verify(schemaProvisioner).dropSchemaIfExists(Tenant.schemaNameFromCode(code));
+    }
+
+    @Test
+    @DisplayName("Story 9-2: create() records a REGISTRATION plan event → PREMIUM_TRIAL")
+    void create_recordsRegistrationPlanEvent() {
+        String code = "KV-REG123";
+        UUID id = UUID.randomUUID();
+        Tenant savedTenant = new Tenant(id, code, Tenant.schemaNameFromCode(code),
+                TenantStatus.ACTIVE, PlanType.PREMIUM_TRIAL, Instant.now());
+        when(codeGenerator.generate()).thenReturn(code);
+        when(tenantRepository.save(any(Tenant.class))).thenReturn(savedTenant);
+
+        tenantFactory.create();
+
+        verify(planChangeRecorder).recordEvent(id, null, PlanType.PREMIUM_TRIAL,
+                PlanChangeCause.REGISTRATION, null, null);
     }
 
     @Test

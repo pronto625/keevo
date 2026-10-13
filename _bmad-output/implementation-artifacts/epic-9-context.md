@@ -14,7 +14,7 @@ Give Toor (founder, sole platform operator in V1) a dedicated web dashboard to r
 - Story 9.4: Analytics Plateforme (DAU/MAU, cohorts, top stores, feature adoption)
 - Story 9.5: Santé Système, Alertes & Notifications Push Globales
 - Story 9.6: Monitoring Catalogue Produits cross-tenant (KPI cards, filtered product table, CSV export) — done
-- Story 9.7: Monitoring Activité Opérationnelle (GMV global/per tenant, daily trend, tenant activity table, inactive tenants) — backend module `admin.operations` + frontend still to build
+- Story 9.7: Monitoring Activité Opérationnelle (GMV global/per tenant, daily trend, tenant activity table, inactive tenants) — done (backend module `com.keevo.admin.operations`, dashboard page « Activité » at `monitoring/activity`)
 - Story 9.8: Monitoring Synchronisation & Santé Devices (sync overview, per-tenant health table, tenant detail drawer, error/refresh states) — done
 
 ## Requirements & Constraints
@@ -33,8 +33,11 @@ Give Toor (founder, sole platform operator in V1) a dedicated web dashboard to r
 
 - **Frontend:** `keevo/dashboard` — Next.js 16 (app router), React 19, React Query, axios, recharts, Tailwind 4. Pages under `src/app/` (`tenants`, `monitoring/products|activity|sync`, `login`). Pattern: `types/<x>.ts` mirroring backend DTOs (dates as ISO strings) → `lib/api/admin-<x>.ts` using the shared axios `client` (baseURL `/api/backend`, JWT interceptor; unwrap `res.data.data`) → `hooks/use<X>.ts` (useQuery + useState for filters/page, `placeholderData` to avoid pagination flash, `refresh` = invalidate queries) → components. Existing committed `page.tsx` files for activity/sync fix the hook return shape and component props — do not change them. Cards `bg-white rounded-lg shadow p-4`, `animate-pulse` skeletons.
 - **French labels:** `src/lib/labels.ts` is the single source of French labels (plans, statuses, event/op types, humanizing unknown codes). Extend it for new codes; never print raw codes or define ad-hoc label maps in components.
-- **Dashboard tests:** Vitest + Testing Library harness (`npm test` = `vitest run`), tests live in `__tests__` folders next to the code, and run in Dashboard CI alongside build, lint and type-check. New pages/components get component tests.
+- **Shared dashboard pieces (reuse, don't duplicate):** `src/lib/labels.ts` (French labels), `src/lib/period.ts` (period selection/params), `src/components/sync/SyncErrorStates.tsx` exporting `LoadError` (first-load error + « Réessayer ») and `StaleDataWarning` (failed refresh with stale data).
+- **Dashboard tests:** Vitest + Testing Library harness (`npm test` = `vitest run`), tests live in `__tests__` folders next to the code (page-level tests under `src/app/**/__tests__`, e.g. `monitoring/sync` and `monitoring/activity`), and run in Dashboard CI alongside build, lint and type-check. New pages/components get component tests.
 - **Backend:** `com.keevo.admin.*` hexagonal modules (adapter/in/rest + dto, application/service, domain/model, domain/port/in); subscription logic in `com.keevo.subscription`. Cross-tenant reads use `JdbcTemplate` with schema-qualified SQL (`<schema>.products`, `.sales`, `.audit_log`), skipping tenants whose schema can't be resolved (pattern of `AdminTenantService`). Schema-per-tenant is non-negotiable.
+- **Per-tenant loop error handling:** admin services looping over tenant schemas skip a tenant only on its own SQL/schema errors (e.g. missing table/schema); connection or resource failures (pool exhaustion, DB unreachable) must be rethrown, never swallowed as "skip tenant".
+- **Batched schema lookup:** the admin tenant list loads all tenant schema names in one batched query (no per-row lookup / N+1); follow the same approach in new cross-tenant lists.
 - **Security:** `/api/v1/admin/**` requires `SUPER_ADMIN` at the filter chain, plus an explicit `CurrentActor.requireSuperAdmin()` in each controller method (non-admin → 403 `FORBIDDEN`). Admin identity: fixed user/tenant `KV-ADMIN` with schema `public`, created idempotently at boot. Tenant always resolved from JWT, never URL/body (except admin paths targeting a tenant id).
 - **API conventions:** responses wrapped in `ApiResponseWrapper`; errors `{ error, code, domainCode, details, timestamp }`; every exception carries a `domainCode` (e.g. suspended tenant → 403 `TENANT_SUSPENDED`). Validation errors (bad params/body) are HTTP 422 `VALIDATION_ERROR`, following the `GlobalExceptionHandler` convention. Domain events emitted for admin actions with `actorId` (e.g. plan activated/expired, tenant suspended, global push sent).
 - **Plan storage:** the source of truth is the tenant-schema `subscriptions` table. `public.tenants.plan_type` exists but is not kept in sync with it today; story 9.2 fixes this, so until then don't rely on `plan_type` for cross-tenant plan reads.
@@ -44,8 +47,9 @@ Give Toor (founder, sole platform operator in V1) a dedicated web dashboard to r
   - `GET /api/v1/admin/feedback` (feedback list)
   - `GET /api/v1/admin/catalog/summary`, `GET /catalog/products`, `GET /catalog/products/export` (CSV)
   - `GET /api/v1/admin/sync/overview`, `GET /sync/tenants`, `GET /sync/tenants/{id}/detail`
+  - `GET /api/v1/admin/operations/overview`, `/operations/trend`, `/operations/tenants`, `/operations/inactive-tenants` (period params)
   - Tenant-side: `GET /api/v1/subscription/me`
-  - Not yet present: `admin/operations/overview|trend|tenants|inactive-tenants` (9.7), revenue, analytics, health, alerts, global push endpoints. `admin/platform` holds only an empty MCP adapter placeholder.
+  - Not yet present: revenue, analytics, health, alerts, global push endpoints. `admin/platform` holds only an empty MCP adapter placeholder.
 
 ## UX & Interaction Patterns
 
@@ -59,4 +63,4 @@ Give Toor (founder, sole platform operator in V1) a dedicated web dashboard to r
 
 - 9.2 builds on the subscription module (plan types, daily expiry downgrade job) and WhatsApp notifications; suspension must be enforced on all tenant API calls and the Flutter app (full-screen block).
 - 9.3 churn and 9.5 alerts depend on plan expiry events from 9.2; 9.5 alerts consume feedback (Epic 8 feedback) and tenant deletion requests (account deletion flow), and global push relies on FCM tokens and in-app notification history (Epic 8).
-- 9.7 reuses the 9.6/9.8 frontend patterns (`admin-catalog.ts`, `useProducts.ts`, `CatalogSummaryCards`, the sync page's error/refresh states and tests, `labels.ts`); 9.7's "last activity" reuses the 9.1 definition (latest sale / audit_log entry). 9.8 consumes sync data produced by the offline sync engine (failed ops, conflicts, device push/pull timestamps).
+- 9.7 (done) reused the 9.6/9.8 frontend patterns (`admin-catalog.ts`, `useProducts.ts`, `CatalogSummaryCards`, the sync page's error/refresh states and tests, `labels.ts`); 9.7's "last activity" reuses the 9.1 definition (latest sale / audit_log entry). Remaining stories (9.3–9.5) should reuse `labels.ts`, `period.ts`, `LoadError`/`StaleDataWarning` and the page-test harness. 9.8 consumes sync data produced by the offline sync engine (failed ops, conflicts, device push/pull timestamps).

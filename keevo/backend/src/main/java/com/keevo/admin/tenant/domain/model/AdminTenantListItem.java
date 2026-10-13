@@ -9,7 +9,9 @@ import java.util.UUID;
  * <p>Pure Java record — no Spring/JPA dependency.
  * Loaded via JdbcTemplate from the public schema.
  *
- * <p>plan: "FREE" | "PAID" (PREMIUM + PREMIUM_TRIAL both map to "PAID" at the DTO layer)
+ * <p>plan: "FREE" | "PREMIUM_TRIAL" | "PREMIUM" — {@code public.tenants.plan_type}, kept in step with the
+ * tenant-schema subscription since Story 9-2 (labelled in French by the dashboard). The list filter
+ * still takes "PAID" (PREMIUM + PREMIUM_TRIAL) or "FREE".
  * <p>status: "ACTIVE" | "DELETION_PENDING" | "SUSPENDED"
  */
 public record AdminTenantListItem(
