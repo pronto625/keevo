@@ -8,6 +8,7 @@ CartItem _item({
   String name = 'Savon',
   int price = 500,
   int qty = 1,
+  int? stock,
 }) =>
     CartItem(
       id: id,
@@ -16,6 +17,7 @@ CartItem _item({
       unitPrice: price,
       appliedUnitPrice: price,
       quantity: qty,
+      availableStock: stock,
     );
 
 void main() {
@@ -144,6 +146,37 @@ void main() {
         expect(notifier().discountAmount, 0);
         expect(notifier().finalTotal, 500);
       });
+    });
+  });
+
+  // Device test: 4 sardines could be added with 3 in stock; the sale was
+  // only refused at checkout, without naming the product.
+  group('CartNotifier — known stock caps the cart', () {
+    test('addItem refuses the unit above the stock and keeps the cart', () {
+      for (var i = 0; i < 3; i++) {
+        expect(notifier().addItem(_item(stock: 3)), isTrue);
+      }
+      expect(notifier().addItem(_item(stock: 3)), isFalse);
+      expect(state().single.quantity, 3);
+    });
+
+    test('updateQuantity / setQuantity refuse above the stock', () {
+      notifier().addItem(_item(stock: 3));
+      expect(notifier().updateQuantity('p1', 4), isFalse);
+      expect(notifier().setQuantity('p1', 9), isFalse);
+      expect(state().single.quantity, 1);
+      expect(notifier().setQuantity('p1', 3), isTrue);
+      expect(state().single.quantity, 3);
+    });
+
+    test('unknown stock (draft) is not capped', () {
+      notifier().addItem(_item(qty: 50));
+      expect(notifier().updateQuantity('p1', 99), isTrue);
+    });
+
+    test('the limit message names the product', () {
+      expect(_item(name: 'Sardines', stock: 3).stockLimitMessage,
+          'Stock disponible atteint pour « Sardines » (3).');
     });
   });
 }

@@ -4,13 +4,17 @@
 /// "Épicerie" and "epicerie" missed both. [searchFoldTable] is the single
 /// source of truth for the fold; it is applied:
 /// - in SQL to the searched column ([foldedSqlExpr] for drift,
-///   [foldedSqlRaw] for raw SQL), as nested `replace()` calls over `lower()`;
+///   [foldedSqlRaw] for raw SQL), through the `keevo_fold()` scalar function
+///   that [registerSearchFold] installs on every connection;
 /// - in Dart to the user query of every SQL search ([foldForSql],
 ///   [likeContainsFolded]) — an exact mirror of the SQL side;
 /// - in Dart on both sides of in-memory filters ([foldForSearch]).
 ///
-/// Pure SQLite: no schema change, no registered function, works unchanged
-/// under SQLCipher, in background isolates and in in-memory test databases.
+/// No schema change; works under SQLCipher and in in-memory test databases.
+/// The SQL side used to be 126 nested `replace()` calls: on Android's
+/// SQLite/SQLCipher build that nesting overflows the parser stack
+/// ("parser stack overflow"), so every local search and the product
+/// duplicate check failed on device. The registered function has no nesting.
 ///
 /// Limit (accepted): Latin-1 / French letters plus Cameroonian letters
 /// (ɛ/ɔ/ŋ, General Alphabet letters, precomposed tone-marked vowels). Other
@@ -20,6 +24,7 @@
 library;
 
 import 'package:drift/drift.dart';
+import 'package:sqlite3/common.dart';
 
 import 'sql_like.dart';
 
@@ -192,28 +197,33 @@ String foldForSql(String input) {
 /// Never use it for a query compared in SQL — use [foldForSql].
 String foldForSearch(String input) => _applyTable(input.toLowerCase());
 
-/// Drift expression folding [column] the same way as [foldForSql]:
-/// `replace(…replace(lower(column), 'À', 'a')…)`, with SQL string literals.
-Expression<String> foldedSqlExpr(Expression<String> column) {
-  Expression<String> expr = column.lower();
-  searchFoldTable.forEach((from, to) {
-    expr = FunctionCallExpression<String>(
-      'replace',
-      [expr, Constant<String>(from), Constant<String>(to)],
-    );
-  });
-  return expr;
+/// Name of the SQL scalar function installed by [registerSearchFold].
+const String searchFoldSqlFunction = 'keevo_fold';
+
+/// Installs `keevo_fold(text)` on a raw connection: [foldForSql] applied in
+/// Dart (NULL stays NULL). Must run in every `NativeDatabase` setup that
+/// executes [foldedSqlExpr] / [foldedSqlRaw].
+void registerSearchFold(CommonDatabase db) {
+  db.createFunction(
+    functionName: searchFoldSqlFunction,
+    argumentCount: const AllowedArgumentCount(1),
+    deterministic: true,
+    directOnly: false,
+    function: (args) {
+      final value = args[0];
+      return value == null ? null : foldForSql(value.toString());
+    },
+  );
 }
+
+/// Drift expression folding [column] the same way as [foldForSql]
+/// (`keevo_fold(column)`).
+Expression<String> foldedSqlExpr(Expression<String> column) =>
+    FunctionCallExpression<String>(searchFoldSqlFunction, [column]);
 
 /// Raw-SQL counterpart of [foldedSqlExpr] for `customSelect` queries.
 /// [columnSql] is inserted verbatim (e.g. `p.name`) — never user input.
-String foldedSqlRaw(String columnSql) {
-  var sql = 'lower($columnSql)';
-  searchFoldTable.forEach((from, to) {
-    sql = "replace($sql, '$from', '$to')";
-  });
-  return sql;
-}
+String foldedSqlRaw(String columnSql) => '$searchFoldSqlFunction($columnSql)';
 
 /// `%…%` LIKE pattern for [query], folded and escaped (use with
 /// [likeEscapeChar] against [foldedSqlExpr] / [foldedSqlRaw]).

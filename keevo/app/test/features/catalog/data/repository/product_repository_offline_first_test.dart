@@ -4,6 +4,8 @@
 /// create(), update(), archive(), unarchive().
 library;
 
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/sync/connectivity_service.dart';
 import 'package:keevo/core/sync/sync_service.dart';
@@ -13,6 +15,7 @@ import 'package:keevo/features/catalog/data/datasource/remote_csv_import_datasou
 import 'package:keevo/features/catalog/data/datasource/remote_product_datasource.dart';
 import 'package:keevo/features/catalog/data/repository/product_repository_impl.dart';
 import 'package:keevo/features/catalog/domain/exception/product_exception.dart';
+import 'package:keevo/features/catalog/domain/model/csv_import_result.dart';
 import 'package:keevo/features/catalog/domain/model/product_model.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -47,6 +50,8 @@ void main() {
   setUpAll(() {
     registerFallbackValue(FakeProductModel());
     registerFallbackValue(<String, dynamic>{});
+    registerFallbackValue(Uint8List(0));
+    registerFallbackValue(<String, String>{});
   });
 
   setUp(() {
@@ -289,5 +294,48 @@ void main() {
             entityId: any(named: 'entityId'),
           )).called(1);
     });
+  });
+
+  // Device test: imported products showed under "Rupture" until the next
+  // sync — the import must pull the stock levels too.
+  test('importCsv pulls deltas (stock levels) after a successful import',
+      () async {
+    when(() => mockRemoteCsv.importCsv(
+          csvBytes: any(named: 'csvBytes'),
+          fileName: any(named: 'fileName'),
+          columnMapping: any(named: 'columnMapping'),
+          storeId: any(named: 'storeId'),
+        )).thenAnswer((_) async => const CsvImportResult(imported: 2, skipped: 0));
+    when(() => mockSyncService.pull()).thenAnswer((_) async {});
+    when(() => mockSyncService.hasPendingOperations())
+        .thenAnswer((_) async => true);
+
+    final result = await repo.importCsv(
+      csvBytes: Uint8List.fromList([1]),
+      fileName: 'f.csv',
+      columnMapping: const {'nameColumn': 'nom'},
+    );
+
+    expect(result.imported, 2);
+    verify(() => mockSyncService.pull()).called(1);
+  });
+
+  test('importCsv still succeeds when the follow-up pull fails', () async {
+    when(() => mockRemoteCsv.importCsv(
+          csvBytes: any(named: 'csvBytes'),
+          fileName: any(named: 'fileName'),
+          columnMapping: any(named: 'columnMapping'),
+          storeId: any(named: 'storeId'),
+        )).thenAnswer((_) async => const CsvImportResult(imported: 1, skipped: 0));
+    when(() => mockSyncService.pull()).thenThrow(Exception('offline'));
+    when(() => mockSyncService.hasPendingOperations())
+        .thenAnswer((_) async => true);
+
+    final result = await repo.importCsv(
+      csvBytes: Uint8List.fromList([1]),
+      fileName: 'f.csv',
+      columnMapping: const {'nameColumn': 'nom'},
+    );
+    expect(result.imported, 1);
   });
 }

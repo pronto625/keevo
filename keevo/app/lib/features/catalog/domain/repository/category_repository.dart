@@ -13,6 +13,19 @@ class CategoryNotFoundException implements Exception {
   String toString() => 'Catégorie introuvable ou supprimée.';
 }
 
+/// Thrown when another active category with the same parent already has this
+/// name, compared case- and accent-insensitively ("boissons" = "Boissons").
+class CategoryNameTakenException implements Exception {
+  final String name;
+
+  const CategoryNameTakenException(this.name);
+
+  String get message => 'Une catégorie « $name » existe déjà.';
+
+  @override
+  String toString() => message;
+}
+
 /// CategoryRepository — Port for category data access.
 ///
 /// Handles sync between remote API and local Drift database.

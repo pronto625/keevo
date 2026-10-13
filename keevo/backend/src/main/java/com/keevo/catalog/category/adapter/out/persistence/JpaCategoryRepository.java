@@ -49,6 +49,14 @@ public class JpaCategoryRepository implements CategoryRepository {
     }
 
     @Override
+    public Category insert(Category category) {
+        return toDomain(jpaRepository.save(CategoryJpaEntity.newWithId(
+            category.id(), category.name(), category.parentId(),
+            category.isActive(), category.isCustom(),
+            category.createdAt(), category.updatedAt())));
+    }
+
+    @Override
     public Optional<Category> findById(UUID id) {
         return jpaRepository.findById(id).map(this::toDomain);
     }
@@ -111,7 +119,9 @@ public class JpaCategoryRepository implements CategoryRepository {
 
     @Override
     public Optional<Category> findByNameAndParentId(String name, UUID parentId) {
-        return jpaRepository.findByNameAndParentId(name, parentId).map(this::toDomain);
+        return jpaRepository.findByNameIgnoreCaseAndParentId(name, parentId).stream()
+            .findFirst()
+            .map(this::toDomain);
     }
 
     @Override
@@ -127,7 +137,7 @@ public class JpaCategoryRepository implements CategoryRepository {
 
     private CategoryJpaEntity toEntity(Category domain) {
         if (domain.id() == null) {
-            // New entity — let Hibernate generate the UUID via @GeneratedValue
+            // New entity — the no-id constructor assigns a random UUID
             return new CategoryJpaEntity(
                 domain.name(),
                 domain.parentId(),

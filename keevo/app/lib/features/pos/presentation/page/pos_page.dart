@@ -288,15 +288,27 @@ class _PosPageState extends ConsumerState<PosPage> {
 
   void _addProductToCart(
       PosProductResult product, CartNotifier cartNotifier) {
-    HapticFeedback.lightImpact();
-    cartNotifier.addItem(CartItem(
+    final item = CartItem(
       id: product.id,
       productId: product.id,
       productName: product.name,
       unitPrice: product.price,
       appliedUnitPrice: product.price,
       quantity: 1,
-    ));
+      availableStock: product.stock,
+    );
+    if (cartNotifier.addItem(item)) {
+      HapticFeedback.lightImpact();
+      return;
+    }
+    HapticFeedback.heavyImpact();
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(item.stockLimitMessage),
+        backgroundColor: AppTheme.errorStrong,
+        behavior: SnackBarBehavior.floating,
+      ));
   }
 
   /// Story 4.3 — Create a draft product and add it to the cart.

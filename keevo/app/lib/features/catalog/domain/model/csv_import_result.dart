@@ -5,7 +5,10 @@ part 'csv_import_result.g.dart';
 
 /// CsvImportResult — result of a CSV bulk import (AC2, AC3).
 ///
-/// Maps to [ImportResultResponseDto] from the backend.
+/// Maps to [ImportResultResponseDto] from the backend. The JSON keys are the
+/// backend's (`limitMessage`, `lineNumber`): with the former Dart names, any
+/// file with a skipped row failed to parse and a successful import was shown
+/// as an error (found on device).
 @freezed
 class CsvImportResult with _$CsvImportResult {
   const factory CsvImportResult({
@@ -13,7 +16,7 @@ class CsvImportResult with _$CsvImportResult {
     required int skipped,
     @Default([]) List<CsvRowError> errors,
     @Default(false) bool limitReached,
-    String? message,
+    @JsonKey(name: 'limitMessage') String? message,
   }) = _CsvImportResult;
 
   factory CsvImportResult.fromJson(Map<String, dynamic> json) =>
@@ -24,7 +27,7 @@ class CsvImportResult with _$CsvImportResult {
 @freezed
 class CsvRowError with _$CsvRowError {
   const factory CsvRowError({
-    required int line,
+    @JsonKey(name: 'lineNumber') required int line,
     required String column,
     required String message,
   }) = _CsvRowError;

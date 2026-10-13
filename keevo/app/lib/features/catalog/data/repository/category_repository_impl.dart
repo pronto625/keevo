@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/storage/app_database.dart';
+import '../../../../core/storage/search_fold.dart';
 import '../../../../core/sync/sync_service.dart';
 import '../../../../core/sync/sync_trigger_dispatcher.dart';
 import '../../domain/model/category_model.dart';
@@ -67,6 +68,7 @@ class CategoryRepositoryImpl implements CategoryRepository {
     final id = const Uuid().v4();
     final now = DateTime.now();
     final model = await _database.transaction(() async {
+      await _requireNameFree(name, parentId: parentId);
       await _database.into(_database.categories).insertOnConflictUpdate(
         CategoriesCompanion.insert(
           id: id,
@@ -91,6 +93,23 @@ class CategoryRepositoryImpl implements CategoryRepository {
     });
     _syncTriggerDispatcher.triggerPushIfIdle();
     return model;
+  }
+
+  /// Refuses a name already used by another active category under the same
+  /// parent, case- and accent-insensitively (the server dedups the same way).
+  Future<void> _requireNameFree(String name,
+      {String? parentId, String? exceptId}) async {
+    final wanted = foldForSql(name.trim());
+    final rows = await (_database.select(_database.categories)
+          ..where((c) =>
+              c.isActive.equals(true) &
+              (parentId == null
+                  ? c.parentId.isNull()
+                  : c.parentId.equals(parentId))))
+        .get();
+    final taken = rows.any(
+        (c) => c.id != exceptId && foldForSql(c.name.trim()) == wanted);
+    if (taken) throw CategoryNameTakenException(name.trim());
   }
 
   @override
@@ -122,7 +141,9 @@ class CategoryRepositoryImpl implements CategoryRepository {
     // Offline-first (Story 5.6): rename locally, queue RENAME_CATEGORY.
     // v1s-14-15: atomic; a missing row raises CategoryNotFoundException.
     final model = await _database.transaction(() async {
-      await _requireRow(categoryId);
+      final current = await _requireRow(categoryId);
+      await _requireNameFree(newName,
+          parentId: current.parentId, exceptId: categoryId);
       await (_database.update(_database.categories)
             ..where((c) => c.id.equals(categoryId)))
           .write(CategoriesCompanion(

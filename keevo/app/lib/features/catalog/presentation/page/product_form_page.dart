@@ -334,7 +334,8 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
           ),
         );
       }
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('TMPDIAG product save failed: $e\n$st');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

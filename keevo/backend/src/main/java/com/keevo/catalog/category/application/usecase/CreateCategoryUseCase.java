@@ -66,7 +66,7 @@ public class CreateCategoryUseCase {
     @Transactional
     public Category createWithId(UUID id, String name, UUID parentId, UUID actorId, String tenantId) {
         Instant now = Instant.now();
-        Category saved = categoryRepository.save(new Category(id, name, parentId, true, true, now, now));
+        Category saved = categoryRepository.insert(new Category(id, name, parentId, true, true, now, now));
         publishCreated(saved, actorId, tenantId);
         return saved;
     }

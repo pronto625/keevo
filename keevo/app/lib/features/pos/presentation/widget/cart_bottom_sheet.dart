@@ -199,17 +199,28 @@ class _CartBottomSheetState extends ConsumerState<CartBottomSheet> {
                 ),
                 itemBuilder: (context, index) {
                   final item = cart[index];
+                  void stockLimit(bool applied) {
+                    if (applied) return;
+                    ScaffoldMessenger.of(context)
+                      ..hideCurrentSnackBar()
+                      ..showSnackBar(SnackBar(
+                        content: Text(item.stockLimitMessage),
+                        backgroundColor: AppTheme.errorStrong,
+                        behavior: SnackBarBehavior.floating,
+                      ));
+                  }
+
                   return _CartItemTile(
                     item: item,
-                    onIncrement: () =>
-                        notifier.updateQuantity(item.id, item.quantity + 1),
+                    onIncrement: () => stockLimit(
+                        notifier.updateQuantity(item.id, item.quantity + 1)),
                     onDecrement: () =>
                         notifier.updateQuantity(item.id, item.quantity - 1),
                     onDismissed: () => notifier.removeItem(item.id),
                     onPriceChanged: (newPrice) =>
                         notifier.updatePrice(item.id, newPrice),
                     onQuantityChanged: (qty) =>
-                        notifier.setQuantity(item.id, qty),
+                        stockLimit(notifier.setQuantity(item.id, qty)),
                   );
                 },
               ),

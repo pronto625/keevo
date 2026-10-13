@@ -20,6 +20,9 @@ public interface CategoryJpaRepository extends JpaRepository<CategoryJpaEntity, 
     @Query("SELECT c FROM CategoryJpaEntity c WHERE c.parentId = :parentId")
     List<CategoryJpaEntity> findByParentId(UUID parentId);
 
-    @Query("SELECT c FROM CategoryJpaEntity c WHERE c.name = :name AND (:parentId IS NULL AND c.parentId IS NULL OR c.parentId = :parentId)")
-    java.util.Optional<CategoryJpaEntity> findByNameAndParentId(String name, UUID parentId);
+    /** Case-insensitive; active rows first, then oldest — several legacy rows may match. */
+    @Query("SELECT c FROM CategoryJpaEntity c WHERE LOWER(TRIM(c.name)) = LOWER(TRIM(:name))"
+            + " AND (:parentId IS NULL AND c.parentId IS NULL OR c.parentId = :parentId)"
+            + " ORDER BY c.isActive DESC, c.createdAt ASC, c.id ASC")
+    List<CategoryJpaEntity> findByNameIgnoreCaseAndParentId(String name, UUID parentId);
 }

@@ -282,7 +282,14 @@ class ProductRepositoryImpl implements ProductRepository {
       columnMapping: columnMapping,
       storeId: storeId,
     );
-    // Pull newly imported products into local cache.
+    // Pull newly imported products into local cache. The delta pull also
+    // brings their stock levels: without it the catalog listed freshly
+    // imported products under "Rupture" until the next sync (found on device).
+    try {
+      await _syncService.pull();
+    } catch (_) {
+      // The import itself succeeded; the next scheduled sync catches up.
+    }
     await syncFromRemote();
     return result;
   }

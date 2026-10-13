@@ -16,6 +16,7 @@ import 'product_suppliers_table.dart';
 import 'products_table.dart';
 import 'sale_items_table.dart';
 import 'sales_table.dart';
+import 'search_fold.dart';
 import 'stock_levels_table.dart';
 import 'stock_movements_table.dart';
 import 'stores_table.dart';
@@ -87,7 +88,8 @@ class AppDatabase extends _$AppDatabase {
       : super(_openEncryptedConnection(hexKey));
 
   /// Test constructor — in-memory Drift database, no encryption, no file system.
-  AppDatabase.forTesting() : super(NativeDatabase.memory());
+  AppDatabase.forTesting()
+      : super(NativeDatabase.memory(setup: registerSearchFold));
 
   /// Test constructor on a given executor — e.g. an in-memory database
   /// pre-built at an older schema version to exercise [migration].
@@ -441,6 +443,7 @@ LazyDatabase _openEncryptedConnection(String hexKey) {
           '[DB] ✅ kdf_iter=$kdfIter (256000 = SQLCipher v4 default)',
           name: 'AppDatabase',
         );
+        registerSearchFold(db);
       },
     );
   });
