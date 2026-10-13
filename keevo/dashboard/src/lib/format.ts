@@ -32,3 +32,14 @@ export function formatDate(iso: string | null): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("fr-FR");
 }
+
+/** Ratio 0..1 → « 25 % » / « 12,5 % » (French, at most 1 decimal). */
+export function formatPercent(ratio: number): string {
+  return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 }).format(ratio * 100)} %`;
+}
+
+/** `2026-09-12` → `12/09/2026` (string split: no time-zone shift). */
+export function formatIsoDay(iso: string | null | undefined): string {
+  const [y, m, d] = (iso ?? "").split("-");
+  return y && m && d ? `${d}/${m}/${y}` : "—";
+}

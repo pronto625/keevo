@@ -17,6 +17,7 @@ export function Sidebar() {
 
   const navItems = [
     { href: "/tenants", label: "Tenants" },
+    { href: "/revenus", label: "Revenus" },
   ];
 
   const monitoringItems = [

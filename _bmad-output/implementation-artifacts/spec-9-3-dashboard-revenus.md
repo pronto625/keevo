@@ -2,9 +2,10 @@
 title: '9-3 — Revenue dashboard (super admin): MRR/ARR, paying tenants, conversion, churn, CSV'
 type: 'feature'
 created: '2026-10-13'
-status: 'ready-for-dev'
+status: 'done'
+baseline_revision: '11158785fb5ce9b015c87a5c56fc2f5cdab043a4'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-9-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/spec-9-2-activation-plan-payant.md'
@@ -76,9 +77,68 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-10-13 — Review pass
+- verdicts: 44 findings — high 0, medium 9, low 22, false 5, maybe-false 0 (+ intent rows descriptive)
+- findings:
+  - `[medium]` `[patch]` (blind) churn rate > 100 % when a payment ends the day before the month — base = payingAt(from − 1) ∪ churned; regression test.
+  - `[medium]` `[patch]` (blind) summary churn over long ranges misses tenants who started paying in the range — same base rule.
+  - `[medium]` `[patch]` (blind) PREMIUM tenants without payment invisible, no Premium count — `premiumTenants` + `premiumWithoutPayment` with a note.
+  - `[low]` `[reject]` (blind) lapsed payment without an event leaves MRR but is not churned — the nightly expiry job always writes the EXPIRY event; a lapse without event is an inconsistency surfaced by `premiumWithoutPayment`.
+  - `[medium]` `[patch]` (blind) FREE registration counted as trial start — requires `toPlan == PREMIUM_TRIAL`.
+  - `[low]` `[patch]` (blind) tenure overstated for returning tenants — latest continuous paid streak.
+  - `[low]` `[reject]` (blind) full-table loads and per-schema plan queries — Phase 1 (< 200 tenants) accepted in the epic context; tables are tiny (one row per payment/plan change).
+  - `[medium]` `[patch]` (blind) « Tenant » shown to users — « Entreprises … » everywhere.
+  - `[low]` `[patch]` (blind) tooltip « Nouvelles conversions » vs « Nouveaux payants » — one label.
+  - `[low]` `[patch]` (blind) browser month vs WAT — current month computed in Africa/Douala.
+  - `[low]` `[patch]` (blind) 29 Feb 24-month bound mismatch — clamp like `plusMonths`.
+  - `[low]` `[patch]` (blind) blob URL revoked synchronously — deferred.
+  - `[low]` `[patch]` (blind) export error never clears; `useRevenue` untested — mutation reset on month change; page interaction tests.
+  - `[false]` `[reject]` (blind) GMV may truncate a decimal sum — `sales.total_amount` is INTEGER (provisioner DDL).
+  - `[low]` `[reject]` (blind) CSV raw amount — a plain integer is the most Excel-friendly numeric cell; screen formatting is display-only.
+  - `[low]` `[patch]` (blind) missing controller/IT assertions — export 422, exact plan-count deltas, system tenant exclusion; unauthenticated request is the filter chain's job (tested in SecurityConfig tests).
+  - `[low]` `[reject]` (blind) leading `+`/`-` names get an apostrophe — deliberate OWASP CSV-injection neutralisation; visible apostrophe in Excel is the accepted trade-off.
+  - `[medium]` `[patch]` (edge) churned tenant missing from denominator — same as blind row 1.
+  - `[medium]` `[patch]` (edge) first-pay-and-churn in range — same as blind row 2.
+  - `[medium]` `[patch]` (edge) manual downgrade still in MRR — payment stops counting after a later PREMIUM→FREE event.
+  - `[low]` `[patch]` (edge) EXPIRY plan end one day late — event date − 1 for EXPIRY.
+  - `[medium]` `[patch]` (edge) converted > trialsEnded — conversions restricted to trials ended in range.
+  - `[low]` `[reject]` (edge) PREMIUM activation event before the trial-start event — REGISTRATION rows are written at registration / backfilled at `created_at`, always first.
+  - `[low]` `[patch]` (edge) 29 Feb mismatch — same as blind row 11.
+  - `[low]` `[patch]` (edge) year bounds missing client-side — 2000..9999 message.
+  - `[low]` `[patch]` (edge) browser time zone — same as blind row 10.
+  - `[low]` `[patch]` (edge) revokeObjectURL — same as blind row 12.
+  - `[low]` `[patch]` (edge) stale export error — same as blind row 13.
+  - `[false]` `[reject]` (edge) subscription rows with identical created_at — one subscription row per tenant schema.
+  - `[low]` `[patch]` (edge, claim) multi-month churn labelled monthly — KPI label « Taux de churn sur la période ».
+  - `[medium]` `[patch]` (gap) page wiring untested — interaction tests.
+  - `[medium]` `[patch]` (gap) plan-count tenant filter never run on SQL — integration deltas with DELETED (provisioned) and SUSPENDED tenants.
+  - `[low]` `[patch]` (gap) tooltip untested — `MrrTooltip` exported and tested.
+  - `[low]` `[patch]` (gap other) converted > trialsEnded untested — same as edge conversion row.
+  - `[low]` `[patch]` (gap other) client year bounds — same as edge row.
+  - `[false]` `[reject]` (intent) reading B (separate churn month picker) — `/churn` and its CSV are month-scoped by the spec's own endpoints; the range drives the KPIs.
+  - `[false]` `[reject]` (intent) C1 vs C2 — range churn kept for the summary, labelled « sur la période »; monthly rate shown in the churn table and the chart.
+  - `[false]` `[reject]` (intent) UI matrix rows tested on components — page interaction tests added; a backend 422 never reaches the page because the client validates the same rules.
+
 ## Verification
 
 **Commands:**
 - `cd keevo/backend && MAVEN_OPTS=-Xmx1g mvn -q -o test -Dtest='com.keevo.admin.**,com.keevo.architecture.**' -DforkCount=1 -DargLine=-Xmx1536m` -- expected: 0 failures
 - `cd keevo/backend && MAVEN_OPTS=-Xmx1g mvn -q -o test -Dtest='AdminRevenue*IntegrationTest' -DforkCount=1 -DargLine=-Xmx1536m` -- expected: 0 failures (Docker)
 - `cd keevo/dashboard && npm run lint && npx tsc --noEmit && npm test && npm run build` -- expected: all succeed
+
+## Auto Run Result
+
+Status: done
+
+**Summary:** Story 9-3 delivered: `/revenus` page backed by `com.keevo.admin.revenue` (`/summary`, `/trend`, `/churn`, `/churn/export`). MRR/ARR from recorded payments (monthly value = amount × 30 / covered days, latest payment per tenant, stops after a manual downgrade), paying / Premium / free / trial counts (+ « sans paiement enregistré » note), new paying, collected revenue, trial→Premium conversion (trials ended in range), churn rate with base = paying the day before ∪ churned, 12-month MRR bar chart, monthly churn table with CSV (BOM, `;`, French headers, formula-safe). Range filter in WAT with 24-month and 2000–9999 bounds, manual refresh, stale/error states.
+
+**Files changed:** backend `admin/revenue/**` (+ tests incl. Testcontainers IT); dashboard `types/revenue.ts`, `lib/api/admin-revenue.ts`, `hooks/useRevenue.ts`, `components/revenue/*`, `app/revenus/page.tsx`, `lib/{labels,period,format}.ts`, `Sidebar.tsx` + tests. Also routed: catalog CSV export without JWT → story 9-6 (reopened; fix scheduled in the 9-1 completion spec).
+
+**Review:** 44 findings — patched 9 medium entries and 22 low (grouped); deferred 0; rejected 13 (false 5, low with reasons).
+
+**Follow-up review recommended:** true — 9 medium entries patched; unverified risk: the MRR/churn interplay (downgrade stop, churn base union, streak tenure) is unit-tested on synthetic timelines and covered by one month in the IT, not on a multi-month real dataset.
+
+**Verification:** dashboard lint, tsc, `npm test` (24 files, 133 tests), build — green. Backend `com.keevo.admin.**` 212 tests (incl. `AdminRevenueServiceIntegrationTest`), `com.keevo.architecture.**` 6 — 0 failures/errors.
+
+**Residual risks:** revenue queries load the payment/event tables fully (fine at Phase 1 volumes); MRR ignores PREMIUM tenants with no recorded payment (shown as a note).
+
