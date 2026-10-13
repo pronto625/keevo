@@ -113,10 +113,9 @@ class _TransferFormBottomSheetState
         final available = details?['available'] ?? 0;
         return 'Stock insuffisant — disponible : $available unité(s)';
       }
-      final msg = body['error'] as String? ?? body['message'] as String?;
-      if (msg != null && msg.isNotEmpty) return msg;
     }
-    return 'Erreur de connexion (${e.response?.statusCode ?? 'réseau'})';
+    // v1s-16-20: never the raw server text, status code or ids.
+    return appErrorMessage(e);
   }
 
   Future<void> _submit() async {
@@ -191,7 +190,7 @@ class _TransferFormBottomSheetState
         setState(() => _errorMessage = msg);
       }
     } catch (e) {
-      if (mounted) setState(() => _errorMessage = 'Erreur inattendue : $e');
+      if (mounted) setState(() => _errorMessage = appErrorMessage(e));
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }

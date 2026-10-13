@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/storage/search_fold.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import '../../../catalog/domain/model/product_model.dart';
 import '../../../catalog/presentation/provider/product_provider.dart';
@@ -114,7 +115,7 @@ class _SupplierFormPageState extends ConsumerState<SupplierFormPage>
             content: Row(children: [
               const Icon(Icons.error_rounded, color: AppTheme.onBrand, size: 20),
               const SizedBox(width: 12),
-              Expanded(child: Text(e.toString())),
+              Expanded(child: Text(appErrorMessage(e))),
             ]),
             backgroundColor: AppTheme.errorStrong,
             behavior: SnackBarBehavior.floating,

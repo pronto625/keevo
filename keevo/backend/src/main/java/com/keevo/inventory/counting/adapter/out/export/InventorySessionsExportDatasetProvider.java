@@ -30,7 +30,6 @@ public class InventorySessionsExportDatasetProvider extends NativeKeysetExportDa
     static final String KEY = "inventory_sessions";
 
     private static final List<ExportColumn> COLUMNS = List.of(
-            new ExportColumn("id", "Identifiant", ExportColumnType.TEXT),
             new ExportColumn("startedAt", "Commencé le", ExportColumnType.DATETIME),
             new ExportColumn("store", "Boutique", ExportColumnType.TEXT),
             new ExportColumn("scope", "Périmètre", ExportColumnType.TEXT),
@@ -56,7 +55,7 @@ public class InventorySessionsExportDatasetProvider extends NativeKeysetExportDa
 
     @Override
     protected String selectList(ExportFilter filter) {
-        return "CAST(s.id AS text), s.started_at, st.name, s.scope, s.status, " + actorNameSelect("a")
+        return "s.started_at, st.name, s.scope, s.status, " + actorNameSelect("a")
                 + ", s.completed_at, s.cancelled_at, agg.counted, agg.gaps, agg.total_gap";
     }
 
@@ -87,8 +86,8 @@ public class InventorySessionsExportDatasetProvider extends NativeKeysetExportDa
 
     @Override
     protected List<Object> mapRow(Object[] r) {
-        return Arrays.asList(str(r[0]), toInstant(r[1]), str(r[2]), frLabel(InventoryLabels.SCOPE, r[3]),
-                frLabel(InventoryLabels.STATUS, r[4]), str(r[5]), toInstant(r[6]), toInstant(r[7]),
-                toLong(r[8]), toLong(r[9]), toLong(r[10]));
+        return Arrays.asList(toInstant(r[0]), str(r[1]), frLabel(InventoryLabels.SCOPE, r[2]),
+                frLabel(InventoryLabels.STATUS, r[3]), str(r[4]), toInstant(r[5]), toInstant(r[6]),
+                toLong(r[7]), toLong(r[8]), toLong(r[9]));
     }
 }

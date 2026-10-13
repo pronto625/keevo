@@ -21,6 +21,7 @@ import '../../features/stores/presentation/provider/store_provider.dart';
 import '../../features/team/presentation/provider/employee_provider.dart';
 import '../di/providers.dart';
 import '../storage/app_constants.dart';
+import 'sync_event_logger.dart';
 import 'sync_gate_provider.dart';
 import 'sync_monitoring_providers.dart';
 import 'sync_required_exception.dart';
@@ -195,7 +196,10 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
           'Push blocked by server 423 gate: ${e.daysSinceLastSync} days stale',
           name: 'SyncTrigger',
         );
-        await eventLogger.logPushFailed('423 gate: ${e.daysSinceLastSync} days stale');
+        // v1s-16-20: the history shows this text — French, no code / exception.
+        await eventLogger.logPushFailed(
+            'Appareil hors ligne depuis ${e.daysSinceLastSync} jours — '
+            'mise à jour avant l\'envoi');
         await syncService.pull();
         pulled = true;
         await eventLogger.logPullSuccess(0);
@@ -214,7 +218,7 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
         }
       } catch (e) {
         dev.log('Push failed during sync cycle: $e', name: 'SyncTrigger');
-        await eventLogger.logPushFailed(e.toString());
+        await eventLogger.logPushFailed(kSyncPushFailedMessage);
         // Non-423 push failure: proceed with pull (pull is NOT gated)
       }
 
@@ -226,7 +230,8 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
           await syncService.pull();
           await eventLogger.logPullSuccess(0);
         } catch (e) {
-          await eventLogger.logPullFailed(e.toString());
+          dev.log('Pull failed during sync cycle: $e', name: 'SyncTrigger');
+          await eventLogger.logPullFailed(kSyncPullFailedMessage);
           rethrow;
         }
       }

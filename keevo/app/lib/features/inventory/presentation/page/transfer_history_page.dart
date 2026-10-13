@@ -425,7 +425,7 @@ class _TransferTileState extends ConsumerState<_TransferTile> {
             const SizedBox(width: 10),
             Expanded(
                 child: Text(
-              'Stock réceptionné : ${widget.transfer.quantity}× ${widget.transfer.productName.isNotEmpty ? widget.transfer.productName : widget.transfer.productId}',
+              'Stock réceptionné : ${widget.transfer.quantity}× ${widget.transfer.productName.isNotEmpty ? widget.transfer.productName : 'Produit'}',
               overflow: TextOverflow.ellipsis,
             )),
           ]),
@@ -444,11 +444,11 @@ class _TransferTileState extends ConsumerState<_TransferTile> {
         return;
       }
 
-      final msg = (body is Map ? body['error'] ?? body['message'] : null) ??
-          'Erreur réseau';
+      // v1s-16-20: never the raw server text (ids, status codes).
+      final msg = appErrorMessage(e);
       if (mounted) {
         messenger.showSnackBar(SnackBar(
-          content: Text(msg.toString()),
+          content: Text(msg),
           backgroundColor: AppTheme.errorStrong,
           behavior: SnackBarBehavior.floating,
         ));
@@ -456,7 +456,7 @@ class _TransferTileState extends ConsumerState<_TransferTile> {
     } catch (e) {
       if (mounted) {
         messenger.showSnackBar(SnackBar(
-          content: Text(e.toString()),
+          content: Text(appErrorMessage(e)),
           backgroundColor: AppTheme.errorStrong,
           behavior: SnackBarBehavior.floating,
         ));
@@ -487,15 +487,16 @@ class _TransferTileState extends ConsumerState<_TransferTile> {
     final cs = theme.colorScheme;
     final dateLabel =
         DateFormat('dd/MM/yyyy · HH:mm').format(widget.transfer.occurredAt.toLocal());
+    // v1s-16-20: a missing name reads as a neutral label, never the id.
     final srcName = widget.transfer.sourceStoreName.isNotEmpty
         ? widget.transfer.sourceStoreName
-        : widget.transfer.sourceStoreId;
+        : 'Boutique d\'origine';
     final dstName = widget.transfer.destinationStoreName.isNotEmpty
         ? widget.transfer.destinationStoreName
-        : widget.transfer.destinationStoreId;
+        : 'Boutique de destination';
     final productLabel = widget.transfer.productName.isNotEmpty
         ? widget.transfer.productName
-        : widget.transfer.productId;
+        : 'Produit';
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
@@ -642,7 +643,7 @@ class _StatusBadge extends StatelessWidget {
       'COMPLETED'    => (Icons.check_circle_outline_rounded, 'Effectué',           AppTheme.success),
       'PENDING_SYNC' => (Icons.schedule_rounded,             'En attente de sync', AppTheme.warning),
       'CONFLICT'     => (Icons.error_outline_rounded,        'Conflit',            AppTheme.errorColor),
-      _              => (Icons.circle_outlined,              status,               Theme.of(context).colorScheme.onSurfaceVariant),
+      _              => (Icons.circle_outlined,              _humanize(status),    Theme.of(context).colorScheme.onSurfaceVariant),
     };
 
     return Container(
@@ -668,4 +669,11 @@ class _StatusBadge extends StatelessWidget {
       ),
     );
   }
+}
+
+/// `SOME_STATUS` → « Some status » — an unknown status is never shown raw
+/// (v1s-16-20).
+String _humanize(String code) {
+  final s = code.replaceAll('_', ' ').trim().toLowerCase();
+  return s.isEmpty ? code : s[0].toUpperCase() + s.substring(1);
 }

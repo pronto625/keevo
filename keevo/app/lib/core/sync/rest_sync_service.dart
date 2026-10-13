@@ -684,7 +684,7 @@ class RestSyncService implements SyncService {
   }
 
   Future<String> _getDeviceId() async {
-    const key = 'keevo_device_id';
+    const key = kDeviceIdKey;
     var deviceId = await _secureStorage.read(key: key);
     if (deviceId == null) {
       deviceId = const Uuid().v4();

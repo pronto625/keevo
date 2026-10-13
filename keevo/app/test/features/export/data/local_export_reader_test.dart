@@ -5,6 +5,7 @@ import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/features/export/data/local/local_export_reader.dart';
 import 'package:keevo/features/export/domain/local/local_export_schema.dart';
 
+import '../../../helpers/no_technical_text.dart';
 import '../export_test_helpers.dart';
 
 /// v1s-18-5 — the reader pages each dataset out of Drift with the server
@@ -123,7 +124,8 @@ void main() {
     }
 
     final all = await rows('products');
-    expect(all.map((r) => r[0]), ['p-1', 'p-2']); // createdAt order
+    // createdAt order; no id column (v1s-16-20)
+    expect(all.map((r) => named('products', r)['name']), ['=SUM(A1)', 'Second']);
     final p1 = named('products', all[0]);
     expect(p1['sku'], 'PG-1');
     expect(p1['name'], '=SUM(A1)');
@@ -139,7 +141,7 @@ void main() {
     expect((p1['createdAt'] as DateTime).toUtc(),
         DateTime.utc(2026, 10, 2, 23, 30));
     final p2 = named('products', all[1]);
-    expect(p2['status'], 'WEIRD'); // unknown code → raw code
+    expect(p2['status'], 'Weird'); // unknown code → humanized (v1s-16-20)
     expect(p2['stockQuantity'], 0);
     expect(p2['suppliers'], isNull);
     expect(p2['category'], isNull);
@@ -163,12 +165,11 @@ void main() {
         updatedAt: t0));
     final all = await rows('categories');
     expect(named('categories', all[1]), {
-      'id': 'c-2',
       'name': 'Wax',
       'parent': 'Tissus',
       'active': true,
       'custom': true,
-      'createdAt': all[1][5]
+      'createdAt': all[1][4]
     });
   });
 
@@ -203,7 +204,7 @@ void main() {
         updatedAt: t0));
     final all = await rows('stock_levels');
     // store name, product name, id
-    expect(all.map((r) => '${r[1]}/${r[4]}'),
+    expect(all.map((r) => '${r[0]}/${r[2]}'),
         ['Boutique A/Ananas', 'Boutique A/Pagne', 'Boutique B/Pagne']);
     expect(named('stock_levels', all[0])['stockStatus'], 'OK');
     final out = named('stock_levels', all[1]);
@@ -247,7 +248,10 @@ void main() {
     expect(named('stock_movements', all[2])['actor'], isNull);
     final period = await rows(
         'stock_movements', LocalExportFilter(from: day(5), to: day(9)));
-    expect(period.map((r) => r[0]), ['m-2', 'm-3']); // inclusive bounds
+    expect(
+        period.map((r) =>
+            (named('stock_movements', r)['occurredAt'] as DateTime).toUtc()),
+        [day(5), day(9)]); // inclusive bounds
   });
 
   test('stock_transfers: source OR destination store, snapshot fallback',
@@ -338,8 +342,12 @@ void main() {
     await seedPeople();
     await seedSales();
     final all = await rows('sales');
-    expect(all.map((r) => r[0]), ['s-1', 's-2', 's-3', 's-4']);
+    DateTime at(List<Object?> r) =>
+        (named('sales', r)['occurredAt'] as DateTime).toUtc();
+    expect(all.map(at), [day(1), day(8), day(8, 11), day(9)]);
     final s1 = named('sales', all[0]);
+    // v1s-16-20: readable reference instead of the sale id
+    expect(s1['reference'], 'Vente du 01/10/2026 à 11:00:00 — Boutique A');
     expect(s1['store'], 'Boutique A');
     expect(s1['employee'], 'Awa Diallo');
     expect(s1['client'], 'Mme Ngo');
@@ -357,14 +365,18 @@ void main() {
     // Store A within the last days: only s-3 and s-4.
     final scoped = await rows(
         'sales', LocalExportFilter(storeId: 's-A', from: day(2), to: day(9)));
-    expect(scoped.map((r) => r[0]), ['s-3', 's-4']);
+    expect(scoped.map(at), [day(8, 11), day(9)]);
   });
 
   test('sale_items: through the sale (date, store, status)', () async {
     await seedPeople();
     await seedSales();
     final all = await rows('sale_items');
-    expect(all.map((r) => r[0]), ['s-1', 's-1', 's-3']);
+    // the sale reference matches the `sales` file (v1s-16-20)
+    final ref1 = exportSaleReference(day(1), 'Boutique A');
+    final ref3 = exportSaleReference(day(8, 11), 'Boutique A');
+    expect(all.map((r) => r[0]), [ref1, ref1, ref3]);
+    expect(named('sales', (await rows('sales'))[0])['reference'], ref1);
     final i3 = named('sale_items', all[2]);
     expect(i3['saleStatus'], 'Annulée');
     expect(i3['employee'], 'Awa Diallo');
@@ -503,8 +515,8 @@ void main() {
     expect(await rows('employees', const LocalExportFilter(storeId: 's-B')),
         isEmpty);
     final stores = await rows('stores');
-    expect(stores.map((r) => r[1]), ['Boutique A', 'Boutique B']);
-    expect(named('stores', stores[0]), containsPair('type', 'STORE'));
+    expect(stores.map((r) => r[0]), ['Boutique A', 'Boutique B']);
+    expect(named('stores', stores[0]), containsPair('type', 'Boutique'));
     expect(await rows('stores', const LocalExportFilter(storeId: 's-B')),
         hasLength(1));
   });
@@ -533,8 +545,13 @@ void main() {
         metadata: '{"actorLabel":"Système Keevo"}');
     await entry('a-4', 'u-y', day(4), source: 'WEIRD');
     final all = await rows('audit_log');
-    expect(all.map((r) => r[0]), ['a-4', 'a-3', 'a-2', 'a-1']);
+    DateTime at(List<Object?> r) =>
+        (named('audit_log', r)['occurredAt'] as DateTime).toUtc();
+    expect(all.map(at), [day(4), day(3), day(2), day(1)]);
     final a1 = named('audit_log', all[3]);
+    // v1s-16-20: French action, humanized unknown object type
+    expect(a1['action'], 'Produit modifié');
+    expect(a1['entityType'], 'Product');
     expect(a1['actor'], 'Awa Diallo');
     expect(a1['actorRole'], 'Employé');
     expect(a1['source'], 'Synchronisé');
@@ -547,12 +564,12 @@ void main() {
     final a4 = named('audit_log', all[0]);
     expect(a4['actor'], 'Un utilisateur');
     expect(a4['actorRole'], isNull);
-    expect(a4['source'], 'WEIRD');
+    expect(a4['source'], 'Weird');
     expect(
         (await rows('audit_log',
                 LocalExportFilter(storeId: 's-A', from: day(1), to: day(2))))
-            .map((r) => r[0]),
-        ['a-1']);
+            .map(at),
+        [day(1)]);
   });
 
   group('store + period filters (inclusive bounds) per event dataset', () {
@@ -566,6 +583,22 @@ void main() {
       ('x-5', 's-A', day(9, 11)),
     ];
     final filter = LocalExportFilter(storeId: 's-A', from: day(5), to: day(9));
+    // No id column (v1s-16-20): rows are told apart by their event date.
+    const dateColumn = {
+      'stock_movements': 'occurredAt',
+      'stock_transfers': 'occurredAt',
+      'sale_items': 'occurredAt',
+      'day_closures': 'closedAt',
+      'inventory_sessions': 'startedAt',
+      'inventory_counts': 'sessionStartedAt',
+      'reports': 'createdAt',
+    };
+    Iterable<String> ids(String key, List<List<Object?>> found) => found.map(
+        (r) => fixtures
+            .firstWhere((f) =>
+                f.$3 ==
+                (named(key, r)[dateColumn[key]!] as DateTime).toUtc())
+            .$1);
 
     final seeders = <String, Future<void> Function(String, String, DateTime)>{
       'stock_movements': (id, store, at) => db.into(db.stockMovements).insert(
@@ -664,17 +697,16 @@ void main() {
         for (final (id, store, at) in fixtures) {
           await entry.value(id, store, at);
         }
-        expect((await rows(entry.key)).map((r) => r[0]),
+        expect(ids(entry.key, await rows(entry.key)),
             ['x-1', 'x-2', 'x-3', 'x-4', 'x-5']);
+        expect(ids(entry.key, await rows(entry.key, filter)), ['x-2', 'x-4']);
         expect(
-            (await rows(entry.key, filter)).map((r) => r[0]), ['x-2', 'x-4']);
-        expect(
-            (await rows(entry.key, const LocalExportFilter(storeId: 's-B')))
-                .map((r) => r[0]),
+            ids(entry.key,
+                await rows(entry.key, const LocalExportFilter(storeId: 's-B'))),
             ['x-3']);
         expect(
-            (await rows(entry.key, LocalExportFilter(from: day(5), to: day(9))))
-                .map((r) => r[0]),
+            ids(entry.key,
+                await rows(entry.key, LocalExportFilter(from: day(5), to: day(9)))),
             ['x-2', 'x-3', 'x-4']);
       });
     }
@@ -699,13 +731,13 @@ void main() {
     await for (final page
         in reader.pages('clients', const LocalExportFilter(), pageSize: 500)) {
       sizes.add(page.length);
-      ids.addAll(page.map((r) => r[0]));
+      ids.addAll(page.map((r) => r[0])); // client name (no id column)
     }
     expect(sizes, [500, 500, 201]);
     expect(ids, hasLength(1201));
     expect(ids.toSet(), hasLength(1201));
-    expect(ids.first, 'c-0000');
-    expect(ids.last, 'c-1200');
+    expect(ids.first, 'Client 0');
+    expect(ids.last, 'Client 1200');
   });
 
   test('rows hold sendable primitives only', () async {
@@ -725,5 +757,117 @@ void main() {
         }
       }
     }
+  });
+
+  // ── v1s-16-20 guard ───────────────────────────────────────────────────────
+
+  test(
+      'v1s-16-20 guard: no cell of any dataset holds a UUID, a SNAKE_CASE code '
+      'or JSON (UUID ids seeded everywhere)', () async {
+    String id(int n) =>
+        '7f1c2b4e-2b9a-4c1e-9d0f-${n.toString().padLeft(12, '0')}';
+    final store = id(1), warehouse = id(2), owner = id(3), empUser = id(4);
+    final product = id(5), category = id(6), client = id(7), supplier = id(8);
+    final sale = id(9), session = id(10);
+    await db.into(db.stores).insert(StoresCompanion.insert(
+        id: store, name: 'Boutique Centre', tenantId: 't',
+        createdAt: t0, updatedAt: t0));
+    await db.into(db.stores).insert(StoresCompanion.insert(
+        id: warehouse, name: 'Dépôt', tenantId: 't',
+        type: const Value('WAREHOUSE'), createdAt: t0, updatedAt: t0));
+    await db.into(db.users).insert(UsersCompanion.insert(
+        id: owner, phoneNumber: '+237600', tenantId: 't', role: 'OWNER',
+        createdAt: t0));
+    await db.into(db.users).insert(UsersCompanion.insert(
+        id: empUser, phoneNumber: '+237611', tenantId: 't', role: 'EMPLOYEE',
+        createdAt: t0));
+    await db.into(db.employees).insert(EmployeesCompanion.insert(
+        id: id(11), userId: empUser, firstName: 'Awa', lastName: 'Diallo',
+        storeId: store, createdAt: t0));
+    await db.into(db.categories).insert(CategoriesCompanion.insert(
+        id: category, name: 'Tissus', createdAt: t0, updatedAt: t0));
+    await db.into(db.categories).insert(CategoriesCompanion.insert(
+        id: id(12), name: 'Wax', parentId: Value(category),
+        createdAt: t0, updatedAt: t0));
+    await db.into(db.products).insert(ProductsCompanion.insert(
+        id: product, name: 'Pagne', categoryId: Value(category),
+        status: const Value('SOME_NEW_STATUS'), createdAt: t0, updatedAt: t0));
+    await db.into(db.suppliers).insert(SuppliersCompanion.insert(
+        id: supplier, name: 'Zed', phone: '1', createdAt: t0, updatedAt: t0));
+    await db.into(db.productSuppliers).insert(ProductSuppliersCompanion.insert(
+        supplierId: supplier, productId: product));
+    await db.into(db.clients).insert(ClientsCompanion.insert(
+        id: client, name: 'Mme Ngo', phone: '6', createdAt: t0, updatedAt: t0));
+    await db.into(db.stockLevels).insert(StockLevelsCompanion.insert(
+        id: id(13), productId: product, storeId: store, quantity: 4,
+        updatedAt: t0));
+    await db.into(db.stockMovements).insert(StockMovementsCompanion.insert(
+        id: id(14), productId: product, storeId: store, type: 'ADJUSTMENT',
+        quantityDelta: -2, actorId: owner,
+        reason: Value('INVENTORY:$session'), createdAt: day(2)));
+    await db.into(db.stockTransfers).insert(StockTransfersCompanion.insert(
+        id: id(15), sourceStoreId: store, destinationStoreId: id(99),
+        productId: id(98), quantity: 1, actorId: owner,
+        status: const Value('PENDING_SYNC'), occurredAt: day(2)));
+    await db.into(db.sales).insert(SalesCompanion.insert(
+        id: sale, storeId: store, employeeId: empUser, totalAmount: 900,
+        paymentMode: 'BANK_CARD', clientId: Value(client),
+        status: const Value('PENDING_VALIDATION'), occurredAt: Value(day(2)),
+        createdAt: day(2)));
+    await db.into(db.saleItems).insert(SaleItemsCompanion.insert(
+        id: id(16), saleId: sale, productId: product, productName: 'Pagne',
+        unitPrice: 900, quantity: 1, subtotal: 900, createdAt: t0));
+    await db.into(db.dayClosures).insert(DayClosuresCompanion.insert(
+        id: id(17), storeId: store, actorId: owner, closedAt: day(2),
+        totalSales: 1, totalRevenue: 900, cashAmount: 900, momoAmount: 0,
+        pendingSalesCount: 0, pendingSalesTotal: 0, createdAt: t0));
+    await db.into(db.inventorySessions).insert(InventorySessionsCompanion.insert(
+        id: session, storeId: store, scope: 'FULL', status: 'IN_PROGRESS',
+        startedBy: owner, startedAt: day(2), updatedAt: t0));
+    await db.into(db.inventoryCounts).insert(InventoryCountsCompanion.insert(
+        id: id(18), sessionId: session, productId: product,
+        productName: 'Pagne', theoretical: 3, updatedAt: t0));
+    await db.into(db.reports).insert(ReportsCompanion.insert(
+        id: id(19), tenantId: 't', storeId: store, reportType: 'DAILY',
+        reportDate: day(2), content: 'Rapport', deliveryStatus: 'SENT',
+        createdAt: day(2)));
+    await db.into(db.auditEntries).insert(AuditEntriesCompanion.insert(
+        id: id(20), userId: empUser, entityType: 'PriceOverride',
+        entityId: product, action: 'PRICE_OVERRIDDEN', occurredAt: day(2),
+        storeId: Value(store), entityLabel: const Value('Pagne'),
+        source: const Value('SYNC'),
+        deviceId: const Value('android-3f2a9c1d8e7b6a5f'),
+        valueBefore: Value('{"price":1000,"productId":"$product"}'),
+        valueAfter: const Value(
+            '{"price":1500,"criteria":{"q":"x"},"status":"PENDING_VALIDATION"}'),
+        metadata: Value('{"storeId":"$store","notes":"INVENTORY:$session",'
+            '"isAutomatic":true}')));
+    await db.into(db.auditEntries).insert(AuditEntriesCompanion.insert(
+        id: id(21), userId: owner, entityType: 'Gadget', entityId: id(22),
+        action: 'FOO_BAR', occurredAt: day(3),
+        entityLabel: Value(id(23)), valueAfter: const Value('{oops')));
+
+    for (final d in localExportCatalog) {
+      final found = await rows(d.key);
+      expect(found, isNotEmpty, reason: d.key);
+      for (final c in d.columns) {
+        expectNoTechnicalString(c.label, reason: '${d.key} header');
+      }
+      for (final r in found) {
+        for (final v in r) {
+          if (v is String) expectNoTechnicalString(v, reason: d.key);
+        }
+      }
+    }
+    final audit = named('audit_log', (await rows('audit_log')).last);
+    expect(audit['action'], 'Prix modifié en caisse');
+    expect(audit['entityType'], 'Prix de vente');
+    expect(audit['changes'],
+        'Prix : 1 000 XAF → 1 500 XAF ; Statut : — → En attente de validation');
+    expect(audit['details'],
+        'Motif : Ajustement d\'inventaire ; Déclenchement : Automatique');
+    final stores = await rows('stores');
+    expect(stores.map((r) => named('stores', r)['type']),
+        ['Boutique', 'Entrepôt']);
   });
 }

@@ -172,9 +172,9 @@ class ExportServiceTest {
 
             assertThat(outcome).isInstanceOf(RequestExportUseCase.Direct.class);
             var d = (RequestExportUseCase.Direct) outcome;
-            assertThat(d.fileName()).isEqualTo("keevo-stores-20261012-1330.csv");
+            assertThat(d.fileName()).isEqualTo("keevo-boutiques-20261012-1330.csv");
             assertThat(d.rowCount()).isEqualTo(3);
-            assertThat(opened).containsExactly("text/csv; charset=UTF-8|keevo-stores-20261012-1330.csv");
+            assertThat(opened).containsExactly("text/csv; charset=UTF-8|keevo-boutiques-20261012-1330.csv");
             assertThat(new String(out.toByteArray(), StandardCharsets.UTF_8)).startsWith("﻿N°;Nom;");
             DataExportedEvent e = capturedEvent();
             assertThat(e.exportId()).isEqualTo(d.exportId());
@@ -269,7 +269,7 @@ class ExportServiceTest {
             ExportJob job = ((RequestExportUseCase.Background) outcome).job();
             assertThat(job.getStatus()).isEqualTo(ExportJobStatus.PENDING);
             assertThat(job.getRequestedBy()).isEqualTo(ACTOR);
-            assertThat(job.getFileName()).isEqualTo("keevo-big-20261012-1330.xlsx");
+            assertThat(job.getFileName()).isEqualTo("keevo-gros-20261012-1330.xlsx");
             assertThat(job.getCreatedAt()).isEqualTo(NOW);
             assertThat(submitted).hasSize(1);
             assertThat(opened).isEmpty();
@@ -558,8 +558,8 @@ class ExportServiceTest {
         void premiumPdfDirect() throws Exception {
             var d = (RequestExportUseCase.Direct) run(req(ExportFormat.PDF, "sales"));
 
-            assertThat(d.fileName()).isEqualTo("keevo-sales-20261012-1330.pdf");
-            assertThat(opened).containsExactly("application/pdf|keevo-sales-20261012-1330.pdf");
+            assertThat(d.fileName()).isEqualTo("keevo-ventes-20261012-1330.pdf");
+            assertThat(opened).containsExactly("application/pdf|keevo-ventes-20261012-1330.pdf");
             assertThat(new String(out.toByteArray(), StandardCharsets.US_ASCII)).startsWith("%PDF");
             assertThat(d.rowCount()).isEqualTo(4);
             assertThat(pdfRenderer.calls).containsExactly("validate", "checkSize:4", "render");

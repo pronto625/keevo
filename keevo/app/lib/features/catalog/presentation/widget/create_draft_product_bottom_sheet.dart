@@ -1,4 +1,5 @@
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import 'dart:async';
 
@@ -139,7 +140,7 @@ class _CreateDraftProductBottomSheetState
     } on ProductException catch (e) {
       if (mounted) setState(() => _errorMessage = e.message);
     } catch (e) {
-      if (mounted) setState(() => _errorMessage = 'Erreur inattendue : $e');
+      if (mounted) setState(() => _errorMessage = appErrorMessage(e));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

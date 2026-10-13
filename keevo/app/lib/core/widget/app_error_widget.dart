@@ -1,7 +1,42 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import 'soft_icon_badge.dart';
+
+/// Generic French message when nothing readable can be shown.
+const kAppGenericErrorMessage =
+    'Une erreur inattendue est survenue. Réessayez plus tard.';
+
+/// Technical data a user must never read (v1s-16-20): a UUID, a raw
+/// SNAKE_CASE code, JSON, an exception class / stack noise or an HTTP code.
+final _technical = RegExp(
+    r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+    r'|\b[A-Z]+(_[A-Z]+)+\b'
+    r'|[{\[]"'
+    r'|Exception|Error\b|\bnull\b|Bad state|status code|#0 ');
+
+/// [value] when it is a String (an API body field may be a Map / List).
+String? _text(Object? value) => value is String ? value : null;
+
+/// The `message` getter of an exception, when it has a String one.
+String? _messageOf(Object error) {
+  try {
+    final dynamic e = error;
+    final Object? m = e.message;
+    return m is String ? m : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// [message] when it is readable French for the user, else `null`.
+String? _readable(String? message) {
+  final m = message?.trim();
+  if (m == null || m.isEmpty || _technical.hasMatch(m)) return null;
+  return m;
+}
 
 /// Extracts a human-readable error message from any exception type.
 ///
@@ -9,14 +44,18 @@ import 'soft_icon_badge.dart';
 ///  1. DioException: parses the API body (`error`, `message`, `domainCode`)
 ///  2. Regular Exception: strips internal stack noise
 ///  3. Fallback generic message
+///
+/// v1s-16-20: never returns an id, a raw code, an HTTP status code or an
+/// exception text — such messages fall back to a generic French message.
 String appErrorMessage(Object error) {
   if (error is DioException) {
     final body = error.response?.data;
     if (body is Map) {
-      final domainCode = body['domainCode'] as String?;
+      final domainCode = _text(body['domainCode']);
       if (domainCode != null) return _domainMessage(domainCode, body);
-      final msg = body['error'] as String? ?? body['message'] as String?;
-      if (msg != null && msg.isNotEmpty) return msg;
+      final msg = _readable(_text(body['error'])) ??
+          _readable(_text(body['message']));
+      if (msg != null) return msg;
     }
     if (error.type == DioExceptionType.connectionTimeout ||
         error.type == DioExceptionType.receiveTimeout ||
@@ -26,17 +65,25 @@ String appErrorMessage(Object error) {
     if (error.type == DioExceptionType.connectionError) {
       return 'Impossible de se connecter au serveur. Vérifiez votre réseau.';
     }
-    return 'Erreur réseau (${error.response?.statusCode ?? 'inconnu'})';
+    return 'Le serveur n\'a pas pu traiter la demande. Réessayez plus tard.';
   }
   if (error is Exception) {
-    final msg = error.toString().replaceFirst('Exception: ', '');
-    // Never expose UUIDs or stack traces to the user.
-    if (RegExp(r'[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}').hasMatch(msg)) {
-      return 'Une erreur inattendue est survenue. Réessayez plus tard.';
+    // App domain exceptions (ContactException, ProductException…) carry a
+    // French `message`: show it when readable.
+    // Dart core exceptions (FormatException…) carry English text: skipped.
+    final own = error is FormatException || error is TimeoutException
+        ? null
+        : _readable(_messageOf(error));
+    if (own != null) return own;
+    final raw = error.toString();
+    // `FormatException: …` and the like are technical as a whole.
+    if (!raw.startsWith('Exception: ') && _technical.hasMatch(raw)) {
+      return kAppGenericErrorMessage;
     }
-    if (msg.isNotEmpty) return msg;
+    return _readable(raw.replaceFirst('Exception: ', '')) ??
+        kAppGenericErrorMessage;
   }
-  return 'Une erreur inattendue est survenue. Réessayez plus tard.';
+  return kAppGenericErrorMessage;
 }
 
 /// Maps backend domain codes to French user-facing messages.
@@ -57,10 +104,9 @@ String _domainMessage(String code, Map<dynamic, dynamic> body) {
     case 'SALE_ALREADY_CANCELLED':
       return 'Cette vente a déjà été annulée.';
     default:
-      final msg = body['error'] as String? ?? body['message'] as String?;
-      return msg != null && msg.isNotEmpty
-          ? msg
-          : 'Erreur ($code). Réessayez plus tard.';
+      return _readable(_text(body['error'])) ??
+          _readable(_text(body['message'])) ??
+          kAppGenericErrorMessage;
   }
 }
 

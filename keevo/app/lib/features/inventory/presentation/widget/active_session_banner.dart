@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../domain/model/inventory_scope.dart';
 import '../../domain/model/inventory_session_model.dart';
 
 /// ActiveSessionBanner — shows the current active inventory session.
@@ -47,7 +48,7 @@ class ActiveSessionBanner extends StatelessWidget {
                 ),
                 const Spacer(),
                 Chip(
-                  label: Text(session.scope),
+                  label: Text(inventoryScopeLabel(session.scope)),
                   backgroundColor: cs.primary.withValues(alpha: 0.12),
                   side: BorderSide.none,
                   shape: const StadiumBorder(),

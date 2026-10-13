@@ -30,7 +30,6 @@ public class EmployeesExportDatasetProvider extends NativeKeysetExportDataset {
     private static final Map<String, String> STATUS = Map.of("ACTIVE", "Actif", "INACTIVE", "Inactif");
 
     private static final List<ExportColumn> COLUMNS = List.of(
-            new ExportColumn("id", "Identifiant", ExportColumnType.TEXT),
             new ExportColumn("firstName", "Prénom", ExportColumnType.TEXT),
             new ExportColumn("lastName", "Nom", ExportColumnType.TEXT),
             new ExportColumn("phone", "Téléphone", ExportColumnType.TEXT),
@@ -52,7 +51,7 @@ public class EmployeesExportDatasetProvider extends NativeKeysetExportDataset {
 
     @Override
     protected String selectList(ExportFilter filter) {
-        return "CAST(e.id AS text), e.first_name, e.last_name, u.phone_number, st.name, e.status, e.created_at";
+        return "e.first_name, e.last_name, u.phone_number, st.name, e.status, e.created_at";
     }
 
     @Override
@@ -72,7 +71,7 @@ public class EmployeesExportDatasetProvider extends NativeKeysetExportDataset {
 
     @Override
     protected List<Object> mapRow(Object[] r) {
-        return Arrays.asList(str(r[0]), str(r[1]), str(r[2]), str(r[3]), str(r[4]), frLabel(STATUS, r[5]),
-                toInstant(r[6]));
+        return Arrays.asList(str(r[0]), str(r[1]), str(r[2]), str(r[3]), frLabel(STATUS, r[4]),
+                toInstant(r[5]));
     }
 }

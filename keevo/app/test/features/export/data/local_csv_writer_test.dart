@@ -9,7 +9,8 @@ import 'package:keevo/features/export/domain/exception/export_exception.dart';
 import 'package:keevo/features/export/domain/local/local_export_schema.dart';
 
 /// v1s-18-5 — the worker-isolate writer: BOM, header of French labels,
-/// CRLF, server cell formats; a zip of `<key>.csv` for several datasets.
+/// CRLF, server cell formats; a zip of `<label slug>.csv` for several
+/// datasets (v1s-16-20: never the dataset key).
 void main() {
   late Directory dir;
 
@@ -21,9 +22,8 @@ void main() {
   final products = localExportDataset('products')!;
   final sales = localExportDataset('sales')!;
 
-  List<Object?> productRow(String id) => [
-        id,
-        'PG-1',
+  List<Object?> productRow(String sku) => [
+        sku,
         '=SUM(A1)',
         'Tissus',
         'Actif',
@@ -54,12 +54,12 @@ void main() {
     final lines = text.split('\r\n');
     expect(
         lines.first,
-        'Identifiant;Référence;Nom;Catégorie;Statut;Prix de vente;'
+        'Référence;Nom;Catégorie;Statut;Prix de vente;'
         'Prix d\'achat;Frais de transport;Seuil minimum;Stock;Fournisseurs;'
         'Archivé;Créé le;Modifié le');
     expect(
         lines[1],
-        "p-1;PG-1;'=SUM(A1);Tissus;Actif;1500;1000;0;;3;\"A; B\";Oui;"
+        "p-1;'=SUM(A1);Tissus;Actif;1500;1000;0;;3;\"A; B\";Oui;"
         '13/10/2026 00:30:00;13/10/2026 00:30:00');
     expect(lines, hasLength(5)); // header + 3 rows + trailing empty
     expect(lines.last, '');
@@ -68,7 +68,8 @@ void main() {
     expect(Directory('${dir.path}/.parts').existsSync(), isFalse);
   });
 
-  test('several datasets: zip of <key>.csv entries, each with a BOM', () async {
+  test('several datasets: zip of <label slug>.csv entries, each with a BOM',
+      () async {
     final writer = LocalCsvWriter();
     await writer.start(dir);
     await writer.beginDataset('products', products.columns);
@@ -93,7 +94,7 @@ void main() {
     final file = await writer.finish('out.zip');
 
     final archive = ZipDecoder().decodeBytes(file.readAsBytesSync());
-    expect(archive.files.map((f) => f.name), ['products.csv', 'sales.csv']);
+    expect(archive.files.map((f) => f.name), ['produits.csv', 'ventes.csv']);
     for (final f in archive.files) {
       final content = f.content;
       expect(content.sublist(0, 3), [0xEF, 0xBB, 0xBF], reason: f.name);

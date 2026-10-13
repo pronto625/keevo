@@ -117,9 +117,10 @@ class CsvExportRendererTest {
                 entries.put(e.getName(), new String(zip.readAllBytes(), StandardCharsets.UTF_8));
             }
         }
-        assertThat(entries).containsOnlyKeys("stores.csv", "products.csv");
-        assertThat(entries.get("stores.csv")).isEqualTo("﻿Nom\r\nA\r\n");
-        assertThat(entries.get("products.csv")).isEqualTo("﻿Nom\r\nB\r\n");
+        // v1s-16-20 — entries named after the French label, never the dataset key
+        assertThat(entries).containsOnlyKeys("boutiques.csv", "produits.csv");
+        assertThat(entries.get("boutiques.csv")).isEqualTo("﻿Nom\r\nA\r\n");
+        assertThat(entries.get("produits.csv")).isEqualTo("﻿Nom\r\nB\r\n");
         assertThat(renderer.contentType(2)).isEqualTo("application/zip");
         assertThat(renderer.extension(2)).isEqualTo("zip");
     }

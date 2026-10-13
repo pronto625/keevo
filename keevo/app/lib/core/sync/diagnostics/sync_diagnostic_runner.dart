@@ -60,12 +60,13 @@ class SyncDiagnosticRunner {
 
     // Log result
     if (serverReachable && jwtValid) {
-      await _eventLogger.logDiagnostic(
-          'OK', 'Server reachable, JWT valid — sync issue may be transient');
+      await _eventLogger.logDiagnostic('OK',
+          'Serveur joignable et session valide — le problème devrait se résoudre seul');
     } else {
       final issues = <String>[];
-      if (!serverReachable) issues.add('server unreachable');
-      if (!jwtValid) issues.add('JWT expired/invalid');
+      // v1s-16-20: shown in the sync history — French, no technical term.
+      if (!serverReachable) issues.add('serveur injoignable');
+      if (!jwtValid) issues.add('session expirée, reconnectez-vous');
       await _eventLogger.logDiagnostic('WARN', issues.join(', '));
     }
 

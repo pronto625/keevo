@@ -16,6 +16,8 @@ import 'package:keevo/features/stores/domain/model/store_model.dart';
 import 'package:keevo/features/stores/presentation/provider/active_store_provider.dart';
 import 'package:keevo/features/stores/presentation/provider/store_provider.dart';
 
+import '../../../../helpers/no_technical_text.dart';
+
 class _MockTransferRepo extends Mock implements StockTransferRepository {}
 
 class _FixedActiveStore extends ActiveStoreNotifier {
@@ -92,6 +94,34 @@ void main() {
     await tester.pump();
 
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'v1s-16-20 guard: unnamed stores / product and unknown status never '
+      'show an id or a code', (tester) async {
+    const uuid = '7f1c2b4e-2b9a-4c1e-9d0f-0a1b2c3d4e5f';
+    when(() => repo.getHistory(
+          sourceStoreId: any(named: 'sourceStoreId'),
+          destinationStoreId: any(named: 'destinationStoreId'),
+          page: any(named: 'page'),
+          pageSize: any(named: 'pageSize'),
+        )).thenAnswer((_) async => [
+          StockTransferModel(
+            id: uuid,
+            sourceStoreId: 'store-1',
+            destinationStoreId: uuid,
+            productId: uuid,
+            quantity: 2,
+            actorId: uuid,
+            occurredAt: DateTime(2026, 1, 1),
+            status: 'SOME_NEW_STATUS',
+          ),
+        ]);
+    await tester.pumpWidget(buildPage(storesLoaded: true));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Some new status'), findsOneWidget);
+    expectNoTechnicalText(tester);
   });
 
   testWidgets('pull-to-refresh reloads the history', (tester) async {

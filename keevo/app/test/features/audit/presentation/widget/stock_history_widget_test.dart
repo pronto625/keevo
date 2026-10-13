@@ -229,6 +229,40 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
     });
 
+    testWidgets('v1s-16-20: price override in XAF, stock entry readable',
+        (tester) async {
+      await tester.pumpWidget(_buildWidget([
+        AuditEntryDto(
+          id: 'e-price',
+          entityType: 'PriceOverride',
+          entityId: 'p-1',
+          action: 'PRICE_OVERRIDDEN',
+          valueBefore: '{"cataloguePrice":1000}',
+          valueAfter: '{"appliedPrice":1500,"productName":"Savon"}',
+          userId: 'other-user',
+          actorName: 'Awa',
+          occurredAt: DateTime.utc(2026, 3, 1, 11),
+        ),
+        AuditEntryDto(
+          id: 'e-entry',
+          entityType: 'StockMovement',
+          entityId: 'p-1',
+          action: 'STOCK_ADJUSTED',
+          valueAfter: '{"movementType":"STOCK_ENTRY","quantityChange":4,'
+              '"quantityAfter":9}',
+          userId: 'other-user',
+          occurredAt: DateTime.utc(2026, 3, 1, 10),
+        ),
+      ]));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Prix modifié : 1 000 XAF → 1 500 XAF'), findsOneWidget);
+      expect(find.text('Stock réceptionné : +4 unité(s) · total : 9'),
+          findsOneWidget);
+      expect(find.textContaining('STOCK_ENTRY'), findsNothing);
+      expect(find.textContaining('FCFA'), findsNothing);
+    });
+
     testWidgets('shows valueBefore → valueAfter when present', (tester) async {
       await tester.pumpWidget(_buildWidget([_stockEntry]));
       await tester.pumpAndSettle();
@@ -245,7 +279,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
-      expect(find.text('system'), findsOneWidget);
+      expect(find.text('system'), findsNothing); // never an id (v1s-16-20)
+      expect(find.text('Un utilisateur'), findsOneWidget);
     });
 
     testWidgets('empty state supports pull-to-refresh', (tester) async {

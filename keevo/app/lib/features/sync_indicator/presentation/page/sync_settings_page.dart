@@ -1,12 +1,12 @@
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/di/providers.dart';
 import '../../../../core/sync/domain/sync_conflict.dart';
 import '../../../../core/sync/domain/sync_conflict_provider.dart';
 import '../../../../core/sync/sync_monitoring_providers.dart';
@@ -111,6 +111,7 @@ class _ActiveDevicesSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final asyncDevices = ref.watch(activeDevicesProvider);
+    final selfDeviceId = ref.watch(currentDeviceIdProvider).valueOrNull;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -150,7 +151,8 @@ class _ActiveDevicesSection extends ConsumerWidget {
                         : const NeverScrollableScrollPhysics(),
                     itemCount: devices.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 6),
-                    itemBuilder: (_, i) => _DeviceTile(device: devices[i]),
+                    itemBuilder: (_, i) => _DeviceTile(
+                        device: devices[i], selfDeviceId: selfDeviceId),
                   ),
                 ),
               ),
@@ -167,20 +169,22 @@ class _ActiveDevicesSection extends ConsumerWidget {
 
 class _DeviceTile extends StatelessWidget {
   final Map<String, dynamic> device;
-  const _DeviceTile({required this.device});
+  final String? selfDeviceId;
+  const _DeviceTile({required this.device, this.selfDeviceId});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final deviceId = (device['deviceId'] as String?) ?? '-';
+    final deviceId = device['deviceId'] as String?;
     final lastPushRaw = device['lastPushAt'] as String?;
     final lastPush = (lastPushRaw != null && lastPushRaw.isNotEmpty)
         ? DateTime.tryParse(lastPushRaw)
         : null;
     final freshness = _freshnessColor(lastPush, theme.colorScheme);
-    final shortId = deviceId.length > 13
-        ? '${deviceId.substring(0, 13)}…'
-        : deviceId;
+    // v1s-16-20: a device id is never shown — only whose device it is.
+    final name = deviceId != null && deviceId == selfDeviceId
+        ? 'Cet appareil'
+        : 'Autre appareil';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -203,11 +207,9 @@ class _DeviceTile extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  shortId,
+                  name,
                   style: const TextStyle(
-                      fontSize: 12,
-                      fontFamily: 'monospace',
-                      fontWeight: FontWeight.w600),
+                      fontSize: 12, fontWeight: FontWeight.w600),
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
@@ -288,16 +290,19 @@ class _EventTile extends StatelessWidget {
       _ => Theme.of(context).colorScheme.onSurfaceVariant,
     };
     final dateStr = DateFormat('dd/MM HH:mm').format(event.createdAt);
+    final message = event.errorMessage == null
+        ? null
+        : syncEventMessage(event.type, event.status, event.errorMessage!);
 
     return ListTile(
       dense: true,
       leading: Icon(icon, color: color, size: 20),
       title: Text(
-        isAbandon ? 'Opération abandonnée' : '${event.type} — ${event.status}',
+        isAbandon ? 'Opération abandonnée' : syncEventTitle(event.type, event.status),
         style: const TextStyle(fontSize: 13),
       ),
-      subtitle: event.errorMessage != null
-          ? Text(event.errorMessage!,
+      subtitle: message != null
+          ? Text(message,
               style: const TextStyle(fontSize: 11),
               maxLines: 2,
               overflow: TextOverflow.ellipsis)
@@ -393,21 +398,22 @@ class _ConflictTile extends StatelessWidget {
                     .titleMedium
                     ?.copyWith(fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
-            _DetailRow('Type', conflict.conflictType),
-            _DetailRow('Stratégie', conflict.strategy),
-            _DetailRow('Entité', conflict.entityId ?? '-'),
-            _DetailRow('Opération', conflict.operationType),
-            _DetailRow('Date', conflict.resolvedAt.toIso8601String()),
-            if (conflict.conflictData != null) ...[
+            // v1s-16-20: French labels only — no code, id or JSON.
+            _DetailRow('Type', SyncConflict.typeLabel(conflict.conflictType)),
+            _DetailRow(
+                'Résolution', SyncConflict.strategyLabel(conflict.strategy)),
+            if (conflict.entityType != null)
+              _DetailRow(
+                  'Élément', SyncConflict.entityLabel(conflict.entityType!)),
+            _DetailRow('Opération',
+                friendlySyncOperationLabel(conflict.operationType)),
+            _DetailRow('Date', SyncConflict.formatDate(conflict.resolvedAt)),
+            if (conflict.detailRows.isNotEmpty) ...[
               const SizedBox(height: 12),
-              Text('Données', style: Theme.of(ctx).textTheme.titleSmall),
+              Text('Détails', style: Theme.of(ctx).textTheme.titleSmall),
               const SizedBox(height: 8),
-              SelectableText(
-                const JsonEncoder.withIndent('  ')
-                    .convert(conflict.conflictData),
-                style:
-                    const TextStyle(fontFamily: 'monospace', fontSize: 12),
-              ),
+              for (final (label, value) in conflict.detailRows)
+                _DetailRow(label, value),
             ],
           ],
         ),
@@ -487,11 +493,6 @@ class _QueueTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final elapsed = DateTime.now().difference(op.createdAt);
     final timeInQueue = _humanizeDuration(elapsed);
-    final entityLabel = op.entityId != null
-        ? op.entityId!.length > 8
-            ? op.entityId!.substring(0, 8)
-            : op.entityId!
-        : '-';
     final isRejected = op.lastError != null;
     return ListTile(
       dense: true,
@@ -506,7 +507,7 @@ class _QueueTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '$entityLabel — $timeInQueue — ${op.retryCount} tentative${op.retryCount != 1 ? 's' : ''}',
+            '$timeInQueue — ${op.retryCount} tentative${op.retryCount != 1 ? 's' : ''}',
             style: const TextStyle(fontSize: 11),
           ),
           if (isRejected)

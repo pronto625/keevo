@@ -255,6 +255,9 @@ Après ça → directement sur l'écran POS, prêt à vendre. Pas de tutoriel ob
 4. **❌ Formulaires à champs obligatoires bloquants** — Le produit "brouillon" est valide.
 5. **❌ Messages d'erreur techniques** — Jamais "Error 500". Toujours un message humain rassurant.
 6. **❌ Import/export CSV comme onboarding** — Barrière infranchissable à tech literacy 4/10.
+7. **❌ Données techniques visibles** — Jamais d'identifiant (UUID ou fragment `…abcd1234`), de code brut (`CATEGORY_RENAMED`, `PENDING_VALIDATION`, `SYNC`), de nom de classe ou de colonne, d'identifiant d'appareil ni de JSON, que ce soit à l'écran ou dans un fichier exporté.
+
+**Règle permanente « aucune donnée technique » (story 16.20, NFR35).** Tout ce que voit le commerçant — écrans, SnackBars, messages de rejet de synchronisation, « Opérations bloquées », notifications, historique des actions (liste et détail avant/après), exports CSV/XLSX/PDF serveur et CSV local — se lit en français courant. Un identifiant est remplacé par ce qu'il désigne (nom du produit, de la boutique, de l'employé ; « Vente du 12/10/2026 à 14:32:05 — Boutique Centre » ; « Appareil de Awa » ; « Cet appareil » / « Autre appareil »). Un code connu reçoit son libellé, un code inconnu est humanisé (« Mobile money »), et un champ sans libellé lisible est omis plutôt qu'affiché brut. Les valeurs avant/après de l'historique se lisent « Prix : 1 000 XAF → 1 500 XAF ». Un message d'erreur serveur contenant un identifiant ou un code est remplacé par un message générique rassurant. Les identifiants restent autorisés en interne (requêtes, navigation, filtres, base) ; des tests de garde automatisés font échouer la CI dès qu'un UUID ou un code SNAKE_CASE apparaît dans un écran clé ou une cellule d'export.
 
 ### Design Inspiration Strategy
 

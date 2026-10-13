@@ -110,7 +110,7 @@ void main() {
         ];
     await pumpApp(tester, app());
 
-    expect(find.text('Ventes, mystery'), findsOneWidget);
+    expect(find.text('Ventes, Export'), findsOneWidget);
     expect(find.text('Prêt'), findsOneWidget);
     expect(find.text('Expiré'), findsNWidgets(2));
     expect(find.text('Échec'), findsOneWidget);

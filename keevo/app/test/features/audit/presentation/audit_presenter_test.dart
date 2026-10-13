@@ -165,6 +165,28 @@ void main() {
     });
   });
 
+  group('device (v1s-16-20)', () {
+    test('« Appareil de <actor> », null without device', () {
+      expect(
+          AuditPresenter.deviceLabel(
+              _entry(deviceId: 'android-3f2a9c1d8e7b6a5f', actorName: 'Awa')),
+          'Appareil de Awa');
+      expect(AuditPresenter.deviceLabel(_entry()), isNull);
+      expect(AuditPresenter.deviceLabel(_entry(deviceId: 'x')),
+          'Appareil de l\'auteur');
+    });
+
+    test('DATA_EXPORTED is a known action; unknown object type humanized',
+        () {
+      expect(AuditPresenter.isKnownAction('DATA_EXPORTED'), isTrue);
+      expect(AuditPresenter.actionInfo('DATA_EXPORTED').label,
+          'Données exportées');
+      expect(AuditPresenter.objectTypeLabel('Gadget'), 'Gadget');
+      expect(AuditPresenter.objectTypeLabel('FancyThing'), 'Fancy thing');
+      expect(AuditPresenter.objectTypeLabel('Product'), 'Produits');
+    });
+  });
+
   group('actor', () {
     test('name > metadata actorLabel > phone > generic', () {
       expect(AuditPresenter.actorName(_entry(actorName: 'Awa Diallo')),
@@ -196,7 +218,9 @@ void main() {
               _entry(entityType: 'DayClosure', action: 'DAY_CLOSED')),
           'Clôture de journée');
       expect(AuditPresenter.objectLabel(_entry(entityType: 'Employee')),
-          'Un employé');
+          'Employé');
+      expect(AuditPresenter.objectLabel(_entry(entityType: 'Export')),
+          'Export de données');
       expect(AuditPresenter.objectLabel(_entry(entityType: 'FancyThing')),
           'Fancy thing');
     });
@@ -291,6 +315,41 @@ void main() {
       }
     });
 
+    test('v1s-16-20: nested maps, UUID values and *Id keys never shown', () {
+      final rows = AuditPresenter.changes(_entry(
+        valueBefore: '{"price":1000,"productId":"7f1c2b4e-2b9a-4c1e-9d0f-0a1b2c3d4e5f"}',
+        valueAfter: '{"price":1500,"criteria":{"q":"x"},"ref":'
+            '"7f1c2b4e-2b9a-4c1e-9d0f-0a1b2c3d4e5f","categoryId":"c-1",'
+            '"draftProductIds":["a"],"mode":"DIRECT","kind":"FOO_BAR"}',
+      ));
+      expect(rows, [
+        const AuditChange('Prix', '1 000 XAF', '1 500 XAF'),
+        const AuditChange('Mode', '—', 'Téléchargement direct'),
+        const AuditChange('Kind', '—', 'Foo bar'),
+      ]);
+    });
+
+    test('v1s-16-20: unchanged snapshot fields skipped, sale ids stripped', () {
+      expect(
+          AuditPresenter.changes(_entry(
+              valueBefore: '{"name":"A","sku":"S1","price":1000}',
+              valueAfter: '{"name":"A","sku":"S1","price":1500}')),
+          [const AuditChange('Prix', '1 000 XAF', '1 500 XAF')]);
+      expect(
+          AuditPresenter.context(_entry(
+              metadata: '{"notes":"Annulation vente '
+                  '7f1c2b4e-2b9a-4c1e-9d0f-0a1b2c3d4e5f"}')),
+          [const AuditContextItem('Motif', 'Annulation vente')]);
+      expect(
+          AuditPresenter.objectLabel(
+              _entry(entityLabel: 'SOME_CODE', entityType: 'Product')),
+          'Produit');
+      expect(
+          AuditPresenter.objectLabel(
+              _entry(entityLabel: '{"a":1}', entityType: 'Product')),
+          'Produit');
+    });
+
     test('malformed or absent JSON never throws', () {
       expect(AuditPresenter.changes(_entry(valueAfter: 'not json')), isEmpty);
       expect(AuditPresenter.changes(_entry()), isEmpty);
@@ -317,6 +376,14 @@ void main() {
       expect(items, [const AuditContextItem('Justification', 'Client parti')]);
     });
 
+    test('inventory notes are readable, ids hidden', () {
+      expect(
+          AuditPresenter.context(_entry(
+              metadata: '{"notes":"INVENTORY:7f1c2b4e-2b9a-4c1e-9d0f-0a1b2c3d4e5f",'
+                  '"sessionId":"s-1","ip":"1.2.3.4"}')),
+          [const AuditContextItem('Motif', 'Ajustement d\'inventaire')]);
+    });
+
     test('empty when nothing to show', () {
       expect(AuditPresenter.context(_entry(metadata: '{"actorLabel":"A"}')),
           isEmpty);
@@ -327,8 +394,11 @@ void main() {
     test('source labels', () {
       expect(AuditPresenter.sourceLabel(_entry(source: 'ONLINE')), 'En ligne');
       expect(
-          AuditPresenter.sourceLabel(_entry(source: 'SYNC', deviceId: 'tab-1')),
-          'Synchronisé depuis l\'appareil tab-1');
+          AuditPresenter.sourceLabel(
+              _entry(source: 'SYNC', deviceId: 'tab-1', actorName: 'Awa')),
+          'Synchronisé depuis l\'appareil de Awa');
+      expect(AuditPresenter.sourceLabel(_entry(source: 'SYNC')),
+          'Synchronisé depuis l\'appareil');
       expect(AuditPresenter.sourceLabel(_entry(source: 'SYSTEM')),
           'Automatique (système)');
       expect(AuditPresenter.sourceLabel(_entry()), 'Non renseigné');

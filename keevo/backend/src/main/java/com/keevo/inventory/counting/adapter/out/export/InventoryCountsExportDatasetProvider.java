@@ -30,11 +30,9 @@ public class InventoryCountsExportDatasetProvider extends NativeKeysetExportData
     static final String KEY = "inventory_counts";
 
     private static final List<ExportColumn> COLUMNS = List.of(
-            new ExportColumn("sessionId", "Inventaire", ExportColumnType.TEXT),
             new ExportColumn("sessionStartedAt", "Date de l'inventaire", ExportColumnType.DATETIME),
             new ExportColumn("store", "Boutique", ExportColumnType.TEXT),
             new ExportColumn("sessionStatus", "Statut de l'inventaire", ExportColumnType.TEXT),
-            new ExportColumn("productId", "Identifiant produit", ExportColumnType.TEXT),
             new ExportColumn("product", "Produit", ExportColumnType.TEXT),
             new ExportColumn("variant", "Variante", ExportColumnType.TEXT),
             new ExportColumn("theoretical", "Stock théorique", ExportColumnType.INTEGER),
@@ -56,11 +54,17 @@ public class InventoryCountsExportDatasetProvider extends NativeKeysetExportData
     @Override public String label() { return "Comptages d'inventaire"; }
     @Override public List<ExportColumn> columns() { return COLUMNS; }
 
+    /** Session id, after the columns: the inventory PDF starts a block per session. */
+    @Override public List<String> internalKeys() { return INTERNAL; }
+
+    static final String INTERNAL_SESSION_ID = "sessionId";
+    private static final List<String> INTERNAL = List.of(INTERNAL_SESSION_ID);
+
     @Override
     protected String selectList(ExportFilter filter) {
-        return "CAST(s.id AS text), s.started_at, st.name, s.status, CAST(c.product_id AS text), c.product_name,"
+        return "s.started_at, st.name, s.status, c.product_name,"
                 + " c.variant_label, c.theoretical, c.physical, c.physical - c.theoretical, c.counted_at, "
-                + actorNameSelect("a");
+                + actorNameSelect("a") + ", CAST(s.id AS text)";
     }
 
     @Override
@@ -86,8 +90,8 @@ public class InventoryCountsExportDatasetProvider extends NativeKeysetExportData
 
     @Override
     protected List<Object> mapRow(Object[] r) {
-        return Arrays.asList(str(r[0]), toInstant(r[1]), str(r[2]), frLabel(InventoryLabels.STATUS, r[3]),
-                str(r[4]), str(r[5]), str(r[6]), toLong(r[7]), toLong(r[8]), toLong(r[9]), toInstant(r[10]),
-                str(r[11]));
+        return Arrays.asList(toInstant(r[0]), str(r[1]), frLabel(InventoryLabels.STATUS, r[2]),
+                str(r[3]), str(r[4]), toLong(r[5]), toLong(r[6]), toLong(r[7]), toInstant(r[8]),
+                str(r[9]), str(r[10]));
     }
 }

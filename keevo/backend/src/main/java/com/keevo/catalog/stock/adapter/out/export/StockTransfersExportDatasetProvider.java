@@ -15,6 +15,7 @@ import java.util.Map;
 import static com.keevo.shared.infrastructure.export.ExportValues.actorJoins;
 import static com.keevo.shared.infrastructure.export.ExportValues.actorNameSelect;
 import static com.keevo.shared.infrastructure.export.ExportValues.frLabel;
+import static com.keevo.shared.infrastructure.export.ExportValues.notes;
 import static com.keevo.shared.infrastructure.export.ExportValues.str;
 import static com.keevo.shared.infrastructure.export.ExportValues.toInstant;
 import static com.keevo.shared.infrastructure.export.ExportValues.toLong;
@@ -36,7 +37,6 @@ public class StockTransfersExportDatasetProvider extends NativeKeysetExportDatas
             "IN_TRANSIT", "En transit");
 
     private static final List<ExportColumn> COLUMNS = List.of(
-            new ExportColumn("id", "Identifiant", ExportColumnType.TEXT),
             new ExportColumn("occurredAt", "Date", ExportColumnType.DATETIME),
             new ExportColumn("sourceStore", "Boutique d'origine", ExportColumnType.TEXT),
             new ExportColumn("destinationStore", "Boutique de destination", ExportColumnType.TEXT),
@@ -61,7 +61,7 @@ public class StockTransfersExportDatasetProvider extends NativeKeysetExportDatas
 
     @Override
     protected String selectList(ExportFilter filter) {
-        return "CAST(t.id AS text), t.occurred_at, src.name, dst.name, p.sku, p.name, t.quantity, t.status, "
+        return "t.occurred_at, src.name, dst.name, p.sku, p.name, t.quantity, t.status, "
                 + actorNameSelect("a") + ", t.notes";
     }
 
@@ -89,7 +89,7 @@ public class StockTransfersExportDatasetProvider extends NativeKeysetExportDatas
 
     @Override
     protected List<Object> mapRow(Object[] r) {
-        return Arrays.asList(str(r[0]), toInstant(r[1]), str(r[2]), str(r[3]), str(r[4]), str(r[5]),
-                toLong(r[6]), frLabel(STATUS, r[7]), str(r[8]), str(r[9]));
+        return Arrays.asList(toInstant(r[0]), str(r[1]), str(r[2]), str(r[3]), str(r[4]),
+                toLong(r[5]), frLabel(STATUS, r[6]), str(r[7]), notes(r[8]));
     }
 }

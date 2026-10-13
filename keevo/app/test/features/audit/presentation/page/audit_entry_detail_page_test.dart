@@ -12,6 +12,7 @@ import 'package:keevo/features/audit/presentation/page/audit_entry_detail_page.d
 import 'package:keevo/features/audit/presentation/provider/audit_log_provider.dart';
 import 'package:keevo/features/audit/presentation/provider/audit_provider.dart';
 
+import '../../../../helpers/no_technical_text.dart';
 import 'audit_test_helpers.dart';
 
 /// v1s-18-7 — detail of one action: Qui / Quoi / Sur quoi / Quand et où /
@@ -78,7 +79,9 @@ void main() {
     expect(find.text('Qui'), findsOneWidget);
     expect(find.text('Awa'), findsOneWidget);
     expect(find.text('Employé'), findsOneWidget, reason: 'role');
-    expect(find.text('tablette-1'), findsOneWidget);
+    // v1s-16-20: the device is named after the actor, never by its id.
+    expect(find.text('Appareil de Awa'), findsOneWidget);
+    expect(find.textContaining('tablette-1'), findsNothing);
     expect(find.text('Quoi'), findsOneWidget);
     expect(find.text('Prix modifié en caisse'), findsOneWidget);
     expect(find.text('Sur quoi'), findsOneWidget);
@@ -86,13 +89,40 @@ void main() {
     expect(find.text('12/10/2026 09:05'), findsOneWidget);
     expect(find.text('Boutique Centre'), findsOneWidget);
     expect(
-        find.text('Synchronisé depuis l\'appareil tablette-1'), findsOneWidget);
+        find.text('Synchronisé depuis l\'appareil de Awa'), findsOneWidget);
     await scrollTo(tester, 'Contexte');
     expect(find.text('Changements'), findsOneWidget);
     expect(find.text('15 000 XAF'), findsOneWidget);
     expect(find.text('12 500 XAF'), findsOneWidget);
     expect(find.text('Client fidèle'), findsOneWidget);
     expect(repo.entryCalls, ['e1']);
+    expectNoTechnicalText(tester);
+  });
+
+  testWidgets(
+      'v1s-16-20 guard: ids, device id, nested values and codes never shown',
+      (tester) async {
+    repo.onEntry = (_) => Completer<AuditEntryDto>().future;
+    final e = auditEntry('t1',
+        action: 'PRODUCT_UPDATED',
+        entityType: 'Product',
+        entityLabel: 'Savon',
+        valueBefore: '{"id":"7f1c2b4e-2b9a-4c1e-9d0f-0a1b2c3d4e5f",'
+            '"status":"DRAFT","categoryId":"0b1c2d3e-2b9a-4c1e-9d0f-0a1b2c3d4e5f"}',
+        valueAfter: '{"status":"PENDING_VALIDATION","extra":{"a":1},'
+            '"ref":"7f1c2b4e-2b9a-4c1e-9d0f-0a1b2c3d4e5f","kind":"SOME_CODE"}',
+        metadata: '{"storeId":"7f1c2b4e-2b9a-4c1e-9d0f-0a1b2c3d4e5f",'
+            '"notes":"INVENTORY:7f1c2b4e-2b9a-4c1e-9d0f-0a1b2c3d4e5f"}',
+        source: 'SYNC',
+        deviceId: 'android-3f2a9c1d8e7b6a5f');
+
+    await tester.pumpWidget(app('t1', e));
+    await tester.pump();
+    await scrollTo(tester, 'Contexte');
+
+    expect(find.text('Code'), findsNothing);
+    expect(find.text('Ajustement d\'inventaire'), findsOneWidget);
+    expectNoTechnicalText(tester);
   });
 
   testWidgets('the fresh detail replaces the tapped data', (tester) async {
@@ -166,11 +196,13 @@ void main() {
 
     expect(find.text('Vous avez effectué « Foo bar »'), findsOneWidget);
     expect(find.text('Foo bar'), findsOneWidget);
-    expect(find.text('FOO_BAR'), findsOneWidget, reason: 'raw code shown');
+    expect(find.text('FOO_BAR'), findsNothing, reason: 'never the raw code');
+    expect(find.text('Code'), findsNothing);
     expect(find.text('Propriétaire'), findsOneWidget);
     expect(find.text('Gizmo'), findsOneWidget);
     expect(find.text('Non renseigné'), findsWidgets);
     await scrollTo(tester, 'Aucun changement détaillé');
     expect(find.text('Contexte'), findsNothing);
+    expectNoTechnicalText(tester);
   });
 }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../audit/domain/audit_format.dart';
 import '../../domain/model/stock_movement_model.dart';
 import '../provider/stock_provider.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
@@ -296,7 +297,8 @@ class _MovementTile extends StatelessWidget {
                   color: Theme.of(context).colorScheme.onSurfaceVariant)),
           if (movement.notes != null && movement.notes!.isNotEmpty)
             Text(
-              movement.notes!,
+              // v1s-16-20: `INVENTORY:<id>` → « Ajustement d'inventaire ».
+              AuditFormat.notes(movement.notes)!,
               style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -321,6 +323,6 @@ class _MovementTile extends StatelessWidget {
         'TRANSFER_IN' => 'Transfert entrant',
         'TRANSFER_OUT' => 'Transfert sortant',
         'SALE_CANCELLED' => 'Vente annulée',
-        _ => type,
+        _ => AuditFormat.humanize(type),
       };
 }

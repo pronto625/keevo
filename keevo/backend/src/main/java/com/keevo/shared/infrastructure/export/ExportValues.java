@@ -6,14 +6,23 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.text.Normalizer;
+import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Typed value converters for export dataset providers (Story v1s-18-2): turn raw native-query
  * values (JDBC / Hibernate types) into the types of {@code ExportColumnType}, and enum codes into
  * French labels.
+ *
+ * <p>Story v1s-16-20 — no technical data in a file: unknown codes are humanized
+ * ({@link #humanize(String)}), never written raw; {@link #isTechnical(String)} is the rule the
+ * export guard tests apply to every header and cell.
  */
 public final class ExportValues {
 
@@ -22,6 +31,28 @@ public final class ExportValues {
 
     /** Owner fallback name when the actor has no employee row (same rule as the audit log). */
     public static final String OWNER_LABEL = "Propriétaire";
+
+    /** Readable text of a stock movement note written by an inventory validation. */
+    public static final String INVENTORY_NOTE = "Ajustement d'inventaire";
+
+    /** Prefix of the stock movement notes written by an inventory validation ({@code INVENTORY:<id>}). */
+    public static final String INVENTORY_NOTE_PREFIX = "INVENTORY:";
+
+    /** Time zone of every date shown to the user (West Africa Time). */
+    public static final ZoneId WAT = ZoneId.of("Africa/Douala");
+
+    /** A UUID anywhere in a text. */
+    public static final Pattern UUID_PATTERN = Pattern.compile(
+            "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+
+    /** A raw SNAKE_CASE code ({@code PENDING_VALIDATION}). */
+    public static final Pattern SNAKE_CODE = Pattern.compile("^[A-Z0-9]+(_[A-Z0-9]+)+$");
+
+    /** A SNAKE_CASE code inside a longer text (« Statut : PENDING_VALIDATION »). */
+    public static final Pattern EMBEDDED_SNAKE_CODE = Pattern.compile("\\b[A-Z][A-Z0-9]*(_[A-Z0-9]+)+\\b");
+
+    private static final DateTimeFormatter SALE_REFERENCE = DateTimeFormatter.ofPattern(
+            "'Vente du 'dd/MM/yyyy' à 'HH:mm:ss", Locale.FRENCH);
 
     public static String str(Object value) {
         return value != null ? value.toString() : null;
@@ -64,11 +95,65 @@ public final class ExportValues {
         return Boolean.parseBoolean(value.toString());
     }
 
-    /** French label of an enum code; unknown codes fall back to the raw code, {@code null} stays null. */
+    /** French label of an enum code; unknown codes are humanized ({@code KIOSK} → « Kiosk »), null stays null. */
     public static String frLabel(Map<String, String> labels, Object code) {
         if (code == null) return null;
         String c = code.toString();
-        return labels.getOrDefault(c, c);
+        String label = labels.get(c);
+        return label != null ? label : humanize(c);
+    }
+
+    /**
+     * Readable words of a code — same rule as the app ({@code AuditPresenter.humanize}):
+     * {@code MOBILE_MONEY} → « Mobile money », {@code someKey} → « Some key ».
+     */
+    public static String humanize(String code) {
+        if (code == null) return null;
+        String spaced = code.replaceAll("([a-z0-9])([A-Z])", "$1 $2").replace('_', ' ').trim()
+                .toLowerCase(Locale.ROOT);
+        if (spaced.isEmpty()) return code;
+        return Character.toUpperCase(spaced.charAt(0)) + spaced.substring(1);
+    }
+
+    /** Whether a text shown to the user holds technical data: a UUID, a raw SNAKE_CASE code or JSON. */
+    public static boolean isTechnical(String text) {
+        if (text == null) return false;
+        String t = text.trim();
+        return UUID_PATTERN.matcher(t).find() || SNAKE_CODE.matcher(t).matches()
+                || EMBEDDED_SNAKE_CODE.matcher(t).find() || t.contains("{\"") || t.contains("[\"")
+                || t.startsWith("{") || t.startsWith("[");
+    }
+
+    /**
+     * Readable reference of a sale: « Vente du 12/10/2026 à 14:32:05 — Boutique Centre » (WAT),
+     * without the store part when it is unknown. Shared by {@code sales} and {@code sale_items} so
+     * the two files can be matched.
+     */
+    public static String saleReference(Instant occurredAt, String store) {
+        if (occurredAt == null) return null;
+        String ref = SALE_REFERENCE.format(occurredAt.atZone(WAT));
+        return store == null || store.isBlank() ? ref : ref + " — " + store.trim();
+    }
+
+    /** ASCII file-name part of a French label: « Journal d'audit » → {@code journal-d-audit}; null when empty. */
+    public static String slug(String label) {
+        if (label == null) return null;
+        String ascii = Normalizer.normalize(label, Normalizer.Form.NFD).replaceAll("\\p{M}+", "");
+        String s = ascii.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("^-+|-+$", "");
+        return s.isEmpty() ? null : s;
+    }
+
+    /**
+     * Stock movement / transfer notes: an inventory validation note ({@code INVENTORY:<id>}) reads
+     * « Ajustement d'inventaire »; any other UUID is removed (« Annulation vente <id> » →
+     * « Annulation vente »). Null when nothing readable remains.
+     */
+    public static String notes(Object value) {
+        if (value == null) return null;
+        String s = value.toString();
+        if (s.startsWith(INVENTORY_NOTE_PREFIX)) return INVENTORY_NOTE;
+        String cleaned = UUID_PATTERN.matcher(s).replaceAll(" ").replaceAll("\\s+", " ").trim();
+        return cleaned.isEmpty() ? null : cleaned;
     }
 
     /**

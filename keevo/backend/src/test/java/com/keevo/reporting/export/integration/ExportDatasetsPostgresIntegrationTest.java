@@ -17,8 +17,15 @@ import com.keevo.shared.application.port.export.ExportDatasetProvider;
 import com.keevo.shared.application.port.export.ExportFilter;
 import com.keevo.shared.application.port.export.ExportPage;
 import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.infrastructure.export.ExportValues;
 import com.keevo.shared.infrastructure.persistence.FullContextIntegrationTest;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.Row;
@@ -36,6 +43,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.sql.Date;
 import java.sql.Timestamp;
@@ -231,14 +239,27 @@ class ExportDatasetsPostgresIntegrationTest extends FullContextIntegrationTest {
     }
 
     /** dataset key → lines (header first) of a zip of CSVs. */
-    private static Map<String, List<String>> unzipCsv(byte[] zip) throws Exception {
+    private Map<String, List<String>> unzipCsv(byte[] zip) throws Exception {
         Map<String, List<String>> files = new LinkedHashMap<>();
+        unzip(zip).forEach((key, csv) -> files.put(key, List.of(csv.split("\r\n"))));
+        return files;
+    }
+
+    /**
+     * dataset key → CSV text (BOM removed) of a zip of CSVs. Entries are named after the French
+     * label (v1s-16-20), mapped back to the dataset key here.
+     */
+    private Map<String, String> unzip(byte[] zip) throws Exception {
+        Map<String, String> keyBySlug = new LinkedHashMap<>();
+        registry.all().forEach(p -> keyBySlug.put(ExportValues.slug(p.label()) + ".csv", p.key()));
+        Map<String, String> files = new LinkedHashMap<>();
         try (ZipInputStream in = new ZipInputStream(new ByteArrayInputStream(zip), StandardCharsets.UTF_8)) {
             ZipEntry entry;
             while ((entry = in.getNextEntry()) != null) {
                 String csv = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-                assertThat(csv).as(entry.getName()).startsWith("﻿");
-                files.put(entry.getName().replace(".csv", ""), List.of(csv.substring(1).split("\r\n")));
+                assertThat(csv).as(entry.getName()).startsWith("\uFEFF");
+                assertThat(keyBySlug).as("zip entry " + entry.getName()).containsKey(entry.getName());
+                files.put(keyBySlug.get(entry.getName()), csv.substring(1));
             }
         }
         return files;
@@ -359,17 +380,20 @@ class ExportDatasetsPostgresIntegrationTest extends FullContextIntegrationTest {
                 ExportFormat.CSV, ExportFilter.none()));
 
         String products = String.join("\n", all.get("products"));
-        assertThat(products).contains(a.p1() + ";SKU-1;" + a.tag() + "-P1;" + a.tag() + "-Cat;Actif;1500;1000;50;5;13;"
+        assertThat(products).contains("SKU-1;" + a.tag() + "-P1;" + a.tag() + "-Cat;Actif;1500;1000;50;5;13;"
                 + a.tag() + "-Sup;Non;10/01/2026 11:00:00");
-        assertThat(products).contains(a.p2() + ";SKU-2;" + a.tag() + "-P2;" + a.tag() + "-Cat;Brouillon;800;500;0;0;0;;Oui");
+        assertThat(products).contains("SKU-2;" + a.tag() + "-P2;" + a.tag() + "-Cat;Brouillon;800;500;0;0;0;;Oui");
 
         String sales = String.join("\n", all.get("sales"));
-        assertThat(sales).contains("15/03/2026 11:00:00;" + a.tag() + "-S1;Awa " + a.tag() + "-Emp;" + a.tag()
+        assertThat(sales).contains("Vente du 15/03/2026 à 11:00:00 — " + a.tag() + "-S1;15/03/2026 11:00:00;"
+                + a.tag() + "-S1;Awa " + a.tag() + "-Emp;" + a.tag()
                 + "-Client;Validée;Espèces;3;100;1500");
         assertThat(sales).contains(";Annulée;Mobile Money;1;100;1500", ";En attente de validation;Espèces;1;100;1500");
 
         assertThat(String.join("\n", all.get("sale_items")))
-                .contains(";" + a.p2() + ";SKU-2;" + a.tag() + "-P2;2;800;800;1600");
+                .contains(";SKU-2;" + a.tag() + "-P2;2;800;800;1600")
+                // same readable reference as the sale: the two files can be matched
+                .contains("Vente du 15/03/2026 à 11:00:00 — " + a.tag() + "-S1;15/03/2026 11:00:00;");
         assertThat(String.join("\n", all.get("inventory_sessions")))
                 .contains(";Annulé;Propriétaire;", ";Complet;", ";Partiel;")
                 .contains(";1;1;-2"); // S1/IN: one counted line out of two, gap 8 − 10
@@ -378,7 +402,7 @@ class ExportDatasetsPostgresIntegrationTest extends FullContextIntegrationTest {
         String empPhone = jdbc.queryForObject("SELECT phone_number FROM public.users WHERE id = ?", String.class,
                 a.employeeUser());
         assertThat(String.join("\n", all.get("employees"))).contains(";Inactif;")
-                .contains(";Awa;" + a.tag() + "-Emp;" + empPhone + ";" + a.tag() + "-S1;Actif;");
+                .contains("\nAwa;" + a.tag() + "-Emp;" + empPhone + ";" + a.tag() + "-S1;Actif;");
         assertThat(String.join("\n", all.get("clients")))
                 .contains(a.tag() + "-Client;690000001;;;1;1500;15/03/2026 11:00:00;Non")
                 .contains(a.tag() + "-OldClient;690000002;;;0;0;;Oui");
@@ -387,11 +411,11 @@ class ExportDatasetsPostgresIntegrationTest extends FullContextIntegrationTest {
         assertThat(String.join("\n", all.get("stock_transfers")))
                 .contains(";" + a.tag() + "-S1;" + a.tag() + "-S2;SKU-1;", ";En transit;Propriétaire;");
         assertThat(String.join("\n", all.get("stock_levels")))
-                .contains(a.tag() + "-S1;" + a.p1() + ";SKU-1;" + a.tag() + "-P1;" + a.tag() + "-Cat;10;5;OK;1000;10000;Non")
-                .contains(a.tag() + "-S2;" + a.p1() + ";SKU-1;" + a.tag() + "-P1;" + a.tag() + "-Cat;3;5;Stock bas;1000;3000;Non")
+                .contains(a.tag() + "-S1;SKU-1;" + a.tag() + "-P1;" + a.tag() + "-Cat;10;5;OK;1000;10000;Non")
+                .contains(a.tag() + "-S2;SKU-1;" + a.tag() + "-P1;" + a.tag() + "-Cat;3;5;Stock bas;1000;3000;Non")
                 .contains(";0;7;Rupture;500;0;Oui"); // the store level's own threshold wins
         assertThat(String.join("\n", all.get("day_closures")))
-                .contains(";15/03/2026;15/03/2026 11:00:00;" + a.tag() + "-S1;Non;Propriétaire;2;3000;2000;1000;0;0;")
+                .contains("15/03/2026;15/03/2026 11:00:00;" + a.tag() + "-S1;Non;Propriétaire;2;3000;2000;1000;0;0;")
                 .contains(";Oui;;2;3000;"); // automatic closure without actor
         assertThat(String.join("\n", all.get("reports")))
                 .contains(";Fin de journée;" + a.tag() + "-S1;3000;2;Oui;Awa;Envoyé;", ";Hebdomadaire;");
@@ -417,25 +441,29 @@ class ExportDatasetsPostgresIntegrationTest extends FullContextIntegrationTest {
                     f.criterion("action"), f.criterion("entityType"),
                     f.criterion("entityId") != null ? UUID.fromString(f.criterion("entityId")) : null, f.criterion("q"));
             TenantContext.setCurrentTenant(a.schema());
-            List<String> expectedIds;
+            List<String> expectedDates;
             try {
-                expectedIds = auditPort.search(query, null, 0, 100).entries().stream()
-                        .map(e -> e.id().toString()).toList();
-                assertThat(auditPort.count(query)).as("count = search rows").isEqualTo(expectedIds.size());
+                // no id in the file (v1s-16-20): rows are matched on their WAT date, newest first
+                expectedDates = auditPort.search(query, null, 0, 100).entries().stream()
+                        .map(e -> java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss")
+                                .format(e.occurredAt().atZone(ExportValues.WAT))).toList();
+                assertThat(auditPort.count(query)).as("count = search rows").isEqualTo(expectedDates.size());
             } finally {
                 TenantContext.clear();
             }
-            assertThat(expectedIds).isNotEmpty();
+            assertThat(expectedDates).isNotEmpty();
             String csv = new String(export(a.schema(), List.of("audit_log"), ExportFormat.CSV, f),
                     StandardCharsets.UTF_8);
             List<String> lines = List.of(csv.substring(1).split("\r\n"));
-            assertThat(lines.subList(1, lines.size()).stream().map(l -> l.substring(0, 36)).toList())
-                    .containsExactlyElementsOf(expectedIds);
+            assertThat(lines.subList(1, lines.size()).stream().map(l -> l.substring(0, 19)).toList())
+                    .containsExactlyElementsOf(expectedDates);
         }
         String one = new String(export(a.schema(), List.of("audit_log"), ExportFormat.CSV,
                 new ExportFilter(a.s1(), FROM, TO, criteria)), StandardCharsets.UTF_8);
-        assertThat(one).contains(";15/03/2026 11:00:00;Awa " + a.tag() + "-Emp;Employé;SALE_CREATED;Sale;")
-                .contains(";Vente de 1500 XAF " + a.tag() + ";" + a.tag() + "-S1;Synchronisé;;;\"{\"\"total\"\":1500}\"");
+        // French action (unknown code humanized) and object type, readable changes, no id / device / JSON
+        assertThat(one).contains("15/03/2026 11:00:00;Awa " + a.tag() + "-Emp;Employé;Sale created;Vente;")
+                .contains(";Vente de 1500 XAF " + a.tag() + ";" + a.tag() + "-S1;Synchronisé;Total : 1 500;")
+                .doesNotContain("SALE_CREATED", "{");
 
         // criteria on a dataset that does not accept them → 400 VALIDATION_ERROR
         assertThatThrownBy(() -> export(a.schema(), List.of("products"), ExportFormat.CSV,
@@ -488,7 +516,7 @@ class ExportDatasetsPostgresIntegrationTest extends FullContextIntegrationTest {
         Map<String, String> criteria = Map.of("action", "PRODUCT_UPDATED", "entityType", "Product");
         TenantContext.setCurrentTenant(a.schema());
         ExportJob job = jobRepository.save(ExportJob.pending(UUID.randomUUID(), a.owner(), ExportFormat.CSV,
-                List.of("audit_log"), new ExportFilter(a.s1(), FROM, TO, criteria), "keevo-audit_log.csv",
+                List.of("audit_log"), new ExportFilter(a.s1(), FROM, TO, criteria), "keevo-journal-d-audit.csv",
                 "text/csv; charset=UTF-8", Instant.now()));
         TenantContext.clear();
         assertThat(jdbc.queryForObject("SELECT criteria FROM \"" + a.schema() + "\".export_jobs WHERE id = ?",
@@ -504,8 +532,137 @@ class ExportDatasetsPostgresIntegrationTest extends FullContextIntegrationTest {
         assertThat(ready.getFilter().criteria()).isEqualTo(criteria);
         assertThat(ready.getRowCount()).isEqualTo(1);
         try (InputStream in = storage.read(ready.getStoragePath())) {
-            assertThat(new String(in.readAllBytes(), StandardCharsets.UTF_8)).contains(";PRODUCT_UPDATED;Product;")
-                    .doesNotContain("SALE_CREATED");
+            assertThat(new String(in.readAllBytes(), StandardCharsets.UTF_8)).contains(";Produit modifié;Produit;")
+                    .doesNotContain("Sale created", "PRODUCT_UPDATED");
+        }
+    }
+
+    // ── v1s-16-20 guard: no technical data in any export ────────────────────────
+
+    @Test
+    @DisplayName("v1s-16-20 guard: no header, file name or cell of any dataset (CSV + XLSX) holds a UUID, a SNAKE_CASE code or JSON")
+    void noTechnicalDataInAnyExport() throws Exception {
+        Seed a = seed("G" + UUID.randomUUID().toString().substring(0, 8));
+        String q = "\"" + a.schema() + "\".";
+        // rows the guard must see rendered readably: a warehouse, an inventory note, an audit row with
+        // JSON before/after (ids, nested map, codes) from a synced device + its metadata
+        jdbc.update("INSERT INTO " + q + "stores (id, name, type) VALUES (?, ?, 'WAREHOUSE')",
+                UUID.randomUUID(), a.tag() + "-Depot");
+        jdbc.update("INSERT INTO " + q + "stock_movements (id, product_id, store_id, movement_type, quantity_before, "
+                + "quantity_change, quantity_after, actor_id, notes, occurred_at) VALUES (?, ?, ?, 'ADJUSTMENT', 10, -2, 8, "
+                + "?, ?, ?)", UUID.randomUUID(), a.p1(), a.s1(), a.owner(), "INVENTORY:" + UUID.randomUUID(),
+                Timestamp.from(IN));
+        jdbc.update("INSERT INTO " + q + "audit_log (id, user_id, entity_type, entity_id, action, occurred_at, store_id, "
+                + "entity_label, source, device_id, value_before, value_after, metadata) VALUES (?, ?, 'PriceOverride', ?, "
+                + "'PRICE_OVERRIDDEN', ?, ?, ?, 'SYNC', 'android-3f2a9c1d8e7b6a5f', ?, ?, CAST(? AS jsonb))",
+                UUID.randomUUID(), a.employeeUser(), a.p1(), Timestamp.from(IN), a.s1(), a.tag() + "-P1",
+                "{\"price\":1000,\"productId\":\"" + a.p1() + "\",\"status\":\"PENDING_VALIDATION\"}",
+                "{\"price\":1500,\"criteria\":{\"q\":\"x\"},\"movementType\":\"STOCK_ENTRY\",\"tags\":[1,2]}",
+                "{\"storeId\":\"" + a.s1() + "\",\"notes\":\"INVENTORY:" + UUID.randomUUID()
+                        + "\",\"isAutomatic\":true,\"actorLabel\":\"Awa\"}");
+        jdbc.update("INSERT INTO " + q + "audit_log (id, user_id, entity_type, entity_id, action, occurred_at, "
+                + "entity_label, source, value_after) VALUES (?, ?, 'Gadget', ?, 'FOO_BAR', ?, ?, 'SYSTEM', '{oops')",
+                UUID.randomUUID(), a.owner(), UUID.randomUUID(), Timestamp.from(IN), UUID.randomUUID().toString());
+
+        List<ExportDatasetProvider> providers = registry.all();
+        List<String> keys = providers.stream().map(ExportDatasetProvider::key).toList();
+        List<String> violations = new ArrayList<>();
+
+        // CSV (zip of every dataset): entry names, headers and cells
+        Map<String, String> csv = unzip(export(a.schema(), keys, ExportFormat.CSV, ExportFilter.none()));
+        assertThat(csv.keySet()).containsExactlyInAnyOrderElementsOf(keys);
+        CSVFormat format = CSVFormat.Builder.create(CSVFormat.DEFAULT).setDelimiter(';').build();
+        csv.forEach((key, text) -> {
+            try (CSVParser parser = CSVParser.parse(new StringReader(text), format)) {
+                List<CSVRecord> records = parser.getRecords();
+                assertThat(records.size()).as(key + " has rows").isGreaterThan(1);
+                for (CSVRecord rec : records) {
+                    for (int c = 0; c < rec.size(); c++) {
+                        check(violations, "CSV " + key + " row " + rec.getRecordNumber() + " col " + c, rec.get(c));
+                    }
+                }
+            } catch (java.io.IOException e) {
+                throw new IllegalStateException(e);
+            }
+        });
+        String auditCsv = csv.get("audit_log");
+        assertThat(auditCsv).contains(";Prix modifié en caisse;Prix de vente;" + a.tag() + "-P1;" + a.tag()
+                        + "-S1;Synchronisé;")
+                .contains("Prix : 1 000 XAF → 1 500 XAF")
+                .contains("Motif : Ajustement d'inventaire ; Déclenchement : Automatique")
+                .contains(";Foo bar;Gadget;;");
+        assertThat(csv.get("stores")).contains(a.tag() + "-Depot;Entrepôt;");
+        assertThat(csv.get("stock_movements")).contains(";Ajustement d'inventaire");
+
+        // XLSX: sheet names, headers and every string cell
+        byte[] xlsx = export(a.schema(), keys, ExportFormat.XLSX, ExportFilter.none());
+        try (XSSFWorkbook wb = new XSSFWorkbook(new ByteArrayInputStream(xlsx))) {
+            for (int si = 0; si < wb.getNumberOfSheets(); si++) {
+                XSSFSheet sheet = wb.getSheetAt(si);
+                check(violations, "XLSX sheet name", sheet.getSheetName());
+                for (Row row : sheet) {
+                    for (Cell cell : row) {
+                        if (cell.getCellType() == CellType.STRING) {
+                            check(violations, "XLSX " + sheet.getSheetName() + " " + cell.getAddress(),
+                                    cell.getStringCellValue());
+                        }
+                    }
+                }
+            }
+        }
+        // file names (one request per dataset would burn the hourly quota): the slug of each label
+        for (ExportDatasetProvider p : providers) {
+            assertThat(ExportValues.slug(p.label())).as(p.key() + " file name part").matches("[a-z0-9-]+");
+        }
+        assertThat(violations).as("technical data found in exports").isEmpty();
+    }
+
+    @Test
+    @DisplayName("v1s-16-20: PDF models read hidden trailing ids of the real providers; PDFs hold no id or code")
+    void pdfHiddenIdsAndNoTechnicalText() throws Exception {
+        Seed a = seed("H" + UUID.randomUUID().toString().substring(0, 8));
+        Map<String, ExportDatasetProvider> byKey = new LinkedHashMap<>();
+        registry.all().forEach(p -> byKey.put(p.key(), p));
+        Map<String, String> idSql = Map.of(
+                "stock_levels", "SELECT CAST(store_id AS text) FROM \"" + a.schema() + "\".stock_levels",
+                "inventory_counts", "SELECT CAST(id AS text) FROM \"" + a.schema() + "\".inventory_sessions",
+                "day_closures", "SELECT CAST(id AS text) FROM \"" + a.schema() + "\".day_closures");
+        TenantContext.setCurrentTenant(a.schema());
+        try {
+            for (Map.Entry<String, String> e : idSql.entrySet()) {
+                ExportDatasetProvider p = byKey.get(e.getKey());
+                assertThat(p.internalKeys()).as(e.getKey()).hasSize(1);
+                Set<String> expectedIds = new HashSet<>(jdbc.queryForList(e.getValue(), String.class));
+                List<List<Object>> rows = p.readPage(ExportFilter.none(), null, 1000).rows();
+                assertThat(rows).as(e.getKey()).isNotEmpty();
+                for (List<Object> row : rows) {
+                    assertThat(row).as(e.getKey() + " row width").hasSize(p.columns().size() + 1);
+                    assertThat(String.valueOf(row.get(p.columns().size()))).as(e.getKey() + " hidden id")
+                            .isIn(expectedIds);
+                }
+            }
+        } finally {
+            TenantContext.clear();
+        }
+
+        List<String> violations = new ArrayList<>();
+        for (String key : List.of("stock_levels", "inventory_counts", "day_closures", "sales")) {
+            byte[] pdf = export(a.schema(), List.of(key), ExportFormat.PDF, ExportFilter.none());
+            String text;
+            try (PDDocument doc = Loader.loadPDF(pdf)) {
+                text = new PDFTextStripper().getText(doc);
+            }
+            assertThat(text).as(key + " PDF text").isNotBlank();
+            for (String line : text.split("\\R")) {
+                check(violations, "PDF " + key, line);
+            }
+        }
+        assertThat(violations).as("technical data found in PDFs").isEmpty();
+    }
+
+    private static void check(List<String> violations, String where, String value) {
+        if (ExportValues.isTechnical(value)) {
+            violations.add(where + ": " + value);
         }
     }
 }

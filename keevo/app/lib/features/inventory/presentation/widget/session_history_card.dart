@@ -1,6 +1,7 @@
 import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
+import '../../domain/model/inventory_scope.dart';
 import '../../domain/model/inventory_session_model.dart';
 
 /// SessionHistoryCard — displays a single session in the history list.
@@ -48,7 +49,7 @@ class SessionHistoryCard extends StatelessWidget {
               ),
             ),
             title: Text(
-              'Inventaire ${session.scope}',
+              'Inventaire ${inventoryScopeLabel(session.scope).toLowerCase()}',
               style: theme.textTheme.bodyLarge?.copyWith(
                 fontWeight: FontWeight.w600,
               ),
@@ -125,7 +126,9 @@ class SessionHistoryCard extends StatelessWidget {
       case 'CANCELLED':
         return 'Annulé';
       default:
-        return session.status;
+        // v1s-16-20: an unknown status is humanized, never shown raw.
+        final s = session.status.replaceAll('_', ' ').trim().toLowerCase();
+        return s.isEmpty ? session.status : s[0].toUpperCase() + s.substring(1);
     }
   }
 

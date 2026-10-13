@@ -3,6 +3,7 @@ package com.keevo.reporting.export.adapter.out.render;
 import com.keevo.reporting.export.domain.model.ExportFormat;
 import com.keevo.reporting.export.domain.port.out.ExportRenderer;
 import com.keevo.shared.application.port.export.ExportColumn;
+import com.keevo.shared.infrastructure.export.ExportValues;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 import org.springframework.stereotype.Component;
@@ -76,7 +77,8 @@ public class CsvExportRenderer implements ExportRenderer {
         @Override
         public void beginDataset(String key, String label, List<ExportColumn> columns) throws IOException {
             if (zip != null) {
-                zip.putNextEntry(new ZipEntry(key + ".csv"));
+                String slug = ExportValues.slug(label); // French file name, never the dataset key (v1s-16-20)
+                zip.putNextEntry(new ZipEntry((slug != null ? slug : "export") + ".csv"));
             }
             this.columns = columns;
             Writer writer = new OutputStreamWriter(new NonClosingOutputStream(target), StandardCharsets.UTF_8);

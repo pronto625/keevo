@@ -47,19 +47,16 @@ public class AuditLogExportDatasetProvider implements ExportDatasetProvider {
             "SYSTEM", "Système");
 
     private static final List<ExportColumn> COLUMNS = List.of(
-            new ExportColumn("id", "Identifiant", ExportColumnType.TEXT),
             new ExportColumn("occurredAt", "Date", ExportColumnType.DATETIME),
             new ExportColumn("actor", "Auteur", ExportColumnType.TEXT),
             new ExportColumn("actorRole", "Rôle", ExportColumnType.TEXT),
             new ExportColumn("action", "Action", ExportColumnType.TEXT),
             new ExportColumn("entityType", "Type d'objet", ExportColumnType.TEXT),
-            new ExportColumn("entityId", "Identifiant de l'objet", ExportColumnType.TEXT),
             new ExportColumn("entityLabel", "Objet", ExportColumnType.TEXT),
             new ExportColumn("store", "Boutique", ExportColumnType.TEXT),
             new ExportColumn("source", "Source", ExportColumnType.TEXT),
-            new ExportColumn("deviceId", "Appareil", ExportColumnType.TEXT),
-            new ExportColumn("valueBefore", "Avant", ExportColumnType.TEXT),
-            new ExportColumn("valueAfter", "Après", ExportColumnType.TEXT));
+            new ExportColumn("changes", "Changements", ExportColumnType.TEXT),
+            new ExportColumn("details", "Détails", ExportColumnType.TEXT));
 
     private final AuditPort auditPort;
 
@@ -99,19 +96,21 @@ public class AuditLogExportDatasetProvider implements ExportDatasetProvider {
                 blankToNull(f.criterion(CRITERION_Q)));
     }
 
-    private static List<Object> row(AuditEntryRecord e) {
+    /**
+     * One readable row (v1s-16-20): French action / object type / source, before→after rendered by
+     * {@link AuditChangesFormatter}; no id, device id or JSON.
+     */
+    static List<Object> row(AuditEntryRecord e) {
         String actor = e.actorName() != null && !e.actorName().isBlank() ? e.actorName() : e.actorPhone();
-        return Arrays.asList(str(e.id()), e.occurredAt(), actor, roleLabel(e.actorRole()), e.action(),
-                e.entityType(), str(e.entityId()), e.entityLabel(), e.storeName(), frLabel(SOURCES, e.source()),
-                e.deviceId(), e.valueBefore(), e.valueAfter());
+        String label = e.entityLabel() != null && !ExportValues.isTechnical(e.entityLabel()) ? e.entityLabel() : null;
+        return Arrays.asList(e.occurredAt(), actor, roleLabel(e.actorRole()), frLabel(AuditLabels.ACTIONS, e.action()),
+                frLabel(AuditLabels.ENTITY_TYPES, e.entityType()), label, e.storeName(),
+                frLabel(SOURCES, e.source()), AuditChangesFormatter.changes(e.valueBefore(), e.valueAfter()),
+                AuditChangesFormatter.details(e.metadata(), e.valueAfter()));
     }
 
     private static String roleLabel(String role) {
         return role == null ? null : ROLES.get(role); // other platform roles: no label
-    }
-
-    private static String str(UUID id) {
-        return id != null ? id.toString() : null;
     }
 
     private static UUID uuid(String value) {

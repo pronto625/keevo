@@ -109,6 +109,7 @@ class PdfExportRendererTest {
         @Override public String key() { return schema.key(); }
         @Override public String label() { return schema.label(); }
         @Override public List<ExportColumn> columns() { return schema.columns(); }
+        @Override public List<String> internalKeys() { return schema.internalKeys(); }
         @Override public long count(ExportFilter filter) { return total; }
 
         @Override
@@ -120,6 +121,7 @@ class PdfExportRendererTest {
                 Map<String, Object> byKey = rowFactory.apply(i);
                 List<Object> row = new ArrayList<>();
                 for (ExportColumn c : columns()) row.add(byKey.get(c.key()));
+                for (String k : internalKeys()) row.add(byKey.get(k)); // hidden ids (v1s-16-20)
                 rows.add(row);
                 rowsServed.incrementAndGet();
             }

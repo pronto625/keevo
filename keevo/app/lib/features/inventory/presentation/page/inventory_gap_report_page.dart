@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/storage/app_constants.dart';
 import '../../domain/model/inventory_gap_report_model.dart';
+import '../../domain/model/inventory_scope.dart';
 import '../../domain/service/inventory_report_text_formatter.dart';
 import '../provider/gap_report_provider.dart';
 import '../widget/apply_adjustments_button.dart';
@@ -59,7 +60,7 @@ class InventoryGapReportPage extends ConsumerWidget {
             ),
             if (reportAsync.valueOrNull != null)
               Text(
-                '${reportAsync.value!.storeName} — ${reportAsync.value!.scope}',
+                '${reportAsync.value!.storeName} — ${inventoryScopeLabel(reportAsync.value!.scope)}',
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall

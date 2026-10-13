@@ -27,7 +27,6 @@ public class SuppliersExportDatasetProvider extends NativeKeysetExportDataset {
     static final String KEY = "suppliers";
 
     private static final List<ExportColumn> COLUMNS = List.of(
-            new ExportColumn("id", "Identifiant", ExportColumnType.TEXT),
             new ExportColumn("name", "Nom", ExportColumnType.TEXT),
             new ExportColumn("phone", "Téléphone", ExportColumnType.TEXT),
             new ExportColumn("email", "E-mail", ExportColumnType.TEXT),
@@ -49,7 +48,7 @@ public class SuppliersExportDatasetProvider extends NativeKeysetExportDataset {
 
     @Override
     protected String selectList(ExportFilter filter) {
-        return "CAST(s.id AS text), s.name, s.phone, s.email,"
+        return "s.name, s.phone, s.email,"
                 + " (SELECT COUNT(*) FROM product_suppliers ps WHERE ps.supplier_id = s.id), s.archived, s.created_at";
     }
 
@@ -65,7 +64,7 @@ public class SuppliersExportDatasetProvider extends NativeKeysetExportDataset {
 
     @Override
     protected List<Object> mapRow(Object[] r) {
-        return Arrays.asList(str(r[0]), str(r[1]), str(r[2]), str(r[3]), toLong(r[4]), toBool(r[5]),
-                toInstant(r[6]));
+        return Arrays.asList(str(r[0]), str(r[1]), str(r[2]), toLong(r[3]), toBool(r[4]),
+                toInstant(r[5]));
     }
 }

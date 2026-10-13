@@ -197,7 +197,7 @@ class ExportPostgresIntegrationTest extends FullContextIntegrationTest {
         UUID third = jdbc.queryForObject("SELECT id FROM \"" + a + "\".stores WHERE name = ?", UUID.class, tag + "-3");
 
         assertThat(dataLines(directCsv(a, new ExportFilter(third, null, null))))
-                .singleElement().satisfies(l -> assertThat(l).startsWith(third.toString()).contains(tag + "-3"));
+                .singleElement().satisfies(l -> assertThat(l).startsWith(tag + "-3;").doesNotContain(third.toString()));
         assertThat(dataLines(directCsv(a, new ExportFilter(null,
                 Instant.parse("2026-01-01T00:00:02Z"), Instant.parse("2026-01-01T00:00:05Z")))))
                 .hasSize(11); // the 10 stores + the seeded « Ma Boutique », whatever their creation date

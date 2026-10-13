@@ -16,6 +16,7 @@ import java.util.Map;
 import static com.keevo.shared.infrastructure.export.ExportValues.actorJoins;
 import static com.keevo.shared.infrastructure.export.ExportValues.actorNameSelect;
 import static com.keevo.shared.infrastructure.export.ExportValues.frLabel;
+import static com.keevo.shared.infrastructure.export.ExportValues.notes;
 import static com.keevo.shared.infrastructure.export.ExportValues.str;
 import static com.keevo.shared.infrastructure.export.ExportValues.toInstant;
 import static com.keevo.shared.infrastructure.export.ExportValues.toLong;
@@ -39,7 +40,6 @@ public class StockMovementsExportDatasetProvider extends NativeKeysetExportDatas
             MovementType.SALE_CANCELLED.name(), "Annulation de vente");
 
     private static final List<ExportColumn> COLUMNS = List.of(
-            new ExportColumn("id", "Identifiant", ExportColumnType.TEXT),
             new ExportColumn("occurredAt", "Date", ExportColumnType.DATETIME),
             new ExportColumn("store", "Boutique", ExportColumnType.TEXT),
             new ExportColumn("sku", "Référence", ExportColumnType.TEXT),
@@ -65,7 +65,7 @@ public class StockMovementsExportDatasetProvider extends NativeKeysetExportDatas
 
     @Override
     protected String selectList(ExportFilter filter) {
-        return "CAST(m.id AS text), m.occurred_at, st.name, p.sku, p.name, m.movement_type,"
+        return "m.occurred_at, st.name, p.sku, p.name, m.movement_type,"
                 + " m.quantity_before, m.quantity_change, m.quantity_after, " + actorNameSelect("a") + ", m.notes";
     }
 
@@ -92,7 +92,7 @@ public class StockMovementsExportDatasetProvider extends NativeKeysetExportDatas
 
     @Override
     protected List<Object> mapRow(Object[] r) {
-        return Arrays.asList(str(r[0]), toInstant(r[1]), str(r[2]), str(r[3]), str(r[4]), frLabel(TYPES, r[5]),
-                toLong(r[6]), toLong(r[7]), toLong(r[8]), str(r[9]), str(r[10]));
+        return Arrays.asList(toInstant(r[0]), str(r[1]), str(r[2]), str(r[3]), frLabel(TYPES, r[4]),
+                toLong(r[5]), toLong(r[6]), toLong(r[7]), str(r[8]), notes(r[9]));
     }
 }

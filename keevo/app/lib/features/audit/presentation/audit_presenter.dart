@@ -1,7 +1,7 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart' show IconData, Icons;
 
+import '../domain/audit_format.dart';
+import '../domain/audit_labels.dart';
 import '../domain/model/audit_entry_dto.dart';
 
 /// Families of actions — drive the icon color and the « Action » filter order.
@@ -110,6 +110,11 @@ class AuditContextItem {
 /// AuditPresenter — pure rendering rules of the « Historique des actions »
 /// list and detail (v1s-18-7). Never throws: unknown actions, fields and
 /// malformed JSON fall back to a generic rendering.
+///
+/// v1s-16-20 — no technical data: labels come from the shared table
+/// (`audit_labels.dart`, pinned to the server `AuditLabels` by the export
+/// contract test) and values are rendered by [AuditFormat], the mirror of
+/// the server export formatter: no id, raw code, device id or JSON.
 class AuditPresenter {
   const AuditPresenter._();
 
@@ -295,7 +300,16 @@ class AuditPresenter {
         Icons.verified_outlined,
         AuditCategory.inventory,
         takesObject: false),
+    // Export (v1s-18-1)
+    'DATA_EXPORTED': AuditActionInfo('Données exportées', 'exporté des données',
+        Icons.file_download_outlined, AuditCategory.other,
+        takesObject: false),
   };
+
+  /// Code → title of every catalogue action; equals the contract
+  /// `labels["audit_log.action"]` (server `AuditLabels.ACTIONS`).
+  static Map<String, String> get catalogueLabels =>
+      {for (final e in catalogue.entries) e.key: e.value.label};
 
   /// Object types offered by the « Objet » filter (`entityType` values).
   static const Map<String, String> objectTypes = {
@@ -315,26 +329,16 @@ class AuditPresenter {
     'StockAlert': 'Alertes de stock',
     'Tenant': 'Compte',
     'User': 'Utilisateurs',
+    'Export': 'Exports',
   };
 
-  static const _typeNouns = {
-    'Product': 'Produit',
-    'Sale': 'Vente',
-    'StockMovement': 'Mouvement de stock',
-    'StockAlert': 'Alerte de stock',
-    'StockLevel': 'Niveau de stock',
-    'PriceOverride': 'Prix de vente',
-    'Client': 'Client',
-    'Supplier': 'Fournisseur',
-    'Category': 'Catégorie',
-    'Store': 'Boutique',
-    'Employee': 'Un employé',
-    'User': 'Compte utilisateur',
-    'Tenant': 'Compte',
-    'DayClosure': 'Clôture de journée',
-    'InventorySession': 'Inventaire',
-    'InventoryCount': 'Comptage d\'inventaire',
-  };
+  /// Singular noun of each object type (contract `audit_log.entityType`).
+  static const typeNouns = auditEntityTypeLabels;
+
+  /// « Objet » filter label of [entityType]: the plural label, else the
+  /// humanized type (never the raw class-like code).
+  static String objectTypeLabel(String entityType) =>
+      objectTypes[entityType] ?? humanize(entityType);
 
   // ── Action ────────────────────────────────────────────────────────────────
 
@@ -347,16 +351,7 @@ class AuditPresenter {
   static bool isKnownAction(String action) => catalogue.containsKey(action);
 
   /// `FOO_BAR` → `Foo bar`, `someKey` → `Some key`.
-  static String humanize(String code) {
-    final spaced = code
-        .replaceAllMapped(
-            RegExp(r'([a-z0-9])([A-Z])'), (m) => '${m[1]} ${m[2]}')
-        .replaceAll('_', ' ')
-        .trim()
-        .toLowerCase();
-    if (spaced.isEmpty) return code;
-    return spaced[0].toUpperCase() + spaced.substring(1);
-  }
+  static String humanize(String code) => AuditFormat.humanize(code);
 
   // ── Actor ─────────────────────────────────────────────────────────────────
 
@@ -368,7 +363,7 @@ class AuditPresenter {
     if (isSelf(e, selfUserId)) return 'Vous';
     final name = e.actorName?.trim();
     if (name != null && name.isNotEmpty) return name;
-    final label = _string(_decodeMap(e.metadata)['actorLabel']);
+    final label = _string(AuditFormat.decodeMap(e.metadata)['actorLabel']);
     if (label != null) return label;
     final phone = e.actorPhone?.trim();
     if (phone != null && phone.isNotEmpty) return phone;
@@ -422,22 +417,24 @@ class AuditPresenter {
       final total = saleTotal(e);
       if (total != null) return 'Vente de ${formatXaf(total)}';
     }
-    return _readableLabel(e) ??
-        _typeNouns[e.entityType] ??
-        humanize(e.entityType);
+    return _readableLabel(e) ?? AuditFormat.entityTypeLabel(e.entityType);
   }
 
   /// Sale total from `value_after.totalAmount` (also on legacy rows).
   static num? saleTotal(AuditEntryDto e) {
-    final v = _decodeMap(e.valueAfter)['totalAmount'];
+    final v = AuditFormat.decodeMap(e.valueAfter)['totalAmount'];
     return v is num ? v : null;
   }
 
   static String? _readableLabel(AuditEntryDto e) {
     final label = e.entityLabel?.trim();
-    if (label != null && label.isNotEmpty) return label;
+    if (label != null &&
+        label.isNotEmpty &&
+        !AuditFormat.isTechnical(label)) {
+      return label;
+    }
     // Legacy rows (before v1s-18-6): the name sits in value_after.
-    final after = _decodeMap(e.valueAfter);
+    final after = AuditFormat.decodeMap(e.valueAfter);
     for (final k in const ['productName', 'name', 'newName', 'storeName']) {
       final s = _string(after[k]);
       if (s != null) return s;
@@ -447,287 +444,34 @@ class AuditPresenter {
 
   // ── Changes ───────────────────────────────────────────────────────────────
 
-  /// Keys that are context or technical ids, never shown as changes.
-  static const _hiddenChangeKeys = {
-    'actorLabel',
-    'storeId',
-    'occurredAt',
-    'saleId',
-    'sessionId',
-    'variantId',
-    'productId',
-    'parentId',
-    'triggerProductId',
-    'cancelledBy',
-    'tenantId',
-    'userId',
-    'storeIds',
-  };
+  /// Field-by-field « Avant → Après » rows (server export rules: hidden ids,
+  /// no UUID value, no nested object, translated codes). Dates in local time.
+  static List<AuditChange> changes(AuditEntryDto e) => [
+        for (final l in AuditFormat.changes(e.valueBefore, e.valueAfter,
+            display: _local))
+          AuditChange(l.field, l.before ?? AuditFormat.none, l.after),
+      ];
 
-  /// Context keys found in `value_after` of legacy rows.
-  static const _contextKeys = {
-    'justification',
-    'notes',
-    'note',
-    'motif',
-    'reason',
-    'scope',
-    'isAutomatic',
-    'forcedProducts',
-    'draftProductIds',
-  };
+  static String fieldLabel(String key) => AuditFormat.fieldLabel(key);
 
-  /// Field-by-field « Avant → Après » rows.
-  static List<AuditChange> changes(AuditEntryDto e) {
-    final beforeRaw = _decode(e.valueBefore);
-    final afterRaw = _decode(e.valueAfter);
-    // Whole snapshots that are lists (sale items).
-    if (beforeRaw is List || afterRaw is List) {
-      if (beforeRaw is Map || afterRaw is Map) {
-        // Mixed shapes: fall through with the map side only.
-      } else {
-        return [
-          AuditChange(
-              fieldLabel('itemsSnapshot'),
-              beforeRaw is List ? _items(beforeRaw.length) : '—',
-              afterRaw is List ? _items(afterRaw.length) : '—'),
-        ];
-      }
-    }
-    final before =
-        beforeRaw is Map ? beforeRaw.cast<String, dynamic>() : const {};
-    final after = afterRaw is Map ? afterRaw.cast<String, dynamic>() : const {};
-    final keys = <String>[...after.keys];
-    for (final k in before.keys) {
-      if (!keys.contains(k)) keys.add(k);
-    }
-    final rows = <AuditChange>[];
-    for (final k in keys) {
-      if (_hiddenChangeKeys.contains(k) || _contextKeys.contains(k)) continue;
-      final b = before[k];
-      final a = after[k];
-      if (b == null && a == null) continue;
-      rows.add(
-          AuditChange(fieldLabel(k), formatValue(k, b), formatValue(k, a)));
-    }
-    return rows;
-  }
+  static bool isAmountKey(String k) => AuditFormat.isAmountKey(k);
 
-  static const _fieldLabels = {
-    'productName': 'Produit',
-    'productSku': 'Référence',
-    'name': 'Nom',
-    'newName': 'Nouveau nom',
-    'type': 'Type',
-    'archived': 'Archivé',
-    'active': 'Active',
-    'deactivated': 'Désactivée',
-    'status': 'Statut',
-    'totalAmount': 'Montant total',
-    'discountAmount': 'Remise',
-    'appliedPrice': 'Prix appliqué',
-    'cataloguePrice': 'Prix catalogue',
-    'totalRevenue': 'Chiffre d\'affaires',
-    'totalSales': 'Nombre de ventes',
-    'price': 'Prix',
-    'sellingPrice': 'Prix de vente',
-    'purchasePrice': 'Prix d\'achat',
-    'costPrice': 'Prix de revient',
-    'unitPrice': 'Prix unitaire',
-    'quantity': 'Quantité',
-    'quantityBefore': 'Quantité avant',
-    'quantityChange': 'Variation',
-    'quantityAfter': 'Quantité après',
-    'movementType': 'Type de mouvement',
-    'currentQuantity': 'Quantité actuelle',
-    'threshold': 'Seuil d\'alerte',
-    'lowStockThreshold': 'Seuil d\'alerte',
-    'requestedQuantity': 'Quantité demandée',
-    'availableQuantity': 'Quantité disponible',
-    'theoretical': 'Stock théorique',
-    'physical': 'Stock compté',
-    'ecart': 'Écart',
-    'adjustmentCount': 'Ajustements',
-    'role': 'Rôle',
-    'fieldsChanged': 'Champs modifiés',
-    'forcedReset': 'Changement de mot de passe imposé',
-    'itemsSnapshot': 'Articles',
-    'scheduledDeletionAt': 'Suppression prévue le',
-    'cancelledAt': 'Annulée le',
-    'storeName': 'Boutique',
-    'sectorType': 'Secteur',
-    'categoriesCreated': 'Catégories créées',
-    'tenantCode': 'Code du compte',
-    'description': 'Description',
-    'barcode': 'Code-barres',
-    'unit': 'Unité',
-  };
+  /// Formats one value: XAF amounts, units, translated codes, dates, lists
+  /// (« — » when the value must not be shown).
+  static String formatValue(String key, Object? v) =>
+      AuditFormat.formatValue(key, v, display: _local) ?? AuditFormat.none;
 
-  static String fieldLabel(String key) => _fieldLabels[key] ?? humanize(key);
-
-  static const _amountKeys = {
-    'totalAmount',
-    'discountAmount',
-    'appliedPrice',
-    'cataloguePrice',
-    'totalRevenue',
-    'price',
-    'sellingPrice',
-    'purchasePrice',
-    'costPrice',
-    'unitPrice',
-  };
-
-  static const _quantityKeys = {
-    'quantity',
-    'quantityBefore',
-    'quantityChange',
-    'quantityAfter',
-    'currentQuantity',
-    'threshold',
-    'lowStockThreshold',
-    'requestedQuantity',
-    'availableQuantity',
-    'theoretical',
-    'physical',
-    'ecart',
-  };
-
-  static const _signedKeys = {'quantityChange', 'ecart'};
-
-  static bool isAmountKey(String k) =>
-      _amountKeys.contains(k) || k.endsWith('Price') || k.endsWith('Amount');
-
-  /// Keys whose values are codes; only these are translated, so a product
-  /// literally named « SALE » stays « SALE ».
-  static const _codeKeys = {
-    'status', 'type', 'movementType', 'role', 'scope', 'source',
-    'previousRole', 'newRole', 'storeType',
-  };
-
-  static const _codes = {
-    'DRAFT': 'Brouillon',
-    'ACTIVE': 'Actif',
-    'INACTIVE': 'Inactif',
-    'PENDING_VALIDATION': 'En attente de validation',
-    'COMPLETED': 'Terminée',
-    'CANCELLED': 'Annulé(e)',
-    'VALIDATED': 'Validé',
-    'IN_PROGRESS': 'En cours',
-    'SALE': 'Vente',
-    'PURCHASE': 'Réception',
-    'ADJUSTMENT': 'Ajustement',
-    'TRANSFER_OUT': 'Transfert (sortie)',
-    'TRANSFER_IN': 'Transfert (entrée)',
-    'SALE_CANCELLED': 'Annulation de vente',
-    'INVENTORY': 'Inventaire',
-    'OWNER': 'Propriétaire',
-    'EMPLOYEE': 'Employé',
-    'MANAGER': 'Gérant',
-    'STORE': 'Boutique',
-    'WAREHOUSE': 'Entrepôt',
-    'FULL': 'Complet',
-    'CATEGORY': 'Par catégorie',
-    'PARTIAL': 'Partiel',
-  };
-
-  /// Formats one value: XAF amounts, units, translated codes, dates, lists.
-  static String formatValue(String key, Object? v) {
-    if (v == null) return '—';
-    if (v is bool) return v ? 'Oui' : 'Non';
-    if (v is List) {
-      if (v.every((x) => x is String) && key == 'fieldsChanged') {
-        return v.map((x) => humanize(x as String)).join(', ');
-      }
-      return _items(v.length);
-    }
-    if (v is Map) return jsonEncode(v);
-    if (v is num) {
-      if (isAmountKey(key)) return formatXaf(v);
-      if (_quantityKeys.contains(key)) {
-        final sign = _signedKeys.contains(key) && v > 0 ? '+' : '';
-        return '$sign${_number(v)} unité(s)';
-      }
-      return _number(v);
-    }
-    final s = v.toString();
-    if (s.isEmpty) return '—';
-    if (isAmountKey(key)) {
-      final n = num.tryParse(s);
-      if (n != null) return formatXaf(n);
-    }
-    if (_codeKeys.contains(key)) {
-      final code = _codes[s];
-      if (code != null) return code;
-    }
-    if (key.endsWith('At')) {
-      final d = DateTime.tryParse(s);
-      if (d != null) return formatDateTime(d);
-    }
-    return s;
-  }
-
-  static String _items(int n) => '$n article(s)';
+  static DateTime _local(DateTime d) => d.toLocal();
 
   // ── Context ───────────────────────────────────────────────────────────────
 
-  static const _contextLabels = {
-    'justification': 'Justification',
-    'notes': 'Motif',
-    'note': 'Motif',
-    'motif': 'Motif',
-    'reason': 'Motif',
-    'scope': 'Périmètre',
-    'forcedProducts': 'Produits forcés',
-    'draftProductIds': 'Produits en brouillon',
-  };
-
-  /// Keys of `metadata` never shown in « Contexte ».
-  static const _hiddenContextKeys = {
-    'actorLabel',
-    'storeId',
-    'occurredAt',
-    'saleId',
-    'sessionId',
-    'variantId',
-    'productId',
-    'parentId',
-    'triggerProductId',
-    'cancelledBy',
-  };
-
   /// « Contexte » rows from `metadata` (or, for legacy rows, the context keys
   /// still in `value_after`). Empty when there is nothing to show.
-  static List<AuditContextItem> context(AuditEntryDto e) {
-    final meta = _decodeMap(e.metadata);
-    final Map<String, dynamic> source;
-    if (meta.isNotEmpty) {
-      source = meta;
-    } else {
-      final after = _decodeMap(e.valueAfter);
-      source = {
-        for (final k in _contextKeys)
-          if (after.containsKey(k)) k: after[k],
-      };
-    }
-    final items = <AuditContextItem>[];
-    source.forEach((k, v) {
-      if (_hiddenContextKeys.contains(k) || v == null) return;
-      if (k == 'isAutomatic') {
-        items.add(AuditContextItem('Déclenchement',
-            v == true || v == 'true' ? 'Automatique' : 'Manuel'));
-        return;
-      }
-      final value = v is List
-          ? _items(v.length)
-          : (v is String
-              ? (_codeKeys.contains(k) ? (_codes[v] ?? v) : v)
-              : formatValue(k, v));
-      if (value.trim().isEmpty) return;
-      items.add(AuditContextItem(_contextLabels[k] ?? humanize(k), value));
-    });
-    return items;
-  }
+  static List<AuditContextItem> context(AuditEntryDto e) => [
+        for (final r
+            in AuditFormat.details(e.metadata, e.valueAfter, display: _local))
+          AuditContextItem(r.$1, r.$2),
+      ];
 
   // ── Where / how ───────────────────────────────────────────────────────────
 
@@ -736,10 +480,10 @@ class AuditPresenter {
       case 'ONLINE':
         return 'En ligne';
       case 'SYNC':
-        final device = deviceLabel(e.deviceId);
-        return device == null
-            ? 'Synchronisé depuis l\'appareil'
-            : 'Synchronisé depuis l\'appareil $device';
+        final hasDevice = e.deviceId?.trim().isNotEmpty ?? false;
+        return hasDevice
+            ? 'Synchronisé depuis l\'appareil de ${_deviceOwner(e)}'
+            : 'Synchronisé depuis l\'appareil';
       case 'SYSTEM':
         return 'Automatique (système)';
       case null:
@@ -749,35 +493,23 @@ class AuditPresenter {
     }
   }
 
-  /// Short device id (last 8 characters) for display.
-  static String? deviceLabel(String? deviceId) {
-    final d = deviceId?.trim();
+  /// « Appareil de Awa » — a device id has no readable name, so the device
+  /// is named after the actor; `null` (row omitted) without device.
+  static String? deviceLabel(AuditEntryDto e) {
+    final d = e.deviceId?.trim();
     if (d == null || d.isEmpty) return null;
-    return d.length > 12 ? '…${d.substring(d.length - 8)}' : d;
+    return 'Appareil de ${_deviceOwner(e)}';
+  }
+
+  static String _deviceOwner(AuditEntryDto e) {
+    final name = actorName(e);
+    return name == 'Un utilisateur' ? 'l\'auteur' : name;
   }
 
   // ── Formatting ────────────────────────────────────────────────────────────
 
   /// `15 000 XAF` (integer XAF, space grouping).
-  static String formatXaf(num amount) => '${_number(amount.round())} XAF';
-
-  static String _number(num v) {
-    final isInt = v == v.roundToDouble();
-    final negative = v < 0;
-    final abs = v.abs();
-    final intPart = abs.truncate().toString();
-    final grouped = StringBuffer();
-    for (var i = 0; i < intPart.length; i++) {
-      if (i > 0 && (intPart.length - i) % 3 == 0) grouped.write(' ');
-      grouped.write(intPart[i]);
-    }
-    var out = grouped.toString();
-    if (!isInt) {
-      final dec = abs.toString().split('.');
-      if (dec.length == 2) out = '$out,${dec[1]}';
-    }
-    return negative ? '-$out' : out;
-  }
+  static String formatXaf(num amount) => AuditFormat.formatXaf(amount);
 
   /// `dd/MM/yyyy HH:mm` in local time.
   static String formatDateTime(DateTime d) {
@@ -819,21 +551,7 @@ class AuditPresenter {
 
   static String _pad2(int v) => v.toString().padLeft(2, '0');
 
-  // ── JSON helpers ──────────────────────────────────────────────────────────
-
-  static Object? _decode(String? raw) {
-    if (raw == null || raw.trim().isEmpty) return null;
-    try {
-      return jsonDecode(raw);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  static Map<String, dynamic> _decodeMap(String? raw) {
-    final v = _decode(raw);
-    return v is Map ? v.cast<String, dynamic>() : const {};
-  }
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
   static String? _string(Object? v) {
     if (v is! String) return null;

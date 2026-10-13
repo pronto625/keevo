@@ -34,7 +34,6 @@ public class ProductsExportDatasetProvider extends NativeKeysetExportDataset {
     private static final Map<String, String> STATUS = Map.of("ACTIVE", "Actif", "DRAFT", "Brouillon");
 
     private static final List<ExportColumn> COLUMNS = List.of(
-            new ExportColumn("id", "Identifiant", ExportColumnType.TEXT),
             new ExportColumn("sku", "Référence", ExportColumnType.TEXT),
             new ExportColumn("name", "Nom", ExportColumnType.TEXT),
             new ExportColumn("category", "Catégorie", ExportColumnType.TEXT),
@@ -70,7 +69,7 @@ public class ProductsExportDatasetProvider extends NativeKeysetExportDataset {
     @Override
     protected String selectList(ExportFilter filter) {
         String storeClause = filter.storeId() != null ? " AND sl.store_id = CAST(:stockStoreId AS uuid)" : "";
-        return "CAST(p.id AS text), p.sku, p.name, c.name, p.status, p.price, p.buy_price, p.transport_cost,"
+        return "p.sku, p.name, c.name, p.status, p.price, p.buy_price, p.transport_cost,"
                 + " p.minimum_threshold,"
                 + " (SELECT COALESCE(SUM(sl.quantity), 0) FROM stock_levels sl WHERE sl.product_id = p.id"
                 + storeClause + "),"
@@ -96,8 +95,8 @@ public class ProductsExportDatasetProvider extends NativeKeysetExportDataset {
 
     @Override
     protected List<Object> mapRow(Object[] r) {
-        return Arrays.asList(str(r[0]), str(r[1]), str(r[2]), str(r[3]), frLabel(STATUS, r[4]),
-                toLong(r[5]), toLong(r[6]), toLong(r[7]), toLong(r[8]), toLong(r[9]), str(r[10]),
-                toBool(r[11]), toInstant(r[12]), toInstant(r[13]));
+        return Arrays.asList(str(r[0]), str(r[1]), str(r[2]), frLabel(STATUS, r[3]),
+                toLong(r[4]), toLong(r[5]), toLong(r[6]), toLong(r[7]), toLong(r[8]), str(r[9]),
+                toBool(r[10]), toInstant(r[11]), toInstant(r[12]));
     }
 }

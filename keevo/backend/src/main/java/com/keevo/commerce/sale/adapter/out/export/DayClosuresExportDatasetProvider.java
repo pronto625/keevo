@@ -29,7 +29,6 @@ public class DayClosuresExportDatasetProvider extends NativeKeysetExportDataset 
     static final String KEY = "day_closures";
 
     private static final List<ExportColumn> COLUMNS = List.of(
-            new ExportColumn("id", "Identifiant", ExportColumnType.TEXT),
             new ExportColumn("closureDate", "Jour", ExportColumnType.DATE),
             new ExportColumn("closedAt", "Clôturée le", ExportColumnType.DATETIME),
             new ExportColumn("store", "Boutique", ExportColumnType.TEXT),
@@ -56,11 +55,17 @@ public class DayClosuresExportDatasetProvider extends NativeKeysetExportDataset 
     @Override public String label() { return "Clôtures"; }
     @Override public List<ExportColumn> columns() { return COLUMNS; }
 
+    /** Closure id, after the columns: the « Fin de journée » PDF loads each closure by id. */
+    @Override public List<String> internalKeys() { return INTERNAL; }
+
+    public static final String INTERNAL_ID = "id";
+    private static final List<String> INTERNAL = List.of(INTERNAL_ID);
+
     @Override
     protected String selectList(ExportFilter filter) {
-        return "CAST(d.id AS text), d.closure_date, d.closed_at, st.name, d.is_automatic, " + actorNameSelect("a")
+        return "d.closure_date, d.closed_at, st.name, d.is_automatic, " + actorNameSelect("a")
                 + ", d.total_sales, d.total_revenue, d.cash_amount, d.momo_amount, d.pending_sales_count,"
-                + " d.pending_sales_total, d.top_product_name, d.top_product_qty";
+                + " d.pending_sales_total, d.top_product_name, d.top_product_qty, CAST(d.id AS text)";
     }
 
     @Override
@@ -85,8 +90,8 @@ public class DayClosuresExportDatasetProvider extends NativeKeysetExportDataset 
 
     @Override
     protected List<Object> mapRow(Object[] r) {
-        return Arrays.asList(str(r[0]), toLocalDate(r[1]), toInstant(r[2]), str(r[3]), toBool(r[4]), str(r[5]),
-                toLong(r[6]), toLong(r[7]), toLong(r[8]), toLong(r[9]), toLong(r[10]), toLong(r[11]),
-                str(r[12]), toLong(r[13]));
+        return Arrays.asList(toLocalDate(r[0]), toInstant(r[1]), str(r[2]), toBool(r[3]), str(r[4]),
+                toLong(r[5]), toLong(r[6]), toLong(r[7]), toLong(r[8]), toLong(r[9]), toLong(r[10]),
+                str(r[11]), toLong(r[12]), str(r[13]));
     }
 }

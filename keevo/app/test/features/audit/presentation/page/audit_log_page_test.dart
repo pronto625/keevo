@@ -14,6 +14,7 @@ import 'package:keevo/features/audit/presentation/provider/audit_log_provider.da
 import 'package:keevo/features/audit/presentation/provider/audit_provider.dart';
 import 'package:keevo/features/export/domain/model/export_models.dart';
 
+import '../../../../helpers/no_technical_text.dart';
 import 'audit_test_helpers.dart';
 
 /// v1s-18-7 — « Historique des actions » list.
@@ -98,12 +99,35 @@ void main() {
     expect(find.text('Boutique Centre · 00:05'), findsOneWidget);
     expect(find.text('09:30'), findsOneWidget);
     expect(find.byKey(const Key('audit-offline-banner')), findsNothing);
+    expectNoTechnicalText(tester);
 
     await tester
         .tap(find.text('Awa a créé le produit Pagne wax', findRichText: true));
     await tester.pumpAndSettle();
     expect(find.text('detail t1'), findsOneWidget);
     expect(opened?.id, 't1');
+  });
+
+  testWidgets(
+      'v1s-16-20 guard: unknown codes and ids never reach the list',
+      (tester) async {
+    final now = DateTime.now();
+    repo.onSlice = (_, __) async => AuditSlice(entries: [
+          auditEntry('x1',
+              at: DateTime(now.year, now.month, now.day, 8),
+              action: 'SOME_NEW_ACTION',
+              entityType: 'SomeThing',
+              entityLabel: '7f1c2b4e-2b9a-4c1e-9d0f-0a1b2c3d4e5f',
+              actorName: null,
+              valueAfter: '{"status":"PENDING_VALIDATION"}'),
+        ], nextCursor: null);
+
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Some new action', findRichText: true),
+        findsWidgets);
+    expectNoTechnicalText(tester);
   });
 
   testWidgets('a filter chip reloads from the first page with the filter',

@@ -149,6 +149,8 @@ void main() {
     expect(find.text('Résumé'), findsOneWidget);
     expect(find.text('4 comptés'), findsOneWidget);
     expect(find.text('1 concordants'), findsOneWidget);
+    // v1s-16-20: French scope in the subtitle, never the raw code
+    expect(find.text('Boutique Test — Complet'), findsOneWidget);
 
     // Sections
     expect(find.text('Concordants : 1 produits'), findsOneWidget);

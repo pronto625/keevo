@@ -52,6 +52,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(find.text('main'), findsOneWidget);
+    // v1s-16-20: an unknown store reads « Boutique », never its id.
+    expect(find.text('main'), findsNothing);
+    expect(find.text('Boutique'), findsOneWidget);
   });
 }
