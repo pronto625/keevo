@@ -637,6 +637,68 @@ public class TenantSchemaProvisioner {
     static final String DDL_SALES_IDX_STORE_EMPLOYEE_OCCURRED_AT =
             "CREATE INDEX IF NOT EXISTS idx_sales_store_employee_occurred ON sales(store_id, employee_id, occurred_at)";
 
+    // Story 11.5 — keyset pull indexes. DeltaPageQuery filters and orders each delta table by
+    // (<cursor>, CAST(id AS text)); each index below repeats the provider's exact cursor
+    // expression (its CURSOR constant) and the text-cast id so the planner can walk it instead of
+    // sorting the table. SyncKeysetIndexesMatchProvidersTest (sync test package) guards the coupling.
+    // New schemas get them at provisioning (createTables); existing schemas get them from
+    // SyncKeysetIndexJob (background, CREATE INDEX CONCURRENTLY) — never from the request-path sync.
+
+    /**
+     * One keyset pull index: {@code name ON table (cursor, (CAST(id AS text)))}.
+     *
+     * @param name   index name (unqualified)
+     * @param table  delta table (unqualified)
+     * @param cursor cursor column or expression, identical to the provider's {@code CURSOR}
+     */
+    public record SyncKeysetIndex(String name, String table, String cursor) {
+
+        /** Index key list as written in the DDL; an expression cursor gets its own parentheses. */
+        String keys() {
+            String lead = cursor.matches("[a-z_]+") ? cursor : "(" + cursor + ")";
+            return lead + ", (CAST(id AS text))";
+        }
+
+        /** Plain DDL on the current {@code search_path} (provisioning of a new, empty schema). */
+        public String createSql() {
+            return "CREATE INDEX IF NOT EXISTS " + name + " ON " + table + " (" + keys() + ")";
+        }
+
+        /** Non-blocking DDL on an existing schema (must run in autocommit). */
+        String createConcurrentlySql(String schema) {
+            return "CREATE INDEX CONCURRENTLY IF NOT EXISTS " + name
+                    + " ON \"" + schema + "\"." + table + " (" + keys() + ")";
+        }
+
+        /**
+         * The definition PostgreSQL reports for this index ({@code pg_get_indexdef}), with the
+         * schema qualifier removed: a column or function-call cursor is printed bare and the
+         * text-cast id as {@code ((id)::text)}.
+         */
+        String expectedDefinition() {
+            return "CREATE INDEX " + name + " ON " + table + " USING btree (" + cursor + ", ((id)::text))";
+        }
+    }
+
+    /** Story 11.5 — every keyset pull index, one per table read through DeltaPageQuery. */
+    public static final java.util.List<SyncKeysetIndex> SYNC_KEYSET_INDEXES = java.util.List.of(
+            new SyncKeysetIndex("idx_products_sync_keyset", "products", "updated_at"),
+            new SyncKeysetIndex("idx_categories_sync_keyset", "categories", "updated_at"),
+            new SyncKeysetIndex("idx_stores_sync_keyset", "stores", "updated_at"),
+            new SyncKeysetIndex("idx_clients_sync_keyset", "clients", "updated_at"),
+            new SyncKeysetIndex("idx_suppliers_sync_keyset", "suppliers", "updated_at"),
+            new SyncKeysetIndex("idx_employees_sync_keyset", "employees", "updated_at"),
+            new SyncKeysetIndex("idx_sales_sync_keyset", "sales", "updated_at"),
+            new SyncKeysetIndex("idx_stock_levels_sync_keyset", "stock_levels", "updated_at"),
+            new SyncKeysetIndex("idx_stock_movements_sync_keyset", "stock_movements", "occurred_at"),
+            new SyncKeysetIndex("idx_stock_transfers_sync_keyset", "stock_transfers",
+                    "GREATEST(occurred_at, COALESCE(updated_at, occurred_at))"),
+            new SyncKeysetIndex("idx_audit_log_sync_keyset", "audit_log", "occurred_at"),
+            new SyncKeysetIndex("idx_day_closures_sync_keyset", "day_closures", "received_at"),
+            new SyncKeysetIndex("idx_inventory_sessions_sync_keyset", "inventory_sessions", "updated_at"),
+            new SyncKeysetIndex("idx_inventory_counts_sync_keyset", "inventory_counts", "updated_at"),
+            new SyncKeysetIndex("idx_reports_sync_keyset", "reports", "created_at"));
+
     // Story 5.1 — sync operations log (idempotency guard)
     static final String DDL_SYNC_OPERATIONS_LOG = """
             CREATE TABLE IF NOT EXISTS sync_operations_log (
@@ -1091,7 +1153,33 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_EXPORT_JOBS_MIGRATE_CRITERIA); // Story v1s-18-2
             stmt.execute(DDL_EXPORT_JOBS_IDX_CREATED);
             stmt.execute(DDL_EXPORT_JOBS_IDX_STATUS_EXPIRES);
+            // Story 11.5 — keyset pull indexes (every delta table exists at this point, still empty).
+            // Best effort: a failed index never fails provisioning; SyncKeysetIndexJob repairs it.
+            createSyncKeysetIndexes(conn, stmt, schemaName);
             stmt.execute("SET search_path TO public");
+        }
+    }
+
+    /** Indexes built at provisioning; package-private so a test can inject a failing one. */
+    java.util.List<SyncKeysetIndex> syncKeysetIndexes = SYNC_KEYSET_INDEXES;
+
+    /**
+     * Story 11.5 — creates each keyset pull index on its own: a failure is logged with its cause
+     * and skipped. Inside a caller transaction each index runs under a savepoint, so a failure
+     * does not abort the rest of the provisioning.
+     */
+    private void createSyncKeysetIndexes(Connection conn, Statement stmt, String schemaName) throws SQLException {
+        boolean inTransaction = !conn.getAutoCommit();
+        for (SyncKeysetIndex index : syncKeysetIndexes) {
+            java.sql.Savepoint savepoint = inTransaction ? conn.setSavepoint() : null;
+            try {
+                stmt.execute(index.createSql());
+                if (savepoint != null) conn.releaseSavepoint(savepoint);
+            } catch (SQLException e) {
+                if (savepoint != null) conn.rollback(savepoint);
+                log.warn("Keyset index {} not created on schema {} — left to SyncKeysetIndexJob",
+                        index.name(), schemaName, e);
+            }
         }
     }
 

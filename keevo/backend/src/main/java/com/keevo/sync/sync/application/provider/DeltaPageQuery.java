@@ -37,9 +37,10 @@ final class DeltaPageQuery {
                 .append(cursorExpr).append(" AS sync_cursor FROM ").append(table)
                 .append(" WHERE ").append(cursorExpr).append(" >= :since");
         if (after != null) {
-            sql.append(" AND (").append(cursorExpr).append(" > :afterCursor OR (")
-                    .append(cursorExpr).append(" = :afterCursor AND ").append(idExpr)
-                    .append(" > :afterId))");
+            // Row-value comparison (same order as the ORDER BY): the (cursor, CAST(id AS text))
+            // sync keyset index can start its scan right after the previous page (Story 11.5).
+            sql.append(" AND (").append(cursorExpr).append(", ").append(idExpr)
+                    .append(") > (:afterCursor, :afterId)");
         }
         sql.append(" ORDER BY ").append(cursorExpr).append(", ").append(idExpr);
 

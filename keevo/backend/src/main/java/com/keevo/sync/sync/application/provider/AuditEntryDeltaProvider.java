@@ -13,6 +13,9 @@ import java.util.*;
 @Component
 public class AuditEntryDeltaProvider implements DeltaEntityProvider {
 
+    /** Keyset cursor of the delta pull; the {@code audit_log} sync keyset index leads with it (Story 11.5). */
+    static final String CURSOR = "occurred_at";
+
     private final EntityManager em;
 
     public AuditEntryDeltaProvider(EntityManager em) {
@@ -39,7 +42,7 @@ public class AuditEntryDeltaProvider implements DeltaEntityProvider {
         var page = DeltaPageQuery.fetch(em,
                 "id, user_id, entity_type, entity_id, action, value_before, value_after, occurred_at, "
                         + "store_id, entity_label, device_id, source, CAST(metadata AS text)",
-                "audit_log", "occurred_at", effectiveSince, after, limit);
+                "audit_log", CURSOR, effectiveSince, after, limit);
         return new Page(page.rows().stream().map(this::mapRow).toList(), page.next());
     }
 

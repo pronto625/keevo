@@ -1,0 +1,825 @@
+diff --git a/_bmad-output/implementation-artifacts/11-5-correctifs-performance-n1-bug-index.md b/_bmad-output/implementation-artifacts/11-5-correctifs-performance-n1-bug-index.md
+index dbf2dcb3..2a161b01 100644
+--- a/_bmad-output/implementation-artifacts/11-5-correctifs-performance-n1-bug-index.md
++++ b/_bmad-output/implementation-artifacts/11-5-correctifs-performance-n1-bug-index.md
+@@ -1,6 +1,6 @@
+ # Story 11.5: Correctifs performance & justesse (N+1, bug d'index)
+ 
+-Status: ready-for-dev
++Status: done
+ 
+ <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
+ 
+@@ -41,8 +41,8 @@ The audits (`review_claude_opus_8.md`, `review_qwen_6.md`) flagged three concret
+ 
+ ## Tasks / Subtasks
+ 
+-- [ ] **Task 1 — Eliminate the tenant-list schema-name N+1** (AC: #1, #2)
+-  - [ ] In `keevo/backend/src/main/java/com/keevo/admin/tenant/application/service/AdminTenantService.java`, in `execute(ListTenantsQuery)`, **after** the list rows are fetched (`items`) and **before** the enrichment `.map(...)`, build a single `Map<UUID,String>` of tenant-id → schema_name for the page:
++- [x] **Task 1 — Eliminate the tenant-list schema-name N+1** (AC: #1, #2)
++  - [x] In `keevo/backend/src/main/java/com/keevo/admin/tenant/application/service/AdminTenantService.java`, in `execute(ListTenantsQuery)`, **after** the list rows are fetched (`items`) and **before** the enrichment `.map(...)`, build a single `Map<UUID,String>` of tenant-id → schema_name for the page:
+     ```java
+     Map<UUID, String> schemaByTenant = loadSchemaNames(items.stream().map(AdminTenantListItem::id).toList());
+     List<AdminTenantListItem> enriched = items.stream()
+@@ -60,14 +60,14 @@ The audits (`review_claude_opus_8.md`, `review_qwen_6.md`) flagged three concret
+     return out;
+     ```
+     (The `?` placeholders are parameterized — no interpolation of values; the count of `?` equals `ids.size()`. This keeps the existing SQL-injection-safe posture.)
+-  - [ ] Change `enrichWithCrossSchemaMetrics(AdminTenantListItem item)` → `enrichWithCrossSchemaMetrics(AdminTenantListItem item, String schemaName)`. Drop the internal `safeLoadSchemaName(item.id())` call; use the passed `schemaName` (keep the `if (schemaName == null) return item;` guard). The two cross-schema metric queries inside (`safeCount` for `storeCount`, `safeMaxInstant` for `lastActivity`) are **legitimately per-tenant** (they read different tenant schemas) and are **out of scope** — leave them exactly as-is. The N+1 to remove is only the redundant `schema_name` re-lookup.
+-  - [ ] In `execute(GetTenantDetailQuery)` (detail path), reorder so `schemaName` is loaded **before** enrichment and reused: move `String schemaName = loadSchemaName(query.tenantId());` above the `enrichWithCrossSchemaMetrics` call and pass it in — `AdminTenantListItem summary = enrichWithCrossSchemaMetrics(summaryRows.get(0), schemaName);`. This removes the duplicate lookup (today the detail path queries schema_name twice: once in `safeLoadSchemaName` inside enrich, once in `loadSchemaName`). `loadSchemaName` throws `TENANT_NOT_FOUND` on null, which is correct for the detail path (the tenant was already found in `summaryRows`).
+-  - [ ] Remove the now-unused `safeLoadSchemaName` private method (confirm no other caller via `grep`). Update the stale class/`enrichWithCrossSchemaMetrics` javadoc comments (lines ~24-43, ~214-219) that describe the old per-item lookup so they reflect the preloaded-map approach.
+-  - [ ] **Schema-name regex note:** this story does **not** add `TenantSchema.validate(...)` — that is Story 11.4's job (RBAC/exposition). If 11.4 has already landed on this branch and `AdminTenantService` now routes schema through `TenantSchema.validate`, keep that call (apply it to the map values before interpolation). If 11.4 has not landed, do **not** introduce it here. Check `git log`/the file's current state and note which case applied in completion notes.
+-  - [ ] Update `AdminTenantServiceTest` (`src/test/.../admin/tenant/application/service/AdminTenantServiceTest.java`): the existing `@BeforeEach` stub `lenient().when(jdbcTemplate.queryForObject(anyString(), eq(String.class), any(Object[].class))).thenReturn("kv_abc123")` modelled the **per-row** lookup — replace it with a stub of the **batched** `jdbc.query(... RowCallbackHandler/ResultSetExtractor ...)` used by `loadSchemaNames`. Add a new test `listTenants_multipleTenants_loadsSchemaNamesInOneQuery`: return a 3-row page from the list query and `verify(jdbcTemplate, times(1)).query(contains("WHERE id IN"), any(<the handler type>.class), any(Object[].class))` (and assert no per-id `queryForObject(String.class)` schema lookup is made). Keep the three existing tests green (adjust their stubs to the new shape). See Dev Notes "Mocking the batched schema query".
+-
+-- [ ] **Task 2 — JOIN FETCH the pending-sales items (kill the lazy N+1)** (AC: #3, #4)
+-  - [ ] In `keevo/backend/src/main/java/com/keevo/commerce/sale/adapter/out/persistence/jpa/SaleSpringRepository.java`, replace the **derived** declaration
++  - [x] Change `enrichWithCrossSchemaMetrics(AdminTenantListItem item)` → `enrichWithCrossSchemaMetrics(AdminTenantListItem item, String schemaName)`. Drop the internal `safeLoadSchemaName(item.id())` call; use the passed `schemaName` (keep the `if (schemaName == null) return item;` guard). The two cross-schema metric queries inside (`safeCount` for `storeCount`, `safeMaxInstant` for `lastActivity`) are **legitimately per-tenant** (they read different tenant schemas) and are **out of scope** — leave them exactly as-is. The N+1 to remove is only the redundant `schema_name` re-lookup.
++  - [x] In `execute(GetTenantDetailQuery)` (detail path), reorder so `schemaName` is loaded **before** enrichment and reused: move `String schemaName = loadSchemaName(query.tenantId());` above the `enrichWithCrossSchemaMetrics` call and pass it in — `AdminTenantListItem summary = enrichWithCrossSchemaMetrics(summaryRows.get(0), schemaName);`. This removes the duplicate lookup (today the detail path queries schema_name twice: once in `safeLoadSchemaName` inside enrich, once in `loadSchemaName`). `loadSchemaName` throws `TENANT_NOT_FOUND` on null, which is correct for the detail path (the tenant was already found in `summaryRows`).
++  - [x] Remove the now-unused `safeLoadSchemaName` private method (confirm no other caller via `grep`). Update the stale class/`enrichWithCrossSchemaMetrics` javadoc comments (lines ~24-43, ~214-219) that describe the old per-item lookup so they reflect the preloaded-map approach.
++  - [x] **Schema-name regex note:** this story does **not** add `TenantSchema.validate(...)` — that is Story 11.4's job (RBAC/exposition). If 11.4 has already landed on this branch and `AdminTenantService` now routes schema through `TenantSchema.validate`, keep that call (apply it to the map values before interpolation). If 11.4 has not landed, do **not** introduce it here. Check `git log`/the file's current state and note which case applied in completion notes.
++  - [x] Update `AdminTenantServiceTest` (`src/test/.../admin/tenant/application/service/AdminTenantServiceTest.java`): the existing `@BeforeEach` stub `lenient().when(jdbcTemplate.queryForObject(anyString(), eq(String.class), any(Object[].class))).thenReturn("kv_abc123")` modelled the **per-row** lookup — replace it with a stub of the **batched** `jdbc.query(... RowCallbackHandler/ResultSetExtractor ...)` used by `loadSchemaNames`. Add a new test `listTenants_multipleTenants_loadsSchemaNamesInOneQuery`: return a 3-row page from the list query and `verify(jdbcTemplate, times(1)).query(contains("WHERE id IN"), any(<the handler type>.class), any(Object[].class))` (and assert no per-id `queryForObject(String.class)` schema lookup is made). Keep the three existing tests green (adjust their stubs to the new shape). See Dev Notes "Mocking the batched schema query".
++
++- [x] **Task 2 — JOIN FETCH the pending-sales items (kill the lazy N+1)** (AC: #3, #4)
++  - [x] In `keevo/backend/src/main/java/com/keevo/commerce/sale/adapter/out/persistence/jpa/SaleSpringRepository.java`, replace the **derived** declaration
+     ```java
+     List<SaleJpaEntity> findByStoreIdAndStatus(UUID storeId, String status);
+     ```
+@@ -78,18 +78,18 @@ The audits (`review_claude_opus_8.md`, `review_qwen_6.md`) flagged three concret
+     List<SaleJpaEntity> findByStoreIdAndStatus(@Param("storeId") UUID storeId, @Param("status") String status);
+     ```
+     Use `LEFT JOIN FETCH` (not inner) + `DISTINCT` exactly like `findByIdWithItems` — `LEFT` keeps a (hypothetical) item-less sale in the result; `DISTINCT` collapses the per-item row fan-out to one entity. Field names confirmed on `SaleJpaEntity`: `storeId` (`store_id`), `status`, `items` (`@OneToMany(mappedBy="sale", fetch=LAZY)`).
+-  - [ ] Do **not** touch the other repository methods (`findByStatus`, `findPendingByProductId`, `findByIdWithItems`, the Story-4.4 history queries). The adapter (`SaleRepositoryAdapter.findByStoreIdAndStatus`) and the caller (`ValidateSaleService.getPendingSalesByStore`) need **no** change — same method signature, same returned `List<Sale>`; only the fetch strategy improves.
+-  - [ ] Add/extend a `@DataJpaTest` (or the existing `SaleRepositoryAdapterTest` if it already uses a real EM/Testcontainers) proving AC3/AC4: persist a `PENDING_VALIDATION` sale with ≥2 items in a store, call `findByStoreIdAndStatus(storeId, "PENDING_VALIDATION")`, assert exactly **one** entity is returned and `entity.getItems()` is populated (size == number of items) **without** a `LazyInitializationException` when accessed outside an open session/transaction. If the existing test infra for this repository is Testcontainers-backed, follow that pattern; if there is none, a `@DataJpaTest` with the in-suite Postgres/Testcontainers config used elsewhere is acceptable — match the project's existing repository-test convention rather than inventing a new one. See Dev Notes "Proving the fetch join".
++  - [x] Do **not** touch the other repository methods (`findByStatus`, `findPendingByProductId`, `findByIdWithItems`, the Story-4.4 history queries). The adapter (`SaleRepositoryAdapter.findByStoreIdAndStatus`) and the caller (`ValidateSaleService.getPendingSalesByStore`) need **no** change — same method signature, same returned `List<Sale>`; only the fetch strategy improves.
++  - [x] Add/extend a `@DataJpaTest` (or the existing `SaleRepositoryAdapterTest` if it already uses a real EM/Testcontainers) proving AC3/AC4: persist a `PENDING_VALIDATION` sale with ≥2 items in a store, call `findByStoreIdAndStatus(storeId, "PENDING_VALIDATION")`, assert exactly **one** entity is returned and `entity.getItems()` is populated (size == number of items) **without** a `LazyInitializationException` when accessed outside an open session/transaction. If the existing test infra for this repository is Testcontainers-backed, follow that pattern; if there is none, a `@DataJpaTest` with the in-suite Postgres/Testcontainers config used elsewhere is acceptable — match the project's existing repository-test convention rather than inventing a new one. See Dev Notes "Proving the fetch join".
+ 
+-- [ ] **Task 3 — Fix the day-closure column index** (AC: #5)
+-  - [ ] In `keevo/backend/src/main/java/com/keevo/sync/sync/application/provider/DayClosureDeltaProvider.java`, change the single line in `mapRow`:
++- [x] **Task 3 — Fix the day-closure column index** (AC: #5)
++  - [x] In `keevo/backend/src/main/java/com/keevo/sync/sync/application/provider/DayClosureDeltaProvider.java`, change the single line in `mapRow`:
+     ```java
+     map.put("totalTransactions", num(row[4]));   // before — duplicate of totalSales
+     map.put("totalTransactions", num(row[5]));   // after  — total_revenue (what the client stores as total_revenue)
+     ```
+     Leave `map.put("totalSales", num(row[4]))` and `map.put("totalRevenue", num(row[5]))` unchanged. Do **not** rename the payload keys — the Flutter client (`rest_sync_service.dart#_upsertDayClosures`) reads them **by name** and maps `totalTransactions` **positionally** into its local `total_revenue` column; renaming would break sync. Add a short comment above the put explaining the (admittedly confusing) key→column contract so a future reader doesn't "helpfully" revert it. See Dev Notes "Why `totalTransactions` carries revenue".
+-  - [ ] **Do not** change the SQL SELECT, `setMaxResults`, or any other mapping. `day_closures` has **no** `total_transactions` column (confirmed in `V1__baseline_public.sql` and `TenantSchemaProvisioner`), so the "extend the query" alternative in the epic note is not applicable — the index correction (`row[4]`→`row[5]`) is the fix.
+-  - [ ] Update `DayClosureDeltaProviderTest` (`src/test/.../sync/sync/application/provider/DayClosureDeltaProviderTest.java`): make the test row semantically unambiguous and assert both keys. Set the row to realistic values — `total_sales` = a small count, `total_revenue` = a money amount, e.g.:
++  - [x] **Do not** change the SQL SELECT, `setMaxResults`, or any other mapping. `day_closures` has **no** `total_transactions` column (confirmed in `V1__baseline_public.sql` and `TenantSchemaProvisioner`), so the "extend the query" alternative in the epic note is not applicable — the index correction (`row[4]`→`row[5]`) is the fix.
++  - [x] Update `DayClosureDeltaProviderTest` (`src/test/.../sync/sync/application/provider/DayClosureDeltaProviderTest.java`): make the test row semantically unambiguous and assert both keys. Set the row to realistic values — `total_sales` = a small count, `total_revenue` = a money amount, e.g.:
+     ```java
+     Object[] row = {UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), now,
+             12, 50000, 40000, 10000};   // row[4]=total_sales (count), row[5]=total_revenue
+@@ -100,9 +100,9 @@ The audits (`review_claude_opus_8.md`, `review_qwen_6.md`) flagged three concret
+     ```
+     (The current test only asserts `totalSales == 50000` against a row whose `row[4]=50000`; updating the data to count-vs-revenue makes the assertions express the real contract. Keep it a pure Mockito unit test — no Spring context.)
+ 
+-- [ ] **Task 4 — Regression + completion notes** (AC: #6)
+-  - [ ] From `keevo/backend`: `./mvnw -q -DskipTests compile` then `./mvnw test`. Confirm no NEW failures beyond the documented baseline (~1463 tests; **1 pre-existing failure + 33 pre-existing errors** — do not increase these counts). Your three touched test classes must be green.
+-  - [ ] In completion notes document: (1) the batched schema-name approach (one `IN (…)` query) and that the per-tenant cross-schema metric queries were intentionally left in scope-out; (2) confirmation `getTenantDetail` no longer double-loads schema_name; whether `TenantSchema.validate` was present (11.4 landed) or not; (3) the `findByStoreIdAndStatus` fetch-join (LEFT JOIN FETCH + DISTINCT) and how the item-eager-load test proves no N+1/`LazyInitializationException`; (4) the `totalTransactions` → `row[5]` correction and the client-contract reasoning (so a reviewer doesn't flag it as "now totalTransactions == totalRevenue").
++- [x] **Task 4 — Regression + completion notes** (AC: #6)
++  - [x] From `keevo/backend`: `./mvnw -q -DskipTests compile` then `./mvnw test`. Confirm no NEW failures beyond the documented baseline (~1463 tests; **1 pre-existing failure + 33 pre-existing errors** — do not increase these counts). Your three touched test classes must be green.
++  - [x] In completion notes document: (1) the batched schema-name approach (one `IN (…)` query) and that the per-tenant cross-schema metric queries were intentionally left in scope-out; (2) confirmation `getTenantDetail` no longer double-loads schema_name; whether `TenantSchema.validate` was present (11.4 landed) or not; (3) the `findByStoreIdAndStatus` fetch-join (LEFT JOIN FETCH + DISTINCT) and how the item-eager-load test proves no N+1/`LazyInitializationException`; (4) the `totalTransactions` → `row[5]` correction and the client-contract reasoning (so a reviewer doesn't flag it as "now totalTransactions == totalRevenue").
+ 
+ ## Dev Notes
+ 
+@@ -168,13 +168,34 @@ This looks wrong at first glance (`totalTransactions == totalRevenue`?), but it
+ 
+ ### Agent Model Used
+ 
++Claude Opus 5.5 (spec `spec-11-5-correctifs-performance-n1.md`)
++
+ ### Debug Log References
+ 
++- Sanity check: with the old derived `findByStoreIdAndStatus` restored, `SalePendingFetchJoinPostgresIntegrationTest` fails with `LazyInitializationException` (no session) — the test does detect the N+1; with the fetch join it passes.
++- Verification (one package at a time, `MAVEN_OPTS=-Xmx1g mvn -q -o test -DforkCount=1 -DargLine=-Xmx1536m`): `com.keevo.admin.**` 108/0/0, `com.keevo.commerce.**` 232/0/0, `com.keevo.sync.**` 437/0/0, `com.keevo.shared.**` 500/0/0 (tests/failures/errors). The full suite was not run in one go (15 GB machine rule).
++
+ ### Completion Notes List
+ 
++1. **Tenant-list N+1 (AC1).** `AdminTenantService.execute(ListTenantsQuery)` now preloads the schema names of the whole page with one parameterized `SELECT id, schema_name FROM public.tenants WHERE id IN (?,…)` (`loadSchemaNames`, `RowCallbackHandler`, one `?` per id, no value interpolation) into a `Map<UUID,String>`, then calls `enrichWithCrossSchemaMetrics(item, schemaName)`. A failed batched lookup returns an empty map, so items are kept with zero metrics as before. The two per-tenant cross-schema metric queries (`storeCount`, `lastActivity`) are intentionally unchanged (out of scope). `safeLoadSchemaName` was removed (no other caller).
++2. **Detail path (AC2).** `execute(GetTenantDetailQuery)` loads `schemaName` once via `loadSchemaName` before the enrichment and passes it in: no duplicate lookup. 11.4's `TenantSchema` was already on this branch (v1s-13-12): the enrichment keeps the `TenantSchema.isValid` gate on the map value before interpolation, and `loadSchemaName` keeps its 404-on-invalid behaviour. An invalid schema in the detail now fails before the enrichment instead of after, with the same `TENANT_NOT_FOUND` result.
++3. **Pending-sales N+1 (AC3/AC4).** `SaleSpringRepository.findByStoreIdAndStatus` is now `SELECT DISTINCT s FROM SaleJpaEntity s LEFT JOIN FETCH s.items WHERE s.storeId = :storeId AND s.status = :status`, mirroring `findByIdWithItems`; adapter and service unchanged. `SalePendingFetchJoinPostgresIntegrationTest` (Testcontainers `@DataJpaTest`, no test transaction) proves 2 pending sales × 3 items come back as 2 entities, in exactly 1 prepared SQL statement (Hibernate statistics), with items readable after the transaction closed (no `LazyInitializationException`). The adapter path keeps the full item list.
++4. **Day-closure index bug (AC5) — already fixed before this story.** An earlier rename (UI-3 sync work) replaced the buggy `totalTransactions = row[4]` with `totalRevenue = row[5]` and removed the `totalTransactions` key. The Flutter client now reads `map['totalRevenue']` (`rest_sync_service.dart`), so the story's `totalTransactions → row[5]` instruction no longer applies and was not reintroduced. A regression test (`queryDelta_mapsCountToTotalSalesAndRevenueToTotalRevenue`) pins `totalSales` = row[4] (count), `totalRevenue` = row[5] (XAF) and the absence of `totalTransactions`.
++5. **Routed item: keyset pull indexes.** `TenantSchemaProvisioner.DDL_SYNC_KEYSET_INDEXES` contains one `CREATE INDEX IF NOT EXISTS idx_<table>_sync_keyset ON <table> (<cursor>, (CAST(id AS text)))` per table read through `DeltaPageQuery` (15 tables). Each index repeats the provider's exact cursor expression, including `GREATEST(occurred_at, COALESCE(updated_at, occurred_at))` for `stock_transfers`, `received_at` for `day_closures`, `occurred_at` for `audit_log`/`stock_movements` and `created_at` for `reports`. New schemas get them in `createTables`. Existing schemas get them in `TenantSchemaSyncService.doSync` (step 5, `ensureSyncKeysetIndexes`), which runs at boot through `TenantSchemaMigrationRunner` → `syncNow` and on the first request through `syncIfNeeded`. Each index runs under its own savepoint: a failure (e.g. lock timeout) is logged at WARN and skipped without rolling back the rest of the sync, and the next sync retries it. `SyncKeysetIndexesPostgresIntegrationTest` checks `pg_indexes` after provisioning and after the boot runner on an existing schema whose indexes were dropped (a re-sync is idempotent). It also checks via EXPLAIN that the delta query shape uses the index (`sales`, `stock_transfers`). `TenantSchemaSyncServiceTest.sync_keyset_index_failure_is_isolated` covers the savepoint isolation.
++
+ ### File List
+ 
++- `keevo/backend/src/main/java/com/keevo/admin/tenant/application/service/AdminTenantService.java` (UPDATE)
++- `keevo/backend/src/test/java/com/keevo/admin/tenant/application/service/AdminTenantServiceTest.java` (UPDATE)
++- `keevo/backend/src/main/java/com/keevo/commerce/sale/adapter/out/persistence/jpa/SaleSpringRepository.java` (UPDATE)
++- `keevo/backend/src/test/java/com/keevo/commerce/sale/adapter/out/persistence/SalePendingFetchJoinPostgresIntegrationTest.java` (NEW)
++- `keevo/backend/src/test/java/com/keevo/sync/sync/application/provider/DayClosureDeltaProviderTest.java` (UPDATE)
++- `keevo/backend/src/main/java/com/keevo/shared/infrastructure/persistence/TenantSchemaProvisioner.java` (UPDATE)
++- `keevo/backend/src/main/java/com/keevo/shared/infrastructure/persistence/TenantSchemaSyncService.java` (UPDATE)
++- `keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/TenantSchemaSyncServiceTest.java` (UPDATE)
++- `keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/SyncKeysetIndexesPostgresIntegrationTest.java` (NEW)
++
+ ### Deferred items routed 2026-10-11
+ 
+-- [ ] [Deferred-from: legacy CR 9-1, 2026-05-04] N+1 schema_name in enrichWithCrossSchemaMetrics [AdminTenantService.java#enrichWithCrossSchemaMetrics] — already in 11-5 scope (preload Map<UUID,String>)
+-- [ ] [Deferred-from: CR UI-3 lot 1 backend, 2026-10-11] Keyset pull ordering has no supporting index [DeltaPageQuery.java] — EXPLAIN on large tenant; index (cursor, id::text) per table
++- [x] [Deferred-from: legacy CR 9-1, 2026-05-04] N+1 schema_name in enrichWithCrossSchemaMetrics [AdminTenantService.java#enrichWithCrossSchemaMetrics] — already in 11-5 scope (preload Map<UUID,String>) — DONE: batched `IN (…)` lookup, see completion note 1
++- [x] [Deferred-from: CR UI-3 lot 1 backend, 2026-10-11] Keyset pull ordering has no supporting index [DeltaPageQuery.java] — EXPLAIN on large tenant; index (cursor, id::text) per table — DONE: `DDL_SYNC_KEYSET_INDEXES`, see completion note 5
+diff --git a/_bmad-output/implementation-artifacts/spec-11-5-correctifs-performance-n1.md b/_bmad-output/implementation-artifacts/spec-11-5-correctifs-performance-n1.md
+index a886317a..5bd565f2 100644
+--- a/_bmad-output/implementation-artifacts/spec-11-5-correctifs-performance-n1.md
++++ b/_bmad-output/implementation-artifacts/spec-11-5-correctifs-performance-n1.md
+@@ -2,7 +2,8 @@
+ title: '11-5 — Performance fixes: admin tenant-list N+1, pending-sales N+1, keyset pull indexes'
+ type: 'refactor'
+ created: '2026-10-13'
+-status: 'ready-for-dev'
++status: 'in-progress'
++baseline_revision: '8700dd45b4bbecbcae9efbe116d0c3c8c73aeb28'
+ review_loop_iteration: 0
+ followup_review_recommended: false
+ context:
+diff --git a/keevo/backend/src/main/java/com/keevo/admin/tenant/application/service/AdminTenantService.java b/keevo/backend/src/main/java/com/keevo/admin/tenant/application/service/AdminTenantService.java
+index 576e2dd1..fc850fba 100644
+--- a/keevo/backend/src/main/java/com/keevo/admin/tenant/application/service/AdminTenantService.java
++++ b/keevo/backend/src/main/java/com/keevo/admin/tenant/application/service/AdminTenantService.java
+@@ -14,6 +14,7 @@ import org.springframework.data.domain.Page;
+ import org.springframework.data.domain.PageImpl;
+ import org.springframework.data.domain.PageRequest;
+ import org.springframework.jdbc.core.JdbcTemplate;
++import org.springframework.jdbc.core.RowCallbackHandler;
+ import org.springframework.jdbc.core.RowMapper;
+ import org.springframework.stereotype.Service;
+ import org.springframework.transaction.annotation.Transactional;
+@@ -23,8 +24,11 @@ import java.sql.SQLException;
+ import java.sql.Timestamp;
+ import java.time.Instant;
+ import java.util.ArrayList;
++import java.util.HashMap;
+ import java.util.List;
++import java.util.Map;
+ import java.util.UUID;
++import java.util.stream.Collectors;
+ 
+ /**
+  * AdminTenantService — implements Super Admin tenant management use cases.
+@@ -32,8 +36,8 @@ import java.util.UUID;
+  * <p><b>Architecture rules:</b>
+  * <ol>
+  *   <li>listTenants(): queries public schema via JdbcTemplate ONLY — no TenantContext manipulation.
+- *       Cross-schema per-tenant metrics (storeCount, lastActivityAt) use parameterized schema names
+- *       from {@code public.tenants.schema_name} (validated at provisioning and re-checked here with {@code TenantSchema}: pattern {@code ^kv_[a-z0-9]{6}$}).
++ *       Cross-schema per-tenant metrics (storeCount, lastActivityAt) use schema names preloaded
++ *       for the whole page in one batched query on {@code public.tenants.schema_name} (validated at provisioning and re-checked here with {@code TenantSchema}: pattern {@code ^kv_[a-z0-9]{6}$}).
+  *   </li>
+  *   <li>getTenantDetail(): switches TenantContext to the target tenant's schema for stores,
+  *       employees, and audit log, then restores it — same pattern as ActivatePlanService.
+@@ -107,9 +111,13 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
+ 
+         List<AdminTenantListItem> items = jdbc.query(listSql, new TenantListRowMapper(), listParams.toArray());
+ 
++        // Story 11.5 — one batched schema_name lookup for the whole page (was one per row)
++        Map<UUID, String> schemaByTenant = loadSchemaNames(
++                items.stream().map(AdminTenantListItem::id).toList());
++
+         // Enrich each item with cross-schema metrics
+         List<AdminTenantListItem> enriched = items.stream()
+-                .map(this::enrichWithCrossSchemaMetrics)
++                .map(it -> enrichWithCrossSchemaMetrics(it, schemaByTenant.get(it.id())))
+                 .toList();
+ 
+         return new PageImpl<>(enriched, PageRequest.of(query.page(), query.pageSize()), total);
+@@ -141,8 +149,9 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
+             throw new DomainException(ErrorCode.TENANT_NOT_FOUND,
+                     "Tenant not found: " + query.tenantId());
+         }
+-        AdminTenantListItem summary = enrichWithCrossSchemaMetrics(summaryRows.get(0));
++        // Story 11.5 — schema_name loaded once and reused for the enrichment
+         String schemaName = loadSchemaName(query.tenantId());
++        AdminTenantListItem summary = enrichWithCrossSchemaMetrics(summaryRows.get(0), schemaName);
+ 
+         // Switch TenantContext to load cross-schema data
+         String previousTenant = TenantContext.getCurrentTenant();
+@@ -254,13 +263,13 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
+         return sb.toString();
+     }
+ 
+-    private AdminTenantListItem enrichWithCrossSchemaMetrics(AdminTenantListItem item) {
+-        // schemaName must be obtained from the DB item — we carry it via a temp holder approach:
+-        // The RowMapper loads schemaName into a holder via a thread-local string. Since records
+-        // are immutable, we pass schemaName as a column in the SQL result and strip it here.
+-        // See TenantListRowMapper which reads schema_name into the record's "name" position.
+-        // We call loadSchemaName separately to avoid complex record reshaping.
+-        String schemaName = safeLoadSchemaName(item.id());
++    /**
++     * Fills storeCount and lastActivityAt from the tenant's own schema. The schema name is
++     * resolved by the caller (preloaded map for the list, {@link #loadSchemaName} for the detail),
++     * so no per-item {@code schema_name} lookup is made here (Story 11.5). A null or invalid
++     * schema name leaves the item with zero metrics.
++     */
++    private AdminTenantListItem enrichWithCrossSchemaMetrics(AdminTenantListItem item, String schemaName) {
+         if (!TenantSchema.isValid(schemaName)) return item; // gate before SQL interpolation
+ 
+         int storeCount = safeCount("SELECT COUNT(*) FROM " + schemaName + ".stores WHERE is_active = true");
+@@ -275,14 +284,24 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
+         );
+     }
+ 
+-    private String safeLoadSchemaName(UUID tenantId) {
++    /**
++     * Loads the schema names of a page of tenants in a single parameterized {@code IN (…)} query.
++     * A failure yields an empty map: the items are then kept with zero metrics, as before.
++     */
++    private Map<UUID, String> loadSchemaNames(List<UUID> ids) {
++        if (ids.isEmpty()) return Map.of();
++        String inClause = ids.stream().map(x -> "?").collect(Collectors.joining(","));
++        Map<UUID, String> out = new HashMap<>();
+         try {
+-            return jdbc.queryForObject(
+-                    "SELECT schema_name FROM public.tenants WHERE id = ?",
+-                    String.class, tenantId);
++            jdbc.query("SELECT id, schema_name FROM public.tenants WHERE id IN (" + inClause + ")",
++                    (RowCallbackHandler) rs -> out.put(
++                            UUID.fromString(rs.getString("id")), rs.getString("schema_name")),
++                    ids.toArray());
+         } catch (Exception e) {
+-            return null;
++            log.warn("Batched schema_name lookup failed for {} tenants — metrics left empty", ids.size());
++            return Map.of();
+         }
++        return out;
+     }
+ 
+     private String loadSchemaName(UUID tenantId) {
+diff --git a/keevo/backend/src/main/java/com/keevo/commerce/sale/adapter/out/persistence/jpa/SaleSpringRepository.java b/keevo/backend/src/main/java/com/keevo/commerce/sale/adapter/out/persistence/jpa/SaleSpringRepository.java
+index 49267b93..159863cf 100644
+--- a/keevo/backend/src/main/java/com/keevo/commerce/sale/adapter/out/persistence/jpa/SaleSpringRepository.java
++++ b/keevo/backend/src/main/java/com/keevo/commerce/sale/adapter/out/persistence/jpa/SaleSpringRepository.java
+@@ -31,8 +31,14 @@ public interface SaleSpringRepository extends JpaRepository<SaleJpaEntity, UUID>
+ 
+     List<SaleJpaEntity> findByStatus(String status);
+ 
+-        /** AC5: EMPLOYEE-scoped pending sales — filter by store and status. */
+-        List<SaleJpaEntity> findByStoreIdAndStatus(UUID storeId, String status);
++        /**
++         * AC5: EMPLOYEE-scoped pending sales — filter by store and status.
++         * Story 11.5: items fetched in the same statement (no lazy N+1); DISTINCT collapses the
++         * per-item fan-out to one entity per sale, like {@link #findByIdWithItems}.
++         */
++        @Query("SELECT DISTINCT s FROM SaleJpaEntity s LEFT JOIN FETCH s.items "
++                + "WHERE s.storeId = :storeId AND s.status = :status")
++        List<SaleJpaEntity> findByStoreIdAndStatus(@Param("storeId") UUID storeId, @Param("status") String status);
+ 
+     // ── Story 4.4 — Sales History queries ─────────────────────────────────────
+ 
+diff --git a/keevo/backend/src/main/java/com/keevo/shared/infrastructure/persistence/TenantSchemaProvisioner.java b/keevo/backend/src/main/java/com/keevo/shared/infrastructure/persistence/TenantSchemaProvisioner.java
+index f275fad2..94492c44 100644
+--- a/keevo/backend/src/main/java/com/keevo/shared/infrastructure/persistence/TenantSchemaProvisioner.java
++++ b/keevo/backend/src/main/java/com/keevo/shared/infrastructure/persistence/TenantSchemaProvisioner.java
+@@ -637,6 +637,60 @@ public class TenantSchemaProvisioner {
+     static final String DDL_SALES_IDX_STORE_EMPLOYEE_OCCURRED_AT =
+             "CREATE INDEX IF NOT EXISTS idx_sales_store_employee_occurred ON sales(store_id, employee_id, occurred_at)";
+ 
++    // Story 11.5 — keyset pull indexes. DeltaPageQuery filters and orders each delta table by
++    // (<cursor>, CAST(id AS text)); each index below repeats the provider's exact cursor
++    // expression and the text-cast id so the planner can walk it instead of sorting the table.
++    // Keep in sync with the *DeltaProvider classes (com.keevo.sync.sync.application.provider).
++    static final String DDL_SYNC_KEYSET_IDX_PRODUCTS =
++            "CREATE INDEX IF NOT EXISTS idx_products_sync_keyset ON products (updated_at, (CAST(id AS text)))";
++    static final String DDL_SYNC_KEYSET_IDX_CATEGORIES =
++            "CREATE INDEX IF NOT EXISTS idx_categories_sync_keyset ON categories (updated_at, (CAST(id AS text)))";
++    static final String DDL_SYNC_KEYSET_IDX_STORES =
++            "CREATE INDEX IF NOT EXISTS idx_stores_sync_keyset ON stores (updated_at, (CAST(id AS text)))";
++    static final String DDL_SYNC_KEYSET_IDX_CLIENTS =
++            "CREATE INDEX IF NOT EXISTS idx_clients_sync_keyset ON clients (updated_at, (CAST(id AS text)))";
++    static final String DDL_SYNC_KEYSET_IDX_SUPPLIERS =
++            "CREATE INDEX IF NOT EXISTS idx_suppliers_sync_keyset ON suppliers (updated_at, (CAST(id AS text)))";
++    static final String DDL_SYNC_KEYSET_IDX_EMPLOYEES =
++            "CREATE INDEX IF NOT EXISTS idx_employees_sync_keyset ON employees (updated_at, (CAST(id AS text)))";
++    static final String DDL_SYNC_KEYSET_IDX_SALES =
++            "CREATE INDEX IF NOT EXISTS idx_sales_sync_keyset ON sales (updated_at, (CAST(id AS text)))";
++    static final String DDL_SYNC_KEYSET_IDX_STOCK_LEVELS =
++            "CREATE INDEX IF NOT EXISTS idx_stock_levels_sync_keyset ON stock_levels (updated_at, (CAST(id AS text)))";
++    static final String DDL_SYNC_KEYSET_IDX_STOCK_MOVEMENTS =
++            "CREATE INDEX IF NOT EXISTS idx_stock_movements_sync_keyset ON stock_movements (occurred_at, (CAST(id AS text)))";
++    static final String DDL_SYNC_KEYSET_IDX_STOCK_TRANSFERS =
++            "CREATE INDEX IF NOT EXISTS idx_stock_transfers_sync_keyset ON stock_transfers "
++            + "((GREATEST(occurred_at, COALESCE(updated_at, occurred_at))), (CAST(id AS text)))";
++    static final String DDL_SYNC_KEYSET_IDX_AUDIT_LOG =
++            "CREATE INDEX IF NOT EXISTS idx_audit_log_sync_keyset ON audit_log (occurred_at, (CAST(id AS text)))";
++    static final String DDL_SYNC_KEYSET_IDX_DAY_CLOSURES =
++            "CREATE INDEX IF NOT EXISTS idx_day_closures_sync_keyset ON day_closures (received_at, (CAST(id AS text)))";
++    static final String DDL_SYNC_KEYSET_IDX_INVENTORY_SESSIONS =
++            "CREATE INDEX IF NOT EXISTS idx_inventory_sessions_sync_keyset ON inventory_sessions (updated_at, (CAST(id AS text)))";
++    static final String DDL_SYNC_KEYSET_IDX_INVENTORY_COUNTS =
++            "CREATE INDEX IF NOT EXISTS idx_inventory_counts_sync_keyset ON inventory_counts (updated_at, (CAST(id AS text)))";
++    static final String DDL_SYNC_KEYSET_IDX_REPORTS =
++            "CREATE INDEX IF NOT EXISTS idx_reports_sync_keyset ON reports (created_at, (CAST(id AS text)))";
++
++    /** Story 11.5 — every keyset pull index, executed by the provisioner and by the boot/request sync. */
++    static final java.util.List<String> DDL_SYNC_KEYSET_INDEXES = java.util.List.of(
++            DDL_SYNC_KEYSET_IDX_PRODUCTS,
++            DDL_SYNC_KEYSET_IDX_CATEGORIES,
++            DDL_SYNC_KEYSET_IDX_STORES,
++            DDL_SYNC_KEYSET_IDX_CLIENTS,
++            DDL_SYNC_KEYSET_IDX_SUPPLIERS,
++            DDL_SYNC_KEYSET_IDX_EMPLOYEES,
++            DDL_SYNC_KEYSET_IDX_SALES,
++            DDL_SYNC_KEYSET_IDX_STOCK_LEVELS,
++            DDL_SYNC_KEYSET_IDX_STOCK_MOVEMENTS,
++            DDL_SYNC_KEYSET_IDX_STOCK_TRANSFERS,
++            DDL_SYNC_KEYSET_IDX_AUDIT_LOG,
++            DDL_SYNC_KEYSET_IDX_DAY_CLOSURES,
++            DDL_SYNC_KEYSET_IDX_INVENTORY_SESSIONS,
++            DDL_SYNC_KEYSET_IDX_INVENTORY_COUNTS,
++            DDL_SYNC_KEYSET_IDX_REPORTS);
++
+     // Story 5.1 — sync operations log (idempotency guard)
+     static final String DDL_SYNC_OPERATIONS_LOG = """
+             CREATE TABLE IF NOT EXISTS sync_operations_log (
+@@ -1091,6 +1145,10 @@ public class TenantSchemaProvisioner {
+             stmt.execute(DDL_EXPORT_JOBS_MIGRATE_CRITERIA); // Story v1s-18-2
+             stmt.execute(DDL_EXPORT_JOBS_IDX_CREATED);
+             stmt.execute(DDL_EXPORT_JOBS_IDX_STATUS_EXPIRES);
++            // Story 11.5 — keyset pull indexes (every delta table exists at this point)
++            for (String ddl : DDL_SYNC_KEYSET_INDEXES) {
++                stmt.execute(ddl);
++            }
+             stmt.execute("SET search_path TO public");
+         }
+     }
+diff --git a/keevo/backend/src/main/java/com/keevo/shared/infrastructure/persistence/TenantSchemaSyncService.java b/keevo/backend/src/main/java/com/keevo/shared/infrastructure/persistence/TenantSchemaSyncService.java
+index f8f85a0a..aca21123 100644
+--- a/keevo/backend/src/main/java/com/keevo/shared/infrastructure/persistence/TenantSchemaSyncService.java
++++ b/keevo/backend/src/main/java/com/keevo/shared/infrastructure/persistence/TenantSchemaSyncService.java
+@@ -204,6 +204,9 @@ public class TenantSchemaSyncService {
+                 // Step 4 — Apply idempotent index migrations (Story 2.4: uq_products_name)
+                 ensureRequiredIndexes(conn, tenantSchema);
+ 
++                // Step 5 — Story 11.5: keyset pull indexes, each isolated by a savepoint
++                ensureSyncKeysetIndexes(conn, tenantSchema);
++
+                 conn.commit();
+                 log.debug("Schema sync complete for '{}'", tenantSchema);
+ 
+@@ -320,6 +323,30 @@ public class TenantSchemaSyncService {
+         }
+     }
+ 
++    /**
++     * Story 11.5 — create the keyset pull indexes ({@code (cursor, CAST(id AS text))} per delta
++     * table) on an existing tenant schema. Each index runs under its own savepoint: one that
++     * cannot be built (lock timeout, legacy table missing a column) is logged and skipped
++     * without rolling back the rest of the sync; the next sync retries it ({@code IF NOT EXISTS}).
++     */
++    private void ensureSyncKeysetIndexes(Connection conn, String tenantSchema) throws SQLException {
++        try (Statement stmt = conn.createStatement()) {
++            stmt.execute("SET search_path TO \"" + tenantSchema + "\"");
++            for (String ddl : TenantSchemaProvisioner.DDL_SYNC_KEYSET_INDEXES) {
++                Savepoint savepoint = conn.setSavepoint();
++                try {
++                    stmt.execute(ddl);
++                    conn.releaseSavepoint(savepoint);
++                } catch (SQLException e) {
++                    conn.rollback(savepoint);
++                    log.warn("Schema sync [{}]: keyset index skipped ({}): {}",
++                            tenantSchema, ddl, e.getMessage());
++                }
++            }
++            stmt.execute("SET search_path TO public");
++        }
++    }
++
+     // ── Table-level operations ────────────────────────────────────────────────
+ 
+     private void createTableLike(Connection conn, String tenantSchema, String tableName)
+diff --git a/keevo/backend/src/test/java/com/keevo/admin/tenant/application/service/AdminTenantServiceTest.java b/keevo/backend/src/test/java/com/keevo/admin/tenant/application/service/AdminTenantServiceTest.java
+index b71e9260..b03a377e 100644
+--- a/keevo/backend/src/test/java/com/keevo/admin/tenant/application/service/AdminTenantServiceTest.java
++++ b/keevo/backend/src/test/java/com/keevo/admin/tenant/application/service/AdminTenantServiceTest.java
+@@ -15,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoSettings;
+ import org.mockito.quality.Strictness;
+ import org.springframework.data.domain.Page;
+ import org.springframework.jdbc.core.JdbcTemplate;
++import org.springframework.jdbc.core.RowCallbackHandler;
+ import org.springframework.jdbc.core.RowMapper;
+ 
+ import java.sql.ResultSet;
+@@ -46,9 +47,17 @@ class AdminTenantServiceTest {
+     @BeforeEach
+     void setUp() {
+         service = new AdminTenantService(jdbcTemplate, accountDeletionScheduler);
+-        // Stub schema_name lookup used by enrichWithCrossSchemaMetrics
+-        lenient().when(jdbcTemplate.queryForObject(anyString(), eq(String.class), any(Object[].class)))
+-                .thenReturn("kv_abc123");
++        // Stub the batched schema_name lookup (Story 11.5): every requested id → "kv_abc123"
++        lenient().doAnswer(inv -> {
++            RowCallbackHandler handler = inv.getArgument(1);
++            for (Object id : idArgs(inv.getArguments())) {
++                ResultSet rs = mock(ResultSet.class);
++                when(rs.getString("id")).thenReturn(id.toString());
++                when(rs.getString("schema_name")).thenReturn("kv_abc123");
++                handler.processRow(rs);
++            }
++            return null;
++        }).when(jdbcTemplate).query(contains("WHERE id IN"), any(RowCallbackHandler.class), any(Object[].class));
+         // Stub cross-schema count queries (called with no args)
+         lenient().when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class)))
+                 .thenReturn(0);
+@@ -130,8 +139,64 @@ class AdminTenantServiceTest {
+         assertThat(result.getContent().get(0).plan()).isEqualTo("PAID");
+     }
+ 
++    @Test
++    @DisplayName("11.5 — listTenants loads the schema names of the whole page in one query (no N+1)")
++    void listTenants_multipleTenants_loadsSchemaNamesInOneQuery() {
++        List<AdminTenantListItem> rows = List.of(
++                buildItem(UUID.randomUUID(), "FREE", "ACTIVE"),
++                buildItem(UUID.randomUUID(), "PAID", "ACTIVE"),
++                buildItem(UUID.randomUUID(), "FREE", "SUSPENDED"));
++        when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(3L);
++        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class))).thenReturn(rows);
++        when(jdbcTemplate.queryForObject(contains("kv_abc123.stores"), eq(Integer.class))).thenReturn(2);
++
++        Page<AdminTenantListItem> result = service.execute(
++                new ListTenantsQuery(null, null, null, null, null, null, null, 0, 25));
++
++        verify(jdbcTemplate, times(1))
++                .query(contains("WHERE id IN (?,?,?)"), any(RowCallbackHandler.class), any(Object[].class));
++        verify(jdbcTemplate, never())
++                .queryForObject(contains("schema_name"), eq(String.class), any(Object[].class));
++        // content unchanged apart from the cross-schema metrics, in the same order
++        assertThat(result.getContent()).extracting(AdminTenantListItem::id)
++                .containsExactlyElementsOf(rows.stream().map(AdminTenantListItem::id).toList());
++        assertThat(result.getContent()).extracting(AdminTenantListItem::storeCount).containsOnly(2);
++    }
++
++    @Test
++    @DisplayName("11.5 — tenant missing from the batched lookup is kept with zero metrics")
++    void listTenants_missingSchema_keepsItemWithZeroMetrics() {
++        UUID id = UUID.randomUUID();
++        when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(1L);
++        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class)))
++                .thenReturn(List.of(buildItem(id, "FREE", "ACTIVE")));
++        doNothing().when(jdbcTemplate)
++                .query(contains("WHERE id IN"), any(RowCallbackHandler.class), any(Object[].class));
++
++        Page<AdminTenantListItem> result = service.execute(
++                new ListTenantsQuery(null, null, null, null, null, null, null, 0, 25));
++
++        assertThat(result.getContent()).singleElement()
++                .satisfies(it -> {
++                    assertThat(it.id()).isEqualTo(id);
++                    assertThat(it.storeCount()).isZero();
++                    assertThat(it.lastActivityAt()).isNull();
++                });
++        verify(jdbcTemplate, never()).queryForObject(contains(".stores"), eq(Integer.class));
++    }
++
+     // ── Helpers ───────────────────────────────────────────────────────────────
+ 
++    /** Flattens the varargs of a {@code query(sql, handler, Object...)} invocation. */
++    private static List<Object> idArgs(Object[] args) {
++        List<Object> out = new java.util.ArrayList<>();
++        for (int i = 2; i < args.length; i++) {
++            if (args[i] instanceof Object[] arr) out.addAll(List.of(arr));
++            else out.add(args[i]);
++        }
++        return out;
++    }
++
+     private AdminTenantListItem buildItem(UUID id, String plan, String status) {
+         return new AdminTenantListItem(
+                 id, "KV-" + id.toString().substring(0, 4),
+diff --git a/keevo/backend/src/test/java/com/keevo/commerce/sale/adapter/out/persistence/SalePendingFetchJoinPostgresIntegrationTest.java b/keevo/backend/src/test/java/com/keevo/commerce/sale/adapter/out/persistence/SalePendingFetchJoinPostgresIntegrationTest.java
+new file mode 100644
+index 00000000..1c2a8b60
+--- /dev/null
++++ b/keevo/backend/src/test/java/com/keevo/commerce/sale/adapter/out/persistence/SalePendingFetchJoinPostgresIntegrationTest.java
+@@ -0,0 +1,116 @@
++package com.keevo.commerce.sale.adapter.out.persistence;
++
++import com.keevo.commerce.sale.adapter.out.persistence.entity.SaleJpaEntity;
++import com.keevo.commerce.sale.adapter.out.persistence.impl.SaleRepositoryAdapter;
++import com.keevo.commerce.sale.adapter.out.persistence.jpa.SaleSpringRepository;
++import com.keevo.commerce.sale.domain.model.PaymentMode;
++import com.keevo.commerce.sale.domain.model.Sale;
++import com.keevo.commerce.sale.domain.model.SaleItem;
++import com.keevo.commerce.sale.domain.model.SaleStatus;
++import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
++import jakarta.persistence.EntityManagerFactory;
++import org.hibernate.SessionFactory;
++import org.hibernate.stat.Statistics;
++import org.junit.jupiter.api.DisplayName;
++import org.junit.jupiter.api.Test;
++import org.springframework.beans.factory.annotation.Autowired;
++import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
++import org.springframework.context.annotation.Import;
++import org.springframework.transaction.PlatformTransactionManager;
++import org.springframework.transaction.annotation.Propagation;
++import org.springframework.transaction.annotation.Transactional;
++import org.springframework.transaction.support.TransactionTemplate;
++
++import java.time.Instant;
++import java.time.temporal.ChronoUnit;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.UUID;
++
++import static org.assertj.core.api.Assertions.assertThat;
++
++/**
++ * Story 11.5 (AC3/AC4) — the EMPLOYEE pending-sales list loads the sale items in the same SQL
++ * statement ({@code LEFT JOIN FETCH} + {@code DISTINCT}), against a real PostgreSQL migrated by Flyway.
++ *
++ * <p>No test-managed transaction: the finder runs in its own transaction and the items are read
++ * after it closed, so a lazy collection would throw {@code LazyInitializationException}.</p>
++ */
++@DataJpaTest(properties = {
++        "spring.jpa.hibernate.ddl-auto=validate",
++        "spring.jpa.properties.hibernate.generate_statistics=true"})
++@Import(SaleRepositoryAdapter.class)
++@Transactional(propagation = Propagation.NOT_SUPPORTED)
++@DisplayName("Pending sales fetch their items in one query (Story 11.5)")
++class SalePendingFetchJoinPostgresIntegrationTest extends PostgresIntegrationTest {
++
++    private static final Instant NOW = Instant.now().truncatedTo(ChronoUnit.MILLIS);
++
++    @Autowired SaleRepositoryAdapter adapter;
++    @Autowired SaleSpringRepository springRepository;
++    @Autowired EntityManagerFactory emf;
++    @Autowired PlatformTransactionManager transactionManager;
++
++    @Test
++    @DisplayName("2 pending sales × 3 items → 2 entities, items loaded, one SQL statement")
++    void pendingSalesWithItems_oneStatement_oneRowPerSale() {
++        UUID storeId = UUID.randomUUID();
++        Sale a = pendingSale(storeId, 3);
++        Sale b = pendingSale(storeId, 3);
++        tx().executeWithoutResult(s -> {
++            adapter.save(a);
++            adapter.save(b);
++            // another status in the same store must not leak into the result
++            adapter.save(sale(storeId, SaleStatus.COMPLETED, 2));
++        });
++
++        Statistics stats = emf.unwrap(SessionFactory.class).getStatistics();
++        stats.clear();
++
++        List<SaleJpaEntity> found = tx().execute(s ->
++                springRepository.findByStoreIdAndStatus(storeId, SaleStatus.PENDING_VALIDATION.name()));
++
++        assertThat(stats.getPrepareStatementCount()).as("SQL statements for the finder").isEqualTo(1);
++        assertThat(found).extracting(SaleJpaEntity::getId).containsExactlyInAnyOrder(a.getId(), b.getId());
++        // read outside the transaction: a lazy collection would throw LazyInitializationException
++        assertThat(found).allSatisfy(e -> assertThat(e.getItems()).hasSize(3));
++        assertThat(stats.getPrepareStatementCount()).as("no lazy item load afterwards").isEqualTo(1);
++    }
++
++    @Test
++    @DisplayName("adapter path (ValidateSaleService) maps each pending sale with its full item list")
++    void adapterMapsFullItemList() {
++        UUID storeId = UUID.randomUUID();
++        Sale a = pendingSale(storeId, 2);
++        tx().executeWithoutResult(s -> adapter.save(a));
++
++        List<Sale> found = tx().execute(s ->
++                adapter.findByStoreIdAndStatus(storeId, SaleStatus.PENDING_VALIDATION));
++
++        assertThat(found).singleElement().satisfies(sale -> {
++            assertThat(sale.getId()).isEqualTo(a.getId());
++            assertThat(sale.getItems()).hasSize(2);
++        });
++    }
++
++    // ── helpers ──────────────────────────────────────────────────────────────
++
++    private TransactionTemplate tx() {
++        return new TransactionTemplate(transactionManager);
++    }
++
++    private static Sale pendingSale(UUID storeId, int itemCount) {
++        return sale(storeId, SaleStatus.PENDING_VALIDATION, itemCount);
++    }
++
++    private static Sale sale(UUID storeId, SaleStatus status, int itemCount) {
++        UUID saleId = UUID.randomUUID();
++        List<SaleItem> items = new ArrayList<>();
++        for (int i = 0; i < itemCount; i++) {
++            items.add(new SaleItem(UUID.randomUUID(), saleId, UUID.randomUUID(), null,
++                    "Produit " + i, 1000, 1000, 1));
++        }
++        return new Sale(saleId, storeId, UUID.randomUUID(), null, PaymentMode.CASH,
++                1000 * itemCount, 0, status, NOW, NOW, items);
++    }
++}
+diff --git a/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/SyncKeysetIndexesPostgresIntegrationTest.java b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/SyncKeysetIndexesPostgresIntegrationTest.java
+new file mode 100644
+index 00000000..5dc3d9fd
+--- /dev/null
++++ b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/SyncKeysetIndexesPostgresIntegrationTest.java
+@@ -0,0 +1,140 @@
++package com.keevo.shared.infrastructure.persistence;
++
++import org.junit.jupiter.api.DisplayName;
++import org.junit.jupiter.api.Test;
++import org.springframework.beans.factory.annotation.Autowired;
++import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
++import org.springframework.context.annotation.Import;
++import org.springframework.jdbc.core.JdbcTemplate;
++import org.springframework.transaction.annotation.Propagation;
++import org.springframework.transaction.annotation.Transactional;
++
++import javax.sql.DataSource;
++import java.sql.Connection;
++import java.sql.ResultSet;
++import java.sql.Statement;
++import java.util.List;
++import java.util.Map;
++import java.util.UUID;
++
++import static org.assertj.core.api.Assertions.assertThat;
++
++/**
++ * Story 11.5 — keyset pull indexes ({@code (cursor, CAST(id AS text))} per delta table) on a real
++ * PostgreSQL: created by provisioning for new tenants and by the boot/request schema sync for
++ * existing ones, idempotently, and matching the delta query shape so the planner uses them.
++ *
++ * <p>Commits tenant schemas: each test uses its own schema name.</p>
++ */
++@DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
++@Import({TenantSchemaProvisioner.class, TenantSchemaSyncService.class, TenantSchemaMigrationRunner.class})
++@Transactional(propagation = Propagation.NOT_SUPPORTED)
++@DisplayName("Keyset pull indexes on tenant schemas (Story 11.5)")
++class SyncKeysetIndexesPostgresIntegrationTest extends PostgresIntegrationTest {
++
++    /** index name → table, one per table read through DeltaPageQuery. */
++    private static final Map<String, String> INDEXES = Map.ofEntries(
++            Map.entry("idx_products_sync_keyset", "products"),
++            Map.entry("idx_categories_sync_keyset", "categories"),
++            Map.entry("idx_stores_sync_keyset", "stores"),
++            Map.entry("idx_clients_sync_keyset", "clients"),
++            Map.entry("idx_suppliers_sync_keyset", "suppliers"),
++            Map.entry("idx_employees_sync_keyset", "employees"),
++            Map.entry("idx_sales_sync_keyset", "sales"),
++            Map.entry("idx_stock_levels_sync_keyset", "stock_levels"),
++            Map.entry("idx_stock_movements_sync_keyset", "stock_movements"),
++            Map.entry("idx_stock_transfers_sync_keyset", "stock_transfers"),
++            Map.entry("idx_audit_log_sync_keyset", "audit_log"),
++            Map.entry("idx_day_closures_sync_keyset", "day_closures"),
++            Map.entry("idx_inventory_sessions_sync_keyset", "inventory_sessions"),
++            Map.entry("idx_inventory_counts_sync_keyset", "inventory_counts"),
++            Map.entry("idx_reports_sync_keyset", "reports"));
++
++    @Autowired JdbcTemplate jdbc;
++    @Autowired DataSource dataSource;
++    @Autowired TenantSchemaProvisioner provisioner;
++    @Autowired TenantSchemaSyncService syncService;
++    @Autowired TenantSchemaMigrationRunner runner;
++
++    @Test
++    @DisplayName("provision(): a new tenant schema gets every keyset index, on (cursor, id::text)")
++    void provisionCreatesKeysetIndexes() {
++        String schema = "kv_ksi001";
++        provisioner.provision("tenant-ksi1", schema);
++
++        assertThat(keysetIndexes(schema)).containsOnlyKeys(INDEXES.keySet().toArray(String[]::new));
++        assertThat(keysetIndexes(schema)).allSatisfy((name, def) -> assertThat(def)
++                .as(name).contains("ON " + schema + "." + INDEXES.get(name)).contains("((id)::text)"));
++        assertThat(keysetIndexes(schema).get("idx_sales_sync_keyset")).contains("(updated_at, ((id)::text))");
++        assertThat(keysetIndexes(schema).get("idx_day_closures_sync_keyset")).contains("(received_at, ((id)::text))");
++        assertThat(keysetIndexes(schema).get("idx_stock_transfers_sync_keyset"))
++                .contains("GREATEST(occurred_at, COALESCE(updated_at, occurred_at))");
++    }
++
++    @Test
++    @DisplayName("boot: an existing tenant without the indexes gets them from the runner; a re-sync is idempotent")
++    void runnerCreatesKeysetIndexesOnExistingTenant() throws Exception {
++        String schema = "kv_ksi002";
++        provisioner.provision("tenant-ksi2", schema);
++        for (String index : INDEXES.keySet()) {
++            jdbc.execute("DROP INDEX \"" + schema + "\"." + index);
++        }
++        assertThat(keysetIndexes(schema)).isEmpty();
++        registerTenant(schema, "KV-KSI002");
++        try {
++            runner.runAll();
++            assertThat(keysetIndexes(schema)).containsOnlyKeys(INDEXES.keySet().toArray(String[]::new));
++
++            syncService.syncNow(schema); // second pass: IF NOT EXISTS, no duplicate, no failure
++            assertThat(keysetIndexes(schema)).hasSize(INDEXES.size());
++        } finally {
++            jdbc.update("DELETE FROM public.tenants WHERE schema_name = ?", schema);
++        }
++    }
++
++    @Test
++    @DisplayName("the delta page query shape (cursor >= since ORDER BY cursor, CAST(id AS text)) uses the index")
++    void deltaQueryUsesKeysetIndex() throws Exception {
++        String schema = "kv_ksi003";
++        provisioner.provision("tenant-ksi3", schema);
++
++        assertThat(explain(schema, "sales", "updated_at")).contains("idx_sales_sync_keyset");
++        assertThat(explain(schema, "stock_transfers", "GREATEST(occurred_at, COALESCE(updated_at, occurred_at))"))
++                .contains("idx_stock_transfers_sync_keyset");
++    }
++
++    // ── helpers ──────────────────────────────────────────────────────────────
++
++    private Map<String, String> keysetIndexes(String schema) {
++        List<Map<String, Object>> rows = jdbc.queryForList(
++                "SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = ? AND indexname LIKE '%_sync_keyset'",
++                schema);
++        return rows.stream().collect(java.util.stream.Collectors.toMap(
++                r -> (String) r.get("indexname"), r -> (String) r.get("indexdef")));
++    }
++
++    /** EXPLAIN of the DeltaPageQuery SQL with seq scans disabled (empty tables would otherwise seq-scan). */
++    private String explain(String schema, String table, String cursor) throws Exception {
++        String sql = "EXPLAIN SELECT id, " + cursor + " AS sync_cursor FROM \"" + schema + "\"." + table
++                + " WHERE " + cursor + " >= now() - interval '1 day'"
++                + " AND (" + cursor + " > now() - interval '1 hour' OR (" + cursor + " = now() - interval '1 hour'"
++                + " AND CAST(id AS text) > '0'))"
++                + " ORDER BY " + cursor + ", CAST(id AS text) LIMIT 51";
++        StringBuilder plan = new StringBuilder();
++        try (Connection conn = dataSource.getConnection(); Statement stmt = conn.createStatement()) {
++            stmt.execute("SET enable_seqscan = off");
++            try (ResultSet rs = stmt.executeQuery(sql)) {
++                while (rs.next()) plan.append(rs.getString(1)).append('\n');
++            } finally {
++                stmt.execute("RESET enable_seqscan");
++            }
++        }
++        return plan.toString();
++    }
++
++    private void registerTenant(String schema, String code) {
++        jdbc.update("INSERT INTO public.tenants (id, created_at, updated_at, code, max_employees, max_products, "
++                + "max_stores, plan_type, schema_name, status) "
++                + "VALUES (?, now(), now(), ?, 1, 1, 1, 'FREE', ?, 'ACTIVE')", UUID.randomUUID(), code, schema);
++    }
++}
+diff --git a/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/TenantSchemaSyncServiceTest.java b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/TenantSchemaSyncServiceTest.java
+index 2527abd4..d275d53d 100644
+--- a/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/TenantSchemaSyncServiceTest.java
++++ b/keevo/backend/src/test/java/com/keevo/shared/infrastructure/persistence/TenantSchemaSyncServiceTest.java
+@@ -317,4 +317,33 @@ class TenantSchemaSyncServiceTest {
+ 
+         verify(execStmt).execute(TenantSchemaProvisioner.DDL_STOCK_MOVEMENTS_MIGRATE_SALE_CANCELLED);
+     }
++
++    // ── Story 11.5 — keyset pull indexes ─────────────────────────────────────
++
++    @Test
++    @DisplayName("11.5 — a keyset index that fails is rolled back to its savepoint; the others and the sync still commit")
++    void sync_keyset_index_failure_is_isolated() throws Exception {
++        when(dataSource.getConnection()).thenReturn(connection);
++        when(connection.prepareStatement(contains("information_schema.tables")))
++                .thenReturn(tablesStmt);
++        when(tablesStmt.executeQuery()).thenReturn(tablesRs);
++        when(tablesRs.next()).thenReturn(false);
++        when(connection.createStatement()).thenReturn(execStmt);
++        Savepoint savepoint = mock(Savepoint.class);
++        when(connection.setSavepoint()).thenReturn(savepoint);
++        lenient().doThrow(new SQLException("canceling statement due to lock timeout"))
++                .when(execStmt).execute(TenantSchemaProvisioner.DDL_SYNC_KEYSET_IDX_SALES);
++
++        service.syncNow("kv_ks1234");
++
++        for (String ddl : TenantSchemaProvisioner.DDL_SYNC_KEYSET_INDEXES) {
++            verify(execStmt).execute(ddl);
++        }
++        int count = TenantSchemaProvisioner.DDL_SYNC_KEYSET_INDEXES.size();
++        verify(connection, times(count)).setSavepoint();
++        verify(connection, times(1)).rollback(savepoint);
++        verify(connection, times(count - 1)).releaseSavepoint(savepoint);
++        verify(connection).commit();
++        verify(connection, never()).rollback();
++    }
+ }
+diff --git a/keevo/backend/src/test/java/com/keevo/sync/sync/application/provider/DayClosureDeltaProviderTest.java b/keevo/backend/src/test/java/com/keevo/sync/sync/application/provider/DayClosureDeltaProviderTest.java
+index 0417ea65..040dbace 100644
+--- a/keevo/backend/src/test/java/com/keevo/sync/sync/application/provider/DayClosureDeltaProviderTest.java
++++ b/keevo/backend/src/test/java/com/keevo/sync/sync/application/provider/DayClosureDeltaProviderTest.java
+@@ -46,4 +46,27 @@ class DayClosureDeltaProviderTest {
+         assertThat(result.get(0)).doesNotContainKey("totalTransactions");
+         assertThat(result.get(0)).containsEntry("totalRevenue", 10);
+     }
++
++    @Test
++    void queryDelta_mapsCountToTotalSalesAndRevenueToTotalRevenue() {
++        // Story 11.5 AC5 regression: row[4] = total_sales (COUNT of completed sales),
++        // row[5] = total_revenue (XAF) — the revenue must never be the duplicated count.
++        when(em.createNativeQuery(anyString())).thenReturn(query);
++        when(query.setParameter(eq("since"), any())).thenReturn(query);
++        when(query.setMaxResults(anyInt())).thenReturn(query);
++        var now = Timestamp.from(Instant.now());
++        Object[] row = {UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), now,
++                12, 50000, 40000, 10000, false, now};
++        when(query.getResultList()).thenReturn(Collections.singletonList(row));
++
++        var result = provider.queryDelta(Instant.parse("2026-03-20T10:00:00Z"));
++
++        assertThat(result).singleElement().satisfies(map -> {
++            assertThat(map).containsEntry("totalSales", 12);
++            assertThat(map).containsEntry("totalRevenue", 50000);
++            assertThat(map).containsEntry("cashTotal", 40000);
++            assertThat(map).containsEntry("mobileMoneyTotal", 10000);
++            assertThat(map).doesNotContainKey("totalTransactions");
++        });
++    }
+ }

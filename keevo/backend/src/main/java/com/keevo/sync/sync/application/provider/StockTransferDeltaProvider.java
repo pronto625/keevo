@@ -12,6 +12,9 @@ import java.util.*;
 @Component
 public class StockTransferDeltaProvider implements DeltaEntityProvider {
 
+    /** Keyset cursor of the delta pull; the {@code stock_transfers} sync keyset index leads with it (Story 11.5). */
+    static final String CURSOR = "GREATEST(occurred_at, COALESCE(updated_at, occurred_at))";
+
     private final EntityManager em;
 
     public StockTransferDeltaProvider(EntityManager em) {
@@ -27,7 +30,7 @@ public class StockTransferDeltaProvider implements DeltaEntityProvider {
     public Page queryDeltaPage(Instant since, Position after, int limit) {
         var page = DeltaPageQuery.fetch(em,
                 "id, source_store_id, destination_store_id, product_id, variant_id, quantity, actor_id, occurred_at, status, notes",
-                "stock_transfers", "GREATEST(occurred_at, COALESCE(updated_at, occurred_at))", since, after, limit);
+                "stock_transfers", CURSOR, since, after, limit);
         return new Page(page.rows().stream().map(this::mapRow).toList(), page.next());
     }
 

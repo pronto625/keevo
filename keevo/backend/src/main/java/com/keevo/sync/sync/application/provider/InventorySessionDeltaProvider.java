@@ -17,6 +17,9 @@ import java.util.*;
 @Component
 public class InventorySessionDeltaProvider implements DeltaEntityProvider {
 
+    /** Keyset cursor of the delta pull; the {@code inventory_sessions} sync keyset index leads with it (Story 11.5). */
+    static final String CURSOR = "updated_at";
+
     private final EntityManager em;
 
     public InventorySessionDeltaProvider(EntityManager em) {
@@ -32,7 +35,7 @@ public class InventorySessionDeltaProvider implements DeltaEntityProvider {
     public Page queryDeltaPage(Instant since, Position after, int limit) {
         var page = DeltaPageQuery.fetch(em,
                 "id, store_id, scope, category_ids, status, started_by, started_at, cancelled_by, cancelled_at, completed_at, updated_at",
-                "inventory_sessions", "updated_at", since, after, limit);
+                "inventory_sessions", CURSOR, since, after, limit);
         return new Page(page.rows().stream().map(this::mapRow).toList(), page.next());
     }
 

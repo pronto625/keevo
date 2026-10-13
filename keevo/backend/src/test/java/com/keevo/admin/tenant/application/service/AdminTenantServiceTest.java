@@ -15,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.data.domain.Page;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.RowMapper;
 
 import java.sql.ResultSet;
@@ -46,9 +47,17 @@ class AdminTenantServiceTest {
     @BeforeEach
     void setUp() {
         service = new AdminTenantService(jdbcTemplate, accountDeletionScheduler);
-        // Stub schema_name lookup used by enrichWithCrossSchemaMetrics
-        lenient().when(jdbcTemplate.queryForObject(anyString(), eq(String.class), any(Object[].class)))
-                .thenReturn("kv_abc123");
+        // Stub the batched schema_name lookup (Story 11.5): every requested id → "kv_abc123"
+        lenient().doAnswer(inv -> {
+            RowCallbackHandler handler = inv.getArgument(1);
+            for (Object id : idArgs(inv.getArguments())) {
+                ResultSet rs = mock(ResultSet.class);
+                when(rs.getString("id")).thenReturn(id.toString());
+                when(rs.getString("schema_name")).thenReturn("kv_abc123");
+                handler.processRow(rs);
+            }
+            return null;
+        }).when(jdbcTemplate).query(contains("WHERE id IN"), any(RowCallbackHandler.class), any(Object[].class));
         // Stub cross-schema count queries (called with no args)
         lenient().when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class)))
                 .thenReturn(0);
@@ -130,7 +139,104 @@ class AdminTenantServiceTest {
         assertThat(result.getContent().get(0).plan()).isEqualTo("PAID");
     }
 
+    @Test
+    @DisplayName("11.5 — listTenants loads the schema names of the whole page in one query (no N+1)")
+    void listTenants_multipleTenants_loadsSchemaNamesInOneQuery() {
+        List<AdminTenantListItem> rows = List.of(
+                buildItem(UUID.randomUUID(), "FREE", "ACTIVE"),
+                buildItem(UUID.randomUUID(), "PAID", "ACTIVE"),
+                buildItem(UUID.randomUUID(), "FREE", "SUSPENDED"));
+        when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(3L);
+        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class))).thenReturn(rows);
+        when(jdbcTemplate.queryForObject(contains("kv_abc123.stores"), eq(Integer.class))).thenReturn(2);
+
+        Page<AdminTenantListItem> result = service.execute(
+                new ListTenantsQuery(null, null, null, null, null, null, null, 0, 25));
+
+        verify(jdbcTemplate, times(1))
+                .query(contains("WHERE id IN (?,?,?)"), any(RowCallbackHandler.class), any(Object[].class));
+        verify(jdbcTemplate, never())
+                .queryForObject(contains("schema_name"), eq(String.class), any(Object[].class));
+        // content unchanged apart from the cross-schema metrics, in the same order
+        assertThat(result.getContent()).extracting(AdminTenantListItem::id)
+                .containsExactlyElementsOf(rows.stream().map(AdminTenantListItem::id).toList());
+        assertThat(result.getContent()).extracting(AdminTenantListItem::storeCount).containsOnly(2);
+    }
+
+    @Test
+    @DisplayName("11.5 — tenant missing from the batched lookup is kept with zero metrics")
+    void listTenants_missingSchema_keepsItemWithZeroMetrics() {
+        UUID id = UUID.randomUUID();
+        when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(1L);
+        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class)))
+                .thenReturn(List.of(buildItem(id, "FREE", "ACTIVE")));
+        doNothing().when(jdbcTemplate)
+                .query(contains("WHERE id IN"), any(RowCallbackHandler.class), any(Object[].class));
+
+        Page<AdminTenantListItem> result = service.execute(
+                new ListTenantsQuery(null, null, null, null, null, null, null, 0, 25));
+
+        assertThat(result.getContent()).singleElement()
+                .satisfies(it -> {
+                    assertThat(it.id()).isEqualTo(id);
+                    assertThat(it.storeCount()).isZero();
+                    assertThat(it.lastActivityAt()).isNull();
+                });
+        verify(jdbcTemplate, never()).queryForObject(contains(".stores"), eq(Integer.class));
+    }
+
+    @Test
+    @DisplayName("11.5 — batched schema lookup fails → items kept with zero metrics, no cross-schema query")
+    void listTenants_batchedLookupFails_keepsItemsWithZeroMetrics() {
+        UUID a = UUID.randomUUID();
+        UUID b = UUID.randomUUID();
+        when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(2L);
+        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class)))
+                .thenReturn(List.of(buildItem(a, "FREE", "ACTIVE"), buildItem(b, "PAID", "ACTIVE")));
+        doThrow(new org.springframework.dao.DataAccessResourceFailureException("db down")).when(jdbcTemplate)
+                .query(contains("WHERE id IN"), any(RowCallbackHandler.class), any(Object[].class));
+
+        Page<AdminTenantListItem> result = service.execute(
+                new ListTenantsQuery(null, null, null, null, null, null, null, 0, 25));
+
+        assertThat(result.getContent()).extracting(AdminTenantListItem::id).containsExactly(a, b);
+        assertThat(result.getContent()).allSatisfy(it -> {
+            assertThat(it.storeCount()).isZero();
+            assertThat(it.lastActivityAt()).isNull();
+        });
+        verify(jdbcTemplate, never()).queryForObject(contains(".stores"), eq(Integer.class));
+    }
+
+    @Test
+    @DisplayName("11.5 — tenant detail looks the schema name up exactly once and reuses it for the metrics")
+    void tenantDetail_loadsSchemaNameOnce() {
+        UUID id = UUID.randomUUID();
+        when(jdbcTemplate.query(contains("WHERE t.id = ?"), any(RowMapper.class), any(Object[].class)))
+                .thenReturn(List.of(buildItem(id, "FREE", "ACTIVE")));
+        when(jdbcTemplate.queryForObject(contains("SELECT schema_name FROM public.tenants"), eq(String.class),
+                any(Object[].class))).thenReturn("kv_abc123");
+        when(jdbcTemplate.queryForObject(contains("kv_abc123.stores"), eq(Integer.class))).thenReturn(3);
+
+        var detail = service.execute(new com.keevo.admin.tenant.domain.port.in.GetTenantDetailQuery(id, 0));
+
+        verify(jdbcTemplate, times(1)).queryForObject(contains("schema_name"), eq(String.class), any(Object[].class));
+        verify(jdbcTemplate, never())
+                .query(contains("WHERE id IN"), any(RowCallbackHandler.class), any(Object[].class));
+        assertThat(detail.summary().id()).isEqualTo(id);
+        assertThat(detail.summary().storeCount()).isEqualTo(3);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /** Flattens the varargs of a {@code query(sql, handler, Object...)} invocation. */
+    private static List<Object> idArgs(Object[] args) {
+        List<Object> out = new java.util.ArrayList<>();
+        for (int i = 2; i < args.length; i++) {
+            if (args[i] instanceof Object[] arr) out.addAll(List.of(arr));
+            else out.add(args[i]);
+        }
+        return out;
+    }
 
     private AdminTenantListItem buildItem(UUID id, String plan, String status) {
         return new AdminTenantListItem(

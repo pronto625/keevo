@@ -14,6 +14,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,8 +24,11 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * AdminTenantService — implements Super Admin tenant management use cases.
@@ -32,8 +36,8 @@ import java.util.UUID;
  * <p><b>Architecture rules:</b>
  * <ol>
  *   <li>listTenants(): queries public schema via JdbcTemplate ONLY — no TenantContext manipulation.
- *       Cross-schema per-tenant metrics (storeCount, lastActivityAt) use parameterized schema names
- *       from {@code public.tenants.schema_name} (validated at provisioning and re-checked here with {@code TenantSchema}: pattern {@code ^kv_[a-z0-9]{6}$}).
+ *       Cross-schema per-tenant metrics (storeCount, lastActivityAt) use schema names preloaded
+ *       for the whole page in one batched query on {@code public.tenants.schema_name} (validated at provisioning and re-checked here with {@code TenantSchema}: pattern {@code ^kv_[a-z0-9]{6}$}).
  *   </li>
  *   <li>getTenantDetail(): switches TenantContext to the target tenant's schema for stores,
  *       employees, and audit log, then restores it — same pattern as ActivatePlanService.
@@ -107,9 +111,13 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
 
         List<AdminTenantListItem> items = jdbc.query(listSql, new TenantListRowMapper(), listParams.toArray());
 
+        // Story 11.5 — one batched schema_name lookup for the whole page (was one per row)
+        Map<UUID, String> schemaByTenant = loadSchemaNames(
+                items.stream().map(AdminTenantListItem::id).toList());
+
         // Enrich each item with cross-schema metrics
         List<AdminTenantListItem> enriched = items.stream()
-                .map(this::enrichWithCrossSchemaMetrics)
+                .map(it -> enrichWithCrossSchemaMetrics(it, schemaByTenant.get(it.id())))
                 .toList();
 
         return new PageImpl<>(enriched, PageRequest.of(query.page(), query.pageSize()), total);
@@ -141,8 +149,9 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
             throw new DomainException(ErrorCode.TENANT_NOT_FOUND,
                     "Tenant not found: " + query.tenantId());
         }
-        AdminTenantListItem summary = enrichWithCrossSchemaMetrics(summaryRows.get(0));
+        // Story 11.5 — schema_name loaded once and reused for the enrichment
         String schemaName = loadSchemaName(query.tenantId());
+        AdminTenantListItem summary = enrichWithCrossSchemaMetrics(summaryRows.get(0), schemaName);
 
         // Switch TenantContext to load cross-schema data
         String previousTenant = TenantContext.getCurrentTenant();
@@ -254,13 +263,13 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
         return sb.toString();
     }
 
-    private AdminTenantListItem enrichWithCrossSchemaMetrics(AdminTenantListItem item) {
-        // schemaName must be obtained from the DB item — we carry it via a temp holder approach:
-        // The RowMapper loads schemaName into a holder via a thread-local string. Since records
-        // are immutable, we pass schemaName as a column in the SQL result and strip it here.
-        // See TenantListRowMapper which reads schema_name into the record's "name" position.
-        // We call loadSchemaName separately to avoid complex record reshaping.
-        String schemaName = safeLoadSchemaName(item.id());
+    /**
+     * Fills storeCount and lastActivityAt from the tenant's own schema. The schema name is
+     * resolved by the caller (preloaded map for the list, {@link #loadSchemaName} for the detail),
+     * so no per-item {@code schema_name} lookup is made here (Story 11.5). A null or invalid
+     * schema name leaves the item with zero metrics.
+     */
+    private AdminTenantListItem enrichWithCrossSchemaMetrics(AdminTenantListItem item, String schemaName) {
         if (!TenantSchema.isValid(schemaName)) return item; // gate before SQL interpolation
 
         int storeCount = safeCount("SELECT COUNT(*) FROM " + schemaName + ".stores WHERE is_active = true");
@@ -275,14 +284,24 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
         );
     }
 
-    private String safeLoadSchemaName(UUID tenantId) {
+    /**
+     * Loads the schema names of a page of tenants in a single parameterized {@code IN (…)} query.
+     * A failure yields an empty map: the items are then kept with zero metrics, as before.
+     */
+    private Map<UUID, String> loadSchemaNames(List<UUID> ids) {
+        if (ids.isEmpty()) return Map.of();
+        String inClause = ids.stream().map(x -> "?").collect(Collectors.joining(","));
+        Map<UUID, String> out = new HashMap<>();
         try {
-            return jdbc.queryForObject(
-                    "SELECT schema_name FROM public.tenants WHERE id = ?",
-                    String.class, tenantId);
+            jdbc.query("SELECT id, schema_name FROM public.tenants WHERE id IN (" + inClause + ")",
+                    (RowCallbackHandler) rs -> out.put(
+                            UUID.fromString(rs.getString("id")), rs.getString("schema_name")),
+                    ids.toArray());
         } catch (Exception e) {
-            return null;
+            log.warn("Batched schema_name lookup failed for {} tenants — metrics left empty", ids.size(), e);
+            return Map.of();
         }
+        return out;
     }
 
     private String loadSchemaName(UUID tenantId) {

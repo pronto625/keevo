@@ -15,6 +15,9 @@ import java.util.*;
 @Component
 public class InventoryCountDeltaProvider implements DeltaEntityProvider {
 
+    /** Keyset cursor of the delta pull; the {@code inventory_counts} sync keyset index leads with it (Story 11.5). */
+    static final String CURSOR = "updated_at";
+
     private final EntityManager em;
 
     public InventoryCountDeltaProvider(EntityManager em) {
@@ -30,7 +33,7 @@ public class InventoryCountDeltaProvider implements DeltaEntityProvider {
     public Page queryDeltaPage(Instant since, Position after, int limit) {
         var page = DeltaPageQuery.fetch(em,
                 "id, session_id, product_id, variant_id, product_name, variant_label, theoretical, physical, counted_at, counted_by, updated_at",
-                "inventory_counts", "updated_at", since, after, limit);
+                "inventory_counts", CURSOR, since, after, limit);
         return new Page(page.rows().stream().map(this::mapRow).toList(), page.next());
     }
 

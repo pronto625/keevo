@@ -31,8 +31,14 @@ public interface SaleSpringRepository extends JpaRepository<SaleJpaEntity, UUID>
 
     List<SaleJpaEntity> findByStatus(String status);
 
-        /** AC5: EMPLOYEE-scoped pending sales — filter by store and status. */
-        List<SaleJpaEntity> findByStoreIdAndStatus(UUID storeId, String status);
+        /**
+         * AC5: EMPLOYEE-scoped pending sales — filter by store and status.
+         * Story 11.5: items fetched in the same statement (no lazy N+1); DISTINCT collapses the
+         * per-item fan-out to one entity per sale, like {@link #findByIdWithItems}. Oldest sale first.
+         */
+        @Query("SELECT DISTINCT s FROM SaleJpaEntity s LEFT JOIN FETCH s.items "
+                + "WHERE s.storeId = :storeId AND s.status = :status ORDER BY s.occurredAt")
+        List<SaleJpaEntity> findByStoreIdAndStatus(@Param("storeId") UUID storeId, @Param("status") String status);
 
     // ── Story 4.4 — Sales History queries ─────────────────────────────────────
 
