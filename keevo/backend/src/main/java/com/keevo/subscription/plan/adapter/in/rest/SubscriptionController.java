@@ -11,7 +11,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -52,8 +51,7 @@ public class SubscriptionController {
     public ResponseEntity<ApiResponseWrapper<SubscriptionResponse>> getMySubscription() {
         requireTenantRole();
 
-        UUID actorId = (UUID) SecurityContextHolder.getContext()
-                .getAuthentication().getPrincipal();
+        UUID actorId = CurrentActor.actorId();
 
         SubscriptionResponse response = getSubscriptionUseCase.execute(
                 new GetSubscriptionQuery(actorId.toString()));

@@ -4,8 +4,8 @@ type: 'chore'
 created: '2026-10-11'
 status: 'done'
 baseline_revision: '62f1f0d1c7b563277346c6b63a22b30f3f237787'
-review_loop_iteration: 1
-followup_review_recommended: true
+review_loop_iteration: 0
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-15-context.md'
 warnings: [oversized]
@@ -202,12 +202,56 @@ New tests:
   - `[false]` `[reject]` intent 8: epic context says pin core — `dependency:tree` shows no docker-java-core artifact to pin.
   - `[maybe-false]` `[reject]` intent 9: operational constraints not visible in diff — target is deleted at run end, no push/merge, no foreign container touched (if true: low).
 
+### 2026-10-13 — Follow-up review pass
+- verdicts: 37 findings — high 0, medium 5, low 17, false 10, maybe-false 5
+- scope: story-scoped diff (files of `a68253f6` + `AccountDeletionConcurrencyPostgresIntegrationTest`, from `baseline_revision` to the current code), so later stories' edits (v1s-15-9, 18-1, 18-3) appear in it.
+- findings:
+  - `[medium]` `[patch]` verification-gap: the per-phone catch around the final WhatsApp is never exercised — added `AccountDeletionSchedulerTest.deleteNow_whatsAppFailureAfterCommit_isNonBlocking` (2 owners, first send throws: `deleteNow` true, DELETED saved, one commit, no rollback, second owner notified).
+  - `[medium]` `[patch]` verification-gap: keeping a multi-tenant user is only checked against mocked SQL text — added `AccountDeletionSchedulerPostgresIntegrationTest.multiTenantUserIsPreserved` (real PG: user, device token and other membership kept, other tenant untouched).
+  - `[false]` `[reject]` verification-gap other: `findOwnerPhones` failure now blocks deletion — carried (pass 2 edge 7): inside a PG transaction a failed statement aborts the transaction anyway; retried next run.
+  - `[maybe-false]` `[reject]` verification-gap other: CI workflow never actually run — carried (pass 2 intent 6), Actions `startup_failure` is pre-existing.
+  - `[false]` `[reject]` blind 1: diff mixes other stories' work — the follow-up diff spans `baseline_revision..HEAD`, so v1s-15-9/18-x commits on the same files are included by construction; each has its own spec.
+  - `[false]` `[reject]` blind 2: `deleteNow` strands a schemaless PENDING tenant for days — `AdminTenantService.forceDelete` first commits `deletion_scheduled_at = now()`, so the next daily run selects it.
+  - `[low]` `[reject]` blind 3: no alert for the stuck state — ERROR log per failed tenant exists; a metric is new surface for a rare post-DROP failure.
+  - `[low]` `[reject]` blind 4: at-most-once WhatsApp not spelled out — carried (pass 2 blind 14), accepted trade-off.
+  - `[low]` `[reject]` blind 5: two pooled connections per deletion (tx + DROP) — exhaustion needs pool-size concurrent admin force-deletes; Hikari `connectionTimeout` bounds the wait and rolls back.
+  - `[low]` `[reject]` blind 6: tenant row read twice after locking — cosmetic round-trip; the `null` path is unreachable while the row is locked.
+  - `[false]` `[reject]` blind 7: connection budget assumed — carried (pass 2 blind 7, `minimum-idle: 2`).
+  - `[low]` `[reject]` blind 8: lock-wait probes may match another session — test classes run sequentially and, with scheduling now off in tests (patch below), no other session issues `FOR UPDATE` / `UPDATE public.tenants … to_regnamespace` during them.
+  - `[low]` `[reject]` blind 9: leaked tenants/schemas and hygiene DB — carried (pass 1 blind 5 / edge 9 / edge 10).
+  - `[low]` `[reject]` blind 10: `meta.size == 100` echoes the stub; exact log-string assertion — the cap is asserted by `ListFeedbackServiceTest.list_capsSizeAt100`; the log assertion is deliberate.
+  - `[low]` `[reject]` blind 11: class-wide LENIENT in `AccountDeletionSchedulerTest` — carried (pass 2 blind 14).
+  - `[low]` `[reject]` blind 12: Flyway test copies config — carried (pass 1 intent g).
+  - `[maybe-false]` `[reject]` blind 13: CI drops `SPRING_PROFILES_ACTIVE: dev` for non-PG tests; no `timeout-minutes` — `ProdSecretsFailFastContextTest` sets its own profile; slices need none; local suite green without it (if true: low).
+  - `[low]` `[reject]` blind 14: "V1..V13" labels / floating `postgres:16-alpine` — the label matches the `containsAll` assertion; minor-tag drift is harmless for tests.
+  - `[low]` `[reject]` blind 15: product tests on `public.products` — carried (pass 2 blind 8).
+  - `[medium]` `[patch]` edge 1: `findDeletionsDueBy_selectsOnlyDuePendingTenants` leaves a due DELETION_PENDING tenant with an OWNER in the shared DB — reset to ACTIVE in a `finally`.
+  - `[medium]` `[patch]` edge 2: unscoped `verifyNoInteractions(whatsAppPort)` in `inFlightCancelBlocksSchedulerWhichThenSkips` fails whenever a leftover due tenant exists (and `AccountDeletionConcurrency…` sorts before it) — scoped to `never().sendReport(seed.phone(), …)`. Grouped with edge 1.
+  - `[maybe-false]` `[reject]` edge 3: no `lock_timeout` on `FOR UPDATE` — carried (pass 2 edge 3).
+  - `[false]` `[reject]` edge 4: `deleteNow` joining a caller transaction — its only caller `AdminTenantService.forceDelete` is deliberately non-transactional, as is `AdminTenantController`.
+  - `[low]` `[reject]` edge 5: pool starvation on concurrent force-deletes — same as blind 5.
+  - `[low]` `[reject]` edge 6: hygiene DB never dropped — carried (pass 1 edge 9).
+  - `[low]` `[reject]` edge 7: transfer tenant never dropped — carried (pass 1 edge 10).
+  - `[false]` `[reject]` edge 8: feedback cap unverified — `ListFeedbackServiceTest.list_capsSizeAt100`.
+  - `[maybe-false]` `[reject]` edge 9: connection budget near 300 — carried (pass 2 blind 7) (if true: low).
+  - `[false]` `[reject]` edge 10: pom adds export dependencies — diff range, see blind 1.
+  - `[false]` `[reject]` intent 1: per-class vs whole-suite — the whole `mvn test` was green in pass 2 (2229 tests); this pass re-runs the touched packages in batches.
+  - `[maybe-false]` `[reject]` intent 2: replay at handler level — carried (pass 1 intent b).
+  - `[low]` `[reject]` intent 3: `runAll()` idempotence only shown as "no exception" — schema-level idempotence is covered by the hygiene class's boot sync; low value.
+  - `[low]` `[reject]` intent 4: "DROP fails" row only mocked, ERROR log unasserted — a real DROP failure is not inducible without a faulty provisioner; the post-DROP failure is covered on PG.
+  - `[false]` `[reject]` intent 5: production scope beyond the intent — `deleteNow` / `findDeletionsDueBy` come from v1s-15-9 in the diff range.
+  - `[false]` `[reject]` intent 6: out-of-scope content — diff range, see blind 1.
+  - `[low]` `[reject]` intent 7: `TenantContext` not cleared in scheduler/admin-cancel workers; polling instead of a start gate — those workers never set `TenantContext`; waits are bounded.
+  - `[medium]` `[patch]` orchestrator check (pass 1 blind 6 / edge 6, pass 2 blind 5 — previously maybe-false): production schedulers are live in full-context tests. Verified real: `DayClosureAutoScheduler`, `WeeklyReportScheduler`, `SalesTrendDetectionScheduler` tick at minute 0 of every hour over every ACTIVE tenant of the shared DB (day closure after the EOD time), and the 03:00 `AccountDeletionScheduler` deletes any leftover due tenant — a suite crossing the hour can flake. Fix: `@EnableScheduling` moved from `KeevoApplication` to `SchedulingConfig` (`@ConditionalOnProperty keevo.scheduling.enabled`, `matchIfMissing = true`, production unchanged), turned off in `application-test.yml`; `KeevoApplicationContextIntegrationTest.schedulingDisabledInTestProfile` asserts it.
+
 ## Design Notes
 
 - AccountDeletionScheduler (pass 1): this supersedes the 14-5 review decision DN1 ("save DELETED before DROP so retry is possible"). DN1 was wrong because the loop only retries DELETION_PENDING tenants, so a DELETED tenant with a lingering schema was never cleaned. Now the DROP comes first inside a per-tenant transaction holding the tenant row lock, and DELETED is written last, so DELETED always means "schema gone". The residual race is pre-existing: `cancelDeletion` reads, then blind-writes ACTIVE after the scheduler commit. It is routed to v1s-15-9 (conditional UPDATE `WHERE status = 'DELETION_PENDING'`).
 - One shared database plus per-purpose fresh databases, rather than one database per class. Same-config classes keep Spring context caching, and @ServiceConnection always wins over URL properties, so classes needing isolation bypass the base on purpose.
 - Context-test assertions run on the shared `test` database, which other classes may have touched. Assertions are therefore schema/bean-level or on rows this test created.
 - Transfer tests run in a provisioned tenant through the production multi-tenant routing. That is where these code paths live in production; the public schema in a `@DataJpaTest` would not exercise `TenantContext` routing.
+
+- Follow-up 2026-10-13 — `SchedulingConfig`: the intent limits production edits to real bugs exposed by tests. Moving `@EnableScheduling` behind a property that defaults to on changes no deployed behaviour; it removes the flakiness source (live cron ticks over the shared test database) at its root instead of guarding every assertion. ShedLock stays active, so tests that call a job bean directly still go through the lock proxy.
 
 ## Verification
 
@@ -270,3 +314,32 @@ The pending integration tests were added: full context (AC B), concurrent transf
 - The cancel races listed above (owned by v1s-15-9).
 - GitHub Actions has not run the new workflow; Actions end in `startup_failure` per project memory.
 - Full-context tests keep the production schedulers active.
+
+### Follow-up review pass — 2026-10-13
+
+**Summary:** fresh four-layer review of the story-scoped diff (baseline → current code, including the v1s-15-9 `AccountDeletionConcurrencyPostgresIntegrationTest`). The pass-2 residual risk ("only a raw UPDATE contender was exercised") is now closed: v1s-15-9 races the real `AccountDeletionService.cancelDeletion` and `AdminTenantService.cancelDeletion` against a scheduler blocked inside the DROP, and checks that each cancel waits on the row lock and is then refused. The "schedulers active in full-context tests" risk was verified real and fixed.
+
+**Files changed:**
+- `keevo/backend/src/main/java/com/keevo/KeevoApplication.java`: `@EnableScheduling` removed.
+- `keevo/backend/src/main/java/com/keevo/shared/infrastructure/config/SchedulingConfig.java` (new): `@EnableScheduling` behind `keevo.scheduling.enabled`, on by default.
+- `keevo/backend/src/test/resources/application-test.yml`: `keevo.scheduling.enabled: false`.
+- `KeevoApplicationContextIntegrationTest`: new check that no scheduling post-processor exists in the test profile while ShedLock is still wired.
+- `AccountDeletionSchedulerTest`: new test where the WhatsApp send fails after commit.
+- `AccountDeletionSchedulerPostgresIntegrationTest`: new test that a user belonging to several tenants is preserved; the WhatsApp assertion is now limited to the seeded tenant.
+- `AccountDeletionConcurrencyPostgresIntegrationTest`: the due tenants seeded by `findDeletionsDueBy` are reset in a `finally`.
+
+**Review findings:** 37 findings.
+- 5 medium entries patched, in 4 groups. No high.
+- 0 deferred.
+- 32 rejected, each with its reason in the triage log.
+
+**Follow-up review recommended: false.** This follow-up pass patched no high entry.
+
+**Verification:**
+- Targeted run, 32 tests, 0 failures: `AccountDeletionSchedulerTest` 12, `AccountDeletionSchedulerPostgresIntegrationTest` 4, `AccountDeletionConcurrencyPostgresIntegrationTest` 11, `KeevoApplicationContextIntegrationTest` 5.
+- Batch `backend/shared`: 493 tests, 0 failures, 0 errors.
+- Batch `backend/architecture`: 6 tests, 0 failures, 0 errors.
+
+**Residual risks:**
+- The GitHub Actions workflow has still not run (pre-existing `startup_failure`).
+- Committed fixtures still accumulate in the shared test database. This was accepted in passes 1 and 2.

@@ -102,6 +102,11 @@ export function SyncTenantDetailDrawer({ tenantId, onClose }: SyncTenantDetailDr
               Erreur de chargement des données
             </p>
           )}
+          {error && data && (
+            <p className="text-sm text-red-600">
+              Échec de l&apos;actualisation — données possiblement obsolètes
+            </p>
+          )}
 
           {data && (
             <>

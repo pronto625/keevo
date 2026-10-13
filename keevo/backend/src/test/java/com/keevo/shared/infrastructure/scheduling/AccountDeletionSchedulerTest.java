@@ -119,6 +119,32 @@ class AccountDeletionSchedulerTest {
         verify(transactionManager, never()).rollback(any());
     }
 
+    @Test
+    @DisplayName("final WhatsApp failure after commit: deletion still succeeds, the other owners are still notified")
+    void deleteNow_whatsAppFailureAfterCommit_isNonBlocking() {
+        Tenant tenant = createTenant(TenantStatus.DELETION_PENDING, expiredDate);
+        stubLock(tenantId, TenantStatus.DELETION_PENDING, expiredDate);
+        when(tenantRepository.findById(tenantId)).thenReturn(Optional.of(tenant));
+        UUID ownerA = UUID.randomUUID();
+        UUID ownerB = UUID.randomUUID();
+        when(jdbcTemplate.queryForList(anyString(), eq(UUID.class), eq(tenantId)))
+                .thenReturn(List.of(ownerA, ownerB));
+        when(userRepository.findById(ownerA)).thenReturn(Optional.of(new User(ownerA, "+243811111111", "hash",
+                Role.OWNER, true, Instant.now().minus(60, ChronoUnit.DAYS))));
+        when(userRepository.findById(ownerB)).thenReturn(Optional.of(new User(ownerB, "+243822222222", "hash",
+                Role.OWNER, true, Instant.now().minus(60, ChronoUnit.DAYS))));
+        doThrow(new RuntimeException("provider down"))
+                .when(whatsAppPort).sendReport(eq("+243811111111"), anyString());
+
+        assertThat(scheduler.deleteNow(tenantId)).isTrue();
+
+        verify(tenantRepository).save(argThat(t -> t.getStatus() == TenantStatus.DELETED));
+        verify(transactionManager, times(1)).commit(any());
+        verify(transactionManager, never()).rollback(any());
+        verify(whatsAppPort).sendReport(eq("+243811111111"), anyString());
+        verify(whatsAppPort).sendReport(eq("+243822222222"), anyString());
+    }
+
     // ── Due-tenant query (v1s-15-9) ───────────────────────────────────────────
 
     @Test

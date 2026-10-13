@@ -55,9 +55,12 @@ public class EndOfDayReportRepositoryAdapter implements EndOfDayReportRepository
                 .map(this::toDomain);
     }
 
+    /** A PENDING report older than this was orphaned by a crash before its after-commit send. */
+    static final java.time.Duration STALE_PENDING_AFTER = java.time.Duration.ofMinutes(15);
+
     @Override
     public List<EndOfDayReport> findPendingRetries(int maxAttempts) {
-        return springRepository.findPendingRetries(maxAttempts)
+        return springRepository.findPendingRetries(maxAttempts, java.time.Instant.now().minus(STALE_PENDING_AFTER))
                 .stream()
                 .map(this::toDomain)
                 .toList();

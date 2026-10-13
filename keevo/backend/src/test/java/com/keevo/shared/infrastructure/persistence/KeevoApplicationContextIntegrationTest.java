@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.annotation.ScheduledAnnotationBeanPostProcessor;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -62,6 +63,15 @@ class KeevoApplicationContextIntegrationTest extends FullContextIntegrationTest 
         assertThat(jdbc.queryForObject("SELECT to_regclass('public.shedlock') IS NOT NULL", Boolean.class)).isTrue();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' "
                 + "AND table_name = 'sales' AND column_name = 'version'", Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("SchedulingConfig: no cron tick in the test profile (jobs are called directly by tests)")
+    void schedulingDisabledInTestProfile() {
+        // A real tick (hourly day closure / weekly report, 03:00 deletion) would act on other
+        // tests' tenants in the shared database. Production keeps it on (matchIfMissing = true).
+        assertThat(context.getBeanNamesForType(ScheduledAnnotationBeanPostProcessor.class)).isEmpty();
+        assertThat(context.getBeanNamesForType(LockProvider.class)).hasSize(1);
     }
 
     @Test

@@ -37,8 +37,16 @@ public interface EndOfDayReportSpringRepository
             @Param("type") String type,
             Pageable pageable);
 
-    @Query("SELECT r FROM EndOfDayReportJpaEntity r WHERE r.deliveryStatus = 'FAILED' AND r.deliveryAttempts < :maxAttempts")
-    List<EndOfDayReportJpaEntity> findPendingRetries(@Param("maxAttempts") int maxAttempts);
+    /**
+     * FAILED deliveries, plus PENDING reports created before {@code stalePendingBefore}: since
+     * v1s-13-13 a weekly report commits as PENDING and is sent after commit, so a crash between
+     * the two would otherwise leave it PENDING for ever (the "already generated" guard blocks a
+     * regeneration). Every other path writes the final status in the creating transaction.
+     */
+    @Query("SELECT r FROM EndOfDayReportJpaEntity r WHERE r.deliveryAttempts < :maxAttempts AND "
+            + "(r.deliveryStatus = 'FAILED' OR (r.deliveryStatus = 'PENDING' AND r.createdAt < :stalePendingBefore))")
+    List<EndOfDayReportJpaEntity> findPendingRetries(@Param("maxAttempts") int maxAttempts,
+                                                     @Param("stalePendingBefore") java.time.Instant stalePendingBefore);
 
     List<EndOfDayReportJpaEntity> findByReportDateAndTenantIdAndReportType(
             LocalDate reportDate, String tenantId, String reportType);

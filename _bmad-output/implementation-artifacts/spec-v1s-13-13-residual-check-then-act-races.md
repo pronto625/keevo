@@ -5,7 +5,7 @@ created: '2026-10-13'
 status: 'done'
 baseline_revision: '7c28ada54f3e06b34153ffb53aa491f2af6fed3d'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-13-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/spec-v1s-13-9-scheduler-locking-races.md'
@@ -122,6 +122,34 @@ Tests (existing to update): `CreateStoreServiceTest`, `CreateStoreSyncHandlerTes
   - `[false]` `[reject]` ECH: legacy `insertOnConflictUpdate` race guard comment misleading (dup of BH row) — comment accurate after the existence check.
   - `[false]` `[reject]` VG: backend controller test does not tie the app key name — covered by the new app remote test above.
 
+### 2026-10-13 — Follow-up review pass
+- verdicts: 23 findings — high 0, medium 5, low 16, false 2, maybe-false 0
+- orchestrator check: the REQUIRES_NEW redesign of the weekly delivery is now proven — with `PROPAGATION_REQUIRES_NEW` removed from `WeeklyReportGenerator.afterCommitTx`, `ResidualRacesPostgresIntegrationTest.weeklyReport_afterCommitDelivery_statusPersisted` fails (status stays `PENDING`); restored, it passes.
+- findings:
+  - `[low]` `[reject]` intent rows 1–3: the PG race uses a hand-written competitor holding the same lock — it proves the production bean waits on the key and sees the commit; lock-before-count order is pinned by InOrder unit tests on every entry point.
+  - `[low]` `[reject]` intent row 4: "no second WhatsApp" only checked with mocks — the loser returns before `deliverReport` (one row asserted on PG); the send itself is mocked by design.
+  - `[medium]` `[patch]` intent rows 5–7: app side only shown with a copied pull statement — grouped with verification-gap (real pull test below).
+  - `[low]` `[reject]` intent row 8: commit-lag PG test builds the windows by hand — services' `now − 5 s` persistence is pinned by `CloseDayServiceTest` / `WeeklyReportWindowResolverTest`; the PG test proves the window maths against a real uncommitted sale.
+  - `[false]` `[reject]` intent scope: version 1.1.44, Sunday clamps, after-commit delivery, v1s-14-13 material — later bump/story in the diff range, or review-pass patches recorded above.
+  - `[medium]` `[patch]` verification-gap: de-duplication on pull checked only against a hand-copied statement — added `rest_sync_service_pull_test.dart` `pull_stockMovement_existingLocalId_keepsSingleRowWithServerFields` (local row under `saleCancelledMovementId`, real `pull()` of the same id → one row, no PK error).
+  - `[medium]` `[patch]` blind 1: the device's own row (cashier as actor, no reason, local quantities, no variant) wins for good with `INSERT OR IGNORE` — the pull now upserts movements (`ON CONFLICT(id) DO UPDATE`, server fields win, `synced = 1`, local `synced_at` kept); asserted by the new pull test.
+  - `[low]` `[reject]` blind 2: early return in `_adjustStock` when the movement was pulled but the stock level was skipped (pending local op) — self-heals on the next pull once the pending op is pushed; no double-apply.
+  - `[low]` `[reject]` blind 3: legacy random-id branch marked synced — no caller passes a null `correctionId` (`SaleRepositoryImpl.correctSale` always sends one).
+  - `[medium]` `[patch]` blind 4: a crash/failed save between commit and the after-commit send leaves the weekly report PENDING for ever (retry selects FAILED only, the guard blocks regeneration) — `findPendingRetries` now also returns PENDING reports older than 15 min (`EndOfDayReportRepositoryAdapter.STALE_PENDING_AFTER`; every other path writes the final status in its creating transaction); PG test `weeklyReport_stalePending_isRetried`.
+  - `[false]` `[reject]` blind 5: `..._rolledBack_neverSends` cannot fail — a send performed before commit (the regression it guards) makes `verifyNoInteractions` fail; only the afterCommit hook is deliberately not driven.
+  - `[low]` `[reject]` blind 6: commit-lag test hand-built; 5 s margin unmonitored — same as intent row 8; stamp-to-commit is a single local transaction.
+  - `[low]` `[reject]` blind 7: phone uniqueness checked before the employee lock; `employee-limit:null` — pre-existing order (concurrent same-phone creates hit the unique constraint); tenant paths always set `TenantContext`.
+  - `[low]` `[reject]` blind 8: `correctionId` not an idempotency key — a replay of the same correction computes no delta (quantities already applied); a different correction reusing an id needs a client bug (fresh v4 per correction).
+  - `[low]` `[reject]` blind 9: cross-language vectors placement / upper-case / RFC example — both sides pin the same two vectors; ids are lower-case on both sides.
+  - `[low]` `[patch]` blind 10: version skip and 14-13 material (false, diff range); local rows omit `variantId` — fixed by the authoritative pull (server `variant_id` wins). Grouped with blind 1.
+  - `[medium]` `[patch]` edge 1: PENDING forever after a crash — grouped with blind 4.
+  - `[low]` `[patch]` edge 2: an exception in the first afterCommit step skips the remaining synchronizations — `afterCommit` now catches and logs; unit test `generateWeeklyReport_afterCommitFailure_isContained_andNextStepStillRuns`.
+  - `[low]` `[patch]` edge 3: the manual trigger returns 500 for a committed report and stops the other stores — same fix as edge 2.
+  - `[low]` `[reject]` edge 4: reused `correctionId` would merge over an earlier movement — same as blind 8.
+  - `[low]` `[reject]` edge 5: `employee-limit:null` — same as blind 7.
+  - `[low]` `[reject]` edge 6: `store-limit:null`; sync handler ignores its `tenantId` argument — the sync service sets `TenantContext` to the same tenant before dispatch.
+  - `[low]` `[reject]` edge 7: stale stock level after the early return — same as blind 2.
+
 ## Design Notes
 
 - **Item 2 lock vs unique index:** a unique index on `reports(store_id, report_type, report_date)` needs tenant DDL + sync for 100s of schemas and a catch in a REQUIRES_NEW tx; the advisory lock + existing `findByKey` guard is the 13.9 pattern and keeps DDL untouched. WhatsApp delivery runs inside the locked tx (same as daily reports' REQUIRES_NEW template); the loser waits for it, acceptable for a weekly job.
@@ -156,3 +184,44 @@ Status: done
 **Verification:** targeted backend classes green; ResidualRacesPostgresIntegrationTest 8/8 on PostgreSQL; chunked backend store 42, identity 367, commerce 230, sync 433, architecture 6 (pre-review), reporting 374, shared 489 (post-review) — 0 failure/error; app test/features/pos 245, test/core 489, test/features/inventory 186 — all pass; flutter analyze 0 error / 0 warning (625 infos).
 
 **Residual risks:** a sale whose stamp-to-commit exceeds 5 s can still be missed; corrections from apps < 1.1.43 still duplicate one ADJUSTMENT row on pull.
+
+### Follow-up review pass — 2026-10-13
+
+**Summary:** fresh four-layer review of the story-scoped diff. The weekly delivery redesign (`afterCommit` + `REQUIRES_NEW`) is proven by mutation: without `REQUIRES_NEW` the PG test fails because the status stays `PENDING`. Two real regressions of the redesign were closed:
+- a crash between commit and send left the report `PENDING` for ever;
+- an exception after commit escaped to the caller and skipped the next step.
+
+The app pull now treats the server row as the truth for a movement id the device already wrote, so the owner's cancel or correction history no longer shows the cashier with no reason.
+
+**Files changed:**
+- `EndOfDayReportSpringRepository` and `EndOfDayReportRepositoryAdapter`: retry query extended to stale `PENDING` reports.
+- `WeeklyReportGenerator`: guarded `afterCommit`.
+- App `rest_sync_service.dart`: movement upsert.
+- Tests:
+  - `WeeklyReportGeneratorTest` (+1)
+  - `ResidualRacesPostgresIntegrationTest` (+1)
+  - `rest_sync_service_pull_test.dart` (+1)
+  - `local_sale_datasource_test.dart` (helper aligned)
+- `pubspec.yaml`: 1.1.45+44.
+
+**Review findings:** 23 in total.
+- 3 medium entries patched (pull de-duplication test, authoritative pull, stale `PENDING` retry), plus 2 low entries patched.
+- 0 deferred.
+- The rest were rejected, with reasons in the triage log.
+
+**Follow-up review recommended: false.** No high entry was patched.
+
+**Verification:**
+- Targeted run, 0 failures:
+  - `ResidualRacesPostgresIntegrationTest`: 10
+  - `WeeklyReportGeneratorTest`: 16
+  - `ReportDeliveryRetryServiceTest`: 6
+- Batch `backend/reporting`: 375 tests, 0 failures.
+- App batches, all passed:
+  - `test/core`: 490
+  - `test/features/pos`: 245
+  - `test/features/inventory`: 186
+- `flutter analyze`: 0 errors, 0 warnings, 625 infos. None of these infos come from the lines changed here.
+
+**Residual risks:**
+- A stale `PENDING` weekly report for a tenant set to in-app delivery would be retried over WhatsApp. This only happens after a crash.

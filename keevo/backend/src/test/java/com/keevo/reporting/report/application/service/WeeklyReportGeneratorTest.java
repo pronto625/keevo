@@ -345,6 +345,33 @@ class WeeklyReportGeneratorTest {
     }
 
     @Test
+    void generateWeeklyReport_afterCommitFailure_isContained_andNextStepStillRuns() {
+        when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
+        when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))
+                .thenReturn(sampleWeeklyData());
+        when(formatter.format(any(WeeklyReportData.class))).thenReturn("Rapport");
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone("kv_test01")).thenReturn(Optional.of("+237600072001"));
+
+        org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+        try {
+            generator.generateWeeklyReport(command);
+            // The status save after the send fails (report already committed as PENDING).
+            doThrow(new RuntimeException("db down")).when(reportRepository).save(any());
+
+            org.assertj.core.api.Assertions.assertThatCode(() ->
+                    org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations()
+                            .forEach(org.springframework.transaction.support.TransactionSynchronization::afterCommit))
+                    .doesNotThrowAnyException();
+
+            verify(whatsAppPort).sendReport(eq("+237600072001"), anyString());
+            // The multi-store step, registered after delivery, still runs.
+            verify(multiStoreSummaryService).checkAndGenerateCombinedSummary(any());
+        } finally {
+            org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
     void generateWeeklyReport_inTransaction_rolledBack_neverSends() {
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
         when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))

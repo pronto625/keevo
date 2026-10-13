@@ -97,6 +97,7 @@ class ResidualRacesPostgresIntegrationTest extends FullContextIntegrationTest {
     @Autowired CreateEmployeeUseCase createEmployee;
     @Autowired ReactivateEmployeeUseCase reactivateEmployee;
     @Autowired GenerateWeeklyReportUseCase weeklyReportGenerator;
+    @Autowired com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository reportRepository;
     @Autowired CancelPendingSaleUseCase cancelSale;
     @Autowired CorrectSaleUseCase correctSale;
     @Autowired SaleRepository saleRepository;
@@ -426,6 +427,32 @@ class ResidualRacesPostgresIntegrationTest extends FullContextIntegrationTest {
                 String.class, report.getId());
         assertThat(status).isNotEqualTo("PENDING").isIn("SENT", "IN_APP_ONLY", "FAILED");
         assertThat(status).isEqualTo(report.getDeliveryStatus().name());
+    }
+
+    @Test
+    @DisplayName("weekly report orphaned PENDING (crash before the after-commit send) is picked up by the retry query once stale")
+    void weeklyReport_stalePending_isRetried() {
+        String schema = tx.execute(s -> tenantFactory.create()).getSchemaName();
+        UUID store = jdbc.queryForObject("SELECT id FROM \"" + schema + "\".stores LIMIT 1", UUID.class);
+        UUID stale = UUID.randomUUID();
+        UUID fresh = UUID.randomUUID();
+        UUID failed = UUID.randomUUID();
+        String insert = "INSERT INTO \"" + schema + "\".reports (id, tenant_id, store_id, report_type, report_date, "
+                + "content, delivery_status, is_automatic, created_at) VALUES (?, ?, ?, 'WEEKLY', ?, 'r', ?, TRUE, ?)";
+        jdbc.update(insert, stale, schema, store, LocalDate.of(2026, 3, 1), "PENDING",
+                Timestamp.from(Instant.now().minus(Duration.ofHours(1))));
+        jdbc.update(insert, fresh, schema, store, LocalDate.of(2026, 3, 8), "PENDING", Timestamp.from(Instant.now()));
+        jdbc.update(insert, failed, schema, store, LocalDate.of(2026, 3, 15), "FAILED", Timestamp.from(Instant.now()));
+
+        TenantContext.setCurrentTenant(schema);
+        List<UUID> ids;
+        try {
+            ids = tx.execute(s -> reportRepository.findPendingRetries(3).stream().map(EndOfDayReport::getId).toList());
+        } finally {
+            TenantContext.clear();
+        }
+
+        assertThat(ids).contains(stale, failed).doesNotContain(fresh);
     }
 
     // ── Item 3: deterministic SALE_CANCELLED / ADJUSTMENT movement ids ────────

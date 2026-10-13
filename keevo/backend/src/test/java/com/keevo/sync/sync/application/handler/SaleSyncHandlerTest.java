@@ -389,6 +389,20 @@ class SaleSyncHandlerTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void handle_fractionalCatalogueUnitPrice_isRejected() {
+        var op = saleWith(0, 500, 1);
+        var item = (java.util.Map<String, Object>) ((List<Object>) op.payload().get("items")).get(0);
+        item.put("catalogueUnitPrice", 1.5);
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).startsWith("Invalid catalogueUnitPrice");
+        verifyNoInteractions(recordSaleUseCase);
+    }
+
+    @Test
     void handle_wholeDoubleQuantity_isAccepted() {
         var result = handler.handle(saleWith(null, 500.0, 2.0), ACTOR_ID, TENANT_ID);
 

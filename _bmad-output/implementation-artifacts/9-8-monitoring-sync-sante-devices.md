@@ -87,6 +87,10 @@ Status: review
 - [ ] [Deferred-from: v1s-17-1-dashboard-build-ci, 2026-10-11] Erreurs de rafraîchissement silencieuses [components/sync/SyncOverviewCards.tsx, SyncHealthTable.tsx] — `page.tsx` (contrat figé) ne transmet ni `isError` ni `isFetching` : un refetch échoué garde les données périmées sans signal, une requête « paused » hors-ligne affiche l'erreur. Réglé si la page passe `error`/`isFetching` aux composants (retry + spinner sur « Actualiser »).
 - [ ] Task 6.1 (ajout de "Story 9.8" à `epic-9-super-admin-dashboard-toor.md`) reste ouverte.
 
+### Deferred items routed 2026-10-13
+
+- [ ] [Deferred-from: follow-up review v1s-17-1, 2026-10-13] Identifiants et codes bruts dans le panneau de synchronisation [keevo/dashboard/src/components/sync/SyncTenantDetailDrawer.tsx:120-125, sections opérations/conflits] — la colonne Appareil/Utilisateur affiche des UUID et les opérations/conflits affichent `operationType`, `conflictType`, `strategy` bruts (ex. CREATE_SALE, LWW). Règle 2026-10-13 : libellés français compréhensibles (« Téléphone de Awa », nom de l'employé, « Création de vente »…), sinon omettre le champ. Nécessite d'ajouter `deviceName` / nom de l'utilisateur aux DTO `AdminDeviceInfo` (backend) et une table de libellés côté dashboard ; v1s-17-1 interdisait tout changement backend.
+
 ## Dev Agent Record
 
 ### Agent Model Used

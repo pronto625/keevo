@@ -10,6 +10,7 @@ import 'package:keevo/core/di/providers.dart' show kUserRoleKey;
 import 'package:keevo/core/storage/app_constants.dart';
 import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/core/sync/rest_sync_service.dart';
+import 'package:keevo/core/sync/stock_movement_ids.dart';
 import 'package:keevo/features/catalog/data/datasource/remote_product_datasource.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -555,6 +556,55 @@ void main() {
       final movements = await db.select(db.stockMovements).get();
       expect(movements, hasLength(1));
       expect(movements.first.quantityDelta, -2);
+    });
+
+    // v1s-13-13 follow-up: an online owner cancel writes its movement locally under the
+    // server's deterministic id; the later pull of that same id must keep one row, never
+    // fail on the primary key, and take the server's fields (owner as actor, reason).
+    test('pull_stockMovement_existingLocalId_keepsSingleRowWithServerFields', () async {
+      final movementId = saleCancelledMovementId('item-1');
+      final syncedAt = DateTime.utc(2026, 3, 21, 10, 0, 5);
+      await db.into(db.stockMovements).insert(StockMovementsCompanion.insert(
+            id: movementId,
+            productId: 'prod-1',
+            storeId: 'store-1',
+            type: 'SALE_CANCELLED',
+            quantityBefore: const Value(48),
+            quantityDelta: 2,
+            quantityAfter: const Value(50),
+            actorId: 'cashier-1',
+            reason: const Value('local'),
+            synced: const Value(true),
+            syncedAt: Value(syncedAt),
+            createdAt: DateTime.utc(2026, 3, 21, 10),
+          ));
+      stubPull(entities: {
+        'stockMovements': [
+          {
+            'id': movementId,
+            'productId': 'prod-1',
+            'variantId': null,
+            'storeId': 'store-1',
+            'movementType': 'SALE_CANCELLED',
+            'quantityBefore': 48,
+            'quantityChange': 2,
+            'quantityAfter': 50,
+            'actorId': 'owner-1',
+            'notes': 'server',
+            'occurredAt': '2026-03-21T10:00:00.000Z',
+          }
+        ]
+      });
+
+      await syncService.pull();
+
+      final movements = await db.select(db.stockMovements).get();
+      expect(movements, hasLength(1));
+      expect(movements.single.id, movementId);
+      expect(movements.single.actorId, 'owner-1'); // server is the source of truth
+      expect(movements.single.reason, 'server');
+      expect(movements.single.synced, isTrue);
+      expect(movements.single.syncedAt, syncedAt); // purge clock kept
     });
 
     test('pull_upsertsStockTransfers', () async {

@@ -13,6 +13,22 @@ const STORAGE_KEY = "ks_admin_token";
 let _token: string | null = null;
 export const getToken = () => _token;
 
+/**
+ * Drops the in-memory token, its sessionStorage copy and the auth cookie read by the proxy.
+ * Called on logout and by the axios interceptor on a 401 (expired or revoked token, or a
+ * new tab that has the cookie but no stored token), so a dead session is not restored again
+ * on the next refresh.
+ */
+export function clearSession() {
+  _token = null;
+  try {
+    sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // storage blocked: nothing persisted
+  }
+  document.cookie = `ks_admin_auth=; path=/; max-age=0`;
+}
+
 interface AuthContextValue {
   token: string | null;
   login: (token: string) => void;
@@ -43,7 +59,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback((newToken: string) => {
     _token = newToken;
-    sessionStorage.setItem(STORAGE_KEY, newToken);
+    try {
+      sessionStorage.setItem(STORAGE_KEY, newToken);
+    } catch {
+      // storage blocked: the session lives in memory for this page only
+    }
     // Set a short-lived cookie so Next.js middleware can check auth
     const secure = window.location.protocol === "https:" ? "; Secure" : "";
     document.cookie = `ks_admin_auth=1; path=/; max-age=86400; SameSite=Strict${secure}`;
@@ -51,9 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
-    _token = null;
-    sessionStorage.removeItem(STORAGE_KEY);
-    document.cookie = `ks_admin_auth=; path=/; max-age=0`;
+    clearSession();
     setToken(null);
   }, []);
 
