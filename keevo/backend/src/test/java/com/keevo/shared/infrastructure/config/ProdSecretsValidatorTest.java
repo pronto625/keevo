@@ -314,6 +314,13 @@ class ProdSecretsValidatorTest {
             assertRejects(builder().dbPassword(pwd).build(), "POSTGRES_PASSWORD", pwd);
         }
 
+        @Test
+        @DisplayName("v1s-12-13 follow-up: default padded with Unicode spaces is still denylisted (strip, not trim)")
+        void rejectsDefaultPaddedWithUnicodeSpaces() {
+            String padded = "\u3000keevo_local_pwd\u2003";
+            assertRejects(builder().dbPassword(padded).build(), "POSTGRES_PASSWORD", padded);
+        }
+
         @ParameterizedTest(name = "rejects placeholder [{0}]")
         @ValueSource(strings = {"my_change_me_password", "CHANGEME_please_123", "your_db_password_here",
                 "replace_with_secret_value", "db-placeholder-value", "xxxxxxxxxxxxxxxx"})

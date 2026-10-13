@@ -5,7 +5,7 @@ created: '2026-10-11'
 status: 'done'
 baseline_revision: 'b85e44a860da86143f802006178777d1d2b18b88'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-12-context.md'
 warnings: [oversized]
@@ -115,6 +115,38 @@ deferred: []
   - `[medium]` `[patch]` (vg other) Empty/padded provider matches no adapter — same root cause as the empty/padded provider entry; fixed there.
   - `[medium]` `[patch]` (blind) Checklist says TWILIO_FROM_NUMBER needed "if twilio" only though failover uses it — same root cause as the TWILIO_FROM_NUMBER entry; fixed there.
 
+### 2026-10-13 — Review pass (follow-up)
+- verdicts: 28 findings — high 0, medium 0, low 21, false 7, maybe-false 0
+- findings:
+  - `[low]` `[patch]` (intent) ordering guarantee never asserted directly (context tests use `initialization-fail-timeout=-1`) — new `ProdSecretsValidatorOrderingTest`: post-processor adds `dependsOn("prodSecretsValidator")` to DataSource definitions only, bean-name constant = scanned validator name.
+  - `[low]` `[reject]` (intent) most matrix rows proven at unit level only — carried: the context test proves wiring, unit tests prove policy.
+  - `[low]` `[patch]` (intent) staging never exercised — grouped with the ordering row: the test pins the ordering config to the validator's `{"prod","staging"}` profiles.
+  - `[low]` `[reject]` (intent) noop WARN not asserted — log-only behaviour, no decision depends on it.
+  - `[false]` `[reject]` (intent) diff enforces more than the matrix (TWILIO_FROM_NUMBER, unknown/empty provider) — carried: `TwilioProperties.isConfigured()` needs the sender; an empty/unknown value matches no `@ConditionalOnProperty` adapter (the NoOp's `matchIfMissing` does not apply to a present-but-empty value), so the context would fail anyway — the validator only makes the message explicit.
+  - `[false]` `[reject]` (intent) shared denylist widens the admin check — the intent asks for one shared denylist.
+  - `[false]` `[reject]` (intent) JWT tests rewritten / POSIX skip — carried: assertions unchanged; skip only on non-POSIX hosts.
+  - `[false]` `[reject]` (intent) unrelated hunks (tutorial URLs, v1s-15-7 guards) — follow-up diff spans baseline→current code; those hunks belong to v1s-14-6/15-7.
+  - `[low]` `[patch]` (verification) ordering post-processor not pinned — same fix as the intent row.
+  - `[low]` `[reject]` (verification other) `ProdSecretsFailFastContextTest` sets POSIX permissions without guard — carried: CI and prod are Linux.
+  - `[low]` `[patch]` (blind) `.env.example` claims every example value is rejected, but the Twilio sandbox sender passes — comment corrected (sender not checked, set your own approved sender); no new guard (staging may use the sandbox; no format policy on provider values per Boundaries).
+  - `[low]` `[reject]` (blind) POSIX guard missing in context test — carried (same as above).
+  - `[low]` `[patch]` (blind) denylist uses `trim()` while length uses `strip()` — `strip()` everywhere; test with U+3000/U+2003 padding.
+  - `[low]` `[patch]` (blind) `.env.example` inline `# NEVER use Admin@1234!` after the ADMIN_PASSWORD value becomes part of the value under properties parsing — comment moved to its own line with a note.
+  - `[low]` `[reject]` (blind) ordering covers DataSource only (RsaKeyConfig, WhatsApp adapters) — JWT key checks are pre-existing and out of the intent ("keep unchanged"); RsaKeyConfig errors already name the key path; WhatsApp adapters do not connect at boot.
+  - `[low]` `[patch]` (blind) ordering not directly proven — grouped with the ordering row.
+  - `[low]` `[reject]` (blind) dev/staging/twilio/failover/empty-provider not booted end to end — policy is unit-tested per row; profile scoping now pinned by the ordering test; more Spring boots add ~1 s each for no new wiring.
+  - `[low]` `[reject]` (blind) `KEEVO_EXPORT_LINK_SECRET` / FCM credentials unvalidated — outside the intent's secret list; the export secret's blank → random-per-boot + WARN is v1s-18-1's documented design.
+  - `[low]` `[patch]` (blind) provider comment "matched exactly (no trimming)" misleading — reworded: case-insensitive, must not be empty or padded; empty value rejected (omit or set noop).
+  - `[low]` `[reject]` (blind) `WASSENDER_API_URL` format unchecked — carried.
+  - `[false]` `[reject]` (blind) unrelated tutorial-URL hunk — same as intent row.
+  - `[low]` `[patch]` (edge) trim/strip disagreement — grouped with the blind row.
+  - `[low]` `[reject]` (edge) interior whitespace counts toward 12 chars — an ops-chosen admin secret with whitespace runs is unlikely; extra branch for no realistic case.
+  - `[low]` `[reject]` (edge) uncased letters counted as symbols — carried.
+  - `[low]` `[reject]` (edge) RsaKeyConfig before the validator — grouped with the blind ordering-scope row.
+  - `[false]` `[reject]` (edge) empty `KEEVO_WHATSAPP_PROVIDER=` rejected — the context would fail anyway (no adapter matches ""); the explicit `[FailFast]` is the better outcome, now documented in `.env.example`.
+  - `[low]` `[reject]` (edge claim) AC "aborts before any DataSource" vs JWT key failures — grouped with the ordering-scope row.
+  - `[false]` `[reject]` (edge claim) "noop/unset passes" vs empty value — same as the empty-provider row.
+
 ## Design Notes
 
 - **"ApplicationContextException" in the item is approximate:** a `@PostConstruct` failure surfaces from `SpringApplication.run` as `BeanCreationException` (root `IllegalStateException`), not `ApplicationContextException`. The test asserts on the cause chain, which is the observable contract. `@SpringBootTest` cannot assert a failing context, hence `SpringApplicationBuilder`.
@@ -149,3 +181,17 @@ Status: done
 **Verification:** `mvn -q test -Dtest='ProdSecretsValidatorTest,ProdSecretsFailFastContextTest'` → 84 tests, 0 failures. Full `mvn test` → 2067 tests, 7 failures + 29 errors, all in the 10 known baseline persistence classes (no new failure). `target/` removed afterwards (disk).
 
 **Residual risks:** the live prod/staging `.env` may hold a DB/admin password or provider config that now fails the policy → the next manual deploy will not boot until secrets are rotated (DB: ALTER ROLE + `.env`; admin: env value only gates boot, the live password is changed in-app). A prod `.env` with `twilio`/`failover` and no `TWILIO_FROM_NUMBER`, or an empty `KEEVO_WHATSAPP_PROVIDER=`, will now also fail fast.
+
+### Follow-up review pass — 2026-10-13
+
+**Summary:** fresh 4-layer review of the post-review provider corrections (no trim, empty/padded/unknown → FailFast, TWILIO_FROM_NUMBER mandatory). Verified: an empty or unknown provider matches no WhatsApp adapter (`@ConditionalOnProperty havingValue`, NoOp's `matchIfMissing` only covers an absent property), so the stricter validator turns an inevitable boot failure into an explicit `[FailFast]`; no behaviour regression. Fixes: denylist normalisation `strip()` (consistent with the length checks), `.env.example` comments (inline comment leaking into ADMIN_PASSWORD, provider rules, sandbox sender), direct test of the DataSource ordering + profiles.
+
+**Files changed:** `ProdSecretsValidator.java` (strip in denylist), `.env.example`, tests `ProdSecretsValidatorTest` (Unicode padding), new `ProdSecretsValidatorOrderingTest`.
+
+**Review findings:** 28 (0 high, 0 medium, 21 low, 7 false). Patched: 6 low entries. Deferred: none. Rejected: see the 2026-10-13 triage entry.
+
+**Follow-up review recommended: false** — follow-up pass, no high patched (patched: 0 high, 0 medium, 6 low).
+
+**Verification:** `ProdSecretsValidatorTest` (81), `ProdSecretsValidatorOrderingTest` (3), `ProdSecretsFailFastContextTest` (4) green; batch `shared` 472 / 0 failure.
+
+**Residual risks:** unchanged — a live prod `.env` with weak secrets or an empty provider will refuse to boot on the next manual deploy (intended fail-fast).
