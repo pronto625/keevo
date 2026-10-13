@@ -1,5 +1,5 @@
 import axios from "axios";
-import { getToken } from "@/lib/auth/auth-context";
+import { clearSession, getToken } from "@/lib/auth/auth-context";
 
 const client = axios.create({
   baseURL: "/api/backend",
@@ -18,6 +18,7 @@ client.interceptors.response.use(
   (res) => res,
   (error) => {
     if (error.response?.status === 401 && typeof window !== "undefined") {
+      clearSession(); // otherwise the next refresh would restore the same dead token
       window.location.href = "/login";
     }
     return Promise.reject(error);
