@@ -44,6 +44,11 @@ class AdminSyncMonitoringControllerTest {
 
     private static final UUID ADMIN_ID  = UUID.randomUUID();
     private static final UUID TENANT_ID = UUID.randomUUID();
+    private static final UUID USER_ID   = UUID.randomUUID();
+    // Fixed whole-second instants so the ISO serialisation is deterministic.
+    private static final Instant PUSH_AT    = Instant.parse("2026-10-12T08:30:00Z");
+    private static final Instant PULL_AT    = Instant.parse("2026-10-12T09:15:00Z");
+    private static final Instant UPDATED_AT = Instant.parse("2026-10-12T09:20:00Z");
 
     // ── getOverview ───────────────────────────────────────────────────────────
 
@@ -55,7 +60,12 @@ class AdminSyncMonitoringControllerTest {
 
         mockMvc.perform(get("/api/v1/admin/sync/overview"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalDevices").value(42));
+                // Contract with keevo/dashboard/src/types/sync-monitoring.ts (AdminSyncOverview)
+                .andExpect(jsonPath("$.data.totalDevices").value(42))
+                .andExpect(jsonPath("$.data.totalFailedOps7d").value(5))
+                .andExpect(jsonPath("$.data.totalConflicts7d").value(2))
+                .andExpect(jsonPath("$.data.tenantsInAlert").value(1))
+                .andExpect(jsonPath("$.data.latestPushGlobally").value(PUSH_AT.toString()));
 
         verify(adminSyncMonitoringService).getSyncOverview();
     }
@@ -83,6 +93,15 @@ class AdminSyncMonitoringControllerTest {
         mockMvc.perform(get("/api/v1/admin/sync/tenants"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray())
+                // Contract with keevo/dashboard/src/types/sync-monitoring.ts (AdminTenantSyncHealth)
+                .andExpect(jsonPath("$.data[0].tenantId").value(TENANT_ID.toString()))
+                .andExpect(jsonPath("$.data[0].tenantName").value("Boutique Test"))
+                .andExpect(jsonPath("$.data[0].tenantPlan").value("FREE"))
+                .andExpect(jsonPath("$.data[0].failedOps7d").value(4))
+                .andExpect(jsonPath("$.data[0].conflicts7d").value(1))
+                .andExpect(jsonPath("$.data[0].deviceCount").value(3))
+                .andExpect(jsonPath("$.data[0].lastPushAt").value(PUSH_AT.toString()))
+                .andExpect(jsonPath("$.data[0].lastPullAt").value(PULL_AT.toString()))
                 .andExpect(jsonPath("$.data[0].status").value("OK"));
 
         verify(adminSyncMonitoringService).listTenantSyncHealth();
@@ -99,7 +118,24 @@ class AdminSyncMonitoringControllerTest {
 
         mockMvc.perform(get("/api/v1/admin/sync/tenants/{tenantId}/detail", TENANT_ID))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.tenantId").exists());
+                // Contract with keevo/dashboard/src/types/sync-monitoring.ts (AdminSyncTenantDetail)
+                .andExpect(jsonPath("$.data.tenantId").value(TENANT_ID.toString()))
+                .andExpect(jsonPath("$.data.tenantName").value("Boutique Test"))
+                .andExpect(jsonPath("$.data.tenantPlan").value("PREMIUM_TRIAL"))
+                .andExpect(jsonPath("$.data.devices[0].deviceId").value("device-001"))
+                .andExpect(jsonPath("$.data.devices[0].userId").value(USER_ID.toString()))
+                .andExpect(jsonPath("$.data.devices[0].lastPushAt").value(PUSH_AT.toString()))
+                .andExpect(jsonPath("$.data.devices[0].lastPullAt").value(PULL_AT.toString()))
+                .andExpect(jsonPath("$.data.devices[0].updatedAt").value(UPDATED_AT.toString()))
+                .andExpect(jsonPath("$.data.devices[0].userName").value("Awa Diallo"))
+                .andExpect(jsonPath("$.data.devices[0].userRole").value("CASHIER"))
+                .andExpect(jsonPath("$.data.recentFailedOps[0].operationType").value("CREATE_SALE"))
+                .andExpect(jsonPath("$.data.recentFailedOps[0].errorReason").value("PRODUCT_NOT_FOUND"))
+                .andExpect(jsonPath("$.data.recentFailedOps[0].processedAt").value(PUSH_AT.toString()))
+                .andExpect(jsonPath("$.data.recentConflicts[0].entityType").value("PRODUCT"))
+                .andExpect(jsonPath("$.data.recentConflicts[0].conflictType").value("UPDATE_UPDATE"))
+                .andExpect(jsonPath("$.data.recentConflicts[0].strategy").value("LAST_WRITE_WINS"))
+                .andExpect(jsonPath("$.data.recentConflicts[0].resolvedAt").value(PULL_AT.toString()));
 
         verify(adminSyncMonitoringService).execute(any(com.keevo.admin.sync_monitoring.domain.port.in.GetSyncTenantDetailQuery.class));
     }
@@ -118,19 +154,22 @@ class AdminSyncMonitoringControllerTest {
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private AdminSyncOverview sampleOverview() {
-        return new AdminSyncOverview(42L, 5L, 2L, 1, Instant.now());
+        return new AdminSyncOverview(42L, 5L, 2L, 1, PUSH_AT);
     }
 
     private AdminTenantSyncHealth sampleTenantHealth(String status) {
         return new AdminTenantSyncHealth(
                 TENANT_ID.toString(), "Boutique Test", "FREE",
-                0L, 0L, 3, Instant.now(), Instant.now(), status);
+                4L, 1L, 3, PUSH_AT, PULL_AT, status);
     }
 
     private AdminSyncTenantDetail sampleTenantDetail() {
         return new AdminSyncTenantDetail(
-                TENANT_ID.toString(), "Boutique Test", "FREE",
-                List.of(), List.of(), List.of());
+                TENANT_ID.toString(), "Boutique Test", "PREMIUM_TRIAL",
+                List.of(new AdminDeviceInfo("device-001", USER_ID.toString(), PUSH_AT, PULL_AT, UPDATED_AT,
+                        "Awa Diallo", "CASHIER")),
+                List.of(new AdminSyncFailedOp("CREATE_SALE", "PRODUCT_NOT_FOUND", PUSH_AT)),
+                List.of(new AdminSyncConflict("PRODUCT", "UPDATE_UPDATE", "LAST_WRITE_WINS", PULL_AT)));
     }
 
     private void setupFilterAs(String role) throws Exception {

@@ -29,6 +29,14 @@ export interface AdminDeviceInfo {
   lastPushAt: string | null;
   lastPullAt: string | null;
   updatedAt: string | null;
+  /** Trimmed "first last" of the tenant employee; null when the user has no employee row. */
+  userName: string | null;
+  /**
+   * Membership role in the tenant (e.g. "OWNER"); null when unknown. Not shown as such: the user
+   * column reads the employee name, else « Propriétaire » for OWNER, else « Utilisateur inconnu »
+   * (deviceUserLabel).
+   */
+  userRole: string | null;
 }
 
 export interface AdminSyncFailedOp {

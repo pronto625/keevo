@@ -168,6 +168,90 @@ class AdminSyncMonitoringServiceTest {
     }
 
     @Test
+    @DisplayName("getTenantDetail merges employee names and membership roles by user id")
+    void getTenantDetail_mergesUserNameAndRole() {
+        UUID tenantId = UUID.randomUUID();
+        String emp = UUID.randomUUID().toString();
+        String owner = UUID.randomUUID().toString();
+        String unknown = UUID.randomUUID().toString();
+        stubSingleTenant(tenantId.toString(), "Boutique Test", "kv_test00", "PREMIUM");
+        stubDevices(List.of(new String[]{"device-emp", emp}, new String[]{"device-own", owner},
+                new String[]{"device-unk", unknown}));
+        stubEmptyOpsAndConflicts();
+
+        when(jdbc.query(contains("public.user_tenant_memberships m"), any(RowMapper.class), any(Object[].class)))
+                .thenAnswer(inv -> mapPairs(inv.getArgument(1), "user_role",
+                        new String[]{emp, "EMPLOYEE"}, new String[]{owner, "OWNER"}));
+        when(jdbc.query(contains("kv_test00.employees e"), any(RowMapper.class), any(Object[].class)))
+                .thenAnswer(inv -> mapPairs(inv.getArgument(1), "user_name", new String[]{emp, "  Awa Diallo "}));
+
+        AdminSyncTenantDetail detail = service.execute(new GetSyncTenantDetailQuery(tenantId));
+
+        assertThat(detail.devices()).extracting(AdminDeviceInfo::deviceId)
+                .containsExactly("device-emp", "device-own", "device-unk");
+        assertThat(detail.devices()).extracting(AdminDeviceInfo::userName)
+                .containsExactly("Awa Diallo", null, null);
+        assertThat(detail.devices()).extracting(AdminDeviceInfo::userRole)
+                .containsExactly("EMPLOYEE", "OWNER", null);
+    }
+
+    @Test
+    @DisplayName("getTenantDetail keeps the devices (null name/role) when the name and role lookups fail")
+    void getTenantDetail_failingLabelLookup_keepsDevices() {
+        UUID tenantId = UUID.randomUUID();
+        stubSingleTenant(tenantId.toString(), "Boutique Test", "kv_test00", "FREE");
+        stubDevices(List.<String[]>of(new String[]{"device-001", UUID.randomUUID().toString()},
+                new String[]{"device-002", UUID.randomUUID().toString()}));
+        stubEmptyOpsAndConflicts();
+        when(jdbc.query(contains("public.user_tenant_memberships m"), any(RowMapper.class), any(Object[].class)))
+                .thenThrow(new RuntimeException("cast failed"));
+        when(jdbc.query(contains("kv_test00.employees e"), any(RowMapper.class), any(Object[].class)))
+                .thenThrow(new RuntimeException("relation kv_test00.employees does not exist"));
+
+        AdminSyncTenantDetail detail = service.execute(new GetSyncTenantDetailQuery(tenantId));
+
+        assertThat(detail.devices()).extracting(AdminDeviceInfo::deviceId)
+                .containsExactly("device-001", "device-002");
+        assertThat(detail.devices()).extracting(AdminDeviceInfo::userName).containsOnlyNulls();
+        assertThat(detail.devices()).extracting(AdminDeviceInfo::userRole).containsOnlyNulls();
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void stubDevices(List<String[]> rows) {
+        when(jdbc.query(contains("FROM public.user_sync_state WHERE tenant_id"), any(RowMapper.class), any(Object[].class)))
+                .thenAnswer(inv -> {
+                    RowMapper rm = inv.getArgument(1);
+                    List<Object> result = new java.util.ArrayList<>();
+                    for (String[] row : rows) {
+                        ResultSet rs = mock(ResultSet.class);
+                        when(rs.getString("device_id")).thenReturn(row[0]);
+                        when(rs.getString("user_id")).thenReturn(row[1]);
+                        result.add(rm.mapRow(rs, result.size()));
+                    }
+                    return result;
+                });
+    }
+
+    private void stubEmptyOpsAndConflicts() {
+        lenient().when(jdbc.query(contains("sync_operations_log"), any(RowMapper.class)))
+                .thenReturn(List.of());
+        lenient().when(jdbc.query(contains("sync_conflicts_log"), any(RowMapper.class)))
+                .thenReturn(List.of());
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static List<Object> mapPairs(RowMapper rm, String valueColumn, String[]... pairs) throws java.sql.SQLException {
+        List<Object> result = new java.util.ArrayList<>();
+        for (String[] pair : pairs) {
+            ResultSet rs = mock(ResultSet.class);
+            when(rs.getString("user_id")).thenReturn(pair[0]);
+            when(rs.getString(valueColumn)).thenReturn(pair[1]);
+            result.add(rm.mapRow(rs, result.size()));
+        }
+        return result;
+    }
+
+    @Test
     @DisplayName("getTenantDetail returns empty lists when schema queries fail")
     void getTenantDetail_schemaFailure_returnsEmptyLists() {
         UUID tenantId = UUID.randomUUID();

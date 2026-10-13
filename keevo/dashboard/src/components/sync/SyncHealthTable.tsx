@@ -2,12 +2,18 @@
 
 import type { AdminTenantSyncHealth, SyncHealthStatus } from "@/types/sync-monitoring";
 import { relativeTime } from "@/lib/format";
+import { planLabel, syncStatusLabel } from "@/lib/labels";
+import { LoadError, StaleDataWarning } from "@/components/sync/SyncErrorStates";
 
 interface SyncHealthTableProps {
   data: AdminTenantSyncHealth[] | undefined;
   isLoading: boolean;
   onRowClick: (tenantId: string) => void;
   selectedTenantId: string | null;
+  /** The last fetch failed (first load or refresh). */
+  isError?: boolean;
+  /** Retries the failed query. */
+  onRetry?: () => void;
 }
 
 const STATUS_STYLES: Record<SyncHealthStatus, string> = {
@@ -23,13 +29,13 @@ function SyncStatusBadge({ status }: { status: SyncHealthStatus }) {
         STATUS_STYLES[status] ?? "bg-gray-100 text-gray-700"
       }`}
     >
-      {status}
+      {syncStatusLabel(status)}
     </span>
   );
 }
 
 const COLUMNS = [
-  "Tenant",
+  "Entreprise",
   "Plan",
   "Statut",
   "Appareils",
@@ -56,8 +62,14 @@ export function SyncHealthTable({
   isLoading,
   onRowClick,
   selectedTenantId,
+  isError = false,
+  onRetry,
 }: SyncHealthTableProps) {
+  // Pending without error (e.g. a query paused while offline) keeps the skeleton, not an error.
+  const showSkeleton = isLoading || (!data && !isError);
   return (
+    <div className="space-y-3">
+    {data && isError && <StaleDataWarning onRetry={onRetry} />}
     <div className="bg-white rounded-lg shadow overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="bg-gray-50 border-b border-gray-200">
@@ -73,18 +85,18 @@ export function SyncHealthTable({
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {isLoading ? (
+          {showSkeleton ? (
             Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
           ) : !data ? (
             <tr>
-              <td colSpan={COLUMNS.length} className="px-4 py-8 text-center text-red-600">
-                Erreur de chargement de la santé de synchronisation
+              <td colSpan={COLUMNS.length} className="px-4 py-6">
+                <LoadError onRetry={onRetry} />
               </td>
             </tr>
           ) : data.length === 0 ? (
             <tr>
               <td colSpan={COLUMNS.length} className="px-4 py-8 text-center text-gray-400">
-                Aucun tenant
+                Aucune entreprise
               </td>
             </tr>
           ) : (
@@ -108,7 +120,7 @@ export function SyncHealthTable({
                   }`}
                 >
                   <td className="px-4 py-3 font-medium text-gray-900">{t.tenantName ?? "Sans nom"}</td>
-                  <td className="px-4 py-3 text-gray-500">{t.tenantPlan ?? "—"}</td>
+                  <td className="px-4 py-3 text-gray-500">{planLabel(t.tenantPlan)}</td>
                   <td className="px-4 py-3">
                     <SyncStatusBadge status={t.status} />
                   </td>
@@ -127,6 +139,7 @@ export function SyncHealthTable({
           )}
         </tbody>
       </table>
+    </div>
     </div>
   );
 }

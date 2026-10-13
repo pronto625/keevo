@@ -2,11 +2,18 @@
 
 import type { AdminSyncOverview } from "@/types/sync-monitoring";
 import { relativeTime } from "@/lib/format";
+import { LoadError, StaleDataWarning } from "@/components/sync/SyncErrorStates";
 
 interface SyncOverviewCardsProps {
   data: AdminSyncOverview | undefined;
   isLoading: boolean;
   onRefresh: () => void;
+  /** The last fetch failed (first load or refresh). */
+  isError?: boolean;
+  /** A fetch is in flight (disables « Actualiser »). */
+  isFetching?: boolean;
+  /** Retries the failed query; defaults to onRefresh. */
+  onRetry?: () => void;
 }
 
 interface CardProps {
@@ -34,7 +41,17 @@ function SkeletonCard() {
   );
 }
 
-export function SyncOverviewCards({ data, isLoading, onRefresh }: SyncOverviewCardsProps) {
+export function SyncOverviewCards({
+  data,
+  isLoading,
+  onRefresh,
+  isError = false,
+  isFetching = false,
+  onRetry,
+}: SyncOverviewCardsProps) {
+  const retry = onRetry ?? onRefresh;
+  // Pending without error (e.g. a query paused while offline) keeps the skeleton, not an error.
+  const showSkeleton = isLoading || (!data && !isError);
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
@@ -44,22 +61,23 @@ export function SyncOverviewCards({ data, isLoading, onRefresh }: SyncOverviewCa
         <button
           type="button"
           onClick={onRefresh}
-          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50"
+          disabled={isFetching}
+          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          Actualiser
+          {isFetching ? "Actualisation…" : "Actualiser"}
         </button>
       </div>
 
-      {isLoading ? (
+      {data && isError && <StaleDataWarning onRetry={retry} />}
+
+      {showSkeleton ? (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           {Array.from({ length: 5 }).map((_, i) => (
             <SkeletonCard key={i} />
           ))}
         </div>
       ) : !data ? (
-        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-          Erreur de chargement de la vue d&apos;ensemble
-        </p>
+        <LoadError onRetry={retry} />
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <KpiCard label="Appareils" value={data.totalDevices} colorClass="text-gray-800" />
@@ -74,7 +92,7 @@ export function SyncOverviewCards({ data, isLoading, onRefresh }: SyncOverviewCa
             colorClass={data.totalConflicts7d > 0 ? "text-amber-600" : "text-gray-800"}
           />
           <KpiCard
-            label="Tenants en alerte"
+            label="Entreprises en alerte"
             value={data.tenantsInAlert}
             colorClass={data.tenantsInAlert > 0 ? "text-red-600" : "text-green-600"}
           />

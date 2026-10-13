@@ -26,6 +26,9 @@ export default function SyncMonitoringPage() {
           data={overviewQuery.data}
           isLoading={overviewQuery.isLoading}
           onRefresh={refresh}
+          isError={overviewQuery.isError}
+          isFetching={overviewQuery.isFetching || healthQuery.isFetching}
+          onRetry={() => void overviewQuery.refetch()}
         />
 
         <SyncHealthTable
@@ -33,6 +36,8 @@ export default function SyncMonitoringPage() {
           isLoading={healthQuery.isLoading}
           onRowClick={(id) => setSelectedTenantId(id)}
           selectedTenantId={selectedTenantId}
+          isError={healthQuery.isError}
+          onRetry={() => void healthQuery.refetch()}
         />
       </div>
 

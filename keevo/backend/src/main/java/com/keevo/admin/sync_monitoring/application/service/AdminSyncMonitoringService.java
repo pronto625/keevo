@@ -13,6 +13,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -108,7 +109,7 @@ public class AdminSyncMonitoringService
     public AdminSyncTenantDetail execute(GetSyncTenantDetailQuery query) {
         TenantSchemaRef tenant = loadTenantById(query.tenantId().toString());
 
-        List<AdminDeviceInfo> devices = safeQuery(
+        List<AdminDeviceInfo> rawDevices = safeQuery(
                 "SELECT device_id, user_id, last_push_at, last_pull_at, updated_at "
                 + "FROM public.user_sync_state WHERE tenant_id = ? ORDER BY last_push_at DESC NULLS LAST",
                 deviceMapper(), tenant.schemaName());
@@ -125,12 +126,55 @@ public class AdminSyncMonitoringService
                 + "ORDER BY resolved_at DESC LIMIT 10",
                 conflictMapper());
 
+        // Last on purpose: inside this read-only transaction a failed statement aborts every later
+        // one on PostgreSQL, so the optional label lookups must not run before the sections above.
+        List<AdminDeviceInfo> devices = withUserLabels(rawDevices, tenant);
+
         return new AdminSyncTenantDetail(
                 tenant.id(), tenant.name(), tenant.planType(),
                 devices, failedOps, conflicts);
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
+
+    /**
+     * 9-8: human label of each device's user — employee name (tenant schema) and membership role.
+     * Resolved by user_id in two lookups separate from the device query: a failing lookup (missing
+     * table, bad cast…) only leaves {@code userName}/{@code userRole} null, never drops devices.
+     * Roles (public) run before names (tenant schema): a failed statement aborts the transaction.
+     * Schema name already validated by {@code loadTenantById} (TenantSchema.isValid).
+     */
+    private List<AdminDeviceInfo> withUserLabels(List<AdminDeviceInfo> devices, TenantSchemaRef tenant) {
+        if (devices.isEmpty()) return devices;
+
+        Map<String, String> roles = new HashMap<>();
+        safeQuery(
+                "SELECT DISTINCT ON (m.user_id) m.user_id::text AS user_id, m.role AS user_role "
+                + "FROM public.user_tenant_memberships m "
+                + "WHERE m.tenant_id = ?::uuid "
+                + "AND m.user_id IN (SELECT s.user_id FROM public.user_sync_state s WHERE s.tenant_id = ?) "
+                + "ORDER BY m.user_id, m.is_active DESC, (m.role = 'OWNER') DESC",
+                (rs, row) -> new String[]{rs.getString("user_id"), rs.getString("user_role")},
+                tenant.id(), tenant.schemaName())
+                .forEach(r -> roles.put(r[0], blankToNull(r[1])));
+
+        Map<String, String> names = new HashMap<>();
+        safeQuery(
+                "SELECT DISTINCT ON (e.user_id) e.user_id::text AS user_id, "
+                + "NULLIF(TRIM(CONCAT_WS(' ', TRIM(e.first_name), TRIM(e.last_name))), '') AS user_name "
+                + "FROM " + tenant.schemaName() + ".employees e "
+                + "WHERE e.user_id IN (SELECT s.user_id FROM public.user_sync_state s WHERE s.tenant_id = ?) "
+                + "ORDER BY e.user_id, e.created_at",
+                (rs, row) -> new String[]{rs.getString("user_id"), rs.getString("user_name")},
+                tenant.schemaName())
+                .forEach(r -> names.put(r[0], blankToNull(r[1])));
+
+        return devices.stream()
+                .map(d -> new AdminDeviceInfo(
+                        d.deviceId(), d.userId(), d.lastPushAt(), d.lastPullAt(), d.updatedAt(),
+                        names.get(d.userId()), roles.get(d.userId())))
+                .toList();
+    }
 
     private record TenantSchemaRef(String id, String schemaName, String name, String planType) {}
 
@@ -205,7 +249,15 @@ public class AdminSyncMonitoringService
                 rs.getString("user_id"),
                 toInstant(rs, "last_push_at"),
                 toInstant(rs, "last_pull_at"),
-                toInstant(rs, "updated_at"));
+                toInstant(rs, "updated_at"),
+                null,
+                null);
+    }
+
+    private static String blankToNull(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private RowMapper<AdminSyncFailedOp> failedOpMapper() {

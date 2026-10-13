@@ -5,6 +5,17 @@ import { useQuery } from "@tanstack/react-query";
 import { getTenantSyncDetail } from "@/lib/api/admin-sync";
 import { SYNC_TENANT_DETAIL_KEY } from "@/hooks/useSyncMonitoring";
 import { relativeTime } from "@/lib/format";
+import {
+  conflictTypeLabel,
+  deviceNumberLabels,
+  deviceUserLabel,
+  entityTypeLabel,
+  operationLabel,
+  planLabel,
+  rejectionReasonLabel,
+  strategyLabel,
+} from "@/lib/labels";
+import { LoadError, StaleDataWarning } from "@/components/sync/SyncErrorStates";
 import type { AdminSyncTenantDetail } from "@/types/sync-monitoring";
 
 interface SyncTenantDetailDrawerProps {
@@ -47,7 +58,7 @@ function Th({ children }: { children: React.ReactNode }) {
 }
 
 export function SyncTenantDetailDrawer({ tenantId, onClose }: SyncTenantDetailDrawerProps) {
-  const { data, isLoading, error } = useQuery<AdminSyncTenantDetail>({
+  const { data, isPending, isError, refetch } = useQuery<AdminSyncTenantDetail>({
     queryKey: [SYNC_TENANT_DETAIL_KEY, tenantId],
     queryFn: () => getTenantSyncDetail(tenantId as string),
     enabled: tenantId !== null,
@@ -65,6 +76,8 @@ export function SyncTenantDetailDrawer({ tenantId, onClose }: SyncTenantDetailDr
 
   if (tenantId === null) return null;
 
+  const deviceNames = data ? deviceNumberLabels(data.devices) : [];
+
   return (
     <>
       {/* Backdrop */}
@@ -79,9 +92,11 @@ export function SyncTenantDetailDrawer({ tenantId, onClose }: SyncTenantDetailDr
         <header className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white">
           <div>
             <h2 id="sync-detail-title" className="text-base font-semibold text-gray-900">
-              Synchronisation — {data ? data.tenantName ?? "Sans nom" : "tenant"}
+              Synchronisation — {data ? data.tenantName ?? "Sans nom" : "entreprise"}
             </h2>
-            {data?.tenantPlan && <p className="text-xs text-gray-500">Plan {data.tenantPlan}</p>}
+            {data?.tenantPlan && (
+              <p className="text-xs text-gray-500">Plan {planLabel(data.tenantPlan)}</p>
+            )}
           </div>
           <button
             type="button"
@@ -94,19 +109,11 @@ export function SyncTenantDetailDrawer({ tenantId, onClose }: SyncTenantDetailDr
         </header>
 
         <div className="overflow-y-auto flex-1 px-6 py-5 space-y-6 bg-gray-50">
-          {isLoading && (
+          {isPending && !isError && (
             <p className="text-sm text-gray-500 text-center py-8">Chargement…</p>
           )}
-          {error && !data && (
-            <p className="text-sm text-red-600 text-center py-8">
-              Erreur de chargement des données
-            </p>
-          )}
-          {error && data && (
-            <p className="text-sm text-red-600">
-              Échec de l&apos;actualisation — données possiblement obsolètes
-            </p>
-          )}
+          {isError && !data && <LoadError onRetry={() => void refetch()} />}
+          {isError && data && <StaleDataWarning onRetry={() => void refetch()} />}
 
           {data && (
             <>
@@ -121,13 +128,11 @@ export function SyncTenantDetailDrawer({ tenantId, onClose }: SyncTenantDetailDr
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {data.devices.map((d) => (
-                      <tr key={d.deviceId}>
-                        <td className="py-2 pr-2 font-mono text-xs text-gray-900 break-all">
-                          {d.deviceId}
-                        </td>
-                        <td className="py-2 pr-2 font-mono text-xs text-gray-500 break-all">
-                          {d.userId}
+                    {data.devices.map((d, i) => (
+                      <tr key={`${d.deviceId}-${i}`}>
+                        <td className="py-2 pr-2 text-gray-900">{deviceNames[i]}</td>
+                        <td className="py-2 pr-2 text-gray-700">
+                          {deviceUserLabel(d.userName, d.userRole)}
                         </td>
                         <td className="py-2 pr-2 text-gray-600" title={d.lastPushAt ?? undefined}>
                           {relativeTime(d.lastPushAt)}
@@ -160,9 +165,9 @@ export function SyncTenantDetailDrawer({ tenantId, onClose }: SyncTenantDetailDr
                         <td className="py-2 pr-2 text-gray-500 whitespace-nowrap">
                           {formatDateTime(op.processedAt)}
                         </td>
-                        <td className="py-2 pr-2 text-gray-900 font-medium">{op.operationType}</td>
+                        <td className="py-2 pr-2 text-gray-900 font-medium">{operationLabel(op.operationType)}</td>
                         <td className="py-2 pr-2 text-gray-600 break-words">
-                          {op.errorReason ?? "—"}
+                          {rejectionReasonLabel(op.errorReason)}
                         </td>
                       </tr>
                     ))}
@@ -190,9 +195,9 @@ export function SyncTenantDetailDrawer({ tenantId, onClose }: SyncTenantDetailDr
                         <td className="py-2 pr-2 text-gray-500 whitespace-nowrap">
                           {formatDateTime(c.resolvedAt)}
                         </td>
-                        <td className="py-2 pr-2 text-gray-900 font-medium">{c.entityType}</td>
-                        <td className="py-2 pr-2 text-gray-600">{c.conflictType}</td>
-                        <td className="py-2 pr-2 text-gray-600">{c.strategy}</td>
+                        <td className="py-2 pr-2 text-gray-900 font-medium">{entityTypeLabel(c.entityType)}</td>
+                        <td className="py-2 pr-2 text-gray-600">{conflictTypeLabel(c.conflictType)}</td>
+                        <td className="py-2 pr-2 text-gray-600">{strategyLabel(c.strategy)}</td>
                       </tr>
                     ))}
                   </tbody>

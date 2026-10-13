@@ -173,3 +173,110 @@ So that I can detect incidents before users report them and communicate planned 
 **And** within 5 minutes the card updates to: "✅ Envoyé — [N] livrés / [M] échecs"
 **And** the notification appears in each targeted user's in-app notification history (Story 8.1)
 **And** the global notification history is preserved in the admin panel for 90 days: date, title, target segment, delivered count, failure count
+
+---
+
+## Story 9.6: Monitoring Catalogue Produits Cross-Tenant
+
+As Toor (super admin),
+I want to view the complete product catalog across all tenants from the admin dashboard,
+So that I can monitor platform inventory, identify inactive or draft-heavy tenants, and track product catalog health at the platform level.
+
+*Story file: `_bmad-output/implementation-artifacts/9-6-monitoring-catalogue-produits.md` (done).*
+
+**Acceptance Criteria:**
+
+**Given** Toor opens Monitoring > Catalogue Produits
+**When** the page loads
+**Then** 5 KPI cards show Total Produits / Actifs / Brouillons / Stock Critique (≤ 5 unités) / En Rupture (= 0), all tenants combined, excluding the `KV-ADMIN` system tenant (`GET /api/v1/admin/catalog/summary`)
+
+**Given** the cross-tenant product table
+**When** it is displayed
+**Then** it is server-side paginated (25 rows/page) and sorted, with columns Produit, Entreprise, Plan, Catégorie, Prix (XAF), Stock, Statut (Actif / Brouillon / Archivé), Dernière màj (`GET /api/v1/admin/catalog/products`)
+
+**Given** Toor filters the table
+**When** he searches by product name (debounced 300 ms) or picks Entreprise / Niveau de stock / Statut / Plan
+**Then** filters compose (AND), show as dismissible chips, and a reset button clears them all
+
+**Given** Toor clicks « Exporter CSV »
+**When** the export runs with the current filters (`GET /api/v1/admin/catalog/products/export`)
+**Then** `keevo-products-YYYY-MM-DD.csv` downloads with French column content and no internal ids
+
+**Given** the sidebar
+**When** any admin page renders
+**Then** a collapsible « Monitoring » group links Catalogue Produits, Activité and Synchronisation
+
+---
+
+## Story 9.7: Monitoring Activité Opérationnelle
+
+As Toor (super admin),
+I want an « Activité Opérationnelle » dashboard showing global and per-tenant GMV, recent activity per tenant and inactive tenants,
+So that I can spot tenants drifting away (churn risk) and follow platform traction without querying the database by hand.
+
+*Story file: `_bmad-output/implementation-artifacts/9-7-monitoring-activite-operationnelle.md` (ready-for-dev — backend module `admin.operations` and frontend still to build).*
+
+**Decided defaults:** GMV = sum of `total_amount` of `COMPLETED` sales (XAF) over the period; a tenant is inactive when its last activity (latest sale or `audit_log` entry, the 9.1 definition) is missing or older than 14 days. Period = `TODAY | 7D | 30D | 90D | CUSTOM`; `CUSTOM` requires `from` and `to` (ISO dates, both inclusive, `from ≤ to`, at most 366 days), otherwise 422 `VALIDATION_ERROR`.
+
+**Acceptance Criteria:**
+
+**Given** a SUPER_ADMIN calls `GET /api/v1/admin/operations/overview?period=TODAY|7D|30D|90D` or `?period=CUSTOM&from=YYYY-MM-DD&to=YYYY-MM-DD`
+**When** the request succeeds
+**Then** it returns total GMV, order count, active tenants and new tenants for the period, cross-tenant; a non-SUPER_ADMIN gets 403 `FORBIDDEN`
+
+**Given** the GMV trend chart
+**When** `GET /api/v1/admin/operations/trend` is called with the same period parameters (including `CUSTOM` with `from`/`to`)
+**Then** it returns one point per day (`date`, `gmv`, `orderCount`), days without sales at 0
+
+**Given** the tenant activity table
+**When** `GET /api/v1/admin/operations/tenants` is called with the same period parameters plus `page=n&pageSize=25`
+**Then** it returns a page of tenants (name, plan, GMV, order count, last activity, store count) sorted by GMV descending
+
+**Given** the inactive tenants section
+**When** `GET /api/v1/admin/operations/inactive-tenants` is called
+**Then** it lists tenants with no activity for more than 14 days (or never), with days since last activity
+
+**Given** a `CUSTOM` period with a missing date, `from > to` or a range over 366 days
+**When** any of the endpoints above is called
+**Then** it returns 422 `VALIDATION_ERROR`
+
+**Given** the Activité page (`monitoring/activity`)
+**When** it renders
+**Then** a period selector (Aujourd'hui / 7 j / 30 j / 90 j / Personnalisé with from/to date inputs sent as `CUSTOM`), KPI cards, trend chart, paginated tenant table and inactive tenants section display French labels only, and the dashboard build, lint and type-check stay green
+
+---
+
+## Story 9.8: Monitoring Synchronisation & Santé Devices
+
+As Toor (super admin),
+I want to see the sync and device health of every tenant (active devices, failed operations, conflicts),
+So that I can detect offline-sync problems proactively, before merchants complain.
+
+*Story file: `_bmad-output/implementation-artifacts/9-8-monitoring-sync-sante-devices.md` (done); completion spec `spec-9-8-monitoring-sync-completion.md`.*
+
+**Acceptance Criteria:**
+
+**Given** Toor opens Monitoring > Synchronisation
+**When** the page loads
+**Then** 5 KPI cards show total devices, failed operations (7 j), conflicts (7 j), tenants in alert and the latest push platform-wide (`GET /api/v1/admin/sync/overview`), with an « Actualiser » button disabled (« Actualisation… ») while a refresh is in flight
+
+**Given** the per-tenant health table (`GET /api/v1/admin/sync/tenants`)
+**When** it is displayed
+**Then** each row shows the business name, French plan label (Gratuit / Premium / Essai Premium), a coloured status badge (Sain / À surveiller / En erreur from `OK | WARN | ERROR`), device count, failed ops and conflicts over 7 days, last push / pull; rows keep the backend order (ERROR first) and are selectable by click or keyboard (Enter / Espace)
+
+**Given** Toor selects a tenant
+**When** the right-side drawer opens (`GET /api/v1/admin/sync/tenants/{id}/detail`)
+**Then** it lists devices as « Appareil 1 », « Appareil 2 »… per user with the employee's name (else « Propriétaire » for the owner, else « Utilisateur inconnu »), the 10 latest failed operations and the 10 latest conflicts with French labels; it closes on Échap, the backdrop or the close button
+
+**Given** the sync page in any state
+**When** it renders (list and drawer)
+**Then** no UUID, schema name or raw enum code is visible: unknown codes are humanized and free-text server reasons are replaced by a generic French label
+
+**Given** a request fails
+**When** it is the first load
+**Then** « Erreur de chargement » shows with a « Réessayer » button
+**And** when a refresh fails with data cached, the stale data stays with « Échec de l'actualisation — données possiblement obsolètes » and « Réessayer »
+
+**Given** the endpoints
+**When** a non-SUPER_ADMIN calls them
+**Then** they return 403; the JSON contract with `types/sync-monitoring.ts` is locked by controller tests and the page behaviour by dashboard component tests (`npm test`, run in Dashboard CI)
