@@ -376,8 +376,15 @@ class AccountDeletionConcurrencyPostgresIntegrationTest extends FullContextInteg
         Seed future = seedPending(Duration.ofDays(5));
         Seed active = seedTenant("ACTIVE", null);
 
-        var ids = tenantRepository.findDeletionsDueBy(Instant.now()).stream().map(Tenant::getId).toList();
+        try {
+            var ids = tenantRepository.findDeletionsDueBy(Instant.now()).stream().map(Tenant::getId).toList();
 
-        assertThat(ids).contains(due.tenantId()).doesNotContain(future.tenantId(), active.tenantId());
+            assertThat(ids).contains(due.tenantId()).doesNotContain(future.tenantId(), active.tenantId());
+        } finally {
+            // Never leave a due DELETION_PENDING tenant in the shared DB: a later executeDeletions()
+            // (another class) would delete it and notify its owner.
+            jdbc.update("UPDATE public.tenants SET status = 'ACTIVE', deletion_scheduled_at = NULL "
+                    + "WHERE id IN (?, ?)", due.tenantId(), future.tenantId());
+        }
     }
 }

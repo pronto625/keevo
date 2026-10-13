@@ -135,6 +135,29 @@ class AccountDeletionSchedulerPostgresIntegrationTest extends FullContextIntegra
     }
 
     @Test
+    @DisplayName("a member of another tenant keeps the account, its device token and the other membership")
+    void multiTenantUserIsPreserved() {
+        Seed seed = seedExpiredTenant();
+        Tenant other = tx.execute(status -> tenantFactory.create());
+        jdbc.update("INSERT INTO public.user_tenant_memberships (id, created_at, updated_at, is_active, role, "
+                + "tenant_id, user_id) VALUES (?, now(), now(), true, 'MANAGER', ?, ?)",
+                UUID.randomUUID(), other.getId(), seed.ownerId());
+
+        scheduler(jdbc).executeDeletions();
+
+        assertThat(status(seed.tenantId())).isEqualTo("DELETED");
+        assertThat(schemaExists(seed.schema())).isFalse();
+        assertThat(count("SELECT count(*) FROM public.user_tenant_memberships WHERE tenant_id = ?", seed.tenantId())).isZero();
+        assertThat(count("SELECT count(*) FROM public.refresh_tokens WHERE tenant_id = ?", seed.schema())).isZero();
+        // Still a member elsewhere: the user, its device token and the other membership survive
+        assertThat(count("SELECT count(*) FROM public.users WHERE id = ?", seed.ownerId())).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM public.device_tokens WHERE user_id = ?", seed.ownerId())).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM public.user_tenant_memberships WHERE tenant_id = ?", other.getId())).isEqualTo(1);
+        assertThat(status(other.getId())).isEqualTo("ACTIVE");
+        assertThat(schemaExists(other.getSchemaName())).isTrue();
+    }
+
+    @Test
     @DisplayName("failure after the DROP rolls back the public deletes (still DELETION_PENDING); the next run completes it")
     void postDropFailureRollsBackAndIsRetried() {
         Seed seed = seedExpiredTenant();
@@ -223,7 +246,8 @@ class AccountDeletionSchedulerPostgresIntegrationTest extends FullContextIntegra
             assertThat(schemaExists(seed.schema())).isTrue();
             assertThat(status(seed.tenantId())).isEqualTo("ACTIVE");
             assertThat(count("SELECT count(*) FROM public.user_tenant_memberships WHERE tenant_id = ?", seed.tenantId())).isEqualTo(1);
-            verifyNoInteractions(whatsAppPort);
+            // Scoped to the seeded tenant: a leftover expired tenant in the shared DB may be processed too
+            verify(whatsAppPort, never()).sendReport(eq(seed.phone()), anyString());
         } finally {
             commitCancel.countDown();
             pool.shutdownNow();

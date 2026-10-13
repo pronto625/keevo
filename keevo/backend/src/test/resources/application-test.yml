@@ -15,3 +15,9 @@ logging:
     root: WARN
     com.keevo: INFO
     org.testcontainers: INFO
+
+# Follow-up review v1s-15-11 (2026-10-13): no real cron tick during tests (SchedulingConfig).
+# Full-context tests share one database; jobs are invoked directly by the tests that need them.
+keevo:
+  scheduling:
+    enabled: false
