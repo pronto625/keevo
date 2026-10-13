@@ -108,7 +108,10 @@ public class RequestPasswordResetService implements RequestPasswordResetUseCase 
                 whatsAppPort.sendOtp(phone, code);
                 log.info("forgot-password: OTP generated and sent for userId={}", userId);
             } catch (RuntimeException e) {
-                log.error("forgot-password: OTP send failed for userId={}: {}", userId, e.getMessage());
+                // Exception class only: provider messages (e.g. Twilio "The 'To' number +… is
+                // not valid") can embed the phone number (PII).
+                log.error("forgot-password: OTP send failed for userId={}: {}", userId,
+                        e.getClass().getSimpleName());
             }
         };
         if (TransactionSynchronizationManager.isSynchronizationActive()) {

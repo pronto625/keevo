@@ -27,16 +27,15 @@ public interface UserMembershipRepository {
     Optional<UserTenantMembership> findByUserIdAndTenantId(UUID userId, UUID tenantId);
 
     /**
-     * Deactivate all memberships for a user (set is_active = false).
-     * Story 3.5 — employee deactivation.
+     * Deactivate the user's membership in ONE tenant (set is_active = false); no-op when the
+     * user has no membership there. Story 3.5 — employee deactivation; scoped to the tenant by
+     * the v1s-13-9 follow-up review (the former all-tenant variant also cut the user's access to
+     * every other shop, including one they own).
      */
-    void deactivateByUserId(UUID userId);
+    void deactivate(UUID userId, UUID tenantId);
 
-    /**
-     * Reactivate all memberships for a user (set is_active = true).
-     * Story 3.5 — employee reactivation.
-     */
-    void reactivateByUserId(UUID userId);
+    /** Reactivate the user's membership in ONE tenant (set is_active = true). Story 3.5. */
+    void reactivate(UUID userId, UUID tenantId);
 
     /**
      * Story 14.11 — update the role for a specific (userId, tenantId) membership.

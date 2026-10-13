@@ -73,6 +73,7 @@ class _SaleDetailContentState extends ConsumerState<_SaleDetailContent> {
   /// cancel/correction so the page never offers actions on a stale status.
   late Sale _sale;
   bool _locallyUpdated = false;
+  static const _conflictPullTimeout = Duration(seconds: 15);
   bool _busy = false;
 
   Sale get sale => _sale;
@@ -240,7 +241,8 @@ class _SaleDetailContentState extends ConsumerState<_SaleDetailContent> {
   /// earlier local override so the re-read sale is displayed.
   Future<void> _resyncAfterConflict() async {
     try {
-      await ref.read(syncServiceProvider).pull();
+      // Bounded: the owner buttons stay disabled while this runs.
+      await ref.read(syncServiceProvider).pull().timeout(_conflictPullTimeout);
     } catch (e) {
       debugPrint('[SaleDetail] pull after 409 failed: $e');
     }

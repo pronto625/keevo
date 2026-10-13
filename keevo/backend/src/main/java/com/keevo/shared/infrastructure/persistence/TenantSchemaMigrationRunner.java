@@ -126,6 +126,9 @@ public class TenantSchemaMigrationRunner implements SmartLifecycle {
 
     // ── private helpers ──────────────────────────────────────────────────────
 
+    /** Session-level bound on lock waits during M1–M6 (reset afterwards). */
+    static final String M_LOCK_TIMEOUT_SQL = "SET lock_timeout = '10s'";
+
     private record TenantRow(String schema, boolean present) {}
 
     private List<TenantRow> loadTenants() {
@@ -153,7 +156,21 @@ public class TenantSchemaMigrationRunner implements SmartLifecycle {
              Statement stmt = conn.createStatement()) {
 
             stmt.execute("SET search_path TO \"" + schema + "\"");
+            // Follow-up review v1s-13-12: M1–M6 now run before the web server — bound every DDL
+            // lock wait (e.g. behind an old instance during a rolling deploy) like the sync does.
+            stmt.execute(M_LOCK_TIMEOUT_SQL);
+            try {
+                migrateSchemaStatements(conn, stmt, schema);
+            } finally {
+                // Session settings on a pooled connection: always restore them, even on failure.
+                stmt.execute("RESET lock_timeout");
+                stmt.execute("SET search_path TO public");
+            }
+        }
+    }
 
+    private void migrateSchemaStatements(Connection conn, Statement stmt, String schema) throws SQLException {
+        {
             // Migration M1: add IN_TRANSIT to status CHECK constraint (guarded — table may not exist)
             if (tableExists(conn, schema, "stock_transfers")) {
                 stmt.execute(TenantSchemaProvisioner.DDL_STOCK_TRANSFERS_MIGRATE_IN_TRANSIT);
@@ -196,8 +213,6 @@ public class TenantSchemaMigrationRunner implements SmartLifecycle {
                 stmt.execute(TenantSchemaProvisioner.DDL_SALES_MIGRATE_UPDATED_AT);
                 stmt.execute(TenantSchemaProvisioner.DDL_SALE_ITEMS_MIGRATE_UPDATED_AT);
             }
-
-            stmt.execute("SET search_path TO public");
         }
     }
 

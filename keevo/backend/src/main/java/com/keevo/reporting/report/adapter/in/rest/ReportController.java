@@ -17,6 +17,7 @@ import com.keevo.reporting.report.domain.port.in.GetReportHistoryUseCase;
 import com.keevo.reporting.report.domain.port.in.GetReportHistoryUseCase.ReportHistoryQuery;
 import com.keevo.reporting.report.domain.port.in.ResendReportUseCase;
 import com.keevo.reporting.report.domain.port.in.ResendReportUseCase.ResendReportCommand;
+import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -37,6 +38,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -72,6 +74,9 @@ public class ReportController {
     private final StoreRepository storeRepository;
     private final DayClosureRepository dayClosureRepository;
     private final WeeklyReportWindowResolver weeklyWindowResolver;
+    private final EndOfDayReportRepository reportRepository;
+    /** v1s-13-11 follow-up: same Clock bean as WeeklyReportScheduler (deterministic window tests). */
+    private final Clock clock;
 
     public ReportController(GetReportHistoryUseCase getReportHistoryUseCase,
                              ResendReportUseCase resendReportUseCase,
@@ -79,7 +84,9 @@ public class ReportController {
                              GenerateEndOfDayReportUseCase dailyReportGenerator,
                              StoreRepository storeRepository,
                              DayClosureRepository dayClosureRepository,
-                             WeeklyReportWindowResolver weeklyWindowResolver) {
+                             WeeklyReportWindowResolver weeklyWindowResolver,
+                             EndOfDayReportRepository reportRepository,
+                             Clock clock) {
         this.getReportHistoryUseCase = getReportHistoryUseCase;
         this.resendReportUseCase = resendReportUseCase;
         this.weeklyReportGenerator = weeklyReportGenerator;
@@ -87,6 +94,8 @@ public class ReportController {
         this.storeRepository = storeRepository;
         this.dayClosureRepository = dayClosureRepository;
         this.weeklyWindowResolver = weeklyWindowResolver;
+        this.reportRepository = reportRepository;
+        this.clock = clock;
     }
 
     @Operation(summary = "Get paginated report history. OWNER: all or filtered. EMPLOYEE: own only.")
@@ -173,14 +182,23 @@ public class ReportController {
     public ResponseEntity<ApiResponseWrapper<Void>> triggerWeekly() {
         requireOwnerOrForbid();
         String tenantId = TenantContext.getCurrentTenant();
-        Instant now = Instant.now();
+        Instant now = Instant.now(clock);
         LocalDate todayWAT = now.atZone(WAT).toLocalDate();
         // Last completed ISO Mon–Sun week (its Sunday is today or the one before), regardless
         // of the trigger day; window chained on the previous weekly report (v1s-13-11 D2).
         // Mirror WeeklyReportScheduler.
         LocalDate weekEndDate = todayWAT.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY));
 
+        // v1s-13-11 follow-up: same per-store "already generated" guard as the scheduler — a
+        // second report for the same week would re-count its sales (same start/lateFrom).
+        // Use POST /{reportId}/resend to re-deliver an existing report.
+        var generatedStoreIds = reportRepository.findByDateAndTenant(weekEndDate, tenantId, ReportType.WEEKLY)
+                .stream().map(EndOfDayReport::getStoreId).collect(java.util.stream.Collectors.toSet());
+
         storeRepository.findAllActive().forEach(store -> {
+            if (generatedStoreIds.contains(store.id())) {
+                return;
+            }
             var window = weeklyWindowResolver.resolve(store.id(), tenantId, weekEndDate, now);
             var cmd = new WeeklyReportCommand(
                     store.id(), tenantId, false, window.start(), window.end(), null,

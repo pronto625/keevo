@@ -362,6 +362,11 @@ class LocalSaleDataSource {
           .get();
 
       for (final item in items) {
+        // v1s-13-10 follow-up: a SALE movement with this id can only come from
+        // a pull — the server already applied it and the pulled stock level
+        // includes it. Keep the server row and do not decrement twice.
+        if (await _saleMovementAlreadyPulled(item.id)) continue;
+
         // B1: use .get() to handle potential duplicate (product_id, store_id) rows.
         final stockRowsDecrement = await (_db.select(_db.stockLevels)
               ..where((s) =>
@@ -384,9 +389,7 @@ class LocalSaleDataSource {
           ));
         }
 
-        // insertOnConflictUpdate: a pull may already have upserted the
-        // server's movement with this id.
-        await _db.into(_db.stockMovements).insertOnConflictUpdate(
+        await _db.into(_db.stockMovements).insert(
             StockMovementsCompanion.insert(
           // v1s-13-10: SALE movement id = sale item id, as on the backend
           // (ValidateSaleService) — the pull upserts this row instead of
@@ -408,6 +411,16 @@ class LocalSaleDataSource {
             ..where((s) => s.id.equals(saleId)))
           .write(const SalesCompanion(status: Value('COMPLETED')));
     });
+  }
+
+  /// v1s-13-10 follow-up: whether the SALE movement of [saleItemId] (its id is
+  /// the sale item id, backend and app alike) is already in the local cache —
+  /// only a pull can have put it there.
+  Future<bool> _saleMovementAlreadyPulled(String saleItemId) async {
+    final existing = await (_db.select(_db.stockMovements)
+          ..where((m) => m.id.equals(saleItemId)))
+        .getSingleOrNull();
+    return existing != null;
   }
 
   /// Cascade-validate pending sales after a DRAFT product is activated.
@@ -466,6 +479,10 @@ class LocalSaleDataSource {
 
         final now = DateTime.now();
         for (final item in items) {
+          // v1s-13-10 follow-up: server movement already pulled → keep it,
+          // no second decrement (see validateAndDecrementStock).
+          if (await _saleMovementAlreadyPulled(item.id)) continue;
+
           // B1: use .get() to handle potential duplicate (product_id, store_id) rows.
           final stockRowsCascade = await (_db.select(_db.stockLevels)
                 ..where((s) =>
@@ -484,8 +501,7 @@ class LocalSaleDataSource {
                 .write(StockLevelsCompanion(quantity: Value(qAfter)));
           }
 
-          // insertOnConflictUpdate: a pull may already hold this id.
-          await _db.into(_db.stockMovements).insertOnConflictUpdate(
+          await _db.into(_db.stockMovements).insert(
               StockMovementsCompanion.insert(
             // v1s-13-10: SALE movement id = sale item id (backend cascade does
             // the same), so the pull does not add a second SALE movement.

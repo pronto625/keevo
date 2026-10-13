@@ -167,12 +167,14 @@ public class TenantSchemaSyncService {
             try {
                 // Story v1s-13-12: serialise concurrent syncs of the same schema (boot syncNow vs
                 // request syncIfNeeded, or several instances) and never wait forever on a DDL lock.
+                // lock_timeout is set FIRST so it also bounds the advisory-lock wait (follow-up
+                // review: a request thread in syncIfNeeded must not block behind a long sync).
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute(LOCK_TIMEOUT_SQL);
+                }
                 try (PreparedStatement lock = conn.prepareStatement(ADVISORY_LOCK_SQL)) {
                     lock.setString(1, ADVISORY_LOCK_PREFIX + tenantSchema);
                     lock.execute();
-                }
-                try (Statement stmt = conn.createStatement()) {
-                    stmt.execute(LOCK_TIMEOUT_SQL);
                 }
 
                 Set<String> sourceTables = getTablesInSchema(conn, SOURCE_SCHEMA);

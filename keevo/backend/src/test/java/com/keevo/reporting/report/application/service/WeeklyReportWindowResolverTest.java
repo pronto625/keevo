@@ -234,4 +234,33 @@ class WeeklyReportWindowResolverTest {
         assertThat(w.end()).isEqualTo(endOfDay(S));
         assertThat(Duration.between(w.end(), w.receivedUntil())).isPositive();
     }
+    // ── v1s-13-11 follow-up: a missing week does not break the chain ─────────
+
+    @Test
+    void missingWeek_chainsOnTheLatestEarlierReport() {
+        // Week ending S-7 has no report (backend down on the configured day); the last report
+        // is the one of S-14, generated Sunday S-14 20:00.
+        Instant lastCreatedAt = at(S.minusDays(14), 20, 0);
+        reports.add(weeklyReport(storeId, S.minusDays(14), lastCreatedAt));
+
+        Window w = resolver.resolve(storeId, TENANT, S, at(S, 20, 0));
+
+        assertThat(w.start()).isEqualTo(lastCreatedAt.plusNanos(1000));
+        assertThat(w.lateFrom()).isEqualTo(lastCreatedAt);
+        // The Sunday S-14 evening sale and a late-synced older sale are covered here.
+        ClosureWindow cw = w.closureWindow();
+        assertThat(cw.covers(at(S.minusDays(14), 21, 30), at(S.minusDays(14), 21, 31))).isTrue();
+        assertThat(cw.covers(at(S.minusDays(15), 10, 0), at(S.minusDays(3), 9, 0))).isTrue();
+    }
+
+    @Test
+    void reportOlderThanTheLookBack_isIgnored() {
+        LocalDate tooOld = S.minusWeeks(WeeklyReportWindowResolver.MAX_LOOKBACK_WEEKS + 1);
+        reports.add(weeklyReport(storeId, tooOld, at(tooOld, 20, 0)));
+
+        Window w = resolver.resolve(storeId, TENANT, S, at(S, 20, 0));
+
+        assertThat(w.start()).isEqualTo(S.minusDays(6).atStartOfDay(WAT).toInstant());
+        assertThat(w.lateFrom()).isNull();
+    }
 }

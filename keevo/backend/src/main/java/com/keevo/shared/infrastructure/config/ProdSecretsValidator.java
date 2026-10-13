@@ -217,7 +217,7 @@ public class ProdSecretsValidator {
     /** Blank, contains a placeholder marker, or equals a known dev/CI/example default (case-insensitive). */
     static boolean isPlaceholderOrDefault(String value) {
         return isBlankOrPlaceholder(value)
-                || KNOWN_DEFAULTS.contains(value.trim().toLowerCase(Locale.ROOT));
+                || KNOWN_DEFAULTS.contains(value.strip().toLowerCase(Locale.ROOT));
     }
 
     private static boolean isBlankOrPlaceholder(String value) {

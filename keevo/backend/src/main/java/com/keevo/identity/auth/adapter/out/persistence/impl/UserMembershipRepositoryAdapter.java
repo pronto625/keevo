@@ -54,21 +54,20 @@ public class UserMembershipRepositoryAdapter implements UserMembershipRepository
     }
 
     @Override
-    public void deactivateByUserId(UUID userId) {
-        List<UserTenantMembershipJpaEntity> memberships = springRepository.findByUserId(userId);
-        for (UserTenantMembershipJpaEntity m : memberships) {
-            m.setActive(false);
-            springRepository.save(m);
-        }
+    public void deactivate(UUID userId, UUID tenantId) {
+        setActive(userId, tenantId, false);
     }
 
     @Override
-    public void reactivateByUserId(UUID userId) {
-        List<UserTenantMembershipJpaEntity> memberships = springRepository.findByUserId(userId);
-        for (UserTenantMembershipJpaEntity m : memberships) {
-            m.setActive(true);
+    public void reactivate(UUID userId, UUID tenantId) {
+        setActive(userId, tenantId, true);
+    }
+
+    private void setActive(UUID userId, UUID tenantId, boolean active) {
+        springRepository.findByUserIdAndTenantId(userId, tenantId).ifPresent(m -> {
+            m.setActive(active);
             springRepository.save(m);
-        }
+        });
     }
 
     @Override

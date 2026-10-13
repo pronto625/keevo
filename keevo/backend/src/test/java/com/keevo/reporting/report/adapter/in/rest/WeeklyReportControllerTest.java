@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -55,14 +56,19 @@ class WeeklyReportControllerTest {
 
     @BeforeEach
     void setUp() {
+        mockMvc = mvcWithClock(java.time.Clock.systemUTC());
+        ownerId = UUID.randomUUID();
+    }
+
+    private MockMvc mvcWithClock(java.time.Clock clock) {
         ReportController controller = new ReportController(
                 getReportHistoryUseCase, resendReportUseCase, weeklyReportGenerator,
                 dailyReportGenerator, storeRepository, dayClosureRepository,
-                new com.keevo.reporting.report.application.service.WeeklyReportWindowResolver(reportRepository));
-        mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                new com.keevo.reporting.report.application.service.WeeklyReportWindowResolver(reportRepository),
+                reportRepository, clock);
+        return MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
-        ownerId = UUID.randomUUID();
     }
 
     private void authenticateAs(String role) {
@@ -142,5 +148,45 @@ class WeeklyReportControllerTest {
         var captor = org.mockito.ArgumentCaptor.forClass(GenerateWeeklyReportUseCase.WeeklyReportCommand.class);
         verify(weeklyReportGenerator).generateWeeklyReport(captor.capture());
         org.assertj.core.api.Assertions.assertThat(captor.getValue().isAutomatic()).isFalse();
+    }
+    @Test
+    void POST_triggerWeekly_usesInjectedClock() throws Exception {
+        // v1s-13-11 follow-up: Sunday 2026-10-11 21:00 WAT (20:00 UTC) — generated on the
+        // Sunday, so the window ends at the (injected) generation time.
+        Instant fixedNow = Instant.parse("2026-10-11T20:00:00Z");
+        mockMvc = mvcWithClock(java.time.Clock.fixed(fixedNow, java.time.ZoneOffset.UTC));
+        authenticateAs("OWNER");
+        when(storeRepository.findAllActive()).thenReturn(List.of(sampleStore()));
+        when(weeklyReportGenerator.generateWeeklyReport(any())).thenReturn(sampleReport());
+
+        mockMvc.perform(post("/api/v1/reports/trigger-weekly"))
+                .andExpect(status().isOk());
+
+        var captor = org.mockito.ArgumentCaptor.forClass(GenerateWeeklyReportUseCase.WeeklyReportCommand.class);
+        verify(weeklyReportGenerator).generateWeeklyReport(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().weekEnd()).isEqualTo(fixedNow);
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().receivedUntil()).isEqualTo(fixedNow);
+    }
+    @Test
+    void POST_triggerWeekly_skipsStoresWhoseWeekIsAlreadyGenerated() throws Exception {
+        // v1s-13-11 follow-up: a second report for the same week would re-count its sales.
+        Instant fixedNow = Instant.parse("2026-10-11T20:00:00Z");   // Sunday 21:00 WAT
+        mockMvc = mvcWithClock(java.time.Clock.fixed(fixedNow, java.time.ZoneOffset.UTC));
+        authenticateAs("OWNER");
+        Store done = sampleStore();
+        Store pending = sampleStore();
+        when(storeRepository.findAllActive()).thenReturn(List.of(done, pending));
+        EndOfDayReport existing = mock(EndOfDayReport.class);
+        when(existing.getStoreId()).thenReturn(done.id());
+        when(reportRepository.findByDateAndTenant(eq(LocalDate.of(2026, 10, 11)), any(), eq(ReportType.WEEKLY)))
+                .thenReturn(List.of(existing));
+        when(weeklyReportGenerator.generateWeeklyReport(any())).thenReturn(sampleReport());
+
+        mockMvc.perform(post("/api/v1/reports/trigger-weekly"))
+                .andExpect(status().isOk());
+
+        var captor = org.mockito.ArgumentCaptor.forClass(GenerateWeeklyReportUseCase.WeeklyReportCommand.class);
+        verify(weeklyReportGenerator, times(1)).generateWeeklyReport(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().storeId()).isEqualTo(pending.id());
     }
 }

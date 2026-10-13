@@ -3,6 +3,7 @@ package com.keevo.admin.tenant.application.service;
 import com.keevo.admin.tenant.domain.model.AdminTenantListItem;
 import com.keevo.admin.tenant.domain.port.in.ListTenantsQuery;
 import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -227,5 +228,26 @@ class AdminTenantServiceTest {
         service.forceDelete(id);
 
         verify(accountDeletionScheduler).deleteNow(id);
+    }
+    // ── v1s-13-12 follow-up: invalid schema_name never interpolated ──────────
+
+    @Test
+    @DisplayName("getTenantDetail — invalid stored schema_name → TENANT_NOT_FOUND, no tenant switch, no schema SQL")
+    @SuppressWarnings("unchecked")
+    void getTenantDetail_invalidSchema_notFound() {
+        UUID id = UUID.randomUUID();
+        when(jdbcTemplate.query(anyString(), any(org.springframework.jdbc.core.RowMapper.class), eq(id)))
+                .thenReturn(List.of(new AdminTenantListItem(id, "KV-TEST", "Test Boutique", "+237600000001",
+                        "FREE", "ACTIVE", Instant.now(), null, 0, 0, null)));
+        when(jdbcTemplate.queryForObject(anyString(), eq(String.class), any(Object[].class)))
+                .thenReturn("kv_x\"; DROP");
+
+        assertThatThrownBy(() -> service.execute(new com.keevo.admin.tenant.domain.port.in.GetTenantDetailQuery(id, 0)))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getErrorCode())
+                .isEqualTo(ErrorCode.TENANT_NOT_FOUND);
+        verify(jdbcTemplate, never()).queryForObject(contains("DROP"), eq(Integer.class));
+        verify(jdbcTemplate, never()).queryForObject(contains("DROP"), eq(java.sql.Timestamp.class));
+        assertThat(com.keevo.shared.infrastructure.persistence.TenantContext.getCurrentTenant()).isNull();
     }
 }

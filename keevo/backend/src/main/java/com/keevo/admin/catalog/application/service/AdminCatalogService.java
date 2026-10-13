@@ -154,7 +154,15 @@ public class AdminCatalogService implements ListProductsUseCase, GetCatalogSumma
     /** Drops rows whose schema name fails the shared tenant-schema gate (never interpolated). */
     private static List<TenantSchema> onlyValidSchemas(List<TenantSchema> tenants) {
         return tenants.stream()
-                .filter(t -> com.keevo.shared.infrastructure.persistence.TenantSchema.isValid(t.schemaName()))
+                .filter(t -> {
+                    boolean valid = com.keevo.shared.infrastructure.persistence.TenantSchema.isValid(t.schemaName());
+                    if (!valid) {
+                        // Visible, not silent (follow-up review v1s-13-12); raw value never echoed.
+                        org.slf4j.LoggerFactory.getLogger(AdminCatalogService.class).warn(
+                                "Tenant {} skipped from the admin catalog: invalid schema_name", t.id());
+                    }
+                    return valid;
+                })
                 .toList();
     }
 

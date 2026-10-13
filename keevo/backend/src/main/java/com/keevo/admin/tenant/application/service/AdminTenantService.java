@@ -8,6 +8,8 @@ import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.shared.infrastructure.scheduling.AccountDeletionScheduler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -47,6 +49,8 @@ import java.util.UUID;
  */
 @Service
 public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUseCase {
+
+    private static final Logger log = LoggerFactory.getLogger(AdminTenantService.class);
 
     private static final String ADMIN_TENANT_ID = "00000000-0000-0000-0000-000000000000";
     private static final int AUDIT_PAGE_SIZE = 50;
@@ -289,7 +293,13 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
             throw new DomainException(ErrorCode.TENANT_NOT_FOUND,
                     "Tenant schema not found: " + tenantId);
         }
-        return TenantSchema.validate(s); // gate before SQL interpolation
+        if (!TenantSchema.isValid(s)) {
+            // gate before SQL interpolation — a corrupted row answers like an unknown tenant
+            // (404), never a 500 (follow-up review v1s-13-12); the raw value is not echoed.
+            log.warn("Tenant {} has an invalid schema_name (length={}) — detail refused", tenantId, s.length());
+            throw new DomainException(ErrorCode.TENANT_NOT_FOUND, "Tenant schema not found: " + tenantId);
+        }
+        return s;
     }
 
     private int safeCount(String sql) {

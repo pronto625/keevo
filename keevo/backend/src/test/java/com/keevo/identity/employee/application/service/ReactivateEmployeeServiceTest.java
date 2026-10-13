@@ -1,5 +1,9 @@
 package com.keevo.identity.employee.application.service;
 
+import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.identity.auth.domain.model.Tenant;
+import com.keevo.identity.auth.domain.model.TenantStatus;
+import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserMembershipRepository;
 import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.model.EmployeeStatus;
@@ -7,6 +11,8 @@ import com.keevo.identity.employee.domain.port.in.ReactivateEmployeeCommand;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,6 +26,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
@@ -31,6 +38,7 @@ class ReactivateEmployeeServiceTest {
 
     @Mock EmployeeRepository employeeRepository;
     @Mock UserMembershipRepository membershipRepository;
+    @Mock TenantRepository tenantRepository;
 
     @InjectMocks ReactivateEmployeeService reactivateEmployeeService;
 
@@ -38,6 +46,7 @@ class ReactivateEmployeeServiceTest {
     UUID employeeId;
     UUID userId;
     Employee inactiveEmployee;
+    Tenant tenant;
 
     @BeforeEach
     void setUp() {
@@ -46,6 +55,15 @@ class ReactivateEmployeeServiceTest {
         userId = UUID.randomUUID();
         inactiveEmployee = new Employee(employeeId, userId, UUID.randomUUID(),
                 "Loïc", "Nkoulou", EmployeeStatus.INACTIVE, false, Instant.now());
+        TenantContext.setCurrentTenant("kv_abc123");
+        tenant = new Tenant(UUID.randomUUID(), "TEST", "kv_abc123", "Test Shop",
+                TenantStatus.ACTIVE, PlanType.FREE, Instant.now());
+        lenient().when(tenantRepository.findBySchemaName("kv_abc123")).thenReturn(Optional.of(tenant));
+    }
+
+    @AfterEach
+    void tearDown() {
+        TenantContext.clear();
     }
 
     @Test
@@ -69,7 +87,8 @@ class ReactivateEmployeeServiceTest {
 
         reactivateEmployeeService.execute(new ReactivateEmployeeCommand(actorId, employeeId));
 
-        verify(membershipRepository).reactivateByUserId(userId);
+        verify(membershipRepository).reactivate(userId, tenant.getId());
+        verifyNoMoreInteractions(membershipRepository);
     }
 
     @Test
@@ -82,5 +101,19 @@ class ReactivateEmployeeServiceTest {
                 .isInstanceOf(DomainException.class)
                 .extracting(e -> ((DomainException) e).getDomainCode())
                 .isEqualTo(ErrorCode.EMPLOYEE_NOT_FOUND.name());
+    }
+    @Test
+    @DisplayName("v1s-13-9 follow-up: unknown tenant → TENANT_NOT_FOUND, nothing reactivated")
+    void execute_unknownTenant_failsClosed() {
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(inactiveEmployee));
+        when(tenantRepository.findBySchemaName("kv_abc123")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reactivateEmployeeService.execute(
+                new ReactivateEmployeeCommand(actorId, employeeId)))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getDomainCode())
+                .isEqualTo(ErrorCode.TENANT_NOT_FOUND.name());
+        verify(employeeRepository, never()).updateStatus(any(), any());
+        verifyNoInteractions(membershipRepository);
     }
 }

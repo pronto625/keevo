@@ -71,7 +71,7 @@ public class GlobalExceptionHandler {
             Map.entry("EMPLOYEE_NOT_FOUND",        "Employé introuvable"),
             Map.entry("PHONE_ALREADY_REGISTERED",  "Ce numéro de téléphone est déjà utilisé par un autre compte"),
             Map.entry("CANNOT_CHANGE_OWN_ROLE",    "Vous ne pouvez pas modifier votre propre rôle"),
-            Map.entry("CANNOT_DEMOTE_LAST_OWNER",  "Impossible de rétrograder le dernier propriétaire actif"),
+            Map.entry("CANNOT_DEMOTE_LAST_OWNER",  "Impossible de retirer le dernier propriétaire actif du compte"), // demotion AND deactivation (v1s-13-9)
             Map.entry("CANNOT_SET_OWN_PASSWORD",   "Vous ne pouvez pas définir votre propre mot de passe via cet endpoint"),
             Map.entry("PASSWORD_CHANGE_REQUIRED",  "Vous devez changer votre mot de passe avant de continuer"),
             Map.entry("STORE_REASSIGNED",          "Votre boutique a été modifiée, veuillez vous reconnecter"),

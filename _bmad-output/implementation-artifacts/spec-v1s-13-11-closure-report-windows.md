@@ -5,11 +5,18 @@ created: '2026-10-11'
 status: 'done'
 baseline_revision: 'ecb40a73f1abfc01be72a09e275b2b31e1a88379'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-13-context.md'
 warnings: [oversized]
-deferred: []
+deferred:
+  - summary: >-
+      A sale stamped before a report's receivedUntil but committed after the report queries is excluded from that report and the next one.
+    evidence: |-
+      created_at is stamped in the inserting transaction; the next window's lateFrom = previous receivedUntil. Millisecond window at generation time; applies to closures and weekly reports. Routed to v1s-13-13-residual-check-then-act-races.
+    location: >-
+      keevo/backend/src/main/java/com/keevo/reporting/report/application/service/WeeklyReportWindowResolver.java
+    severity: low
 ---
 
 <intent-contract>
@@ -122,6 +129,47 @@ Docs: `_bmad-output/planning-artifacts/prd.md:399-400,467` -- decision notes.
   - `[low]` `[reject]` (verification-gap other) warning for a late-synced sale — same as intent row 2.
   - `[false]` `[reject]` (verification-gap other) manual weekly trigger double-counts — idempotency guard, as above.
 
+### 2026-10-13 — Review pass (follow-up)
+- verdicts: 37 findings — high 0, medium 4, low 27, false 6, maybe-false 0
+- findings:
+  - `[low]` `[reject]` (intent) D2 proven on `ClosureWindow.covers` + SQL strings, never on a database — the predicate constants are shared and string-pinned; a Testcontainers run of 7 weekly aggregations is disproportionate for a follow-up.
+  - `[low]` `[patch]` (intent) manual trigger used `Instant.now()` instead of the Clock — `ReportController` takes the shared `Clock` bean; fixed-clock test asserts weekEnd/receivedUntil.
+  - `[low]` `[reject]` (intent) D3 warning on `occurredAt` only, not the arrival rule — the warning is advisory and errs on the safe side (a late-synced sale may show it while its report is still pending); the app has no server-received time for sales.
+  - `[low]` `[patch]` (intent) cache→warning path not tested end to end — grouped with the close-day refresh test below.
+  - `[false]` `[reject]` (intent) weekly guard per store outside scope — required to keep the D2 chain intact (a failed store is retried).
+  - `[false]` `[reject]` (intent) other stories' changes in the diff — follow-up diff = baseline→current code.
+  - `[false]` `[reject]` (intent) PRD edits / pubspec bump absent — PRD already carries D1–D3; the review diff filtered `.yaml` (the story bumped it). This follow-up bumps 1.1.41+40 → 1.1.42+41.
+  - `[medium]` `[patch]` (blind) manual weekly trigger had no "already generated" guard → a second report for the same week re-counted its sales — controller skips stores whose WEEKLY report for that Sunday exists (same per-store guard as the scheduler; resend endpoint for re-delivery); test.
+  - `[medium]` `[patch]` (blind) one missing weekly report broke the chain (fallback Monday 00:00, lateFrom null → Sunday tail and late syncs in no report) — resolver chains on the store's latest WEEKLY report within 8 weeks; tests for a missing week and for a report beyond the look-back.
+  - `[low]` `[reject]` (blind) sales received before the store's first weekly report are never counted late — first-report edge only (before any report there is no previous window to be late against); same as the first day closure.
+  - `[low]` `[reject]` (blind) warning ignores the arrival rule — same as the intent row.
+  - `[low]` `[reject]` (blind) warning reads the local closure cache (other device / auto-close not pulled yet) — refreshed on every sync pull and on local close; advisory only.
+  - `[false]` `[reject]` (blind) pubspec not bumped — same as the intent row.
+  - `[low]` `[patch]` (blind) Clock half done (controller `Instant.now`, scheduler `Clock.systemDefaultZone()`) — controller as above; `WeeklyReportScheduler` now has a single constructor taking the `Clock` bean.
+  - `[low]` `[reject]` (blind) `WeeklyReportGenerator.persistReport` duplicates the base method — refactor with no defect.
+  - `[low]` `[reject]` (blind) `created_at` not `updatable = false` — no code path rewrites it (the delivery save keeps the loaded value).
+  - `[low]` `[reject]` (blind) three window types — cosmetic.
+  - `[low]` `[reject]` (blind) predicate test checks a string — same as the intent row.
+  - `[low]` `[reject]` (blind) OR predicate may defeat the `(store_id, occurred_at)` index — per-store weekly volumes are small; no measured regression.
+  - `[low]` `[reject]` (blind) resolver loads the tenant's weekly reports per store (N×N) — a handful of stores per tenant; a per-store query adds port surface for no measured cost.
+  - `[low]` `[reject]` (blind) 409 widget-test comments vs assertions — the bounded-wait test asserts no re-read before the timeout and a re-read after; the conflict snackbar is covered by the failing-pull test.
+  - `[low]` `[patch]` (blind) `CloseDayNotifier` refresh of the last closure untested — `close_day_notifier_test.dart` "closeDay refreshes lastClosureAtProvider" (mutation-checked).
+  - `[low]` `[reject]` (blind) controller depends on the concrete resolver — existing pattern in this module; no defect.
+  - `[false]` `[reject]` (blind) `parseTime` fallback silent — both schedulers already `log.warn` in the catch branch.
+  - `[low]` `[patch]` (verification) close-day refresh — same patch as above.
+  - `[low]` `[patch]` (verification) « Réessayer » on the sale detail error state never tapped — widget test asserts the sale is re-read.
+  - `[low]` `[reject]` (verification other) warning rule vs `ClosureWindow` — same as the intent row.
+  - `[low]` `[reject]` (edge) late-arrival warning — same.
+  - `[low]` `[reject]` (edge) closure from another device not yet pulled — same as the cache row.
+  - `[low]` `[reject]` (edge) a timed-out pull keeps running and may finish after the re-read — the next sync/pull invalidation refreshes the page; a repeated action gets a fresh 409 at worst.
+  - `[medium]` `[patch]` (edge) chain gap when the week S-7 has no report — grouped with the blind chain row.
+  - `[low]` `[reject]` (edge) a store whose generation fails all the configured day is not retried the next days — with the look-back its sales land in the next week's report (no loss).
+  - `[low]` `[defer]` (edge) sale committed after the report queries with `created_at` < `receivedUntil` is lost — millisecond window; routed to v1s-13-13-residual-check-then-act-races.
+  - `[low]` `[reject]` (edge) legacy previous report bounded at 23:59:59 vs .999999 — one-time legacy transition, sub-second window.
+  - `[medium]` `[patch]` (edge claim) "every sale in exactly one weekly report" false on a broken chain — grouped with the chain row.
+  - `[low]` `[reject]` (edge claim) warning claim — same as the intent row.
+  - `[false]` `[reject]` (edge claim) pubspec — same as the intent row.
+
 ## Design Notes
 
 PO decisions (taken autonomously from FR51/FR52/FR90 and the UI-3 closure rule):
@@ -156,3 +204,17 @@ PO decisions (taken autonomously from FR51/FR52/FR90 and the UI-3 closure rule):
 **Verification:** backend full `mvn test` after patches = 2170 tests, 7 failures + 29 errors, exactly the 10 baseline classes; targeted classes green. `flutter analyze` = 630 issues (baseline count); `flutter test` = 1345 passed, 1 failed (known `offline_gate_banner_test`). `keevo/backend/target` deleted afterwards.
 
 **Residual risks:** skipped weekly report (reports disabled / scheduler down all evening) restarts the next week at Monday 00:00; app warning uses occurredAt only (a late-synced sale may be flagged); sales committed in the milliseconds around a report's arrival cut-off (shared with closures).
+
+### Follow-up review pass — 2026-10-13
+
+**Summary:** fresh 4-layer review of the post-review corrections. `ReportController.triggerWeekly` and `WeeklyReportScheduler` now use the shared `Clock` bean. Two D2 gaps closed: the manual trigger no longer generates a second report for a week already reported (it re-counted the same sales), and the weekly window chains on the store's latest report within 8 weeks, so a missing week (backend down on the configured day, reports disabled, store inactive) no longer drops the Sunday tail and late-synced sales. App: tests for the close-day refresh of the closed-day warning and the « Réessayer » button; app 1.1.42+41.
+
+**Files changed:** `ReportController.java` (Clock + guard), `WeeklyReportScheduler.java` (Clock bean), `WeeklyReportWindowResolver.java` (look-back chain); tests `WeeklyReportControllerTest`, `ReportControllerTest`, `WeeklyReportWindowResolverTest`; app `close_day_notifier_test.dart`, `sale_detail_page_test.dart`, `pubspec.yaml`.
+
+**Review findings:** 37 (0 high, 4 medium, 27 low, 6 false). Patched: 2 medium entries (manual-trigger guard, chain look-back) + 4 low entries (Clock, close-day refresh test, retry test, controller clock test). Deferred: 1 low → v1s-13-13-residual-check-then-act-races (sale committed after the report queries). Rejected: see the 2026-10-13 triage entry.
+
+**Follow-up review recommended: false** — follow-up pass, no high patched (patched: 0 high, 2 medium, 4 low).
+
+**Verification:** report tests (`WeeklyReportControllerTest` 7, `ReportControllerTest` 10, `WeeklyReportSchedulerTest` 13, `WeeklyReportWindowResolverTest` 11, `WeeklyReportGeneratorTest` 10) green; batches `reporting` 366, `commerce` 226, app `test/features/pos` 235, `test/features/reports` 44 — 0 failure; `flutter analyze` 0 error / 0 warning.
+
+**Residual risks:** a weekly report that covers missed weeks is labelled with its own Sunday (it carries several weeks of sales); late-arrival warnings on the app are conservative; the ms commit window until v1s-13-13.
