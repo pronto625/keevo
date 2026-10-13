@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { getUnhandledHighCount } from "@/lib/api/admin-feedback";
+import { getUnhandledHighAlertCount } from "@/lib/api/admin-alerts";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/tenants",
@@ -10,8 +11,10 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ logout: vi.fn() }) }));
 vi.mock("@/lib/api/admin-feedback", () => ({ getUnhandledHighCount: vi.fn() }));
+vi.mock("@/lib/api/admin-alerts", () => ({ getUnhandledHighAlertCount: vi.fn() }));
 
 const count = vi.mocked(getUnhandledHighCount);
+const alerts = vi.mocked(getUnhandledHighAlertCount);
 
 function renderSidebar() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -23,7 +26,10 @@ function renderSidebar() {
 }
 
 describe("Sidebar (spec 9-1 completion)", () => {
-  beforeEach(() => count.mockReset());
+  beforeEach(() => {
+    count.mockReset();
+    alerts.mockReset().mockResolvedValue(0);
+  });
 
   it("says « Entreprises », never « Tenants », and shows the unhandled HIGH feedback badge", async () => {
     count.mockResolvedValue(3);
@@ -40,5 +46,16 @@ describe("Sidebar (spec 9-1 completion)", () => {
     renderSidebar();
     await screen.findByText("Retours utilisateurs");
     expect(screen.queryByLabelText(/retours? prioritaires?/)).not.toBeInTheDocument();
+  });
+
+  it("Story 9-5 — « Alertes » with the unhandled HIGH alert badge and « Santé système »", async () => {
+    count.mockResolvedValue(0);
+    alerts.mockResolvedValue(2);
+    renderSidebar();
+
+    expect(await screen.findByLabelText("2 alertes hautes non traitées")).toHaveTextContent("2");
+    expect(screen.getByRole("link", { name: /^Alertes/ })).toHaveAttribute("href", "/alertes");
+    expect(screen.getByRole("link", { name: "Santé système" })).toHaveAttribute("href", "/sante");
+    expect(alerts).toHaveBeenCalled();
   });
 });

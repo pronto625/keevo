@@ -2,9 +2,10 @@
 title: '9-5 (1/2) — System health, platform alerts feed and proactive owner alerts (super admin)'
 type: 'feature'
 created: '2026-10-13'
-status: 'ready-for-dev'
+status: 'done'
+baseline_revision: '658466af91431b33f1fcdcc6b7bb774e387b54a2'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-9-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/spec-9-2-activation-plan-payant.md'
@@ -76,9 +77,68 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-10-13 — Review pass
+- verdicts: 45 findings — high 2, medium 11, low 23, false 2, maybe-false 0 (+ intent rows descriptive)
+- findings:
+  - `[high]` `[patch]` (edge) alert feed 500 when the DB is down, so the database alert is never visible — sources isolated per try/catch, acks unreadable = none handled.
+  - `[medium]` `[patch]` (edge) `/health` 500 when a DB-derived read throws after a passing check — caught, DB ❌, metrics null.
+  - `[medium]` `[patch]` (edge) expired-not-FREE alert fires on every normal nightly expiry — `expires_at < now − 26 h`.
+  - `[medium]` `[patch]` (edge) non-ACTIVE expired rows alert forever — `status = 'ACTIVE'`.
+  - `[medium]` `[patch]` (edge) send then recordNotice failure re-sends daily — notice recorded first, deleted on send failure.
+  - `[low]` `[patch]` (edge) non-DataAccess exception aborts the daily silence run — per-company catch.
+  - `[low]` `[patch]` (edge) multi-instance sampler deltas wrong — single-instance assumption documented (javadoc + checklist).
+  - `[low]` `[patch]` (edge) expected sample period vs configurable cron — fixed 5-minute period.
+  - `[low]` `[patch]` (edge) expiring alert occurredAt in the future — clamped to now.
+  - `[low]` `[patch]` (edge) excerpt cut inside a surrogate pair — code-point cut.
+  - `[low]` `[patch]` (edge) new device without push flags the tenant silent — recent null-push devices count as active.
+  - `[low]` `[patch]` (edge) system tenant feedback not excluded — excluded.
+  - `[low]` `[patch]` (edge) acks grow forever — 90-day purge + cleared-condition removal.
+  - `[medium]` `[patch]` (edge) badge polls the full feed per tab — `/alerts/count` + 30 s single-flight server cache.
+  - `[medium]` `[patch]` (edge, claim) banner within 60 s not guaranteed — status polled every 30 s.
+  - `[medium]` `[patch]` (edge, claim) handled alert reappears hourly — condition keys without time bucket, ack removed when the condition clears.
+  - `[medium]` `[patch]` (blind) expired-plan false HIGH — same as edge row 3.
+  - `[medium]` `[patch]` (blind) status ignored — same as edge row 4.
+  - `[high]` `[patch]` (blind) database alert unreachable in the feed — same as edge row 1.
+  - `[medium]` `[patch]` (blind) banner hidden when status unreadable — « État du serveur inconnu ».
+  - `[low]` `[patch]` (blind) wrong « dépasse le seuil » wording for uptime/DB — per-metric phrases.
+  - `[medium]` `[patch]` (blind) silence notice recorded although WhatsApp unconfigured — skipped without recording.
+  - `[low]` `[patch]` (blind) sampler state per instance — same as edge row 7.
+  - `[low]` `[patch]` (blind) percentile decay window shorter than the sample period — expiry 5 m, buffer 5.
+  - `[medium]` `[patch]` (blind) feed cost / badge polling — same as edge row 14.
+  - `[low]` `[patch]` (blind) acks never purged — same as edge row 13.
+  - `[medium]` `[patch]` (blind) health alerts back every hour — same as edge claim row.
+  - `[low]` `[patch]` (blind) HIGH feedback handled in Alertes stays unhandled in the inbox — handling the alert marks the feedback handled.
+  - `[low]` `[patch]` (blind) deletion grace magic number — shared constant.
+  - `[low]` `[patch]` (blind) `dbActiveConnectionsBreached` always false — 80 % of maximumPoolSize.
+  - `[low]` `[patch]` (blind) Micrometer adapter / schedulers / probe timeout untested — adapter test (registry), probe/adapters rethrow tests; scheduler wiring rejected (lock coverage test + services tested).
+  - `[low]` `[patch]` (blind) double padding — removed.
+  - `[false]` `[reject]` (blind) handled_by never shown — single super admin in V1 (epic context: Toor is the sole operator).
+  - `[low]` `[patch]` (gap) Micrometer adapter and yml percentiles never exercised — `MicrometerRuntimeMetricsAdapterTest`.
+  - `[low]` `[patch]` (gap) rethrow branches untested — Mockito adapter tests.
+  - `[low]` `[patch]` (gap) alert texts for 4 metrics and 2 deletion branches — tests added.
+  - `[low]` `[patch]` (gap) dashboard API clients untested — `admin-alerts.test.ts`, `admin-health.test.ts`.
+  - `[false]` `[reject]` (intent) R1 vs R2 surfaces — descriptive; outage paths now tested end to end at service level; key-lifetime reading now (a) condition-stable.
+
 ## Verification
 
 **Commands:**
 - `cd keevo/backend && MAVEN_OPTS=-Xmx1g mvn -q -o test -Dtest='com.keevo.admin.**,com.keevo.architecture.**' -DforkCount=1 -DargLine=-Xmx1536m` -- expected: 0 failures
 - `cd keevo/backend && MAVEN_OPTS=-Xmx1g mvn -q -o test -Dtest='com.keevo.messaging.**,com.keevo.shared.infrastructure.scheduling.**' -DforkCount=1 -DargLine=-Xmx1536m` -- expected: 0 failures
 - `cd keevo/dashboard && npm run lint && npx tsc --noEmit && npm test && npm run build` -- expected: all succeed
+
+## Auto Run Result
+
+Status: done
+
+**Summary:** Story 9-5 part 1 delivered. Platform health sampled every 5 min (V20 `platform_health_samples`, Micrometer percentiles with a 5-min window, 5xx, Hikari connections vs pool size, DB probe, sync refusals) and exposed on `/api/v1/admin/health` (+ cheap `/status`, single-flight 30 s cache) with thresholds; « Santé système » page and an incident banner on every admin page (polled every 30 s, « État du serveur inconnu » when unreachable). « Alertes » feed computed from unhandled HIGH feedback, pending deletions, expired-but-not-downgraded plans (26 h grace, ACTIVE only), expiring plans, WhatsApp delivery failures, silent companies (5 days) and health breaches — each source isolated so the feed survives a DB outage; acks per condition (cleared when the condition ends, 90-day purge), handling a feedback alert also handles the feedback; count endpoint for the badge. FR81: daily 10:00 WAT WhatsApp to owners of companies silent for 5 days, once per silence streak, not recorded when WhatsApp is unconfigured, retried on failure.
+
+**Files changed:** backend `V20__platform_health_alerts.sql`, `admin/platform/**`, `admin/alerts/**`, `identity/auth/domain/model/AccountDeletionPolicy.java`, `AccountDeletionService`, `TenantSchemaSyncService` global tables, `application.yml` metrics, `docs/DEPLOYMENT_CHECKLIST.md` §9 (single-instance sampling); tests (unit, adapters, controller, Postgres IT, `SchedulerLockCoverageTest`); dashboard `types/{health,alerts}.ts`, `lib/api/admin-{health,alerts}.ts`, `hooks/{useHealth,useAlerts}.ts`, `components/{health,alerts}/*`, `app/{sante,alertes}/page.tsx`, `AdminLayout.tsx`, `Sidebar.tsx`, `lib/labels.ts` + tests.
+
+**Review:** 45 findings — patched 2 high (feed unusable during a DB outage; same root as the unreachable database alert), 11 medium and 23 low entries (grouped); deferred 0; rejected 3.
+
+**Follow-up review recommended:** true — two highs were patched; unverified risk: outage behaviour is tested with throwing mocks at service level, not with a real database outage against the running app.
+
+**Verification:** dashboard lint, tsc, `npm test` (48 files, 221 tests), build — green. Backend admin 415, architecture 6, messaging 126, shared 525, identity 373, feedback 44 — 0 failures/errors.
+
+**Residual risks:** health sampling assumes a single backend instance (documented); feed computation remains O(companies) every 30 s at most.
+

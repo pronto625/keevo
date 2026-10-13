@@ -269,3 +269,16 @@ Appliquer la Lifecycle Policy sur le bucket (voir `BACKUP_RESTORE.md` §8 pour l
 | `ANDROID_KEY_ALIAS` | ✅ | `release-flutter.yml` |
 | `ANDROID_STORE_PASSWORD` | ✅ | `release-flutter.yml` |
 | `ANDROID_KEY_PASSWORD` | ✅ | `release-flutter.yml` |
+
+---
+
+## 9. Santé système (Story 9-5) — une seule instance backend
+
+La page « Santé système » du tableau de bord admin s'appuie sur un échantillon toutes les 5 minutes
+(`PlatformHealthSampleScheduler`). Les compteurs HTTP de chaque fenêtre sont calculés par différence
+avec la mesure précédente **gardée en mémoire** par l'instance.
+
+- ✅ Déployer **une seule instance** du backend (cas actuel : un conteneur `backend`).
+- ⚠️ Avec plusieurs instances, ShedLock fait tourner l'échantillonnage tantôt sur l'une, tantôt sur
+  l'autre : les requêtes, erreurs 5xx et latences enregistrées seraient fausses. Passer alors à un
+  registre de métriques partagé avant de multiplier les instances.

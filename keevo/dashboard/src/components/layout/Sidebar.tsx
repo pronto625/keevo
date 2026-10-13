@@ -5,6 +5,15 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { useUnhandledHighFeedbackCount } from "@/hooks/useFeedback";
+import { useUnhandledHighAlertCount } from "@/hooks/useAlerts";
+
+function feedbackBadgeLabel(n: number): string {
+  return `${n} ${n > 1 ? "retours prioritaires non traités" : "retour prioritaire non traité"}`;
+}
+
+function alertBadgeLabel(n: number): string {
+  return `${n} ${n > 1 ? "alertes hautes non traitées" : "alerte haute non traitée"}`;
+}
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -12,6 +21,8 @@ export function Sidebar() {
   const router = useRouter();
   const highFeedback = useUnhandledHighFeedbackCount();
   const highCount = highFeedback.data ?? 0;
+  const highAlerts = useUnhandledHighAlertCount();
+  const highAlertCount = highAlerts.data ?? 0;
 
   const handleLogout = () => {
     logout();
@@ -23,7 +34,10 @@ export function Sidebar() {
     { href: "/revenus", label: "Revenus", badge: 0 },
     { href: "/analytics", label: "Statistiques", badge: 0 },
     // Spec 9-1 completion — badge = HIGH-priority feedback not handled yet.
-    { href: "/retours", label: "Retours utilisateurs", badge: highCount },
+    { href: "/retours", label: "Retours utilisateurs", badge: highCount, badgeLabel: feedbackBadgeLabel },
+    // Story 9-5 — badge = HIGH alerts not handled yet.
+    { href: "/alertes", label: "Alertes", badge: highAlertCount, badgeLabel: alertBadgeLabel },
+    { href: "/sante", label: "Santé système", badge: 0 },
   ];
 
   const monitoringItems = [
@@ -54,7 +68,7 @@ export function Sidebar() {
             {item.badge > 0 && (
               <span
                 className="ml-2 min-w-5 px-1.5 text-center text-xs font-semibold rounded-full bg-red-600 text-white"
-                aria-label={`${item.badge} ${item.badge > 1 ? "retours prioritaires non traités" : "retour prioritaire non traité"}`}
+                aria-label={item.badgeLabel?.(item.badge)}
               >
                 {item.badge > 99 ? "99+" : item.badge}
               </span>

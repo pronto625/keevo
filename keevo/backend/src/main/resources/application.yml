@@ -74,6 +74,16 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+  # Story 9-5 — client-side percentiles of the HTTP timer, read every 5 min by the health sampler
+  metrics:
+    distribution:
+      percentiles:
+        "[http.server.requests]": 0.5,0.95,0.99
+      # decay window aligned on the 5-minute sample period
+      expiry:
+        "[http.server.requests]": 5m
+      buffer-length:
+        "[http.server.requests]": 5
 
 # Keevo custom config
 keevo:
