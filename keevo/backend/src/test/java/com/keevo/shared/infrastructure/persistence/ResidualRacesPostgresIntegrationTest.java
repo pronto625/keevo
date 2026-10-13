@@ -11,6 +11,8 @@ import com.keevo.commerce.sale.domain.port.out.SaleRepository;
 import com.keevo.identity.auth.application.service.TenantFactory;
 import com.keevo.identity.employee.domain.port.in.CreateEmployeeCommand;
 import com.keevo.identity.employee.domain.port.in.CreateEmployeeUseCase;
+import com.keevo.identity.employee.domain.port.in.ReactivateEmployeeCommand;
+import com.keevo.identity.employee.domain.port.in.ReactivateEmployeeUseCase;
 import com.keevo.identity.onboarding.domain.model.ReportChannel;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.port.in.GenerateWeeklyReportUseCase;
@@ -93,6 +95,7 @@ class ResidualRacesPostgresIntegrationTest extends FullContextIntegrationTest {
     @Autowired CreateStoreUseCase createStore;
     @Autowired CreateStoreSyncHandler createStoreSyncHandler;
     @Autowired CreateEmployeeUseCase createEmployee;
+    @Autowired ReactivateEmployeeUseCase reactivateEmployee;
     @Autowired GenerateWeeklyReportUseCase weeklyReportGenerator;
     @Autowired CancelPendingSaleUseCase cancelSale;
     @Autowired CorrectSaleUseCase correctSale;
@@ -335,6 +338,41 @@ class ResidualRacesPostgresIntegrationTest extends FullContextIntegrationTest {
                     .isEqualTo(3);
             // Rolled back: no user nor membership left behind for B.
             assertThat(count("SELECT count(*) FROM public.users WHERE phone_number = ?", phoneB)).isZero();
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    @DisplayName("v1s-14-13 employee limit: reactivation races a create at max−1 → B blocks, then refused; target stays INACTIVE")
+    void employeeLimit_reactivateRacesCreate_refused() throws Exception {
+        String schema = freeTenantWithoutActiveStore();
+        UUID store = UUID.randomUUID();
+        for (int i = 0; i < 2; i++) {  // FREE: 3 employees max → 2 active = max−1
+            jdbc.update("INSERT INTO \"" + schema + "\".employees (user_id, store_id, first_name, last_name) "
+                    + "VALUES (?, ?, 'Emp', 'Existant')", UUID.randomUUID(), store);
+        }
+        UUID target = UUID.randomUUID();
+        jdbc.update("INSERT INTO \"" + schema + "\".employees (id, user_id, store_id, first_name, last_name, status) "
+                + "VALUES (?, ?, ?, 'Emp', 'Inactif', 'INACTIVE')", target, UUID.randomUUID(), store);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<Object> b = race(schema, "employee-limit:" + schema,
+                    "INSERT INTO \"" + schema + "\".employees (user_id, store_id, first_name, last_name) "
+                            + "VALUES (?1, ?2, 'Emp', 'A')",
+                    new Object[]{UUID.randomUUID(), store},
+                    () -> {
+                        authenticateOwner();
+                        reactivateEmployee.execute(new ReactivateEmployeeCommand(UUID.randomUUID(), target));
+                        return null;
+                    },
+                    pool);
+
+            assertThat(domainCode(failure(b))).isEqualTo("PLAN_LIMIT_EXCEEDED");
+            assertThat(count("SELECT count(*) FROM \"" + schema + "\".employees WHERE status = 'ACTIVE'"))
+                    .isEqualTo(3);
+            assertThat(jdbc.queryForObject("SELECT status FROM \"" + schema + "\".employees WHERE id = ?",
+                    String.class, target)).isEqualTo("INACTIVE");
         } finally {
             pool.shutdownNow();
         }
