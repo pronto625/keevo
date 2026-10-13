@@ -161,7 +161,8 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
             List<AdminEmployeeInfo> employees = loadEmployees(schemaName, query.tenantId());
             long auditTotal = countAuditEvents(schemaName);
             List<AdminAuditEvent> auditEvents = loadAuditEvents(schemaName, query.auditPage());
-            return new AdminTenantDetail(summary, stores, employees, auditEvents, auditTotal);
+            AdminPlanInfo plan = loadPlan(schemaName, query.tenantId());
+            return new AdminTenantDetail(summary, stores, employees, auditEvents, auditTotal, plan);
         } finally {
             TenantContext.setCurrentTenant(previousTenant);
         }
@@ -375,6 +376,25 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
         }
     }
 
+    /** Story 9-2 — current subscription (first row by created_at), null when unreadable. */
+    private AdminPlanInfo loadPlan(String schema, UUID tenantId) {
+        try {
+            List<AdminPlanInfo> rows = jdbc.query(
+                    "SELECT plan_type, expires_at FROM \"" + schema + "\".subscriptions "
+                    + "ORDER BY created_at ASC LIMIT 1",
+                    (rs, row) -> {
+                        Timestamp exp = rs.getTimestamp("expires_at");
+                        return new AdminPlanInfo(rs.getString("plan_type"),
+                                exp != null ? exp.toInstant() : null);
+                    });
+            return rows.isEmpty() ? null : rows.get(0);
+        } catch (Exception e) {
+            // tenant id only — never the schema name or SQL in logs
+            log.warn("Tenant detail: subscription of tenant {} unreadable", tenantId, e);
+            return null;
+        }
+    }
+
     private long countAuditEvents(String schema) {
         try {
             Long count = jdbc.queryForObject(
@@ -419,9 +439,9 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
     private static class TenantListRowMapper implements RowMapper<AdminTenantListItem> {
         @Override
         public AdminTenantListItem mapRow(ResultSet rs, int rowNum) throws SQLException {
-            String planType = rs.getString("plan_type");
-            String plan = ("PREMIUM".equals(planType) || "PREMIUM_TRIAL".equals(planType))
-                    ? "PAID" : "FREE";
+            // Story 9-2 — raw plan code (labelled by the dashboard); public.tenants.plan_type is now
+            // kept in step with the tenant-schema subscription.
+            String plan = rs.getString("plan_type");
 
             Timestamp deletionTs = rs.getTimestamp("deletion_scheduled_at");
             Timestamp createdTs  = rs.getTimestamp("created_at");

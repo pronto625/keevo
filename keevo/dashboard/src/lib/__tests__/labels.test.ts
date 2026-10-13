@@ -7,9 +7,11 @@ import {
   humanizeCode,
   isCode,
   operationLabel,
+  paymentMethodLabel,
   planLabel,
   rejectionReasonLabel,
   strategyLabel,
+  tenantStatusLabel,
   syncStatusLabel,
   userRoleLabel,
 } from "@/lib/labels";
@@ -98,5 +100,22 @@ describe("device labels", () => {
     expect(deviceNumberLabels([a, c, b])).toEqual(["Appareil 1", "Appareil 1", "Appareil 2"]);
     // Backend re-sorted by last push: each device keeps its number.
     expect(deviceNumberLabels([b, a, c])).toEqual(["Appareil 2", "Appareil 1", "Appareil 1"]);
+  });
+});
+
+describe("plan management labels (Story 9-2)", () => {
+  it("labels plans, tenant statuses and payment methods in French", () => {
+    expect(planLabel("FREE")).toBe("Gratuit");
+    expect(planLabel("PREMIUM_TRIAL")).toBe("Essai Premium");
+    expect(planLabel("PREMIUM")).toBe("Premium");
+    expect(tenantStatusLabel("ACTIVE")).toBe("Actif");
+    expect(tenantStatusLabel("SUSPENDED")).toBe("Suspendu");
+    expect(tenantStatusLabel("DELETION_PENDING")).toBe("Suppression planifiée");
+    expect(tenantStatusLabel(null)).toBe("—");
+    expect(paymentMethodLabel("MOBILE_MONEY")).toBe("Mobile Money");
+    expect(paymentMethodLabel("CASH")).toBe("Espèces");
+    expect(paymentMethodLabel("BANK_TRANSFER")).toBe("Virement bancaire");
+    expect(paymentMethodLabel("OTHER")).toBe("Autre");
+    expect(paymentMethodLabel("CRYPTO_WALLET")).toBe("Crypto wallet");
   });
 });

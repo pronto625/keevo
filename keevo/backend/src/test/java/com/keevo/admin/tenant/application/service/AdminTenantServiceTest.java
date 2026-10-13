@@ -124,7 +124,7 @@ class AdminTenantServiceTest {
     @DisplayName("listTenants — with PAID plan filter — filters Premium plans")
     void listTenants_withPlanFilter_filtersCorrectly() {
         UUID id = UUID.randomUUID();
-        AdminTenantListItem item = buildItem(id, "PAID", "ACTIVE");
+        AdminTenantListItem item = buildItem(id, "PREMIUM", "ACTIVE");
 
         when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(1L);
         when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class)))
@@ -136,7 +136,7 @@ class AdminTenantServiceTest {
         Page<AdminTenantListItem> result = service.execute(query);
 
         assertThat(result.getContent()).hasSize(1);
-        assertThat(result.getContent().get(0).plan()).isEqualTo("PAID");
+        assertThat(result.getContent().get(0).plan()).isEqualTo("PREMIUM");
     }
 
     @Test
@@ -144,7 +144,7 @@ class AdminTenantServiceTest {
     void listTenants_multipleTenants_loadsSchemaNamesInOneQuery() {
         List<AdminTenantListItem> rows = List.of(
                 buildItem(UUID.randomUUID(), "FREE", "ACTIVE"),
-                buildItem(UUID.randomUUID(), "PAID", "ACTIVE"),
+                buildItem(UUID.randomUUID(), "PREMIUM_TRIAL", "ACTIVE"),
                 buildItem(UUID.randomUUID(), "FREE", "SUSPENDED"));
         when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(3L);
         when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class))).thenReturn(rows);
@@ -192,7 +192,7 @@ class AdminTenantServiceTest {
         UUID b = UUID.randomUUID();
         when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(2L);
         when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class)))
-                .thenReturn(List.of(buildItem(a, "FREE", "ACTIVE"), buildItem(b, "PAID", "ACTIVE")));
+                .thenReturn(List.of(buildItem(a, "FREE", "ACTIVE"), buildItem(b, "PREMIUM", "ACTIVE")));
         doThrow(new org.springframework.dao.DataAccessResourceFailureException("db down")).when(jdbcTemplate)
                 .query(contains("WHERE id IN"), any(RowCallbackHandler.class), any(Object[].class));
 

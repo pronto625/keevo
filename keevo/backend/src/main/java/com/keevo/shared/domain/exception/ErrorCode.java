@@ -119,6 +119,7 @@ public enum ErrorCode {
     RATE_LIMIT_EXCEEDED,    // HTTP 429 — >100 req/min per tenant
     DELETION_ALREADY_REQUESTED, // HTTP 409 — deletion already pending (Story 14.5)
     DELETION_NOT_PENDING,       // HTTP 409 — no deletion pending to cancel (Story 14.5)
+    INVALID_STATE,              // HTTP 409 — admin action not allowed in the tenant's current state (Story 9-2)
     // ── Audit ─────────────────────────────────────────────────────────────
     AUDIT_IMMUTABLE,        // HTTP 403 — attempt to modify or delete an immutable audit entry
     AUDIT_ENTRY_NOT_FOUND,  // HTTP 404 — audit entry id unknown in the tenant (v1s-18-6)

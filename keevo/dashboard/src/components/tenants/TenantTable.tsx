@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
 import type { TenantListItem, TenantPage } from "@/types/tenant";
-import { TenantDetailDrawer } from "./TenantDetailDrawer";
+import { planLabel, tenantStatusLabel } from "@/lib/labels";
 
 interface TenantTableProps {
   data: TenantPage | undefined;
   isLoading: boolean;
   page: number;
   onPageChange: (page: number) => void;
+  /** Opens the tenant drawer (owned by the page: a single drawer for the table and the alerts). */
+  onSelect: (tenantId: string) => void;
 }
 
 function daysUntil(iso: string): number {
@@ -32,9 +33,8 @@ export function TenantTable({
   isLoading,
   page,
   onPageChange,
+  onSelect,
 }: TenantTableProps) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-
   const totalCount = data?.totalCount ?? 0;
   const pageSize = data?.pageSize ?? 25;
   const start = page * pageSize + 1;
@@ -89,7 +89,7 @@ export function TenantTable({
               data.items.map((item: TenantListItem) => (
                 <tr
                   key={item.id}
-                  onClick={() => setSelectedId(item.id)}
+                  onClick={() => onSelect(item.id)}
                   className={`cursor-pointer hover:bg-gray-50 ${
                     item.status === "DELETION_PENDING"
                       ? "bg-amber-50 border-l-2 border-amber-400"
@@ -109,16 +109,16 @@ export function TenantTable({
                   <td className="px-4 py-3">{item.ownerPhone}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      item.plan === "PAID"
+                      item.plan !== "FREE"
                         ? "bg-purple-100 text-purple-800"
                         : "bg-gray-100 text-gray-700"
                     }`}>
-                      {item.plan}
+                      {planLabel(item.plan)}
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${STATUS_BADGE[item.status]}`}>
-                      {item.status}
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${STATUS_BADGE[item.status] ?? "bg-gray-100 text-gray-700"}`}>
+                      {tenantStatusLabel(item.status)}
                     </span>
                   </td>
                   <td className="px-4 py-3">{formatDate(item.registeredAt)}</td>
@@ -152,12 +152,6 @@ export function TenantTable({
         </div>
       )}
 
-      {selectedId && (
-        <TenantDetailDrawer
-          tenantId={selectedId}
-          onClose={() => setSelectedId(null)}
-        />
-      )}
     </div>
   );
 }

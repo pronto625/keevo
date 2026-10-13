@@ -1,0 +1,99 @@
+package com.keevo.subscription.plan.application.service;
+
+import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.subscription.plan.domain.model.event.PlanActivatedEvent;
+import com.keevo.subscription.plan.domain.model.event.PlanDowngradedEvent;
+import com.keevo.subscription.plan.domain.model.event.PlanExpiredEvent;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.time.Instant;
+import java.util.Optional;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+@DisplayName("PlanWhatsAppNotificationListener (Story 9-2)")
+class PlanWhatsAppNotificationListenerTest {
+
+    private static final String SCHEMA = "kv_abc123";
+    private static final String PHONE = "+237600000001";
+    private static final UUID TENANT = UUID.randomUUID();
+
+    @Mock WhatsAppPort whatsApp;
+    @Mock OwnerRecipientResolver resolver;
+    @InjectMocks PlanWhatsAppNotificationListener listener;
+
+    @Test
+    @DisplayName("activation → « 🎉 … activé jusqu'au dd/MM/yyyy … » (WAT date)")
+    void activated() {
+        when(resolver.resolveOwnerWhatsAppPhone(SCHEMA)).thenReturn(Optional.of(PHONE));
+
+        listener.onActivated(new PlanActivatedEvent(UUID.randomUUID(), TENANT, SCHEMA, PlanType.FREE,
+                Instant.parse("2026-11-12T22:59:59Z"), 10_000, Instant.now()));
+
+        verify(whatsApp).sendReport(PHONE,
+                "🎉 Votre compte Keevo Premium est activé jusqu'au 12/11/2026. Profitez de toutes les fonctionnalités !");
+    }
+
+    @Test
+    @DisplayName("downgrade → « … repassé au plan Gratuit. Vos données sont conservées. »")
+    void downgraded() {
+        when(resolver.resolveOwnerWhatsAppPhone(SCHEMA)).thenReturn(Optional.of(PHONE));
+
+        listener.onDowngraded(new PlanDowngradedEvent(UUID.randomUUID(), TENANT, SCHEMA, PlanType.PREMIUM, null, Instant.now()));
+
+        verify(whatsApp).sendReport(PHONE,
+                "Votre abonnement Keevo est repassé au plan Gratuit. Vos données sont conservées.");
+    }
+
+    @Test
+    @DisplayName("expiry → « … Premium a expiré : … plan Gratuit. Vos données sont conservées. »")
+    void expired() {
+        when(resolver.resolveOwnerWhatsAppPhone(SCHEMA)).thenReturn(Optional.of(PHONE));
+
+        listener.onExpired(new PlanExpiredEvent(TENANT, SCHEMA, PlanType.PREMIUM, Instant.now()));
+
+        verify(whatsApp).sendReport(PHONE,
+                "Votre abonnement Keevo Premium a expiré : votre compte est passé au plan Gratuit. Vos données sont conservées.");
+    }
+
+    @Test
+    @DisplayName("no owner phone → nothing sent")
+    void noPhone() {
+        when(resolver.resolveOwnerWhatsAppPhone(SCHEMA)).thenReturn(Optional.empty());
+
+        listener.onExpired(new PlanExpiredEvent(TENANT, SCHEMA, PlanType.PREMIUM, Instant.now()));
+
+        verifyNoInteractions(whatsApp);
+    }
+
+    @Test
+    @DisplayName("WhatsApp down → exception swallowed (the admin action already committed)")
+    void sendFailure_swallowed() {
+        when(resolver.resolveOwnerWhatsAppPhone(SCHEMA)).thenReturn(Optional.of(PHONE));
+        doThrow(new RuntimeException("down")).when(whatsApp).sendReport(anyString(), anyString());
+
+        assertThatCode(() -> listener.onDowngraded(new PlanDowngradedEvent(UUID.randomUUID(), TENANT, SCHEMA,
+                PlanType.PREMIUM, null, Instant.now()))).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("resolver failure → swallowed too")
+    void resolverFailure_swallowed() {
+        when(resolver.resolveOwnerWhatsAppPhone(SCHEMA)).thenThrow(new RuntimeException("db"));
+
+        assertThatCode(() -> listener.onExpired(new PlanExpiredEvent(TENANT, SCHEMA, PlanType.PREMIUM, Instant.now())))
+                .doesNotThrowAnyException();
+        verifyNoInteractions(whatsApp);
+    }
+}

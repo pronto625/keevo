@@ -1,5 +1,6 @@
 "use client";
 
+import { tenantStatusLabel } from "@/lib/labels";
 import type { TenantFilters } from "@/types/tenant";
 
 interface TenantFilterChipsProps {
@@ -11,8 +12,10 @@ export function TenantFilterChips({ filters, onClear }: TenantFilterChipsProps) 
   const chips: { label: string; key: keyof TenantFilters }[] = [];
 
   if (filters.search) chips.push({ label: `"${filters.search}"`, key: "search" });
-  if (filters.plan !== "ALL") chips.push({ label: `Plan: ${filters.plan}`, key: "plan" });
-  if (filters.status !== "ALL") chips.push({ label: `Statut: ${filters.status}`, key: "status" });
+  if (filters.plan !== "ALL")
+    chips.push({ label: `Plan: ${filters.plan === "PAID" ? "Premium et essai" : "Gratuit"}`, key: "plan" });
+  if (filters.status !== "ALL")
+    chips.push({ label: `Statut: ${tenantStatusLabel(filters.status)}`, key: "status" });
   if (filters.registeredFrom) chips.push({ label: `Depuis: ${filters.registeredFrom}`, key: "registeredFrom" });
   if (filters.registeredTo) chips.push({ label: `Jusqu'au: ${filters.registeredTo}`, key: "registeredTo" });
   if (filters.lastActivityFrom) chips.push({ label: `Activité depuis: ${filters.lastActivityFrom}`, key: "lastActivityFrom" });

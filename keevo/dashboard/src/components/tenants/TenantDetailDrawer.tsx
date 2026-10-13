@@ -7,7 +7,9 @@ import {
   forceDelete,
   getTenantDetail,
 } from "@/lib/api/admin-tenants";
+import { planLabel, tenantStatusLabel } from "@/lib/labels";
 import type { TenantDetail } from "@/types/tenant";
+import { PlanSection } from "./PlanSection";
 
 interface TenantDetailDrawerProps {
   tenantId: string;
@@ -97,10 +99,10 @@ export function TenantDetailDrawer({ tenantId, onClose }: TenantDetailDrawerProp
                   <Row label="Propriétaire" value={data.tenant.ownerPhone} />
                   <Row label="Plan" value={
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      data.tenant.plan === "PAID"
+                      (data.subscription?.planType ?? data.tenant.plan) !== "FREE"
                         ? "bg-purple-100 text-purple-800"
                         : "bg-gray-100 text-gray-700"
-                    }`}>{data.tenant.plan}</span>
+                    }`}>{planLabel(data.subscription?.planType ?? data.tenant.plan)}</span>
                   } />
                   <Row label="Statut" value={
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${
@@ -109,7 +111,7 @@ export function TenantDetailDrawer({ tenantId, onClose }: TenantDetailDrawerProp
                         : data.tenant.status === "DELETION_PENDING"
                         ? "bg-amber-100 text-amber-800"
                         : "bg-red-100 text-red-800"
-                    }`}>{data.tenant.status}</span>
+                    }`}>{tenantStatusLabel(data.tenant.status)}</span>
                   } />
                   <Row label="Inscription" value={formatDate(data.tenant.registeredAt)} />
                   <Row label="Dernière activité" value={formatDate(data.tenant.lastActivityAt)} />
@@ -117,6 +119,13 @@ export function TenantDetailDrawer({ tenantId, onClose }: TenantDetailDrawerProp
                   <Row label="Employés" value={data.tenant.employeeCount} />
                 </dl>
               </section>
+
+              {/* Story 9-2 — Plan & paiements */}
+              <PlanSection
+                tenantId={tenantId}
+                status={data.tenant.status}
+                subscription={data.subscription ?? null}
+              />
 
               {/* DELETION_PENDING actions */}
               {data.tenant.status === "DELETION_PENDING" && (
@@ -258,7 +267,7 @@ export function TenantDetailDrawer({ tenantId, onClose }: TenantDetailDrawerProp
             </h3>
             <p className="text-sm text-gray-500 mb-4">
               {confirmAction === "cancel"
-                ? "Le tenant sera remis en statut ACTIVE."
+                ? "Le tenant sera remis en statut Actif."
                 : "Cette action est irréversible. Le tenant sera immédiatement supprimé."}
             </p>
             <div className="flex gap-3 justify-end">

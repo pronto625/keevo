@@ -37,7 +37,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * use fully-qualified table names ({@code "kv_xxx"."table"}) so no {@code search_path}
  * is needed. Raw JDBC is intentional and correct for this use case.
  *
- * <p><b>Tables NOT synced to tenant schemas (global-only):</b> {@code tenants}.
+ * <p><b>Tables NOT synced to tenant schemas (global-only):</b> {@code tenants},
+ * {@code tenant_payments}, {@code tenant_plan_events}, {@code plan_expiry_reminders}.
  *
  * <p>Architecture: shared infrastructure — zero knowledge of business domain.
  */
@@ -53,7 +54,10 @@ public class TenantSchemaSyncService {
      * Tables that live in {@code public} for global/admin use only and must
      * NOT be replicated into tenant schemas.
      */
-    private static final Set<String> GLOBAL_ONLY_TABLES = Set.of("tenants");
+    private static final Set<String> GLOBAL_ONLY_TABLES = Set.of(
+            "tenants",
+            // Story 9-2 — super-admin plan management (public only, reference public.tenants)
+            "tenant_payments", "tenant_plan_events", "plan_expiry_reminders");
 
     /**
      * Tables that are tenant-schema-specific (not mirrored from {@code public}) but MUST

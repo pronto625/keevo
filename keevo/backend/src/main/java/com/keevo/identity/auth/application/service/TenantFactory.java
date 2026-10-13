@@ -5,6 +5,8 @@ import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.auth.domain.model.TenantStatus;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
+import com.keevo.subscription.plan.domain.model.PlanChangeCause;
+import com.keevo.subscription.plan.domain.port.out.PlanChangeRecorder;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -27,13 +29,16 @@ public class TenantFactory {
     private final TenantCodeGenerator codeGenerator;
     private final TenantRepository tenantRepository;
     private final TenantSchemaProvisioner schemaProvisioner;
+    private final PlanChangeRecorder planChangeRecorder;
 
     public TenantFactory(TenantCodeGenerator codeGenerator,
                          TenantRepository tenantRepository,
-                         TenantSchemaProvisioner schemaProvisioner) {
+                         TenantSchemaProvisioner schemaProvisioner,
+                         PlanChangeRecorder planChangeRecorder) {
         this.codeGenerator    = codeGenerator;
         this.tenantRepository = tenantRepository;
         this.schemaProvisioner = schemaProvisioner;
+        this.planChangeRecorder = planChangeRecorder;
     }
 
     /**
@@ -69,8 +74,12 @@ public class TenantFactory {
         // 3. Provision tenant schema: CREATE SCHEMA + DDL tables + seed data
         //    Programmatic DDL defined in TenantSchemaProvisioner (no SQL files).
         //    Compensating action (dropSchemaIfExists) prevents orphaned schemas on failure (AC4).
+        //    Story 9-2 — plan history starts with the trial (same registration transaction); inside
+        //    the try so a failure also drops the provisioned schema.
         try {
             schemaProvisioner.provision(savedTenant.getId().toString(), schemaName);
+            planChangeRecorder.recordEvent(savedTenant.getId(), null, PlanType.PREMIUM_TRIAL,
+                    PlanChangeCause.REGISTRATION, null, null);
         } catch (RuntimeException e) {
             schemaProvisioner.dropSchemaIfExists(schemaName);
             throw e;

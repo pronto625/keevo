@@ -187,6 +187,33 @@ export function planLabel(code: string | null | undefined): string {
   return lookup(PLAN_LABELS, code, "—");
 }
 
+// Story 9-2 — tenant lifecycle status.
+const TENANT_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "Actif",
+  SUSPENDED: "Suspendu",
+  DELETION_PENDING: "Suppression planifiée",
+  DELETED: "Supprimé",
+};
+
+export function tenantStatusLabel(code: string | null | undefined): string {
+  return lookup(TENANT_STATUS_LABELS, code, "—");
+}
+
+// Story 9-2 — off-platform payment methods.
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  MOBILE_MONEY: "Mobile Money",
+  CASH: "Espèces",
+  BANK_TRANSFER: "Virement bancaire",
+  OTHER: "Autre",
+};
+
+export function paymentMethodLabel(code: string | null | undefined): string {
+  return lookup(PAYMENT_METHOD_LABELS, code, "—");
+}
+
+/** Payment methods in display order (select options). */
+export const PAYMENT_METHODS = ["MOBILE_MONEY", "CASH", "BANK_TRANSFER", "OTHER"] as const;
+
 const USER_ROLE_LABELS: Record<string, string> = {
   OWNER: "Propriétaire",
   EMPLOYEE: "Employé",
