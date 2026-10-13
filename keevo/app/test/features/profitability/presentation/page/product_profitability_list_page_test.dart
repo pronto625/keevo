@@ -4,6 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:keevo/core/sync/sync_status.dart';
+import 'package:keevo/core/sync/sync_status_provider.dart';
+import 'package:keevo/features/profitability/presentation/widget/offline_data_banner.dart';
 import 'package:keevo/features/profitability/domain/model/product_profitability_model.dart';
 import 'package:keevo/features/profitability/domain/repository/profitability_repository.dart';
 import 'package:keevo/features/profitability/presentation/page/product_profitability_list_page.dart';
@@ -208,5 +211,23 @@ void main() {
 
       expect(find.text('Aucune vente sur cette période'), findsOneWidget);
     });
+  });
+
+  testWidgets('offline device → shared OfflineDataBanner', (tester) async {
+    final mockRepo = MockProfitabilityRepository();
+    when(() => mockRepo.getProductProfitability(params: any(named: 'params')))
+        .thenAnswer((_) async => [makeEntry()]);
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        profitabilityRepositoryProvider.overrideWithValue(mockRepo),
+        syncStatusProvider
+            .overrideWith((_) => Stream.value(SyncStatus.offlineOk)),
+      ],
+      child: const MaterialApp(home: ProductProfitabilityListPage()),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(OfflineDataBanner), findsOneWidget);
   });
 }

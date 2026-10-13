@@ -20,6 +20,23 @@ String _local(DateTime d) {
   return '${_d(d)}T12:00:00.000 $sign$h:$m';
 }
 
+String _2(int v) => v.toString().padLeft(2, '0');
+
+/// Drift text of a local wall-clock instant, with the device offset
+/// (`2026-03-17T00:01:00.000 +01:00`).
+String _localAt(DateTime d) {
+  final o = d.timeZoneOffset;
+  final sign = o.isNegative ? '-' : '+';
+  return '${_d(d)}T${_2(d.hour)}:${_2(d.minute)}:00.000 '
+      '$sign${_2(o.inHours.abs())}:${_2(o.inMinutes.abs() % 60)}';
+}
+
+/// UTC text (`…Z`) of a local instant, as written by rows synced in UTC.
+String _utcZ(DateTime local) {
+  final u = local.toUtc();
+  return '${_d(u)}T${_2(u.hour)}:${_2(u.minute)}:00.000Z';
+}
+
 /// v1s-14-2 — offline seller leaderboard computed from Drift (mirror of the
 /// backend SQL).
 void main() {
@@ -43,8 +60,8 @@ void main() {
   final day = DateTime(today.year, today.month, today.day);
 
   Future<void> sale(String id, String seller, String store, int amount,
-      {String status = 'COMPLETED', DateTime? at}) async {
-    final ts = _local(at ?? today);
+      {String status = 'COMPLETED', DateTime? at, String? raw}) async {
+    final ts = raw ?? _local(at ?? today);
     await db.customStatement(
       'INSERT INTO sales (id, store_id, employee_id, total_amount, '
       'payment_mode, status, occurred_at, created_at) VALUES '
@@ -146,5 +163,32 @@ void main() {
 
   test('no sale, no employee → empty', () async {
     expect(await load(), isEmpty);
+  });
+
+  test('day boundaries on from/to (local offset and UTC `Z` rows)', () async {
+    final from = DateTime(2026, 3, 17);
+    final to = DateTime(2026, 3, 18);
+    await employee('u1', 'Awa', 'Ndiaye', 's1');
+    // Around `from`.
+    await sale('f-out', 'u1', 's1', 1,
+        raw: _localAt(DateTime(2026, 3, 16, 23, 59)));
+    await sale('f-in', 'u1', 's1', 10,
+        raw: _localAt(DateTime(2026, 3, 17, 0, 1)));
+    // Around `to`.
+    await sale('t-in', 'u1', 's1', 100,
+        raw: _localAt(DateTime(2026, 3, 18, 23, 59)));
+    await sale('t-out', 'u1', 's1', 1000,
+        raw: _localAt(DateTime(2026, 3, 19, 0, 1)));
+    // UTC-stored rows: 00:30 local on `from` (in) and on to+1 (out).
+    await sale('z-in', 'u1', 's1', 10000,
+        raw: _utcZ(DateTime(2026, 3, 17, 0, 30)));
+    await sale('z-out', 'u1', 's1', 100000,
+        raw: _utcZ(DateTime(2026, 3, 19, 0, 30)));
+
+    final rows = await LocalProfitabilityDatasource(db)
+        .getSellerLeaderboard(from: from, to: to);
+
+    expect(rows.single.salesCount, 3);
+    expect(rows.single.totalRevenue, 10110);
   });
 }

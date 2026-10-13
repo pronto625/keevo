@@ -70,7 +70,8 @@ void main() {
 
     final result = await sut.getSellerLeaderboard(params: params);
 
-    expect(result.single.totalRevenue, 10000);
+    expect(result.entries.single.totalRevenue, 10000);
+    expect(result.fromLocal, isFalse);
     verify(() => remote.fetchSellerLeaderboard(
         from: '2026-10-01', to: '2026-10-07', storeId: 's1')).called(1);
     verifyNever(() => local.getSellerLeaderboard(
@@ -85,7 +86,8 @@ void main() {
 
     final result = await sut.getSellerLeaderboard(params: params);
 
-    expect(result.single.totalRevenue, 4000);
+    expect(result.entries.single.totalRevenue, 4000);
+    expect(result.fromLocal, isTrue);
     verify(() => local.getSellerLeaderboard(
         from: params.from, to: params.to, storeId: 's1')).called(1);
   });
@@ -98,7 +100,10 @@ void main() {
     stubLocal();
 
     final result = await sut.getSellerLeaderboard(params: params);
-    expect(result.single.totalRevenue, 4000);
+    expect(result.entries.single.totalRevenue, 4000);
+    // Online device but Drift data served → flagged so the page shows the
+    // offline banner (spec loop 1).
+    expect(result.fromLocal, isTrue);
   });
 
   test('API error (403) → rethrown, no local fallback', () async {

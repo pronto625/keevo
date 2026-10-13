@@ -39,16 +39,19 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     final repo = _MockRepo();
     when(() => repo.getSellerLeaderboard(params: any(named: 'params')))
-        .thenAnswer((_) async => const [
-              SellerLeaderboardEntry(
-                  rank: 0,
-                  sellerId: 'u1',
-                  sellerName: 'Awa Ndiaye',
-                  owner: false,
-                  salesCount: 1,
-                  totalRevenue: 1000,
-                  averageBasket: 1000),
-            ]);
+        .thenAnswer((_) async => const SellerLeaderboardResult(
+              fromLocal: false,
+              entries: [
+                SellerLeaderboardEntry(
+                    rank: 0,
+                    sellerId: 'u1',
+                    sellerName: 'Awa Ndiaye',
+                    owner: false,
+                    salesCount: 1,
+                    totalRevenue: 1000,
+                    averageBasket: 1000),
+              ],
+            ));
 
     await tester.pumpWidget(ProviderScope(
       overrides: [

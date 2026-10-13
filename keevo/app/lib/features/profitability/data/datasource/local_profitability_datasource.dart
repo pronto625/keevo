@@ -13,6 +13,10 @@ String _localDay(String column) =>
     "(CASE WHEN $column LIKE '%Z' THEN date($column, 'localtime') "
     "ELSE substr($column, 1, 10) END)";
 
+/// `YYYY-MM-DD` of a local date, comparable with [_localDay].
+String _ymd(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
+    '${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
 /// LocalProfitabilityDatasource — Drift SQL aggregation queries for profitability.
 ///
 /// Mirrors the SQL logic of JdbcProfitabilityRepository (backend) but runs
@@ -381,7 +385,8 @@ class LocalProfitabilityDatasource {
   // ── Seller leaderboard (v1s-14-2) ─────────────────────────────────────────
 
   /// Offline mirror of `JdbcSellerLeaderboardRepository`: COMPLETED sales
-  /// grouped by seller (`sales.employee_id` = user id) in `[from, to+1)`,
+  /// grouped by seller (`sales.employee_id` = user id) whose local day is in
+  /// `[from, to]` (= `[from 00:00, to+1 00:00)` local),
   /// optionally scoped to [storeId], plus the active employees (same scope)
   /// without sale (0/0). Name = latest employee row of that user, else
   /// « Propriétaire » when `users.role` is OWNER, else « Vendeur inconnu ».
@@ -391,13 +396,16 @@ class LocalProfitabilityDatasource {
     required DateTime to,
     String? storeId,
   }) async {
-    final toExclusive = DateTime(to.year, to.month, to.day + 1);
+    // Compare local days (not raw text): rows synced in UTC (`…Z`) would
+    // otherwise be bucketed on the wrong side of the [from, to+1) window.
     final rows = await _db.customSelect(
       'WITH sold AS ('
       '  SELECT s.employee_id AS seller_id, COUNT(s.id) AS sales_count, '
       '    COALESCE(SUM(s.total_amount), 0) AS total_revenue '
       '  FROM sales s '
-      '  WHERE s.status = ? AND s.occurred_at >= ? AND s.occurred_at < ? '
+      '  WHERE s.status = ? '
+      '    AND ${_localDay('s.occurred_at')} >= ? '
+      '    AND ${_localDay('s.occurred_at')} <= ? '
       '  ${storeId != null ? 'AND s.store_id = ? ' : ''}'
       '  GROUP BY s.employee_id'
       '), sellers AS ('
@@ -419,8 +427,8 @@ class LocalProfitabilityDatasource {
       'FROM sellers x',
       variables: [
         Variable.withString('COMPLETED'),
-        Variable.withDateTime(from),
-        Variable.withDateTime(toExclusive),
+        Variable.withString(_ymd(from)),
+        Variable.withString(_ymd(to)),
         if (storeId != null) Variable.withString(storeId),
         if (storeId != null) Variable.withString(storeId),
       ],

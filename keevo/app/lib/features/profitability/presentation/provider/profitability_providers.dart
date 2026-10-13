@@ -21,7 +21,10 @@ export '../../domain/model/product_profitability_model.dart'
         StorePerformanceEntry,
         DailyMarginEntry;
 export '../../domain/model/seller_leaderboard_model.dart'
-    show SellerLeaderboardEntry, SellerLeaderboardParams;
+    show
+        SellerLeaderboardEntry,
+        SellerLeaderboardParams,
+        SellerLeaderboardResult;
 
 // ── Infrastructure providers ──────────────────────────────────────────────────
 
@@ -198,9 +201,10 @@ List<SellerLeaderboardEntry> rankSellersBy(
 }
 
 /// Seller leaderboard provider (family by period + store). Unranked data;
-/// the page ranks with [rankSellersBy].
+/// the page ranks with [rankSellersBy] and shows the offline banner when
+/// `fromLocal` is true.
 final sellerLeaderboardProvider = FutureProvider.autoDispose
-    .family<List<SellerLeaderboardEntry>, SellerLeaderboardParams>(
+    .family<SellerLeaderboardResult, SellerLeaderboardParams>(
         (ref, params) async {
   final repo = ref.watch(profitabilityRepositoryProvider);
   return repo.getSellerLeaderboard(params: params);

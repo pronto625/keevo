@@ -19,8 +19,9 @@ abstract class ProfitabilityRepository {
   });
 
   /// FR44 seller leaderboard (v1s-14-2) — unranked order is not guaranteed;
-  /// callers rank with `rankSellersBy`.
-  Future<List<SellerLeaderboardEntry>> getSellerLeaderboard({
+  /// callers rank with `rankSellersBy`. `fromLocal` tells whether the Drift
+  /// aggregation was served (offline or backend unreachable).
+  Future<SellerLeaderboardResult> getSellerLeaderboard({
     required SellerLeaderboardParams params,
   });
 }

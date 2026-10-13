@@ -66,10 +66,26 @@ class LeaderboardControllerSecurityTest {
         verify(useCase).getLeaderboard(any());
     }
 
+    @Test
+    @DisplayName("anonymous → 401, use case never invoked")
+    void anonymousRejected() throws Exception {
+        filterAsAnonymous();
+        mockMvc.perform(get("/api/v1/reporting/leaderboard").param("from", "2026-10-12").param("to", "2026-10-12"))
+                .andExpect(status().isUnauthorized());
+        verifyNoInteractions(useCase);
+    }
+
     private void filterAs(String authority) throws Exception {
         doAnswer(inv -> {
             SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                     UUID.randomUUID(), null, List.of(new SimpleGrantedAuthority(authority))));
+            inv.getArgument(2, FilterChain.class).doFilter(inv.getArgument(0), inv.getArgument(1));
+            return null;
+        }).when(jwtAuthFilter).doFilter(any(), any(), any());
+    }
+
+    private void filterAsAnonymous() throws Exception {
+        doAnswer(inv -> {
             inv.getArgument(2, FilterChain.class).doFilter(inv.getArgument(0), inv.getArgument(1));
             return null;
         }).when(jwtAuthFilter).doFilter(any(), any(), any());

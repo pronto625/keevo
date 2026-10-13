@@ -24,7 +24,7 @@ class OfflineDataBanner extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Mode hors ligne — données du dernier sync affiché',
+                'Mode hors ligne — données de la dernière synchronisation affichées',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: accent,
                     ),

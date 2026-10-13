@@ -120,16 +120,17 @@ class ProfitabilityRepositoryImpl implements ProfitabilityRepository {
   // ── Seller leaderboard (v1s-14-2) ─────────────────────────────
 
   @override
-  Future<List<SellerLeaderboardEntry>> getSellerLeaderboard({
+  Future<SellerLeaderboardResult> getSellerLeaderboard({
     required SellerLeaderboardParams params,
   }) async {
     if (await _connectivity.isOnline()) {
       try {
-        return await _remote.fetchSellerLeaderboard(
+        final entries = await _remote.fetchSellerLeaderboard(
           from: _fmt(params.from),
           to: _fmt(params.to),
           storeId: params.storeId,
         );
+        return SellerLeaderboardResult(entries: entries, fromLocal: false);
       } on DioException catch (e) {
         // API answers (4xx/5xx, incl. 403) are rethrown; only a transport
         // failure falls back to the local Drift aggregation.
@@ -138,11 +139,12 @@ class ProfitabilityRepositoryImpl implements ProfitabilityRepository {
             name: 'ProfitabilityRepository');
       }
     }
-    return _local.getSellerLeaderboard(
+    final entries = await _local.getSellerLeaderboard(
       from: params.from,
       to: params.to,
       storeId: params.storeId,
     );
+    return SellerLeaderboardResult(entries: entries, fromLocal: true);
   }
 
   // ── Helpers ───────────────────────────────────────────────────

@@ -29,7 +29,8 @@ class SellerLeaderboardRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final medal = _medal(entry.rank);
+    // Idle sellers (0 sale) never get a medal, even when ranked 1–3.
+    final medal = entry.salesCount > 0 ? _medal(entry.rank) : null;
     final ventes = entry.salesCount <= 1 ? 'vente' : 'ventes';
 
     return Padding(

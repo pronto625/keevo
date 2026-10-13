@@ -72,3 +72,17 @@ class SellerLeaderboardParams {
   @override
   int get hashCode => Object.hash(from, to, storeId);
 }
+
+/// Result of a leaderboard read: the (unranked) entries plus where they came
+/// from. [fromLocal] is true whenever the local Drift aggregation was served
+/// (device offline OR backend unreachable) so the page can show the offline
+/// banner instead of presenting possibly stale data as live.
+class SellerLeaderboardResult {
+  final List<SellerLeaderboardEntry> entries;
+  final bool fromLocal;
+
+  const SellerLeaderboardResult({
+    required this.entries,
+    required this.fromLocal,
+  });
+}

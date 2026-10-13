@@ -23,10 +23,15 @@ class SellerLeaderboardPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Refresh when the device comes back online (backend becomes the source).
+    // Refresh when the device comes back online (backend becomes the
+    // source). Only a real offline → online transition re-fetches: the first
+    // status emission (loading → online) must not double the initial fetch.
     ref.listen<AsyncValue<SyncStatus>>(syncStatusProvider, (prev, next) {
-      if (next.valueOrNull == SyncStatus.online &&
-          prev?.valueOrNull != SyncStatus.online) {
+      final wasOffline = switch (prev?.valueOrNull) {
+        SyncStatus.offlineOk || SyncStatus.offlineCritical => true,
+        _ => false,
+      };
+      if (wasOffline && next.valueOrNull == SyncStatus.online) {
         ref.invalidate(sellerLeaderboardProvider);
       }
     });
@@ -93,7 +98,10 @@ class SellerLeaderboardPage extends ConsumerWidget {
               ),
             ),
           ),
-          if (isOffline) const SliverToBoxAdapter(child: OfflineDataBanner()),
+          // Banner whenever the shown data is the local Drift aggregation:
+          // device offline, or online but the backend was unreachable.
+          if (isOffline || (dataAsync.valueOrNull?.fromLocal ?? false))
+            const SliverToBoxAdapter(child: OfflineDataBanner()),
           dataAsync.when(
             loading: () => const SliverFillRemaining(
               child: Center(child: CircularProgressIndicator()),
@@ -105,8 +113,8 @@ class SellerLeaderboardPage extends ConsumerWidget {
                 onRetry: () => ref.invalidate(sellerLeaderboardProvider),
               ),
             ),
-            data: (fetched) {
-              final entries = rankSellersBy(fetched, metric);
+            data: (result) {
+              final entries = rankSellersBy(result.entries, metric);
               if (entries.isEmpty) {
                 return SliverFillRemaining(
                   child: Center(

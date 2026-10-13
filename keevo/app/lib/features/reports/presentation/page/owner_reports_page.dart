@@ -19,7 +19,6 @@ import 'reports_page.dart';
 ///   📈 Rentabilité  — ProductProfitabilityListPage (Story 7.4)
 ///   🏪 Boutiques    — StorePerformancePage (Story 7.4)
 ///   👥 Équipe       — SellerLeaderboardPage (FR44, v1s-14-2 — OWNER only)
-///   📝 Brouillons   — PendingSalesPage
 ///
 /// Uses a StatefulWidget with an explicit TabController to keep it stable across
 /// provider-driven rebuilds, preventing GlobalKey conflicts that can arise when
