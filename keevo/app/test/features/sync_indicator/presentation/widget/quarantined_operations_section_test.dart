@@ -265,4 +265,67 @@ void main() {
     expect(find.text('Épicerie fine'), findsOneWidget);
     expect(find.text('Savon de Marseille'), findsNothing);
   });
+
+  // v1s-16-15 follow-up: a failing action says so instead of an unhandled
+  // error (and never « Opération abandonnée »).
+  testWidgets('Abandonner failing after the export says nothing was changed',
+      (tester) async {
+    shareSucceeds = true;
+    when(() => service.abandon(any())).thenThrow(StateError('db locked'));
+    await tester.pumpWidget(build('OWNER'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Abandonner'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Exporter et abandonner'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining('Action impossible'), findsOneWidget);
+    expect(find.text('Opération abandonnée'), findsNothing);
+  });
+
+  testWidgets('Renvoyer failing shows a message and starts no sync',
+      (tester) async {
+    when(() => service.release(any())).thenThrow(StateError('db locked'));
+    await tester.pumpWidget(build('EMPLOYEE'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Renvoyer'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining('Action impossible'), findsOneWidget);
+    expect(_FakeTrigger.syncs, 0);
+  });
+
+  testWidgets('Exporter failing shows a message instead of an unhandled error',
+      (tester) async {
+    when(() => service.exportText(any())).thenThrow(StateError('db locked'));
+    await tester.pumpWidget(build('EMPLOYEE'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Exporter'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining('Action impossible'), findsOneWidget);
+    expect(shared, isEmpty);
+  });
+
+  testWidgets('Abandonner whose export fails deletes nothing and says so',
+      (tester) async {
+    when(() => service.exportText(any())).thenThrow(StateError('db locked'));
+    await tester.pumpWidget(build('OWNER'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Abandonner'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Exporter et abandonner'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining('Action impossible'), findsOneWidget);
+    verifyNever(() => service.abandon(any()));
+  });
 }

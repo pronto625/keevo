@@ -34,8 +34,9 @@ class _PasswordChangePageState extends ConsumerState<PasswordChangePage> {
     try {
       await ref.read(signOutServiceProvider).signOut();
     } catch (_) {
-      // Best effort: the session secrets are cleared before anything that
-      // can fail offline; the login page is shown anyway.
+      // Best effort: every server call in signOut() tolerates being
+      // offline; if the device storage itself fails, the login page is
+      // shown anyway (its redirect treats unreadable storage as signed out).
     }
     if (mounted) context.go('/auth/login');
   }

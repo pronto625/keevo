@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:io' show IOException;
 
 import 'package:dio/dio.dart';
+import 'package:drift/native.dart' show SqliteException;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show PlatformException;
 
 import 'soft_icon_badge.dart';
 
@@ -13,9 +16,14 @@ const kAppGenericErrorMessage =
 /// SNAKE_CASE code, JSON, an exception class / stack noise or an HTTP code.
 final _technical = RegExp(
     r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
-    r'|\b[A-Z]+(_[A-Z]+)+\b'
+    r'|\b[A-Z]+(_[A-Z0-9]+)+\b'
     r'|[{\[]"'
-    r'|Exception|Error\b|\bnull\b|Bad state|status code|#0 ');
+    r'|Exception|Error\b|\bnull\b|Bad state|status code|#0 '
+    r"|Instance of '"
+    // HTTP reason phrases of a framework error body ({error: 'Not Found'}).
+    r'|^(Not Found|Bad Request|Forbidden|Unauthorized|Conflict'
+    r'|Method Not Allowed|Internal Server Error|Service Unavailable'
+    r'|Bad Gateway|Gateway Timeout)$');
 
 /// [value] when it is a String (an API body field may be a Map / List).
 String? _text(Object? value) => value is String ? value : null;
@@ -62,7 +70,8 @@ String appErrorMessage(Object error) {
         error.type == DioExceptionType.sendTimeout) {
       return 'La requête a expiré. Veuillez vérifier votre connexion.';
     }
-    if (error.type == DioExceptionType.connectionError) {
+    if (error.type == DioExceptionType.connectionError ||
+        error.error is IOException) {
       return 'Impossible de se connecter au serveur. Vérifiez votre réseau.';
     }
     return 'Le serveur n\'a pas pu traiter la demande. Réessayez plus tard.';
@@ -71,7 +80,12 @@ String appErrorMessage(Object error) {
     // App domain exceptions (ContactException, ProductException…) carry a
     // French `message`: show it when readable.
     // Dart core exceptions (FormatException…) carry English text: skipped.
-    final own = error is FormatException || error is TimeoutException
+    // Platform / IO / SQLite errors carry English technical text: skipped.
+    final own = error is FormatException ||
+            error is TimeoutException ||
+            error is IOException ||
+            error is SqliteException ||
+            error is PlatformException
         ? null
         : _readable(_messageOf(error));
     if (own != null) return own;
@@ -83,6 +97,8 @@ String appErrorMessage(Object error) {
     return _readable(raw.replaceFirst('Exception: ', '')) ??
         kAppGenericErrorMessage;
   }
+  // A notifier that stores its error as text (e.g. StockState.error).
+  if (error is String) return _readable(error) ?? kAppGenericErrorMessage;
   return kAppGenericErrorMessage;
 }
 
@@ -128,7 +144,7 @@ String _domainMessage(String code, Map<dynamic, dynamic> body) {
 ///   child: AppErrorWidget(error: e, onRetry: () => ref.invalidate(myProvider)),
 /// ),
 /// ```
-class AppErrorWidget extends StatelessWidget {
+class AppErrorWidget extends StatefulWidget {
   final Object error;
   final VoidCallback onRetry;
   final String? title;
@@ -143,6 +159,27 @@ class AppErrorWidget extends StatelessWidget {
   });
 
   @override
+  State<AppErrorWidget> createState() => _AppErrorWidgetState();
+}
+
+class _AppErrorWidgetState extends State<AppErrorWidget> {
+  // A provider refreshed from an error keeps its AsyncError until the new
+  // result arrives (`skipLoadingOnRefresh`), so the tap needs its own
+  // feedback. Cleared when a new error arrives; the button stays tappable.
+  bool _retrying = false;
+
+  @override
+  void didUpdateWidget(AppErrorWidget old) {
+    super.didUpdateWidget(old);
+    if (!identical(old.error, widget.error)) _retrying = false;
+  }
+
+  void _retry() {
+    setState(() => _retrying = true);
+    widget.onRetry();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
@@ -150,31 +187,41 @@ class AppErrorWidget extends StatelessWidget {
       child: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(32),
-          child: Semantics(
-            liveRegion: true,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SoftIconBadge(
-                  icon: Icons.error_outline_rounded,
-                  color: cs.error,
-                  size: 72,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SoftIconBadge(
+                icon: Icons.error_outline_rounded,
+                color: cs.error,
+                size: 72,
+              ),
+              const SizedBox(height: 16),
+              // Only the explanation is announced; the button stays a
+              // normal focusable control.
+              Semantics(
+                liveRegion: true,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(widget.title ?? 'Un problème est survenu',
+                        style: tt.titleMedium, textAlign: TextAlign.center),
+                    const SizedBox(height: 8),
+                    Text(widget.message ?? appErrorMessage(widget.error),
+                        style:
+                            tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                        textAlign: TextAlign.center),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                Text(title ?? 'Un problème est survenu',
-                    style: tt.titleMedium, textAlign: TextAlign.center),
-                const SizedBox(height: 8),
-                Text(message ?? appErrorMessage(error),
-                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                    textAlign: TextAlign.center),
-                const SizedBox(height: 24),
-                FilledButton.tonalIcon(
-                  onPressed: onRetry,
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('Réessayer'),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 24),
+              FilledButton.tonalIcon(
+                onPressed: _retry,
+                icon: Icon(_retrying
+                    ? Icons.hourglass_top_rounded
+                    : Icons.refresh_rounded),
+                label: Text(_retrying ? 'Nouvel essai…' : 'Réessayer'),
+              ),
+            ],
           ),
         ),
       ),

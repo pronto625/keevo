@@ -377,4 +377,58 @@ void main() {
       reason: 'the sheet draws its own handle',
     );
   });
+
+  // v1s-16-11 follow-up: the retry of a tab invalidates that tab's provider.
+  testWidgets('low-stock tab error → Réessayer reloads that tab only',
+      (tester) async {
+    final prefs = await _setupPrefs();
+    var lowStockCalls = 0;
+    var activeCalls = 0;
+    var failing = true;
+    final now = DateTime(2026);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        currentUserRoleProvider.overrideWith((ref) => 'OWNER'),
+        productListProvider.overrideWith((ref) async {
+          activeCalls++;
+          return const [];
+        }),
+        archivedProductListProvider.overrideWith((ref) async => const []),
+        outOfStockProductListProvider.overrideWith((ref) async => const []),
+        lowStockProductListProvider.overrideWith((ref) async {
+          lowStockCalls++;
+          if (failing) throw StateError('database is locked');
+          return [
+            ProductModel(
+                id: 'p1', name: 'Riz parfumé', createdAt: now, updatedAt: now),
+          ];
+        }),
+      ],
+      child: MaterialApp.router(
+        routerConfig: GoRouter(
+          initialLocation: '/catalog',
+          routes: [
+            GoRoute(path: '/catalog', builder: (_, __) => const CatalogPage()),
+          ],
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Stock Bas'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Réessayer'), findsOneWidget);
+    expect(find.textContaining('database'), findsNothing);
+    final activeBefore = activeCalls;
+
+    failing = false;
+    await tester.tap(find.text('Réessayer'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Réessayer'), findsNothing);
+    expect(find.text('Riz parfumé'), findsOneWidget);
+    expect(lowStockCalls, 2);
+    expect(activeCalls, activeBefore);
+  });
 }

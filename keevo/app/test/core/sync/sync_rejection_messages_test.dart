@@ -53,7 +53,7 @@ void main() {
           'Cet inventaire n\'est plus en cours');
     });
 
-    test('falls back to a generic message carrying the raw code', () {
+    test('an unknown code falls back to a generic message without the code', () {
       expect(friendlySyncRejectionReason('SOME_UNKNOWN_CODE'),
           'Refusé par le serveur');
     });
@@ -76,7 +76,7 @@ void main() {
       }
     });
 
-    test('falls back to the raw operation string when unknown', () {
+    test('an unknown operation falls back to a generic label', () {
       expect(friendlySyncOperationLabel('SOME_FUTURE_OP'), 'Opération');
     });
   });

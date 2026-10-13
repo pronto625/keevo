@@ -77,13 +77,19 @@ class ClientListNotifier extends _$ClientListNotifier {
   String _query = '';
 
   /// Reloads the list, keeping the current search and archive filter.
+  // Each reload takes a number: only the latest one may write the state
+  // (a slower earlier search must not overwrite the current one).
+  int _reloadSeq = 0;
+
   Future<void> refresh({bool? includeArchived}) async {
     if (includeArchived != null) _includeArchived = includeArchived;
+    final seq = ++_reloadSeq;
     state = const AsyncLoading();
     final repo = ref.read(clientRepositoryProvider);
-    state = await AsyncValue.guard(() => _query.isEmpty
+    final result = await AsyncValue.guard(() => _query.isEmpty
         ? repo.getAll(includeArchived: _includeArchived)
         : repo.search(_query, includeArchived: _includeArchived));
+    if (seq == _reloadSeq) state = result;
   }
 
   Future<void> search(String query) async {
@@ -160,13 +166,19 @@ class SupplierListNotifier extends _$SupplierListNotifier {
   String _query = '';
 
   /// Reloads the list, keeping the current search and archive filter.
+  // Each reload takes a number: only the latest one may write the state
+  // (a slower earlier search must not overwrite the current one).
+  int _reloadSeq = 0;
+
   Future<void> refresh({bool? includeArchived}) async {
     if (includeArchived != null) _includeArchived = includeArchived;
+    final seq = ++_reloadSeq;
     state = const AsyncLoading();
     final repo = ref.read(supplierRepositoryProvider);
-    state = await AsyncValue.guard(() => _query.isEmpty
+    final result = await AsyncValue.guard(() => _query.isEmpty
         ? repo.getAll(includeArchived: _includeArchived)
         : repo.search(_query, includeArchived: _includeArchived));
+    if (seq == _reloadSeq) state = result;
   }
 
   Future<void> search(String query) async {

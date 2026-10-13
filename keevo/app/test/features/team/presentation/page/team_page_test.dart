@@ -219,5 +219,28 @@ void main() {
       verifyNever(() => mockEmpRepo.listActivity());
       expect(find.textContaining("Aujourd'hui"), findsNothing);
     });
+
+    // v1s-16-11 follow-up: « Réessayer » reloads the employee list.
+    testWidgets('list load failure → Réessayer shows the employees',
+        (tester) async {
+      final page = buildPage(employees: [activeEmployee]);
+      var failing = true;
+      when(() => mockEmpRepo.listEmployees()).thenAnswer((_) async {
+        if (failing) throw StateError('database is locked');
+        return [activeEmployee];
+      });
+      await tester.pumpWidget(page);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Erreur de chargement'), findsOneWidget);
+      expect(find.textContaining('database'), findsNothing);
+
+      failing = false;
+      await tester.tap(find.text('Réessayer'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Jean Mbida'), findsOneWidget);
+      expect(find.text('Réessayer'), findsNothing);
+    });
   });
 }

@@ -5,7 +5,7 @@ created: '2026-10-11'
 status: 'done'
 baseline_revision: 'd982e66776ac6cb75169850be95eb92b7523d652'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-16-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/spec-v1s-16-12-sync-rejection-feedback.md'
@@ -138,6 +138,45 @@ deferred: []
   - `[false]` `[reject]` (intent 7) extra surfaces (backend check, DIV, sign-out, detail row) — all derived from the quarantine decision and recorded in the spec.
   - `[false]` `[reject]` (intent 8) fixed in `_pushBatch` rather than `_reconcileRejection` — descriptive; the money branch lives in `_pushBatch`.
 
+### 2026-10-13 — Review pass (follow-up)
+- verdicts: 40 findings — high 0, medium 2, low 20, false 9, maybe-false 0 (+ 9 descriptive intent rows)
+- findings:
+  - `[false]` `[reject]` (blind) store/product UUIDs and raw payment code in export and card — since v1s-16-20 `storeLabel`/`_productLabel` return names or "inconnu" labels without id, `paymentModeLabel` maps codes, no raw JSON block (`sync_quarantine_service.dart:259-346`).
+  - `[low]` `[reject]` (blind) abandon deletes non-quarantined VALIDATE/CANCEL of the sale not listed in the export — they must go (orphans); the sale itself, which carries the money, is exported; listing them adds a second chain query for a validation/cancellation flag.
+  - `[medium]` `[patch]` (blind) `_export` and the export step of `_abandon` unguarded — both wrapped, "Action impossible" SnackBar; 2 widget tests (Exporter failing, Abandonner whose export fails deletes nothing).
+  - `[low]` `[reject]` (blind) reattach sheet spinner forever on query failure — carried: local Drift select, no failure mode shown.
+  - `[low]` `[reject]` (blind) `WidgetRef` used after awaits in the card — the card is keyed to a chain still quarantined until `_refresh` runs right after the await; disposal needs a concurrent list invalidation during the share sheet, and the fix (container plumbing) is more than a direct correction.
+  - `[false]` `[reject]` (blind) stripping guard `head.entityId == null` vs `payload['saleId']` — `sale_repository_impl` always queues CREATE_SALE with `entityId: sale.id`; the null branch is unreachable for a sale.
+  - `[low]` `[patch]` (blind) stripping tests miss the value branch / non-quarantined validation — test added (remap value = re-attached product, validation queued after the quarantine). CANCEL_SALE / store-only paths unchanged by the follow-up: rejected.
+  - `[low]` `[reject]` (blind) re-attach to a product with variants / local stock not moved — carried from 2026-10-11 (variant check rejected as low UX; stock set by the next pull, Design Notes).
+  - `[false]` `[reject]` (blind) store check not tenant-scoped — repositories run on the tenant schema (`search_path` per request), a store of another tenant is invisible.
+  - `[low]` `[reject]` (blind) other ledger handlers lack the store check — intent names CREATE_SALE / CREATE_DAY_CLOSURE only; the others reference stock levels keyed by store and fail on FK.
+  - `[low]` `[reject]` (blind) abandon trace local only, no actor, unbounded ABANDON rows — carried PO decision (server keeps the refused payload in `sync_error_log`); ABANDON rows are rare.
+  - `[low]` `[reject]` (blind) non-sale abandon leaves local stock / lone VALIDATE/CANCEL head not reverted — carried: next pull, no longer protected, sets server truth.
+  - `[low]` `[reject]` (blind) sign-out text drops the pending part when both kinds exist — the blocked text is the actionable one; pending ops are still flushed before the dialog.
+  - `[low]` `[reject]` (blind) service count (ops) vs UI count (chains) — no UI caller of the service count.
+  - `[false]` `[reject]` (blind) owner-only enforced in UI only — device-local data, carried PO decision (intent 3 row 2026-10-11).
+  - `[low]` `[reject]` (blind) queue tab hides blocked section while pending list loads — carried (chains provider row 2026-10-11).
+  - `[low]` `[reject]` (blind) v28 migration test tied to the v29 step — runs the real migration path from v27 and asserts the column; a later migration breaking it is a useful signal.
+  - `[medium]` `[patch]` (gap) export failures unhandled — same entry as blind row 3.
+  - `[low]` `[patch]` (gap) only the blocked count is asserted after a quarantined push — test now also asserts `quarantinedSyncQueueProvider` and `pendingSyncCountProvider` rebuild.
+  - `[low]` `[patch]` (gap) value branch untested — same as blind row 7.
+  - `[false]` `[reject]` (gap other) schema version mismatch diff vs tree — the diff spans the base commit (v28) and today's tree (v29, v1s-18-7); both are right for their time.
+  - `[low]` `[reject]` (edge) reattach store leaves sale stock movements on the ghost store — carried (2026-10-11 row).
+  - `[low]` `[reject]` (edge) variant dropped — carried.
+  - `[low]` `[reject]` (edge) remap value of a real product used elsewhere dropped — a remapping value is a promoted draft id of this sale; no evidence a real product id appears there.
+  - `[low]` `[reject]` (edge) share `unavailable` counted as exported — carried PO reading "not dismissed".
+  - `[medium]` `[patch]` (edge) export/share throws — same as blind row 3.
+  - `[low]` `[patch]` (edge) abandon with an empty export is a silent no-op — the card now refreshes the list (Exporter and Abandonner).
+  - `[false]` `[reject]` (edge) chains provider groups null-entityId ops under a sale — `quarantined_operations_section.dart:56` only collects non-null entity ids.
+  - `[low]` `[reject]` (edge) lone VALIDATE/CANCEL abandon — same as blind row 12.
+  - `[false]` `[reject]` (edge) chain op APPLIED in the same batch deleted — matrix row "Chain op APPLIED in same batch → deleted as usual".
+  - `[false]` `[reject]` (edge) deactivated store accepted — carried 2026-10-11 decision (offline sale before deactivation is real).
+  - `[low]` `[reject]` (edge, claim) abandon deletes follow-ups absent from export — same as blind row 2.
+  - `[low]` `[reject]` (edge, claim) chain grows between export and abandon — carried.
+  - `[false]` `[reject]` (intent) R1–R4 readings, refresh surface, share mapping, stub-server proof, sync_error_log write, migration path, abandon scope — descriptive; the abandon scope beyond the literal rows was a 2026-10-11 patch; `sync_error_log` writing is the existing push pipeline (epic 5).
+  - `[low]` `[patch]` (intent) follow-up changes `keevo/app/lib` without a version bump — `pubspec.yaml` 1.1.49+48 → 1.1.50+49.
+
 ## Design Notes
 
 - Why quarantine rather than server-side ad-hoc lines: accepting a sale line for a product that does not exist would decrement no stock and break FR27 (movement history) and reporting; the owner, who knows what was sold, re-attaches it to a real product instead.
@@ -179,3 +218,18 @@ Status: done
 **Verification:** targeted files green (rejection 32, pull 34, quarantine service 13, providers 1, settings page 8, section 7, router+detail 17, misc 59). Chunked app: `test/core` 338 passed / 1 failed (baseline `offline_gate_banner_test`), `sync_indicator` 58, `auth` 79, `settings` 36, `pos` 206, `catalog` 109, `inventory` 172, `stores` 45 — all OK. `flutter analyze` 630 issues (= baseline, 9 pre-existing warnings, none in changed files). Backend chunks: `sync` 421, `shared` 386, `architecture` 3 — 0 failures/errors.
 
 **Residual risks:** a re-attached sale's queued `VALIDATE_SALE.productIdRemappings` is not rewritten (a refusal re-quarantines it with a notice); sales screens refresh after abandon only on the next sync cycle or reopen; local stock after abandon/re-attach stays approximate until the next pull; the `.g.dart` riverpod hash of `quarantinedSyncCount` regenerates at the next build_runner run (gitignored).
+
+### Follow-up pass 2026-10-13
+
+**Summary:** Rattacher now also cleans the sale's queued validations (draft remappings / initial stock naming the ghost product), so a re-attached chain is not refused again; every card action (Renvoyer, Exporter, Abandonner incl. its export step) reports a failure with "Action impossible … rien n'a été modifié"; an action on a chain already gone refreshes the list. Tests: v27→v28 migration, cross-batch chain on Drift, blocked list/count refresh after a quarantined push with a failing pull, sign-out wording. App 1.1.50+49.
+
+**Files changed:** `keevo/app/lib/core/sync/sync_quarantine_service.dart`, `keevo/app/lib/features/sync_indicator/presentation/widget/quarantined_operations_section.dart`, `keevo/app/pubspec.yaml`; tests `test/core/storage/sync_queue_v28_migration_test.dart` (new), `test/core/sync/{rest_sync_service_rejection,sync_quarantine_service,sync_trigger_active_store}_test.dart`, `test/features/settings/presentation/page/settings_page_test.dart`, `test/features/sync_indicator/presentation/widget/quarantined_operations_section_test.dart`.
+
+**Review:** 40 findings — patched 1 medium entry (export error handling) and 4 low; deferred 0; rejected 31 (false 9 + descriptive intent rows, low with reasons in the triage log).
+
+**Follow-up review recommended:** false — follow-up pass, no high patched.
+
+**Verification:** `flutter analyze` no error/warning (infos only). `test/core/sync` 261 ✓, `test/features/sync_indicator` 68 ✓, `sign_out_service_test` 13 ✓, `settings_page_test` 20 ✓, `sync_queue_v28_migration_test` 1 ✓.
+
+**Residual risks:** unchanged from the first pass (local stock approximate until next pull after abandon/re-attach; variant-required products on re-attach).
+

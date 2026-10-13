@@ -131,8 +131,17 @@ class RestSyncService implements SyncService {
         rewritten.removeAll(ids);
       }
       if (batch.isEmpty) continue;
-      allConflicts
-          .addAll(await _pushBatch(batch, removed, rewritten, quarantined));
+      try {
+        allConflicts
+            .addAll(await _pushBatch(batch, removed, rewritten, quarantined));
+      } on DioException {
+        // A later batch could not be sent (its ops stay queued, retried next
+        // push). The earlier batches already removed rolled-back /
+        // quarantined ops from the queue: their notices must still reach
+        // the user, otherwise they would be lost for good.
+        if (allConflicts.isEmpty) rethrow;
+        return allConflicts;
+      }
     }
     return allConflicts;
   }
@@ -577,6 +586,10 @@ class RestSyncService implements SyncService {
         }
         await _database.customStatement(
             'DELETE FROM product_suppliers WHERE product_id = ?', [entityId]);
+        // Local transfer history of the ghost product (its queued
+        // STOCK_TRANSFER ops are dropped by the caller).
+        await _database.customStatement(
+            'DELETE FROM stock_transfers WHERE product_id = ?', [entityId]);
         await _database
             .customStatement('DELETE FROM products WHERE id = ?', [entityId]);
       case 'CREATE_CATEGORY':

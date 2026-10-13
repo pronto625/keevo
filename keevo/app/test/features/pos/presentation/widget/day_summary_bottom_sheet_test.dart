@@ -186,5 +186,56 @@ void main() {
       final sheet = tester.widget<BottomSheet>(find.byType(BottomSheet));
       expect(sheet.showDragHandle, isFalse);
     });
+
+    // v1s-16-11 follow-up: the retry reloads the same summary instance and
+    // stops the 5 s auto-dismiss, so the sheet stays open with the data.
+    testWidgets('summary error → Réessayer shows the data, sheet stays open',
+        (tester) async {
+      final requested = <({String storeId, String? employeeId})>[];
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            todaySummaryProvider.overrideWith((ref, args) async {
+              requested.add(args);
+              if (requested.length == 1) throw StateError('db locked');
+              return mockSummary;
+            }),
+          ],
+          child: MaterialApp(
+            home: Consumer(
+              builder: (context, ref, _) => Scaffold(
+                body: TextButton(
+                  onPressed: () => DaySummaryBottomSheet.show(
+                    context: context,
+                    ref: ref,
+                    storeId: testStoreId,
+                    actorId: testActorId,
+                    employeeId: 'emp-1',
+                  ),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('Réessayer'), findsOneWidget);
+
+      await tester.tap(find.text('Réessayer'));
+      await tester.pump();
+      await tester.pump();
+      // Well past the 5 s auto-dismiss.
+      await tester.pump(const Duration(seconds: 6));
+
+      expect(find.byType(DaySummaryBottomSheet), findsOneWidget);
+      expect(find.text('iPhone 14'), findsOneWidget);
+      expect(requested, [
+        (storeId: testStoreId, employeeId: 'emp-1'),
+        (storeId: testStoreId, employeeId: 'emp-1'),
+      ]);
+    });
   });
 }

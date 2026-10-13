@@ -5,7 +5,7 @@ created: '2026-10-12'
 status: 'done'
 baseline_revision: '169727c3087dafd5996018758d6505bce6ba4ed0'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-16-context.md'
 warnings: [oversized, multiple-goals]
@@ -144,6 +144,47 @@ deferred: []
   - `[false]` `[reject]` (intent h) country-code detection / i18n rejected — recorded with reasons (NFR26, Cameroon target).
   - `[false]` `[reject]` (intent i) « already covered » items lack proof in diff — proof cited (files/tests/commit) in Design Notes and in the epic ticks.
 
+### 2026-10-13 — Review pass (follow-up)
+- verdicts: 38 findings — high 0, medium 3, low 22, false 8, maybe-false 5
+- findings:
+  - `[false]` `[reject]` (blind, gap, intent) diff mixes 18-4/18-7/14-6/16-2/16-20 hunks — the follow-up diff runs from the baseline to the current tree by design.
+  - `[false]` `[reject]` (blind, edge) no pubspec bump in the diff — excluded from the review diff on purpose; 16-13 bumped 1.1.25+24 → 1.1.26+25 in its commit.
+  - `[medium]` `[patch]` (blind, edge, gap) forced password change « Se déconnecter »: an unguarded refresh-token read in `SignOutService.signOut` could throw before `clearSessionSecrets`, leaving the session → login → splash → change-password again; the page comment claimed the opposite — read guarded (secrets always cleared), comment corrected; test « a failing refresh-token read still clears the session ».
+  - `[low]` `[reject]` (blind) offline sign-out waits through Dio timeouts with only a disabled button — bounded (10 s timeouts), best effort by design.
+  - `[low]` `[reject]` (blind, edge) trial-expired banner hidden while the subscription reload fails offline — the banner comes back with the next successful load; persisting the plan per tenant is a feature.
+  - `[medium]` `[patch]` (blind) previous tenant's deletion banner survives a sign-out / new sign-in (cached `deletionPendingStatusProvider`, ranked 2nd by `ShellBanners`) — invalidated with the subscription in `SignOutService` and `SessionClaimsApplier` (new session); test added.
+  - `[low]` `[reject]` (blind) `deletionPending` ranked above the day-6 offline warning — product priority choice; the 7-day block still shows its own modal.
+  - `[low]` `[patch]` (blind) suspended-session throttle used up when no messenger is mounted — messenger checked before acquiring; test added.
+  - `[low]` `[patch]` (blind, edge) contact search: a slower earlier query finishing last overwrote the latest — reload sequence number, only the latest reload writes the state; test added.
+  - `[false]` `[reject]` (blind) `kFreePlanLimits` wrong for non-FREE plans — `PlanType.PREMIUM_TRIAL` / `PREMIUM` are unlimited: only FREE can hit a limit.
+  - `[low]` `[reject]` (blind) loading spinners use `onSurfaceVariant` — every such button is disabled while loading (disabled foreground).
+  - `[maybe-false]` `[reject]` (blind) setting the device clock back extends the offline gate — the server gate (HTTP 423) enforces the 7 days; would need a threat-model decision; if true low.
+  - `[low]` `[reject]` (blind) stale FCM token only revoked within the same app run — v1s-16-2 scope; the backend prunes invalid tokens on send.
+  - `[false]` `[reject]` (blind) employee rejection SnackBar untested — covered by the 16-12 follow-up test (« employee: Voir only on blocked operations »).
+  - `[low]` `[reject]` (blind) `OfflineGateBanner` dismiss target small / `SyncWarningBanner` tokens — cosmetic, outside this story's items.
+  - `[maybe-false]` `[reject]` (edge) stored role null and JWT without role claim → splash sends owner to `/pos` — backend tokens always carry `role`; would need a token sample without it; if true low.
+  - `[low]` `[reject]` (edge) owner-only deep link with a missing role loses its destination — the splash opens the role's home; resuming deep links is a feature.
+  - `[low]` `[patch]` (edge) `/terms/view` opened without a stack: back went to `/auth/register` even when signed in — back goes to `/splash`, which decides; real-router test added.
+  - `[low]` `[reject]` (edge) dismissed day-5 warning stays hidden past midnight until restart — the banner provider re-evaluates on the next app start / sync.
+  - `[maybe-false]` `[reject]` (edge) list-page search leaks into checkout's client picker (shared notifier) — `/clients` is a top-level route left before checkout and the provider is auto-dispose; would need a navigation path keeping both mounted; if true low.
+  - `[low]` `[patch]` (edge, claim) password-change comment inaccurate — same root cause as the sign-out row.
+  - `[low]` `[patch]` (gap) stores-list plan-limit assertion matched any number — now « limite de 1 boutique »; create-employee plan-limit test (« limite de 3 employés ») added.
+  - `[low]` `[patch]` (gap) suspended-session wiring of `dioProvider` untested — test reads the real `dioProvider`, fires its interceptor's callback 5× with the root messenger → one SnackBar; plus an interceptor-level test.
+  - `[medium]` `[patch]` (gap) splash-failure marker only tested at the redirect-function level — real `appRouter` tests (`splash_login_navigation_test.dart`): broken storage + cached session lands on the login form and stays (verified to fail with the marker check removed), plain `/auth/login` passes the splash once then stops.
+  - `[low]` `[patch]` (intent) role-null owner-only, reset-password and `/terms/view` rows only function-tested — real-router tests added for the three.
+  - `[low]` `[patch]` (intent) contact query vs app-wide sync invalidation untested — provider-invalidation test added (query and toggle survive).
+  - `[low]` `[reject]` (intent) banners tested on `ShellBanners`, not `MainShell` — `MainShell` renders `ShellBanners` in one line.
+  - `[low]` `[reject]` (intent) sales-history period picker call site untested — same `clampDateRange` call as the tested `PeriodFilterChips`.
+  - `[low]` `[reject]` (intent) day-boundary timer cancellation not asserted — `onDispose` cancel read in code; a leaked timer would fail the provider tests (pending timers).
+  - `[maybe-false]` `[reject]` (intent) the 23-item ledger cannot be checked from the diff — dispositions are in this spec's Design Notes.
+  - `[maybe-false]` `[reject]` (intent) priority order is a product choice — recorded in Design Notes.
+  - `[false]` `[reject]` (gap, other) splash_login_navigation_test uncommitted — committed with this pass.
+  - `[false]` `[reject]` (gap, other) `session_presence_cache.dart` shown as new — v1s-15-10 file, outside this story.
+  - `[false]` `[reject]` (intent) a new `sessionPresenceCacheProvider` replaces `hasSession(storage)` untested — covered by its own `session_presence_cache_test.dart` and now by the real-router tests.
+  - `[false]` `[reject]` (edge) `/auth/login` deep link while signed out with a session marker — the marker is only set by the splash failure path.
+  - `[low]` `[reject]` (blind) `?? 0` limit for an unknown entity — every caller passes a known entity.
+  - `[low]` `[reject]` (blind) N startup notices across a route transition — throttle shared app-wide (provider singleton), now tested.
+
 ## Design Notes
 
 - Item dispositions: **already covered** — logout re-entrancy (guard + progress dialogs, 1041827; test added here), HF-2 currentUserId (reports_page + test), back in login mode (auth_page_navigation_test). **Closed by decision** — OTP single field (AC7 amended 2026-10-11). **Rejected** — legacy pending-sale flow (unreachable, see Code Map), English auth pages (NFR26), SIM/locale country detection (target market is Cameroon; Cameroonian devices often report fr_FR, which would pre-select France; the picker lets the user change country — constant centralized instead).
@@ -185,3 +226,17 @@ Status: done
 **Verification:** `flutter analyze` — 632 issues, no new error/warning (all warnings pre-existing). Chunked runs (`run-tests-chunked.sh app`, one directory at a time): test/core +384 −1 (known baseline `offline_gate_banner_test` amber colour), auth +86, contact +37, settings +43, profitability +45, onboarding +26, catalog +148, sync_indicator +62, team +89, stores +45, pos +212, account +20, reports +42, dashboard +85 — all OK.
 
 **Residual risks:** day-boundary timer test uses ~400 ms of real time; contact search trims the query; the offline-gate « dismissed today » flag does not roll over at midnight while the app stays open (pre-existing behaviour, rejected low).
+
+### Follow-up pass 2026-10-13
+
+**Summary:** The splash/login loop fix is now proven on the real `appRouter` (plus role-null owner-only, reset-password and `/terms/view` redirects). Sign-out from the forced password change always clears the session; the deletion banner no longer leaks to the next account; the suspended-session notice is not lost before a messenger exists and is tested through `dioProvider`; contact search ignores out-of-order results; read-only CGU back goes through the splash.
+
+**Files changed:** `keevo/app/lib/features/auth/presentation/provider/{sign_out_service.dart,session_claims_applier.dart,auth_provider.dart}`, `keevo/app/lib/features/auth/presentation/page/password_change_page.dart` (comment), `keevo/app/lib/features/contact/presentation/provider/contact_provider.dart`, `keevo/app/lib/features/onboarding/presentation/page/terms_page.dart`; tests: new `test/core/router/splash_login_navigation_test.dart`, `suspended_session_notice_test.dart`, `sign_out_service_test.dart`, `contact_provider_test.dart`, `stores_list_page_test.dart`, `create_employee_page_test.dart`; `keevo/app/pubspec.yaml` 1.1.49+48.
+
+**Review:** 38 findings — patched: 3 medium, 10 low entries; rejected 25; deferred 0.
+
+**Follow-up review recommended:** false — no high patched in this follow-up pass.
+
+**Verification:** `flutter analyze` 0 error / 0 warning. Lots: test/core 510 ✓, auth 104 ✓, contact 41 ✓, stores 45 ✓, team 124 ✓, onboarding 26 ✓, settings 50 ✓, pos 247 ✓, sync_indicator 64 ✓, account 20 ✓.
+
+**Residual risks:** trial-expired banner hidden while offline reloads fail (needs a persisted plan); clock-back vs offline gate relies on the server gate.

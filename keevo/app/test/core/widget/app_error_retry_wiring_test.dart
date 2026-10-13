@@ -147,6 +147,7 @@ void main() {
     expect(find.byType(AppErrorWidget), findsNothing);
     expect(find.text('Gratuit'), findsWidgets);
   });
+
   testWidgets('retry that fails again shows the error state again',
       (tester) async {
     var calls = 0;

@@ -44,6 +44,15 @@ class _EmptyQueueSyncService extends Mock implements SyncService {
   Future<int> quarantinedOperationCount() async => 0;
 }
 
+/// Pending queue with [blocked] quarantined operations (v1s-16-15).
+class _BlockedQueueSyncService extends _EmptyQueueSyncService {
+  _BlockedQueueSyncService(this.blocked);
+  final int blocked;
+
+  @override
+  Future<int> quarantinedOperationCount() async => blocked;
+}
+
 AuthRepository _authRepository() {
   final repo = _MockAuthRepository();
   when(() => repo.logout(any())).thenAnswer((_) async {});
@@ -517,7 +526,7 @@ void main() {
   });
 
   group('SettingsPage — unsynced operations at sign-out', () {
-    Widget page(_FakeSignOutService service) => ProviderScope(
+    Widget page(_FakeSignOutService service, {int blocked = 0}) => ProviderScope(
           overrides: [
             fcmServiceProvider.overrideWithValue(mockFcm),
             remoteDeviceTokenDataSourceProvider.overrideWithValue(mockTokenDs),
@@ -526,7 +535,8 @@ void main() {
             sharedPreferencesProvider.overrideWithValue(prefs),
             flutterSecureStorageProvider
                 .overrideWithValue(const FlutterSecureStorage()),
-            syncServiceProvider.overrideWithValue(_EmptyQueueSyncService()),
+            syncServiceProvider
+                .overrideWithValue(_BlockedQueueSyncService(blocked)),
             authRepositoryProvider.overrideWithValue(_authRepository()),
             signOutServiceProvider.overrideWithValue(service),
           ],
@@ -554,6 +564,32 @@ void main() {
 
       expect(service.signOutCalls, 0);
       expect(find.text('Login Page'), findsNothing);
+    });
+
+    // v1s-16-15 follow-up: blocked operations are never sent automatically —
+    // the dialog must not promise they will be.
+    testWidgets('blocked operations: the dialog says they will not be sent',
+        (tester) async {
+      final service = _FakeSignOutService(() async => false);
+      await tester.pumpWidget(page(service, blocked: 1));
+      await tester.pumpAndSettle();
+
+      await _tapLogoutAndConfirm(tester);
+
+      expect(find.textContaining('sont bloquées'), findsOneWidget);
+      expect(find.textContaining('prochaine connexion'), findsNothing);
+    });
+
+    testWidgets('only pending operations: sent at the next sign-in',
+        (tester) async {
+      final service = _FakeSignOutService(() async => false);
+      await tester.pumpWidget(page(service));
+      await tester.pumpAndSettle();
+
+      await _tapLogoutAndConfirm(tester);
+
+      expect(find.textContaining('prochaine connexion'), findsOneWidget);
+      expect(find.textContaining('sont bloquées'), findsNothing);
     });
 
     testWidgets('"Déconnecter quand même" signs out', (tester) async {

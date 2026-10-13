@@ -110,8 +110,9 @@ class _TermsPageState extends State<TermsPage> {
                       if (context.canPop()) {
                         context.pop();
                       } else {
-                        context.go(
-                            widget.readOnly ? '/auth/register' : '/onboarding');
+                        // Read-only CGU opened without a stack (deep link):
+                        // the splash decides (login/register or home).
+                        context.go(widget.readOnly ? '/splash' : '/onboarding');
                       }
                     },
                   ),

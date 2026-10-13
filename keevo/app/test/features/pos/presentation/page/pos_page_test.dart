@@ -9,6 +9,7 @@ import 'package:keevo/core/sync/sync_status.dart';
 import 'package:keevo/core/sync/sync_status_provider.dart';
 import 'package:keevo/features/pos/presentation/page/pos_page.dart';
 import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
+import 'package:keevo/features/pos/presentation/provider/pos_search_provider.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -29,6 +30,28 @@ class _CountingFrequentProductsNotifier extends _FakeFrequentProductsNotifier {
 
   @override
   Future<void> loadMore() async => loadMoreCalls++;
+}
+
+/// Fails the first search, succeeds afterwards; records every call.
+class _FlakySearchNotifier extends PosSearchNotifier {
+  static final calls = <(String, String?)>[];
+  String _q = '';
+
+  @override
+  String get lastQuery => _q;
+
+  @override
+  Future<void> search(String query, String? storeId) async {
+    _q = query;
+    calls.add((query, storeId));
+    if (calls.length == 1) {
+      state = AsyncError(StateError('db locked'), StackTrace.empty);
+      return;
+    }
+    state = const AsyncData([
+      PosProductResult(id: 'p1', name: 'Savon de Marseille', price: 500, stock: 3),
+    ]);
+  }
 }
 
 GoRouter _testRouter(Widget page) => GoRouter(
@@ -170,6 +193,33 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(_CountingFrequentProductsNotifier.loadMoreCalls, greaterThan(0));
+    });
+
+    testWidgets(
+        'search error → Réessayer re-runs the same query and shows results '
+        '(v1s-16-11 follow-up)', (tester) async {
+      _FlakySearchNotifier.calls.clear();
+      await tester.pumpWidget(buildApp(
+        overrides: [posSearchProvider.overrideWith(_FlakySearchNotifier.new)],
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'savon');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Réessayer'), findsOneWidget);
+      expect(find.textContaining('db locked'), findsNothing);
+
+      await tester.tap(find.text('Réessayer'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Réessayer'), findsNothing);
+      expect(find.text('Savon de Marseille'), findsOneWidget);
+      expect(_FlakySearchNotifier.calls, hasLength(2));
+      expect(_FlakySearchNotifier.calls[1].$1, 'savon');
+      expect(_FlakySearchNotifier.calls[1].$2, _FlakySearchNotifier.calls[0].$2);
+      // The query survives the retry (field not cleared).
+      expect(find.widgetWithText(TextField, 'savon'), findsOneWidget);
     });
   });
 }

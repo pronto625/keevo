@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/core/sync/sync_gate_provider.dart';
 import 'package:keevo/core/sync/sync_status.dart';
 import 'package:keevo/core/sync/sync_status_provider.dart';
@@ -20,6 +21,7 @@ void main() {
       syncStatusProvider.overrideWith((ref) => Stream.value(SyncStatus.online)),
       daysOfflineProvider.overrideWithValue(0),
       daysSinceLastSyncProvider.overrideWithValue(0),
+      currentUserRoleProvider.overrideWithValue('OWNER'),
     ]);
     // Safety net if an expectation fails before the in-body dispose.
     addTearDown(container.dispose);
@@ -152,5 +154,67 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
     container.dispose();
+  });
+
+  // v1s-16-12 follow-up: /settings/sync is OWNER-only — an employee gets no
+  // « Voir » on a plain rejection, but keeps it on a blocked operation.
+  testWidgets('employee: « Voir » only on blocked operations', (tester) async {
+    final container = ProviderContainer(overrides: [
+      syncStatusProvider.overrideWith((ref) => Stream.value(SyncStatus.online)),
+      daysOfflineProvider.overrideWithValue(0),
+      daysSinceLastSyncProvider.overrideWithValue(0),
+      currentUserRoleProvider.overrideWithValue('EMPLOYEE'),
+    ]);
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        home: Scaffold(
+          appBar: PreferredSize(
+            preferredSize: const Size.fromHeight(56),
+            child: AppBar(actions: const [SyncIndicator()]),
+          ),
+          body: const SizedBox.shrink(),
+        ),
+      ),
+    ));
+    await tester.pump();
+
+    container.read(pendingRejectionNotificationsProvider.notifier).state = [
+      {
+        'status': 'REJECTED',
+        'operation': 'UPDATE_PRODUCT',
+        'reason': 'FORBIDDEN',
+      },
+    ];
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.textContaining('Non synchronisé'), findsOneWidget);
+    expect(find.byType(SnackBarAction), findsNothing);
+
+    tester
+        .state<ScaffoldMessengerState>(find.byType(ScaffoldMessenger))
+        .hideCurrentSnackBar();
+    await tester.pumpAndSettle();
+
+    container.read(pendingRejectionNotificationsProvider.notifier).state = [
+      {
+        'status': 'REJECTED',
+        'operation': 'CREATE_SALE',
+        'reason': 'INSUFFICIENT_STOCK',
+        'quarantined': true,
+      },
+    ];
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.textContaining('Bloqué'), findsOneWidget);
+    expect(find.widgetWithText(SnackBarAction, 'Voir'), findsOneWidget);
+
+    tester
+        .state<ScaffoldMessengerState>(find.byType(ScaffoldMessenger))
+        .hideCurrentSnackBar();
+    await tester.pumpAndSettle();
+    container.dispose();
+    await tester.pumpWidget(const SizedBox());
   });
 }

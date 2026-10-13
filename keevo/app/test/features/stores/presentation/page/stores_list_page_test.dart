@@ -101,7 +101,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Nouvelle boutique'), findsNothing);
-    expect(find.textContaining('Vous avez atteint la limite'), findsOneWidget);
+    // FREE plan: 1 store (PlanType.FREE) — never the old hard-coded 3.
+    expect(find.textContaining('Vous avez atteint la limite de 1 boutique '),
+        findsOneWidget);
     expect(find.text(StoreException.planLimitExceeded().message), findsNothing);
   });
 

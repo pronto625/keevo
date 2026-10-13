@@ -1,3 +1,9 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:drift/native.dart' show SqliteException;
+import 'package:flutter/services.dart' show PlatformException;
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,12 +39,50 @@ void main() {
       onRetry: () => calls++,
     )));
 
-    await tester.tap(find.text('Réessayer'));
+    await tester.tap(find.byType(FilledButton));
     await tester.pump();
-    await tester.tap(find.text('Réessayer'));
+    await tester.tap(find.byType(FilledButton));
     await tester.pump();
 
     expect(calls, 2);
+  });
+
+  // v1s-16-11 follow-up: a provider refreshed from an error keeps showing it
+  // until the new result arrives — the tap gets its own feedback.
+  testWidgets('tap shows « Nouvel essai… » until a new error arrives',
+      (tester) async {
+    final first = Exception('Base locale indisponible');
+    await tester.pumpWidget(_host(AppErrorWidget(error: first, onRetry: () {})));
+
+    await tester.tap(find.text('Réessayer'));
+    await tester.pump();
+    expect(find.text('Nouvel essai…'), findsOneWidget);
+    expect(find.text('Réessayer'), findsNothing);
+
+    // Same error rebuilt (refresh in flight) → still retrying.
+    await tester.pumpWidget(_host(AppErrorWidget(error: first, onRetry: () {})));
+    expect(find.text('Nouvel essai…'), findsOneWidget);
+
+    // The retry failed again → button back to « Réessayer ».
+    await tester.pumpWidget(_host(AppErrorWidget(
+        error: Exception('Base locale indisponible'), onRetry: () {})));
+    expect(find.text('Réessayer'), findsOneWidget);
+  });
+
+  testWidgets('only the explanation is a live region, not the button',
+      (tester) async {
+    await tester.pumpWidget(_host(AppErrorWidget(
+      error: Exception('Base locale indisponible'),
+      onRetry: () {},
+    )));
+
+    final live = find.byWidgetPredicate(
+        (w) => w is Semantics && w.properties.liveRegion == true);
+    expect(live, findsOneWidget);
+    expect(find.descendant(of: live, matching: find.text('Un problème est survenu')),
+        findsOneWidget);
+    expect(find.descendant(of: live, matching: find.byType(FilledButton)),
+        findsNothing);
   });
 
   testWidgets('custom title and message override the defaults', (tester) async {
@@ -147,6 +191,48 @@ void main() {
           kAppGenericErrorMessage);
       expect(appErrorMessage(Exception('Connexion perdue')), 'Connexion perdue');
     });
+
+    test('English platform / IO / SQLite texts are never shown', () {
+      expect(appErrorMessage(const SocketException('Failed host lookup')),
+          kAppGenericErrorMessage);
+      expect(appErrorMessage(SqliteException(5, 'database is locked')),
+          kAppGenericErrorMessage);
+      expect(appErrorMessage(PlatformException(code: 'x', message: 'denied')),
+          kAppGenericErrorMessage);
+      expect(appErrorMessage(_Opaque()), kAppGenericErrorMessage);
+      expect(appErrorMessage(Exception('HTTP_404')), kAppGenericErrorMessage);
+    });
+
+    test('framework reason phrase in the body is not shown', () {
+      expect(appErrorMessage(dio({'error': 'Not Found'})),
+          isNot('Not Found'));
+      expect(appErrorMessage(dio({'error': 'Bad Request', 'message': 'Nom requis'})),
+          'Nom requis');
+    });
+
+    test('Dio error wrapping a socket error → connection message', () {
+      final e = DioException(
+        requestOptions: RequestOptions(path: '/x'),
+        type: DioExceptionType.unknown,
+        error: const SocketException('Network is unreachable'),
+      );
+      expect(appErrorMessage(e), contains('Vérifiez votre réseau'));
+    });
+
+    test('TimeoutException text is never shown', () {
+      expect(appErrorMessage(TimeoutException('Future not completed')),
+          kAppGenericErrorMessage);
+    });
+
+    test('error stored as text: readable French kept, technical hidden', () {
+      expect(
+          appErrorMessage(
+              'Produit introuvable sur le serveur. Validez le brouillon d\'abord.'),
+          'Produit introuvable sur le serveur. Validez le brouillon d\'abord.');
+      expect(appErrorMessage('Exception: SqliteException(5): database is locked'),
+          kAppGenericErrorMessage);
+      expect(appErrorMessage(''), kAppGenericErrorMessage);
+    });
   });
 }
 
@@ -157,3 +243,6 @@ class _DomainException implements Exception {
   @override
   String toString() => 'DomainException[X_CODE]: $message';
 }
+
+/// An exception with neither a message nor a custom toString.
+class _Opaque implements Exception {}

@@ -28,6 +28,19 @@ class _FakeStockRepository implements StockRepository {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// Fails until [failing] is cleared (v1s-16-11 follow-up retry test).
+class _FlakyStockRepository extends _FakeStockRepository {
+  bool failing = true;
+  int calls = 0;
+
+  @override
+  Future<List<StockLevelModel>> getLevels(String productId) {
+    calls++;
+    if (failing) throw StateError('database is locked');
+    return super.getLevels(productId);
+  }
+}
+
 class _NoStores extends StoreListNotifier {
   @override
   Future<List<StoreModel>> build() async => const [];
@@ -55,5 +68,40 @@ void main() {
     // v1s-16-20: an unknown store reads « Boutique », never its id.
     expect(find.text('main'), findsNothing);
     expect(find.text('Boutique'), findsOneWidget);
+  });
+
+  testWidgets('levels load failure → Réessayer reloads the levels '
+      '(v1s-16-11 follow-up)', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final repo = _FlakyStockRepository();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        getStockLevelUseCaseProvider
+            .overrideWithValue(GetStockLevelUseCase(repo)),
+        primaryStoreIdProvider.overrideWith((_) async => null),
+        storeListNotifierProvider.overrideWith(_NoStores.new),
+      ],
+      child: const MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: StockLevelWidget(productId: 'p1'))),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Stock indisponible'), findsOneWidget);
+    expect(find.textContaining('database'), findsNothing);
+    expect(find.text('Boutique'), findsNothing);
+
+    repo.failing = false;
+    await tester.tap(find.text('Réessayer'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Stock indisponible'), findsNothing);
+    expect(find.text('Boutique'), findsOneWidget);
+    expect(repo.calls, 2);
   });
 }

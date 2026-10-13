@@ -271,9 +271,17 @@ class _QuarantinedChainCard extends ConsumerWidget {
     ref.read(syncTriggerNotifierProvider.notifier).triggerSync();
   }
 
+  static const _actionFailed =
+      'Action impossible pour le moment — rien n\'a été modifié. Réessayez.';
+
   Future<void> _release(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
-    await ref.read(syncQuarantineServiceProvider).release(chain.head.id);
+    try {
+      await ref.read(syncQuarantineServiceProvider).release(chain.head.id);
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(content: Text(_actionFailed)));
+      return;
+    }
     _refresh(ref);
     _push(ref);
     messenger.showSnackBar(const SnackBar(
@@ -281,10 +289,19 @@ class _QuarantinedChainCard extends ConsumerWidget {
   }
 
   Future<void> _export(BuildContext context, WidgetRef ref) async {
-    final text =
-        await ref.read(syncQuarantineServiceProvider).exportText(chain.head.id);
-    if (text.isEmpty) return;
-    await ref.read(quarantineExportShareProvider)(text);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final text = await ref
+          .read(syncQuarantineServiceProvider)
+          .exportText(chain.head.id);
+      if (text.isEmpty) {
+        _refresh(ref);
+        return;
+      }
+      await ref.read(quarantineExportShareProvider)(text);
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(content: Text(_actionFailed)));
+    }
   }
 
   Future<void> _abandon(BuildContext context, WidgetRef ref) async {
@@ -317,9 +334,19 @@ class _QuarantinedChainCard extends ConsumerWidget {
 
     final messenger = ScaffoldMessenger.of(context);
     final service = ref.read(syncQuarantineServiceProvider);
-    final text = await service.exportText(chain.head.id);
-    if (text.isEmpty) return;
-    final exported = await ref.read(quarantineExportShareProvider)(text);
+    final bool exported;
+    try {
+      final text = await service.exportText(chain.head.id);
+      if (text.isEmpty) {
+        // Already released or abandoned elsewhere: show the current list.
+        _refresh(ref);
+        return;
+      }
+      exported = await ref.read(quarantineExportShareProvider)(text);
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(content: Text(_actionFailed)));
+      return;
+    }
     if (!exported) {
       messenger.showSnackBar(SnackBar(
         content: Text(isSale
@@ -328,7 +355,14 @@ class _QuarantinedChainCard extends ConsumerWidget {
       ));
       return;
     }
-    final abandoned = await service.abandon(chain.head.id);
+    final bool abandoned;
+    try {
+      abandoned = await service.abandon(chain.head.id);
+    } catch (_) {
+      // Nothing was deleted (one transaction): say so, never « abandonnée ».
+      messenger.showSnackBar(const SnackBar(content: Text(_actionFailed)));
+      return;
+    }
     _refresh(ref);
     if (abandoned) {
       messenger.showSnackBar(

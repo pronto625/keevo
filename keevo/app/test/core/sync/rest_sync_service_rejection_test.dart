@@ -8,6 +8,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/core/sync/rest_sync_service.dart';
+import 'package:keevo/core/sync/sync_event_logger.dart';
+import 'package:keevo/core/sync/sync_quarantine_service.dart';
 import 'package:keevo/features/catalog/data/datasource/remote_product_datasource.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -768,6 +770,27 @@ void main() {
       expect((await sessionRow('s-1')).synced, true);
     });
 
+    // v1s-16-12 follow-up: only the rejected store's selection is cleared.
+    test('rejected CREATE_STORE keeps another active store selected',
+        () async {
+      await db.into(db.stores).insert(StoresCompanion.insert(
+          id: 'store-x',
+          name: 'Annexe',
+          tenantId: 't',
+          createdAt: now,
+          updatedAt: now));
+      await prefs.setString('active_store_id', 'store-1');
+      await insertPendingOp(
+          id: 'op-1', operation: 'CREATE_STORE', entityId: 'store-x');
+      stubPushResults([('op-1', 'REJECTED', 'PLAN_LIMIT_EXCEEDED')]);
+
+      final result = await syncService.push();
+
+      expect(await db.select(db.stores).get(), isEmpty);
+      expect(prefs.getString('active_store_id'), 'store-1');
+      expect(result.single['rolledBack'], true);
+    });
+
     test('ops removed by a cascade are not sent in a later batch', () async {
       await product('prod-x');
       await insertPendingOp(
@@ -1116,6 +1139,409 @@ void main() {
       expect(again.single['quarantined'], true);
       expect((await row('sale-op'))!.quarantinedAt, isNotNull);
       expect((await row('sale-op'))!.retryCount, 2);
+    });
+  });
+
+  // v1s-16-12 follow-up: payload rewriting + queue re-read between batches,
+  // end to end on the in-memory Drift database (several 50-op batches and
+  // successive pushes), the server answering per operation.
+  group('v1s-16-12 — multi-batch queue rewriting (Drift in memory)', () {
+    final now = DateTime(2026, 10, 1);
+
+    /// Every push request: operationId → payload as sent.
+    late List<Map<String, Map<String, dynamic>>> requests;
+
+    /// Server: [answer] decides (status, reason) per sent operation.
+    void server((String, String?) Function(Map<String, dynamic> op) answer) {
+      requests = [];
+      when(() => mockDio.post<dynamic>(any(), data: any(named: 'data')))
+          .thenAnswer((inv) async {
+        final ops = ((inv.namedArguments[#data] as Map)['operations'] as List)
+            .cast<Map<String, dynamic>>();
+        requests.add({
+          for (final o in ops)
+            o['operationId'] as String:
+                Map<String, dynamic>.of(o['payload'] as Map<String, dynamic>)
+        });
+        return Response(
+          requestOptions: RequestOptions(path: '/api/v1/sync/push'),
+          statusCode: 200,
+          data: {
+            'data': {
+              'results': [
+                for (final o in ops)
+                  () {
+                    final (status, reason) = answer(o);
+                    return {
+                      'operationId': o['operationId'],
+                      'status': status,
+                      'reason': reason,
+                    };
+                  }(),
+              ],
+            },
+          },
+        );
+      });
+    }
+
+    Future<void> fillers(int n) async {
+      for (var i = 0; i < n; i++) {
+        await insertPendingOp(
+            id: 'filler-$i', operation: 'UPDATE_CLIENT', entityId: 'c-$i');
+      }
+    }
+
+    test('a sale queued in a later batch is sent without the ghost client',
+        () async {
+      await db.into(db.clients).insert(ClientsCompanion.insert(
+          id: 'client-x',
+          name: 'Ghost',
+          phone: '600000000',
+          createdAt: now,
+          updatedAt: now));
+      await db.into(db.sales).insert(SalesCompanion.insert(
+          id: 'sale-1',
+          storeId: 'store-1',
+          employeeId: 'u',
+          totalAmount: 1000,
+          paymentMode: 'CASH',
+          clientId: const Value('client-x'),
+          createdAt: now));
+      await insertPendingOp(
+          id: 'op-client', operation: 'CREATE_CLIENT', entityId: 'client-x');
+      await fillers(55); // pushes the sale into the second batch
+      await insertPendingOp(
+          id: 'op-sale',
+          operation: 'CREATE_SALE',
+          entityId: 'sale-1',
+          payload: {'storeId': 'store-1', 'clientId': 'client-x'});
+      server((o) => o['operationId'] == 'op-client'
+          ? ('REJECTED', 'VALIDATION_ERROR')
+          : ('APPLIED', null));
+
+      final result = await syncService.push();
+
+      expect(requests, hasLength(2));
+      expect(requests[0].containsKey('op-sale'), false);
+      expect(requests[1]['op-sale'], {'storeId': 'store-1'},
+          reason: 'batch 2 re-reads the rewritten payload');
+      expect(await queuedIds(), isEmpty);
+      expect((await db.select(db.sales).getSingle()).clientId, isNull);
+      expect(result.map((r) => r['operation']), ['CREATE_CLIENT']);
+    });
+
+    test('a product queued in a later batch drops the ghost category and '
+        'is kept', () async {
+      await db.into(db.categories).insert(CategoriesCompanion.insert(
+          id: 'cat-x', name: 'Ghost', createdAt: now, updatedAt: now));
+      await db.into(db.products).insert(ProductsCompanion.insert(
+          id: 'prod-1',
+          name: 'Savon',
+          categoryId: const Value('cat-x'),
+          createdAt: now,
+          updatedAt: now));
+      await insertPendingOp(
+          id: 'op-cat', operation: 'CREATE_CATEGORY', entityId: 'cat-x');
+      await fillers(60);
+      await insertPendingOp(
+          id: 'op-prod',
+          operation: 'CREATE_PRODUCT',
+          entityId: 'prod-1',
+          payload: {'id': 'prod-1', 'name': 'Savon', 'categoryId': 'cat-x'});
+      server((o) => switch (o['operationId']) {
+            'op-cat' => ('REJECTED', 'FORBIDDEN'),
+            // A real server refuses a product still pointing at the ghost.
+            'op-prod' => (o['payload'] as Map).containsKey('categoryId')
+                ? ('REJECTED', 'CATEGORY_NOT_FOUND')
+                : ('APPLIED', null),
+            _ => ('APPLIED', null),
+          });
+
+      await syncService.push();
+
+      expect(requests[1]['op-prod']!.containsKey('categoryId'), false);
+      expect(await queuedIds(), isEmpty);
+      final p = await db.select(db.products).getSingle();
+      expect(p.id, 'prod-1');
+      expect(p.categoryId, isNull);
+    });
+
+    test('rewritten in the same batch: retried, then sent clean on the next '
+        'push', () async {
+      await db.into(db.categories).insert(CategoriesCompanion.insert(
+          id: 'cat-x', name: 'Ghost', createdAt: now, updatedAt: now));
+      await db.into(db.products).insert(ProductsCompanion.insert(
+          id: 'prod-1',
+          name: 'Savon',
+          categoryId: const Value('cat-x'),
+          createdAt: now,
+          updatedAt: now));
+      await insertPendingOp(
+          id: 'op-cat', operation: 'CREATE_CATEGORY', entityId: 'cat-x');
+      await insertPendingOp(
+          id: 'op-prod',
+          operation: 'CREATE_PRODUCT',
+          entityId: 'prod-1',
+          payload: {'id': 'prod-1', 'name': 'Savon', 'categoryId': 'cat-x'});
+      (String, String?) answer(Map<String, dynamic> o) =>
+          switch (o['operationId']) {
+            'op-cat' => ('REJECTED', 'FORBIDDEN'),
+            'op-prod' => (o['payload'] as Map).containsKey('categoryId')
+                ? ('REJECTED', 'CATEGORY_NOT_FOUND')
+                : ('APPLIED', null),
+            _ => ('APPLIED', null),
+          };
+      server(answer);
+
+      final first = await syncService.push();
+      expect(first.map((r) => r['operation']), ['CREATE_CATEGORY']);
+      expect(await queuedIds(), ['op-prod']);
+      expect(await db.select(db.products).get(), hasLength(1),
+          reason: 'the product is not rolled back for the ghost category');
+
+      server(answer);
+      final second = await syncService.push();
+
+      expect(requests.single['op-prod']!.containsKey('categoryId'), false);
+      expect(second, isEmpty);
+      expect(await queuedIds(), isEmpty);
+    });
+
+    test('a rewritten op refused for its own reason in a later batch is '
+        'reconciled normally', () async {
+      await db.into(db.categories).insert(CategoriesCompanion.insert(
+          id: 'cat-x', name: 'Ghost', createdAt: now, updatedAt: now));
+      await db.into(db.products).insert(ProductsCompanion.insert(
+          id: 'prod-1',
+          name: 'Savon',
+          categoryId: const Value('cat-x'),
+          createdAt: now,
+          updatedAt: now));
+      await insertPendingOp(
+          id: 'op-cat', operation: 'CREATE_CATEGORY', entityId: 'cat-x');
+      await fillers(52);
+      await insertPendingOp(
+          id: 'op-prod',
+          operation: 'CREATE_PRODUCT',
+          entityId: 'prod-1',
+          payload: {'id': 'prod-1', 'name': 'Savon', 'categoryId': 'cat-x'});
+      server((o) => switch (o['operationId']) {
+            'op-cat' => ('REJECTED', 'FORBIDDEN'),
+            'op-prod' => ('REJECTED', 'PLAN_LIMIT_EXCEEDED'),
+            _ => ('APPLIED', null),
+          });
+
+      final result = await syncService.push();
+
+      expect(result.map((r) => r['operation']),
+          ['CREATE_CATEGORY', 'CREATE_PRODUCT']);
+      expect(result.every((r) => r['rolledBack'] == true), true);
+      expect(await db.select(db.products).get(), isEmpty);
+      expect(await queuedIds(), isEmpty);
+    });
+
+    test('a later batch failing on the network keeps the earlier notices',
+        () async {
+      await db.into(db.products).insert(ProductsCompanion.insert(
+          id: 'prod-x', name: 'Ghost', createdAt: now, updatedAt: now));
+      await insertPendingOp(
+          id: 'op-prod', operation: 'CREATE_PRODUCT', entityId: 'prod-x');
+      await fillers(60);
+      var call = 0;
+      when(() => mockDio.post<dynamic>(any(), data: any(named: 'data')))
+          .thenAnswer((inv) async {
+        call++;
+        if (call == 2) {
+          throw DioException(
+            requestOptions: RequestOptions(path: '/api/v1/sync/push'),
+            type: DioExceptionType.connectionError,
+          );
+        }
+        final ops = ((inv.namedArguments[#data] as Map)['operations'] as List)
+            .cast<Map<String, dynamic>>();
+        return Response(
+          requestOptions: RequestOptions(path: '/api/v1/sync/push'),
+          statusCode: 200,
+          data: {
+            'data': {
+              'results': [
+                for (final o in ops)
+                  {
+                    'operationId': o['operationId'],
+                    'status':
+                        o['operationId'] == 'op-prod' ? 'REJECTED' : 'APPLIED',
+                    'reason': o['operationId'] == 'op-prod'
+                        ? 'PLAN_LIMIT_EXCEEDED'
+                        : null,
+                  }
+              ],
+            },
+          },
+        );
+      });
+
+      final result = await syncService.push();
+
+      expect(result.map((r) => r['operation']), ['CREATE_PRODUCT']);
+      expect(result.single['rolledBack'], true);
+      final left = await db.select(db.syncQueue).get();
+      expect(left, hasLength(11), reason: 'batch 2 stays queued');
+      expect(left.every((o) => o.retryCount == 1), true);
+    });
+
+    test('a first batch failing on the network still throws', () async {
+      await insertPendingOp(
+          id: 'op-1', operation: 'UPDATE_CLIENT', entityId: 'c-1');
+      when(() => mockDio.post<dynamic>(any(), data: any(named: 'data')))
+          .thenThrow(DioException(
+        requestOptions: RequestOptions(path: '/api/v1/sync/push'),
+        type: DioExceptionType.connectionError,
+      ));
+
+      await expectLater(syncService.push(), throwsA(isA<DioException>()));
+    });
+
+    test('a rolled-back product takes its local transfers along', () async {
+      await db.into(db.products).insert(ProductsCompanion.insert(
+          id: 'prod-x', name: 'Ghost', createdAt: now, updatedAt: now));
+      for (final (id, product) in const [('tr-x', 'prod-x'), ('tr-ok', 'p1')]) {
+        await db.into(db.stockTransfers).insert(StockTransfersCompanion.insert(
+            id: id,
+            sourceStoreId: 'store-1',
+            destinationStoreId: 'store-2',
+            productId: product,
+            quantity: 1,
+            actorId: 'u',
+            occurredAt: now));
+      }
+      await insertPendingOp(
+          id: 'op-prod', operation: 'CREATE_PRODUCT', entityId: 'prod-x');
+      await insertPendingOp(
+          id: 'op-tr',
+          operation: 'STOCK_TRANSFER',
+          entityId: 'tr-x',
+          payload: {'productId': 'prod-x', 'quantity': 1});
+      server((o) => o['operationId'] == 'op-prod'
+          ? ('REJECTED', 'PLAN_LIMIT_EXCEEDED')
+          : ('REJECTED', 'PRODUCT_NOT_FOUND'));
+
+      await syncService.push();
+
+      expect((await db.select(db.stockTransfers).get()).map((t) => t.id),
+          ['tr-ok']);
+      expect(await queuedIds(), isEmpty);
+    });
+
+    // v1s-16-15 follow-up: the quarantine chain end to end on Drift — the
+    // sale is refused in batch 1, its validation (batch 2) joins the chain
+    // instead of being sent; « Rattacher » then a new push clears it, with
+    // the validation rid of the ghost product.
+    test('chain across batches, then re-attach and push again', () async {
+      await db.into(db.products).insert(ProductsCompanion.insert(
+          id: 'p-real', name: 'Savon', createdAt: now, updatedAt: now));
+      await insertPendingOp(
+          id: 'op-sale',
+          operation: 'CREATE_SALE',
+          entityId: 'sale-1',
+          payload: {
+            'saleId': 'sale-1',
+            'storeId': 'store-1',
+            'items': [
+              {'itemId': 'i-1', 'productId': 'p-ghost', 'quantity': 1},
+            ],
+          });
+      await fillers(55);
+      await insertPendingOp(
+          id: 'op-validate',
+          operation: 'VALIDATE_SALE',
+          entityId: 'sale-1',
+          payload: {
+            'saleId': 'sale-1',
+            'initialStockEntries': {'p-ghost': 3},
+          });
+      // Server: refuses anything still naming the ghost product.
+      server((o) => jsonEncode(o['payload']).contains('p-ghost')
+          ? ('REJECTED', 'PRODUCT_NOT_FOUND')
+          : ('APPLIED', null));
+
+      final first = await syncService.push();
+
+      expect(requests[1].containsKey('op-validate'), false,
+          reason: 'the validation joins the chain, it is not sent');
+      expect(first.where((r) => r['quarantined'] == true).map((r) => r['operation']),
+          ['CREATE_SALE']);
+      final quarantined = (await db.select(db.syncQueue).get())
+          .where((o) => o.quarantinedAt != null)
+          .map((o) => o.id);
+      expect(quarantined, containsAll(['op-sale', 'op-validate']));
+      expect(await syncService.hasPendingOperations(), false);
+
+      final quarantine = SyncQuarantineService(db, SyncEventLogger(db));
+      await quarantine.reattachSale('op-sale',
+          productIds: {'p-ghost': 'p-real'});
+      final second = await syncService.push();
+
+      expect(second, isEmpty);
+      expect(await queuedIds(), isEmpty);
+      expect(requests.last.keys, ['op-sale', 'op-validate']);
+      expect(requests.last['op-validate'], {'saleId': 'sale-1'},
+          reason: 'the ghost initial stock entry is gone');
+    });
+
+    test('abandon after a real quarantine removes the chain and the sale',
+        () async {
+      await db.into(db.sales).insert(SalesCompanion.insert(
+          id: 'sale-1',
+          storeId: 'store-1',
+          employeeId: 'u',
+          totalAmount: 500,
+          paymentMode: 'CASH',
+          createdAt: now));
+      await insertPendingOp(
+          id: 'op-sale',
+          operation: 'CREATE_SALE',
+          entityId: 'sale-1',
+          payload: {'saleId': 'sale-1', 'storeId': 'store-1'});
+      await insertPendingOp(
+          id: 'op-cancel', operation: 'CANCEL_SALE', entityId: 'sale-1');
+      server((o) => o['operationId'] == 'op-sale'
+          ? ('REJECTED', 'STORE_NOT_FOUND')
+          : ('REJECTED', 'SALE_NOT_FOUND'));
+
+      await syncService.push();
+      expect(await syncService.quarantinedOperationCount(), 2);
+
+      final quarantine = SyncQuarantineService(db, SyncEventLogger(db));
+      expect(await quarantine.abandon('op-cancel'), true);
+
+      expect(await queuedIds(), isEmpty);
+      expect(await db.select(db.sales).get(), isEmpty);
+      expect(await syncService.quarantinedOperationCount(), 0);
+    });
+
+    test('Renvoyer through the service: refused again → back in quarantine '
+        'with one new notice', () async {
+      await insertPendingOp(
+          id: 'op-sale',
+          operation: 'CREATE_SALE',
+          entityId: 'sale-1',
+          payload: {'saleId': 'sale-1', 'storeId': 'store-x'});
+      server((o) => ('REJECTED', 'STORE_NOT_FOUND'));
+      await syncService.push();
+      expect(await syncService.quarantinedOperationCount(), 1);
+
+      final quarantine = SyncQuarantineService(db, SyncEventLogger(db));
+      await quarantine.release('op-sale');
+      expect(await syncService.quarantinedOperationCount(), 0);
+      expect(await syncService.hasPendingOperations(), true);
+
+      final again = await syncService.push();
+
+      expect(requests.last.keys, ['op-sale'], reason: 'released → sent');
+      expect(again.where((r) => r['quarantined'] == true), hasLength(1));
+      expect(await syncService.quarantinedOperationCount(), 1);
+      expect(await syncService.hasPendingOperations(), false);
     });
   });
 }
