@@ -286,6 +286,39 @@ class PendingSaleControllerTest {
     }
 
     @Test
+    void POST_correct_passesOptionalCorrectionIdToUseCase() throws Exception {
+        // v1s-13-13: the app's correctionId derives the ADJUSTMENT movement ids.
+        authenticateAs("OWNER");
+        UUID correctionId = UUID.randomUUID();
+        String payload = mapper.writeValueAsString(Map.of(
+                "justification", "Erreur de quantité scannée au comptoir",
+                "itemQuantities", Map.of(productId.toString(), 5),
+                "correctionId", correctionId.toString()));
+
+        mockMvc.perform(post("/api/v1/sales/{id}/correct", saleId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isOk());
+
+        verify(correctSaleUseCase).correctSale(argThat(c -> correctionId.equals(c.correctionId())));
+    }
+
+    @Test
+    void POST_correct_withoutCorrectionId_passesNull() throws Exception {
+        authenticateAs("OWNER");
+        String payload = mapper.writeValueAsString(Map.of(
+                "justification", "Erreur de quantité scannée au comptoir",
+                "itemQuantities", Map.of(productId.toString(), 5)));
+
+        mockMvc.perform(post("/api/v1/sales/{id}/correct", saleId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isOk());
+
+        verify(correctSaleUseCase).correctSale(argThat(c -> c.correctionId() == null));
+    }
+
+    @Test
     void POST_correct_employeeForbidden_returns403() throws Exception {
         authenticateAs("EMPLOYEE");
 

@@ -96,7 +96,8 @@ public class PendingSaleController {
             throw new DomainException(ErrorCode.FORBIDDEN, "Only OWNER can correct a sale");
         }
         correctSaleUseCase.correctSale(new CorrectSaleCommand(
-                id, CurrentActor.actorId(), CurrentActor.assignedStoreId(), request.justification(), request.itemQuantities()));
+                id, CurrentActor.actorId(), CurrentActor.assignedStoreId(), request.justification(), request.itemQuantities(),
+                request.correctionId()));
         return ResponseEntity.ok(ApiResponseWrapper.ok(Map.of("message", "Sale corrected")));
     }
 }

@@ -1,7 +1,9 @@
 package com.keevo.sync.sync.application.handler;
 
+import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.store.domain.model.StoreFactory;
 import com.keevo.store.store.domain.model.StoreType;
@@ -38,13 +40,16 @@ public class CreateStoreSyncHandler extends AbstractSyncOperationHandler {
     private final StoreRepository storeRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final PlanLimitGuard planLimitGuard;
+    private final TransactionLockPort transactionLock;
 
     public CreateStoreSyncHandler(StoreRepository storeRepository,
                                    SubscriptionRepository subscriptionRepository,
-                                   PlanLimitGuard planLimitGuard) {
+                                   PlanLimitGuard planLimitGuard,
+                                   TransactionLockPort transactionLock) {
         this.storeRepository = storeRepository;
         this.subscriptionRepository = subscriptionRepository;
         this.planLimitGuard = planLimitGuard;
+        this.transactionLock = transactionLock;
     }
 
     @Override
@@ -73,6 +78,11 @@ public class CreateStoreSyncHandler extends AbstractSyncOperationHandler {
 
         Map<String, Object> p = operation.payload();
         UUID storeId = UUID.fromString((String) p.get("id"));
+
+        // v1s-13-13: same per-tenant lock as CreateStoreService, taken BEFORE the idempotency
+        // read so a concurrent replay of the same id sees the winner's row (APPLIED) instead of
+        // a spurious plan-limit REJECTED. Runs inside SyncPushService's per-op transaction.
+        transactionLock.lock("store-limit:" + TenantContext.getCurrentTenant());
 
         // Idempotency: if already synced, return APPLIED without duplicate insert.
         if (storeRepository.findById(storeId).isPresent()) {

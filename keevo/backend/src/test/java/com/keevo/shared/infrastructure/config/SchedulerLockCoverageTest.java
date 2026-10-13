@@ -137,7 +137,11 @@ class SchedulerLockCoverageTest {
                 com.keevo.catalog.stock.application.usecase.ExecuteTransferService.class, "execute",
                 com.keevo.commerce.sale.application.service.CloseDayService.class, "closeDay",
                 com.keevo.identity.employee.application.service.ChangeEmployeeRoleService.class, "execute",
-                com.keevo.identity.employee.application.service.DeactivateEmployeeService.class, "execute");
+                com.keevo.identity.employee.application.service.DeactivateEmployeeService.class, "execute",
+                // v1s-13-13
+                com.keevo.store.store.application.service.CreateStoreService.class, "execute",
+                com.keevo.identity.employee.application.service.CreateEmployeeService.class, "execute",
+                com.keevo.reporting.report.application.service.WeeklyReportGenerator.class, "generateWeeklyReport");
         lockTakers.forEach((type, methodName) -> {
             List<Method> methods = Arrays.stream(type.getDeclaredMethods())
                     .filter(m -> m.getName().equals(methodName) && !m.isSynthetic() && !m.isBridge())

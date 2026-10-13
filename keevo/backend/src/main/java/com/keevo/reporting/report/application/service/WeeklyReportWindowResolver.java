@@ -22,13 +22,18 @@ import java.util.UUID;
  * occurrence/arrival rule as day closures ({@link ClosureWindow}):
  * <ul>
  *   <li>start = just after the previous report's end, i.e. min(prev.createdAt, end of its
- *       Sunday) + 1µs; Monday 00:00 WAT when there is no previous report;</li>
- *   <li>end = min(now, Sunday 23:59:59.999999 WAT): the generation time when generated on
- *       Sunday (a Sunday 20:00 report), else the end of the week;</li>
+ *       Sunday), never before its Sunday 00:00 WAT, + 1µs; Monday 00:00 WAT when there is no
+ *       previous report;</li>
+ *   <li>end = min(generatedAt, Sunday 23:59:59.999999 WAT): the generation time when generated
+ *       on Sunday (a Sunday 20:00 report), else the end of the week — never before Sunday
+ *       00:00 WAT, so the report stays dated by its Sunday;</li>
  *   <li>lateFrom = prev.createdAt: sales made before start but received after the previous
  *       report (offline devices syncing late) are counted here; none without a previous report;</li>
- *   <li>receivedUntil = now: sales received later belong to the next report.</li>
+ *   <li>receivedUntil = generatedAt: sales received later belong to the next report.</li>
  * </ul>
+ * {@code generatedAt = now − }{@link ClosureWindow#COMMIT_SAFETY_MARGIN} (v1s-13-13): a sale
+ * stamped just before {@code now} but committed after the report queries ran is counted by
+ * the next report (late arrival after this report's {@code createdAt}).
  * The report is persisted with {@code createdAt = receivedUntil}, so the next week chains on
  * it exactly — every COMPLETED sale lands in exactly one weekly report, whatever the trigger
  * day/time. Legacy reports (created before this rule) chain the same way: their Sunday
@@ -64,7 +69,8 @@ public class WeeklyReportWindowResolver {
      * @param now           generation time (truncated to microseconds, the DB precision)
      */
     public Window resolve(UUID storeId, String tenantId, LocalDate weekEndSunday, Instant now) {
-        Instant generatedAt = now.truncatedTo(ChronoUnit.MICROS);
+        // v1s-13-13: commit-safety margin — one anchor for end, receivedUntil and createdAt.
+        Instant generatedAt = ClosureWindow.receivedLimit(now).truncatedTo(ChronoUnit.MICROS);
 
         // v1s-13-11 follow-up: chain on the store's LATEST weekly report, not only the one
         // dated exactly a week earlier — a week without report (backend down on the configured
@@ -87,12 +93,18 @@ public class WeeklyReportWindowResolver {
 
         Instant start;
         if (previousCreatedAt != null) {
-            Instant previousEnd = min(previousCreatedAt, endOfDay(previousSunday));
+            // Same clamp as `end` below: a previous report generated in the first seconds of
+            // its Sunday ended at Sunday 00:00 WAT (after its createdAt anchor).
+            Instant previousEnd = max(min(previousCreatedAt, endOfDay(previousSunday)),
+                    previousSunday.atStartOfDay(WAT).toInstant());
             start = previousEnd.plus(1, ChronoUnit.MICROS);
         } else {
             start = weekEndSunday.minusDays(6).atStartOfDay(WAT).toInstant();
         }
-        Instant end = min(generatedAt, endOfDay(weekEndSunday));
+        // Clamped to Sunday 00:00 WAT: a report generated in the first seconds of the Sunday
+        // (margin) must still be dated by that Sunday (report_date, idempotency, lock key).
+        Instant end = max(min(generatedAt, endOfDay(weekEndSunday)),
+                weekEndSunday.atStartOfDay(WAT).toInstant());
         return new Window(start, end, previousCreatedAt, generatedAt);
     }
 
@@ -103,5 +115,9 @@ public class WeeklyReportWindowResolver {
 
     private static Instant min(Instant a, Instant b) {
         return a.isBefore(b) ? a : b;
+    }
+
+    private static Instant max(Instant a, Instant b) {
+        return a.isAfter(b) ? a : b;
     }
 }

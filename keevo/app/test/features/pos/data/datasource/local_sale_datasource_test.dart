@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo/core/sync/stock_movement_ids.dart';
 import 'package:keevo/features/pos/data/datasource/local_sale_datasource.dart';
 import 'package:keevo/features/pos/domain/model/payment_mode_enum.dart';
 import 'package:keevo/features/pos/domain/model/sale_model.dart';
@@ -345,6 +346,142 @@ void main() {
             ..where((l) => l.id.equals('sl-prod-1')))
           .getSingle();
       expect(level.quantity, 7);
+    });
+
+    // ── v1s-13-13: deterministic SALE_CANCELLED / ADJUSTMENT movement ids ──
+
+    Future<List<StockMovement>> movementsOfType(String type) =>
+        (db.select(db.stockMovements)..where((m) => m.type.equals(type))).get();
+
+    Future<int> levelProd1() async => (await (db.select(db.stockLevels)
+              ..where((l) => l.id.equals('sl-prod-1')))
+            .getSingle())
+        .quantity;
+
+    /// Same statement as RestSyncService._upsertStockMovements (the pull).
+    Future<void> pullMovement(String id, String type, int delta) =>
+        db.customStatement(
+          'INSERT OR IGNORE INTO stock_movements (id, product_id, variant_id, '
+          'store_id, type, quantity_before, quantity_delta, quantity_after, '
+          'actor_id, reason, synced, created_at) '
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)',
+          [
+            id, 'prod-1', null, 'store-1', type, 0, delta, 0, 'owner-1',
+            'server', DateTime(2026).toIso8601String(),
+          ],
+        );
+
+    test('cross-language vectors match the backend DeterministicIds', () {
+      expect(saleCancelledMovementId('11111111-1111-1111-1111-111111111111'),
+          '953756a8-12bc-54a0-b3dc-144901d67c83');
+      expect(
+          saleCorrectionMovementId('22222222-2222-2222-2222-222222222222',
+              '11111111-1111-1111-1111-111111111111'),
+          '3a397c41-8198-5a4f-8f09-9b25c36f87ac');
+    });
+
+    test(
+        'cancelAndRestoreStock: SALE_CANCELLED movement uses the derived id; '
+        'a later pull of the same id leaves one row', () async {
+      await stockProd1(10);
+      await ds.insertAll(_testSale());
+      expect(await levelProd1(), 7);
+
+      await ds.cancelAndRestoreStock('sale-1');
+
+      expect(await levelProd1(), 10);
+      final cancelled = await movementsOfType('SALE_CANCELLED');
+      expect(cancelled.map((m) => m.id), [saleCancelledMovementId('item-1')]);
+      expect(cancelled.single.synced, isTrue);
+      expect(cancelled.single.syncedAt, isNotNull);
+
+      await pullMovement(saleCancelledMovementId('item-1'), 'SALE_CANCELLED', 3);
+
+      expect(await movementsOfType('SALE_CANCELLED'), hasLength(1));
+      expect(await levelProd1(), 10);
+    });
+
+    test(
+        'cancelAndRestoreStock: movement already pulled → no second row, '
+        'stock not restored twice', () async {
+      await stockProd1(10);
+      await ds.insertAll(_testSale());
+      // The pull arrived first: server movement + server stock level (10).
+      await pullMovement(saleCancelledMovementId('item-1'), 'SALE_CANCELLED', 3);
+      await (db.update(db.stockLevels)..where((l) => l.id.equals('sl-prod-1')))
+          .write(const StockLevelsCompanion(quantity: Value(10)));
+
+      await ds.cancelAndRestoreStock('sale-1');
+
+      expect(await levelProd1(), 10);
+      final cancelled = await movementsOfType('SALE_CANCELLED');
+      expect(cancelled, hasLength(1));
+      expect(cancelled.single.reason, 'server', reason: 'pulled row kept');
+      expect(await saleStatus('sale-1'), 'CANCELLED');
+    });
+
+    test(
+        'updateItemQuantities with correctionId: ADJUSTMENT uses the derived id; '
+        'a later pull of the same id leaves one row', () async {
+      await stockProd1(10);
+      await ds.insertAll(_testSale());
+
+      await ds.updateItemQuantities('sale-1', {'item-1': 1},
+          correctionId: 'corr-1');
+
+      expect(await levelProd1(), 9);
+      final adjustments = await movementsOfType('ADJUSTMENT');
+      expect(adjustments.map((m) => m.id),
+          [saleCorrectionMovementId('corr-1', 'item-1')]);
+      expect(adjustments.single.quantityDelta, 2);
+      expect(adjustments.single.synced, isTrue);
+      expect(adjustments.single.syncedAt, isNotNull);
+
+      await pullMovement(
+          saleCorrectionMovementId('corr-1', 'item-1'), 'ADJUSTMENT', 2);
+
+      expect(await movementsOfType('ADJUSTMENT'), hasLength(1));
+      expect(await levelProd1(), 9);
+    });
+
+    test(
+        'updateItemQuantities: ADJUSTMENT already pulled → no second row, '
+        'stock not adjusted twice', () async {
+      await stockProd1(10);
+      await ds.insertAll(_testSale());
+      await pullMovement(
+          saleCorrectionMovementId('corr-1', 'item-1'), 'ADJUSTMENT', 2);
+      await (db.update(db.stockLevels)..where((l) => l.id.equals('sl-prod-1')))
+          .write(const StockLevelsCompanion(quantity: Value(9)));
+
+      await ds.updateItemQuantities('sale-1', {'item-1': 1},
+          correctionId: 'corr-1');
+
+      expect(await levelProd1(), 9);
+      expect(await movementsOfType('ADJUSTMENT'), hasLength(1));
+      final item = await (db.select(db.saleItems)
+            ..where((i) => i.id.equals('item-1')))
+          .getSingle();
+      expect(item.quantity, 1);
+    });
+
+    test('updateItemQuantities without correctionId keeps a random id (legacy)',
+        () async {
+      await stockProd1(10);
+      await ds.insertAll(_testSale());
+
+      await ds.updateItemQuantities('sale-1', {'item-1': 2});
+      await ds.updateItemQuantities('sale-1', {'item-1': 1});
+
+      final adjustments = await movementsOfType('ADJUSTMENT');
+      expect(adjustments, hasLength(2));
+      final v4 = RegExp(
+          r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$');
+      for (final m in adjustments) {
+        expect(m.id, matches(v4), reason: 'legacy path keeps a random v4 id');
+      }
+      expect(adjustments[0].id, isNot(adjustments[1].id));
+      expect(await levelProd1(), 9);
     });
   });
 }

@@ -66,13 +66,18 @@ class RemoteSaleDataSource {
   }
 
   /// POST /api/v1/sales/{id}/correct — OWNER-only (Story v1s-13-5).
+  ///
+  /// [correctionId] (v1s-13-13): per-request id from which both sides derive
+  /// the ADJUSTMENT movement ids (one history row after the pull).
   Future<void> correctSale(String saleId, String justification,
-      Map<String, int> itemQuantities) async {
+      Map<String, int> itemQuantities,
+      {String? correctionId}) async {
     await _dio.post(
       '/api/v1/sales/$saleId/correct',
       data: {
         'justification': justification,
         'itemQuantities': itemQuantities,
+        if (correctionId != null) 'correctionId': correctionId,
       },
     );
   }

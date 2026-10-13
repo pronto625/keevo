@@ -2,6 +2,7 @@ import 'dart:developer' as dev;
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../../core/storage/app_database.dart' hide Sale, SaleItem;
 import '../../../../core/sync/connectivity_service.dart';
@@ -340,11 +341,16 @@ class SaleRepositoryImpl implements SaleRepository {
     if (!await _connectivity.isOnline()) {
       throw OfflineActionNotSupportedException();
     }
-    await _remote.correctSale(saleId, justification, itemQuantities);
+    // v1s-13-13: one id per correction request; the ADJUSTMENT movement ids
+    // are derived from it identically on the backend and here.
+    final correctionId = const Uuid().v4();
+    await _remote.correctSale(saleId, justification, itemQuantities,
+        correctionId: correctionId);
     // Review patch: keep the local cache in sync so the Sale Detail page's
     // post-success refresh (ref.invalidate(saleByIdProvider)) doesn't show
     // stale pre-correction quantities/total — getSaleById() is local-only.
-    await _local.updateItemQuantities(saleId, itemQuantities);
+    await _local.updateItemQuantities(saleId, itemQuantities,
+        correctionId: correctionId);
   }
 
   @override

@@ -12,10 +12,17 @@ import com.keevo.reporting.report.domain.model.WeeklyReportData;
 import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase;
 import com.keevo.reporting.report.domain.port.in.GenerateWeeklyReportUseCase;
 import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
+import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -45,6 +52,8 @@ public class WeeklyReportGenerator extends AbstractReportGenerator
     private final WeeklyReportFormatter formatter;
     private final StoreRepository storeRepository;
     private final OwnerRecipientResolver ownerRecipientResolver;
+    private final TransactionLockPort transactionLock;
+    private final TransactionTemplate afterCommitTx;
 
     public WeeklyReportGenerator(EndOfDayReportRepository reportRepository,
                                   WhatsAppPort whatsAppPort,
@@ -52,18 +61,35 @@ public class WeeklyReportGenerator extends AbstractReportGenerator
                                   WeeklyReportBuilder builder,
                                   WeeklyReportFormatter formatter,
                                   StoreRepository storeRepository,
-                                  OwnerRecipientResolver ownerRecipientResolver) {
+                                  OwnerRecipientResolver ownerRecipientResolver,
+                                  TransactionLockPort transactionLock,
+                                  PlatformTransactionManager transactionManager) {
         super(reportRepository, whatsAppPort, multiStoreSummaryService);
         this.builder = builder;
         this.formatter = formatter;
         this.storeRepository = storeRepository;
         this.ownerRecipientResolver = ownerRecipientResolver;
+        this.transactionLock = transactionLock;
+        // afterCommit still sees the committed transaction's resources bound: writes there
+        // must open their own transaction or they are never committed.
+        this.afterCommitTx = new TransactionTemplate(transactionManager);
+        this.afterCommitTx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     // ── GenerateWeeklyReportUseCase ────────────────────────────────────────────
 
+    /**
+     * Transactional entry point (v1s-13-13): the call to {@link #generateReport} below is a
+     * self-invocation (no proxy), so this method owns the transaction. The per-store/week
+     * advisory lock is taken first, so a scheduled run and a manual trigger for the same
+     * store/Sunday serialise: the loser's {@code findByKey} guard then sees the winner's row and
+     * returns it (no second report, no second WhatsApp send).
+     */
     @Override
+    @Transactional
     public EndOfDayReport generateWeeklyReport(WeeklyReportCommand weeklyCommand) {
+        transactionLock.lock("weekly-report:" + weeklyCommand.storeId() + ":"
+                + weeklyCommand.weekEnd().atZone(WAT).toLocalDate());
         try {
             GenerateEndOfDayReportUseCase.GenerateReportCommand adapted = new GenerateEndOfDayReportUseCase.GenerateReportCommand(
                     weeklyCommand.storeId(),
@@ -139,6 +165,39 @@ public class WeeklyReportGenerator extends AbstractReportGenerator
         reportRepository.save(report);
         log.info("Report persisted: id={}, store={}, type={}", report.getId(), command.storeId(), getReportType());
         return report;
+    }
+
+    /**
+     * v1s-13-13: the WhatsApp send runs after the report transaction commits (lock and
+     * connection released, no external HTTP call under the advisory lock), so a rolled-back
+     * report is never sent and a sent report is never rolled back (no re-send next tick).
+     * It runs in a REQUIRES_NEW transaction (data access in {@code afterCommit} would otherwise
+     * join the already-committed transaction and its status save would never be committed).
+     * Without an active transaction synchronization (plain call) it runs immediately.
+     */
+    @Override
+    protected void deliverReport(EndOfDayReport report,
+                                 GenerateEndOfDayReportUseCase.GenerateReportCommand command) {
+        afterCommit(() -> super.deliverReport(report, command));
+    }
+
+    /** v1s-13-13: same after-commit rule as {@link #deliverReport}. */
+    @Override
+    protected void checkMultiStoreCondition(GenerateEndOfDayReportUseCase.GenerateReportCommand command) {
+        afterCommit(() -> super.checkMultiStoreCondition(command));
+    }
+
+    private void afterCommit(Runnable action) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    afterCommitTx.executeWithoutResult(status -> action.run());
+                }
+            });
+        } else {
+            action.run();
+        }
     }
 
     @Override

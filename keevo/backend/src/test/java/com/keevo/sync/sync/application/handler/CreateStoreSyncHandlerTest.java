@@ -1,7 +1,9 @@
 package com.keevo.sync.sync.application.handler;
 
 import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.store.domain.model.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
@@ -14,6 +16,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -36,6 +39,7 @@ class CreateStoreSyncHandlerTest {
     @Mock private StoreRepository storeRepository;
     @Mock private SubscriptionRepository subscriptionRepository;
     @Mock private PlanLimitGuard planLimitGuard;
+    @Mock private TransactionLockPort transactionLock;
 
     private CreateStoreSyncHandler handler;
 
@@ -44,8 +48,10 @@ class CreateStoreSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new CreateStoreSyncHandler(storeRepository, subscriptionRepository, planLimitGuard);
+        handler = new CreateStoreSyncHandler(storeRepository, subscriptionRepository, planLimitGuard,
+                transactionLock);
         authenticateAsOwner();
+        TenantContext.setCurrentTenant(TENANT_ID);
     }
 
     private Subscription samplePlan(PlanType type) {
@@ -57,6 +63,7 @@ class CreateStoreSyncHandlerTest {
     @AfterEach
     void tearDown() {
         SecurityContextHolder.clearContext();
+        TenantContext.clear();
     }
 
     private void authenticateAsOwner() {
@@ -69,6 +76,51 @@ class CreateStoreSyncHandlerTest {
     private Store sampleStore(UUID id) {
         return new Store(id, "Boutique Test", StoreType.STORE, null, null, true,
                 Instant.now(), Instant.now());
+    }
+
+    @Test
+    void handle_createStore_locksBeforeIdempotencyRead_thenCountsThenSaves() {
+        // v1s-13-13: the per-tenant store-limit lock is taken before the idempotency findById,
+        // so a concurrent replay of the same id sees the winner's row (APPLIED, not REJECTED).
+        var storeId = UUID.randomUUID();
+        when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
+        when(storeRepository.save(any())).thenReturn(sampleStore(storeId));
+        Subscription freePlan = samplePlan(PlanType.FREE);
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(freePlan));
+        when(storeRepository.countActive()).thenReturn(0);
+
+        var op = new SyncOperation("op-lock", "CREATE_STORE", storeId.toString(),
+                Map.of("id", storeId.toString(), "name", "Boutique Test", "type", "STORE"),
+                Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        InOrder order = inOrder(transactionLock, storeRepository, planLimitGuard);
+        order.verify(transactionLock).lock("store-limit:" + TENANT_ID);
+        order.verify(storeRepository).findById(storeId);
+        order.verify(storeRepository).countActive();
+        order.verify(planLimitGuard).checkStoreLimit(PlanType.FREE, 0);
+        order.verify(storeRepository).save(any());
+    }
+
+    @Test
+    void handle_createStore_replayOfExistingId_lockedThenApplied_noCount() {
+        var storeId = UUID.randomUUID();
+        when(storeRepository.findById(storeId)).thenReturn(Optional.of(sampleStore(storeId)));
+
+        var op = new SyncOperation("op-replay", "CREATE_STORE", storeId.toString(),
+                Map.of("id", storeId.toString(), "name", "Boutique Test", "type", "STORE"),
+                Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        InOrder order = inOrder(transactionLock, storeRepository);
+        order.verify(transactionLock).lock("store-limit:" + TENANT_ID);
+        order.verify(storeRepository).findById(storeId);
+        verify(storeRepository, never()).countActive();
+        verify(storeRepository, never()).save(any());
     }
 
     @Test

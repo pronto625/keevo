@@ -89,8 +89,9 @@ class WeeklyReportWindowResolverTest {
         Window w = resolver.resolve(storeId, TENANT, S, now);
 
         assertThat(w.start()).isEqualTo(prevCreatedAt.plusNanos(1000));
-        assertThat(w.end()).isEqualTo(now);
-        assertThat(w.receivedUntil()).isEqualTo(now);
+        // v1s-13-13: anchored on now − commit-safety margin.
+        assertThat(w.end()).isEqualTo(now.minusSeconds(5));
+        assertThat(w.receivedUntil()).isEqualTo(now.minusSeconds(5));
         assertThat(w.lateFrom()).isEqualTo(prevCreatedAt);
     }
 
@@ -106,7 +107,7 @@ class WeeklyReportWindowResolverTest {
 
         assertThat(w.end()).isEqualTo(endOfDay(S));
         assertThat(w.end()).isEqualTo(Instant.parse("2026-10-11T22:59:59.999999Z"));
-        assertThat(w.receivedUntil()).isEqualTo(now);
+        assertThat(w.receivedUntil()).isEqualTo(now.minusSeconds(5));
         assertThat(w.start()).isEqualTo(endOfDay(S.minusDays(7)).plusNanos(1000));
         assertThat(w.lateFrom()).isEqualTo(prevCreatedAt);
     }
@@ -143,7 +144,7 @@ class WeeklyReportWindowResolverTest {
 
         Window w = resolver.resolve(storeId, TENANT, S, now);
 
-        assertThat(w.receivedUntil()).isEqualTo(at(S, 20, 0).plusNanos(987_654_000));
+        assertThat(w.receivedUntil()).isEqualTo(at(S, 20, 0).minusSeconds(5).plusNanos(987_654_000));
         assertThat(w.end()).isEqualTo(w.receivedUntil());
         assertThat(w.lateFrom()).isEqualTo(at(S.minusDays(7), 20, 0).plusNanos(123_456_000));
         assertThat(w.start()).isEqualTo(w.lateFrom().plusNanos(1000));
@@ -234,6 +235,60 @@ class WeeklyReportWindowResolverTest {
         assertThat(w.end()).isEqualTo(endOfDay(S));
         assertThat(Duration.between(w.end(), w.receivedUntil())).isPositive();
     }
+    // ── v1s-13-13: commit-safety margin ───────────────────────────────────────
+
+    @Test
+    void commitLag_saleStampedJustBeforeGeneration_landsInTheNextReportOnly() {
+        Instant r = at(S, 20, 0);
+        ClosureWindow w1 = generate(S, r);
+        ClosureWindow w2 = generate(S.plusDays(7), at(S.plusDays(7), 20, 0));
+
+        // Stamped at R − 1 s, committed after the report queries ran: not in R
+        // (receivedUntil = R − 5 s), counted once by the next one (createdAt > lateFrom).
+        Sale lagging = new Sale("stamped R-1s", r.minusSeconds(1), r.minusSeconds(1));
+        assertThat(w1.covers(lagging.occurredAt(), lagging.createdAt())).isFalse();
+        assertThat(w2.covers(lagging.occurredAt(), lagging.createdAt())).isTrue();
+        assertEachCoveredExactlyOnce(List.of(
+                lagging,
+                new Sale("stamped R-6s", r.minusSeconds(6), r.minusSeconds(6)),
+                new Sale("occurred R-10s, stamped R-3s", r.minusSeconds(10), r.minusSeconds(3))
+        ), List.of(w1, w2));
+    }
+
+    @Test
+    void generatedInTheFirstSecondsOfSunday_staysDatedBySunday() {
+        // Margin would put the anchor on Saturday 23:59:57: the window end is clamped to
+        // Sunday 00:00 WAT so the report (date, idempotency, lock key) stays the Sunday's.
+        Instant now = S.atStartOfDay(WAT).toInstant().plusSeconds(2);
+
+        Window w = resolver.resolve(storeId, TENANT, S, now);
+
+        assertThat(w.receivedUntil()).isEqualTo(now.minusSeconds(5));
+        assertThat(w.end()).isEqualTo(S.atStartOfDay(WAT).toInstant());
+        assertThat(w.end().atZone(WAT).toLocalDate()).isEqualTo(S);
+    }
+
+    @Test
+    void reportGeneratedInFirstSecondsOfSunday_nextReportStartsAfterItsEnd_exactlyOnce() {
+        // w1 ends at Sunday 00:00 WAT (clamped) but is anchored on Saturday 23:59:57: the next
+        // report must start after that end, not after the anchor (no double count).
+        Instant sundayMidnight = S.atStartOfDay(WAT).toInstant();
+        ClosureWindow w1 = generate(S, sundayMidnight.plusSeconds(2));
+        ClosureWindow w2 = generate(S.plusDays(7), at(S.plusDays(7), 20, 0));
+
+        assertThat(w1.end()).isEqualTo(sundayMidnight);
+        assertThat(w2.start()).isAfter(w1.end());
+        assertThat(w2.start()).isEqualTo(sundayMidnight.plusNanos(1000));
+        assertThat(w2.lateFrom()).isEqualTo(sundayMidnight.minusSeconds(3));
+        assertEachCoveredExactlyOnce(List.of(
+                Sale.online("Sat 23:59:50", sundayMidnight.minusSeconds(10)),
+                new Sale("Sat 23:59:58 stamped", sundayMidnight.minusSeconds(2), sundayMidnight.minusSeconds(2)),
+                new Sale("Sun 00:00:00 stamped", sundayMidnight, sundayMidnight),
+                new Sale("Sun 00:00:01 stamped", sundayMidnight.plusSeconds(1), sundayMidnight.plusSeconds(1)),
+                Sale.online("Sun 12:00", at(S, 12, 0))
+        ), List.of(w1, w2));
+    }
+
     // ── v1s-13-11 follow-up: a missing week does not break the chain ─────────
 
     @Test

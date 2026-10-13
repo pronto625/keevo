@@ -297,7 +297,8 @@ class WeeklyReportSchedulerTest {
         // sale received until now (v1s-13-11).
         assertThat(captor.getValue().weekEnd())
                 .isEqualTo(expectedSunday.plusDays(1).atStartOfDay(WAT).toInstant().minusNanos(1000));
-        assertThat(captor.getValue().receivedUntil()).isEqualTo(saturdayClock.instant());
+        // v1s-13-13: arrival limit = now − commit-safety margin.
+        assertThat(captor.getValue().receivedUntil()).isEqualTo(saturdayClock.instant().minusSeconds(5));
         assertThat(captor.getValue().lateFrom()).isNull();
         // The "already generated" guard looks at the report's own date (its Sunday).
         verify(reportRepository).findByDateAndTenant(expectedSunday, TENANT_SCHEMA, ReportType.WEEKLY);
@@ -324,7 +325,8 @@ class WeeklyReportSchedulerTest {
                 .isEqualTo(SUNDAY_DATE.minusDays(6).atStartOfDay(WAT).toInstant());
         // Generated on Sunday 20:05: the window ends at the generation time; the rest of
         // Sunday goes to next week's report (v1s-13-11 D2).
-        Instant now = SUNDAY_DATE.atTime(20, 5).atZone(WAT).toInstant();
+        // v1s-13-13: the anchor is now − commit-safety margin.
+        Instant now = SUNDAY_DATE.atTime(20, 5).atZone(WAT).toInstant().minusSeconds(5);
         assertThat(captor.getValue().weekEnd()).isEqualTo(now);
         assertThat(captor.getValue().receivedUntil()).isEqualTo(now);
     }
