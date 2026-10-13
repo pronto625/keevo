@@ -154,6 +154,26 @@ class SchemaProvisioningHygienePostgresIntegrationTest {
     }
 
     @Test
+    @org.junit.jupiter.api.extension.ExtendWith(org.springframework.boot.test.system.OutputCaptureExtension.class)
+    @DisplayName("boot (follow-up): a tenant whose schema no longer exists is skipped (WARN), not failed")
+    void runnerSkipsTenantWhoseSchemaIsMissing(org.springframework.boot.test.system.CapturedOutput output) {
+        String schema = "kv_hyg009";   // valid name, never provisioned
+        registerTenant(schema, "KV-HYG009");
+        try {
+            runner.runAll();
+
+            Integer schemas = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = ?", Integer.class, schema);
+            assertThat(schemas).isZero();
+            assertThat(output.getOut() + output.getErr())
+                    .contains("skipping tenant schema '" + schema + "' — schema does not exist")
+                    .doesNotContain("FAILED for schema '" + schema + "'");
+        } finally {
+            jdbc.update("DELETE FROM public.tenants WHERE schema_name = ?", schema);
+        }
+    }
+
+    @Test
     @DisplayName("boot: an existing tenant missing users.failed_attempts/locked_until gets them back")
     void runnerRestoresUsersLockoutColumns() {
         String schema = "kv_hyg003";

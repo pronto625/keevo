@@ -294,9 +294,10 @@ class TenantSchemaSyncServiceTest {
 
         org.mockito.InOrder order = inOrder(connection, lockStmt, execStmt);
         order.verify(connection).setAutoCommit(false);
+        // follow-up review: lock_timeout first, so it bounds the advisory-lock wait too
+        order.verify(execStmt).execute(TenantSchemaSyncService.LOCK_TIMEOUT_SQL);
         order.verify(lockStmt).setString(1, "tenant-schema-sync:kv_lck123");
         order.verify(lockStmt).execute();
-        order.verify(execStmt).execute(TenantSchemaSyncService.LOCK_TIMEOUT_SQL);
         order.verify(connection, atLeastOnce()).prepareStatement(contains("information_schema.tables"));
         assertThat(TenantSchemaSyncService.ADVISORY_LOCK_SQL).isEqualTo("SELECT pg_advisory_xact_lock(hashtext(?))");
         assertThat(TenantSchemaSyncService.LOCK_TIMEOUT_SQL).isEqualTo("SET LOCAL lock_timeout = '10s'");

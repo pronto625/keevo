@@ -5,7 +5,7 @@ created: '2026-10-11'
 status: 'done'
 baseline_revision: 'a20736708388bad7d505365a325faf1edd902120'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-13-context.md'
 warnings: [oversized]
@@ -114,6 +114,48 @@ Backend `keevo/backend/src/main/java/com/keevo/`:
   - `[medium]` `[patch]` (edge) V13 "succeeds on Hibernate-era DB" claim — same fix as row 14.
   - `[high]` `[patch]` (orchestrator, from implementer risk) v1s-13-5 SALE_CANCELLED movement-type migration ran only at provisioning, so existing tenants (and tenants with the inherited public constraint) reject SALE_CANCELLED movements — migration rewritten as a definition-aware DO block and executed in the sync; real-PG test inserts SALE_CANCELLED before (rejected) / after (accepted).
 
+### 2026-10-13 — Review pass (follow-up)
+- verdicts: 38 findings — high 0, medium 3, low 25, false 10, maybe-false 0
+- findings:
+  - `[low]` `[reject]` (intent) "before any request" proven by the SmartLifecycle phase, not by a booted app — Spring's lifecycle contract (phase 0 < web server / scheduler phases); a full boot test is disproportionate.
+  - `[medium]` `[patch]` (intent) request-path `syncIfNeeded` could block on the advisory lock (lock_timeout was set after it) — `SET LOCAL lock_timeout` now runs BEFORE `pg_advisory_xact_lock`, so the 10 s bound covers the advisory wait too; unit order test updated, real-PG runner tests exercise the SQL.
+  - `[low]` `[reject]` (intent) V13 re-run drops and re-adds instead of a literal no-op — same end state, Flyway applies it once; drop/re-add is what fixes stale Hibernate-era value lists (Design Notes).
+  - `[false]` `[reject]` (intent) tenant `stock_movements` CHECK rewritten by the sync vs "never change tenant-schema CHECK constraints" — the Never targets V13 (public only); the SALE_CANCELLED widening is the first-review high fix (cancelling a sale failed on old tenants).
+  - `[false]` `[reject]` (intent) new gates where none existed — the intent routes every Java schema-name check through `TenantSchema`.
+  - `[false]` `[reject]` (intent) exception messages changed — Story 12.12 D5 (length only); types/codes kept.
+  - `[low]` `[patch]` (intent) gate call sites untested on invalid names — `TenantSchemaTest` (message contract), `AdminCatalogServiceTest` / `AdminTenantServiceTest` invalid-schema cases.
+  - `[false]` `[reject]` (intent) foreign scope (15-9 / 18-x) — follow-up diff = baseline→current code; covered by their own tests (AuditLogEnrichment / Export / AccountDeletion ITs).
+  - `[false]` `[reject]` (blind) V13 after V14–V16 breaks Flyway validation — V13 was committed (fb880b6, 2026-10-11 17:19) before V14 (15ff3ca, 2026-10-12); no database can hold V14 without V13.
+  - `[low]` `[patch]` (blind) `AdminSyncMonitoringService` interpolates `schema_name` ungated — active-tenant list filtered by `TenantSchema.isValid`, `loadTenantById` answers "Tenant not found" for an invalid name.
+  - `[medium]` `[patch]` (blind) advisory wait unbounded — grouped with the intent row.
+  - `[low]` `[reject]` (blind) a deterministically failing sync is retried on every request — the intent keeps "ERROR + retry next request"; the wait is now bounded at 10 s.
+  - `[low]` `[patch]` (blind) M1–M6 run outside the lock and without a lock bound — `SET lock_timeout = '10s'` around M1–M6, reset (with search_path) in `finally` on the pooled connection; concurrent DO blocks are idempotent (not locked further).
+  - `[low]` `[reject]` (blind) boot time grows with tenant count — accepted decision (NFR10: columns before any request); each lock wait bounded, summary log with elapsedMs.
+  - `[low]` `[reject]` (blind) SALE_CANCELLED migration drops the inherited constraint twice / LIKE check — idempotent and covered on real PG (`runnerWidensOldTenantMovementTypeCheck`).
+  - `[false]` `[reject]` (blind) unrelated changes — same as the scope row.
+  - `[low]` `[reject]` (blind) `cancelDeletion` merges 404 cases — v1s-15-9 contract, out of this story.
+  - `[low]` `[reject]` (blind) `forceDelete` side effects / no audit — v1s-15-9 decisions (documented there).
+  - `[low]` `[patch]` (blind) invalid tenants vanish silently from admin views — WARN logs (tenant id only, raw value never echoed) in the catalog filter and the tenant detail.
+  - `[false]` `[reject]` (blind) audit/export DDL not verified on PG — `AuditLogEnrichmentPostgresIntegrationTest` / `ExportPostgresIntegrationTest` cover provision + `syncNow`.
+  - `[low]` `[reject]` (blind) V13 test restores constraints without `finally` — only matters after a failure; isolated Testcontainers DB.
+  - `[low]` `[reject]` (blind) lifecycle test checks only the phase — same as the boot-ordering row.
+  - `[low]` `[patch]` (verification) admin catalog invalid-schema filter untested — `listProducts_invalidSchemaRow_isSkipped` (no SQL ever contains the bad name).
+  - `[low]` `[patch]` (verification) admin tenant gates untested — `getTenantDetail_invalidSchema_notFound`.
+  - `[low]` `[patch]` (verification) "length only" message contract not asserted — `TenantSchemaTest.messageNeverEchoesValue`.
+  - `[low]` `[patch]` (verification) runner "schema missing → skip" only mocked — real-PG `runnerSkipsTenantWhoseSchemaIsMissing` (WARN, no FAILED, schema not created).
+  - `[low]` `[patch]` (verification other) `getTenantDetail` IAE → 500 — invalid stored name now `DomainException(TENANT_NOT_FOUND)` (404) with a WARN.
+  - `[medium]` `[patch]` (edge) advisory lock before lock_timeout — grouped with the intent row.
+  - `[low]` `[reject]` (edge) boot time / probes — same as the blind row.
+  - `[low]` `[patch]` (edge) M1–M6 without lock_timeout — grouped with the blind M1–M6 row.
+  - `[low]` `[reject]` (edge) `ADD COLUMN IF NOT EXISTS` / `CREATE OR REPLACE TRIGGER` take ACCESS EXCLUSIVE on each first sync — brief, bounded by lock_timeout; a catalog pre-check per statement is new complexity.
+  - `[false]` `[reject]` (edge) `audit_log_source_check` fails on legacy rows — the `source` column is new (v1s-18-6): legacy rows hold NULL, which a CHECK accepts.
+  - `[false]` `[reject]` (edge) SALE_CANCELLED DO block on a schema without `stock_movements` — the sync creates missing tables from public before `ensureRequiredIndexes`; provisioning creates it first.
+  - `[low]` `[patch]` (edge) invalid schema → 500 on detail — grouped with the verification row.
+  - `[low]` `[reject]` (edge) `forceDelete` overwrites a SUSPENDED status — v1s-15-9 (also rejected in the v1s-12-12 follow-up).
+  - `[low]` `[reject]` (edge) `forceDelete` leaves an expired DELETION_PENDING after a DROP failure — documented v1s-15-9 design (retried by the daily run).
+  - `[low]` `[reject]` (edge claim) V13 "skip if exists" vs drop/re-add — same as the intent row.
+  - `[false]` `[reject]` (edge claim) `SyncErrorLogCleanupJob` keeps the regex in SQL — deliberate, recorded in the epic tick (SQL predicate, not a Java check).
+
 ## Design Notes
 
 - Item 3 "fail visibly": ERROR at boot per tenant + summary, not a startup abort (availability for all other tenants, NFR10 isolation of failures). The request path keeps its existing ERROR + retry-next-request behavior (no cache on failure).
@@ -141,3 +183,17 @@ Status: done
 **Verification:** targeted tests (98, incl. 7 PG16 Testcontainers) green; `mvn test` 2197 tests, 7 failures + 29 errors in the 10 known baseline classes (no new failure).
 
 **Residual risks:** startup time grows linearly with tenant count (sync before traffic); V13 scans public template tables under lock once at deploy; boot sync per instance on multi-instance deploys (serialized by the advisory lock).
+
+### Follow-up review pass — 2026-10-13
+
+**Summary:** fresh 4-layer review of the boot sync for every tenant and of the SALE_CANCELLED fix. The boot/request sync now sets `lock_timeout` before taking the per-schema advisory lock, so no request thread (nor boot) waits unboundedly behind another sync; M1–M6 get the same 10 s bound and always restore the pooled connection's session settings. Remaining Java interpolation of `schema_name` in `AdminSyncMonitoringService` is gated; an invalid stored name answers 404 on the tenant detail (was 500) and is logged instead of vanishing silently. New tests: `TenantSchemaTest`, admin catalog/tenant invalid-schema cases, real-PG "missing schema skipped".
+
+**Files changed:** `TenantSchemaSyncService.java`, `TenantSchemaMigrationRunner.java`, `AdminTenantService.java`, `AdminCatalogService.java`, `AdminSyncMonitoringService.java`; tests `TenantSchemaSyncServiceTest`, new `TenantSchemaTest`, `AdminCatalogServiceTest`, `AdminTenantServiceTest`, `SchemaProvisioningHygienePostgresIntegrationTest`.
+
+**Review findings:** 38 (0 high, 3 medium, 25 low, 10 false). Patched: 1 medium entry (advisory wait bound) + 8 low entries. Deferred: none. Rejected: see the 2026-10-13 triage entry.
+
+**Follow-up review recommended: false** — follow-up pass, no high patched (patched: 0 high, 1 medium, 8 low).
+
+**Verification:** targeted classes (TenantSchema, sync, runner, admin catalog/tenant/sync-monitoring, hygiene IT on Testcontainers PostgreSQL 16) 60 tests green; batches `shared` 476, `admin` 48 — 0 failure.
+
+**Residual risks:** boot time still grows with the tenant count (bounded per lock wait); a tenant whose sync fails deterministically is retried on each request (≤10 s wait each).

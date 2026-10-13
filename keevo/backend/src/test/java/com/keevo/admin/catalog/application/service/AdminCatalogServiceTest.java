@@ -192,4 +192,30 @@ class AdminCatalogServiceTest {
                 Instant.now()
         );
     }
+    @Test
+    @DisplayName("v1s-13-12 follow-up: a tenant row with an invalid schema_name is skipped, never interpolated")
+    @SuppressWarnings("unchecked")
+    void listProducts_invalidSchemaRow_isSkipped() {
+        ListProductsQuery query = new ListProductsQuery(null, null, null, null, null, 0, 25);
+        java.util.List<String> sqls = new java.util.ArrayList<>();
+
+        doAnswer(inv -> {
+            String sql = (String) inv.getArgument(0);
+            sqls.add(sql);
+            RowMapper<Object> rm = (RowMapper<Object>) inv.getArgument(1);
+            if (sql.contains("FROM public.tenants")) {
+                return List.of(
+                        buildTenantRow(rm, "t1", "Tenant A", "kv_aaaaaa", "FREE"),
+                        buildTenantRow(rm, "t2", "Evil", "kv_x\"; DROP", "FREE"));
+            } else if (sql.contains("kv_aaaaaa")) {
+                return List.of(sampleProduct("p1", "Product A", "kv_aaaaaa"));
+            }
+            return List.of();
+        }).when(jdbc).query(anyString(), any(RowMapper.class), any(Object[].class));
+
+        Page<AdminProductListItem> result = service.execute(query);
+
+        assertThat(result.getContent()).extracting(AdminProductListItem::name).containsExactly("Product A");
+        assertThat(sqls).noneMatch(sql -> sql.contains("DROP"));
+    }
 }

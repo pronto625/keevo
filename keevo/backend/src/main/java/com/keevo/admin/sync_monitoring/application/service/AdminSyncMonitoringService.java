@@ -135,13 +135,17 @@ public class AdminSyncMonitoringService
     private record TenantSchemaRef(String id, String schemaName, String name, String planType) {}
 
     private List<TenantSchemaRef> loadActiveTenantSchemas() {
+        // Follow-up review v1s-13-12: gate before the schema name is interpolated into SQL.
         return jdbc.query(
                 "SELECT id::text, schema_name, name, plan_type FROM public.tenants "
                 + "WHERE id <> '00000000-0000-0000-0000-000000000000'::uuid AND status = 'ACTIVE' "
                 + "ORDER BY name",
                 (rs, row) -> new TenantSchemaRef(
                         rs.getString("id"), rs.getString("schema_name"),
-                        rs.getString("name"), rs.getString("plan_type")));
+                        rs.getString("name"), rs.getString("plan_type")))
+                .stream()
+                .filter(t -> com.keevo.shared.infrastructure.persistence.TenantSchema.isValid(t.schemaName()))
+                .toList();
     }
 
     private TenantSchemaRef loadTenantById(String tenantUuid) {
@@ -151,7 +155,8 @@ public class AdminSyncMonitoringService
                         rs.getString("id"), rs.getString("schema_name"),
                         rs.getString("name"), rs.getString("plan_type")),
                 tenantUuid);
-        if (results.isEmpty()) {
+        if (results.isEmpty()
+                || !com.keevo.shared.infrastructure.persistence.TenantSchema.isValid(results.get(0).schemaName())) {
             throw new IllegalArgumentException("Tenant not found: " + tenantUuid);
         }
         return results.get(0);
