@@ -10,15 +10,22 @@ import com.keevo.inventory.counting.domain.model.*;
 import com.keevo.inventory.counting.domain.port.in.QuickAddProductCommand;
 import com.keevo.inventory.counting.domain.port.out.InventoryCountRepository;
 import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
+import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.subscription.plan.application.service.PlanLimitGuard;
+import com.keevo.subscription.plan.domain.model.Subscription;
+import com.keevo.subscription.plan.domain.port.out.ProductCountPort;
+import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -30,6 +37,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -42,6 +50,11 @@ class QuickAddProductServiceTest {
     @Mock private InventoryCountRepository countRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private com.keevo.store.store.domain.port.out.StoreRepository storeRepository;
+    @Mock private ProductCountPort productCountPort;
+    @Mock private SubscriptionRepository subscriptionRepository;
+    @Mock private PlanLimitGuard planLimitGuard;
+    @Mock private TransactionLockPort transactionLock;
+    @Mock private Subscription freeSubscription;
 
     private QuickAddProductService service;
 
@@ -57,8 +70,14 @@ class QuickAddProductServiceTest {
     void setUp() {
         service = new QuickAddProductService(
                 sessionRepository, productRepository, stockLevelRepository,
-                countRepository, eventPublisher, storeRepository);
+                countRepository, eventPublisher, storeRepository,
+                productCountPort, subscriptionRepository, planLimitGuard, transactionLock);
         TenantContext.setCurrentTenant(TENANT);
+
+        // v1s-14-13: active FREE plan under the cap (lenient: early-failure tests never reach it)
+        lenient().when(freeSubscription.getPlanType()).thenReturn(PlanType.FREE);
+        lenient().when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(freeSubscription));
+        lenient().when(productCountPort.countActiveProducts()).thenReturn(499);
 
         inProgressSession = new InventorySession(
                 SESSION_ID, STORE_ID, InventoryScope.FULL, null,
@@ -245,5 +264,100 @@ class QuickAddProductServiceTest {
 
         assertThat(event.actorName()).isEqualTo("Un employé");
         assertThat(event.actorName()).doesNotContain(ACTOR_ID.toString());
+    }
+
+    // ── v1s-14-13: FREE plan product limit ───────────────────────────────
+
+    @Test
+    @DisplayName("v1s-14-13 — lock → session → name check → count/guard → save, in that order")
+    void execute_takesLockFirst_thenChecksLimitBeforeSave() {
+        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
+        when(productRepository.existsByName("Pagne")).thenReturn(false);
+        when(productRepository.save(any(Product.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(stockLevelRepository.save(any(StockLevel.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(countRepository.save(any(InventoryCount.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.execute(new QuickAddProductCommand(SESSION_ID, "Pagne", CATEGORY_ID, 1, null, ACTOR_ID));
+
+        InOrder order = inOrder(transactionLock, sessionRepository, productRepository,
+                productCountPort, subscriptionRepository, planLimitGuard);
+        order.verify(transactionLock).lock("product-limit:" + TENANT);
+        order.verify(sessionRepository).findById(SESSION_ID);
+        order.verify(productRepository).existsByName("Pagne");
+        order.verify(productCountPort).countActiveProducts();
+        order.verify(subscriptionRepository).findActivePlan();
+        order.verify(planLimitGuard).checkProductLimit(PlanType.FREE, 499);
+        order.verify(productRepository).save(any(Product.class));
+    }
+
+    @Test
+    @DisplayName("v1s-14-13 — at the cap → PLAN_LIMIT_EXCEEDED, nothing written, no event")
+    void execute_atCap_throwsPlanLimitExceeded_writesNothing() {
+        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
+        when(productRepository.existsByName("Pagne")).thenReturn(false);
+        when(productCountPort.countActiveProducts()).thenReturn(500);
+        doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "Limite de produits atteinte"))
+                .when(planLimitGuard).checkProductLimit(PlanType.FREE, 500);
+
+        var cmd = new QuickAddProductCommand(SESSION_ID, "Pagne", CATEGORY_ID, 1, null, ACTOR_ID);
+        assertThatThrownBy(() -> service.execute(cmd))
+                .isInstanceOf(DomainException.class)
+                .satisfies(ex -> assertThat(((DomainException) ex).getDomainCode())
+                        .isEqualTo(ErrorCode.PLAN_LIMIT_EXCEEDED.name()));
+
+        verify(transactionLock).lock("product-limit:" + TENANT);
+        verify(productRepository, never()).save(any());
+        verify(stockLevelRepository, never()).save(any());
+        verify(countRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    @DisplayName("v1s-14-13 — no active subscription → SUBSCRIPTION_NOT_FOUND, nothing written")
+    void execute_noSubscription_throwsSubscriptionNotFound() {
+        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
+        when(productRepository.existsByName("Pagne")).thenReturn(false);
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.empty());
+
+        var cmd = new QuickAddProductCommand(SESSION_ID, "Pagne", CATEGORY_ID, 1, null, ACTOR_ID);
+        assertThatThrownBy(() -> service.execute(cmd))
+                .isInstanceOf(DomainException.class)
+                .satisfies(ex -> assertThat(((DomainException) ex).getDomainCode())
+                        .isEqualTo(ErrorCode.SUBSCRIPTION_NOT_FOUND.name()));
+
+        verify(planLimitGuard, never()).checkProductLimit(any(), anyInt());
+        verify(productRepository, never()).save(any());
+        verify(stockLevelRepository, never()).save(any());
+        verify(countRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    @DisplayName("v1s-14-13 — name taken → PRODUCT_NAME_ALREADY_EXISTS before any count, guard not called")
+    void execute_nameTakenAtCap_dedupWins() {
+        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
+        when(productRepository.existsByName("Pagne")).thenReturn(true);
+
+        var cmd = new QuickAddProductCommand(SESSION_ID, "Pagne", CATEGORY_ID, 1, null, ACTOR_ID);
+        assertThatThrownBy(() -> service.execute(cmd))
+                .isInstanceOf(DomainException.class)
+                .satisfies(ex -> assertThat(((DomainException) ex).getDomainCode())
+                        .isEqualTo(ErrorCode.PRODUCT_NAME_ALREADY_EXISTS.name()));
+
+        verify(transactionLock).lock("product-limit:" + TENANT);
+        verifyNoInteractions(planLimitGuard, productCountPort);
+        verify(productRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("v1s-14-13 — session not found: lock taken, no plan check")
+    void execute_sessionNotFound_noPlanCheck() {
+        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.empty());
+
+        var cmd = new QuickAddProductCommand(SESSION_ID, "Pagne", CATEGORY_ID, 1, null, ACTOR_ID);
+        assertThatThrownBy(() -> service.execute(cmd)).isInstanceOf(DomainException.class);
+
+        verify(transactionLock).lock("product-limit:" + TENANT);
+        verifyNoInteractions(planLimitGuard, productCountPort, subscriptionRepository);
     }
 }

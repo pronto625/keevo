@@ -17,9 +17,13 @@ import com.keevo.inventory.counting.domain.port.in.QuickAddProductCommand;
 import com.keevo.inventory.counting.domain.port.in.QuickAddProductUseCase;
 import com.keevo.inventory.counting.domain.port.out.InventoryCountRepository;
 import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
+import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.subscription.plan.application.service.PlanLimitGuard;
+import com.keevo.subscription.plan.domain.port.out.ProductCountPort;
+import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -47,24 +51,41 @@ public class QuickAddProductService implements QuickAddProductUseCase {
     private final InventoryCountRepository countRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final StoreRepository storeRepository; // v1s-15-9: ProductCreatedEvent.storeName
+    // v1s-14-13: FREE plan product limit (same rule as CreateProductUseCase)
+    private final ProductCountPort productCountPort;
+    private final SubscriptionRepository subscriptionRepository;
+    private final PlanLimitGuard planLimitGuard;
+    private final TransactionLockPort transactionLock;
 
     public QuickAddProductService(InventorySessionRepository sessionRepository,
                                   ProductRepository productRepository,
                                   StockLevelRepository stockLevelRepository,
                                   InventoryCountRepository countRepository,
                                   ApplicationEventPublisher eventPublisher,
-                                  StoreRepository storeRepository) {
+                                  StoreRepository storeRepository,
+                                  ProductCountPort productCountPort,
+                                  SubscriptionRepository subscriptionRepository,
+                                  PlanLimitGuard planLimitGuard,
+                                  TransactionLockPort transactionLock) {
         this.sessionRepository = sessionRepository;
         this.productRepository = productRepository;
         this.stockLevelRepository = stockLevelRepository;
         this.countRepository = countRepository;
         this.eventPublisher = eventPublisher;
         this.storeRepository = storeRepository;
+        this.productCountPort = productCountPort;
+        this.subscriptionRepository = subscriptionRepository;
+        this.planLimitGuard = planLimitGuard;
+        this.transactionLock = transactionLock;
     }
 
     @Override
     @Transactional
     public QuickAddProductResult execute(QuickAddProductCommand cmd) {
+        // v1s-14-13: same per-tenant advisory lock as CreateProductUseCase, first, so the name
+        // check and the plan-limit count → save cannot interleave with a concurrent create.
+        transactionLock.lock("product-limit:" + TenantContext.getCurrentTenant());
+
         // 1. Validate session exists and is IN_PROGRESS
         InventorySession session = sessionRepository.findById(cmd.sessionId())
                 .orElseThrow(() -> new DomainException(ErrorCode.INVENTORY_SESSION_NOT_FOUND,
@@ -81,6 +102,15 @@ public class QuickAddProductService implements QuickAddProductUseCase {
             throw new DomainException(ErrorCode.PRODUCT_NAME_ALREADY_EXISTS,
                     "Un produit avec le nom '" + trimmedName + "' existe déjà");
         }
+
+        // 2b. Plan limit check (v1s-14-13) — after the name check, as in CreateProductUseCase,
+        // so the « produit existant » dedup still wins at the cap; before any write.
+        int currentCount = productCountPort.countActiveProducts();
+        var planType = subscriptionRepository.findActivePlan()
+                .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
+                        "Aucun abonnement actif"))
+                .getPlanType();
+        planLimitGuard.checkProductLimit(planType, currentCount);
 
         // 3. Create Product
         String sku = generateSku();

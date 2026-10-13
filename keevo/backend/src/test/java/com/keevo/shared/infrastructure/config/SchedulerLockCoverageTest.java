@@ -131,19 +131,21 @@ class SchedulerLockCoverageTest {
     void lockTakingUseCasesAreTransactional() throws Exception {
         // The advisory-lock adapter is Propagation.MANDATORY and unit tests mock the port:
         // this guards that the production entry points actually open a transaction.
-        Map<Class<?>, String> lockTakers = Map.of(
-                com.keevo.catalog.product.application.usecase.CreateProductUseCase.class, "execute",
-                com.keevo.catalog.product.application.usecase.CreateDraftProductUseCase.class, "execute",
-                com.keevo.catalog.stock.application.usecase.ExecuteTransferService.class, "execute",
-                com.keevo.commerce.sale.application.service.CloseDayService.class, "closeDay",
-                com.keevo.identity.employee.application.service.ChangeEmployeeRoleService.class, "execute",
-                com.keevo.identity.employee.application.service.DeactivateEmployeeService.class, "execute",
+        Map<Class<?>, String> lockTakers = Map.ofEntries(
+                Map.entry(com.keevo.catalog.product.application.usecase.CreateProductUseCase.class, "execute"),
+                Map.entry(com.keevo.catalog.product.application.usecase.CreateDraftProductUseCase.class, "execute"),
+                Map.entry(com.keevo.catalog.stock.application.usecase.ExecuteTransferService.class, "execute"),
+                Map.entry(com.keevo.commerce.sale.application.service.CloseDayService.class, "closeDay"),
+                Map.entry(com.keevo.identity.employee.application.service.ChangeEmployeeRoleService.class, "execute"),
+                Map.entry(com.keevo.identity.employee.application.service.DeactivateEmployeeService.class, "execute"),
                 // v1s-13-13
-                com.keevo.store.store.application.service.CreateStoreService.class, "execute",
-                com.keevo.identity.employee.application.service.CreateEmployeeService.class, "execute",
-                com.keevo.reporting.report.application.service.WeeklyReportGenerator.class, "generateWeeklyReport",
+                Map.entry(com.keevo.store.store.application.service.CreateStoreService.class, "execute"),
+                Map.entry(com.keevo.identity.employee.application.service.CreateEmployeeService.class, "execute"),
+                Map.entry(com.keevo.reporting.report.application.service.WeeklyReportGenerator.class, "generateWeeklyReport"),
                 // v1s-14-13
-                com.keevo.identity.employee.application.service.ReactivateEmployeeService.class, "execute");
+                Map.entry(com.keevo.identity.employee.application.service.ReactivateEmployeeService.class, "execute"),
+                // v1s-14-13 (quick-add)
+                Map.entry(com.keevo.inventory.counting.application.service.QuickAddProductService.class, "execute"));
         lockTakers.forEach((type, methodName) -> {
             List<Method> methods = Arrays.stream(type.getDeclaredMethods())
                     .filter(m -> m.getName().equals(methodName) && !m.isSynthetic() && !m.isBridge())

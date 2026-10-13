@@ -14,6 +14,8 @@ import com.keevo.identity.employee.domain.port.in.CreateEmployeeUseCase;
 import com.keevo.identity.employee.domain.port.in.ReactivateEmployeeCommand;
 import com.keevo.identity.employee.domain.port.in.ReactivateEmployeeUseCase;
 import com.keevo.identity.onboarding.domain.model.ReportChannel;
+import com.keevo.inventory.counting.domain.port.in.QuickAddProductCommand;
+import com.keevo.inventory.counting.domain.port.in.QuickAddProductUseCase;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.port.in.GenerateWeeklyReportUseCase;
 import com.keevo.reporting.report.domain.port.in.GenerateWeeklyReportUseCase.WeeklyReportCommand;
@@ -96,6 +98,7 @@ class ResidualRacesPostgresIntegrationTest extends FullContextIntegrationTest {
     @Autowired CreateStoreSyncHandler createStoreSyncHandler;
     @Autowired CreateEmployeeUseCase createEmployee;
     @Autowired ReactivateEmployeeUseCase reactivateEmployee;
+    @Autowired QuickAddProductUseCase quickAddProduct;
     @Autowired GenerateWeeklyReportUseCase weeklyReportGenerator;
     @Autowired com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository reportRepository;
     @Autowired CancelPendingSaleUseCase cancelSale;
@@ -374,6 +377,42 @@ class ResidualRacesPostgresIntegrationTest extends FullContextIntegrationTest {
                     .isEqualTo(3);
             assertThat(jdbc.queryForObject("SELECT status FROM \"" + schema + "\".employees WHERE id = ?",
                     String.class, target)).isEqualTo("INACTIVE");
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    // ── v1s-14-13: product plan limit on inventory quick-add ──────────────────
+
+    @Test
+    @DisplayName("v1s-14-13 product limit: quick-add races a create at max−1 → B blocks, then refused; nothing written")
+    void productLimit_quickAddRacesCreate_refused() throws Exception {
+        String schema = tx.execute(s -> tenantFactory.create()).getSchemaName();
+        jdbc.update("UPDATE \"" + schema + "\".subscriptions SET plan_type = 'FREE'");
+        UUID store = jdbc.queryForObject("SELECT id FROM \"" + schema + "\".stores LIMIT 1", UUID.class);
+        // FREE: 500 products max → 499 ACTIVE = max−1
+        jdbc.update("INSERT INTO \"" + schema + "\".products (id, name, sku, status) "
+                + "SELECT gen_random_uuid(), 'Seed ' || g, 'SEED-' || g, 'ACTIVE' FROM generate_series(1, 499) g");
+        UUID session = UUID.randomUUID();
+        jdbc.update("INSERT INTO \"" + schema + "\".inventory_sessions (id, store_id, scope, status, started_by, "
+                + "started_at) VALUES (?, ?, 'FULL', 'IN_PROGRESS', ?, now())", session, store, UUID.randomUUID());
+        String nameB = "Pagne quick-add " + UUID.randomUUID().toString().substring(0, 8);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<Object> b = race(schema, "product-limit:" + schema,
+                    "INSERT INTO \"" + schema + "\".products (id, name, sku, status) "
+                            + "VALUES (?1, 'Produit A', 'KEV-RACEA1', 'ACTIVE')",
+                    new Object[]{UUID.randomUUID()},
+                    () -> quickAddProduct.execute(new QuickAddProductCommand(
+                            session, nameB, null, 3, null, UUID.randomUUID())),
+                    pool);
+
+            assertThat(domainCode(failure(b))).isEqualTo("PLAN_LIMIT_EXCEEDED");
+            assertThat(count("SELECT count(*) FROM \"" + schema + "\".products WHERE status = 'ACTIVE'"))
+                    .isEqualTo(500);
+            assertThat(count("SELECT count(*) FROM \"" + schema + "\".products WHERE name = ?", nameB)).isZero();
+            assertThat(count("SELECT count(*) FROM \"" + schema + "\".inventory_counts WHERE session_id = ?",
+                    session)).isZero();
         } finally {
             pool.shutdownNow();
         }
