@@ -50,6 +50,9 @@ class ReportControllerTest {
     @Mock private GenerateWeeklyReportUseCase weeklyReportGenerator;
     @Mock private StoreRepository storeRepository;
     @Mock private com.keevo.reporting.report.application.service.WeeklyReportWindowResolver weeklyWindowResolver;
+    // v1s-13-11 follow-up: the controller takes the shared Clock bean.
+    @Mock private com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository reportRepository;
+    @org.mockito.Spy private java.time.Clock clock = java.time.Clock.systemUTC();
     @InjectMocks private ReportController controller;
 
     private MockMvc mockMvc;

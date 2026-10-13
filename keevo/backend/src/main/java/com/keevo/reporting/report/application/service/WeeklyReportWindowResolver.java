@@ -17,7 +17,8 @@ import java.util.UUID;
  * WeeklyReportWindowResolver — which sales a store's weekly report covers.
  * Story v1s-13-11 — PO decision D2 (PRD FR52).
  *
- * <p>The weekly report chains on the previous weekly report of the store, with the same
+ * <p>The weekly report chains on the store's latest weekly report (within
+ * {@link #MAX_LOOKBACK_WEEKS} weeks — a missing week does not break the chain), with the same
  * occurrence/arrival rule as day closures ({@link ClosureWindow}):
  * <ul>
  *   <li>start = just after the previous report's end, i.e. min(prev.createdAt, end of its
@@ -37,6 +38,11 @@ import java.util.UUID;
 public class WeeklyReportWindowResolver {
 
     private static final ZoneId WAT = ZoneId.of("Africa/Lagos");
+    /**
+     * How far back the chain looks for the store's previous weekly report (about two months).
+     * Beyond it (store dormant for longer) the report starts on Monday 00:00 WAT.
+     */
+    static final int MAX_LOOKBACK_WEEKS = 8;
 
     private final EndOfDayReportRepository reportRepository;
 
@@ -59,16 +65,25 @@ public class WeeklyReportWindowResolver {
      */
     public Window resolve(UUID storeId, String tenantId, LocalDate weekEndSunday, Instant now) {
         Instant generatedAt = now.truncatedTo(ChronoUnit.MICROS);
-        LocalDate previousSunday = weekEndSunday.minusDays(7);
 
-        Instant previousCreatedAt = reportRepository
-                .findByDateAndTenant(previousSunday, tenantId, ReportType.WEEKLY).stream()
-                .filter(r -> storeId.equals(r.getStoreId()))
-                .map(EndOfDayReport::getCreatedAt)
-                .filter(java.util.Objects::nonNull)
-                .min(Comparator.naturalOrder())
-                .map(i -> i.truncatedTo(ChronoUnit.MICROS))
-                .orElse(null);
+        // v1s-13-11 follow-up: chain on the store's LATEST weekly report, not only the one
+        // dated exactly a week earlier — a week without report (backend down on the configured
+        // day, weekly report disabled for a while, store inactive) must not drop the Sunday
+        // evening and the late-synced sales after the last real report. Bounded look-back.
+        Instant previousCreatedAt = null;
+        LocalDate previousSunday = null;
+        for (int weeksBack = 1; weeksBack <= MAX_LOOKBACK_WEEKS && previousCreatedAt == null; weeksBack++) {
+            LocalDate candidate = weekEndSunday.minusWeeks(weeksBack);
+            previousCreatedAt = reportRepository
+                    .findByDateAndTenant(candidate, tenantId, ReportType.WEEKLY).stream()
+                    .filter(r -> storeId.equals(r.getStoreId()))
+                    .map(EndOfDayReport::getCreatedAt)
+                    .filter(java.util.Objects::nonNull)
+                    .min(Comparator.naturalOrder())
+                    .map(i -> i.truncatedTo(ChronoUnit.MICROS))
+                    .orElse(null);
+            previousSunday = candidate;
+        }
 
         Instant start;
         if (previousCreatedAt != null) {

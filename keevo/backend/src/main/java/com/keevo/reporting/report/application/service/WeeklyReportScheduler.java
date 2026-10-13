@@ -13,7 +13,6 @@ import com.keevo.store.store.domain.port.out.StoreRepository;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -53,20 +52,8 @@ public class WeeklyReportScheduler {
     private final WeeklyReportWindowResolver windowResolver;
     private final Clock clock;
 
-    /** Production constructor — Spring calls this; system clock is used. */
-    @Autowired
+    /** Production constructor — the shared {@code Clock} bean (ClockConfig), as CloseDayService (v1s-13-11 follow-up). */
     public WeeklyReportScheduler(TenantRepository tenantRepository,
-                                  StoreRepository storeRepository,
-                                  EndOfDayReportRepository reportRepository,
-                                  GenerateWeeklyReportUseCase weeklyReportGenerator,
-                                  TenantPreferencesRepository tenantPreferencesRepository,
-                                  WeeklyReportWindowResolver windowResolver) {
-        this(tenantRepository, storeRepository, reportRepository,
-             weeklyReportGenerator, tenantPreferencesRepository, windowResolver, Clock.systemDefaultZone());
-    }
-
-    /** Package-private constructor for tests with an injected clock. */
-    WeeklyReportScheduler(TenantRepository tenantRepository,
                            StoreRepository storeRepository,
                            EndOfDayReportRepository reportRepository,
                            GenerateWeeklyReportUseCase weeklyReportGenerator,

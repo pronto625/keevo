@@ -198,6 +198,31 @@ void main() {
 
       expect(find.textContaining('problème'), findsOneWidget);
     });
+
+    testWidgets('« Réessayer » re-reads the sale', (tester) async {
+      var reads = 0;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            saleByIdProvider('sale-123').overrideWith((ref) {
+              reads++;
+              return Future<Sale?>.error('Test error');
+            }),
+            currentUserRoleProvider.overrideWithValue('EMPLOYEE'),
+          ],
+          child: const MaterialApp(
+            home: SaleDetailPage(saleId: 'sale-123'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final readsBefore = reads;
+
+      await tester.tap(find.text('Réessayer'));
+      await tester.pumpAndSettle();
+
+      expect(reads, greaterThan(readsBefore));
+    });
   });
 
   // ── Story v1s-13-5 (AC8) — Annuler/Corriger button visibility + validation ──
