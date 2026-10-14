@@ -17,7 +17,7 @@ and provides rotation procedures for secrets.
 8. Server setup (files, prerequisites, DNS) · 9. Prod Traefik — known issue · 10. Stack checks ·
 11. Backups · 12. S3 protection (IAM, versioning, Object Lock) · 13. Restore — re-grant step ·
 14. Staging bring-up · 15. Staging TLS through the prod Traefik · 16. Legacy `DELETED` tenants
-cleanup · 17. Single backend instance
+cleanup · 17. Single backend instance · 18. Mise en production du lot « V1 stabilisation »
 
 ---
 
@@ -831,3 +831,70 @@ the previous measurement **kept in memory** by the instance.
 - ✅ Deploy **a single backend instance** (current case: one `backend` container).
 - ⚠️ With several instances, ShedLock would run the sampling on one or the other: recorded requests,
   5xx errors and latencies would be wrong. Move to a shared metrics registry before scaling out.
+
+---
+
+## 18. Mise en production du lot « V1 stabilisation » (préparé le 2026-10-14, testé en local)
+
+Prod observée : branche `deploy` = app **1.1.12+11**, schéma public **V7**. Ce lot applique **V8 → V26**
+(19 migrations Flyway) et livre l'app **1.1.6x**. Ordre imposé : **backend avant app** (l'app 1.1.12 a
+été testée contre le nouveau backend : connexion, synchro, ventes hors ligne — compatible).
+
+### 18.1 Bloquants avant tout déploiement
+- [ ] **Connexion super-admin du tableau de bord (W1)** : sur cette branche, `select-tenant` du compte
+      `KV-ADMIN` (schéma `public`) répond 500 « Invalid tenant schema name » (`SessionTokenIssuer` valide le
+      schéma depuis 11-4). Déployer en l'état rend le tableau de bord inaccessible. Correctif à décider et
+      appliquer (exception explicite `SUPER_ADMIN` + `public`, sans requête de schéma tenant), puis
+      `JwtAuthFilterTest`/`SelectTenantService*` + connexion réelle au tableau de bord.
+- [ ] Story **10-8** (runbooks §11–§16) : sauvegardes testées (restauration à blanc), Traefik/`keevo_edge`,
+      secrets staging, S3 IAM/versioning/Object Lock.
+
+### 18.2 Avant la mise à jour du backend
+- [ ] Sauvegarde complète **vérifiée** (dump + restauration à blanc sur une base jetable, §11/§13).
+- [ ] `.env` prod : `DASHBOARD_ORIGIN=https://<origine du tableau de bord>` (sinon tout navigateur refusé),
+      `KEEVO_EXPORT_LINK_SECRET` défini (sinon liens d'export invalidés à chaque redémarrage),
+      fournisseur WhatsApp réel configuré (`KEEVO_WHATSAPP_PROVIDER`), FCM activé.
+- [ ] Une seule instance backend (§17).
+- [ ] Prévoir une fenêtre calme : au premier démarrage, Flyway applique V8→V26, puis
+      `TenantSchemaSyncService` met à jour chaque schéma tenant (colonnes `reports.updated_at`,
+      `sales.mobile_money_ref`, `sync_operations_log.device_id`, …) et `SyncKeysetIndexJob` construit les
+      index de synchro en arrière-plan (budget 5 h, `CONCURRENTLY`).
+
+### 18.2bis Répétition faite en local (2026-10-14)
+Backend `deploy` (V7) démarré sur une base vide puis alimenté par son API (propriétaire, accueil, 3 produits
++ entrées de stock, client, employé, vente) ; backend de ce lot démarré sur la même base :
+« Successfully applied 19 migrations … v26 » (< 1 s), aucune `ERROR`, nom d'entreprise rattrapé (V24),
+colonnes ajoutées au schéma tenant au premier accès, données intactes (produits, stocks, ventes, clients,
+employés), connexion / pull / push d'une vente Mobile Money appliqués. À refaire sur une copie de la base
+de production avant le jour J (volumétrie réelle).
+
+### 18.3 Déploiement backend puis vérifications
+- [ ] Journal de démarrage : « Successfully applied 19 migrations … now at version v26 », aucune `ERROR`.
+- [ ] `GET /actuator/health` → `UP` ; route inconnue → **404** (et non 500).
+- [ ] `POST /api/v1/auth/forgot-password` sans jeton → **200** (était 401 avant ce lot).
+- [ ] Connexion super-admin au tableau de bord (après correctif W1), pages Entreprises / Revenus /
+      Statistiques / Santé / Alertes / Retours chargées sans erreur.
+- [ ] Un compte de test : inscription, produit, vente, clôture, rapport WhatsApp reçu.
+- [ ] `V24` : les entreprises dont le nom était leur code prennent le nom de leur première boutique —
+      contrôler `select code, name from public.tenants where name = code;` (reste = boutiques sans nom).
+
+### 18.4 App mobile (release)
+- [ ] Construire avec l'URL HTTPS : `flutter build appbundle --release --dart-define=API_BASE_URL=https://<domaine-api>`
+      (par défaut l'URL vaut `http://localhost:4500` — une release sans ce paramètre est inutilisable).
+- [ ] Signer avec la clé de production (`android/key.properties`, cf. `key.properties.example`) — sans ce
+      fichier, Gradle signe en debug.
+- [ ] Mise à jour par-dessus 1.1.12 testée en local : session, données et opérations hors ligne en attente
+      conservées puis synchronisées (migration de la base locale 29→30).
+- [ ] Vérifier sur un appareil réel : vente en ligne, vente hors ligne puis resynchro, mot de passe oublié,
+      connexion employé sur un appareil déjà utilisé par le propriétaire.
+
+### 18.5 Retour arrière
+- App : republier la version précédente (les opérations en attente restent dans la file locale).
+- Backend : les migrations V8→V26 sont additives (colonnes/tables/index) ; un retour au binaire précédent
+  reste possible sur le même schéma, mais **ne pas** restaurer la sauvegarde après que des ventes ont été
+  synchronisées (perte de données) — corriger en avant.
+
+### 18.6 Non couvert par les tests locaux (à faire sur staging)
+- Envois WhatsApp réels (OTP, rapports, messages propriétaire), notifications push réelles.
+- HTTPS/Traefik, plusieurs appareils réels, iOS, volumétrie, réseau instable (et non coupé net).
+
