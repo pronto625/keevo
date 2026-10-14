@@ -110,8 +110,11 @@ class SyncDetailBottomSheet extends ConsumerWidget {
             deviceCount.when(
               data: (devices) => _InfoRow(
                 icon: Icons.devices_rounded,
+                // J24: honest about the window (device ids are renewed on
+                // every account switch).
                 label:
-                    '${devices.length} appareil${devices.length != 1 ? 's' : ''} actif${devices.length != 1 ? 's' : ''}',
+                    '${devices.length} appareil${devices.length != 1 ? 's' : ''} '
+                    'actif${devices.length != 1 ? 's' : ''} (30 derniers jours)',
               ),
               loading: () =>
                   const _InfoRow(icon: Icons.devices, label: '...'),

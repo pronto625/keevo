@@ -64,6 +64,24 @@ Future<List<SyncEvent>> syncHistory(SyncHistoryRef ref) async {
   return logger.getHistory(limit: 20);
 }
 
+/// J24: a device counts as active when seen within this window (the device
+/// id is renewed on every account switch, so older ids pile up).
+const kActiveDeviceWindow = Duration(days: 30);
+
+/// J24: keeps the devices seen (push or update) within [kActiveDeviceWindow]
+/// — also filters an older server that still lists every device id.
+List<Map<String, dynamic>> devicesSeenRecently(
+    List<Map<String, dynamic>> devices, DateTime now) {
+  final since = now.subtract(kActiveDeviceWindow);
+  DateTime? parse(Object? v) =>
+      v is String && v.isNotEmpty ? DateTime.tryParse(v) : null;
+  return devices.where((d) {
+    final seen = [parse(d['lastPushAt']), parse(d['updatedAt'])]
+        .whereType<DateTime>();
+    return seen.any((t) => t.isAfter(since));
+  }).toList();
+}
+
 /// Active devices — from backend GET /api/v1/sync/devices.
 @riverpod
 Future<List<Map<String, dynamic>>> activeDevices(ActiveDevicesRef ref) async {
@@ -71,7 +89,7 @@ Future<List<Map<String, dynamic>>> activeDevices(ActiveDevicesRef ref) async {
     final dio = ref.watch(dioProvider);
     final response = await dio.get('/api/v1/sync/devices');
     final list = (response.data['data'] as List).cast<Map<String, dynamic>>();
-    return list;
+    return devicesSeenRecently(list, DateTime.now());
   } catch (_) {
     return []; // Offline or error → empty list
   }

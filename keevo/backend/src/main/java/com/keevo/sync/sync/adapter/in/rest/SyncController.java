@@ -251,7 +251,13 @@ public class SyncController {
             HttpServletRequest httpRequest) {
         Claims claims = extractClaims(httpRequest);
         String tenantId = claims.get("tenantId", String.class);
-        List<UserSyncState> devices = userSyncStateRepository.findAllByTenantId(tenantId);
+        // J24 (device test): the device id is renewed on every account switch (A29), so
+        // the raw list counted 18 « appareils actifs » for one phone. Only the devices
+        // seen in the last ACTIVE_DEVICE_WINDOW are listed (and labelled so in the app).
+        Instant since = Instant.now().minus(ACTIVE_DEVICE_WINDOW);
+        List<UserSyncState> devices = userSyncStateRepository.findAllByTenantId(tenantId).stream()
+                .filter(d -> lastSeen(d).isAfter(since))
+                .toList();
         List<Map<String, Object>> dtos = devices.stream().map(d -> Map.<String, Object>of(
                 "deviceId", d.deviceId(),
                 "userId", d.userId().toString(),
@@ -259,6 +265,16 @@ public class SyncController {
                 "updatedAt", d.updatedAt().toString()
         )).toList();
         return ResponseEntity.ok(ApiResponseWrapper.ok(dtos));
+    }
+
+    /** J24: a device counts as active if seen (push, pull or update) within this window. */
+    static final java.time.Duration ACTIVE_DEVICE_WINDOW = java.time.Duration.ofDays(30);
+
+    private static Instant lastSeen(UserSyncState d) {
+        Instant seen = d.updatedAt() != null ? d.updatedAt() : Instant.EPOCH;
+        if (d.lastPushAt() != null && d.lastPushAt().isAfter(seen)) seen = d.lastPushAt();
+        if (d.lastPullAt() != null && d.lastPullAt().isAfter(seen)) seen = d.lastPullAt();
+        return seen;
     }
 
     private UUID extractActorId() {

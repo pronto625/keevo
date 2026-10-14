@@ -117,7 +117,7 @@ void main() {
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('2 appareils actifs'), findsOneWidget);
+      expect(find.textContaining('2 appareils actifs (30 derniers jours)'), findsOneWidget);
     });
 
     testWidgets('sync button is enabled when online', (tester) async {
