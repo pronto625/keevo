@@ -856,6 +856,9 @@ Prod observée : branche `deploy` = app **1.1.12+11**, schéma public **V7**. Ce
       `KEEVO_EXPORT_LINK_SECRET` défini (sinon liens d'export invalidés à chaque redémarrage),
       fournisseur WhatsApp réel configuré (`KEEVO_WHATSAPP_PROVIDER`), FCM activé.
 - [ ] Une seule instance backend (§17).
+- [ ] `KEEVO_PRODUCT_PHOTO_DIR` pointe vers un volume **persistant et sauvegardé** (photos produit en
+      vignettes JPEG ~10 Ko ; défaut `${user.home}/keevo-data/product-photos`, seule copie des photos).
+      Monter ce volume dans le conteneur et l'inclure dans les sauvegardes (§11).
 - [ ] Prévoir une fenêtre calme : au premier démarrage, Flyway applique V8→V26, puis
       `TenantSchemaSyncService` met à jour chaque schéma tenant (colonnes `reports.updated_at`,
       `sales.mobile_money_ref`, `sync_operations_log.device_id`, …) et `SyncKeysetIndexJob` construit les
