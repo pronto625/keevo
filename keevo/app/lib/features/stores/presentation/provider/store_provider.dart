@@ -31,6 +31,7 @@ final storeRepositoryProvider = Provider<StoreRepository>((ref) {
     syncService: ref.watch(syncServiceProvider),
     syncTriggerDispatcher: ref.watch(syncTriggerDispatcherProvider),
     db: ref.watch(appDatabaseProvider),
+    isOwnerSession: () => ref.read(isOwnerSessionProvider),
   );
 });
 

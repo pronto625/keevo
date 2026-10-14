@@ -24,6 +24,10 @@ class StoreRepositoryImpl implements StoreRepository {
   final SyncTriggerDispatcher _syncTriggerDispatcher;
   final AppDatabase? _db;
 
+  /// GET /stores is OWNER-only: an employee's assigned store arrives with
+  /// the sync pull, so [syncFromRemote] is a no-op for an employee session.
+  final bool Function() _isOwnerSession;
+
   /// [db] — when given, every offline local write and its sync_queue entry
   /// commit in ONE Drift transaction (v1s-13-8). `SyncService.queueOperation`
   /// writes to the same database, so Drift's zone-scoped transaction covers
@@ -34,11 +38,15 @@ class StoreRepositoryImpl implements StoreRepository {
     required SyncService syncService,
     required SyncTriggerDispatcher syncTriggerDispatcher,
     AppDatabase? db,
+    bool Function() isOwnerSession = _always,
   })  : _local = local,
         _remote = remote,
         _syncService = syncService,
         _syncTriggerDispatcher = syncTriggerDispatcher,
-        _db = db;
+        _db = db,
+        _isOwnerSession = isOwnerSession;
+
+  static bool _always() => true;
 
   Future<T> _atomic<T>(Future<T> Function() action) {
     final db = _db;
@@ -179,6 +187,7 @@ class StoreRepositoryImpl implements StoreRepository {
 
   @override
   Future<void> syncFromRemote() async {
+    if (!_isOwnerSession()) return;
     try {
       final remotes = await _remote.getAll(includeInactive: true);
       for (final s in remotes) {

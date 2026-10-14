@@ -22,15 +22,23 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
   final ConnectivityService _connectivity;
   final SyncService _syncService;
 
+  /// GET /employees is OWNER-only: an employee session (seller filters of
+  /// the sales / report history) reads what the sync pull stored locally.
+  final bool Function() _isOwnerSession;
+
   const EmployeeRepositoryImpl({
     required RemoteEmployeeDataSource remote,
     required LocalEmployeeDataSource local,
     required ConnectivityService connectivity,
     required SyncService syncService,
+    bool Function() isOwnerSession = _always,
   })  : _remote = remote,
         _local = local,
         _connectivity = connectivity,
-        _syncService = syncService;
+        _syncService = syncService,
+        _isOwnerSession = isOwnerSession;
+
+  static bool _always() => true;
 
   @override
   Future<CreateEmployeeResult> createEmployee({
@@ -52,7 +60,7 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
 
   @override
   Future<List<EmployeeModel>> listEmployees() async {
-    if (await _connectivity.isOnline()) {
+    if (_isOwnerSession() && await _connectivity.isOnline()) {
       try {
         final remotes = await _remote.listEmployees();
         await _local.upsertAll(remotes);

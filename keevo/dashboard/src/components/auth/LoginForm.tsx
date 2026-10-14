@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { login } from "@/lib/api/auth";
+import { login, loginErrorMessage } from "@/lib/api/auth";
 import { useAuth } from "@/hooks/useAuth";
 
 export function LoginForm() {
@@ -22,11 +22,7 @@ export function LoginForm() {
       storeToken(res.accessToken);
       router.push("/tenants");
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : "Erreur de connexion. Veuillez réessayer.";
-      setError(msg);
+      setError(loginErrorMessage(err));
     } finally {
       setLoading(false);
     }

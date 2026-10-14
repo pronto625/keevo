@@ -51,6 +51,24 @@ class _ThrowingStockRepository implements StockRepository {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// First load (before the pull) answers late with 12; later loads say 11.
+class _SequencedStockRepository implements StockRepository {
+  int _calls = 0;
+
+  @override
+  Future<List<StockLevelModel>> getLevels(String productId) async {
+    _calls++;
+    if (_calls == 1) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      return [_level('s1', 12, 0)];
+    }
+    return [_level('s1', 11, 0)];
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 class _MockLocalSaleDs extends Mock implements LocalSaleDataSource {}
 
 /// Promotion succeeds and, like the real list refresh, removes the card.
@@ -227,6 +245,41 @@ void main() {
     );
     expect(find.text('Jamais stocké'), findsNothing);
     expect(find.byIcon(Icons.inventory_2_outlined), findsNothing);
+  });
+
+  // G4 (device test): the card kept 12 after a sync brought 11.
+  testWidgets('a sync refresh shows the pulled quantity even if an earlier '
+      'load answers late', (tester) async {
+    final repo = _SequencedStockRepository();
+    SharedPreferences.setMockInitialValues({'active_store_id': 's1'});
+    final prefs = await SharedPreferences.getInstance();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        getStockLevelUseCaseProvider
+            .overrideWithValue(GetStockLevelUseCase(repo)),
+        stockRepositoryProvider.overrideWithValue(repo),
+        currentUserIdProvider.overrideWith((_) async => 'u1'),
+        productListProvider.overrideWith((_) async => const []),
+      ],
+      child: MaterialApp(
+        home: Scaffold(body: ListView(children: [ProductCard(product: _product())])),
+      ),
+    ));
+    await tester.pump(); // first load starts (pre-sync, slow, answers 12)
+
+    // The sync completes and invalidates every stock notifier.
+    ProviderScope.containerOf(tester.element(find.byType(ProductCard)))
+        .invalidate(stockNotifierProvider);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 10));
+    await tester.pump();
+    expect(find.text('11'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 200)); // late answer
+    await tester.pump();
+    expect(find.text('11'), findsOneWidget);
+    expect(find.text('12'), findsNothing);
   });
 
   testWidgets('draft + low stock badges fit on a 360dp screen', (tester) async {
