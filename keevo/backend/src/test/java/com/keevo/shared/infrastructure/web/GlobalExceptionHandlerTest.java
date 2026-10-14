@@ -185,4 +185,19 @@ class GlobalExceptionHandlerTest {
         assertThat(GlobalExceptionHandler.withDetails("no placeholder", java.util.Map.of("a", 1)))
                 .isEqualTo("no placeholder");
     }
+
+    // Device test: a wrong URL answered 500 INTERNAL_ERROR (with a stack trace in the logs).
+    @Test
+    @DisplayName("unknown route maps to 404, wrong method to 405")
+    void unknownRoute_mapsTo404_wrongMethod_to405() {
+        ResponseEntity<ApiResponseWrapper<Void>> notFound = handler.handleNoResource(
+                new org.springframework.web.servlet.resource.NoResourceFoundException(
+                        org.springframework.http.HttpMethod.GET, "api/v1/nope"));
+        assertThat(notFound.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(notFound.getBody().domainCode()).isEqualTo("NOT_FOUND");
+
+        ResponseEntity<ApiResponseWrapper<Void>> notAllowed = handler.handleMethodNotSupported(
+                new org.springframework.web.HttpRequestMethodNotSupportedException("DELETE"));
+        assertThat(notAllowed.getStatusCode()).isEqualTo(HttpStatus.METHOD_NOT_ALLOWED);
+    }
 }

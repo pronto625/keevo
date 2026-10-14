@@ -38,7 +38,7 @@ void main() {
     });
 
     testWidgets(
-        'shows Premium Trial plan with expiry date and unlimited label',
+        'shows Essai Premium plan with expiry date and unlimited label',
         (tester) async {
       await tester.pumpWidget(ProviderScope(
         overrides: [
@@ -60,7 +60,7 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      expect(find.text('Premium Trial'), findsOneWidget);
+      expect(find.text('Essai Premium'), findsOneWidget);
       expect(find.textContaining('Expire'), findsOneWidget);
       expect(find.textContaining('∞'), findsWidgets);
     });
