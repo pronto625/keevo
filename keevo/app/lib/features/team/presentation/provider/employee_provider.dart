@@ -157,16 +157,24 @@ class UpdateEmployee extends _$UpdateEmployee {
       state = AsyncError(readOnly, StackTrace.current);
       return;
     }
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(
-      () => ref.read(employeeRepositoryProvider).updateEmployee(
-            employeeId,
-            firstName: firstName,
-            lastName: lastName,
-            phoneNumber: phoneNumber,
-            storeId: storeId,
-          ),
-    );
+    // J31: kept alive for the whole call — read through `.notifier` without
+    // a listener, an auto-disposed notifier could be torn down mid-call and
+    // the caller would then read a fresh state with the error lost.
+    final link = ref.keepAlive();
+    try {
+      state = const AsyncLoading();
+      state = await AsyncValue.guard(
+        () => ref.read(employeeRepositoryProvider).updateEmployee(
+              employeeId,
+              firstName: firstName,
+              lastName: lastName,
+              phoneNumber: phoneNumber,
+              storeId: storeId,
+            ),
+      );
+    } finally {
+      link.close();
+    }
   }
 }
 
@@ -183,10 +191,15 @@ class ChangeEmployeeRole extends _$ChangeEmployeeRole {
       state = AsyncError(readOnly, StackTrace.current);
       return;
     }
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(
-      () => ref.read(employeeRepositoryProvider).changeRole(employeeId, role),
-    );
+    final link = ref.keepAlive(); // J31: see UpdateEmployee.updateProfile
+    try {
+      state = const AsyncLoading();
+      state = await AsyncValue.guard(
+        () => ref.read(employeeRepositoryProvider).changeRole(employeeId, role),
+      );
+    } finally {
+      link.close();
+    }
   }
 }
 
