@@ -1,3 +1,5 @@
+import '../../utils/server_date.dart';
+
 /// SyncConflict — Domain model for a sync conflict event from the backend.
 ///
 /// Immutable value object parsed from GET /api/v1/sync/conflicts response
@@ -35,7 +37,7 @@ class SyncConflict {
       conflictType: json['conflictType'] as String,
       strategy: json['strategy'] as String,
       conflictData: json['conflictData'] as Map<String, dynamic>?,
-      resolvedAt: DateTime.parse(json['resolvedAt'] as String),
+      resolvedAt: parseServerDate(json['resolvedAt'] as String),
     );
   }
 

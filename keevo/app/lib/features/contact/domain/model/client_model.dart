@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/utils/server_date.dart';
+
 part 'client_model.freezed.dart';
 part 'client_model.g.dart';
 
@@ -16,8 +18,8 @@ class ClientModel with _$ClientModel {
     String? email,
     String? notes,
     @Default(false) bool archived,
-    required DateTime createdAt,
-    required DateTime updatedAt,
+    @ServerDateTimeConverter() required DateTime createdAt,
+    @ServerDateTimeConverter() required DateTime updatedAt,
   }) = _ClientModel;
 
   factory ClientModel.fromJson(Map<String, dynamic> json) =>

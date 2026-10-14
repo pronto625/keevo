@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/utils/server_date.dart';
+
 part 'supplier_model.freezed.dart';
 part 'supplier_model.g.dart';
 
@@ -16,8 +18,8 @@ class SupplierModel with _$SupplierModel {
     String? email,
     @Default(false) bool archived,
     @Default([]) List<String> productIds,
-    required DateTime createdAt,
-    required DateTime updatedAt,
+    @ServerDateTimeConverter() required DateTime createdAt,
+    @ServerDateTimeConverter() required DateTime updatedAt,
   }) = _SupplierModel;
 
   factory SupplierModel.fromJson(Map<String, dynamic> json) =>

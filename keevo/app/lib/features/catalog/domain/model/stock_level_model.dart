@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/utils/server_date.dart';
+
 part 'stock_level_model.freezed.dart';
 part 'stock_level_model.g.dart';
 
@@ -26,7 +28,7 @@ class StockLevelModel with _$StockLevelModel {
     /// Alert threshold. 0 = no alert configured (Story 2.3).
     @Default(0) int minimumThreshold,
 
-    required DateTime updatedAt,
+    @ServerDateTimeConverter() required DateTime updatedAt,
   }) = _StockLevelModel;
 
   factory StockLevelModel.fromJson(Map<String, dynamic> json) =>

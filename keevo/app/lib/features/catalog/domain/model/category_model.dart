@@ -1,3 +1,5 @@
+import '../../../../core/utils/server_date.dart';
+
 /// CategoryModel — Domain model for hierarchical categories.
 ///
 /// Supports parent-child relationships via parentId (null = root category).
@@ -29,8 +31,8 @@ class CategoryModel {
       parentId: json['parentId'] as String?,
       isActive: json['isActive'] as bool,
       isCustom: json['isCustom'] as bool,
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      updatedAt: DateTime.parse(json['updatedAt'] as String),
+      createdAt: parseServerDate(json['createdAt'] as String),
+      updatedAt: parseServerDate(json['updatedAt'] as String),
     );
   }
 

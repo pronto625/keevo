@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/utils/server_date.dart';
+
 part 'stock_transfer_model.freezed.dart';
 part 'stock_transfer_model.g.dart';
 
@@ -16,7 +18,7 @@ class StockTransferModel with _$StockTransferModel {
     String? variantId,
     required int quantity,
     required String actorId,
-    required DateTime occurredAt,
+    @ServerDateTimeConverter() required DateTime occurredAt,
     required String status, // 'IN_TRANSIT' | 'COMPLETED' | 'PENDING_SYNC' | 'CONFLICT'
     String? notes,
     // Denormalized display fields (populated by UI layer from local Drift)

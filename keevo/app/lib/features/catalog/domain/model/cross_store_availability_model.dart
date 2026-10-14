@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/utils/server_date.dart';
+
 part 'cross_store_availability_model.freezed.dart';
 part 'cross_store_availability_model.g.dart';
 
@@ -18,7 +20,7 @@ class CrossStoreAvailabilityModel with _$CrossStoreAvailabilityModel {
     required String productId,
     required String productName,
     required List<CrossStoreAvailabilityEntry> entries,
-    required DateTime refreshedAt,
+    @ServerDateTimeConverter() required DateTime refreshedAt,
   }) = _CrossStoreAvailabilityModel;
 
   factory CrossStoreAvailabilityModel.fromJson(Map<String, dynamic> json) =>

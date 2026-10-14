@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../../../../core/utils/server_date.dart';
 import '../../domain/model/cross_store_availability_model.dart';
 import '../../domain/model/stock_level_model.dart';
 import '../../domain/model/stock_movement_model.dart';
@@ -135,6 +136,6 @@ class RemoteStockDataSource {
         quantityAfter: (json['quantityAfter'] as int?) ?? 0,
         actorId: json['actorId'] as String,
         notes: json['notes'] as String?,
-        occurredAt: DateTime.parse(json['occurredAt'] as String),
+        occurredAt: parseServerDate(json['occurredAt'] as String),
       );
 }

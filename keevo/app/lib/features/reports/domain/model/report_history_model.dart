@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/utils/server_date.dart';
+
 part 'report_history_model.freezed.dart';
 part 'report_history_model.g.dart';
 
@@ -21,11 +23,11 @@ class ReportHistoryModel with _$ReportHistoryModel {
     required String content,
     required String deliveryStatus,
     required int deliveryAttempts,
-    DateTime? lastAttemptAt,
+    @NullableServerDateTimeConverter() DateTime? lastAttemptAt,
     required int totalRevenue,
     required int totalSales,
     required bool isAutomatic,
-    required DateTime createdAt,
+    @ServerDateTimeConverter() required DateTime createdAt,
   }) = _ReportHistoryModel;
 
   factory ReportHistoryModel.fromJson(Map<String, dynamic> json) =>

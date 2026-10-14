@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/utils/server_date.dart';
+
 part 'inventory_session_model.freezed.dart';
 part 'inventory_session_model.g.dart';
 
@@ -17,11 +19,11 @@ class InventorySessionModel with _$InventorySessionModel {
     List<String>? categoryIds,
     required String status,
     required String startedBy,
-    required DateTime startedAt,
+    @ServerDateTimeConverter() required DateTime startedAt,
     String? cancelledBy,
-    DateTime? cancelledAt,
-    DateTime? completedAt,
-    required DateTime updatedAt,
+    @NullableServerDateTimeConverter() DateTime? cancelledAt,
+    @NullableServerDateTimeConverter() DateTime? completedAt,
+    @ServerDateTimeConverter() required DateTime updatedAt,
   }) = _InventorySessionModel;
 
   bool get isActive => status == 'IN_PROGRESS';

@@ -1322,7 +1322,7 @@ class RestSyncService implements SyncService {
             iMap['catalogueUnitPrice'] ?? iMap['appliedUnitPrice'],
             iMap['quantity'],
             iMap['subtotal'],
-            map['createdAt'],
+            _toLocalIso(map['createdAt']),
           ],
         );
       }
