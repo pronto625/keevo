@@ -4,6 +4,7 @@ import com.keevo.identity.auth.domain.model.*;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.shared.domain.port.out.TenantFilesPurger;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -318,5 +319,71 @@ class AccountDeletionSchedulerTest {
         verify(jdbcTemplate, never()).update(anyString(), any(Object.class));
         verify(tenantRepository, never()).save(any());
         verifyNoInteractions(whatsAppPort);
+    }
+
+    // ── Stored files (epic 8: « uploaded photos ») ───────────────────────────
+
+    private AccountDeletionScheduler schedulerWithPurgers(TenantFilesPurger... purgers) {
+        Clock fixedClock = Clock.fixed(Instant.parse("2026-08-22T03:00:00Z"), ZoneOffset.UTC);
+        return new AccountDeletionScheduler(tenantRepository, userRepository, whatsAppPort,
+                schemaProvisioner, jdbcTemplate, transactionManager, fixedClock, List.of(purgers));
+    }
+
+    @Test
+    @DisplayName("deleted tenant: its stored files (product photos) are purged after commit")
+    void deleteNow_purgesTenantFilesAfterCommit() {
+        TenantFilesPurger purger = mock(TenantFilesPurger.class);
+        AccountDeletionScheduler withPurger = schedulerWithPurgers(purger);
+        Tenant tenant = createTenant(TenantStatus.DELETION_PENDING, expiredDate);
+        stubPending(tenant, "+243812345678");
+
+        assertThat(withPurger.deleteNow(tenantId)).isTrue();
+
+        InOrder order = inOrder(schemaProvisioner, transactionManager, purger);
+        order.verify(schemaProvisioner).dropSchemaForDeletion(schemaName);
+        order.verify(transactionManager).commit(any());
+        order.verify(purger).purgeTenant(schemaName);
+    }
+
+    @Test
+    @DisplayName("a failing file purge never fails the deletion; the other purgers still run")
+    void deleteNow_filePurgeFailureIsNonBlocking() {
+        TenantFilesPurger failing = mock(TenantFilesPurger.class);
+        TenantFilesPurger other = mock(TenantFilesPurger.class);
+        doThrow(new RuntimeException("disk")).when(failing).purgeTenant(anyString());
+        AccountDeletionScheduler withPurgers = schedulerWithPurgers(failing, other);
+        Tenant tenant = createTenant(TenantStatus.DELETION_PENDING, expiredDate);
+        stubPending(tenant, "+243812345678");
+
+        assertThat(withPurgers.deleteNow(tenantId)).isTrue();
+
+        verify(other).purgeTenant(schemaName);
+        verify(whatsAppPort).sendReport(eq("+243812345678"), anyString());
+    }
+
+    @Test
+    @DisplayName("rolled-back deletion (DROP failed): files are kept")
+    void deleteNow_dropFailure_keepsFiles() {
+        TenantFilesPurger purger = mock(TenantFilesPurger.class);
+        AccountDeletionScheduler withPurger = schedulerWithPurgers(purger);
+        Tenant tenant = createTenant(TenantStatus.DELETION_PENDING, expiredDate);
+        stubPending(tenant, "+243812345678");
+        doThrow(new RuntimeException("drop failed")).when(schemaProvisioner).dropSchemaForDeletion(schemaName);
+
+        assertThatThrownBy(() -> withPurger.deleteNow(tenantId)).isInstanceOf(RuntimeException.class);
+
+        verify(purger, never()).purgeTenant(anyString());
+    }
+
+    @Test
+    @DisplayName("skipped tenant (no longer pending): files are kept")
+    void deleteNow_skipped_keepsFiles() {
+        TenantFilesPurger purger = mock(TenantFilesPurger.class);
+        AccountDeletionScheduler withPurger = schedulerWithPurgers(purger);
+        stubLock(tenantId, TenantStatus.ACTIVE, null);
+
+        assertThat(withPurger.deleteNow(tenantId)).isFalse();
+
+        verify(purger, never()).purgeTenant(anyString());
     }
 }

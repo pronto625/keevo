@@ -1,7 +1,6 @@
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,6 +16,7 @@ import '../../../pos/presentation/provider/pos_providers.dart';
 import '../../../pos/presentation/provider/day_closure_providers.dart';
 import '../../../../core/di/providers.dart';
 import 'cross_store_availability_bottom_sheet.dart';
+import '../../../../core/widget/product_photo.dart';
 
 /// ProductCard — displays a product in the catalogue list.
 ///
@@ -840,15 +840,7 @@ class ProductCard extends ConsumerWidget {
   }
 
   Widget _buildProductImage(String url, ThemeData theme) {
-    if (url.startsWith('/')) {
-      final file = File(url);
-      if (file.existsSync()) {
-        return Image.file(file, fit: BoxFit.cover);
-      }
-    }
-    return Image.network(url, fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => _buildInitials(theme),
-    );
+    return ProductPhoto(photoUrl: url, placeholder: _buildInitials(theme));
   }
 
   Widget _buildInitials(ThemeData theme) {

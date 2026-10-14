@@ -455,6 +455,7 @@ const AUDIT_ACTION_LABELS: Record<string, string> = {
   PRODUCT_ARCHIVED: "Produit archivé",
   PRODUCT_CREATED: "Produit créé",
   PRODUCT_UPDATED: "Produit modifié",
+  PRODUCT_PHOTO_UPDATED: "Photo du produit modifiée",
   SALE_AUTO_VALIDATED: "Vente validée automatiquement",
   SALE_CANCELLED: "Vente annulée",
   SALE_COMPLETED: "Vente enregistrée",

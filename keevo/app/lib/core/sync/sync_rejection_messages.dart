@@ -75,6 +75,8 @@ String friendlySyncOperationLabel(String operation) {
     'ARCHIVE_PRODUCT' => 'Archivage de produit',
     'UNARCHIVE_PRODUCT' => 'Restauration de produit',
     'PROMOTE_PRODUCT' => 'Validation de produit brouillon',
+    'UPLOAD_PRODUCT_PHOTO' => 'Envoi de la photo du produit',
+    'DELETE_PRODUCT_PHOTO' => 'Suppression de la photo du produit',
     'CREATE_CATEGORY' => 'Création de catégorie',
     'RENAME_CATEGORY' => 'Renommage de catégorie',
     'TOGGLE_CATEGORY' => 'Activation/désactivation de catégorie',

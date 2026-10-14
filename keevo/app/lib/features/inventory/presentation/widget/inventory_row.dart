@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/model/inventory_product_row_model.dart';
 import '../provider/inventory_counting_provider.dart';
+import '../../../../core/widget/product_photo.dart';
 
 /// UX2 color tokens — exact hex from design spec.
 const _colorSuccess = AppTheme.success;
@@ -219,19 +220,13 @@ class _InventoryRowState extends ConsumerState<InventoryRow> {
   }
 
   Widget _buildAvatar(InventoryProductRowModel product) {
-    if (product.photoUrl != null && product.photoUrl!.isNotEmpty) {
-      return CircleAvatar(
-        radius: 24,
-        backgroundImage: NetworkImage(product.photoUrl!),
-      );
-    }
     // Deterministic color from productId
     final colorIndex = product.productId.hashCode.abs() % AppTheme.avatarPalette.length;
     final accent = AppTheme.avatarPalette[colorIndex];
     final initials = _initials(product.productName);
     // Même teinte par produit, mais diluée (badge rond soft) plutôt qu'en
     // aplat saturé.
-    return CircleAvatar(
+    final placeholder = CircleAvatar(
       radius: 24,
       backgroundColor: accent.withValues(alpha: 0.15),
       child: Text(
@@ -240,6 +235,15 @@ class _InventoryRowState extends ConsumerState<InventoryRow> {
             color: AppTheme.avatarInitials(accent, Theme.of(context).brightness),
             fontWeight: FontWeight.bold,
             fontSize: 14),
+      ),
+    );
+    // Photo du produit (fichier local, sinon copie de la photo serveur),
+    // les initiales sinon.
+    return ClipOval(
+      child: SizedBox(
+        width: 48,
+        height: 48,
+        child: ProductPhoto(photoUrl: product.photoUrl, placeholder: placeholder),
       ),
     );
   }

@@ -4,6 +4,7 @@ import com.keevo.identity.auth.domain.model.*;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.shared.domain.port.out.TenantFilesPurger;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
@@ -64,6 +65,8 @@ public class AccountDeletionScheduler {
     private final JdbcTemplate jdbcTemplate;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
+    /** Files stored outside the database (product photos…), deleted with the tenant (epic 8). */
+    private final List<TenantFilesPurger> filePurgers;
 
     /** Production constructor — system clock. */
     @org.springframework.beans.factory.annotation.Autowired
@@ -72,9 +75,10 @@ public class AccountDeletionScheduler {
                                      WhatsAppPort whatsAppPort,
                                      TenantSchemaProvisioner schemaProvisioner,
                                      JdbcTemplate jdbcTemplate,
-                                     PlatformTransactionManager transactionManager) {
+                                     PlatformTransactionManager transactionManager,
+                                     List<TenantFilesPurger> filePurgers) {
         this(tenantRepository, userRepository, whatsAppPort, schemaProvisioner,
-             jdbcTemplate, transactionManager, Clock.systemUTC());
+             jdbcTemplate, transactionManager, Clock.systemUTC(), filePurgers);
     }
 
     /** Test constructor — injectable clock. */
@@ -85,6 +89,20 @@ public class AccountDeletionScheduler {
                                      JdbcTemplate jdbcTemplate,
                                      PlatformTransactionManager transactionManager,
                                      Clock clock) {
+        this(tenantRepository, userRepository, whatsAppPort, schemaProvisioner,
+             jdbcTemplate, transactionManager, clock, List.of());
+    }
+
+    /** Full constructor — injectable clock and file purgers. */
+    public AccountDeletionScheduler(TenantRepository tenantRepository,
+                                     UserRepository userRepository,
+                                     WhatsAppPort whatsAppPort,
+                                     TenantSchemaProvisioner schemaProvisioner,
+                                     JdbcTemplate jdbcTemplate,
+                                     PlatformTransactionManager transactionManager,
+                                     Clock clock,
+                                     List<TenantFilesPurger> filePurgers) {
+        this.filePurgers = filePurgers != null ? List.copyOf(filePurgers) : List.of();
         this.tenantRepository = tenantRepository;
         this.userRepository = userRepository;
         this.whatsAppPort = whatsAppPort;
@@ -143,11 +161,29 @@ public class AccountDeletionScheduler {
      * @return {@code true} when deleted, {@code false} when skipped
      */
     boolean runTenantDeletion(UUID tenantId, boolean requireExpired) {
+        String[] schemaName = new String[1];
         List<String> ownerPhones = transactionTemplate.execute(
-                status -> executeDeletionForTenant(tenantId, requireExpired));
+                status -> executeDeletionForTenant(tenantId, requireExpired, schemaName));
         if (ownerPhones == null) return false; // skipped (cancelled / no longer pending)
+        purgeFiles(tenantId, schemaName[0]);
         sendFinalWhatsApp(tenantId, ownerPhones);
         return true;
+    }
+
+    /**
+     * Epic 8: « uploaded photos » go with the account. After commit (files are not
+     * transactional): a rolled-back deletion keeps them. Best effort — a purger never throws.
+     */
+    private void purgeFiles(UUID tenantId, String schemaName) {
+        if (schemaName == null) return;
+        for (TenantFilesPurger purger : filePurgers) {
+            try {
+                purger.purgeTenant(schemaName);
+            } catch (Exception e) {
+                log.error("[AccountDeletionScheduler] File purge failed for tenant {}: {}",
+                        tenantId, e.getMessage(), e);
+            }
+        }
     }
 
     /**
@@ -169,7 +205,7 @@ public class AccountDeletionScheduler {
      *
      * @return the OWNER phone numbers to notify after commit, or {@code null} when skipped
      */
-    private List<String> executeDeletionForTenant(UUID tenantId, boolean requireExpired) {
+    private List<String> executeDeletionForTenant(UUID tenantId, boolean requireExpired, String[] schemaOut) {
         // 1. Row lock + re-check of status (AND expiry for the daily run: detects a cancellation —
         //    or a cancel then a new request with a future date — since findDeletionsDueBy)
         List<Map<String, Object>> locked = jdbcTemplate.queryForList(LOCK_TENANT_SQL, tenantId);
@@ -181,6 +217,7 @@ public class AccountDeletionScheduler {
         Tenant fresh = tenantRepository.findById(tenantId).orElse(null);
         if (fresh == null) return null;
         String schemaName = fresh.getSchemaName();
+        schemaOut[0] = schemaName;
 
         // 2. OWNER phones, captured before memberships/users are deleted
         List<String> ownerPhones = findOwnerPhones(tenantId);

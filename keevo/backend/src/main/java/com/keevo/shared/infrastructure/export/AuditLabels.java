@@ -34,6 +34,7 @@ public final class AuditLabels {
             // Products
             entry("PRODUCT_CREATED", "Produit créé"),
             entry("PRODUCT_UPDATED", "Produit modifié"),
+            entry("PRODUCT_PHOTO_UPDATED", "Photo du produit modifiée"),
             entry("PRODUCT_ARCHIVED", "Produit archivé"),
             entry("PRODUCT_UNARCHIVED", "Produit désarchivé"),
             entry("PRODUCT_ACTIVATED", "Produit activé"),
@@ -128,6 +129,7 @@ public final class AuditLabels {
             entry("totalRevenue", "Chiffre d'affaires"),
             entry("totalSales", "Nombre de ventes"),
             entry("price", "Prix"),
+            entry("photo", "Photo"),
             entry("sellingPrice", "Prix de vente"),
             entry("purchasePrice", "Prix d'achat"),
             entry("buyPrice", "Prix d'achat"),

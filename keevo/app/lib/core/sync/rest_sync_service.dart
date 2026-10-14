@@ -14,7 +14,9 @@ import '../auth/jwt_claims.dart';
 import '../di/providers.dart' show kUserRoleKey;
 import '../storage/app_constants.dart';
 import '../storage/app_database.dart';
+import '../photo/product_photo_files.dart';
 import 'account_read_only_exception.dart';
+import 'product_photo_outbox.dart';
 import 'sync_rejection_policy.dart';
 import 'sync_required_exception.dart';
 import 'sync_service.dart';
@@ -30,6 +32,7 @@ class RestSyncService implements SyncService {
   final Dio _dio;
   final FlutterSecureStorage _secureStorage;
   final SharedPreferences _prefs;
+  final ProductPhotoOutbox _photoOutbox;
 
   /// Operations each carrying a distinct change (new field values, absolute
   /// state, stock quantity): never deduplicated on (entityId, operation).
@@ -64,10 +67,13 @@ class RestSyncService implements SyncService {
     required Dio dio,
     required FlutterSecureStorage secureStorage,
     required SharedPreferences prefs,
+    ProductPhotoOutbox? photoOutbox,
   })  : _database = database,
         _dio = dio,
         _secureStorage = secureStorage,
-        _prefs = prefs;
+        _prefs = prefs,
+        _photoOutbox = photoOutbox ??
+            ProductPhotoOutbox(database: database, dio: dio, prefs: prefs);
 
   // Single-flight: two pushes of the same queue at once would replay the same
   // operations twice. A caller arriving mid-push joins the running one.
@@ -107,14 +113,29 @@ class RestSyncService implements SyncService {
       'AND quarantined_at IS NOT NULL)',
       [_database.typeMapping.mapToSqlVariable(DateTime.now())],
     );
+    // Photos taken before they were stored on the server: queued once.
+    try {
+      await _photoOutbox.migrateLegacyPhotosOnce();
+    } catch (e) {
+      dev.log('Photo migration failed: $e', name: 'RestSync');
+    }
     // Quarantined operations (v1s-16-15) are kept but never pushed until
-    // the user releases them.
-    final pendingOps = await (_database.select(_database.syncQueue)
+    // the user releases them. Product photos are files with their own
+    // endpoint: sent after the JSON batches by [ProductPhotoOutbox].
+    final queued = await (_database.select(_database.syncQueue)
           ..where((t) => t.synced.equals(false) & t.quarantinedAt.isNull())
           ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
         .get();
+    final pendingOps = queued
+        .where((o) => !ProductPhotoOutbox.isPhotoOperation(o.operation))
+        .toList();
+    final hasPhotoOps = queued.length != pendingOps.length;
 
-    if (pendingOps.isEmpty) return [];
+    if (pendingOps.isEmpty) {
+      if (!hasPhotoOps) return [];
+      if (await _accountReadOnly() == null) await _photoOutbox.processPending();
+      return [];
+    }
 
     // A50: a read-only account (suspended, deletion pending) would be refused
     // (403) — the queue is kept as is, untouched, until the state lifts.
@@ -165,6 +186,8 @@ class RestSyncService implements SyncService {
         return allConflicts;
       }
     }
+    // Every product creation is on the server now: its photo can follow.
+    if (hasPhotoOps) await _photoOutbox.processPending();
     return allConflicts;
   }
 
@@ -215,6 +238,23 @@ class RestSyncService implements SyncService {
       await _database.customStatement(
           'DELETE FROM $table WHERE product_id = ?', [localProductId]);
     }
+    // A photo taken offline goes to the server product.
+    await _database.customStatement(
+      'UPDATE products SET photo_url = (SELECT photo_url FROM products '
+      'WHERE id = ?) WHERE id = ? AND (SELECT photo_url FROM products '
+      'WHERE id = ?) IS NOT NULL',
+      [localProductId, serverProductId, localProductId],
+    );
+    await _database.customStatement(
+      'UPDATE sync_queue SET entity_id = ? WHERE entity_id = ? '
+      'AND synced = 0 AND operation IN (?, ?)',
+      [
+        serverProductId,
+        localProductId,
+        ProductPhotoOutbox.uploadOperation,
+        ProductPhotoOutbox.deleteOperation,
+      ],
+    );
     await _database
         .customStatement('DELETE FROM products WHERE id = ?', [localProductId]);
   }
@@ -938,13 +978,40 @@ class RestSyncService implements SyncService {
   /// These records must NOT be overwritten by pull data.
   Future<Set<String>> _getPendingEntityIds() async {
     // Quarantined operations are never pushed: they protect nothing.
+    // A queued photo protects only the photo (see _upsertProducts), not the
+    // rest of the product.
     final pendingOps = await (_database.select(_database.syncQueue)
-          ..where((t) => t.synced.equals(false) & t.quarantinedAt.isNull()))
+          ..where((t) =>
+              t.synced.equals(false) &
+              t.quarantinedAt.isNull() &
+              t.operation.isNotIn(ProductPhotoOutbox.operations)))
         .get();
     return pendingOps
         .map((o) => o.entityId)
         .whereType<String>()
         .toSet();
+  }
+
+  /// Products whose photo change (upload / deletion) is still queued.
+  Future<Set<String>> _getPendingPhotoProductIds() async {
+    final ops = await (_database.select(_database.syncQueue)
+          ..where((t) =>
+              t.synced.equals(false) &
+              t.quarantinedAt.isNull() &
+              t.operation.isIn(ProductPhotoOutbox.operations)))
+        .get();
+    return ops.map((o) => o.entityId).whereType<String>().toSet();
+  }
+
+  /// Photo kept on this device after a pull: a queued change wins; otherwise
+  /// the server photo; a photo only on this device (not uploaded yet) is kept
+  /// when the server has none; a server photo deleted elsewhere goes.
+  static String? _mergedPhotoUrl(
+      String? server, String? local, bool photoPending) {
+    if (photoPending) return local;
+    if (server != null && server.isNotEmpty) return server;
+    if (ProductPhotoFiles.isLocalPath(local)) return local;
+    return null;
   }
 
   /// Bug fix — pull-merge protection for `stock_levels`.
@@ -1077,7 +1144,7 @@ class RestSyncService implements SyncService {
       List<dynamic> products, Set<String> pendingIds) async {
     if (products.isEmpty) return;
 
-    // Preserve local-only photoUrl values (backend doesn't store images)
+    final pendingPhotos = await _getPendingPhotoProductIds();
     final localProducts = await _database.select(_database.products).get();
     final photoUrlMap = <String, String>{};
     for (final p in localProducts) {
@@ -1104,7 +1171,7 @@ class RestSyncService implements SyncService {
         'price = excluded.price, buy_price = excluded.buy_price, '
         'transport_cost = excluded.transport_cost, '
         'stock_quantity = excluded.stock_quantity, '
-        'photo_url = COALESCE(excluded.photo_url, products.photo_url), '
+        'photo_url = excluded.photo_url, '
         'archived = excluded.archived, status = excluded.status, '
         'updated_at = excluded.updated_at, '
         // Product-wide low-stock threshold; kept when an older server omits it.
@@ -1119,7 +1186,8 @@ class RestSyncService implements SyncService {
           map['buyPrice'],
           map['transportCost'] ?? 0,
           map['stockQuantity'] ?? 0,
-          map['photoUrl'] ?? photoUrlMap[id],
+          _mergedPhotoUrl(map['photoUrl'] as String?, photoUrlMap[id],
+              pendingPhotos.contains(id)),
           (map['archived'] == true) ? 1 : 0,
           map['status'] ?? 'ACTIVE',
           _toLocalIso(map['createdAt']),

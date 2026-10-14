@@ -21,3 +21,5 @@ logging:
 keevo:
   scheduling:
     enabled: false
+  product-photo:
+    storage-dir: ${java.io.tmpdir}/keevo-test-product-photos

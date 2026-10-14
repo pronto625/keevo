@@ -271,6 +271,10 @@ class _AuditEntryTile extends StatelessWidget {
         final name = after['productName'] as String?;
         return name != null ? 'Produit «$name» mis à jour' : 'Produit mis à jour';
 
+      case 'PRODUCT_PHOTO_UPDATED':
+        final photo = after['photo'] as String?;
+        return photo ?? 'Photo du produit modifiée';
+
       case 'PRODUCT_ARCHIVED':
         final name = after['productName'] as String?;
         return name != null ? 'Produit «$name» archivé' : 'Produit archivé';
