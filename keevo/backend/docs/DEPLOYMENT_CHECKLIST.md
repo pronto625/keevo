@@ -841,11 +841,12 @@ Prod observée : branche `deploy` = app **1.1.12+11**, schéma public **V7**. Ce
 été testée contre le nouveau backend : connexion, synchro, ventes hors ligne — compatible).
 
 ### 18.1 Bloquants avant tout déploiement
-- [ ] **Connexion super-admin du tableau de bord (W1)** : sur cette branche, `select-tenant` du compte
-      `KV-ADMIN` (schéma `public`) répond 500 « Invalid tenant schema name » (`SessionTokenIssuer` valide le
-      schéma depuis 11-4). Déployer en l'état rend le tableau de bord inaccessible. Correctif à décider et
-      appliquer (exception explicite `SUPER_ADMIN` + `public`, sans requête de schéma tenant), puis
-      `JwtAuthFilterTest`/`SelectTenantService*` + connexion réelle au tableau de bord.
+- [x] **Connexion super-admin du tableau de bord (W1)** — corrigé : le compte `KV-ADMIN` (schéma `public`)
+      est accepté uniquement avec le rôle `SUPER_ADMIN` (`TenantSchema.isPlatformAdminSession`), à l'émission
+      du jeton et dans `JwtAuthFilter`. **Note** : le filtre de la version actuellement en production refuse
+      déjà ce schéma pour toutes les requêtes — le tableau de bord de prod est probablement inutilisable
+      après connexion tant que ce lot n'est pas déployé. Vérifié en local : connexion, 11 pages, Premium +
+      paiement, retour Gratuit, annonce ciblée reçue sur téléphone, suspension / réactivation.
 - [ ] Story **10-8** (runbooks §11–§16) : sauvegardes testées (restauration à blanc), Traefik/`keevo_edge`,
       secrets staging, S3 IAM/versioning/Object Lock.
 
@@ -872,7 +873,7 @@ de production avant le jour J (volumétrie réelle).
 - [ ] Journal de démarrage : « Successfully applied 19 migrations … now at version v26 », aucune `ERROR`.
 - [ ] `GET /actuator/health` → `UP` ; route inconnue → **404** (et non 500).
 - [ ] `POST /api/v1/auth/forgot-password` sans jeton → **200** (était 401 avant ce lot).
-- [ ] Connexion super-admin au tableau de bord (après correctif W1), pages Entreprises / Revenus /
+- [ ] Connexion super-admin au tableau de bord, pages Entreprises / Revenus /
       Statistiques / Santé / Alertes / Retours chargées sans erreur.
 - [ ] Un compte de test : inscription, produit, vente, clôture, rapport WhatsApp reçu.
 - [ ] `V24` : les entreprises dont le nom était leur code prennent le nom de leur première boutique —

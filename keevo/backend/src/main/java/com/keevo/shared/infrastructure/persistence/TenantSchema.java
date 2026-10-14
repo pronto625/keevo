@@ -44,6 +44,12 @@ public final class TenantSchema {
      */
     private static final Pattern SCHEMA_PATTERN = Pattern.compile("^kv_[a-z0-9]{6}$");
 
+    /**
+     * Schema of the {@code KV-ADMIN} system tenant ({@code AdminAccountInitializer}). It is not a
+     * tenant schema and never passes {@link #isValid(String)}; only a SUPER_ADMIN session may carry it.
+     */
+    public static final String PLATFORM_ADMIN_SCHEMA = "public";
+
     private TenantSchema() {
         // Utility class — prevent instantiation
     }
@@ -79,5 +85,14 @@ public final class TenantSchema {
                     + (schemaName == null ? "null" : String.valueOf(schemaName.length())) + ")");
         }
         return schemaName;
+    }
+
+    /**
+     * {@code true} only for a SUPER_ADMIN session bound to the platform admin schema. Such a session
+     * runs no tenant-qualified SQL, so callers accept it instead of {@link #validate(String)};
+     * {@code "public"} with any other role, or any other schema with SUPER_ADMIN, is not accepted.
+     */
+    public static boolean isPlatformAdminSession(String schemaName, String role) {
+        return PLATFORM_ADMIN_SCHEMA.equals(schemaName) && "SUPER_ADMIN".equals(role);
     }
 }

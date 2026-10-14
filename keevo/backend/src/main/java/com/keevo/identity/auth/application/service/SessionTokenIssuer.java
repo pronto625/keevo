@@ -50,8 +50,10 @@ public class SessionTokenIssuer {
     }
 
     public IssuedSession issue(UUID userId, Tenant tenant, String role) {
-        // Story 11.4 AC7: throws before the schema reaches any SQL (employee lookup, onboarding probe)
-        String schema = TenantSchema.validate(tenant.getSchemaName());
+        // Story 11.4 AC7: throws before the schema reaches any SQL (employee lookup, onboarding probe).
+        // The SUPER_ADMIN system tenant (schema "public") is the only exception: no tenant SQL runs for it.
+        boolean platformAdmin = TenantSchema.isPlatformAdminSession(tenant.getSchemaName(), role);
+        String schema = platformAdmin ? tenant.getSchemaName() : TenantSchema.validate(tenant.getSchemaName());
 
         UUID storeId = null;
         boolean passwordChangeRequired = false;
@@ -71,7 +73,7 @@ public class SessionTokenIssuer {
 
         String accessToken = jwtTokenProvider.generateAccessToken(
                 userId, schema, role, tenant.getStatus().name(),
-                storeId, passwordChangeRequired, firstName, onboardingCompleted(schema));
+                storeId, passwordChangeRequired, firstName, platformAdmin || onboardingCompleted(schema));
 
         String rawRefreshToken = jwtTokenProvider.generateRefreshToken();
         Instant expiresAt = Instant.now().plus(jwtProperties.getRefreshTokenExpiryDays(), ChronoUnit.DAYS);
