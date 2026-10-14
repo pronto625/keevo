@@ -88,6 +88,31 @@ class DashboardServicePostgresIntegrationTest extends PostgresIntegrationTest {
         assertHasAtLeast(summary.dailyCALast30(), "2026-01-01", 1000);
     }
 
+    @Test
+    @DisplayName("period totals: WAT week/month/year boundaries, COMPLETED only, corrected amount")
+    void periodTotals() {
+        // Clock: Wednesday 2041-05-15 13:00 WAT — a far year no other test writes sales in.
+        UUID store = insertStore();
+        insertSale(store, Instant.parse("2041-05-12T22:59:00Z"), 700);   // Sun 12 May 23:59 WAT
+        insertSale(store, Instant.parse("2041-05-12T23:30:00Z"), 1000);  // Mon 13 May 00:30 WAT
+        insertSale(store, Instant.parse("2041-05-14T09:00:00Z"), 5000, "CANCELLED");
+        insertSale(store, Instant.parse("2041-05-14T09:00:00Z"), 4000, "PENDING_VALIDATION");
+        UUID corrected = insertSale(store, Instant.parse("2041-05-14T10:00:00Z"), 3000);
+        // A correction rewrites total_amount in place (CorrectSaleService).
+        jdbc.update("UPDATE sales SET total_amount = 1500 WHERE id = ?", corrected);
+        insertSale(store, Instant.parse("2041-04-30T22:59:00Z"), 300);   // 30 Apr 23:59 WAT
+        insertSale(store, Instant.parse("2040-12-31T22:59:00Z"), 200);   // 31 Dec 2040 23:59 WAT
+
+        DashboardSummary.PeriodTotals totals = summary(at("2041-05-15T12:00:00Z")).periodTotals();
+
+        assertThat(totals.week()).isEqualTo(new DashboardSummary.PeriodTotal(2500, 2));
+        assertThat(totals.month()).isEqualTo(new DashboardSummary.PeriodTotal(3200, 3));
+        assertThat(totals.year()).isEqualTo(new DashboardSummary.PeriodTotal(3500, 4));
+        // Shared DB: other tests' sales are older, so all time is at least ours.
+        assertThat(totals.allTime().amount()).isGreaterThanOrEqualTo(3700);
+        assertThat(totals.allTime().salesCount()).isGreaterThanOrEqualTo(5);
+    }
+
     // ── helpers ──
 
     private static Clock at(String instant) {
@@ -117,10 +142,16 @@ class DashboardServicePostgresIntegrationTest extends PostgresIntegrationTest {
         return id;
     }
 
-    private void insertSale(UUID store, Instant occurredAt, int total) {
+    private UUID insertSale(UUID store, Instant occurredAt, int total) {
+        return insertSale(store, occurredAt, total, "COMPLETED");
+    }
+
+    private UUID insertSale(UUID store, Instant occurredAt, int total, String status) {
+        UUID id = UUID.randomUUID();
         jdbc.update("INSERT INTO sales (id, created_at, employee_id, occurred_at, payment_mode, status, store_id, "
-                        + "total_amount, discount_amount) VALUES (?, ?, ?, ?, 'CASH', 'COMPLETED', ?, ?, 0)",
-                UUID.randomUUID(), Timestamp.from(occurredAt), UUID.randomUUID(), Timestamp.from(occurredAt),
-                store, total);
+                        + "total_amount, discount_amount) VALUES (?, ?, ?, ?, 'CASH', ?, ?, ?, 0)",
+                id, Timestamp.from(occurredAt), UUID.randomUUID(), Timestamp.from(occurredAt),
+                status, store, total);
+        return id;
     }
 }

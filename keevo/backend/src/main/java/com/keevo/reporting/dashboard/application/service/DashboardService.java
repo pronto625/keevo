@@ -97,13 +97,23 @@ public class DashboardService implements GetDashboardSummaryUseCase {
         List<DailyCAEntry> yearlyCA         = chart("year", windows.years(), null);
         List<StoreOverviewEntry> stores     = getStoreOverviews(startToday, startYesterday, windows);
 
+        // « Chiffre d'affaires total » — same rules as todayCA (COMPLETED, corrected total_amount).
+        Instant startOfWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+                .atStartOfDay(wat).toInstant();
+        Instant startOfYear = today.withDayOfYear(1).atStartOfDay(wat).toInstant();
+        PeriodTotals periodTotals = new PeriodTotals(
+                periodTotal(startOfWeek),
+                new PeriodTotal(monthCA, totalTransactionsMonth),
+                periodTotal(startOfYear),
+                periodTotal(null));
+
         return new DashboardSummary(
                 todayCA, yesterdayCA, dayBeforeCA, heroTrend,
                 totalTransactionsMonth, prevMonthTransactions,
                 averageBasketMonth, prevMonthAverageBasket,
                 lowStockCount, todaySalesCount,
                 topProducts, worstProducts, dailyCA,
-                weeklyCA, monthlyCA, yearlyCA, stores
+                weeklyCA, monthlyCA, yearlyCA, stores, periodTotals
         );
     }
 
@@ -123,6 +133,17 @@ public class DashboardService implements GetDashboardSummaryUseCase {
                 Long.class,
                 java.sql.Timestamp.from(from), java.sql.Timestamp.from(to));
         return result != null ? result : 0;
+    }
+
+    /** CA and COMPLETED-sale count since {@code from} (null = all time), all stores. */
+    private PeriodTotal periodTotal(Instant from) {
+        String sql = "SELECT COALESCE(SUM(total_amount), 0) AS total, COUNT(*) AS cnt FROM sales "
+                + "WHERE status = 'COMPLETED'" + (from != null ? " AND occurred_at >= ?" : "");
+        RowMapper<PeriodTotal> mapper = (rs, rowNum) -> new PeriodTotal(rs.getLong("total"), rs.getInt("cnt"));
+        PeriodTotal result = from != null
+                ? jdbc.queryForObject(sql, mapper, Timestamp.from(from))
+                : jdbc.queryForObject(sql, mapper);
+        return result != null ? result : PeriodTotal.ZERO;
     }
 
     private int countSales(Instant from, Instant to) {

@@ -91,6 +91,34 @@ class DashboardControllerTest {
     }
 
     @Test
+    void GET_dashboard_summary_shouldReturn_periodTotals() throws Exception {
+        DashboardSummary s = sampleSummary();
+        var withTotals = new DashboardSummary(
+                s.todayCA(), s.yesterdayCA(), s.dayBeforeYesterdayCA(), s.heroTrendPercent(),
+                s.totalTransactionsMonth(), s.prevMonthTransactions(),
+                s.averageBasketMonth(), s.prevMonthAverageBasket(),
+                s.lowStockCount(), s.todaySalesCount(),
+                s.weeklyTopProducts(), s.weeklyWorstProducts(), s.dailyCALast30(),
+                s.weeklyCA(), s.monthlyCA(), s.yearlyCA(), s.storeOverviews(),
+                new PeriodTotals(new PeriodTotal(125000L, 12), new PeriodTotal(480000L, 45),
+                        new PeriodTotal(2500000L, 230), new PeriodTotal(7300000L, 900)));
+        when(getDashboardSummaryUseCase.execute(any())).thenReturn(withTotals);
+
+        mockMvc.perform(get("/api/v1/dashboard/summary"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.periodTotals.week.amount").value(125000))
+                .andExpect(jsonPath("$.data.periodTotals.week.salesCount").value(12))
+                .andExpect(jsonPath("$.data.periodTotals.month.amount").value(480000))
+                .andExpect(jsonPath("$.data.periodTotals.month.salesCount").value(45))
+                .andExpect(jsonPath("$.data.periodTotals.year.amount").value(2500000))
+                .andExpect(jsonPath("$.data.periodTotals.year.salesCount").value(230))
+                .andExpect(jsonPath("$.data.periodTotals.allTime.amount").value(7300000))
+                .andExpect(jsonPath("$.data.periodTotals.allTime.salesCount").value(900))
+                // Existing fields unchanged (backward compatible).
+                .andExpect(jsonPath("$.data.todayCA").value(75000));
+    }
+
+    @Test
     void GET_dashboard_summary_shouldReturn_emptyData_whenNoSales() throws Exception {
         var emptySummary = new DashboardSummary(
                 0L, 0L, 0L, 0.0, 0, 0, 0L, 0L, 0, 0,
