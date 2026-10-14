@@ -134,14 +134,15 @@ class MultiStoreStockRepositoryAdapterPostgresTest {
     }
 
     @Test
-    void overview_lowStockCount_includesRowlessAndNegative_excludesArchived() {
+    // J29 (device test): never-stocked products made the Catalogue badge « 9+ » for good.
+    void overview_lowStockCount_onlyStockedProducts_negativeIncluded_excludesArchived() {
         List<StoreStockSummary> overviews = adapter.getStoreOverviews();
 
         StoreStockSummary boutique = overviews.stream().filter(o -> o.storeId().equals(store)).findFirst().orElseThrow();
         assertThat(boutique.productCount()).isEqualTo(2);     // stocked + negative (archived excluded)
-        assertThat(boutique.lowStockCount()).isEqualTo(2);    // rowless (0) + negative (-1)
+        assertThat(boutique.lowStockCount()).isEqualTo(1);    // negative (-1); rowless is not an alert
         StoreStockSummary entrepot = overviews.stream().filter(o -> o.storeId().equals(otherStore)).findFirst().orElseThrow();
         assertThat(entrepot.productCount()).isEqualTo(1);
-        assertThat(entrepot.lowStockCount()).isEqualTo(2);    // stocked + negative never stocked there
+        assertThat(entrepot.lowStockCount()).isZero();        // 7 > default threshold 5; others never stocked
     }
 }

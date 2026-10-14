@@ -23,8 +23,10 @@ class LocalMultiStoreStockDataSource {
 
   /// Overview SQL: one row per active store with aggregated stock stats.
   /// Products come from the catalogue (non-archived) and are joined to the
-  /// store's stock levels: a product never stocked in the store counts as
-  /// quantity 0 (rupture) in low_stock_count, as on the server.
+  /// store's stock levels. J29: low_stock_count (Catalogue badge) counts only
+  /// products stocked in the store (a stock row exists) at or below the
+  /// threshold, negative included — as on the server. A product never stocked
+  /// there is listed at 0 in the detail but is not an alert.
   /// product_count stays the number of products actually stocked there.
   static const _overviewSql = '''
     SELECT
@@ -33,8 +35,8 @@ class LocalMultiStoreStockDataSource {
       s.type         AS store_type,
       COUNT(DISTINCT sl.product_id)                                         AS product_count,
       COALESCE(SUM(sl.quantity * p.price), 0)                              AS total_value_xaf,
-      COUNT(CASE WHEN p.id IS NOT NULL
-                  AND COALESCE(sl.quantity, 0)
+      COUNT(CASE WHEN sl.product_id IS NOT NULL
+                  AND sl.quantity
                       <= COALESCE(NULLIF($effectiveThresholdSql, 0), 5)
                  THEN 1 END)                                                AS low_stock_count
     FROM stores s

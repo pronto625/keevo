@@ -253,17 +253,47 @@ void main() {
       expect(result.single.status, 'CRITIQUE');
     });
 
-    test('getStoreOverviews counts never-stocked and negative products as low',
-        () async {
-      await addProduct('p-new', 'Attiéké');
+    // J29 (device test): the Catalogue badge was « 9+ » for good — every
+    // never-stocked product counted as low in every store (warehouse too).
+    test('getStoreOverviews: low = stocked here and <= threshold, never-stocked '
+        'products are not alerts', () async {
+      await addProduct('p-new', 'Attiéké'); // never stocked: not an alert
       await addProduct('p-sard', 'Sardines Boîte');
-      await addLevel('p-sard', storeId, -1);
+      await addLevel('p-sard', storeId, -1); // negative: alert
+      await addProduct('p-zero', 'Riz');
+      await addLevel('p-zero', storeId, 0); // rupture: alert
+      await addProduct('p-thr', 'Bissap', threshold: 8);
+      await addLevel('p-thr', storeId, 8); // at threshold: alert
+      await addProduct('p-ok', 'Huile', threshold: 3);
+      await addLevel('p-ok', storeId, 4); // above threshold: fine
       await addProduct('p-arch', 'Archivé', archived: true);
+      await addLevel('p-arch', storeId, 0); // archived: never counted
 
       final overview = (await datasource.getStoreOverviews()).single;
 
-      expect(overview.productCount, 2); // stocked here: Chaussures + Sardines
-      expect(overview.lowStockCount, 2); // Attiéké (0) + Sardines (-1)
+      expect(overview.productCount, 5); // Chaussures, Sardines, Riz, Bissap, Huile
+      expect(overview.lowStockCount, 3); // Sardines, Riz, Bissap
+    });
+
+    test('getStoreOverviews: a warehouse without stock rows has no alert',
+        () async {
+      await db.into(db.stores).insert(StoresCompanion.insert(
+        id: 'depot',
+        name: 'Dépôt Bonaberi',
+        tenantId: 'tenant-1',
+        type: const Value('WAREHOUSE'),
+        createdAt: DateTime(2025, 1, 1),
+        updatedAt: DateTime(2025, 1, 1),
+      ));
+      for (var i = 0; i < 12; i++) {
+        await addProduct('p-$i', 'Produit $i');
+      }
+
+      final overviews = await datasource.getStoreOverviews();
+      final depot = overviews.firstWhere((o) => o.storeId == 'depot');
+
+      expect(depot.lowStockCount, 0);
+      expect(overviews.fold<int>(0, (sum, o) => sum + o.lowStockCount), 0);
     });
 
     test('product-wide threshold applies where the product has no row',
