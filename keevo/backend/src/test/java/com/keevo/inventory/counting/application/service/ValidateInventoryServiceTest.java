@@ -131,6 +131,31 @@ class ValidateInventoryServiceTest {
         verify(eventPublisher).publishEvent(any(InventoryValidatedEvent.class));
     }
 
+    @Test
+    void execute_productNeverStockedInStore_countedPositive_recordsEntryOnRowlessLevel_countedZero_noMovement() {
+        // Given: two products with no stock_levels row in the store (theoretical 0)
+        InventorySession session = inProgressSession();
+        UUID counted = UUID.randomUUID();   // counted 4 → +4 (creates the row via recordOperation)
+        UUID zero = UUID.randomUUID();      // counted 0 → concordant, no movement
+
+        when(sessionRepo.findById(sessionId)).thenReturn(Optional.of(session));
+        when(countRepo.findBySessionId(sessionId)).thenReturn(List.of(
+                count(counted, null, 0, 4),
+                count(zero, null, 0, 0)
+        ));
+        when(stockLevelRepo.findByProductAndStore(counted, storeId)).thenReturn(Optional.empty());
+        when(sessionRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        ValidateInventoryResult result = service.execute(new ValidateInventoryCommand(sessionId, actorId));
+
+        assertThat(result.adjustmentsApplied()).isEqualTo(1);
+        verify(stockOperationService).recordOperation(counted, null, storeId, MovementType.ADJUSTMENT, 4,
+                actorId, "INVENTORY:" + sessionId, null, false);
+        verify(stockOperationService, never()).recordOperation(eq(zero), any(), any(), any(), anyInt(),
+                any(), anyString(), any(), anyBoolean());
+        verify(stockLevelRepo, never()).findByProductAndStore(zero, storeId);
+    }
+
     // ── Error cases ─────────────────────────────────────────────────
 
     @Test

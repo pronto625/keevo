@@ -18,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -94,5 +95,23 @@ class ProductDeltaProviderTest {
         assertThat(map.get("photoUrl")).isEqualTo("http://photo.jpg");
         assertThat(map.get("archived")).isEqualTo(true);
         assertThat(map.get("transportCost")).isEqualTo(50);
+    }
+
+    @Test
+    void queryDelta_mapsMinimumThreshold_beforeSyncCursorColumn() {
+        when(em.createNativeQuery(anyString())).thenReturn(query);
+        when(query.setParameter(eq("since"), any())).thenReturn(query);
+        when(query.setMaxResults(anyInt())).thenReturn(query);
+
+        var now = Timestamp.from(Instant.now());
+        // Real rows end with the sync_cursor column appended by DeltaPageQuery.
+        Object[] row = {UUID.randomUUID(), "Prod", 500, 300, 0, "SK1", null, null, null,
+                false, "ACTIVE", 0, now, now, 7, now};
+        when(query.getResultList()).thenReturn(Collections.singletonList(row));
+
+        var map = provider.queryDelta(Instant.EPOCH).get(0);
+
+        assertThat(map.get("minimumThreshold")).isEqualTo(7);
+        verify(em).createNativeQuery(contains("minimum_threshold"));
     }
 }

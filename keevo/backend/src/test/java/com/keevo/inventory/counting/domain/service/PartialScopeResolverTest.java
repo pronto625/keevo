@@ -61,31 +61,47 @@ class PartialScopeResolverTest {
     }
 
     @Test
-    void resolveProducts_shouldFilterByCategoryIntersection() {
-        // Stock has both products
+    void resolveProducts_shouldFilterByCategory() {
+        // Stock has both products, only PRODUCT_A is in the selected category
         var slA = new StockLevel(UUID.randomUUID(), PRODUCT_A, null, STORE_ID, 50, Instant.now());
         var slB = new StockLevel(UUID.randomUUID(), PRODUCT_B, null, STORE_ID, 30, Instant.now());
         when(stockLevelRepository.findAllByStoreId(STORE_ID)).thenReturn(List.of(slA, slB));
 
-        // Only PRODUCT_A is in the selected category
         var productA = new Product(PRODUCT_A, "Produit A", "d", "KEV-PRA001",
                 CATEGORY_A, 100, 50, 0, 50, false, ProductStatus.ACTIVE, Instant.now(), Instant.now());
         when(productRepository.findByCategoryIds(List.of(CATEGORY_A))).thenReturn(List.of(productA));
-        when(productRepository.findAllByIds(anyList())).thenReturn(List.of(productA));
         when(productRepository.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
 
         List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, List.of(CATEGORY_A), List.of());
 
         assertThat(rows).hasSize(1);
         assertThat(rows.get(0).productId()).isEqualTo(PRODUCT_A);
+        assertThat(rows.get(0).theoreticalQty()).isEqualTo(50);
     }
 
     @Test
-    void resolveProducts_shouldReturnEmptyWhenNoStockLevels() {
+    void resolveProducts_shouldIncludeCategoryProductsNeverStockedInStore_withZeroExpected() {
         when(stockLevelRepository.findAllByStoreId(STORE_ID)).thenReturn(List.of());
+        var productA = new Product(PRODUCT_A, "Produit A", "d", "KEV-PRA001",
+                CATEGORY_A, 100, 50, 0, 50, false, ProductStatus.ACTIVE, Instant.now(), Instant.now());
+        when(productRepository.findByCategoryIds(List.of(CATEGORY_A))).thenReturn(List.of(productA));
+        when(productRepository.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
+
+        List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, List.of(CATEGORY_A), List.of());
+
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).productId()).isEqualTo(PRODUCT_A);
+        assertThat(rows.get(0).theoreticalQty()).isZero();
+        assertThat(rows.get(0).variantId()).isNull();
+    }
+
+    @Test
+    void resolveProducts_shouldReturnEmptyWhenCategoryHasNoActiveProduct() {
+        when(productRepository.findByCategoryIds(List.of(CATEGORY_A))).thenReturn(List.of());
 
         List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, List.of(CATEGORY_A), List.of());
 
         assertThat(rows).isEmpty();
+        verifyNoInteractions(stockLevelRepository);
     }
 }

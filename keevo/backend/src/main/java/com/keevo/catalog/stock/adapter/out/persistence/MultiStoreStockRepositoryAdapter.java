@@ -38,6 +38,12 @@ import java.util.UUID;
 @Component
 public class MultiStoreStockRepositoryAdapter implements MultiStoreStockRepository {
 
+    /**
+     * One row per active store. Products are read from the catalogue (non-archived) and joined
+     * to the store's stock levels: a product never stocked in the store has no row there and
+     * counts as quantity 0 — i.e. in rupture, so it is part of {@code low_stock_count}.
+     * {@code product_count} stays the number of products actually stocked in the store.
+     */
     private static final String SQL_STORE_OVERVIEW_TPL = """
         SELECT
             s.id           AS store_id,
@@ -45,11 +51,13 @@ public class MultiStoreStockRepositoryAdapter implements MultiStoreStockReposito
             s.type         AS store_type,
             COUNT(DISTINCT sl.product_id)                                        AS product_count,
             COALESCE(SUM(sl.quantity * p.price), 0)                             AS total_value_xaf,
-            COUNT(CASE WHEN sl.quantity <= COALESCE(NULLIF(p.minimum_threshold, 0), 5) THEN 1 END) AS low_stock_count
+            COUNT(CASE WHEN p.id IS NOT NULL
+                        AND COALESCE(sl.quantity, 0) <= COALESCE(NULLIF(p.minimum_threshold, 0), 5)
+                       THEN 1 END)                                               AS low_stock_count
         FROM %1$s.stores s
+        LEFT JOIN %1$s.products p      ON p.archived = false
         LEFT JOIN %1$s.stock_levels sl ON sl.store_id = s.id
-        LEFT JOIN %1$s.products p     ON p.id = sl.product_id
-                                AND p.archived = false
+                                      AND sl.product_id = p.id
         WHERE s.is_active = true
         GROUP BY s.id, s.name, s.type
         ORDER BY
@@ -57,36 +65,44 @@ public class MultiStoreStockRepositoryAdapter implements MultiStoreStockReposito
             s.created_at ASC
         """;
 
-    private static final String SQL_STORE_DETAIL_BASE_TPL = """
-        SELECT
-            p.id                AS product_id,
-            p.name              AS product_name,
-            sl.variant_id       AS variant_id,
-            NULL                AS variant_label,
-            sl.store_id         AS store_id,
-            sl.quantity         AS quantity,
-            p.minimum_threshold AS minimum_threshold
-        FROM %1$s.stock_levels sl
-        JOIN %1$s.products p ON p.id = sl.product_id
-        WHERE sl.store_id = CAST(? AS uuid)
-          AND p.archived = false
+    /**
+     * Store detail: starts from the (non-archived) catalogue and LEFT JOINs the store's stock
+     * levels, so a product never stocked in the store is listed with quantity 0 instead of
+     * being absent. Single bind parameter: the store id (in the join condition).
+     */
+    static final String SQL_STORE_DETAIL_FROM_TPL = """
+        FROM %1$s.products p
+        LEFT JOIN %1$s.stock_levels sl ON sl.product_id = p.id
+                                      AND sl.store_id = CAST(? AS uuid)
+        WHERE p.archived = false
         """;
 
-    private static final String SQL_STORE_DETAIL_SORT_LOW_TPL =
-        SQL_STORE_DETAIL_BASE_TPL +
+    static final String SQL_STORE_DETAIL_BASE_TPL = """
+        SELECT
+            p.id                     AS product_id,
+            p.name                   AS product_name,
+            sl.variant_id            AS variant_id,
+            NULL                     AS variant_label,
+            COALESCE(sl.quantity, 0) AS quantity,
+            p.minimum_threshold      AS minimum_threshold
+        """ + SQL_STORE_DETAIL_FROM_TPL;
+
+    /** Low-stock filter (lowOnly) — same threshold rule as the overview's low_stock_count. */
+    static final String SQL_LOW_FILTER =
+        "  AND COALESCE(sl.quantity, 0) <= COALESCE(NULLIF(p.minimum_threshold, 0), 5)\n";
+
+    static final String SQL_STORE_DETAIL_SORT_LOW =
         "ORDER BY " +
-        "  CASE WHEN sl.quantity <= COALESCE(NULLIF(p.minimum_threshold, 0), 5) AND sl.quantity > 0 THEN 0 " +
-        "       WHEN sl.quantity = 0 THEN 1 " +
+        "  CASE WHEN COALESCE(sl.quantity, 0) <= COALESCE(NULLIF(p.minimum_threshold, 0), 5)" +
+        "            AND COALESCE(sl.quantity, 0) > 0 THEN 0 " +
+        "       WHEN COALESCE(sl.quantity, 0) <= 0 THEN 1 " +
         "       ELSE 2 END ASC, " +
         "  p.name ASC ";
 
-    private static final String SQL_STORE_DETAIL_SORT_NAME_TPL =
-        SQL_STORE_DETAIL_BASE_TPL + "ORDER BY p.name ASC ";
+    static final String SQL_STORE_DETAIL_SORT_NAME = "ORDER BY p.name ASC ";
 
-    private static final String SQL_STORE_DETAIL_COUNT_TPL =
-        "SELECT COUNT(*) FROM %1$s.stock_levels sl " +
-        "JOIN %1$s.products p ON p.id = sl.product_id " +
-        "WHERE sl.store_id = CAST(? AS uuid) AND p.archived = false";
+    static final String SQL_STORE_DETAIL_COUNT_TPL =
+        "SELECT COUNT(*) " + SQL_STORE_DETAIL_FROM_TPL;
 
     private final JdbcTemplate jdbc;
 
@@ -122,15 +138,12 @@ public class MultiStoreStockRepositoryAdapter implements MultiStoreStockReposito
             UUID storeId, boolean sortLowFirst, boolean lowOnly, Pageable pageable) {
 
         String s = TenantSchema.validate(schema()); // schema() already throws IllegalStateException when invalid
-        String baseSql  = String.format(
-                sortLowFirst ? SQL_STORE_DETAIL_SORT_LOW_TPL : SQL_STORE_DETAIL_SORT_NAME_TPL, s);
-        if (lowOnly) {
-            // Insert low-stock filter before ORDER BY clause
-            baseSql = baseSql.replace("ORDER BY",
-                    "  AND sl.quantity <= COALESCE(NULLIF(p.minimum_threshold, 0), 5)\n        ORDER BY");
-        }
-        String pagedSql = baseSql + " LIMIT " + pageable.getPageSize()
-                                  + " OFFSET " + pageable.getOffset();
+        String lowFilter = lowOnly ? SQL_LOW_FILTER : "";
+        String pagedSql = String.format(SQL_STORE_DETAIL_BASE_TPL, s)
+                + lowFilter
+                + (sortLowFirst ? SQL_STORE_DETAIL_SORT_LOW : SQL_STORE_DETAIL_SORT_NAME)
+                + " LIMIT " + pageable.getPageSize()
+                + " OFFSET " + pageable.getOffset();
 
         List<StoreProductStockEntry> content = jdbc.query(pagedSql,
             (rs, rowNum) -> {
@@ -140,17 +153,14 @@ public class MultiStoreStockRepositoryAdapter implements MultiStoreStockReposito
                     rs.getString("product_name"),
                     vid != null ? UUID.fromString(vid) : null,
                     null, // variantLabel — TODO Story 3.3+ (variants)
-                    UUID.fromString(rs.getString("store_id")),
+                    storeId,
                     rs.getInt("quantity"),
                     rs.getInt("minimum_threshold")
                 );
             },
             storeId.toString());
 
-        String countSql = String.format(SQL_STORE_DETAIL_COUNT_TPL, TenantSchema.validate(s));
-        if (lowOnly) {
-            countSql += " AND sl.quantity <= COALESCE(NULLIF(p.minimum_threshold, 0), 5)";
-        }
+        String countSql = String.format(SQL_STORE_DETAIL_COUNT_TPL, s) + lowFilter;
         Long total = jdbc.queryForObject(countSql, Long.class, storeId.toString());
         return new PageImpl<>(content, pageable, total != null ? total : 0L);
     }

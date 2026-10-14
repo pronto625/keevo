@@ -348,6 +348,48 @@ void main() {
       expect(movements.first.quantityAfter, 5);
     });
 
+    test('product never stocked here counted 0 → no row, no movement',
+        () async {
+      final now = DateTime.now();
+      await db.into(db.inventorySessions).insert(
+            InventorySessionsCompanion.insert(
+              id: 'sess-zero',
+              storeId: 'store-1',
+              scope: 'FULL',
+              status: 'IN_PROGRESS',
+              startedBy: 'actor-test',
+              startedAt: now,
+              updatedAt: now,
+            ),
+          );
+      await db.into(db.inventoryCounts).insert(
+            InventoryCountsCompanion.insert(
+              id: 'count-zero',
+              sessionId: 'sess-zero',
+              productId: 'prod-never',
+              productName: 'Product never stocked',
+              theoretical: 0,
+              physical: const Value(0),
+              updatedAt: now,
+            ),
+          );
+
+      final container = buildContainer();
+      addTearDown(container.dispose);
+
+      final adjustments = await container
+          .read(validateInventoryNotifierProvider.notifier)
+          .validate('sess-zero');
+
+      expect(adjustments, 0);
+      expect(await db.select(db.stockMovements).get(), isEmpty);
+      expect(
+          await (db.select(db.stockLevels)
+                ..where((t) => t.productId.equals('prod-never')))
+              .get(),
+          isEmpty);
+    });
+
     // ── Regression: zero-gap counts produce no movement ──────────────────
 
     test('skips zero-gap counts, no movement (regression)', () async {

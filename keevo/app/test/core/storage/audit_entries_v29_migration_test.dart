@@ -41,6 +41,8 @@ void main() {
           "'{\"productName\":\"Savon\"}', '2026-10-05T10:00:00.000')");
       // The later v30 step adds sales.mobile_money_ref.
       raw.execute('CREATE TABLE sales (id TEXT NOT NULL PRIMARY KEY)');
+      // The later v31 step adds products.minimum_threshold.
+      raw.execute('CREATE TABLE products (id TEXT NOT NULL PRIMARY KEY)');
       raw.userVersion = 28;
     }));
     addTearDown(db.close);

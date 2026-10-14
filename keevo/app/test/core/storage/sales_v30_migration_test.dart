@@ -36,6 +36,8 @@ void main() {
       raw.execute("INSERT INTO sales (id, store_id, employee_id, total_amount, "
           "payment_mode, created_at) VALUES ('legacy', 'st-1', 'e-1', 1500, "
           "'MOBILE_MONEY', '2026-10-05T10:00:00.000')");
+      // The later v31 step adds products.minimum_threshold.
+      raw.execute('CREATE TABLE products (id TEXT NOT NULL PRIMARY KEY)');
       raw.userVersion = 29;
     }));
     addTearDown(db.close);

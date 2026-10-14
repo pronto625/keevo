@@ -27,8 +27,27 @@ class LocalStockDataSource {
     final rows = await (_db.select(_db.stockLevels)
           ..where((l) => l.productId.equals(productId)))
         .get();
-    return rows.map(_levelToModel).toList();
+    final productThreshold = await getProductThreshold(productId);
+    return rows
+        .map((r) => _withThreshold(_levelToModel(r), productThreshold))
+        .toList();
   }
+
+  /// Product-wide low-stock threshold (server `products.minimum_threshold`),
+  /// 0 when none is set or the product is unknown locally.
+  Future<int> getProductThreshold(String productId) async {
+    final row = await (_db.select(_db.products)
+          ..where((p) => p.id.equals(productId)))
+        .getSingleOrNull();
+    return row?.minimumThreshold ?? 0;
+  }
+
+  /// The product-wide threshold wins over the legacy per-row one (the server
+  /// only keeps the product one; the row value may be stale after a pull).
+  static StockLevelModel _withThreshold(StockLevelModel level, int productThreshold) =>
+      productThreshold > 0
+          ? level.copyWith(minimumThreshold: productThreshold)
+          : level;
 
   Future<StockLevelModel?> getLevelByStore(
     String productId,
@@ -44,7 +63,7 @@ class LocalStockDataSource {
         .get();
     if (rows.isEmpty) return null;
     final row = rows.reduce((a, b) => a.quantity >= b.quantity ? a : b);
-    return _levelToModel(row);
+    return _withThreshold(_levelToModel(row), await getProductThreshold(productId));
   }
 
   Future<void> upsertLevel(StockLevelModel level) async {
@@ -78,13 +97,21 @@ class LocalStockDataSource {
     }
   }
 
+  /// Sets the low-stock threshold locally, product-wide like the server
+  /// (`products.minimum_threshold`): it is stored on the product, so it applies
+  /// in every store — including one where the product has no stock_levels row
+  /// yet — and the existing rows are aligned for older readers.
   Future<void> updateThreshold(String productId, int minimumThreshold) async {
-    await (_db.update(_db.stockLevels)
-          ..where((l) => l.productId.equals(productId)))
-        .write(StockLevelsCompanion(
-          minimumThreshold: Value(minimumThreshold),
-          updatedAt: Value(DateTime.now()),
-        ));
+    await _db.transaction(() async {
+      await (_db.update(_db.products)..where((p) => p.id.equals(productId)))
+          .write(ProductsCompanion(minimumThreshold: Value(minimumThreshold)));
+      await (_db.update(_db.stockLevels)
+            ..where((l) => l.productId.equals(productId)))
+          .write(StockLevelsCompanion(
+            minimumThreshold: Value(minimumThreshold),
+            updatedAt: Value(DateTime.now()),
+          ));
+    });
   }
 
   // ── Cross-store availability (Story 3.4) ─────────────────────────────────
@@ -107,11 +134,14 @@ class LocalStockDataSource {
     final levelByStore = {
       for (final l in levels) l.storeId: l,
     };
+    final productThreshold = await getProductThreshold(productId);
 
     final entries = stores.map((s) {
       final level = levelByStore[s.id];
       final qty = level?.quantity ?? 0;
-      final minThreshold = level?.minimumThreshold ?? 0;
+      final minThreshold = productThreshold > 0
+          ? productThreshold
+          : (level?.minimumThreshold ?? 0);
       final isLow = qty > 0 && minThreshold > 0 && qty <= minThreshold;
       return CrossStoreAvailabilityEntry(
         storeId: s.id,

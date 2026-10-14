@@ -37,6 +37,11 @@ class Products extends Table {
   /// Product lifecycle status: 'ACTIVE' (visible in POS) or 'DRAFT' (POS-created).
   TextColumn get status => text().withDefault(const Constant('ACTIVE'))();
 
+  /// Low-stock alert threshold, product-wide (schema v31) — the server keeps it
+  /// on `products.minimum_threshold`. Applies in every store, including those
+  /// where the product has no stock_levels row yet. 0 = no threshold set.
+  IntColumn get minimumThreshold => integer().withDefault(const Constant(0))();
+
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
 

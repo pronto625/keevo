@@ -237,6 +237,53 @@ void main() {
       expect(p.photoUrl, '/local/photo.jpg');
     });
 
+    Map<String, dynamic> productDelta({int? minimumThreshold}) => {
+          'id': 'prod-1',
+          'name': 'Bissap',
+          'description': null,
+          'sku': 'SKU1',
+          'categoryId': null,
+          'price': 500,
+          'buyPrice': 300,
+          'transportCost': 0,
+          'stockQuantity': 0,
+          'photoUrl': null,
+          'archived': false,
+          'status': 'ACTIVE',
+          if (minimumThreshold != null) 'minimumThreshold': minimumThreshold,
+          'createdAt': '2026-03-19T10:00:00.000Z',
+          'updatedAt': '2026-03-21T10:00:00.000Z',
+        };
+
+    test('pull_storesProductWideMinimumThreshold', () async {
+      stubPull(entities: {
+        'products': [productDelta(minimumThreshold: 6)]
+      });
+
+      await syncService.pull();
+
+      final p = (await db.select(db.products).get()).single;
+      expect(p.minimumThreshold, 6);
+    });
+
+    test('pull_withoutMinimumThreshold_keepsTheLocalOne', () async {
+      await db.customStatement(
+        'INSERT INTO products (id, name, price, buy_price, stock_quantity, '
+        'archived, status, minimum_threshold, created_at, updated_at) '
+        "VALUES ('prod-1', 'Old', 500, 300, 0, 0, 'ACTIVE', 4, "
+        "'2026-03-19T10:00:00.000Z', '2026-03-19T10:00:00.000Z')",
+      );
+      stubPull(entities: {
+        'products': [productDelta()]
+      });
+
+      await syncService.pull();
+
+      final p = (await db.select(db.products).get()).single;
+      expect(p.name, 'Bissap');
+      expect(p.minimumThreshold, 4);
+    });
+
     test('pull_upsertsStockLevels', () async {
       stubPull(entities: {
         'stockLevels': [

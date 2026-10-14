@@ -77,68 +77,67 @@ class LocalInventoryCountDataSource {
 
   /// Build product rows offline from local tables:
   /// Products + StockLevels + existing InventoryCounts.
+  ///
+  /// The scope is driven by the products (every non-archived product, or those
+  /// of the selected categories for PARTIAL), as on the server: a product never
+  /// stocked in the store has no stock_levels row yet and is counted with an
+  /// expected quantity of 0 (variant null). Products with rows keep one row per
+  /// stock level (product/variant).
   Future<List<InventoryProductRowModel>> buildOfflineProductRows(
     String sessionId,
     String storeId,
     List<String>? categoryIds,
   ) async {
-    // 1. Get stock levels for the store
-    final stockQuery = _db.select(_db.stockLevels)
-      ..where((sl) => sl.storeId.equals(storeId));
-    final stockRows = await stockQuery.get();
-    if (stockRows.isEmpty) return [];
-
-    // 2. Collect product IDs from stock
-    final productIds = stockRows.map((s) => s.productId).toSet().toList();
-
-    // 3. Load products (filter out archived)
+    // 1. Load the products of the scope (archived ones excluded)
     final productQuery = _db.select(_db.products)
-      ..where(
-          (p) => p.id.isIn(productIds) & p.archived.equals(false));
-    var products = await productQuery.get();
-
-    // 4. Filter by categories if PARTIAL scope
+      ..where((p) => p.archived.equals(false));
     if (categoryIds != null && categoryIds.isNotEmpty) {
-      products = products
-          .where((p) =>
-              p.categoryId != null && categoryIds.contains(p.categoryId))
-          .toList();
+      productQuery.where((p) => p.categoryId.isIn(categoryIds));
+    }
+    final products = await productQuery.get();
+    if (products.isEmpty) return [];
+
+    // 2. Stock levels of the store, grouped by product
+    final stockRows = await (_db.select(_db.stockLevels)
+          ..where((sl) => sl.storeId.equals(storeId)))
+        .get();
+    final stocksByProduct = <String, List<StockLevel>>{};
+    for (final sl in stockRows) {
+      stocksByProduct.putIfAbsent(sl.productId, () => []).add(sl);
     }
 
-    // 5. Load existing counts for the session
+    // 3. Load existing counts for the session
     final counts = await findBySessionId(sessionId);
     final countLookup = <String, InventoryCountModel>{};
     for (final c in counts) {
       countLookup['${c.productId}:${c.variantId ?? 'null'}'] = c;
     }
 
-    // 6. Build stock level lookup: productId:variantId → quantity
-    final stockLookup = <String, int>{};
-    for (final sl in stockRows) {
-      stockLookup['${sl.productId}:${sl.variantId ?? 'null'}'] = sl.quantity;
+    // 4. Build product rows
+    InventoryProductRowModel row(Product product, String? variantId, int qty) {
+      final count = countLookup['${product.id}:${variantId ?? 'null'}'];
+      return InventoryProductRowModel(
+        productId: product.id,
+        productName: product.name,
+        sku: product.sku.isNotEmpty ? product.sku : null,
+        photoUrl: product.photoUrl,
+        variantId: variantId,
+        variantLabel: null, // Not available in Drift stock_levels
+        theoreticalQty: qty,
+        physicalQty: count?.physical,
+        ecart: count?.ecart,
+      );
     }
 
-    // 7. Build product rows
     final result = <InventoryProductRowModel>[];
     for (final product in products) {
-      // Find stock levels for this product
-      final productStocks =
-          stockRows.where((sl) => sl.productId == product.id).toList();
-
+      final productStocks = stocksByProduct[product.id];
+      if (productStocks == null || productStocks.isEmpty) {
+        result.add(row(product, null, 0)); // never stocked here → expected 0
+        continue;
+      }
       for (final stock in productStocks) {
-        final key = '${product.id}:${stock.variantId ?? 'null'}';
-        final count = countLookup[key];
-        result.add(InventoryProductRowModel(
-          productId: product.id,
-          productName: product.name,
-          sku: product.sku.isNotEmpty ? product.sku : null,
-          photoUrl: product.photoUrl,
-          variantId: stock.variantId,
-          variantLabel: null, // Not available in Drift stock_levels
-          theoreticalQty: stock.quantity,
-          physicalQty: count?.physical,
-          ecart: count?.ecart,
-        ));
+        result.add(row(product, stock.variantId, stock.quantity));
       }
     }
 
