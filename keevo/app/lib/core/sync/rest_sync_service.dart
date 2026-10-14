@@ -8,10 +8,13 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../features/auth/data/repository/secure_token_storage.dart';
 import '../../features/catalog/data/datasource/remote_product_datasource.dart';
+import '../auth/jwt_claims.dart';
 import '../di/providers.dart' show kUserRoleKey;
 import '../storage/app_constants.dart';
 import '../storage/app_database.dart';
+import 'account_read_only_exception.dart';
 import 'sync_rejection_policy.dart';
 import 'sync_required_exception.dart';
 import 'sync_service.dart';
@@ -79,6 +82,19 @@ class RestSyncService implements SyncService {
     return push;
   }
 
+  /// The read-only state of the account per the stored access token's
+  /// `tenantStatus` claim (A50). Null — writes allowed — when the token cannot
+  /// be read: the server stays the authority.
+  Future<AccountReadOnlyException?> _accountReadOnly() async {
+    try {
+      final token = await SecureTokenStorage(_secureStorage).getToken();
+      return AccountReadOnlyException.forTenantStatus(
+          JwtClaims.tryParse(token)?.tenantStatus);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<List<Map<String, dynamic>>> _push() async {
     // A validation/cancellation queued after its sale was quarantined joins
     // the sale's chain instead of being sent (and refused) on its own.
@@ -99,6 +115,11 @@ class RestSyncService implements SyncService {
         .get();
 
     if (pendingOps.isEmpty) return [];
+
+    // A50: a read-only account (suspended, deletion pending) would be refused
+    // (403) — the queue is kept as is, untouched, until the state lifts.
+    final readOnly = await _accountReadOnly();
+    if (readOnly != null) throw readOnly;
 
     dev.log('📦 Found ${pendingOps.length} pending operations', name: 'RestSync');
 
@@ -134,7 +155,8 @@ class RestSyncService implements SyncService {
       try {
         allConflicts
             .addAll(await _pushBatch(batch, removed, rewritten, quarantined));
-      } on DioException {
+      } on Exception catch (e) {
+        if (e is! DioException && e is! AccountReadOnlyException) rethrow;
         // A later batch could not be sent (its ops stay queued, retried next
         // push). The earlier batches already removed rolled-back /
         // quarantined ops from the queue: their notices must still reach
@@ -410,6 +432,15 @@ class RestSyncService implements SyncService {
         throw SyncRequiredException(
             daysSinceLastSync: days, lastPushAt: lastPushAt);
       }
+      // A50: account read-only (claim renewed since the push started, or a
+      // token the app could not read). Not a failed attempt: the ops stay
+      // queued, untouched, and are sent once the account is writable again.
+      final body = e.response?.data;
+      final readOnly = e.response?.statusCode == 403 && body is Map
+          ? AccountReadOnlyException.forDomainCode(
+              body['domainCode'] as String?)
+          : null;
+      if (readOnly != null) throw readOnly;
       // Network error — increment retry on all ops in this batch
       for (final op in ops) {
         await (_database.update(_database.syncQueue)
@@ -1660,6 +1691,12 @@ class RestSyncService implements SyncService {
     required Map<String, dynamic> payload,
     String? entityId,
   }) async {
+    // A50: no write while the account is read-only (suspended, deletion
+    // pending). Thrown inside the caller's transaction, so the local write
+    // that goes with this operation is rolled back too.
+    final readOnly = await _accountReadOnly();
+    if (readOnly != null) throw readOnly;
+
     const uuid = Uuid();
 
     // Deduplicate: a one-shot operation already queued for this entity (e.g.

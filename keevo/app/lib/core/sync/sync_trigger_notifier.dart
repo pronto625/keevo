@@ -7,6 +7,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../features/auth/presentation/provider/auth_provider.dart';
 import '../../features/catalog/presentation/provider/category_provider.dart';
 import '../../features/catalog/presentation/provider/product_provider.dart';
 import '../../features/catalog/presentation/provider/stock_provider.dart';
@@ -17,11 +18,13 @@ import '../../features/inventory/presentation/provider/stock_transfer_provider.d
 import '../../features/pos/presentation/provider/day_closure_providers.dart';
 import '../../features/pos/presentation/provider/pos_providers.dart';
 import '../../features/reports/presentation/provider/report_history_providers.dart';
+import '../../features/settings/presentation/provider/account_status_provider.dart';
 import '../../features/stores/presentation/provider/active_store_provider.dart';
 import '../../features/stores/presentation/provider/store_provider.dart';
 import '../../features/team/presentation/provider/employee_provider.dart';
 import '../di/providers.dart';
 import '../storage/app_constants.dart';
+import 'account_read_only_exception.dart';
 import 'sync_event_logger.dart';
 import 'sync_gate_provider.dart';
 import 'sync_monitoring_providers.dart';
@@ -76,6 +79,12 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
   Timer? _gateCheckTimer;
   int _consecutiveFailures = 0;
   DateTime? _firstFailureAt;
+  // A50: read-only account — one history entry per episode, and a throttled
+  // session renewal to notice when the account is writable again (the
+  // tenantStatus claim is frozen in the 60-day access token).
+  bool _readOnlyLogged = false;
+  DateTime? _lastReadOnlyRenewalAt;
+  static const _readOnlyRenewalInterval = Duration(minutes: 15);
 
   // Single-flight: connectivity restore, timers and local writes can all ask
   // for a sync while one runs. They join the running cycle instead of
@@ -107,7 +116,12 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
             r == ConnectivityResult.mobile ||
             r == ConnectivityResult.wifi ||
             r == ConnectivityResult.ethernet);
-        if (isOnline) _onConnectivityRestored();
+        if (isOnline) {
+          _onConnectivityRestored();
+        } else {
+          // A44: no retry while offline — the restore resumes the sync.
+          _retryTimer?.cancel();
+        }
       });
     });
 
@@ -138,6 +152,9 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
   }
 
   void _onConnectivityRestored() {
+    // The failures seen offline say nothing about the network now: the next
+    // failure starts the backoff over instead of waiting up to 5 minutes.
+    _consecutiveFailures = 0;
     // Debounce 3 seconds
     _retryTimer?.cancel();
     _retryTimer = Timer(const Duration(seconds: 3), () {
@@ -145,8 +162,26 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
     });
   }
 
+  /// A44: true only when the connectivity service says there is no network.
+  /// Unknown (the check failed) counts as online — the server decides.
+  Future<bool> _isOffline() async {
+    try {
+      return !await ref.read(connectivityServiceProvider).isOnline();
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _tryPeriodicPush() async {
     if (state is! SyncTriggerIdle) return;
+    if (await _isOffline()) return;
+    // A50: a read-only account cannot push — the 5-minute full sync still
+    // pulls and checks whether the account is writable again.
+    if (AccountReadOnlyException.forTenantStatus(
+            ref.read(tenantStatusClaimProvider).valueOrNull) !=
+        null) {
+      return;
+    }
     final syncService = ref.read(syncServiceProvider);
     final hasPending = await syncService.hasPendingOperations();
     if (hasPending) {
@@ -178,6 +213,10 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
   }
 
   Future<void> _syncCycle() async {
+    // A44: offline, a push can only fail — and each failure would count as an
+    // attempt on every queued operation. Nothing is tried; the connectivity
+    // listener starts a sync as soon as the network is back.
+    if (await _isOffline()) return;
     state = const SyncTriggerState.syncing();
     try {
       final syncService = ref.read(syncServiceProvider);
@@ -188,6 +227,7 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
       var pulled = false;
       try {
         conflicts = await syncService.push();
+        _readOnlyLogged = false;
         await eventLogger.logPushSuccess(conflicts.length);
       } on SyncRequiredException catch (e) {
         // Server 423: device is stale server-side. The server lifts that gate
@@ -217,6 +257,15 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
           ref.invalidate(daysSinceLastSyncProvider);
           rethrow; // outer catch handles _scheduleRetry
         }
+      } on AccountReadOnlyException {
+        // A50: the account is read-only (suspended, deletion pending). The
+        // queued operations stay as they are and go once it is writable;
+        // reading (pull) is still allowed.
+        if (!_readOnlyLogged) {
+          _readOnlyLogged = true;
+          await eventLogger.logPushFailed(kSyncPushReadOnlyMessage);
+        }
+        await _renewSessionWhileReadOnly();
       } catch (e) {
         dev.log('Push failed during sync cycle: $e', name: 'SyncTrigger');
         await eventLogger.logPushFailed(kSyncPushFailedMessage);
@@ -249,6 +298,25 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
     }
   }
 
+  /// A50: renews the session at most every [_readOnlyRenewalInterval] while
+  /// the account is read-only, so a reactivation (or a deletion cancelled
+  /// from another device) reaches the claim — the next push then sends the
+  /// kept operations.
+  Future<void> _renewSessionWhileReadOnly() async {
+    final now = DateTime.now();
+    final last = _lastReadOnlyRenewalAt;
+    if (last != null && now.difference(last) < _readOnlyRenewalInterval) {
+      return;
+    }
+    _lastReadOnlyRenewalAt = now;
+    try {
+      await ref.read(sessionRefresherProvider).refresh();
+    } catch (e) {
+      dev.log('Session renewal while read-only failed: $e',
+          name: 'SyncTrigger');
+    }
+  }
+
   /// AC6: Called after JWT validation at app startup (and after login /
   /// tenant selection) to pull the latest server state. Never dropped: a
   /// cycle already running may predate the login/tenant switch, so a fresh
@@ -270,6 +338,7 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
   }
 
   Future<void> _pushCycle() async {
+    if (await _isOffline()) return; // A44 — see _syncCycle.
     state = const SyncTriggerState.syncing();
     try {
       final syncService = ref.read(syncServiceProvider);
@@ -278,6 +347,11 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
       _consecutiveFailures = 0;
       _firstFailureAt = null;
       _invalidateAllProviders();
+      state = const SyncTriggerState.idle();
+    } on AccountReadOnlyException {
+      // A50: not a failure to retry — the operations wait, queued, until the
+      // account is writable again (periodic push, or the renewal after a
+      // cancelled deletion).
       state = const SyncTriggerState.idle();
     } catch (_) {
       _consecutiveFailures++;

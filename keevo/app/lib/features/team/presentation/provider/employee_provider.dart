@@ -1,9 +1,12 @@
 import 'dart:developer' as dev;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart' show Ref;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/sync/account_read_only_exception.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
+import '../../../settings/presentation/provider/account_status_provider.dart';
 import '../../data/datasource/local_employee_datasource.dart';
 import '../../data/datasource/remote_employee_datasource.dart';
 import '../../data/repository/employee_repository_impl.dart';
@@ -79,6 +82,12 @@ final employeeActivityProvider = FutureProvider.autoDispose
   return ref.watch(employeeRepositoryProvider).getActivity(employeeId);
 });
 
+/// A50: team changes are refused while the account is read-only (suspended,
+/// deletion pending) — the server would refuse them too.
+AccountReadOnlyException? _accountReadOnly(Ref ref) =>
+    AccountReadOnlyException.forTenantStatus(
+        ref.read(tenantStatusClaimProvider).valueOrNull);
+
 // ── Create employee ────────────────────────────────────────────────────────
 
 @riverpod
@@ -92,6 +101,11 @@ class CreateEmployee extends _$CreateEmployee {
     required String phoneNumber,
     required String storeId,
   }) async {
+    final readOnly = _accountReadOnly(ref);
+    if (readOnly != null) {
+      state = AsyncError(readOnly, StackTrace.current);
+      return;
+    }
     state = const AsyncLoading();
     state = await AsyncValue.guard(
       () => ref.read(createEmployeeUseCaseProvider).execute(
@@ -112,6 +126,11 @@ class RegeneratePassword extends _$RegeneratePassword {
   FutureOr<CreateEmployeeResult?> build() => null;
 
   Future<void> regenerate(String employeeId) async {
+    final readOnly = _accountReadOnly(ref);
+    if (readOnly != null) {
+      state = AsyncError(readOnly, StackTrace.current);
+      return;
+    }
     state = const AsyncLoading();
     state = await AsyncValue.guard(
       () => ref.read(employeeRepositoryProvider).regeneratePassword(employeeId),
@@ -132,6 +151,11 @@ class UpdateEmployee extends _$UpdateEmployee {
     String? phoneNumber,
     String? storeId,
   }) async {
+    final readOnly = _accountReadOnly(ref);
+    if (readOnly != null) {
+      state = AsyncError(readOnly, StackTrace.current);
+      return;
+    }
     state = const AsyncLoading();
     state = await AsyncValue.guard(
       () => ref.read(employeeRepositoryProvider).updateEmployee(
@@ -153,6 +177,11 @@ class ChangeEmployeeRole extends _$ChangeEmployeeRole {
   FutureOr<void> build() => null;
 
   Future<void> change(String employeeId, String role) async {
+    final readOnly = _accountReadOnly(ref);
+    if (readOnly != null) {
+      state = AsyncError(readOnly, StackTrace.current);
+      return;
+    }
     state = const AsyncLoading();
     state = await AsyncValue.guard(
       () => ref.read(employeeRepositoryProvider).changeRole(employeeId, role),
@@ -168,6 +197,11 @@ class SetEmployeePassword extends _$SetEmployeePassword {
   FutureOr<void> build() => null;
 
   Future<void> set(String employeeId, String newPassword) async {
+    final readOnly = _accountReadOnly(ref);
+    if (readOnly != null) {
+      state = AsyncError(readOnly, StackTrace.current);
+      return;
+    }
     state = const AsyncLoading();
     state = await AsyncValue.guard(
       () => ref.read(employeeRepositoryProvider).setPassword(employeeId, newPassword),

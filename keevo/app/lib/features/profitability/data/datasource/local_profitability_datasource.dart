@@ -340,7 +340,9 @@ class LocalProfitabilityDatasource {
       final sId = row.read<String>('store_id');
       final current = row.read<int>('total_revenue');
       final prev = prevRevenueMap[sId] ?? 0;
-      final delta = prev == 0 ? 0.0 : (current - prev) / prev * 100.0;
+      // A33: no sales in the preceding period → no comparison (null).
+      final double? delta =
+          prev == 0 ? null : (current - prev) / prev * 100.0;
       return {
         'storeId': sId,
         'storeName': row.read<String>('store_name'),
@@ -377,7 +379,7 @@ class LocalProfitabilityDatasource {
         salesCount: s['salesCount'] as int,
         averageBasket: s['averageBasket'] as int,
         topProductName: s['topProductName'] as String?,
-        deltaPercent: s['deltaPercent'] as double,
+        deltaPercent: s['deltaPercent'] as double?,
       );
     }).toList();
   }

@@ -107,12 +107,20 @@ class _OwnerReportsPageState extends ConsumerState<OwnerReportsPage>
           unselectedLabelColor: cs.onSurfaceVariant,
           indicatorColor: cs.primary,
           dividerColor: cs.outlineVariant.withAlpha(80),
-          tabs: const [
-            Tab(icon: Icon(Icons.today_outlined), text: 'Jour'),
-            Tab(icon: Icon(Icons.history_outlined), text: 'Historique'),
-            Tab(icon: Icon(Icons.trending_up_outlined), text: 'Rentabilité'),
-            Tab(icon: Icon(Icons.storefront_outlined), text: 'Boutiques'),
-            Tab(icon: Icon(Icons.groups_outlined), text: 'Équipe'),
+          // A31: five tabs on a 360 dp phone leave ~72 dp each — short labels,
+          // a tighter padding and a slightly smaller font so none is cut
+          // (« Historiq », « Rentabi » on device).
+          labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+          labelStyle:
+              const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          unselectedLabelStyle:
+              const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+          tabs: [
+            _hubTab(Icons.today_outlined, 'Jour'),
+            _hubTab(Icons.history_outlined, 'Historique'),
+            _hubTab(Icons.trending_up_outlined, 'Marges'),
+            _hubTab(Icons.storefront_outlined, 'Boutiques'),
+            _hubTab(Icons.groups_outlined, 'Équipe'),
           ],
         ),
       ),
@@ -240,3 +248,12 @@ class _EmployeeReportsPageState extends ConsumerState<EmployeeReportsPage>
   }
 }
 
+/// A hub tab whose label shrinks rather than being cut when the screen is
+/// too narrow (A31). A [Tab] itself, so the bar keeps its icon + text height.
+Tab _hubTab(IconData icon, String label) => Tab(
+      icon: Icon(icon),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(label, maxLines: 1, softWrap: false),
+      ),
+    );

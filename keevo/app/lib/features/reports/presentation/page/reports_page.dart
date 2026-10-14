@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/di/providers.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/fr_plural.dart';
 import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import '../../../pos/domain/model/day_closure_model.dart';
@@ -495,7 +496,7 @@ class _TopProductTile extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '$quantity unités vendues',
+                  '${unitsLabel(quantity)} ${quantity < 2 ? 'vendue' : 'vendues'}',
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                     fontSize: 12,

@@ -88,13 +88,14 @@ class _StockAdjustBottomSheetState
           const SnackBar(content: Text('Stock ajusté avec succès')),
         );
       } else {
-        final blocked = ref.read(stockNotifierProvider(widget.productId)).blockedByGate;
-        if (blocked) {
+        final stockState = ref.read(stockNotifierProvider(widget.productId));
+        if (stockState.blockedByGate) {
           SyncRequiredModal.show(context);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Erreur lors de l\'ajustement'),
+            SnackBar(
+              content: Text(
+                  stockState.readOnlyMessage ?? 'Erreur lors de l\'ajustement'),
               backgroundColor: AppTheme.errorStrong,
             ),
           );

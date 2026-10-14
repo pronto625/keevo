@@ -76,7 +76,9 @@ public class ProfitabilityService
         var unranked = currentRows.stream()
                 .map(row -> {
                     long prevRev = prevRevenueByStore.getOrDefault(row.storeId(), 0L);
-                    double delta = prevRev == 0 ? 0.0
+                    // A33: no sales in the preceding period → no comparison
+                    // (null, shown « — »), not a misleading +0 %.
+                    Double delta = prevRev == 0 ? null
                             : ((double)(row.totalRevenue() - prevRev) / prevRev) * 100.0;
                     return new StorePerformanceEntry(
                             0, row.storeId(), row.storeName(), row.totalRevenue(),

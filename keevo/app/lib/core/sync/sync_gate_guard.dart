@@ -1,21 +1,39 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/settings/presentation/provider/account_status_provider.dart';
+import 'account_read_only_exception.dart';
 import 'sync_gate_provider.dart';
+
+export 'account_read_only_exception.dart';
 
 /// SyncGateGuard — Template Method pattern for write protection.
 ///
 /// All write notifiers call [SyncGateGuard.assertWriteAllowed] BEFORE
 /// calling repository write methods. If the gate is blocked, throws
 /// [WriteBlockedException], which the calling UI catches and uses to
-/// show [SyncRequiredModal].
+/// show [SyncRequiredModal]. A read-only account (suspended, deletion
+/// pending — A50) throws [AccountReadOnlyException] instead, whose French
+/// message the UI shows as is. `RestSyncService.queueOperation` applies the
+/// same account check to every queued write (backstop).
 class SyncGateGuard {
   const SyncGateGuard._();
 
-  /// Throws [WriteBlockedException] if [daysSinceLastSync] >= 7.
-  /// No-op for all other states (open, warning, critical — writes permitted).
+  /// Throws [AccountReadOnlyException] while the session's `tenantStatus`
+  /// claim is SUSPENDED or DELETION_PENDING, then [WriteBlockedException] if
+  /// [daysSinceLastSync] >= 7. No-op otherwise (open, warning, critical —
+  /// writes permitted).
   static void assertWriteAllowed(Ref ref) {
+    assertAccountWritable(ref.read(tenantStatusClaimProvider).valueOrNull);
     final gate = ref.read(syncGateStateProvider);
     if (gate.isWriteBlocked) throw const WriteBlockedException();
+  }
+
+  /// Throws [AccountReadOnlyException] when [tenantStatus] makes the account
+  /// read-only. For callers holding a `WidgetRef`: pass
+  /// `ref.read(tenantStatusClaimProvider).valueOrNull`.
+  static void assertAccountWritable(String? tenantStatus) {
+    final readOnly = AccountReadOnlyException.forTenantStatus(tenantStatus);
+    if (readOnly != null) throw readOnly;
   }
 }
 

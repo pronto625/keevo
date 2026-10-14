@@ -389,7 +389,9 @@ class AuditPresenter {
         : (self ? 'avez' : 'a');
 
     String? object;
-    var phrase = info.phrase;
+    var phrase = e.action == 'STOCK_ADJUSTED'
+        ? stockMovementPhrase(e) ?? info.phrase
+        : info.phrase;
     if (!isKnownAction(e.action)) {
       final label = _readableLabel(e);
       if (label != null) {
@@ -415,6 +417,20 @@ class AuditPresenter {
     }
     return AuditSentence(actor, '$aux $phrase', object);
   }
+
+  /// A38: a stock movement reads after what caused it (`value_after
+  /// .movementType`): the decrement of a sale is « a vendu X », not « a ajusté
+  /// le stock de X ». Null for a manual adjustment or an unknown type (the
+  /// catalogue phrase « ajusté le stock de » applies).
+  static String? stockMovementPhrase(AuditEntryDto e) =>
+      switch (AuditFormat.decodeMap(e.valueAfter)['movementType']) {
+        'SALE' => 'vendu',
+        'SALE_CANCELLED' => 'remis en stock',
+        'STOCK_ENTRY' || 'PURCHASE' => 'réapprovisionné',
+        'TRANSFER_OUT' => 'transféré du stock de',
+        'TRANSFER_IN' => 'reçu par transfert du stock de',
+        _ => null,
+      };
 
   // ── Object ────────────────────────────────────────────────────────────────
 

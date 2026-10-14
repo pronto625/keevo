@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:keevo/core/sync/account_read_only_exception.dart';
+import 'package:keevo/features/settings/presentation/provider/account_status_provider.dart';
 import 'package:keevo/features/team/domain/model/create_employee_result.dart';
 import 'package:keevo/features/team/domain/model/employee_model.dart';
 import 'package:keevo/features/team/domain/repository/employee_repository.dart';
@@ -103,6 +105,32 @@ void main() {
 
       final state = container.read(createEmployeeProvider);
       expect(state.value, result);
+    });
+
+    // A50: read-only account (suspension / deletion grace) → no team change.
+    test('refused while the account is pending deletion', () async {
+      final container = ProviderContainer(overrides: [
+        employeeRepositoryProvider.overrideWithValue(mockRepo),
+        tenantStatusClaimProvider.overrideWith((_) async => 'DELETION_PENDING'),
+      ]);
+      addTearDown(container.dispose);
+      await container.read(tenantStatusClaimProvider.future);
+
+      await container.read(createEmployeeProvider.notifier).create(
+            firstName: 'Jean',
+            lastName: 'Mbida',
+            phoneNumber: '+237600000000',
+            storeId: 'store-1',
+          );
+
+      final state = container.read(createEmployeeProvider);
+      expect(state.error, isA<AccountReadOnlyException>());
+      verifyNever(() => mockRepo.createEmployee(
+            firstName: any(named: 'firstName'),
+            lastName: any(named: 'lastName'),
+            phoneNumber: any(named: 'phoneNumber'),
+            storeId: any(named: 'storeId'),
+          ));
     });
   });
 }

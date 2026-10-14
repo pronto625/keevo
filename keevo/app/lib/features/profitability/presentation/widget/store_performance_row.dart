@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../domain/model/product_profitability_model.dart';
+import '../../../../core/utils/fr_plural.dart';
 import '../../../../core/utils/percent_format.dart';
 
 /// StorePerformanceRow — ranked store tile for the store comparison page.
@@ -38,12 +39,13 @@ class StorePerformanceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // A33: no sales in the preceding period → « — », no badge.
     final delta = entry.deltaPercent;
-    final isPositive = delta >= 0;
+    final isPositive = delta == null || delta >= 0;
     final deltaColor =
         isPositive ? theme.colorScheme.success : theme.colorScheme.error;
     final deltaText =
-        '${isPositive ? '+' : ''}${formatPercentFr(delta)}';
+        delta == null ? null : '${isPositive ? '+' : ''}${formatPercentFr(delta)}';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -108,26 +110,35 @@ class StorePerformanceRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '${entry.salesCount} ventes',
+                frCount(entry.salesCount, 'vente', 'ventes'),
                 style: theme.textTheme.bodySmall,
               ),
               const SizedBox(height: 4),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: deltaColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  deltaText,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: deltaColor,
-                    fontWeight: FontWeight.w700,
+              if (deltaText == null)
+                Text(
+                  '—',
+                  semanticsLabel: 'Pas de comparaison possible',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                )
+              else
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: deltaColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    deltaText,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: deltaColor,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
         ],

@@ -59,6 +59,9 @@ class RecordSaleNotifier extends Notifier<RecordSaleState> {
     } on WriteBlockedException {
       state = const RecordSaleBlockedByGate();
       return;
+    } on AccountReadOnlyException catch (e) {
+      state = RecordSaleError(e.message);
+      return;
     }
     // v1s-15-8: never record a zero-total sale (cart emptied while the
     // checkout awaited the employee id) — the page CTA is not the only path.

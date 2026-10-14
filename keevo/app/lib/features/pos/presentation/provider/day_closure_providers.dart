@@ -1,8 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/sync/sync_gate_guard.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
 import '../../../reports/presentation/provider/report_history_providers.dart';
+import '../../../settings/presentation/provider/account_status_provider.dart';
 import '../../data/datasource/local_day_closure_datasource.dart';
 import '../../data/datasource/remote_day_closure_datasource.dart';
 import '../../data/repository/day_closure_repository_impl.dart';
@@ -153,6 +155,9 @@ class CloseDayNotifier extends StateNotifier<AsyncValue<DayClosureSummary?>> {
   Future<void> closeDay(String storeId, String actorId) async {
     state = const AsyncValue.loading();
     try {
+      // A50: no closure while the account is read-only.
+      SyncGateGuard.assertAccountWritable(
+          _ref.read(tenantStatusClaimProvider).valueOrNull);
       final summary = await _closeDayUseCase.execute(storeId: storeId, actorId: actorId);
       state = AsyncValue.data(summary);
       // Invalidate related providers to refresh UI

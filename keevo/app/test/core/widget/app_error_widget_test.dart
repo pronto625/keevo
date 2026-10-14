@@ -8,6 +8,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:keevo/core/sync/account_read_only_exception.dart';
 import 'package:keevo/core/widget/app_error_widget.dart';
 import 'package:keevo/core/widget/soft_icon_badge.dart';
 
@@ -153,6 +154,19 @@ void main() {
     test('unknown domain code → generic, never « Erreur (CODE) »', () {
       final msg = appErrorMessage(dio({'domainCode': 'SOME_NEW_CODE'}));
       expect(msg, kAppGenericErrorMessage);
+    });
+
+    test('read-only account codes (A50) → French read-only messages', () {
+      expect(appErrorMessage(dio({'domainCode': 'ACCOUNT_SUSPENDED'}, status: 403)),
+          AccountReadOnlyException.suspendedMessage);
+      expect(
+          appErrorMessage(
+              dio({'domainCode': 'ACCOUNT_DELETION_PENDING'}, status: 403)),
+          AccountReadOnlyException.deletionPendingMessage);
+      expect(
+          appErrorMessage(const AccountReadOnlyException(
+              AccountReadOnlyReason.deletionPending)),
+          AccountReadOnlyException.deletionPendingMessage);
     });
 
     test('no body → no HTTP status code in the message', () {

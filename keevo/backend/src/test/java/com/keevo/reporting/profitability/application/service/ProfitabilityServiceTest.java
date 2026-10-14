@@ -150,4 +150,19 @@ class ProfitabilityServiceTest {
         // delta = (100000 - 80000) / 80000 * 100 = +25%
         assertThat(result.get(0).deltaPercent()).isCloseTo(25.0, org.assertj.core.data.Offset.offset(0.1));
     }
+
+    @Test
+    void getStorePerformance_noSalesInPrecedingPeriod_hasNoDelta() {
+        // A33: nothing to compare with → null (the app shows « — »), not +0 %.
+        var query = new StorePerformanceQuery(TENANT, FROM, TO, RankingMetric.CA);
+        UUID storeId = UUID.randomUUID();
+        when(repo.findRawStoreByPeriod(TENANT, FROM, TO)).thenReturn(List.of(
+                new RawStorePerformanceRow(storeId, "Store", 100_000L, 10, 10000L, "Top")));
+        when(repo.findRawStoreByPeriod(TENANT, LocalDate.of(2025, 12, 1), LocalDate.of(2025, 12, 31)))
+                .thenReturn(List.of());
+
+        var result = service.getRanking(query);
+
+        assertThat(result.get(0).deltaPercent()).isNull();
+    }
 }

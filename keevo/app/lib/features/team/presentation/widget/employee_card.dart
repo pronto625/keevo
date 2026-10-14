@@ -6,8 +6,10 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/sync/sync_gate_guard.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../settings/presentation/provider/account_status_provider.dart';
 import '../../../settings/presentation/widget/plan_limit_bottom_sheet.dart';
 import '../../../stores/presentation/provider/store_provider.dart';
 import '../../domain/model/employee_activity.dart';
@@ -165,10 +167,13 @@ class EmployeeCard extends ConsumerWidget {
 
   /// Lance l'action et ne signale le succès que si elle a abouti ; en cas
   /// d'échec (refus du serveur, réseau…) l'utilisateur voit la raison.
-  Future<void> _runAction(
-      BuildContext context, Future<void> Function() action) async {
+  Future<void> _runAction(BuildContext context, WidgetRef ref,
+      Future<void> Function() action) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
+      // A50: no team change while the account is read-only.
+      SyncGateGuard.assertAccountWritable(
+          ref.read(tenantStatusClaimProvider).valueOrNull);
       await action();
     } catch (e) {
       // v1s-14-13 : une réactivation refusée par la limite du forfait ouvre la
@@ -451,6 +456,7 @@ class EmployeeCard extends ConsumerWidget {
                       Navigator.pop(ctx);
                       await _runAction(
                         context,
+                        ref,
                         () => ref
                             .read(employeeRepositoryProvider)
                             .reassignStore(employee.id, selectedStoreId!),
@@ -487,6 +493,7 @@ class EmployeeCard extends ConsumerWidget {
               Navigator.pop(ctx);
               await _runAction(
                 context,
+                ref,
                 () => ref
                     .read(employeeRepositoryProvider)
                     .deactivateEmployee(employee.id),
@@ -521,6 +528,7 @@ class EmployeeCard extends ConsumerWidget {
               Navigator.pop(ctx);
               await _runAction(
                 context,
+                ref,
                 () => ref
                     .read(employeeRepositoryProvider)
                     .reactivateEmployee(employee.id),

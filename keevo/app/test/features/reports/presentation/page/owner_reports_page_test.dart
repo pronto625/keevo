@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -64,6 +65,23 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Équipe'), findsOneWidget);
+    // A31: every label is shown whole inside its tab on a 360 dp phone
+    // (device: « Historiq », « Rentabi », « Boutiqu »).
+    for (final label in ['Jour', 'Historique', 'Marges', 'Boutiques', 'Équipe']) {
+      final text = find.text(label);
+      final tab = find.ancestor(of: text, matching: find.byType(Tab));
+      final textRect = tester.getRect(text);
+      final tabRect = tester.getRect(tab);
+      expect(textRect.left >= tabRect.left - 0.5, isTrue, reason: label);
+      expect(textRect.right <= tabRect.right + 0.5, isTrue, reason: label);
+      // Not clipped: the paragraph is laid out at its full natural width.
+      final paragraph = tester.renderObject<RenderParagraph>(text);
+      expect(
+          paragraph.size.width >=
+              paragraph.getMaxIntrinsicWidth(double.infinity) - 0.5,
+          isTrue,
+          reason: label);
+    }
     expect(find.byType(SellerLeaderboardPage), findsOneWidget);
     expect(find.text('Awa Ndiaye'), findsOneWidget);
     final params = verify(() =>
