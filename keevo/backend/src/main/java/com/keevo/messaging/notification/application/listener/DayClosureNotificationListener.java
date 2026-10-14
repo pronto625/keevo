@@ -10,6 +10,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -41,8 +42,9 @@ public class DayClosureNotificationListener {
             DayClosureSummary s = event.summary();
             String mode = event.isAutomatic() ? "automatique" : "manuelle";
             String body = String.format(
-                    "Clôture %s — %d vente(s) · %,d FCFA · Espèces: %,d · Mobile Money: %,d",
-                    mode, s.totalSales(), s.totalRevenue(), s.cashAmount(), s.momoAmount());
+                    "Clôture %s — %d vente(s) · %s FCFA · Espèces : %s · Mobile Money : %s",
+                    mode, s.totalSales(), amount(s.totalRevenue()), amount(s.cashAmount()),
+                    amount(s.momoAmount()));
 
             notificationPort.notifyOwners(event.tenantId(), NotificationPayload.of(
                     "DAY_CLOSED",
@@ -62,5 +64,10 @@ public class DayClosureNotificationListener {
             log.warn("[FCM-CLOSURE] Failed to notify owners for closureId={}: {}",
                     event.closureId(), e.getMessage());
         }
+    }
+
+    /** French grouping (« 4 400 », not the default-locale « 4,400 » shown on device). */
+    static String amount(long value) {
+        return String.format(Locale.FRANCE, "%,d", value).replace('\u202F', ' ').replace('\u00A0', ' ');
     }
 }
