@@ -275,6 +275,18 @@ class _AuditEntryTile extends StatelessWidget {
         final name = after['productName'] as String?;
         return name != null ? 'Produit «$name» archivé' : 'Produit archivé';
 
+      case 'PRODUCT_UNARCHIVED':
+        final name = after['productName'] as String?;
+        return name != null ? 'Produit «$name» désarchivé' : 'Produit désarchivé';
+
+      case 'STOCK_THRESHOLD_UPDATED':
+        final from = before['threshold'];
+        final to = after['threshold'];
+        if (from != null && to != null) {
+          return 'Seuil d\'alerte modifié : $from → $to';
+        }
+        return 'Seuil d\'alerte modifié';
+
       case 'PRICE_OVERRIDDEN':
         final from = before['cataloguePrice'];
         final to   = after['appliedPrice'];
@@ -342,6 +354,10 @@ class _AuditEntryTile extends StatelessWidget {
       case 'STORE_DEACTIVATED':
         final name = after['name'] as String?;
         return name != null ? 'Boutique «$name» désactivée' : 'Boutique désactivée';
+
+      case 'STORE_REACTIVATED':
+        final name = after['name'] as String?;
+        return name != null ? 'Boutique «$name» réactivée' : 'Boutique réactivée';
 
       default:
         return '';

@@ -30,14 +30,17 @@ public final class AuditLabels {
             entry("ONBOARDING_COMPLETED", "Configuration terminée"),
             entry("ACCOUNT_DELETION_REQUESTED", "Suppression du compte demandée"),
             entry("ACCOUNT_DELETION_CANCELLED", "Suppression du compte annulée"),
+            entry("REPORT_PREFERENCES_UPDATED", "Préférences des rapports modifiées"),
             // Products
             entry("PRODUCT_CREATED", "Produit créé"),
             entry("PRODUCT_UPDATED", "Produit modifié"),
             entry("PRODUCT_ARCHIVED", "Produit archivé"),
+            entry("PRODUCT_UNARCHIVED", "Produit désarchivé"),
             entry("PRODUCT_ACTIVATED", "Produit activé"),
             entry("PRICE_OVERRIDDEN", "Prix modifié en caisse"),
             // Stock
             entry("STOCK_ADJUSTED", "Mouvement de stock"),
+            entry("STOCK_THRESHOLD_UPDATED", "Seuil d'alerte modifié"),
             entry("STOCK_THRESHOLD_BREACHED", "Alerte de stock bas"),
             entry("STOCK_FORCED_ZERO", "Stock forcé à zéro"),
             // Contacts
@@ -46,6 +49,8 @@ public final class AuditLabels {
             entry("CLIENT_UNARCHIVED", "Client désarchivé"),
             entry("SUPPLIER_CREATED", "Fournisseur créé"),
             entry("SUPPLIER_ARCHIVED", "Fournisseur archivé"),
+            entry("SUPPLIER_UPDATED", "Fournisseur modifié"),
+            entry("SUPPLIER_PRODUCTS_UPDATED", "Produits du fournisseur modifiés"),
             entry("SUPPLIER_UNARCHIVED", "Fournisseur désarchivé"),
             // Categories
             entry("CATEGORY_CREATED", "Catégorie créée"),
@@ -56,6 +61,7 @@ public final class AuditLabels {
             entry("STORE_CREATED", "Boutique créée"),
             entry("STORE_UPDATED", "Boutique modifiée"),
             entry("STORE_DEACTIVATED", "Boutique désactivée"),
+            entry("STORE_REACTIVATED", "Boutique réactivée"),
             // Team
             entry("EMPLOYEE_CREATED", "Employé ajouté"),
             entry("EMPLOYEE_UPDATED", "Employé modifié"),
@@ -161,7 +167,24 @@ public final class AuditLabels {
             entry("rowCount", "Nombre de lignes"),
             entry("from", "Du"),
             entry("to", "Au"),
-            entry("mode", "Mode"));
+            entry("mode", "Mode"),
+            entry("phone", "Téléphone"),
+            entry("email", "E-mail"),
+            entry("productCount", "Nombre de produits"),
+            entry("productsAdded", "Produits ajoutés"),
+            entry("productsRemoved", "Produits retirés"),
+            entry("eodReportEnabled", "Rapport de fin de journée"),
+            entry("eodReportTime", "Heure du rapport de fin de journée"),
+            entry("eodReportChannel", "Envoi du rapport de fin de journée"),
+            entry("weeklyReportEnabled", "Rapport hebdomadaire"),
+            entry("weeklyReportDay", "Jour du rapport hebdomadaire"),
+            entry("weeklyReportTime", "Heure du rapport hebdomadaire"),
+            entry("weeklyReportChannel", "Envoi du rapport hebdomadaire"),
+            entry("inventoryReportEnabled", "Rapport d'inventaire"),
+            entry("inventoryReportChannel", "Envoi du rapport d'inventaire"),
+            entry("stockAlertEnabled", "Alertes de stock bas"),
+            entry("stockAlertChannel", "Envoi des alertes de stock"),
+            entry("trendNotificationEnabled", "Notifications de tendance"));
 
     /** French label of each code value (statuses, types, roles, sectors, export modes…). */
     public static final Map<String, String> VALUES = Map.ofEntries(

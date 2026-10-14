@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../features/catalog/presentation/provider/product_provider.dart';
+import '../../features/contact/presentation/provider/contact_provider.dart';
+import '../../features/team/presentation/provider/employee_provider.dart';
 import '../../features/auth/domain/model/membership_dto.dart';
 import '../../features/auth/presentation/page/auth_page.dart';
 import '../../features/auth/presentation/page/password_change_page.dart';
@@ -79,6 +82,7 @@ import '../scaffold/main_shell.dart';
 import '../storage/app_constants.dart';
 import 'session_presence_cache.dart';
 import 'startup_route.dart';
+import 'deep_link_entity_page.dart';
 
 /// Global ScaffoldMessenger key — used by AuthInterceptor.onAccountSuspended
 /// to show a SnackBar regardless of which page the user is on when their
@@ -552,8 +556,16 @@ final GoRouter appRouter = GoRouter(
       path: '/products/:id/edit',
       builder: (_, state) {
         final product = state.extra;
-        if (product is! ProductModel) return const CatalogPage();
-        return ProductFormPage(product: product);
+        if (product is ProductModel) return ProductFormPage(product: product);
+        // N3: deep link (notification) — load the product by id.
+        final id = state.pathParameters['id'] ?? '';
+        return DeepLinkEntityPage<ProductModel>(
+          load: (ref) => ref.read(productRepositoryProvider).getById(id),
+          formBuilder: (p) => ProductFormPage(product: p),
+          fallback: const CatalogPage(),
+          notFoundMessage:
+              'Ce produit n\'est pas disponible sur cet appareil.',
+        );
       },
     ),
 
@@ -566,8 +578,16 @@ final GoRouter appRouter = GoRouter(
       path: '/clients/:id',
       builder: (_, state) {
         final client = state.extra;
-        if (client is! ClientModel) return const ClientListPage();
-        return ClientFormPage(existing: client);
+        if (client is ClientModel) return ClientFormPage(existing: client);
+        // N3: deep link — load the client by id.
+        final id = state.pathParameters['id'] ?? '';
+        return DeepLinkEntityPage<ClientModel>(
+          load: (ref) => ref.read(clientRepositoryProvider).getById(id),
+          formBuilder: (c) => ClientFormPage(existing: c),
+          fallback: const ClientListPage(),
+          notFoundMessage:
+              'Ce client n\'est pas disponible sur cet appareil.',
+        );
       },
     ),
 
@@ -580,8 +600,18 @@ final GoRouter appRouter = GoRouter(
       path: '/suppliers/:id',
       builder: (_, state) {
         final supplier = state.extra;
-        if (supplier is! SupplierModel) return const SupplierListPage();
-        return SupplierFormPage(supplier: supplier);
+        if (supplier is SupplierModel) {
+          return SupplierFormPage(supplier: supplier);
+        }
+        // N3: deep link — load the supplier by id.
+        final id = state.pathParameters['id'] ?? '';
+        return DeepLinkEntityPage<SupplierModel>(
+          load: (ref) => ref.read(supplierRepositoryProvider).getById(id),
+          formBuilder: (s) => SupplierFormPage(supplier: s),
+          fallback: const SupplierListPage(),
+          notFoundMessage:
+              'Ce fournisseur n\'est pas disponible sur cet appareil.',
+        );
       },
     ),
 
@@ -628,10 +658,19 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/settings/team/:employeeId/edit',
       builder: (_, state) {
-        final employee = state.extra as EmployeeModel?;
-        // Deep link without the employee in `extra`: back to the list.
-        if (employee == null) return const TeamPage();
-        return EditEmployeePage(employee: employee);
+        final employee = state.extra;
+        if (employee is EmployeeModel) {
+          return EditEmployeePage(employee: employee);
+        }
+        // N3: deep link without the employee in `extra` — load it by id.
+        final id = state.pathParameters['employeeId'] ?? '';
+        return DeepLinkEntityPage<EmployeeModel>(
+          load: (ref) => ref.read(localEmployeeDataSourceProvider).getById(id),
+          formBuilder: (e) => EditEmployeePage(employee: e),
+          fallback: const TeamPage(),
+          notFoundMessage:
+              'Cet employé n\'est pas disponible sur cet appareil.',
+        );
       },
     ),
     // ── Settings > Sync Conflicts (Story 5.3 — OWNER only) ────────────────

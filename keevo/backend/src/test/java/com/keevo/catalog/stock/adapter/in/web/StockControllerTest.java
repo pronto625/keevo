@@ -157,7 +157,7 @@ class StockControllerTest {
 
     @Test
     void set_threshold_should_return_200() throws Exception {
-        when(setStockThresholdUseCase.execute(eq(productId), anyInt()))
+        when(setStockThresholdUseCase.execute(eq(productId), anyInt(), any()))
             .thenReturn(sampleProduct());
 
         String body = """

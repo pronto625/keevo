@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:keevo/core/di/providers.dart';
@@ -198,6 +199,59 @@ void main() {
       second.complete(snapshot);
       await tester.pumpAndSettle();
       expect(done, isTrue);
+    });
+
+    // J3 — « VOIR TOUT » de « Vos boutiques » ouvre « Mes boutiques »
+    // (/stores), pas l'onglet Plus (/settings).
+    testWidgets('"VOIR TOUT" opens the stores list', (tester) async {
+      final withStores = copyOf(snapshot, stores: const [
+        StoreOverview(
+          storeId: 's1',
+          storeName: 'Boutique Centre',
+          todayCA: 1000,
+          yesterdayCA: 1000,
+          employeeCount: 1,
+          statusLevel: StoreStatusLevel.stable,
+        ),
+      ]);
+      SharedPreferences.setMockInitialValues({kUserFirstNameKey: 'Simon'});
+      final prefs = await SharedPreferences.getInstance();
+      final router = GoRouter(
+        initialLocation: '/dashboard',
+        routes: [
+          GoRoute(
+              path: '/dashboard', builder: (_, __) => const DashboardPage()),
+          GoRoute(
+              path: '/stores',
+              builder: (_, __) => const Scaffold(body: Text('MES BOUTIQUES'))),
+          GoRoute(
+              path: '/settings',
+              builder: (_, __) => const Scaffold(body: Text('PLUS'))),
+        ],
+      );
+      addTearDown(router.dispose);
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          dashboardSnapshotProvider.overrideWith((_) async => withStores),
+          storeOverviewsProvider
+              .overrideWith((_) => Future.value(const <StoreOverview>[])),
+          chartDataProvider
+              .overrideWith((_) => Future.value(snapshot.dailyCALast30)),
+          sharedPreferencesProvider.overrideWithValue(prefs),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(find.text('VOIR TOUT'), 200,
+          scrollable: find.byType(Scrollable).first);
+      await tester.tap(find.text('VOIR TOUT'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('MES BOUTIQUES'), findsOneWidget);
+      expect(find.text('PLUS'), findsNothing);
+      // Poussée (pas remplacée) : le retour ramène au tableau de bord.
+      expect(router.canPop(), isTrue);
     });
   });
 }

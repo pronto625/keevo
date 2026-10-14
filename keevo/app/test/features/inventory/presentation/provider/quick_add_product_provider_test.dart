@@ -199,6 +199,9 @@ void main() {
       // Verify stock level was cached
       final stockLevels = await db.select(db.stockLevels).get();
       expect(stockLevels.any((s) => s.id == 'stk-001'), isTrue);
+      // J18 — no stock at creation: the validation applies the count once.
+      expect(stockLevels.firstWhere((s) => s.id == 'stk-001').quantity, 0);
+      expect(products.firstWhere((p) => p.id == 'prod-new').stockQuantity, 0);
 
       // Verify inventory count was cached
       final counts = await db.select(db.inventoryCounts).get();
@@ -250,16 +253,33 @@ void main() {
       final createPayload = created.captured[0] as Map<String, dynamic>;
       expect(createPayload['id'], created.captured[1]);
       expect(createPayload['id'], result.productId);
-      verify(() => mockSyncService.queueOperation(
+      // J18 — no stock entry: the counted 5 is applied once, by the
+      // inventory validation (theoretical 0 → physical 5).
+      expect(createPayload['stockQuantity'], 0);
+      verifyNever(() => mockSyncService.queueOperation(
             operation: 'RECORD_STOCK_ENTRY',
             payload: any(named: 'payload'),
             entityId: any(named: 'entityId'),
-          )).called(1);
-      verify(() => mockSyncService.queueOperation(
+          ));
+      final saved = verify(() => mockSyncService.queueOperation(
             operation: 'SAVE_INVENTORY_COUNT',
-            payload: any(named: 'payload'),
+            payload: captureAny(named: 'payload'),
             entityId: any(named: 'entityId'),
-          )).called(1);
+          ))
+        ..called(1);
+      final countPayload = saved.captured.single as Map<String, dynamic>;
+      expect(countPayload['theoretical'], 0);
+      expect(countPayload['physical'], 5);
+
+      final stock = await (db.select(db.stockLevels)
+            ..where((s) => s.productId.equals(result.productId)))
+          .getSingle();
+      expect(stock.quantity, 0);
+      final count = await (db.select(db.inventoryCounts)
+            ..where((c) => c.productId.equals(result.productId)))
+          .getSingle();
+      expect(count.theoretical, 0);
+      expect(count.physical, 5);
     });
 
     // v1s-13-8: local inserts + the 3 queued ops commit together.

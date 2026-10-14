@@ -237,6 +237,8 @@ class ImportCsvProductsUseCaseTest {
             assertEquals(0, result.getImported());
             assertEquals(1, result.getSkipped());
             assertTrue(result.getErrors().get(0).message().contains("existe déjà"));
+            // J12 — French field label, never the raw key « nom ».
+            assertEquals("Nom", result.getErrors().get(0).column());
             verify(createProductUseCase, never()).execute(any());
         }
     }

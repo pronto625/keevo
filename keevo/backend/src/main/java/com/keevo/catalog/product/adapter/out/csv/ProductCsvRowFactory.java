@@ -25,6 +25,12 @@ public class ProductCsvRowFactory {
     private static final Pattern SKU_PATTERN = Pattern.compile("^KEV-[A-Z0-9]{6}$");
     private static final String SKU_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
+    /**
+     * J12 — French label of each imported field, used as the error column AND inside the
+     * message shown on the import result screen (never the raw key such as « prix_vente »).
+     */
+    public static final String LABEL_NAME = "Nom";
+
     private final RequiredStringValidator  requiredString  = new RequiredStringValidator();
     private final PositiveIntegerValidator positiveInteger = new PositiveIntegerValidator();
     private final OptionalIntegerValidator optionalInteger = new OptionalIntegerValidator();
@@ -49,14 +55,14 @@ public class ProductCsvRowFactory {
             Map<String, UUID> categoryNameToId) {
 
         // Required fields
-        String name       = requiredString.validate(  get(row, mapping.nameColumn()),  lineNumber, "nom");
-        int    priceVente = positiveInteger.validate( get(row, mapping.priceColumn()), lineNumber, "prix_vente");
+        String name       = requiredString.validate(  get(row, mapping.nameColumn()),  lineNumber, LABEL_NAME);
+        int    priceVente = positiveInteger.validate( get(row, mapping.priceColumn()), lineNumber, "Prix de vente");
 
         // Optional fields
-        int buyPrice      = optionalInteger.validate( get(row, mapping.buyPriceColumn()),      lineNumber, "prix_achat");
-        int transportCost = optionalInteger.validate( get(row, mapping.transportCostColumn()), lineNumber, "cout_transport");
-        int initialQty    = optionalInteger.validate( get(row, mapping.quantityColumn()),      lineNumber, "quantite_initiale");
-        String rawSku     = optionalString.validate(  get(row, mapping.skuColumn()),           lineNumber, "sku");
+        int buyPrice      = optionalInteger.validate( get(row, mapping.buyPriceColumn()),      lineNumber, "Prix d'achat");
+        int transportCost = optionalInteger.validate( get(row, mapping.transportCostColumn()), lineNumber, "Coût de transport");
+        int initialQty    = optionalInteger.validate( get(row, mapping.quantityColumn()),      lineNumber, "Quantité initiale");
+        String rawSku     = optionalString.validate(  get(row, mapping.skuColumn()),           lineNumber, "SKU");
 
         // SKU: auto-generate if absent or invalid pattern
         String sku = (rawSku != null && SKU_PATTERN.matcher(rawSku).matches())
@@ -65,13 +71,13 @@ public class ProductCsvRowFactory {
 
         // Category matching (case-insensitive)
         UUID categoryId = null;
-        String rawCategory = optionalString.validate(get(row, mapping.categoryColumn()), lineNumber, "categorie");
+        String rawCategory = optionalString.validate(get(row, mapping.categoryColumn()), lineNumber, "Catégorie");
         if (rawCategory != null && categoryNameToId != null) {
             categoryId = categoryNameToId.get(rawCategory.toLowerCase());
         }
 
         // threshold
-        int threshold = optionalInteger.validate(get(row, mapping.thresholdColumn()), lineNumber, "seuil_min");
+        int threshold = optionalInteger.validate(get(row, mapping.thresholdColumn()), lineNumber, "Seuil minimum");
 
         return new CreateProductUseCase.CreateProductDto(
                 name,

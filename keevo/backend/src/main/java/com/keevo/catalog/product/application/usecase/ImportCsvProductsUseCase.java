@@ -190,8 +190,8 @@ public class ImportCsvProductsUseCase {
 
                 // Name uniqueness check (AC8) — skip row gracefully
                 if (productRepository.existsByName(dto.name())) {
-                    builder.addError(new CsvRowError(lineNumber, "nom",
-                            "Un produit avec ce nom existe déjà: " + dto.name()));
+                    builder.addError(new CsvRowError(lineNumber, "Nom",
+                            "Un produit avec ce nom existe déjà : « " + dto.name() + " »"));
                     continue;
                 }
 
@@ -229,7 +229,8 @@ public class ImportCsvProductsUseCase {
                 log.debug("CSV validation error at line {}: {}", lineNumber, e.getMessage());
             } catch (DomainException e) {
                 // Catch any domain errors (e.g. SKU collision after retry) — skip row
-                builder.addError(new CsvRowError(lineNumber, "-", e.getDomainCode() + ": " + e.getMessage()));
+                // J12: never the raw domain code in the import result screen.
+                builder.addError(new CsvRowError(lineNumber, "-", humanMessage(e)));
                 log.debug("Domain error at CSV line {}: {}", lineNumber, e.getMessage());
             }
         }
@@ -251,6 +252,19 @@ public class ImportCsvProductsUseCase {
                 result.getImported(), result.getSkipped(), result.isLimitReached());
 
         return result;
+    }
+
+    /** The exception message without its « CODE: » prefix; a generic French text if empty. */
+    private static String humanMessage(DomainException e) {
+        String message = e.getMessage();
+        String prefix = e.getDomainCode() + ": ";
+        if (message != null && message.startsWith(prefix)) {
+            message = message.substring(prefix.length());
+        }
+        if (message == null || message.isBlank() || message.equals(e.getDomainCode())) {
+            return "Produit non importé";
+        }
+        return message;
     }
 
     private UUID resolveStoreId(UUID requestedStoreId) {

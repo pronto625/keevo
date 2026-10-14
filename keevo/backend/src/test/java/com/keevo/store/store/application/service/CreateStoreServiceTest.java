@@ -145,6 +145,9 @@ class CreateStoreServiceTest {
                 .isInstanceOf(DomainException.class)
                 .extracting(e -> ((DomainException) e).getDomainCode())
                 .isEqualTo(ErrorCode.WAREHOUSE_ALREADY_EXISTS.name());
+        // J6 — message affiché tel quel : français, sans le mot « warehouse ».
+        assertThatThrownBy(() -> createStoreService.execute(cmd))
+                .hasMessageEndingWith("Vous avez déjà un entrepôt. Un seul entrepôt est autorisé par compte.");
     }
 
     @Test

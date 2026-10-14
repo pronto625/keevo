@@ -160,6 +160,12 @@ class AuditPresenter {
         Icons.manage_accounts_outlined,
         AuditCategory.account,
         takesObject: false),
+    'REPORT_PREFERENCES_UPDATED': AuditActionInfo(
+        'Préférences des rapports modifiées',
+        'modifié les préférences des rapports',
+        Icons.tune_rounded,
+        AuditCategory.account,
+        takesObject: false),
     // Products
     'PRODUCT_CREATED': AuditActionInfo('Produit créé', 'créé le produit',
         Icons.inventory_2_outlined, AuditCategory.product),
@@ -169,12 +175,20 @@ class AuditPresenter {
         Icons.archive_outlined, AuditCategory.product),
     'PRODUCT_ACTIVATED': AuditActionInfo('Produit activé', 'activé le produit',
         Icons.check_circle_outline_rounded, AuditCategory.product),
+    'PRODUCT_UNARCHIVED': AuditActionInfo('Produit désarchivé',
+        'désarchivé le produit', Icons.unarchive_outlined, AuditCategory.product),
     'PRICE_OVERRIDDEN': AuditActionInfo('Prix modifié en caisse',
         'modifié le prix de', Icons.sell_outlined, AuditCategory.price,
         fallbackObject: _product),
     // Stock
     'STOCK_ADJUSTED': AuditActionInfo('Mouvement de stock',
         'ajusté le stock de', Icons.swap_vert_rounded, AuditCategory.stock,
+        fallbackObject: _product),
+    'STOCK_THRESHOLD_UPDATED': AuditActionInfo(
+        'Seuil d\'alerte modifié',
+        'modifié le seuil d\'alerte de',
+        Icons.tune_rounded,
+        AuditCategory.stock,
         fallbackObject: _product),
     'STOCK_THRESHOLD_BREACHED': AuditActionInfo(
         'Alerte de stock bas',
@@ -203,6 +217,16 @@ class AuditPresenter {
     'SUPPLIER_ARCHIVED': AuditActionInfo(
         'Fournisseur archivé',
         'archivé le fournisseur',
+        Icons.local_shipping_outlined,
+        AuditCategory.contact),
+    'SUPPLIER_UPDATED': AuditActionInfo(
+        'Fournisseur modifié',
+        'modifié le fournisseur',
+        Icons.local_shipping_outlined,
+        AuditCategory.contact),
+    'SUPPLIER_PRODUCTS_UPDATED': AuditActionInfo(
+        'Produits du fournisseur modifiés',
+        'modifié les produits du fournisseur',
         Icons.local_shipping_outlined,
         AuditCategory.contact),
     'SUPPLIER_UNARCHIVED': AuditActionInfo(
@@ -235,6 +259,8 @@ class AuditPresenter {
         'désactivé la boutique',
         Icons.store_mall_directory_outlined,
         AuditCategory.store),
+    'STORE_REACTIVATED': AuditActionInfo('Boutique réactivée',
+        'réactivé la boutique', Icons.storefront_outlined, AuditCategory.store),
     // Team
     'EMPLOYEE_CREATED': AuditActionInfo('Employé ajouté', 'ajouté l\'employé',
         Icons.badge_outlined, AuditCategory.team,

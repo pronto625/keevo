@@ -44,7 +44,7 @@ String friendlySyncRejectionReason(String? reasonCode) {
       'Action non prise en charge — mettez l\'application à jour',
     'SUBSCRIPTION_NOT_FOUND' => 'Abonnement introuvable',
     'TENANT_NOT_FOUND' => 'Compte de l\'entreprise introuvable',
-    'WAREHOUSE_ALREADY_EXISTS' => 'Une boutique avec ce nom existe déjà',
+    'WAREHOUSE_ALREADY_EXISTS' => 'Un seul entrepôt est autorisé par compte',
     'USER_ALREADY_EXISTS' => 'Un utilisateur avec ces identifiants existe déjà',
     'EMPLOYEE_NOT_FOUND' => 'Employé introuvable',
     'CANNOT_DEMOTE_LAST_OWNER' =>

@@ -110,7 +110,9 @@ class QuickAddProductServiceTest {
 
         assertThat(result.stockLevel().getProductId()).isEqualTo(result.product().getId());
         assertThat(result.stockLevel().getStoreId()).isEqualTo(STORE_ID);
-        assertThat(result.stockLevel().getQuantity()).isEqualTo(5);
+        // J18 — no stock at creation: validation applies the count once (0 → 5).
+        assertThat(result.stockLevel().getQuantity()).isZero();
+        assertThat(result.product().getStockQuantity()).isZero();
 
         assertThat(result.inventoryCount().getSessionId()).isEqualTo(SESSION_ID);
         assertThat(result.inventoryCount().getProductId()).isEqualTo(result.product().getId());

@@ -8,6 +8,7 @@ import '../../../../core/widget/soft_icon_badge.dart';
 import '../../domain/model/notification_model.dart';
 import '../provider/notification_provider.dart';
 import '../widget/notification_card.dart';
+import '../../../../core/router/deep_link_navigation.dart';
 
 /// Notifications list page — Story 8.0.
 class NotificationsPage extends ConsumerStatefulWidget {
@@ -118,8 +119,10 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       ref.read(markAsReadProvider(notification.id));
     }
     if (notification.deepLink != null && notification.deepLink!.isNotEmpty) {
-      // Use push() so the back button always returns to the notifications list.
-      context.push(notification.deepLink!);
+      // J16: a bottom-nav tab (e.g. « /products ») is opened with go() —
+      // pushing it over this page crashed (duplicate shell page key); any
+      // other screen is pushed so BACK returns to the notifications list.
+      openDeepLink(GoRouter.of(context), notification.deepLink!);
     }
   }
 }

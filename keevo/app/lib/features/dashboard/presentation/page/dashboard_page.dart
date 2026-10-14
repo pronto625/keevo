@@ -193,7 +193,7 @@ class _DashboardContent extends ConsumerWidget {
                               ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                         GestureDetector(
-                          onTap: () => context.go('/settings'),
+                          onTap: () => context.push('/stores'),
                           child: Text(
                             'VOIR TOUT',
                             style: Theme.of(context).textTheme.labelSmall?.copyWith(

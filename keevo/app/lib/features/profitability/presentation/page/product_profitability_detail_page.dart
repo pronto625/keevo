@@ -146,7 +146,7 @@ class ProductProfitabilityDetailPage extends ConsumerWidget {
 
                 // ── Price range section ───────────────────────────────────
                 _SectionCard(
-                  title: 'Prix appliqués (sale_items)',
+                  title: 'Prix appliqués en caisse',
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [

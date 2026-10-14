@@ -216,7 +216,7 @@ class ProductCreationNotificationListenerTest {
     @DisplayName("should not double-notify on CSV import (CSV path preserved) — content + metadata correct")
     void shouldNotDoubleNotifyOnCsvImport() {
         CsvImportCompletedEvent csvEvent = new CsvImportCompletedEvent(
-                42, TENANT_ID, ACTOR_ID, "Simon", "OWNER", NOW);
+                42, TENANT_ID, ACTOR_ID, "Simon", "EMPLOYEE", NOW);
 
         listener.onCsvImportCompleted(csvEvent);
 
@@ -227,6 +227,28 @@ class ProductCreationNotificationListenerTest {
         assertThat(payload.type()).isEqualTo("CSV_IMPORT_DRAFTS_PENDING");
         assertThat(payload.body()).contains("42");
         assertThat(payload.metadata()).containsEntry("count", "42");
+    }
+
+    @Test
+    @DisplayName("J13: an OWNER import (ACTIVE products) sends no « brouillons à valider » push")
+    void ownerCsvImport_sendsNoDraftNotification() {
+        listener.onCsvImportCompleted(new CsvImportCompletedEvent(
+                2, TENANT_ID, ACTOR_ID, "Simon", "OWNER", NOW));
+
+        verify(notificationPort, never()).notifyOwners(anyString(), any());
+    }
+
+    @Test
+    @DisplayName("J13: a raw user id is never shown as the actor name in the push body")
+    void csvImport_uuidActorName_isReplacedByNeutralLabel() {
+        listener.onCsvImportCompleted(new CsvImportCompletedEvent(
+                2, TENANT_ID, ACTOR_ID, ACTOR_ID.toString(), "EMPLOYEE", NOW));
+
+        ArgumentCaptor<NotificationPayload> captor = ArgumentCaptor.forClass(NotificationPayload.class);
+        verify(notificationPort).notifyOwners(eq(TENANT_ID), captor.capture());
+        assertThat(captor.getValue().body())
+                .doesNotContain(ACTOR_ID.toString())
+                .startsWith("Un membre de l'équipe a importé 2 produit(s)");
     }
 
     // ── 6.8 shouldNotRollbackOnCsvImportNotificationFailure ────────────────

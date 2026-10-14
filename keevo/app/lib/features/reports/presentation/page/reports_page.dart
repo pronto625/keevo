@@ -134,8 +134,7 @@ class ReportsPage extends ConsumerWidget {
     AsyncValue<String?> userIdAsync,
     DayClosure? lastClosure,
   ) {
-    final isClosed =
-        closureStateAsync.valueOrNull == DayClosureState.closed;
+    final isClosed = closureStateAsync.valueOrNull == DayClosureState.closed;
     // B3.4: mask financial totals for EMPLOYEE role (AC6 / HF-2).
     final isEmployee = ref.watch(currentUserRoleProvider) == 'EMPLOYEE';
 
@@ -150,7 +149,8 @@ class ReportsPage extends ConsumerWidget {
       final hm = DateFormat('HH:mm', 'fr_FR').format(lastClosure.closedAt);
       periodLabel = "depuis la clôture de $hm";
     } else {
-      final dateShort = DateFormat('d MMM', 'fr_FR').format(lastClosure.closedAt);
+      final dateShort =
+          DateFormat('d MMM', 'fr_FR').format(lastClosure.closedAt);
       periodLabel = "depuis le $dateShort";
     }
 
@@ -275,40 +275,57 @@ class ReportsPage extends ConsumerWidget {
           ],
 
           // ── Pending sales warning ──
+          // N1: for the owner the banner opens « Ventes en attente » — the
+          // list had no entry point besides the push notification.
           if (summary.hasPendingSales)
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.only(bottom: 16),
-              padding: const EdgeInsets.all(14),
-              // Fond ambre dilué (lisible en sombre), l'icône porte l'accent.
-              decoration: BoxDecoration(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Material(
                 color: theme.colorScheme.warningContainer,
                 borderRadius: BorderRadius.circular(AppTheme.radiusM),
-                border: Border.all(
-                    color: theme.colorScheme.warning.withValues(alpha: 0.4)),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.warning_amber_rounded,
-                      color: theme.brightness == Brightness.dark
-                          ? theme.colorScheme.warning
-                          : AppTheme.onWarning,
-                      size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      isEmployee
-                          ? '${summary.pendingSalesCount} vente(s) en attente de validation'
-                          : '${summary.pendingSalesCount} vente(s) en attente — '
-                              '${_currencyFormat.format(summary.pendingSalesTotal)}',
-                      style: TextStyle(
-                        color: theme.colorScheme.onSurface,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 13,
-                      ),
+                child: InkWell(
+                  key: const Key('pending-sales-banner'),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusM),
+                  onTap: isEmployee ? null : () => context.push('/pos/pending'),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    // Fond ambre dilué (lisible en sombre), l'icône porte l'accent.
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusM),
+                      border: Border.all(
+                          color:
+                              theme.colorScheme.warning.withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.warning_amber_rounded,
+                            color: theme.brightness == Brightness.dark
+                                ? theme.colorScheme.warning
+                                : AppTheme.onWarning,
+                            size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            isEmployee
+                                ? '${summary.pendingSalesCount} vente(s) en attente de validation'
+                                : '${summary.pendingSalesCount} vente(s) en attente — '
+                                    '${_currencyFormat.format(summary.pendingSalesTotal)}',
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurface,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        if (!isEmployee)
+                          Icon(Icons.chevron_right_rounded,
+                              color: theme.colorScheme.onSurfaceVariant,
+                              size: 20),
+                      ],
                     ),
                   ),
-                ],
+                ),
               ),
             ),
 
@@ -537,9 +554,7 @@ class _ClosureButton extends ConsumerWidget {
       width: double.infinity,
       height: 56,
       child: ElevatedButton.icon(
-        onPressed: isClosed
-            ? null
-            : () => _showDayCloseSummary(context, ref),
+        onPressed: isClosed ? null : () => _showDayCloseSummary(context, ref),
         style: ElevatedButton.styleFrom(
           backgroundColor: cs.primary,
           disabledBackgroundColor: cs.outlineVariant,
@@ -552,7 +567,9 @@ class _ClosureButton extends ConsumerWidget {
           elevation: 0,
         ),
         icon: Icon(
-          isClosed ? Icons.check_circle_outline_rounded : Icons.lock_outline_rounded,
+          isClosed
+              ? Icons.check_circle_outline_rounded
+              : Icons.lock_outline_rounded,
           size: 20,
         ),
         label: Text(
@@ -566,8 +583,7 @@ class _ClosureButton extends ConsumerWidget {
     );
   }
 
-  Future<void> _showDayCloseSummary(
-      BuildContext context, WidgetRef ref) async {
+  Future<void> _showDayCloseSummary(BuildContext context, WidgetRef ref) async {
     final closed = await DaySummaryBottomSheet.show(
       context: context,
       ref: ref,

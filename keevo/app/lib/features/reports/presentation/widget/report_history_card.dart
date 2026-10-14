@@ -12,11 +12,16 @@ class ReportHistoryCard extends StatelessWidget {
   final VoidCallback? onTap;
   final String? currentUserId;
 
+  /// Nom du vendeur résolu localement, utilisé quand le rapport n'a pas de
+  /// `actorName` (J5) — évite le libellé générique « Employé ».
+  final String? actorNameFallback;
+
   const ReportHistoryCard({
     super.key,
     required this.report,
     this.onTap,
     this.currentUserId,
+    this.actorNameFallback,
   });
 
   static final _dateFormat = DateFormat('d MMM yyyy', 'fr_FR');
@@ -145,7 +150,9 @@ class ReportHistoryCard extends StatelessWidget {
     if (report.actorId == currentUserId) {
       return '$base — Vous';
     }
-    final name = report.actorName;
+    final name = (report.actorName?.trim().isNotEmpty ?? false)
+        ? report.actorName
+        : actorNameFallback;
     return '$base — ${name ?? 'Employé'}';
   }
 

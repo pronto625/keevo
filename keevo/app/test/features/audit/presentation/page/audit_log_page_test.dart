@@ -184,6 +184,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('Vente annulée'), 100,
         scrollable: find.byType(Scrollable).last);
+    // More actions in the list (J7/J10): bring the row fully on screen.
+    await tester.ensureVisible(find.text('Vente annulée'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Vente annulée'));
     await tester.pumpAndSettle();
     expect(repo.sliceCalls.last.$1.action, 'SALE_CANCELLED');

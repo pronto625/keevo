@@ -38,16 +38,19 @@ public class StoreController {
     private final UpdateStoreUseCase updateStoreUseCase;
     private final DeactivateStoreUseCase deactivateStoreUseCase;
     private final ListStoresUseCase listStoresUseCase;
+    private final ReactivateStoreUseCase reactivateStoreUseCase;
 
     public StoreController(
             CreateStoreUseCase createStoreUseCase,
             UpdateStoreUseCase updateStoreUseCase,
             DeactivateStoreUseCase deactivateStoreUseCase,
-            ListStoresUseCase listStoresUseCase) {
+            ListStoresUseCase listStoresUseCase,
+            ReactivateStoreUseCase reactivateStoreUseCase) {
         this.createStoreUseCase = createStoreUseCase;
         this.updateStoreUseCase = updateStoreUseCase;
         this.deactivateStoreUseCase = deactivateStoreUseCase;
         this.listStoresUseCase = listStoresUseCase;
+        this.reactivateStoreUseCase = reactivateStoreUseCase;
     }
 
     @Operation(summary = "Create a new store or warehouse")
@@ -107,6 +110,21 @@ public class StoreController {
         CurrentActor.requireOwner("Only OWNER can manage stores");
         UUID actorId = CurrentActor.actorId();
         Store store = deactivateStoreUseCase.execute(new DeactivateStoreCommand(storeId, actorId));
+        return ResponseEntity.ok(ApiResponseWrapper.ok(StoreResponseDto.fromDomain(store)));
+    }
+
+    @Operation(summary = "Reactivate a deactivated store (plan store limit applies)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Store reactivated"),
+            @ApiResponse(responseCode = "403", description = "Plan limit exceeded"),
+            @ApiResponse(responseCode = "404", description = "Store not found")
+    })
+    @PatchMapping("/{storeId}/reactivate")
+    public ResponseEntity<ApiResponseWrapper<StoreResponseDto>> reactivateStore(
+            @PathVariable UUID storeId) {
+        CurrentActor.requireOwner("Only OWNER can manage stores");
+        UUID actorId = CurrentActor.actorId();
+        Store store = reactivateStoreUseCase.execute(new ReactivateStoreCommand(storeId, actorId));
         return ResponseEntity.ok(ApiResponseWrapper.ok(StoreResponseDto.fromDomain(store)));
     }
 

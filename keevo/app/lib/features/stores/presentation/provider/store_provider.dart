@@ -109,6 +109,11 @@ class StoreListNotifier extends _$StoreListNotifier {
     await refresh();
   }
 
+  Future<void> reactivateStore(String storeId) async {
+    await ref.read(storeRepositoryProvider).reactivateStore(storeId);
+    await refresh();
+  }
+
   Future<void> syncFromRemote() async {
     try {
       await ref.read(storeRepositoryProvider).syncFromRemote();

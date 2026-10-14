@@ -39,6 +39,7 @@ class ReportHistoryServiceTest {
     @Mock private EndOfDayReportRepository reportRepository;
     @Mock private WhatsAppPort whatsAppPort;
     @Mock private OwnerRecipientResolver ownerRecipientResolver;
+    @Mock private com.keevo.identity.employee.domain.port.out.EmployeeRepository employeeRepository;
 
     private ReportHistoryService service;
     private UUID reportId;
@@ -47,7 +48,8 @@ class ReportHistoryServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ReportHistoryService(reportRepository, whatsAppPort, ownerRecipientResolver);
+        service = new ReportHistoryService(reportRepository, whatsAppPort, ownerRecipientResolver,
+                employeeRepository);
         reportId = UUID.randomUUID();
         tenantId = "kv_test01";
         sampleReport = EndOfDayReport.createNew(
@@ -73,6 +75,40 @@ class ReportHistoryServiceTest {
 
         assertThat(result.getContent()).hasSize(1);
         verify(reportRepository).findFiltered(tenantId, storeId, actorId, ReportType.DAILY, pageable);
+    }
+
+    @Test
+    void getReportHistory_employeeRecordId_isTranslatedToTheUserIdStoredOnReports() {
+        UUID storeId = UUID.randomUUID();
+        UUID employeeId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        PageRequest pageable = PageRequest.of(0, 10);
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(
+                new com.keevo.identity.employee.domain.model.Employee(employeeId, userId, storeId,
+                        "Jean", "Kamga",
+                        com.keevo.identity.employee.domain.model.EmployeeStatus.ACTIVE,
+                        false, java.time.Instant.now())));
+        when(reportRepository.findFiltered(tenantId, storeId, userId, null, pageable))
+                .thenReturn(new PageImpl<>(List.of(sampleReport)));
+
+        Page<EndOfDayReport> result = service.getReportHistory(
+                new ReportHistoryQuery(tenantId, storeId, employeeId, null, pageable));
+
+        assertThat(result.getContent()).hasSize(1);
+        verify(reportRepository).findFiltered(tenantId, storeId, userId, null, pageable);
+    }
+
+    @Test
+    void getReportHistory_userId_isUsedAsIs() {
+        UUID userId = UUID.randomUUID();
+        PageRequest pageable = PageRequest.of(0, 10);
+        when(employeeRepository.findById(userId)).thenReturn(Optional.empty());
+        when(reportRepository.findFiltered(tenantId, null, userId, null, pageable))
+                .thenReturn(new PageImpl<>(List.of(sampleReport)));
+
+        service.getReportHistory(new ReportHistoryQuery(tenantId, null, userId, null, pageable));
+
+        verify(reportRepository).findFiltered(tenantId, null, userId, null, pageable);
     }
 
     // ─────────────────────────────────────────────────────────────────

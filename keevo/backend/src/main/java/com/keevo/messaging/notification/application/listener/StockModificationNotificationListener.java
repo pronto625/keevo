@@ -172,7 +172,7 @@ public class StockModificationNotificationListener {
                 TYPE_EMPLOYEE_STOCK_MODIFIED,
                 "📦 Stock modifié par " + event.actorName(),
                 body,
-                "/products/" + event.productId(),
+                "/products/" + event.productId() + "/edit",  // J16: existing app route
                 Map.of("productId", event.productId().toString(),
                        "productName", productName,
                        "actorId", event.actorId().toString(),
@@ -196,7 +196,7 @@ public class StockModificationNotificationListener {
                 TYPE_EMPLOYEE_STOCK_MODIFIED_BATCH,
                 "📦 " + count + " modifications de stock par " + first.actorName(),
                 body,
-                "/stock/history",
+                "/stock/overview",  // J16: existing app route
                 Map.of("count", String.valueOf(count),
                        "actorId", first.actorId().toString(),
                        "storeName", first.storeName() != null ? first.storeName() : "",

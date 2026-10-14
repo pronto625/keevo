@@ -105,6 +105,56 @@ void main() {
     expect(find.byIcon(Icons.error_outline_rounded), findsOneWidget);
   });
 
+  testWidgets(
+      'J5: an employee report without actorName shows the name resolved from '
+      'the local employees table (by user id)', (tester) async {
+    final report = _makeReport('r1').copyWith(actorId: 'user-jean');
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        reportHistoryProvider().overrideWith((_) async => [report]),
+        employeeNamesByActorIdProvider
+            .overrideWith((_) async => {'user-jean': 'Jean Kamga'}),
+      ],
+      child: MaterialApp.router(
+        routerConfig: GoRouter(routes: [
+          GoRoute(path: '/', builder: (_, __) => const ReportHistoryPage()),
+        ]),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Boutique Test — Jean Kamga'), findsOneWidget);
+    expect(find.textContaining('Employé'), findsNothing);
+  });
+
+  testWidgets('N2: back with nothing to pop goes to Rapports (/reports)',
+      (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        reportHistoryProvider().overrideWith((_) async => []),
+      ],
+      child: MaterialApp.router(
+        routerConfig: GoRouter(
+          initialLocation: '/reports/history',
+          routes: [
+            GoRoute(
+                path: '/reports',
+                builder: (_, __) => const Scaffold(body: Text('RAPPORTS'))),
+            GoRoute(
+                path: '/reports/history',
+                builder: (_, __) => const ReportHistoryPage()),
+          ],
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.arrow_back_ios_new_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.text('RAPPORTS'), findsOneWidget);
+  });
+
   testWidgets('shows AppBar with correct title', (tester) async {
     await tester.pumpWidget(_buildPage(Future.value([])));
     await tester.pumpAndSettle();

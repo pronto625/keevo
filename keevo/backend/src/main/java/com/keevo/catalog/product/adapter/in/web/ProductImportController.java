@@ -143,7 +143,7 @@ public class ProductImportController {
                 mapping,
                 actorId,
                 actorRole,
-                actorId.toString(),  // actorName — fallback to UUID until user-profile API exists
+                CurrentActor.actorLabel(),  // J13: display name, never a UUID
                 storeId
         );
 
@@ -173,7 +173,7 @@ public class ProductImportController {
                 request.transportCost(),
                 actorId,
                 actorRole,
-                actorId.toString()  // actorName fallback
+                CurrentActor.actorLabel()  // J13: display name, never a UUID
         );
 
         var saved = draftUseCase.execute(command);

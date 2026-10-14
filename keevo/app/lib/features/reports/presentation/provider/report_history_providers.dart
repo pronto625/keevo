@@ -8,6 +8,7 @@ import '../../data/datasource/remote_report_history_datasource.dart';
 import '../../data/repository/report_history_repository_impl.dart';
 import '../../domain/model/report_history_model.dart';
 import '../../domain/repository/report_history_repository.dart';
+import '../../../team/presentation/provider/employee_provider.dart';
 
 part 'report_history_providers.g.dart';
 
@@ -23,6 +24,31 @@ final remoteReportHistoryDataSourceProvider =
     Provider<RemoteReportHistoryDataSource>((ref) {
   final dio = ref.watch(dioProvider);
   return RemoteReportHistoryDataSource(dio);
+});
+
+/// J5 — nom affiché d'un rapport personnel quand le serveur n'a pas rempli
+/// `actorName` (anciens rapports). Le rapport porte l'id UTILISATEUR du
+/// vendeur : on le résout dans la table locale des employés (par user id, et
+/// par id de fiche en repli). Ne bloque ni n'échoue jamais : carte vide.
+final employeeNamesByActorIdProvider =
+    FutureProvider.autoDispose<Map<String, String>>((ref) async {
+  try {
+    final employees =
+        await ref.watch(localEmployeeDataSourceProvider).getAll();
+    final names = <String, String>{};
+    for (final e in employees) {
+      final name = [e.firstName, e.lastName]
+          .map((p) => p.trim())
+          .where((p) => p.isNotEmpty)
+          .join(' ');
+      if (name.isEmpty) continue;
+      names[e.id] = name;
+      if (e.userId.isNotEmpty) names[e.userId] = name;
+    }
+    return names;
+  } catch (_) {
+    return const {};
+  }
 });
 
 final reportHistoryRepositoryProvider =

@@ -163,8 +163,14 @@ public class ProductCreationNotificationListener {
         log.info("[CSV] Import completed: {} product(s) by {} in tenant {}",
                 event.importedCount(), event.actorId(), event.tenantId());
 
+        // J13: an OWNER import creates ACTIVE products — nothing to validate, and the owner
+        // just saw the result on screen. Only an import that produced drafts (non-owner)
+        // asks the owners to validate them.
+        if ("OWNER".equals(event.actorRole())) {
+            return;
+        }
         try {
-            String body = event.actorName() + " a importé " + event.importedCount()
+            String body = displayName(event.actorName()) + " a importé " + event.importedCount()
                     + " produit(s) en brouillon via CSV — Validez-les dans votre catalogue";
 
             notificationPort.notifyOwners(event.tenantId(), NotificationPayload.of(
@@ -182,14 +188,25 @@ public class ProductCreationNotificationListener {
 
     // ── Private helpers ─────────────────────────────────────────────────
 
+    private static final java.util.regex.Pattern UUID_PATTERN = java.util.regex.Pattern.compile(
+            "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
+
+    /** J13 — a push body never shows a raw id: unknown / id-like names become a neutral label. */
+    static String displayName(String actorName) {
+        if (actorName == null || actorName.isBlank() || UUID_PATTERN.matcher(actorName.trim()).matches()) {
+            return "Un membre de l'équipe";
+        }
+        return actorName.trim();
+    }
+
     private void dispatchSingle(ProductCreatedEvent event) {
         String storeLabel = event.storeName() != null ? " (" + event.storeName() + ")" : "";
-        String body = event.actorName() + " a ajouté « " + event.productName()
+        String body = displayName(event.actorName()) + " a ajouté « " + event.productName()
                 + " » au catalogue" + storeLabel + ".";
 
         NotificationPayload payload = NotificationPayload.of(
                 TYPE_EMPLOYEE_PRODUCT_CREATED,
-                "🛍️ Produit créé par " + event.actorName(),
+                "🛍️ Produit créé par " + displayName(event.actorName()),
                 body,
                 "/products/" + event.productId() + "/edit",
                 Map.of("productId", event.productId().toString(),
@@ -207,12 +224,12 @@ public class ProductCreationNotificationListener {
         ProductCreatedEvent first = events.get(0);
         int count = events.size();
         String storeLabel = first.storeName() != null ? " (" + first.storeName() + ")" : "";
-        String body = first.actorName() + " a créé " + count
+        String body = displayName(first.actorName()) + " a créé " + count
                 + " produits dans le catalogue" + storeLabel + ".";
 
         NotificationPayload payload = NotificationPayload.of(
                 TYPE_EMPLOYEE_PRODUCT_CREATED_BATCH,
-                "🛍️ " + count + " produits créés par " + first.actorName(),
+                "🛍️ " + count + " produits créés par " + displayName(first.actorName()),
                 body,
                 "/products",
                 Map.of("count", String.valueOf(count),

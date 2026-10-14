@@ -95,6 +95,7 @@ void main() {
     when(() => plugin.getNotificationAppLaunchDetails())
         .thenAnswer((_) async => null);
     when(() => router.push<Object?>(any())).thenAnswer((_) async => null);
+    when(() => router.go(any())).thenReturn(null);
     when(() => plugin.show(any(), any(), any(), any(),
         payload: any(named: 'payload'))).thenAnswer((_) async {});
     when(() => iosPlugin.requestPermissions(
@@ -226,7 +227,8 @@ void main() {
         notificationResponseType: NotificationResponseType.selectedNotification,
         payload: '/products/p1',
       ));
-      verify(() => router.push<Object?>('/products/p1')).called(1);
+      // J16: legacy « /products/{id} » opens the product form route.
+      verify(() => router.push<Object?>('/products/p1/edit')).called(1);
     });
 
     test('a local notification that launched the app opens its deep link',
@@ -245,7 +247,9 @@ void main() {
 
       await service.initialize(router);
 
-      verify(() => router.push<Object?>('/reports')).called(1);
+      // J16: a bottom-nav tab is opened with go(), never pushed.
+      verify(() => router.go('/reports')).called(1);
+      verifyNever(() => router.push<Object?>('/reports'));
     });
 
     test('getInitialMessage failing still attaches the token refresh listener',
@@ -466,7 +470,8 @@ void main() {
       onOpened.add(pushWithNotification);
       await pumpEventQueue();
 
-      verify(() => router.push<Object?>('/products/p1')).called(1);
+      // J16: legacy « /products/{id} » opens the product form route.
+      verify(() => router.push<Object?>('/products/p1/edit')).called(1);
       verifyNever(() => local.insert(
             id: any(named: 'id'),
             type: any(named: 'type'),

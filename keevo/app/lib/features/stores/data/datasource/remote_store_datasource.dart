@@ -19,9 +19,7 @@ class RemoteStoreDataSource {
         queryParameters: {'includeInactive': includeInactive},
       );
       final data = response.data!['data'] as List<dynamic>;
-      return data
-          .map((e) => _fromJson(e as Map<String, dynamic>))
-          .toList();
+      return data.map((e) => _fromJson(e as Map<String, dynamic>)).toList();
     } on DioException catch (e) {
       throw _mapError(e);
     }
@@ -77,6 +75,18 @@ class RemoteStoreDataSource {
     try {
       final response = await _dio.patch<Map<String, dynamic>>(
         '/api/v1/stores/$storeId/deactivate',
+      );
+      return _fromJson(response.data!['data'] as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw _mapError(e);
+    }
+  }
+
+  /// PATCH /api/v1/stores/{storeId}/reactivate
+  Future<StoreModel> reactivate(String storeId) async {
+    try {
+      final response = await _dio.patch<Map<String, dynamic>>(
+        '/api/v1/stores/$storeId/reactivate',
       );
       return _fromJson(response.data!['data'] as Map<String, dynamic>);
     } on DioException catch (e) {

@@ -9,19 +9,23 @@ import 'store_type_icon.dart';
 ///
 /// Shows: name, type icon, address/phone if set.
 /// Inactive stores are greyed out with a "Désactivée" badge.
-/// Long-press triggers the action menu (owner only).
+/// Long-press triggers the action menu (owner only) : « Modifier » /
+/// « Désactiver » sur une boutique active, « Réactiver » sur une boutique
+/// désactivée (sinon impossible de la remettre en service).
 ///
 /// Story 3.1 — Task 20.2.
 class StoreCard extends StatelessWidget {
   final StoreModel store;
   final VoidCallback? onEdit;
   final VoidCallback? onDeactivate;
+  final VoidCallback? onReactivate;
 
   const StoreCard({
     super.key,
     required this.store,
     this.onEdit,
     this.onDeactivate,
+    this.onReactivate,
   });
 
   @override
@@ -32,7 +36,7 @@ class StoreCard extends StatelessWidget {
     return Opacity(
       opacity: isInactive ? 0.55 : 1.0,
       child: GestureDetector(
-        onLongPress: isInactive ? null : _showMenu(context),
+        onLongPress: _showMenu(context),
         // Rangée de liste : surface + bordure fine plutôt qu'une élévation
         // Material par défaut.
         child: Container(
@@ -71,19 +75,18 @@ class StoreCard extends StatelessWidget {
                     ),
                     child: Text(
                       'Désactivée',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.error),
+                      style: theme.textTheme.labelSmall
+                          ?.copyWith(color: theme.colorScheme.error),
                     ),
                   ),
               ],
             ),
             subtitle: _subtitle(theme),
-            trailing: isInactive
-                ? null
-                : IconButton(
-                    icon: const Icon(Icons.more_vert_rounded),
-                    onPressed: _showMenu(context),
-                  ),
+            trailing: IconButton(
+              icon: const Icon(Icons.more_vert_rounded),
+              tooltip: 'Actions',
+              onPressed: _showMenu(context),
+            ),
           ),
         ),
       ),
@@ -116,8 +119,8 @@ class StoreCard extends StatelessWidget {
       parts.join(' · '),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
-      style:
-          theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+      style: theme.textTheme.bodySmall
+          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
     );
   }
 
@@ -132,27 +135,38 @@ class StoreCard extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const SizedBox(height: 8),
-                ListTile(
-                  leading: const Icon(Icons.edit_outlined),
-                  title: const Text('Modifier'),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    onEdit?.call();
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.block_rounded,
-                      color: Theme.of(context).colorScheme.error),
-                  title: Text(
-                    'Désactiver',
-                    style: TextStyle(
-                        color: Theme.of(context).colorScheme.error),
+                if (!store.isActive)
+                  ListTile(
+                    leading: const Icon(Icons.restart_alt_rounded),
+                    title: const Text('Réactiver'),
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      onReactivate?.call();
+                    },
                   ),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    onDeactivate?.call();
-                  },
-                ),
+                if (store.isActive) ...[
+                  ListTile(
+                    leading: const Icon(Icons.edit_outlined),
+                    title: const Text('Modifier'),
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      onEdit?.call();
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.block_rounded,
+                        color: Theme.of(context).colorScheme.error),
+                    title: Text(
+                      'Désactiver',
+                      style:
+                          TextStyle(color: Theme.of(context).colorScheme.error),
+                    ),
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      onDeactivate?.call();
+                    },
+                  ),
+                ],
                 const SizedBox(height: 8),
               ],
             ),

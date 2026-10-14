@@ -66,7 +66,7 @@ public class CreateStoreService implements CreateStoreUseCase {
         // 2. Warehouse uniqueness check
         if (command.type() == StoreType.WAREHOUSE && storeRepository.existsWarehouse()) {
             throw new DomainException(ErrorCode.WAREHOUSE_ALREADY_EXISTS,
-                    "Vous avez déjà un warehouse. Un seul warehouse est autorisé par compte.");
+                    "Vous avez déjà un entrepôt. Un seul entrepôt est autorisé par compte.");
         }
 
         // 3. Create via factory (validates name, sets defaults)

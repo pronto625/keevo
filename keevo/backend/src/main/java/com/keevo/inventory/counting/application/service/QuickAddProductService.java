@@ -116,10 +116,13 @@ public class QuickAddProductService implements QuickAddProductUseCase {
         String sku = generateSku();
         Instant now = Instant.now();
         int price = cmd.sellingPrice() != null ? cmd.sellingPrice() : 0;
+        // J18: the product starts with NO stock. The counted quantity is recorded as the
+        // session count (theoretical 0 → physical N) and applied ONCE, with its movement, by
+        // the inventory validation. Creating the stock here as well doubled it (3 → 6).
         Product product = new Product(
                 UUID.randomUUID(), trimmedName, null, sku,
                 cmd.categoryId(), price, 0, 0,
-                cmd.physicalQty(), false, ProductStatus.ACTIVE,
+                0, false, ProductStatus.ACTIVE,
                 0, now, now
         );
         Product savedProduct = productRepository.save(product);
@@ -127,7 +130,7 @@ public class QuickAddProductService implements QuickAddProductUseCase {
         // 4. Create StockLevel
         StockLevel stockLevel = new StockLevel(
                 UUID.randomUUID(), savedProduct.getId(), null,
-                session.getStoreId(), cmd.physicalQty(), now
+                session.getStoreId(), 0, now
         );
         StockLevel savedStock = stockLevelRepository.save(stockLevel);
 
