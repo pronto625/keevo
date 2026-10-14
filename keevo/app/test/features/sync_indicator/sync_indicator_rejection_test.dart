@@ -326,5 +326,112 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       container.dispose();
     });
+
+    // J27 follow-up (device test): after « Renvoyer » succeeded the notice
+    // was still covering « ENCAISSER ».
+    testWidgets('the notice closes as soon as no operation is blocked',
+        (tester) async {
+      final blocked = StateProvider<int>((ref) => 1);
+      final container = ProviderContainer(overrides: [
+        syncStatusProvider
+            .overrideWith((ref) => Stream.value(SyncStatus.online)),
+        daysOfflineProvider.overrideWithValue(0),
+        daysSinceLastSyncProvider.overrideWithValue(0),
+        currentUserRoleProvider.overrideWithValue('OWNER'),
+        quarantinedSyncCountProvider
+            .overrideWith((ref) async => ref.watch(blocked)),
+      ]);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
+            appBar: PreferredSize(
+              preferredSize: const Size.fromHeight(56),
+              child: AppBar(actions: const [SyncIndicator()]),
+            ),
+            body: const SizedBox.shrink(),
+          ),
+        ),
+      ));
+      await tester.pump();
+      container.read(pendingRejectionNotificationsProvider.notifier).state = [
+        blockedTransfer(),
+      ];
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(SnackBar), findsOneWidget);
+
+      container.read(blocked.notifier).state = 0; // « Renvoyer » succeeded
+      await tester.pump();
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsNothing);
+      expect(find.text('En ligne'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+    });
+
+    // J30 (device test): « Voir » did nothing once the POS page (owner of
+    // the indicator) had been left — the notice stays on every screen.
+    testWidgets('« Voir » opens the blocked list even after leaving the page',
+        (tester) async {
+      final container = ProviderContainer(overrides: [
+        syncStatusProvider
+            .overrideWith((ref) => Stream.value(SyncStatus.online)),
+        daysOfflineProvider.overrideWithValue(0),
+        daysSinceLastSyncProvider.overrideWithValue(0),
+        currentUserRoleProvider.overrideWithValue('OWNER'),
+        quarantinedSyncCountProvider.overrideWith((ref) async => 1),
+      ]);
+      addTearDown(container.dispose);
+      final router = GoRouter(routes: [
+        GoRoute(
+          path: '/',
+          builder: (_, __) => Scaffold(
+            appBar: PreferredSize(
+              preferredSize: const Size.fromHeight(56),
+              child: AppBar(actions: const [SyncIndicator()]),
+            ),
+            body: const SizedBox.shrink(),
+          ),
+        ),
+        GoRoute(
+          path: '/product-form',
+          builder: (_, __) => const Scaffold(body: Text('PRODUCT FORM')),
+        ),
+        GoRoute(
+          path: '/sync/blocked',
+          builder: (_, __) => const Scaffold(body: Text('BLOCKED PAGE')),
+        ),
+      ]);
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(routerConfig: router),
+      ));
+      await tester.pump();
+      container.read(pendingRejectionNotificationsProvider.notifier).state = [
+        blockedTransfer(),
+      ];
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      router.go('/product-form'); // the indicator's page is disposed
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.text('PRODUCT FORM'), findsOneWidget);
+
+      await tester.tap(find.text('Voir'));
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.text('BLOCKED PAGE'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+    });
   });
 }

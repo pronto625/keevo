@@ -32,6 +32,22 @@ class SyncIndicator extends ConsumerWidget {
   @visibleForTesting
   static void resetSurfacedRejections() => _surfacedRejections.clear();
 
+  /// « Bloqué … » notices shown and maybe still on screen.
+  static final List<ScaffoldFeatureController<SnackBar, SnackBarClosedReason>>
+      _blockedNotices = [];
+
+  /// J27: closes every « Bloqué … » notice still displayed.
+  static void closeBlockedNotices() {
+    for (final c in _blockedNotices) {
+      try {
+        c.close();
+      } catch (_) {
+        // Already closed / messenger gone.
+      }
+    }
+    _blockedNotices.clear();
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // AC8: Listen for stock conflict notifications and show amber SnackBar
@@ -43,6 +59,7 @@ class SyncIndicator extends ConsumerWidget {
         if (data == null) continue;
         final productName = data['productName'] ?? 'Produit';
         final resultingStock = data['resultingStock'] ?? '?';
+        final router = GoRouter.maybeOf(context); // J30: see below
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppTheme.warningStrong,
@@ -70,12 +87,18 @@ class SyncIndicator extends ConsumerWidget {
             action: SnackBarAction(
               label: 'Voir',
               textColor: AppTheme.onBrand,
-              onPressed: () => context.push('/settings/sync/conflicts'),
+              onPressed: () => router?.push('/settings/sync/conflicts'),
             ),
           ),
         );
       }
       ref.read(pendingConflictNotificationsProvider.notifier).state = [];
+    });
+
+    // J27: no blocked operation left (released, re-attached, abandoned) →
+    // the « Bloqué … » notices still on screen go away at once.
+    ref.listen<AsyncValue<int>>(quarantinedSyncCountProvider, (prev, next) {
+      if (next.valueOrNull == 0) closeBlockedNotices();
     });
 
     // Notify when a queued offline operation is rejected by the server
@@ -102,7 +125,11 @@ class SyncIndicator extends ConsumerWidget {
         final text = quarantined
             ? 'Bloqué ($operation) : $reason — action requise'
             : 'Non synchronisé ($operation) : $reason$undone';
-        ScaffoldMessenger.of(context).showSnackBar(
+        // J30: the router is captured now — « Voir » is tapped later, maybe
+        // after this indicator's page was left (its context is then dead and
+        // context.push silently did nothing).
+        final router = GoRouter.maybeOf(context);
+        final controller = ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppTheme.errorStrong,
             duration: const Duration(seconds: 6),
@@ -130,12 +157,13 @@ class SyncIndicator extends ConsumerWidget {
                     textColor: AppTheme.onBrand,
                     // /sync/blocked is open to every role; /settings/sync is
                     // OWNER-only.
-                    onPressed: () => context.push(
+                    onPressed: () => router?.push(
                         quarantined ? '/sync/blocked' : '/settings/sync'),
                   )
                 : null,
           ),
         );
+        if (quarantined) _blockedNotices.add(controller);
       }
       ref.read(pendingRejectionNotificationsProvider.notifier).state = [];
     });
