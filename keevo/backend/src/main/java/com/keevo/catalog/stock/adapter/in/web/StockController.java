@@ -155,7 +155,8 @@ public class StockController {
             @PathVariable UUID productId,
             @Valid @RequestBody SetThresholdRequestDto request) {
 
-        var product = setStockThresholdUseCase.execute(productId, request.minimumThreshold());
+        UUID actorId = CurrentActor.actorId();
+        var product = setStockThresholdUseCase.execute(productId, request.minimumThreshold(), actorId);
         return ResponseEntity.ok(ApiResponseWrapper.ok(ProductResponseDto.fromDomain(product)));
     }
 

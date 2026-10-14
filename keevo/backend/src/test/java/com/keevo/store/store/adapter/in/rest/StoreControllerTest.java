@@ -40,6 +40,7 @@ class StoreControllerTest {
     @Mock UpdateStoreUseCase updateStoreUseCase;
     @Mock DeactivateStoreUseCase deactivateStoreUseCase;
     @Mock ListStoresUseCase listStoresUseCase;
+    @Mock ReactivateStoreUseCase reactivateStoreUseCase;
 
     @InjectMocks StoreController storeController;
 
@@ -136,6 +137,37 @@ class StoreControllerTest {
         mockMvc.perform(patch("/api/v1/stores/" + storeId + "/deactivate"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.isActive").value(false));
+    }
+
+    @Test
+    @DisplayName("J7 — PATCH /api/v1/stores/{id}/reactivate returns 200 with active store")
+    void PATCH_stores_id_reactivate_shouldReturn200_withActiveStore() throws Exception {
+        when(reactivateStoreUseCase.execute(any())).thenReturn(sampleStore);
+
+        mockMvc.perform(patch("/api/v1/stores/" + storeId + "/reactivate"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.isActive").value(true));
+        verify(reactivateStoreUseCase).execute(new ReactivateStoreCommand(storeId, actorId));
+    }
+
+    @Test
+    @DisplayName("J7 — PATCH /reactivate returns 403 when the plan store limit is reached")
+    void PATCH_stores_id_reactivate_shouldReturn403_whenPlanLimitExceeded() throws Exception {
+        when(reactivateStoreUseCase.execute(any()))
+                .thenThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "limit reached"));
+
+        mockMvc.perform(patch("/api/v1/stores/" + storeId + "/reactivate"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("J7 — PATCH /reactivate is refused to an EMPLOYEE")
+    void PATCH_stores_id_reactivate_employee_forbidden() throws Exception {
+        authenticateAs("EMPLOYEE");
+
+        mockMvc.perform(patch("/api/v1/stores/" + storeId + "/reactivate"))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(reactivateStoreUseCase);
     }
 
     @Test

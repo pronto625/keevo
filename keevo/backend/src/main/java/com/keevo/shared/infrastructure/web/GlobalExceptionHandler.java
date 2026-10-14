@@ -64,7 +64,7 @@ public class GlobalExceptionHandler {
             Map.entry("SUPPLIER_NOT_FOUND",        "Fournisseur introuvable"),
             Map.entry("SUBSCRIPTION_NOT_FOUND",    "Aucun abonnement actif trouvé"),
             Map.entry("PRODUCT_NAME_ALREADY_EXISTS", "Un produit avec ce nom existe déjà dans votre catalogue"),
-            Map.entry("WAREHOUSE_ALREADY_EXISTS",   "Vous avez déjà un warehouse. Un seul warehouse est autorisé par compte."),
+            Map.entry("WAREHOUSE_ALREADY_EXISTS",   "Vous avez déjà un entrepôt. Un seul entrepôt est autorisé par compte."),
             Map.entry("STORE_NOT_FOUND",             "Boutique introuvable"),
             Map.entry("PRODUCT_NOT_FOUND",           "Produit introuvable"),
             Map.entry("STORE_NOT_ACTIVE",           "Cette boutique est désactivée"),

@@ -133,4 +133,29 @@ class AuditEventListenerContactTest {
                 .extracting(AuditPort.AuditEntry::entityLabel)
                 .containsExactly("Alice", "Fournisseur SA");
     }
+
+    // ── J10 — supplier info / products updates ───────────────────────────────
+
+    @Test
+    @DisplayName("on(SupplierUpdatedEvent) records SUPPLIER_UPDATED with the changed fields")
+    void on_supplierUpdated_records_audit() {
+        listener.on(new com.keevo.catalog.contact.domain.event.SupplierUpdatedEvent(
+                SUPPLIER_ID, "Fournisseur SA",
+                java.util.Map.of("phone", "+237600000001"), java.util.Map.of("phone", "+237600000002"),
+                ACTOR_ID, TENANT, NOW));
+
+        verify(auditPort).record(entry(ACTOR_ID, TENANT, "SUPPLIER_UPDATED", "Supplier", SUPPLIER_ID,
+                "{\"phone\":\"+237600000001\"}", "{\"phone\":\"+237600000002\"}"));
+    }
+
+    @Test
+    @DisplayName("on(SupplierProductsChangedEvent) records SUPPLIER_PRODUCTS_UPDATED with counts only")
+    void on_supplierProductsChanged_records_audit() {
+        listener.on(new com.keevo.catalog.contact.domain.event.SupplierProductsChangedEvent(
+                SUPPLIER_ID, "Fournisseur SA", 2, 3, 2, 1, ACTOR_ID, TENANT, NOW));
+
+        verify(auditPort).record(entry(ACTOR_ID, TENANT, "SUPPLIER_PRODUCTS_UPDATED", "Supplier", SUPPLIER_ID,
+                "{\"productCount\":2}",
+                "{\"productCount\":3,\"productsAdded\":2,\"productsRemoved\":1}"));
+    }
 }

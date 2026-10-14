@@ -103,7 +103,7 @@ public class CreateStoreSyncHandler extends AbstractSyncOperationHandler {
 
         if (type == StoreType.WAREHOUSE && storeRepository.existsWarehouse()) {
             throw new DomainException(ErrorCode.WAREHOUSE_ALREADY_EXISTS,
-                    "Vous avez déjà un warehouse. Un seul warehouse est autorisé par compte.");
+                    "Vous avez déjà un entrepôt. Un seul entrepôt est autorisé par compte.");
         }
 
         Instant now = Instant.now();

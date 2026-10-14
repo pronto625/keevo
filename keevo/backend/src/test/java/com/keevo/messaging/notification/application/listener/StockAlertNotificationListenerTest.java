@@ -127,6 +127,9 @@ class StockAlertNotificationListenerTest {
         assertTrue(payload.body().contains("Savon Palmolive"));
         assertTrue(payload.body().contains("3 unité(s)"));
         assertTrue(payload.body().contains("Boutique Cosmos"));
+        // J15 — the store name is used as is, never prefixed a second time.
+        assertFalse(payload.body().contains("Boutique Boutique"));
+        assertTrue(payload.body().endsWith("— Boutique Cosmos"), payload.body());
     }
 
     // ── AC1: Alert disabled → skip ───────────────────────────────────────────

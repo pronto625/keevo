@@ -9,6 +9,8 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.identity.employee.domain.model.Employee;
+import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -29,13 +31,16 @@ public class ReportHistoryService implements GetReportHistoryUseCase, ResendRepo
     private final EndOfDayReportRepository reportRepository;
     private final WhatsAppPort whatsAppPort;
     private final OwnerRecipientResolver ownerRecipientResolver;
+    private final EmployeeRepository employeeRepository;
 
     public ReportHistoryService(EndOfDayReportRepository reportRepository,
                                  WhatsAppPort whatsAppPort,
-                                 OwnerRecipientResolver ownerRecipientResolver) {
+                                 OwnerRecipientResolver ownerRecipientResolver,
+                                 EmployeeRepository employeeRepository) {
         this.reportRepository = reportRepository;
         this.whatsAppPort = whatsAppPort;
         this.ownerRecipientResolver = ownerRecipientResolver;
+        this.employeeRepository = employeeRepository;
     }
 
     @Override
@@ -43,10 +48,23 @@ public class ReportHistoryService implements GetReportHistoryUseCase, ResendRepo
         return reportRepository.findFiltered(
                 query.tenantId(),
                 query.storeId(),
-                query.actorId(),
+                reportActorId(query.actorId()),
                 query.type(),
                 query.pageable()
         );
+    }
+
+    /**
+     * Un rapport personnel porte l'id UTILISATEUR du vendeur. Si le filtre
+     * reçoit l'id de la fiche employé, on le traduit en id utilisateur pour
+     * que « Rapports de la boutique » filtré par employé trouve ses rapports.
+     */
+    private UUID reportActorId(UUID actorId) {
+        if (actorId == null) return null;
+        return employeeRepository.findById(actorId)
+                .map(Employee::getUserId)
+                .filter(java.util.Objects::nonNull)
+                .orElse(actorId);
     }
 
     @Override

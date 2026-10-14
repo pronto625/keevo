@@ -100,7 +100,8 @@ class QuickAddProductIntegrationTest {
         assertThat(result.stockLevel()).isNotNull();
         assertThat(result.stockLevel().getProductId()).isEqualTo(result.product().getId());
         assertThat(result.stockLevel().getStoreId()).isEqualTo(STORE_ID);
-        assertThat(result.stockLevel().getQuantity()).isEqualTo(10);
+        // J18 — no stock at creation: validation applies the count once.
+        assertThat(result.stockLevel().getQuantity()).isZero();
 
         assertThat(result.inventoryCount()).isNotNull();
         assertThat(result.inventoryCount().getTheoretical()).isZero();

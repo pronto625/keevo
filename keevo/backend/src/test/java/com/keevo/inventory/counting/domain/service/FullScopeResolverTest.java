@@ -116,6 +116,27 @@ class FullScopeResolverTest {
         assertThat(rows.get(0).ecart()).isEqualTo(4);
     }
 
+    /**
+     * J17 — the counting screen reads a counted row against the count's theoretical snapshot,
+     * like the gap report: a product whose live stock already equals the count (e.g. a legacy
+     * quick-add that also created the stock) is NOT shown as concordant while the report
+     * shows a surplus.
+     */
+    @Test
+    void resolveProducts_countedRow_usesTheCountSnapshot_likeTheGapReport() {
+        var sl = new StockLevel(UUID.randomUUID(), PRODUCT_A, null, STORE_ID, 3, Instant.now());
+        when(stockLevelRepository.findAllByStoreId(STORE_ID)).thenReturn(List.of(sl));
+        when(productRepository.findAllActive()).thenReturn(List.of(product(PRODUCT_A, "Banane", false)));
+        when(productRepository.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
+        var count = InventoryCount.create(
+                UUID.randomUUID(), PRODUCT_A, null, "Banane", null, 0, 3, UUID.randomUUID());
+
+        List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, null, List.of(count));
+
+        assertThat(rows.get(0).theoreticalQty()).isZero();
+        assertThat(rows.get(0).ecart()).isEqualTo(count.getEcart()).isEqualTo(3);
+    }
+
     @Test
     void resolveProducts_shouldKeepOneRowPerVariantStockLevel() {
         UUID variant = UUID.randomUUID();

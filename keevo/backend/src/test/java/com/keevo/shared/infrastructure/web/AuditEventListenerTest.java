@@ -524,6 +524,65 @@ class AuditEventListenerTest {
             assertThat(after.get("name").asText()).isEqualTo("Boutique Centre");
         }
 
+        // ── J7 / J10 — actions that used to leave no trace ──
+
+        @Test
+        @DisplayName("J7 StoreReactivated → STORE_REACTIVATED, store column + label = the store")
+        void storeReactivated() {
+            UUID storeId = UUID.randomUUID();
+            listener.on(new com.keevo.store.store.domain.event.StoreReactivatedEvent(
+                    storeId, "Boutique Akwa", actorId, "kv_abc123", Instant.now()));
+
+            AuditPort.AuditEntry e = captureEntry();
+            assertThat(e.action()).isEqualTo("STORE_REACTIVATED");
+            assertThat(e.storeId()).isEqualTo(storeId);
+            assertThat(e.entityLabel()).isEqualTo("Boutique Akwa");
+        }
+
+        @Test
+        @DisplayName("J10 ProductUnarchived → PRODUCT_UNARCHIVED, label = product name")
+        void productUnarchived() throws Exception {
+            UUID productId = UUID.randomUUID();
+            listener.on(new com.keevo.catalog.product.domain.event.ProductUnarchivedEvent(
+                    productId, "Riz 5kg", "KEV-AAA", "kv_abc123", actorId, Instant.now()));
+
+            AuditPort.AuditEntry e = captureEntry();
+            assertThat(e.action()).isEqualTo("PRODUCT_UNARCHIVED");
+            assertThat(e.entityType()).isEqualTo("Product");
+            assertThat(e.entityId()).isEqualTo(productId);
+            assertThat(e.entityLabel()).isEqualTo("Riz 5kg");
+            assertThat(objectMapper.readTree(e.valueAfter()).get("archived").asBoolean()).isFalse();
+        }
+
+        @Test
+        @DisplayName("J10 StockThresholdChanged → STOCK_THRESHOLD_UPDATED, before/after threshold")
+        void stockThresholdChanged() throws Exception {
+            UUID productId = UUID.randomUUID();
+            listener.on(new com.keevo.catalog.stock.domain.event.StockThresholdChangedEvent(
+                    productId, "Riz 5kg", 5, 12, actorId, "kv_abc123", Instant.now()));
+
+            AuditPort.AuditEntry e = captureEntry();
+            assertThat(e.action()).isEqualTo("STOCK_THRESHOLD_UPDATED");
+            assertThat(e.entityLabel()).isEqualTo("Riz 5kg");
+            assertThat(objectMapper.readTree(e.valueBefore()).get("threshold").asInt()).isEqualTo(5);
+            assertThat(objectMapper.readTree(e.valueAfter()).get("threshold").asInt()).isEqualTo(12);
+        }
+
+        @Test
+        @DisplayName("J10 ReportPreferencesUpdated → REPORT_PREFERENCES_UPDATED, label in French")
+        void reportPreferencesUpdated() throws Exception {
+            UUID prefsId = UUID.randomUUID();
+            listener.on(new com.keevo.identity.onboarding.domain.model.ReportPreferencesUpdatedEvent(
+                    prefsId, java.util.Map.of("eodReportTime", "20:00"),
+                    java.util.Map.of("eodReportTime", "22:00"), actorId, "kv_abc123", Instant.now()));
+
+            AuditPort.AuditEntry e = captureEntry();
+            assertThat(e.action()).isEqualTo("REPORT_PREFERENCES_UPDATED");
+            assertThat(e.entityType()).isEqualTo("Tenant");
+            assertThat(e.entityLabel()).isEqualTo("Préférences des rapports");
+            assertThat(objectMapper.readTree(e.valueAfter()).get("eodReportTime").asText()).isEqualTo("22:00");
+        }
+
         // ── store_id column = the event's store, never the actor's home store (no auth set) ──
 
         @Test

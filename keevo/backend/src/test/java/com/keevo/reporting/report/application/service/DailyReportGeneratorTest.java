@@ -87,6 +87,63 @@ class DailyReportGeneratorTest {
         assertThat(report.getReportType()).isEqualTo(ReportType.DAILY);
     }
 
+    /**
+     * J5 — un rapport personnel porte l'id UTILISATEUR du vendeur
+     * (= sales.employee_id) : le nom doit être trouvé par user id, sinon
+     * actor_name reste NULL et l'app affiche « Employé ».
+     */
+    @Test
+    void employeeReport_actorNameResolvedFromTheUserId() {
+        UUID userId = UUID.randomUUID();
+        var empCommand = new GenerateReportCommand(storeId, userId, "kv_test01", false, Instant.now(), null);
+        when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
+        when(employeeRepository.findByUserId(userId)).thenReturn(Optional.of(
+                new com.keevo.identity.employee.domain.model.Employee(UUID.randomUUID(), userId, storeId,
+                        "Jean", "Kamga",
+                        com.keevo.identity.employee.domain.model.EmployeeStatus.ACTIVE,
+                        false, Instant.now())));
+        when(builder.buildForEmployee(any(), any(), any(ClosureWindow.class), anyString(), any(), any(),
+                anyBoolean(), any())).thenReturn(employeeData("Jean Kamga"));
+        when(formatter.formatEmployee(any())).thenReturn("Rapport");
+
+        EndOfDayReport report = generator.generateReport(empCommand);
+
+        verify(builder).buildForEmployee(eq(storeId), eq(userId), any(ClosureWindow.class), anyString(),
+                any(), any(), eq(false), eq("Jean Kamga"));
+        assertThat(report.getActorName()).isEqualTo("Jean Kamga");
+        assertThat(report.getActorId()).isEqualTo(userId);
+    }
+
+    @Test
+    void employeeReport_legacyEmployeeRecordId_stillResolvesTheName() {
+        UUID employeeId = UUID.randomUUID();
+        var empCommand = new GenerateReportCommand(storeId, employeeId, "kv_test01", false, Instant.now(), null);
+        when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
+        when(employeeRepository.findByUserId(employeeId)).thenReturn(Optional.empty());
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(
+                new com.keevo.identity.employee.domain.model.Employee(employeeId, UUID.randomUUID(), storeId,
+                        "Awa", "Ngo",
+                        com.keevo.identity.employee.domain.model.EmployeeStatus.ACTIVE,
+                        false, Instant.now())));
+        when(builder.buildForEmployee(any(), any(), any(ClosureWindow.class), anyString(), any(), any(),
+                anyBoolean(), any())).thenReturn(employeeData("Awa Ngo"));
+        when(formatter.formatEmployee(any())).thenReturn("Rapport");
+
+        generator.generateReport(empCommand);
+
+        verify(builder).buildForEmployee(any(), any(), any(ClosureWindow.class), anyString(),
+                any(), any(), anyBoolean(), eq("Awa Ngo"));
+    }
+
+    private EndOfDayReportData employeeData(String name) {
+        return new EndOfDayReportData(
+                "Boutique Test", LocalDate.now(), LocalTime.of(20, 0), false,
+                true,
+                2, 10000, 10000, 0, 5000,
+                List.of(), List.of(), 0, 0, 0, name
+        );
+    }
+
     @Test
     void generateReport_whenStoreNotFound_shouldUseFallbackName() {
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());

@@ -60,6 +60,12 @@ final class InventoryRowsAssembler {
                                            int theoreticalQty, Map<String, InventoryCount> countLookup) {
         InventoryCount count = countLookup.get(compositeKey(product.getId(), variantId));
         Integer physicalQty = count != null ? count.getPhysical() : null;
+        // J17: a counted row reads its gap against the theoretical snapshot saved with the
+        // count — the same rule as the gap report and the validation — not against the live
+        // stock (otherwise the counting banner and the report disagree).
+        if (count != null && physicalQty != null) {
+            theoreticalQty = count.getTheoretical();
+        }
         return InventoryProductRow.of(
                 product.getId(),
                 product.getName(),

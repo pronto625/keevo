@@ -78,14 +78,30 @@ public class DailyReportGenerator extends AbstractReportGenerator
                 command.lateFrom(), command.receivedUntil());
 
         if (command.actorId() != null) {
-            String actorName = employeeRepository.findById(command.actorId())
-                    .map(e -> e.getFirstName() + " " + e.getLastName())
-                    .orElse(null);
+            String actorName = resolveEmployeeName(command.actorId());
             return builder.buildForEmployee(command.storeId(), command.actorId(),
                     window, storeName, reportDate, closeTime, command.isAutomatic(), actorName);
         }
         return builder.build(command.storeId(), window,
                 storeName, reportDate, closeTime, command.isAutomatic());
+    }
+
+    /**
+     * Prénom + nom du vendeur d'un rapport personnel. Le rapport porte l'id
+     * UTILISATEUR (= {@code sales.employee_id}), pas l'id de la fiche
+     * employé : chercher par {@code findById} seul ne trouvait jamais personne
+     * et {@code actor_name} restait NULL (« Employé » dans l'app). L'id de fiche
+     * reste accepté en repli pour les anciens appelants.
+     */
+    private String resolveEmployeeName(UUID actorId) {
+        return employeeRepository.findByUserId(actorId)
+                .or(() -> employeeRepository.findById(actorId))
+                .map(e -> java.util.stream.Stream.of(e.getFirstName(), e.getLastName())
+                        .filter(p -> p != null && !p.isBlank())
+                        .map(String::trim)
+                        .collect(java.util.stream.Collectors.joining(" ")))
+                .filter(name -> !name.isEmpty())
+                .orElse(null);
     }
 
     @Override

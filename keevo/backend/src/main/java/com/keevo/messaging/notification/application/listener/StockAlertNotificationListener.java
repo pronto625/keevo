@@ -187,7 +187,7 @@ public class StockAlertNotificationListener {
     private void dispatchIndividual(StockThresholdBreachedEvent event,
                                     String storeName, String ownerPhone,
                                     StockAlertChannel channel) {
-        String body = String.format("%s : %d unité(s) restante(s) (seuil : %d) — Boutique %s",
+        String body = String.format("%s : %d unité(s) restante(s) (seuil : %d) — %s",
                 event.productName(), event.currentQuantity(), event.threshold(), storeName);
 
         NotificationPayload payload = NotificationPayload.of(
@@ -239,7 +239,7 @@ public class StockAlertNotificationListener {
                                            String storeName, String ownerPhone,
                                            StockAlertChannel channel, String tenantId) {
         int count = events.size();
-        String body = String.format("%d produits en stock bas — Boutique %s. Consultez l'onglet Stock.", count, storeName);
+        String body = String.format("%d produits en stock bas — %s. Consultez l'onglet Stock.", count, storeName);
 
         NotificationPayload payload = NotificationPayload.of(
                 "STOCK_ALERT_BATCH",
@@ -267,7 +267,7 @@ public class StockAlertNotificationListener {
                 && ownerPhone != null) {
             try {
                 StringBuilder waMessage = new StringBuilder();
-                waMessage.append("⚠\uFE0F ").append(count).append(" produits en stock bas — Boutique ").append(storeName).append("\n\n");
+                waMessage.append("⚠\uFE0F ").append(count).append(" produits en stock bas — ").append(storeName).append("\n\n");
                 for (StockThresholdBreachedEvent e : events) {
                     waMessage.append("• ").append(e.productName()).append(" : ")
                             .append(e.currentQuantity()).append(" unité(s) (seuil : ")

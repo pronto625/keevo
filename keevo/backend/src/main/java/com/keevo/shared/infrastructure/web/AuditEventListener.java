@@ -36,6 +36,12 @@ import com.keevo.inventory.counting.domain.event.InventoryValidatedEvent;
 import com.keevo.reporting.export.domain.event.DataExportedEvent;
 import com.keevo.store.store.domain.event.StoreCreatedEvent;
 import com.keevo.store.store.domain.event.StoreDeactivatedEvent;
+import com.keevo.store.store.domain.event.StoreReactivatedEvent;
+import com.keevo.catalog.product.domain.event.ProductUnarchivedEvent;
+import com.keevo.catalog.stock.domain.event.StockThresholdChangedEvent;
+import com.keevo.catalog.contact.domain.event.SupplierUpdatedEvent;
+import com.keevo.catalog.contact.domain.event.SupplierProductsChangedEvent;
+import com.keevo.identity.onboarding.domain.model.ReportPreferencesUpdatedEvent;
 import com.keevo.store.store.domain.event.StoreUpdatedEvent;
 import com.keevo.identity.employee.domain.event.EmployeeUpdatedEvent;
 import com.keevo.identity.employee.domain.event.EmployeeRoleChangedEvent;
@@ -226,6 +232,27 @@ public class AuditEventListener {
                 event.productId(), event.productName(), event.tenantId(), event.actorId());
     }
 
+    @EventListener
+    public void on(ProductUnarchivedEvent event) {
+        write(event.actorId(), event.tenantId(), "PRODUCT_UNARCHIVED", "Product", event.productId(),
+                null,
+                map("productName", event.productName(), "productSku", event.productSku(), "archived", false),
+                null, event.productName(), null, null);
+        log.info("AUDIT: product_unarchived productId={} productName={} tenantId={} actorId={}",
+                event.productId(), event.productName(), event.tenantId(), event.actorId());
+    }
+
+    @EventListener
+    public void on(StockThresholdChangedEvent event) {
+        write(event.actorId(), event.tenantId(), "STOCK_THRESHOLD_UPDATED", "Product", event.productId(),
+                map("threshold", event.previousThreshold()),
+                map("productName", event.productName(), "threshold", event.newThreshold()),
+                null, event.productName(), null, null);
+        log.info("AUDIT: stock_threshold_updated productId={} {}→{} tenantId={} actorId={}",
+                event.productId(), event.previousThreshold(), event.newThreshold(),
+                event.tenantId(), event.actorId());
+    }
+
     /**
      * Handle sale price override event (Epic 4 — POS). entityType="PriceOverride" so that
      * compliance queries can filter by entity type.
@@ -360,6 +387,26 @@ public class AuditEventListener {
     }
 
     @EventListener
+    public void on(SupplierUpdatedEvent event) {
+        write(event.actorId(), event.tenantId(), "SUPPLIER_UPDATED", "Supplier", event.supplierId(),
+                event.before(), event.after(),
+                null, event.supplierName(), null, null);
+        log.info("AUDIT: supplier_updated supplierId={} fields={} tenantId={} actorId={}",
+                event.supplierId(), event.after().keySet(), event.tenantId(), event.actorId());
+    }
+
+    @EventListener
+    public void on(SupplierProductsChangedEvent event) {
+        write(event.actorId(), event.tenantId(), "SUPPLIER_PRODUCTS_UPDATED", "Supplier", event.supplierId(),
+                map("productCount", event.previousCount()),
+                map("productCount", event.newCount(),
+                        "productsAdded", event.added(), "productsRemoved", event.removed()),
+                null, event.supplierName(), null, null);
+        log.info("AUDIT: supplier_products_updated supplierId={} +{} -{} tenantId={} actorId={}",
+                event.supplierId(), event.added(), event.removed(), event.tenantId(), event.actorId());
+    }
+
+    @EventListener
     public void on(SupplierUnarchivedEvent event) {
         write(event.actorId(), event.tenantId(), "SUPPLIER_UNARCHIVED", "Supplier", event.supplierId(),
                 map("archived", true), map("name", event.name(), "archived", false),
@@ -387,6 +434,15 @@ public class AuditEventListener {
                 event.storeId(), event.newName(), null, null);
         log.info("AUDIT: store_updated storeId={} newName={} tenantId={} actorId={}",
                 event.storeId(), event.newName(), event.tenantId(), event.actorId());
+    }
+
+    @EventListener
+    public void on(StoreReactivatedEvent event) {
+        write(event.actorId(), event.tenantId(), "STORE_REACTIVATED", "Store", event.storeId(),
+                null, map("name", event.name(), "deactivated", false),
+                event.storeId(), event.name(), null, null);
+        log.info("AUDIT: store_reactivated storeId={} name={} tenantId={} actorId={}",
+                event.storeId(), event.name(), event.tenantId(), event.actorId());
     }
 
     @EventListener
@@ -429,6 +485,15 @@ public class AuditEventListener {
     }
 
     // ── Account deletion events (Story 14.5, FR91) ──────────────────────────
+
+    @EventListener
+    public void on(ReportPreferencesUpdatedEvent event) {
+        write(event.actorId(), event.tenantId(), "REPORT_PREFERENCES_UPDATED", "Tenant", event.preferencesId(),
+                event.before(), event.after(),
+                null, "Préférences des rapports", null, null);
+        log.info("AUDIT: report_preferences_updated fields={} tenantId={} actorId={}",
+                event.after().keySet(), event.tenantId(), event.actorId());
+    }
 
     @EventListener
     public void on(AccountDeletionRequestedEvent event) {

@@ -114,11 +114,71 @@ class UpdateReportPreferencesServiceTest {
             service.update(cmd);
 
             // Then
-            ArgumentCaptor<PreferenceUpdatedEvent> eventCaptor = ArgumentCaptor.forClass(PreferenceUpdatedEvent.class);
-            verify(eventPublisher).publishEvent(eventCaptor.capture());
-            PreferenceUpdatedEvent event = eventCaptor.getValue();
+            ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
+            verify(eventPublisher, atLeastOnce()).publishEvent(eventCaptor.capture());
+            PreferenceUpdatedEvent event = eventCaptor.getAllValues().stream()
+                    .filter(PreferenceUpdatedEvent.class::isInstance)
+                    .map(PreferenceUpdatedEvent.class::cast)
+                    .findFirst().orElseThrow();
             assertThat(event.tenantId()).isEqualTo(existingPrefs.id().toString());
             assertThat(event.newEodReportTime()).isEqualTo("22:00:00");
+        }
+    }
+
+    /** J10 — the change is recorded in the action history, changed fields only, in French. */
+    @Test
+    void updatePreferences_publishesAuditEvent_withChangedFieldsOnly() {
+        when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(existingPrefs));
+        when(tenantPreferencesRepository.update(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        UpdateReportPreferencesCommand cmd = new UpdateReportPreferencesCommand(
+                existingPrefs.eodReportEnabled(), existingPrefs.eodReportChannel(), "22:00:00",
+                existingPrefs.weeklyReportEnabled(), existingPrefs.weeklyReportDay(),
+                existingPrefs.weeklyReportTime(), existingPrefs.weeklyReportChannel(),
+                existingPrefs.inventoryReportEnabled(), existingPrefs.inventoryReportChannel(),
+                existingPrefs.stockAlertEnabled(), existingPrefs.stockAlertChannel(),
+                null
+        );
+
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn(TENANT_ID);
+
+            service.update(cmd);
+
+            ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+            verify(eventPublisher, atLeastOnce()).publishEvent(captor.capture());
+            var audit = captor.getAllValues().stream()
+                    .filter(com.keevo.identity.onboarding.domain.model.ReportPreferencesUpdatedEvent.class::isInstance)
+                    .map(com.keevo.identity.onboarding.domain.model.ReportPreferencesUpdatedEvent.class::cast)
+                    .findFirst().orElseThrow();
+            assertThat(audit.after()).containsOnlyKeys("eodReportTime");
+            assertThat(audit.after().get("eodReportTime")).isEqualTo("22:00");
+            assertThat(audit.tenantId()).isEqualTo(TENANT_ID);
+        }
+    }
+
+    @Test
+    void updatePreferences_nothingChanged_noAuditEvent() {
+        when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(existingPrefs));
+        when(tenantPreferencesRepository.update(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        UpdateReportPreferencesCommand cmd = new UpdateReportPreferencesCommand(
+                existingPrefs.eodReportEnabled(), existingPrefs.eodReportChannel(),
+                existingPrefs.eodReportTime(),
+                existingPrefs.weeklyReportEnabled(), existingPrefs.weeklyReportDay(),
+                existingPrefs.weeklyReportTime(), existingPrefs.weeklyReportChannel(),
+                existingPrefs.inventoryReportEnabled(), existingPrefs.inventoryReportChannel(),
+                existingPrefs.stockAlertEnabled(), existingPrefs.stockAlertChannel(),
+                null
+        );
+
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn(TENANT_ID);
+
+            service.update(cmd);
+
+            verify(eventPublisher, never()).publishEvent(
+                    any(com.keevo.identity.onboarding.domain.model.ReportPreferencesUpdatedEvent.class));
         }
     }
 

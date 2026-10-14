@@ -86,6 +86,8 @@ class StockModificationNotificationListenerTest {
         ArgumentCaptor<NotificationPayload> captor = ArgumentCaptor.forClass(NotificationPayload.class);
         verify(notificationPort).notifyOwners(eq(TENANT_ID), captor.capture());
         NotificationPayload payload = captor.getValue();
+        // J16 — deep link to an existing app route (product form).
+        assertThat(payload.deepLink()).isEqualTo("/products/" + PRODUCT_ID + "/edit");
         assertThat(payload.type()).isEqualTo("EMPLOYEE_STOCK_MODIFIED");
         assertThat(payload.body()).contains("Loïc");
         assertThat(payload.body()).contains("10 unité(s)");
@@ -198,6 +200,7 @@ class StockModificationNotificationListenerTest {
         assertThat(batchPayload.type()).isEqualTo("EMPLOYEE_STOCK_MODIFIED_BATCH");
         assertThat(batchPayload.body()).contains("2 modification(s)");
         assertThat(batchPayload.metadata()).containsEntry("count", "2");
+        assertThat(batchPayload.deepLink()).isEqualTo("/stock/overview");
     }
 
     // ── 7.6 shouldNotRollbackStockModificationWhenNotificationFails ──────
