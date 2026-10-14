@@ -46,6 +46,13 @@ cleanup · 17. Single backend instance · 18. Mise en production du lot « V1 st
 | `ADMIN_PHONE` | ✅ | `+237600000000` | Phone number for system super-admin |
 | `ADMIN_PASSWORD` | ✅ | *(strong, unique password)* | ≥ 12 chars, 3 of 4 classes, ≤ 72 UTF-8 bytes; **never `Admin@1234!`** nor the `.env.example` placeholder — rejected by `ProdSecretsValidator` |
 
+In prod both values come from the GitHub secrets `ADMIN_PHONE` / `ADMIN_PASSWORD`: `deploy-backend.yml`
+checks them on the runner (same rules as `ProdSecretsValidator`, deploy fails otherwise) and writes them to
+`~/keevo/.env.admin` (mode 600), read by the backend after `.env` (§8.1). `AdminAccountInitializer` creates
+the `SUPER_ADMIN` (system tenant `KV-ADMIN`) **only when `ADMIN_PHONE` is not registered yet**; it never
+changes the password of an existing account. The `application.yml` default `Admin@1234!` is for dev only
+and is refused at boot in prod/staging.
+
 ### 1.4 JWT RSA Keys
 
 | Variable | Required | Example | Notes |
@@ -84,7 +91,7 @@ chmod 400 private_key.pem public_key.pem
 |---|---|---|---|
 | `APP_PORT` | Optional | `4500` | Default: 4500 |
 | `LOG_LEVEL` | Optional | `INFO` | Default: INFO |
-| `DASHBOARD_ORIGIN` | Recommended | `https://admin.keevo.cm` | CORS allow-list, comma-separated. In prod/staging it is the **only** allowed browser origin (no `localhost:3000`, no `*`); unset → every browser origin refused and `ProdSecretsValidator` logs a WARN (boot continues). Mobile app and server-side dashboard proxy are unaffected (Story 11.4) |
+| `DASHBOARD_ORIGIN` | Recommended | `https://admin.keevo.cm` | CORS allow-list, comma-separated. In prod/staging it is the **only** allowed browser origin (no `localhost:3000`, no `*`); unset → every browser origin refused and `ProdSecretsValidator` logs a WARN (boot continues). The mobile app is unaffected (no `Origin` header). **The dashboard proxy IS affected**: Next.js forwards the browser `Origin` to the backend, so a missing/wrong value makes every dashboard call (login included) answer 403 (verified 2026-10-14). Prod: set by `deploy-backend.yml` to `https://<ADMIN_DOMAIN>`; staging: from `ADMIN_STAGING_DOMAIN` (Story 11.4) |
 
 ---
 
@@ -163,12 +170,12 @@ In `dev` profile (and tests without a profile), no validation occurs (permissive
 
 1. Change `ADMIN_PASSWORD` in the server's environment/secrets manager
 2. Redeploy the application — `AdminAccountInitializer` skips re-hashing (user already exists)
-3. Use the API endpoint to update the hashed password:
+3. Use the API endpoint to update the hashed password (same procedure as the first login, §18.7):
    ```bash
-   curl -X POST https://<domain>/api/v1/admin/change-password \
-     -H "Authorization: Bearer <current-token>" \
+   curl -X POST https://<APP_DOMAIN>/api/v1/auth/change-password \
+     -H "Authorization: Bearer <access token of the KV-ADMIN session>" \
      -H "Content-Type: application/json" \
-     -d '{"oldPassword":"<old>","newPassword":"<new>"}'
+     -d '{"currentPassword":"<old>","newPassword":"<new>"}'
    ```
 
 ### 4.2 Rotate JWT Keypair
@@ -251,12 +258,16 @@ in the repository; values are set in GitHub.
 | `ACME_EMAIL` | ✅ | `deploy-backend.yml` | Let's Encrypt account e-mail |
 | `JWT_PRIVATE_KEY_PEM` | ✅ | `deploy-backend.yml` | Full content of `private_key.pem` |
 | `JWT_PUBLIC_KEY_PEM` | ✅ | `deploy-backend.yml` | Full content of `public_key.pem` |
+| `ADMIN_DOMAIN` | ✅ | `deploy-backend.yml` | Admin dashboard FQDN without `https://` (e.g. `admin.keevo.cm`), different from `APP_DOMAIN`. Traefik route + certificate, and backend `DASHBOARD_ORIGIN=https://<ADMIN_DOMAIN>`. Missing → deploy fails before SSH |
+| `ADMIN_PHONE` | ✅ | `deploy-backend.yml` | Super-admin phone (`+2376…`). **Use the phone of the existing prod super-admin** (current `ADMIN_PHONE` in `~/keevo/.env`), otherwise a second `SUPER_ADMIN` is created |
+| `ADMIN_PASSWORD` | ✅ | `deploy-backend.yml` | Initial super-admin password: ≥ 12 chars, 3 of 4 classes, ≤ 72 bytes, not a default/placeholder, no `'` / newline. Used only when the account is created |
 | `ANDROID_KEYSTORE_BASE64` | ✅ | `release-flutter.yml` | `base64 -w0 keevo-release.keystore` |
 | `ANDROID_KEY_ALIAS` | ✅ | `release-flutter.yml` | Key alias in the keystore |
 | `ANDROID_STORE_PASSWORD` | ✅ | `release-flutter.yml` | Keystore password |
 | `ANDROID_KEY_PASSWORD` | ✅ | `release-flutter.yml` | Key password |
 
-Staging secrets live in the GitHub **environment** `staging` (§14), never in the prod names.
+Staging secrets live in the GitHub **environment** `staging` (§14), never in the prod names
+(optional `ADMIN_STAGING_DOMAIN` for the staging dashboard, §18.7).
 
 JWT key pair (written to `~/keevo/keys/` by every deploy, `chgrp 2001` + `640`):
 
@@ -279,7 +290,9 @@ keytool -genkey -v -keystore keevo-release.keystore -alias upload -keyalg RSA -k
 
 | File | Mode | Content |
 |---|---|---|
-| `.env` | `600` | Backend variables (§1). `POSTGRES_HOST`/`POSTGRES_PORT` are overridden by compose (`postgres:5432`). Includes `ACME_EMAIL`, `SPRING_PROFILES_ACTIVE=prod`, `DASHBOARD_ORIGIN` (**must** be set in prod, Story 11.4), `FLYWAY_ENABLED=true`, `KEEVO_FCM_ENABLED`, `GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/firebase`, WhatsApp provider, `ADMIN_PHONE`/`ADMIN_PASSWORD` |
+| `.env` | `600` | Backend variables (§1). `POSTGRES_HOST`/`POSTGRES_PORT` are overridden by compose (`postgres:5432`), and `DASHBOARD_ORIGIN` by compose (`https://<ADMIN_DOMAIN>`). Includes `ACME_EMAIL`, `SPRING_PROFILES_ACTIVE=prod`, `FLYWAY_ENABLED=true`, `KEEVO_FCM_ENABLED`, `GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/firebase`, WhatsApp provider. `ADMIN_PHONE`/`ADMIN_PASSWORD` here are overridden by `.env.admin` |
+| `.env.admin` | `600` | Written by the workflow from the `ADMIN_PHONE` / `ADMIN_PASSWORD` secrets — nothing to do by hand |
+| `docker-compose.prod.yml`, `traefik/dynamic.yml` | — | Generated by the workflow (services `backend`, `dashboard`, `postgres` [+ `traefik`]) — never edit by hand |
 | `firebase-credentials.json` | `640`, group 2001 | Prod Firebase service-account JSON (a **file**, not a directory: `file ~/keevo/firebase-credentials.json` → `JSON data`) |
 | `keys/` | `750`, group 2001 | Written by the workflow — nothing to do by hand |
 | `.env.backup` | `600` | Backup variables (§11.1) |
@@ -309,7 +322,9 @@ Point the prod domain to the server **before** the first deploy (Let's Encrypt n
 | Record | Type | Value |
 |---|---|---|
 | `<APP_DOMAIN>` | A | `<server IP>` |
+| `<ADMIN_DOMAIN>` | A | `<server IP>` (admin dashboard, same Traefik) |
 | `staging.api.keevo.cm` | A | `<server IP>` (same VPS, §15) |
+| `<ADMIN_STAGING_DOMAIN>` | A | `<server IP>` (staging dashboard, §15, optional) |
 
 ```bash
 dig <APP_DOMAIN> +short   # must return the server IP
@@ -340,6 +355,9 @@ docker logs --tail 20 keevo_traefik     # no errors
 docker logs --tail 30 keevo_backend     # backend started
 curl https://<APP_DOMAIN>/actuator/health                     # {"status":"UP"}
 curl -vI https://<APP_DOMAIN> 2>&1 | grep "issuer\|subject"   # issuer: Let's Encrypt
+docker inspect -f '{{.State.Health.Status}}' keevo_dashboard  # healthy
+curl -sI https://<ADMIN_DOMAIN>/login | head -1                # HTTP/2 200 (dashboard login page)
+curl -vI https://<ADMIN_DOMAIN> 2>&1 | grep "issuer"           # Let's Encrypt
 ```
 
 ---
@@ -675,7 +693,7 @@ ACME resolver and proxies to `keevo_staging_backend:4500` over the shared extern
 `keevo_edge`. The router ships as a reviewed template, **applied by hand at the first real staging
 bring-up**: [`keevo/ops/traefik/staging-router.yml`](../../ops/traefik/staging-router.yml)
 (router `staging`, entrypoint `websecure`, `certResolver: letsencrypt`, service
-`http://keevo_staging_backend:4500`). `deploy-backend.yml` is unchanged.
+`http://keevo_staging_backend:4500`). `deploy-backend.yml` does not apply it. The same template carries the `staging-admin` router (staging admin dashboard `keevo_staging_dashboard:3000`, host = `ADMIN_STAGING_DOMAIN`, §18.7).
 
 1. **Identify the prod Traefik and its configuration.**
 
@@ -694,7 +712,7 @@ bring-up**: [`keevo/ops/traefik/staging-router.yml`](../../ops/traefik/staging-r
    docker network create keevo_edge || true
    docker network connect keevo_edge "${TRAEFIK}"
    docker network inspect keevo_edge --format '{{range .Containers}}{{.Name}} {{end}}'
-   # expected: the prod Traefik + keevo_staging_backend
+   # expected: the prod Traefik + keevo_staging_backend + keevo_staging_dashboard
    ```
 
 3. **Install the router** (copy the template to the server first:
@@ -852,7 +870,7 @@ Prod observée : branche `deploy` = app **1.1.12+11**, schéma public **V7**. Ce
 
 ### 18.2 Avant la mise à jour du backend
 - [ ] Sauvegarde complète **vérifiée** (dump + restauration à blanc sur une base jetable, §11/§13).
-- [ ] `.env` prod : `DASHBOARD_ORIGIN=https://<origine du tableau de bord>` (sinon tout navigateur refusé),
+- [ ] `.env` prod : `DASHBOARD_ORIGIN` est désormais imposé par le compose (`https://<ADMIN_DOMAIN>`, §18.7),
       `KEEVO_EXPORT_LINK_SECRET` défini (sinon liens d'export invalidés à chaque redémarrage),
       fournisseur WhatsApp réel configuré (`KEEVO_WHATSAPP_PROVIDER`), FCM activé.
 - [ ] Une seule instance backend (§17).
@@ -908,3 +926,73 @@ de production avant le jour J (volumétrie réelle).
 - Envois WhatsApp réels (OTP, rapports, messages propriétaire), notifications push réelles.
 - HTTPS/Traefik, plusieurs appareils réels, iOS, volumétrie, réseau instable (et non coupé net).
 
+### 18.7 Tableau de bord d'administration et compte super-admin par défaut
+
+**Déclenchement.** Comme le backend : tout push sur la branche `deploy` lance `deploy-backend.yml`, qui
+redéploie la pile complète (un seul `docker-compose.prod.yml` avec `backend`, `dashboard`, `postgres`
+[+ `traefik`]). Les images ne sont reconstruites que si nécessaire
+(`.github/scripts/changed-components.sh`) : `keevo/backend/**` → image backend, `keevo/dashboard/**` →
+image `ghcr.io/<dépôt>/dashboard`, le workflow ou ce script → les deux, en comparant avec le commit dont est issue l'image `:latest` en place (étiquette `org.opencontainers.image.revision`) — un déploiement annulé ne laisse donc jamais un changement non construit ; l'image inchangée est reprise
+depuis son dernier tag `:latest` (construite quand même si ce tag n'existe pas encore, ex. premier
+déploiement du tableau de bord). `docker compose up -d` ne recrée que les services modifiés : un push
+qui ne touche que le tableau de bord ne redémarre pas le backend. Lancement manuel : Actions →
+*Deploy Backend* → *Run workflow* sur `deploy` (reconstruit les deux images). Staging : même logique sur
+la branche `staging` (`deploy-staging.yml`, tags `staging-latest`).
+
+**Liaison tableau de bord → API.** Le navigateur n'appelle que `https://<ADMIN_DOMAIN>/api/backend/*` ;
+le serveur Next.js relaie vers `http://backend:4500/api/v1/*` sur le réseau Docker `keevo_net` (le port
+4500 n'est jamais exposé). Cette adresse est **figée à la construction de l'image** (les `rewrites` de
+Next.js sont calculés au build, une variable d'environnement au démarrage n'a aucun effet) : c'est le
+nom du service compose, identique en prod et en staging — jamais une URL publique.
+
+Avant le premier déploiement :
+- [ ] Secrets GitHub (environnement `production`) : `ADMIN_DOMAIN`, `ADMIN_PHONE`, `ADMIN_PASSWORD` (§7).
+      Le déploiement échoue avant toute connexion SSH si l'un manque ou si le mot de passe est faible —
+      choix délibéré : le tableau de bord fait partie de la pile, un déploiement « sans tableau de bord »
+      silencieux le ferait disparaître du compose.
+- [ ] `ADMIN_PHONE` = numéro du super-admin **déjà en prod** (valeur actuelle de `ADMIN_PHONE` dans
+      `~/keevo/.env`) ; un autre numéro crée un second compte `SUPER_ADMIN`.
+- [ ] Mot de passe généré (ex. `openssl rand -base64 18`, en vérifiant 3 classes de caractères sur 4),
+      conservé dans le coffre de l'équipe ; jamais `Admin@1234!` (refusé au démarrage en prod).
+- [ ] DNS : enregistrement A `<ADMIN_DOMAIN>` → IP du serveur, **avant** le déploiement (certificat
+      Let's Encrypt, §8.3) ; `dig <ADMIN_DOMAIN> +short`.
+- [ ] Traefik externe (variante « light », port 80 déjà pris) : vérifier que son résolveur s'appelle
+      `mytlschallenge` et qu'il lit le réseau `traefik-public` (mêmes hypothèses que le backend).
+
+Après le déploiement :
+- [ ] `docker inspect -f '{{.State.Health.Status}}' keevo_dashboard` → `healthy` (le workflow l'attend déjà).
+- [ ] `https://<ADMIN_DOMAIN>/login` s'affiche, certificat Let's Encrypt valide.
+- [ ] Journal backend : `[FailFast] ADMIN_PASSWORD ✓`, `[CORS] DASHBOARD_ORIGIN configured` et, sur une
+      base neuve seulement, `[AdminInit] Super admin account created`.
+
+**Première connexion.**
+1. Ouvrir `https://<ADMIN_DOMAIN>/login`, saisir `ADMIN_PHONE` et `ADMIN_PASSWORD`.
+2. Changer aussitôt le mot de passe (le tableau de bord n'a pas encore d'écran pour cela), depuis un
+   poste de confiance — les mots de passe ne doivent pas rester dans l'historique du shell :
+   ```bash
+   API=https://<APP_DOMAIN>/api/v1/auth
+   read -rsp 'Mot de passe actuel : ' OLD; echo; read -rsp 'Nouveau mot de passe : ' NEW; echo
+   LT=$(jq -n --arg p "+2376…" --arg w "$OLD" '{phoneNumber:$p,password:$w}'         | curl -s -H 'Content-Type: application/json' -d @- "$API/login" | jq -r .loginToken)
+   AT=$(jq -n --arg t "$LT" '{tenantCode:"KV-ADMIN",loginToken:$t}'         | curl -s -H 'Content-Type: application/json' -d @- "$API/select-tenant" | jq -r .accessToken)
+   jq -n --arg o "$OLD" --arg n "$NEW" '{currentPassword:$o,newPassword:$n}'      | curl -s -o /dev/null -w '%{http_code}
+' -H "Authorization: Bearer $AT"             -H 'Content-Type: application/json' -d @- "$API/change-password"   # 200
+   unset OLD NEW LT AT
+   ```
+   Vérifié en local (2026-10-14) : 200, l'ancien mot de passe est ensuite refusé, le nouveau accepté.
+3. Le secret `ADMIN_PASSWORD` peut rester tel quel : il ne sert qu'à la création du compte (et au
+   contrôle de robustesse au démarrage) ; il **n'écrase jamais** le mot de passe d'un compte existant
+   (vérifié en local : redémarrage avec un autre `ADMIN_PASSWORD` → l'ancien mot de passe reste valide).
+
+**Staging (suite à faire).** `deploy-staging.yml` déploie aussi `keevo_staging_dashboard` (réseaux
+`keevo_staging_net` + `keevo_edge`, aucun port publié). Il n'est joignable qu'à travers le Traefik de prod,
+comme l'API de staging :
+- [ ] Choisir l'hôte (ex. `staging.admin.keevo.cm`), enregistrement A → IP du serveur, secret
+      `ADMIN_STAGING_DOMAIN` dans l'environnement GitHub `staging` (devient `DASHBOARD_ORIGIN` du backend
+      de staging — sans lui, toutes les connexions au tableau de bord de staging sont refusées par CORS,
+      sauf si `~/keevo-staging/.env` définit `DASHBOARD_ORIGIN`).
+- [ ] Installer le routeur `staging-admin` de `keevo/ops/traefik/staging-router.yml` (en remplaçant
+      l'hôte) sur le Traefik de prod, comme le routeur `staging` (§15, étapes 2–3), puis vérifier
+      `https://<ADMIN_STAGING_DOMAIN>/login`. À refaire après chaque déploiement prod en mode fichier
+      unique (§15, étape 6).
+- [ ] Compte super-admin de staging : `ADMIN_PHONE` / `ADMIN_PASSWORD` restent dans `~/keevo-staging/.env`
+      (pas encore de secrets GitHub dédiés pour staging).

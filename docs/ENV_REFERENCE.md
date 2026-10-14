@@ -18,6 +18,11 @@
 | `APP_DOMAIN` | Domaine public (Traefik + Let's Encrypt) | *(à renseigner, ex: keevo.lipagar.com)* |
 | `JWT_PRIVATE_KEY_PEM` | Clé privée RSA 2048 PEM | `-----BEGIN PRIVATE KEY-----\n...` |
 | `JWT_PUBLIC_KEY_PEM` | Clé publique RSA 2048 PEM | `-----BEGIN PUBLIC KEY-----\n...` |
+| `ACME_EMAIL` | E-mail du compte Let's Encrypt | *(à renseigner)* |
+| `ADMIN_DOMAIN` | Domaine du tableau de bord d'administration (sans `https://`, différent de `APP_DOMAIN`) — route Traefik + `DASHBOARD_ORIGIN` du backend. **Obligatoire** : le déploiement échoue sans lui | *(à renseigner, ex: admin.keevo.cm)* |
+| `ADMIN_PHONE` | Numéro du super-admin créé au premier démarrage (même numéro que le super-admin déjà en prod) | `+237XXXXXXXXX` |
+| `ADMIN_PASSWORD` | Mot de passe initial du super-admin : ≥ 12 caractères, 3 classes sur 4, ≤ 72 octets, ni défaut ni placeholder, sans `'`. Sert uniquement à la création du compte, n'écrase jamais un mot de passe existant | *(à générer)* |
+| `ADMIN_STAGING_DOMAIN` | *(environnement `staging`, optionnel)* domaine du tableau de bord de staging → `DASHBOARD_ORIGIN` du backend de staging | *(ex: staging.admin.keevo.cm)* |
 
 > `GITHUB_TOKEN` est auto-fourni par GitHub Actions.
 
@@ -67,7 +72,9 @@ POSTGRES_PASSWORD=<MOT_DE_PASSE_FORT>
 JWT_SECRET=<OUTPUT_DE_openssl_rand_-base64_64>
 JWT_EXPIRATION_MS=15552000000
 
-# Admin bootstrap
+# Admin bootstrap — en prod, remplacés par ~/keevo/.env.admin (secrets GitHub ADMIN_PHONE /
+# ADMIN_PASSWORD, écrit par le workflow). DASHBOARD_ORIGIN est imposé par le compose
+# (https://<ADMIN_DOMAIN>) : inutile de le mettre ici.
 ADMIN_PHONE=+237XXXXXXXXX
 ADMIN_PASSWORD=<MOT_DE_PASSE_ADMIN_FORT>
 
@@ -113,6 +120,7 @@ ACME_EMAIL=admin@<TON_DOMAINE>
 
 | Fichier | Description |
 |---------|-------------|
+| `.env.admin` | Écrit par le workflow (mode 600) depuis les secrets `ADMIN_PHONE` / `ADMIN_PASSWORD` ; lu par le backend après `.env` — ne pas éditer |
 | `firebase-credentials.json` | Clé de compte de service Firebase (actuellement `keevo-1d289-firebase-adminsdk-fbsvc-4094494885.json`) |
 | `.env.backup` | Variables pour les sauvegardes S3 : `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `BACKUP_S3_BUCKET`, `BACKUP_S3_PREFIX` ; optionnels `BACKUP_PHOTOS` (1 par défaut, archive aussi les photos), `PHOTOS_CONTAINER` (défaut `keevo_backend`) |
 
@@ -145,13 +153,23 @@ Le contenu de `public_key.pem` → secret GitHub `JWT_PUBLIC_KEY_PEM`
 
 ## 6. Docker Compose (généré par le workflow)
 
-Le workflow génère `docker-compose.prod.yml` sur le serveur avec 3 services :
+`deploy-backend.yml` (push sur `deploy`) génère un seul `docker-compose.prod.yml` sur le serveur avec
+tous les services — `docker compose up` les démarre ensemble. Variante « pile complète » (port 80 libre)
+avec `traefik` (fournisseur fichier `traefik/dynamic.yml`), variante « légère » sans `traefik` (Traefik
+externe, labels sur le réseau `traefik-public`).
 
-| Service | Image | Ports | Mémoire |
-|---------|-------|-------|---------|
-| `traefik` | `traefik:v3.3` | 80, 443 | 128 Mo |
-| `postgres` | `postgres:16-alpine` | *(interne)* | 384 Mo |
-| `backend` | `ghcr.io/<repo>/backend:latest` | *(interne:4500)* | 768 Mo |
+| Service | Conteneur | Image | Ports | Mémoire | Routage |
+|---------|-----------|-------|-------|---------|---------|
+| `traefik` | `keevo_traefik` | `traefik:v3.3` | 80, 443 | 128 Mo | *(pile complète uniquement)* |
+| `postgres` | `keevo_postgres` | `postgres:16-alpine` | *(interne)* | 384 Mo | — |
+| `backend` | `keevo_backend` | `ghcr.io/<repo>/backend:latest` | *(interne:4500)* | 768 Mo | `https://<APP_DOMAIN>` |
+| `dashboard` | `keevo_dashboard` | `ghcr.io/<repo>/dashboard:latest` | *(interne:3000)* | 256 Mo | `https://<ADMIN_DOMAIN>` |
+
+Le tableau de bord appelle l'API côté serveur (`/api/backend/*` → `http://backend:4500/api/v1/*` sur
+le réseau `keevo_net`) ; cette adresse est figée dans l'image à la construction (voir
+`keevo/dashboard/Dockerfile`). Les images ne sont reconstruites que si leur dossier a changé
+(`.github/scripts/changed-components.sh`), l'autre est reprise depuis `:latest`. Staging
+(`deploy-staging.yml`) : mêmes services `backend` + `dashboard` (`keevo_staging_*`, tags `staging-latest`).
 
 Volumes persistants (nommés, conservés entre les déploiements — jamais `docker compose down -v`) :
 
