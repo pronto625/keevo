@@ -16,6 +16,7 @@ import '../widget/motivational_card.dart';
 import '../widget/sales_evolution_chart.dart';
 import '../widget/shop_status_card.dart';
 import '../widget/top_products_section.dart';
+import '../widget/total_revenue_card.dart';
 
 /// DashboardPage — morning dashboard for OWNER role.
 ///
@@ -47,7 +48,10 @@ class DashboardPage extends ConsumerWidget {
               snapshot.totalTransactionsMonth == 0 &&
               snapshot.prevMonthTransactions == 0 &&
               snapshot.storeOverviews.isEmpty &&
-              snapshot.lowStockCount == 0;
+              snapshot.lowStockCount == 0 &&
+              (snapshot.periodRevenue[RevenuePeriod.allTime]?.salesCount ??
+                      0) ==
+                  0;
           if (isEmpty) {
             return _EmptyState(
               firstName: firstName,
@@ -151,6 +155,9 @@ class _DashboardContent extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // « Chiffre d'affaires total » — period selectable, first.
+                const _TotalRevenueSection(),
+
                 // Hero Card — AC2
                 MorningSummaryHeroCard(
                   todayCA: snapshot.todayCA,
@@ -254,6 +261,26 @@ class _DashboardContent extends ConsumerWidget {
     if (hour < 12) return 'Bonjour $name';
     if (hour < 18) return 'Bon après-midi $name';
     return 'Bonsoir $name';
+  }
+}
+
+/// « Chiffre d'affaires total » card wired to its providers.
+class _TotalRevenueSection extends ConsumerWidget {
+  const _TotalRevenueSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final period = ref.watch(revenuePeriodProvider);
+    final view = ref.watch(periodRevenueProvider).valueOrNull;
+    // While another period loads, never show the previous period's figure.
+    final current = view != null && view.period == period ? view : null;
+    return TotalRevenueCard(
+      period: period,
+      revenue: current?.revenue,
+      onDeviceOnly: current?.onDeviceOnly ?? false,
+      onPeriodChanged: (p) =>
+          ref.read(revenuePeriodProvider.notifier).select(p),
+    );
   }
 }
 
@@ -364,6 +391,9 @@ class _SkeletonDashboard extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
+                // Total revenue skeleton
+                const _SkeletonBox(width: double.infinity, height: 140),
+                const SizedBox(height: 16),
                 // Hero skeleton
                 const _SkeletonBox(width: double.infinity, height: 160),
                 const SizedBox(height: 16),

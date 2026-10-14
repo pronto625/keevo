@@ -21,6 +21,15 @@ class DashboardSnapshot {
   final List<StoreOverview> storeOverviews;
   final int todaySalesCount;
 
+  /// « Chiffre d'affaires total » per period (all stores, COMPLETED sales).
+  /// Empty when the source does not provide it (older server) — the
+  /// dashboard then computes it from the device's database.
+  final Map<RevenuePeriod, PeriodRevenue> periodRevenue;
+
+  /// True when this snapshot was aggregated from the device's database
+  /// (offline fallback): it only covers the sales synced to this device.
+  final bool computedOnDevice;
+
   /// When this snapshot was fetched/computed (null = unknown).
   final DateTime? asOf;
 
@@ -42,6 +51,8 @@ class DashboardSnapshot {
     this.yearlyCA = const [],
     required this.storeOverviews,
     required this.todaySalesCount,
+    this.periodRevenue = const {},
+    this.computedOnDevice = false,
     this.asOf,
   });
 
@@ -63,6 +74,8 @@ class DashboardSnapshot {
         yearlyCA: yearlyCA,
         storeOverviews: storeOverviews,
         todaySalesCount: todaySalesCount,
+        periodRevenue: periodRevenue,
+        computedOnDevice: computedOnDevice,
         asOf: time,
       );
 
@@ -94,6 +107,53 @@ class DashboardSnapshot {
     if (dailyCALast30.length <= 7) return dailyCALast30;
     return dailyCALast30.sublist(dailyCALast30.length - 7);
   }
+}
+
+/// Period of the « Chiffre d'affaires total » card (owner dashboard).
+///
+/// Boundaries (shop local calendar): [week] = Monday 00:00 → now,
+/// [month] = 1st of the current month, [year] = 1 January, [allTime] = no
+/// lower bound.
+enum RevenuePeriod {
+  week('Semaine', 'week'),
+  month('Mois', 'month'),
+  year('Année', 'year'),
+  allTime('Depuis le début', 'allTime');
+
+  const RevenuePeriod(this.label, this.key);
+
+  /// French label shown on the selector.
+  final String label;
+
+  /// Stable key: JSON field of `periodTotals` and persisted preference.
+  final String key;
+
+  static RevenuePeriod? fromKey(String? key) {
+    for (final p in values) {
+      if (p.key == key) return p;
+    }
+    return null;
+  }
+}
+
+/// CA and number of COMPLETED sales over a [RevenuePeriod].
+class PeriodRevenue {
+  final int amount;
+  final int salesCount;
+
+  const PeriodRevenue({required this.amount, required this.salesCount});
+
+  @override
+  bool operator ==(Object other) =>
+      other is PeriodRevenue &&
+      other.amount == amount &&
+      other.salesCount == salesCount;
+
+  @override
+  int get hashCode => Object.hash(amount, salesCount);
+
+  @override
+  String toString() => 'PeriodRevenue($amount, $salesCount)';
 }
 
 /// TopProduct — best-selling product for the week.

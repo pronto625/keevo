@@ -6,11 +6,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
 import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/dashboard/domain/model/dashboard_snapshot.dart';
 import 'package:keevo/features/dashboard/presentation/page/dashboard_page.dart';
 import 'package:keevo/features/dashboard/presentation/provider/dashboard_providers.dart';
+import 'package:keevo/features/dashboard/presentation/widget/total_revenue_card.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+const periodTotals = {
+  RevenuePeriod.week: PeriodRevenue(amount: 125000, salesCount: 12),
+  RevenuePeriod.month: PeriodRevenue(amount: 480000, salesCount: 45),
+  RevenuePeriod.year: PeriodRevenue(amount: 2500000, salesCount: 230),
+  RevenuePeriod.allTime: PeriodRevenue(amount: 7300000, salesCount: 1),
+};
 
 void main() {
   setUpAll(() async {
@@ -44,6 +53,7 @@ void main() {
     ),
     storeOverviews: const [],
     todaySalesCount: 8,
+    periodRevenue: periodTotals,
   );
 
   group('DashboardPage', () {
@@ -126,6 +136,7 @@ void main() {
           dailyCALast30: s.dailyCALast30,
           storeOverviews: stores ?? s.storeOverviews,
           todaySalesCount: s.todaySalesCount,
+          periodRevenue: s.periodRevenue,
           asOf: asOf,
         );
 
@@ -243,8 +254,10 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      await tester.scrollUntilVisible(find.text('VOIR TOUT'), 200,
-          scrollable: find.byType(Scrollable).first);
+      // The section sits inside one SliverToBoxAdapter: scroll the text
+      // itself into view (scrollUntilVisible stops once the sliver shows).
+      await tester.ensureVisible(find.text('VOIR TOUT'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('VOIR TOUT'));
       await tester.pumpAndSettle();
 
@@ -252,6 +265,129 @@ void main() {
       expect(find.text('PLUS'), findsNothing);
       // Poussée (pas remplacée) : le retour ramène au tableau de bord.
       expect(router.canPop(), isTrue);
+    });
+
+    group("« Chiffre d'affaires total »", () {
+      Finder chip(String label) => find.descendant(
+          of: find.byType(TotalRevenueCard),
+          matching: find.widgetWithText(ChoiceChip, label));
+      final xaf =
+          NumberFormat.currency(locale: 'fr_FR', symbol: 'XAF', decimalDigits: 0);
+
+      Future<SharedPreferences> pumpTotal(WidgetTester tester,
+          {DashboardSnapshot? data, Map<String, Object> prefs = const {}}) async {
+        SharedPreferences.setMockInitialValues(
+            {kUserFirstNameKey: 'Simon', ...prefs});
+        final sp = await SharedPreferences.getInstance();
+        await tester.pumpWidget(ProviderScope(
+          overrides: [
+            dashboardSnapshotProvider.overrideWith((_) async => data ?? snapshot),
+            storeOverviewsProvider
+                .overrideWith((_) => Future.value(const <StoreOverview>[])),
+            chartDataProvider
+                .overrideWith((_) => Future.value(snapshot.dailyCALast30)),
+            sharedPreferencesProvider.overrideWithValue(sp),
+          ],
+          child: const MaterialApp(home: DashboardPage()),
+        ));
+        await tester.pumpAndSettle();
+        return sp;
+      }
+
+      testWidgets('comes first, then CA du jour, then the metric cards',
+          (tester) async {
+        await pumpTotal(tester);
+
+        final total = tester.getTopLeft(find.text("Chiffre d'affaires total")).dy;
+        final today = tester.getTopLeft(find.text("CA D'AUJOURD'HUI")).dy;
+        final yesterday = tester.getTopLeft(find.text("CA d'Hier")).dy;
+        expect(total, lessThan(today));
+        expect(today, lessThan(yesterday));
+        // « CA d'aujourd'hui » keeps its content.
+        expect(find.text(xaf.format(50000)), findsOneWidget);
+      });
+
+      testWidgets('shows the four periods, « Mois » by default with its count',
+          (tester) async {
+        await pumpTotal(tester);
+
+        for (final label in ['Semaine', 'Mois', 'Année', 'Depuis le début']) {
+          expect(chip(label), findsOneWidget);
+        }
+        expect(
+            tester
+                .widget<ChoiceChip>(chip('Mois'))
+                .selected,
+            isTrue);
+        expect(find.text(xaf.format(480000)), findsOneWidget);
+        expect(find.text('45 ventes'), findsOneWidget);
+        // Server figure: no device-only notice.
+        expect(find.text('Données de cet appareil'), findsNothing);
+      });
+
+      testWidgets('switching period updates the figure and is remembered',
+          (tester) async {
+        final sp = await pumpTotal(tester);
+
+        await tester.tap(chip('Semaine'));
+        await tester.pumpAndSettle();
+        expect(find.text(xaf.format(125000)), findsOneWidget);
+        expect(find.text('12 ventes'), findsOneWidget);
+
+        await tester.tap(chip('Depuis le début'));
+        await tester.pumpAndSettle();
+        expect(find.text(xaf.format(7300000)), findsOneWidget);
+        expect(find.text('1 vente'), findsOneWidget);
+        expect(sp.getString(kDashboardRevenuePeriodKey), 'allTime');
+      });
+
+      testWidgets('restores the period saved on this device', (tester) async {
+        await pumpTotal(tester, prefs: {kDashboardRevenuePeriodKey: 'year'});
+
+        expect(
+            tester
+                .widget<ChoiceChip>(chip('Année'))
+                .selected,
+            isTrue);
+        expect(find.text(xaf.format(2500000)), findsOneWidget);
+        expect(find.text('230 ventes'), findsOneWidget);
+      });
+
+      testWidgets('offline figure is labelled as this device\'s data',
+          (tester) async {
+        final offline = DashboardSnapshot(
+          todayCA: snapshot.todayCA,
+          yesterdayCA: snapshot.yesterdayCA,
+          dayBeforeYesterdayCA: snapshot.dayBeforeYesterdayCA,
+          trendPercent: snapshot.trendPercent,
+          totalTransactionsMonth: snapshot.totalTransactionsMonth,
+          averageBasketMonth: snapshot.averageBasketMonth,
+          prevMonthTransactions: snapshot.prevMonthTransactions,
+          prevMonthAverageBasket: snapshot.prevMonthAverageBasket,
+          lowStockCount: snapshot.lowStockCount,
+          weeklyTopProducts: snapshot.weeklyTopProducts,
+          weeklyWorstProducts: const [],
+          dailyCALast30: snapshot.dailyCALast30,
+          storeOverviews: const [],
+          todaySalesCount: snapshot.todaySalesCount,
+          periodRevenue: const {
+            RevenuePeriod.month: PeriodRevenue(amount: 0, salesCount: 0),
+            RevenuePeriod.allTime: PeriodRevenue(amount: 3000, salesCount: 2),
+          },
+          computedOnDevice: true,
+        );
+        await pumpTotal(tester,
+            data: offline, prefs: {kDashboardRevenuePeriodKey: 'allTime'});
+
+        expect(find.text(xaf.format(3000)), findsOneWidget);
+        expect(find.text('2 ventes'), findsOneWidget);
+        expect(find.text('Données de cet appareil'), findsOneWidget);
+
+        await tester.tap(chip('Mois'));
+        await tester.pumpAndSettle();
+        expect(find.text('Aucune vente'), findsOneWidget);
+        expect(find.text('Données de cet appareil'), findsOneWidget);
+      });
     });
   });
 }

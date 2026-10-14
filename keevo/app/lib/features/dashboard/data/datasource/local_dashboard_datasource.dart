@@ -65,6 +65,49 @@ class LocalDashboardDatasource {
         12, (i) => DateTime(m.year, m.month, m.day - (11 - i) * 7));
   }
 
+  /// First local day of [period] for the clock value [now] (null = no lower
+  /// bound, « Depuis le début »). Same calendar as the server
+  /// (DashboardService): weeks start Monday, months/years on the 1st.
+  @visibleForTesting
+  static DateTime? periodStart(RevenuePeriod period, DateTime now) {
+    switch (period) {
+      case RevenuePeriod.week:
+        return mondayOf(now);
+      case RevenuePeriod.month:
+        return DateTime(now.year, now.month, 1);
+      case RevenuePeriod.year:
+        return DateTime(now.year, 1, 1);
+      case RevenuePeriod.allTime:
+        return null;
+    }
+  }
+
+  /// « Chiffre d'affaires total » over [period]: all stores, COMPLETED sales
+  /// only (cancelled / pending excluded; a correction rewrites the sale's
+  /// `total_amount`, so the corrected amount is what is summed — same rule
+  /// as « CA d'aujourd'hui »). Sales are cut on their local day, like the
+  /// charts, so a sale synced in UTC lands in the right period.
+  ///
+  /// Only covers the sales present on this device.
+  Future<PeriodRevenue> getPeriodRevenue(RevenuePeriod period) async {
+    final start = periodStart(period, _now());
+    final result = await _db.customSelect(
+      'SELECT COALESCE(SUM(total_amount), 0) AS total, COUNT(*) AS cnt '
+      "FROM sales WHERE status = 'COMPLETED'"
+      '${start != null ? ' AND ${_localDay('occurred_at')} >= ?' : ''}',
+      variables: [if (start != null) Variable.withString(_d(start))],
+    ).getSingle();
+    return PeriodRevenue(
+      amount: result.read<int>('total'),
+      salesCount: result.read<int>('cnt'),
+    );
+  }
+
+  /// [getPeriodRevenue] for every [RevenuePeriod].
+  Future<Map<RevenuePeriod, PeriodRevenue>> getPeriodRevenues() async => {
+        for (final p in RevenuePeriod.values) p: await getPeriodRevenue(p),
+      };
+
   /// Today's total CA across all stores (COMPLETED sales only).
   Future<int> getTodayCA() async {
     final now = _now();
@@ -662,6 +705,7 @@ class LocalDashboardDatasource {
     final monthly = await getMonthlyCA();
     final yearly = await getYearlyCA();
     final storeOverviews = await getStoreOverviews();
+    final periodRevenue = await getPeriodRevenues();
 
     final todayCA = results[0];
     final yesterdayCA = results[1];
@@ -688,6 +732,8 @@ class LocalDashboardDatasource {
       yearlyCA: yearly,
       storeOverviews: storeOverviews,
       todaySalesCount: results[8],
+      periodRevenue: periodRevenue,
+      computedOnDevice: true,
     );
   }
 }
