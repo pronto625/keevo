@@ -16,6 +16,7 @@ import '../../../sync_indicator/presentation/widget/sync_required_modal.dart';
 import '../../../../core/sync/sync_gate_provider.dart';
 import '../provider/global_stock_provider.dart';
 import '../provider/stock_transfer_provider.dart';
+import '../../domain/exception/insufficient_stock_exception.dart';
 
 /// Shows the transfer form as a modal bottom sheet.
 ///
@@ -189,6 +190,8 @@ class _TransferFormBottomSheetState
       } else {
         setState(() => _errorMessage = msg);
       }
+    } on InsufficientStockException catch (e) {
+      if (mounted) setState(() => _quantityError = e.message);
     } catch (e) {
       if (mounted) setState(() => _errorMessage = appErrorMessage(e));
     } finally {

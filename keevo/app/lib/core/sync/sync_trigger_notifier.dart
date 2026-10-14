@@ -13,6 +13,7 @@ import '../../features/catalog/presentation/provider/stock_provider.dart';
 import '../../features/contact/presentation/provider/contact_provider.dart';
 import '../../features/dashboard/presentation/provider/dashboard_providers.dart';
 import '../../features/inventory/presentation/provider/global_stock_provider.dart';
+import '../../features/inventory/presentation/provider/stock_transfer_provider.dart';
 import '../../features/pos/presentation/provider/day_closure_providers.dart';
 import '../../features/pos/presentation/provider/pos_providers.dart';
 import '../../features/reports/presentation/provider/report_history_providers.dart';
@@ -361,6 +362,9 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
     // ── POS — Pending sales ───────────────────────────────────────────────
     ref.invalidate(pendingSalesProvider);
     ref.invalidate(pendingSalesCountProvider);
+    // ── Stock transfers — status moves after the push / pull (device test:
+    // a pushed transfer stayed « En attente de sync » until a manual refresh)
+    ref.invalidate(transferHistoryProvider);
   }
 
   void _scheduleRetry() {

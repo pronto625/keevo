@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo/features/inventory/domain/exception/insufficient_stock_exception.dart';
 import 'package:keevo/core/sync/connectivity_service.dart';
 import 'package:keevo/core/sync/sync_service.dart';
 import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
@@ -58,7 +59,7 @@ void main() {
 
   group('AC8 — executeTransfer() offline-first', () {
     test('executeTransfer_validatesLocalStock_orThrows', () async {
-      // Insufficient stock → throws StateError
+      // Insufficient stock → throws InsufficientStockException (French message)
       when(() => mockLocal.getLocalStock(
             productId: any(named: 'productId'),
             storeId: any(named: 'storeId'),
@@ -71,7 +72,7 @@ void main() {
           productId: 'prod-1',
           quantity: 10, // requesting more than available
         ),
-        throwsA(isA<StateError>()),
+        throwsA(isA<InsufficientStockException>().having((e) => e.message, 'message', contains('Stock insuffisant'))),
       );
     });
 

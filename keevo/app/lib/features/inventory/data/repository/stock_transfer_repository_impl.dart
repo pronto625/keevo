@@ -9,6 +9,7 @@ import '../../domain/model/stock_transfer_model.dart';
 import '../../domain/repository/stock_transfer_repository.dart';
 import '../datasource/local_stock_transfer_datasource.dart';
 import '../datasource/remote_stock_transfer_datasource.dart';
+import '../../domain/exception/insufficient_stock_exception.dart';
 
 /// StockTransferRepositoryImpl — Offline-first implementation (Story 5.6).
 ///
@@ -96,9 +97,8 @@ class StockTransferRepositoryImpl implements StockTransferRepository {
       storeId: sourceStoreId,
     );
     if (available < quantity) {
-      throw StateError(
-        'INSUFFICIENT_STOCK:available=$available:requested=$quantity',
-      );
+      throw InsufficientStockException(
+          available: available, requested: quantity);
     }
 
     // 2. AC1: Only decrement source at Step 1. Destination is credited at Step 2
