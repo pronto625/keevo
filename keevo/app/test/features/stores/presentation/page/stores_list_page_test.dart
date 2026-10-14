@@ -201,6 +201,94 @@ void main() {
           findsOneWidget);
     });
 
+    // J22 (device test): after « Réactiver » the list still said
+    // « Désactivée » until « Synchroniser » was tapped.
+    testWidgets('J22: the list shows the store active right after « Réactiver »',
+        (tester) async {
+      var current = [active, inactive];
+      when(() => repo.getStores(includeInactive: any(named: 'includeInactive')))
+          .thenAnswer((_) async => current);
+      when(() => repo.reactivateStore('s2')).thenAnswer((_) async {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        current = [active, inactive.copyWith(isActive: true)];
+        return inactive.copyWith(isActive: true);
+      });
+      await tester.pumpWidget(buildPage());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+      expect(find.text('Désactivée'), findsOneWidget);
+
+      await openMenu(tester, 'Bonamoussadi');
+      await tester.tap(find.text('Réactiver'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Désactivée'), findsNothing);
+    });
+
+    // J22 root cause: « Réactiver » creates the store list notifier, whose
+    // build() pulls the stores from the server. That pull, answered with the
+    // pre-reactivation state but finished after the PATCH, wrote the store
+    // back as inactive locally.
+    testWidgets('J22: a slower initial store pull cannot undo the reactivation',
+        (tester) async {
+      var current = [active, inactive];
+      when(() => repo.getStores(includeInactive: any(named: 'includeInactive')))
+          .thenAnswer((_) async => current);
+      when(() => repo.syncFromRemote()).thenAnswer((_) async {
+        final snapshot = [active, inactive]; // read before the PATCH
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        current = snapshot;
+      });
+      when(() => repo.reactivateStore('s2')).thenAnswer((_) async {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        current = [active, inactive.copyWith(isActive: true)];
+        return inactive.copyWith(isActive: true);
+      });
+      await tester.pumpWidget(buildPage());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+
+      await openMenu(tester, 'Bonamoussadi');
+      await tester.tap(find.text('Réactiver'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('Désactivée'), findsNothing);
+      // Reload the list from the local store: still active.
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+      expect(find.text('Désactivée'), findsNothing);
+    });
+
+    testWidgets('J22: the list shows the store deactivated right after confirming',
+        (tester) async {
+      var current = [active, inactive];
+      when(() => repo.getStores(includeInactive: any(named: 'includeInactive')))
+          .thenAnswer((_) async => current);
+      when(() => repo.deactivateStore('s1')).thenAnswer((_) async {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        current = [active.copyWith(isActive: false), inactive];
+        return active.copyWith(isActive: false);
+      });
+      await tester.pumpWidget(buildPage());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+      expect(find.text('Désactivée'), findsOneWidget);
+
+      await openMenu(tester, 'Akwa');
+      await tester.tap(find.text('Désactiver'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Désactiver'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Désactivée'), findsNWidgets(2));
+    });
+
     testWidgets('reactivation over the plan limit shows the French error',
         (tester) async {
       when(() => repo.reactivateStore('s2'))
