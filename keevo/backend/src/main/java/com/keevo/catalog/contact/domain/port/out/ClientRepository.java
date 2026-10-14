@@ -23,4 +23,6 @@ public interface ClientRepository {
     List<Client> searchByNameOrPhone(String query);
 
     void archive(UUID id);
+
+    void unarchive(UUID id);
 }

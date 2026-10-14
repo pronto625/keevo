@@ -1,4 +1,5 @@
 import '../../../../core/storage/search_fold.dart';
+import '../../../../core/sync/account_read_only_exception.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import 'package:flutter/material.dart';
@@ -78,7 +79,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           SnackBar(
             content: Text(state.message == 'INSUFFICIENT_STOCK'
                 ? 'Stock insuffisant pour un ou plusieurs articles'
-                : 'Erreur: ${state.message}'),
+                : AccountReadOnlyException.isReadOnlyMessage(state.message)
+                    ? state.message
+                    : 'Erreur: ${state.message}'),
             backgroundColor: AppTheme.errorStrong,
           ),
         );
@@ -216,7 +219,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   decoration: InputDecoration(
                     labelText: 'Montant reçu (optionnel)',
                     hintText: 'Ex: $finalTotal',
-                    suffixText: 'FCFA',
+                    suffixText: 'XAF',
                     helperText: _montantRecu != null && _montantRecu! < finalTotal
                         ? 'Montant inférieur au total (${_currencyFormat.format(finalTotal)})'
                         : null,

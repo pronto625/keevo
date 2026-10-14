@@ -11,6 +11,11 @@ const kSyncEventAbandon = 'ABANDON';
 /// text (the technical detail goes to `dev.log` only).
 const kSyncPushFailedMessage =
     'Envoi des données impossible pour le moment — nouvel essai automatique';
+/// A50: push held back while the account is read-only (suspended, deletion
+/// pending) — the operations are kept.
+const kSyncPushReadOnlyMessage =
+    'Compte en consultation uniquement — vos opérations sont conservées et '
+    'seront envoyées dès sa réactivation';
 const kSyncPullFailedMessage =
     'Réception des données impossible pour le moment — nouvel essai automatique';
 

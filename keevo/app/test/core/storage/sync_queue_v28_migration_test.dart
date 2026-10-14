@@ -53,6 +53,8 @@ void main() {
           "'2026-10-01T10:00:00.000', 0, 3, 'sale-1', 'INSUFFICIENT_STOCK'), "
           "('op-done', 'UPDATE_CLIENT', '{}', '2026-10-01T09:00:00.000', 1, 0, "
           "'c-1', NULL)");
+      // The later v30 step adds sales.mobile_money_ref.
+      raw.execute('CREATE TABLE sales (id TEXT NOT NULL PRIMARY KEY)');
       raw.userVersion = 27;
     }));
     addTearDown(db.close);

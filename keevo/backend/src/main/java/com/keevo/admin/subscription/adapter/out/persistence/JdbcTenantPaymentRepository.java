@@ -7,8 +7,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.sql.Date;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /** JdbcTenantPaymentRepository — {@link TenantPaymentRepository} on {@code public.tenant_payments} (Story 9-2). */
@@ -20,9 +24,20 @@ public class JdbcTenantPaymentRepository implements TenantPaymentRepository {
             + "(id, tenant_id, amount_xaf, method, paid_at, period_start, period_end, note, recorded_by) "
             + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
+    private static final String COLUMNS =
+            "id, tenant_id, amount_xaf, method, paid_at, period_start, period_end, note, recorded_by, "
+            + "voided_at, void_reason ";
+
     static final String FIND_BY_TENANT_SQL =
-            "SELECT id, tenant_id, amount_xaf, method, paid_at, period_start, period_end, note, recorded_by "
+            "SELECT " + COLUMNS
             + "FROM public.tenant_payments WHERE tenant_id = ? ORDER BY paid_at DESC, created_at DESC";
+
+    static final String FIND_BY_ID_SQL =
+            "SELECT " + COLUMNS + "FROM public.tenant_payments WHERE tenant_id = ? AND id = ?";
+
+    static final String VOID_SQL =
+            "UPDATE public.tenant_payments SET voided_at = ?, voided_by = ?, void_reason = ? "
+            + "WHERE tenant_id = ? AND id = ? AND voided_at IS NULL";
 
     private final JdbcTemplate jdbc;
 
@@ -40,7 +55,23 @@ public class JdbcTenantPaymentRepository implements TenantPaymentRepository {
 
     @Override
     public List<TenantPayment> findByTenant(UUID tenantId) {
-        return jdbc.query(FIND_BY_TENANT_SQL, (rs, i) -> new TenantPayment(
+        return jdbc.query(FIND_BY_TENANT_SQL, JdbcTenantPaymentRepository::map, tenantId);
+    }
+
+    @Override
+    public Optional<TenantPayment> findById(UUID tenantId, UUID paymentId) {
+        return jdbc.query(FIND_BY_ID_SQL, JdbcTenantPaymentRepository::map, tenantId, paymentId)
+                .stream().findFirst();
+    }
+
+    @Override
+    public boolean voidPayment(UUID tenantId, UUID paymentId, UUID actorId, String reason, Instant at) {
+        return jdbc.update(VOID_SQL, Timestamp.from(at), actorId, reason, tenantId, paymentId) == 1;
+    }
+
+    private static TenantPayment map(ResultSet rs, int row) throws SQLException {
+        Timestamp voidedAt = rs.getTimestamp("voided_at");
+        return new TenantPayment(
                 UUID.fromString(rs.getString("id")),
                 UUID.fromString(rs.getString("tenant_id")),
                 rs.getLong("amount_xaf"),
@@ -49,7 +80,8 @@ public class JdbcTenantPaymentRepository implements TenantPaymentRepository {
                 rs.getDate("period_start").toLocalDate(),
                 rs.getDate("period_end").toLocalDate(),
                 rs.getString("note"),
-                UUID.fromString(rs.getString("recorded_by"))
-        ), tenantId);
+                UUID.fromString(rs.getString("recorded_by")),
+                voidedAt != null ? voidedAt.toInstant() : null,
+                rs.getString("void_reason"));
     }
 }

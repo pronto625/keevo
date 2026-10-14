@@ -205,5 +205,20 @@ void main() {
       expect(entry.topProductName, 'Café Arabica');
       expect(entry.deltaPercent, closeTo(8.0, 0.01));
     });
+
+    test('a null deltaPercent (no preceding sales — A33) stays null', () {
+      final entry = StorePerformanceEntry.fromJson({
+        'rank': 1,
+        'storeId': 's1',
+        'storeName': 'Magasin Central',
+        'totalRevenue': 500000,
+        'salesCount': 50,
+        'averageBasket': 10000,
+        'topProductName': null,
+        'deltaPercent': null,
+      });
+
+      expect(entry.deltaPercent, isNull);
+    });
   });
 }

@@ -43,6 +43,9 @@ describe("labels — known codes", () => {
 
   it("maps conflict, entity, role and status codes", () => {
     expect(conflictTypeLabel("STOCK_NEGATIVE")).toBe("Stock devenu négatif");
+    expect(conflictTypeLabel("LAST_WRITE_SUPERSEDED")).toBe(
+      "Modification hors ligne ignorée (version plus récente conservée)",
+    );
     expect(entityTypeLabel("PRODUCT")).toBe("Produit");
     expect(entityTypeLabel("stock_level")).toBe("Stock");
     expect(entityTypeLabel("UPDATE_CLIENT")).toBe("Modification de client");

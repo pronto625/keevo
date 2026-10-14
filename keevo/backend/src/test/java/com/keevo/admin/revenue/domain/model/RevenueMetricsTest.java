@@ -227,6 +227,31 @@ class RevenueMetricsTest {
     }
 
     @Test
+    @DisplayName("REALIGNMENT rows (9-2 realign job) change neither churn nor conversion")
+    void realignment_ignoredByChurnAndConversion() {
+        List<PlanChange> base = List.of(
+                event(A, null, "PREMIUM_TRIAL", "REGISTRATION", "2026-04-01T10:00:00Z"),
+                event(A, "PREMIUM_TRIAL", "PREMIUM", "ADMIN_ACTIVATION", "2026-10-05T10:00:00Z"),
+                event(B, "PREMIUM", "FREE", "ADMIN_DOWNGRADE", "2026-10-03T10:00:00Z"),
+                event(C, null, "PREMIUM_TRIAL", "REGISTRATION", "2026-04-02T10:00:00Z"));
+        List<PlanChange> withRealignment = new java.util.ArrayList<>(base);
+        // stale public value corrected: trial → FREE, trial → PREMIUM, PREMIUM → FREE, FREE → PREMIUM
+        withRealignment.add(event(C, "PREMIUM_TRIAL", "FREE", "REALIGNMENT", "2026-10-10T10:00:00Z"));
+        withRealignment.add(event(D, "PREMIUM_TRIAL", "PREMIUM", "REALIGNMENT", "2026-10-10T10:00:00Z"));
+        withRealignment.add(event(D, "PREMIUM", "FREE", "REALIGNMENT", "2026-10-11T10:00:00Z"));
+        withRealignment.add(event(B, "FREE", "PREMIUM", "REALIGNMENT", "2026-10-12T10:00:00Z"));
+
+        LocalDate first = LocalDate.of(2026, 10, 1);
+        LocalDate last = LocalDate.of(2026, 10, 31);
+        var without = new RevenueMetrics(List.of(), base);
+        var with = new RevenueMetrics(List.of(), withRealignment);
+
+        assertThat(with.churned(first, last).keySet()).isEqualTo(without.churned(first, last).keySet()).containsOnly(B);
+        assertThat(with.conversion(first, last)).isEqualTo(without.conversion(first, last));
+        assertThat(with.conversion(first, last).trialsEnded()).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("no data → zeros everywhere")
     void noData() {
         var m = new RevenueMetrics(List.of(), List.of());

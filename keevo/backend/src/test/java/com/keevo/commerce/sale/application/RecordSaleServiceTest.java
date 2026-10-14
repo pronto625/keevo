@@ -192,6 +192,22 @@ class RecordSaleServiceTest {
                 any(), eq(-2), eq(ACTOR_ID), any(), eq(null), eq(true));
     }
 
+    @Test
+    void recordSale_mobileMoney_keepsTheReference() {
+        when(saleRepository.existsById(SALE_ID)).thenReturn(false);
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
+                .thenReturn(Optional.of(stockLevel(10)));
+
+        service.recordSale(new RecordSaleCommand(
+                SALE_ID, ACTOR_ID, STORE_ID, null,
+                PaymentMode.MOBILE_MONEY, "  MP2603.1234 ", 0,
+                List.of(new SaleItemCommand(null, PRODUCT_ID, null, "Produit A", 1500, 1500, 1))));
+
+        var saleCaptor = ArgumentCaptor.forClass(com.keevo.commerce.sale.domain.model.Sale.class);
+        verify(saleRepository).save(saleCaptor.capture());
+        assertThat(saleCaptor.getValue().getMobileMoneyRef()).isEqualTo("MP2603.1234");
+    }
+
     // ── Story 4.2 — Discount + Price Override tests ──────────────────────────
 
     @Test

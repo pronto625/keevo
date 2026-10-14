@@ -39,6 +39,8 @@ void main() {
       raw.execute("INSERT INTO audit_entries VALUES ('legacy', 'u-1', "
           "'Product', 'p-1', 'PRODUCT_CREATED', NULL, "
           "'{\"productName\":\"Savon\"}', '2026-10-05T10:00:00.000')");
+      // The later v30 step adds sales.mobile_money_ref.
+      raw.execute('CREATE TABLE sales (id TEXT NOT NULL PRIMARY KEY)');
       raw.userVersion = 28;
     }));
     addTearDown(db.close);

@@ -117,6 +117,40 @@ class AdminTenantControllerTest {
     }
 
     @Test
+    @DisplayName("9-2 — GET /tenants/{id}/detail exposes the subscription and the suspension trace (no actor id)")
+    void getTenantDetail_exposesSubscription() throws Exception {
+        setupFilterAs("ROLE_SUPER_ADMIN");
+        var detail = new com.keevo.admin.tenant.domain.model.AdminTenantDetail(sampleItem(), List.of(), List.of(),
+                List.of(), 0L,
+                new com.keevo.admin.tenant.domain.model.AdminPlanInfo("PREMIUM", Instant.parse("2026-12-31T22:59:59Z")),
+                new com.keevo.admin.tenant.domain.model.AdminSuspensionInfo(
+                        Instant.parse("2026-10-12T09:00:00Z"), "Impayés"));
+        when(adminTenantService.execute(any(com.keevo.admin.tenant.domain.port.in.GetTenantDetailQuery.class)))
+                .thenReturn(detail);
+
+        mockMvc.perform(get("/api/v1/admin/tenants/{id}/detail", TENANT_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.subscription.planType").value("PREMIUM"))
+                .andExpect(jsonPath("$.data.subscription.expiresAt").value("2026-12-31T22:59:59Z"))
+                .andExpect(jsonPath("$.data.suspension.suspendedAt").value("2026-10-12T09:00:00Z"))
+                .andExpect(jsonPath("$.data.suspension.reason").value("Impayés"))
+                .andExpect(jsonPath("$.data.suspension.suspendedBy").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("9-2 — GET /tenants/{id}/detail with an unreadable plan → subscription null")
+    void getTenantDetail_subscriptionNull() throws Exception {
+        setupFilterAs("ROLE_SUPER_ADMIN");
+        when(adminTenantService.execute(any(com.keevo.admin.tenant.domain.port.in.GetTenantDetailQuery.class)))
+                .thenReturn(com.keevo.admin.tenant.domain.model.AdminTenantDetail.empty(sampleItem()));
+
+        mockMvc.perform(get("/api/v1/admin/tenants/{id}/detail", TENANT_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.subscription").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.data.suspension").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
     @DisplayName("9-1 — GET /tenants/{id}/detail: employees and audit lines carry names and labels, no ids")
     void getTenantDetail_contractHasNoIdentifiers() throws Exception {
         setupFilterAs("ROLE_SUPER_ADMIN");

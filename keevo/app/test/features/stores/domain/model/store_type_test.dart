@@ -22,7 +22,7 @@ void main() {
 
     test('displayName returns French labels', () {
       expect(StoreType.store.displayName, 'Boutique');
-      expect(StoreType.warehouse.displayName, 'Warehouse');
+      expect(StoreType.warehouse.displayName, 'Entrepôt');
     });
 
     test('values has exactly STORE and WAREHOUSE', () {

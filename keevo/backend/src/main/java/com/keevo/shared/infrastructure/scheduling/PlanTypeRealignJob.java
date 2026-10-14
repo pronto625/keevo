@@ -28,7 +28,9 @@ import java.util.Optional;
  * <p>Before 9-2 the public column was never updated after registration; from 9-2 every plan change
  * keeps it in step, so this job only repairs the historical drift. It is idempotent (only rows whose
  * value differs are updated), runs on its own thread after {@link ApplicationReadyEvent} and on a
- * single instance (ShedLock lock {@value #LOCK_NAME}). A tenant whose schema query fails is skipped;
+ * single instance (ShedLock lock {@value #LOCK_NAME}). Each correction writes a {@code REALIGNMENT}
+ * row in {@code tenant_plan_events} (old public value → schema value), so the plan history of a
+ * pre-9-2 tenant does not stay « still on trial ». A tenant whose schema query fails is skipped;
  * connection/resource failures stop the run (next boot retries).
  */
 @Component
@@ -42,10 +44,19 @@ public class PlanTypeRealignJob {
             "SELECT id, schema_name FROM public.tenants WHERE status <> 'DELETED' "
             + "AND id <> '00000000-0000-0000-0000-000000000000'::uuid";
 
+    /**
+     * Realigns one tenant and records a {@code REALIGNMENT} plan event from the old public value to
+     * the schema value, in one statement (all CTEs see the pre-update snapshot: {@code old} is the
+     * stale value). Returns the number of events written (0 or 1).
+     */
     static final String REALIGN_SQL =
-            "UPDATE public.tenants t SET plan_type = s.plan_type, updated_at = NOW() "
-            + "FROM (SELECT plan_type FROM \"%s\".subscriptions ORDER BY created_at ASC LIMIT 1) s "
-            + "WHERE t.id = ? AND t.plan_type IS DISTINCT FROM s.plan_type";
+            "WITH s AS (SELECT plan_type FROM \"%s\".subscriptions ORDER BY created_at ASC LIMIT 1), "
+            + "old AS (SELECT t.id, t.plan_type AS old_plan FROM public.tenants t, s "
+            + "  WHERE t.id = ? AND t.plan_type IS DISTINCT FROM s.plan_type), "
+            + "upd AS (UPDATE public.tenants t SET plan_type = s.plan_type, updated_at = NOW() FROM s, old "
+            + "  WHERE t.id = old.id RETURNING t.id, s.plan_type AS new_plan) "
+            + "INSERT INTO public.tenant_plan_events (tenant_id, from_plan, to_plan, cause) "
+            + "SELECT upd.id, old.old_plan, upd.new_plan, 'REALIGNMENT' FROM upd JOIN old ON old.id = upd.id";
 
     private final JdbcTemplate jdbc;
     private final LockProvider lockProvider;

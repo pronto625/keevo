@@ -38,14 +38,18 @@ import java.util.Optional;
  * <p>For each valid, existing, non-deleted tenant schema and each index, on an autocommit
  * connection:
  * <ol>
+ *   <li>{@code SET statement_timeout = '15min'} (bounded build time, reset afterwards);</li>
  *   <li>an existing index of that name that is INVALID ({@code pg_index.indisvalid = false}, e.g.
- *       an interrupted concurrent build) or whose definition differs from the expected one is
- *       dropped with {@code DROP INDEX CONCURRENTLY};</li>
- *   <li>{@code SET statement_timeout = '15min'} then {@code CREATE INDEX CONCURRENTLY IF NOT EXISTS}
- *       — no write lock on the table, bounded build time.</li>
+ *       an interrupted concurrent build) is dropped with {@code DROP INDEX CONCURRENTLY} then
+ *       rebuilt;</li>
+ *   <li>a valid index whose definition differs is replaced without a gap: the new one is built
+ *       CONCURRENTLY under a temporary name ({@value #TEMP_SUFFIX}), then the old one is dropped
+ *       CONCURRENTLY and the new one renamed;</li>
+ *   <li>otherwise {@code CREATE INDEX CONCURRENTLY IF NOT EXISTS} — no write lock on the table.</li>
  * </ol>
- * A failure is logged with its cause and the job continues with the next index; the next run
- * repairs what is left (an interrupted build leaves an INVALID index, dropped next time).
+ * A non-index relation holding the index name is reported (WARN, counted failed). A failure is
+ * logged with its cause and the job continues with the next index; the next run repairs what is
+ * left. The run budget is checked before each schema and each index.
  */
 @Component
 public class SyncKeysetIndexJob {
@@ -55,11 +59,22 @@ public class SyncKeysetIndexJob {
     static final String LOCK_NAME = "syncKeysetIndexJob";
     static final String STATEMENT_TIMEOUT_SQL = "SET statement_timeout = '15min'";
 
-    /** Existing index of a given name in a schema: validity and definition. */
+    /** ShedLock durations, shared by {@link #daily()} and {@link #runAtStartup()}. */
+    static final String LOCK_AT_MOST_FOR = "PT6H";
+    static final String LOCK_AT_LEAST_FOR = "PT1M";
+
+    /** Suffix of the temporary index built before swapping a wrong-definition index. */
+    static final String TEMP_SUFFIX = "_tmp";
+
+    /**
+     * Existing relation of a given name in a schema: its kind and, for an index, validity and
+     * definition (a table, sequence or view may hold the name too).
+     */
     static final String EXISTING_INDEX_SQL =
-            "SELECT i.indisvalid, pg_get_indexdef(i.indexrelid) AS def "
+            "SELECT c.relkind::text AS relkind, i.indisvalid, "
+            + "CASE WHEN c.relkind = 'i' THEN pg_get_indexdef(c.oid) END AS def "
             + "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
-            + "JOIN pg_index i ON i.indexrelid = c.oid "
+            + "LEFT JOIN pg_index i ON i.indexrelid = c.oid "
             + "WHERE n.nspname = ? AND c.relname = ?";
 
     static final String TABLE_EXISTS_SQL =
@@ -82,7 +97,7 @@ public class SyncKeysetIndexJob {
         }
     }
 
-    /** No new schema is started past this budget, well under the lock's {@code lockAtMostFor} (PT6H). */
+    /** No new schema or index is started past this budget, well under {@link #LOCK_AT_MOST_FOR}. */
     static final Duration RUN_BUDGET = Duration.ofHours(5);
 
     private enum Outcome { CREATED, REBUILT, UNCHANGED, SKIPPED, FAILED }
@@ -111,7 +126,7 @@ public class SyncKeysetIndexJob {
 
     /** Daily re-run (ShedLock through the proxy): retries failed or interrupted builds. */
     @Scheduled(cron = "${keevo.sync-keyset-index-job.cron:0 40 3 * * *}")
-    @SchedulerLock(name = LOCK_NAME, lockAtMostFor = "PT6H", lockAtLeastFor = "PT1M")
+    @SchedulerLock(name = LOCK_NAME, lockAtMostFor = LOCK_AT_MOST_FOR, lockAtLeastFor = LOCK_AT_LEAST_FOR)
     public void daily() {
         safeRunAll();
     }
@@ -121,7 +136,7 @@ public class SyncKeysetIndexJob {
         Optional<SimpleLock> lock;
         try {
             lock = lockProvider.lock(new LockConfiguration(
-                    Instant.now(), LOCK_NAME, Duration.ofHours(6), Duration.ofMinutes(1)));
+                    Instant.now(), LOCK_NAME, Duration.parse(LOCK_AT_MOST_FOR), Duration.parse(LOCK_AT_LEAST_FOR)));
         } catch (RuntimeException e) {
             log.error("SyncKeysetIndexJob: cannot take the lock — startup run skipped", e);
             return;
@@ -157,12 +172,12 @@ public class SyncKeysetIndexJob {
         Result total = Result.NONE;
         List<String> schemas = loadSchemas();
         for (int i = 0; i < schemas.size(); i++) {
-            if (Duration.ofNanos(System.nanoTime() - startedAt).compareTo(runBudget) >= 0) {
+            if (budgetSpent(startedAt)) {
                 log.warn("SyncKeysetIndexJob: run budget {} spent — {} schema(s) left for the next run",
                         runBudget, schemas.size() - i);
                 break;
             }
-            total = total.plus(ensureIndexes(schemas.get(i)));
+            total = total.plus(ensureIndexes(schemas.get(i), startedAt));
         }
         log.info("SyncKeysetIndexJob: done — created={} rebuilt={} unchanged={} skipped={} failed={} elapsedMs={}",
                 total.created(), total.rebuilt(), total.unchanged(), total.skipped(), total.failed(),
@@ -170,8 +185,17 @@ public class SyncKeysetIndexJob {
         return total;
     }
 
+    private boolean budgetSpent(long startedAt) {
+        return Duration.ofNanos(System.nanoTime() - startedAt).compareTo(runBudget) >= 0;
+    }
+
     /** Ensures every keyset index on one schema; one failure never stops the others. */
     public Result ensureIndexes(String schema) {
+        return ensureIndexes(schema, System.nanoTime());
+    }
+
+    /** Same, under the run budget counted from {@code startedAt}: checked before each index. */
+    Result ensureIndexes(String schema, long startedAt) {
         if (!TenantSchema.isValid(schema)) {
             log.warn("SyncKeysetIndexJob: invalid tenant schema name skipped (length={})",
                     schema == null ? "null" : String.valueOf(schema.length()));
@@ -183,13 +207,20 @@ public class SyncKeysetIndexJob {
             conn.setAutoCommit(true); // CONCURRENTLY cannot run inside a transaction block
             boolean aborted = false;
             try {
-                for (SyncKeysetIndex index : TenantSchemaProvisioner.SYNC_KEYSET_INDEXES) {
+                List<SyncKeysetIndex> indexes = TenantSchemaProvisioner.SYNC_KEYSET_INDEXES;
+                for (int i = 0; i < indexes.size(); i++) {
+                    if (budgetSpent(startedAt)) {
+                        log.warn("SyncKeysetIndexJob: run budget {} spent — {} index(es) of schema {} left "
+                                + "for the next run", runBudget, indexes.size() - i, schema);
+                        break;
+                    }
                     Outcome outcome;
                     try {
-                        outcome = ensureIndex(conn, schema, index);
+                        outcome = ensureIndex(conn, schema, indexes.get(i));
                     } catch (ConnectionAbortedException e) {
-                        aborted = true; // connection unusable: the remaining indexes wait for the next run
-                        failed++;
+                        // connection unusable: this index and the remaining ones wait for the next run
+                        aborted = true;
+                        failed += indexes.size() - i;
                         break;
                     }
                     switch (outcome) {
@@ -218,17 +249,37 @@ public class SyncKeysetIndexJob {
                 return Outcome.SKIPPED;
             }
             ExistingIndex existing = existingIndex(conn, schema, index.name());
+            if (existing != null && !existing.isIndex()) {
+                // CREATE INDEX IF NOT EXISTS would be a silent no-op on a table/sequence/view of that name
+                log.warn("SyncKeysetIndexJob: {}.{} is held by a non-index relation (relkind={}) — index not built",
+                        schema, index.name(), existing.relkind());
+                return Outcome.FAILED;
+            }
             boolean rebuild = existing != null;
+            boolean swap = false;
             if (rebuild) {
                 boolean sameDefinition = index.expectedDefinition().equals(unqualified(existing.definition(), schema));
                 if (existing.valid() && sameDefinition) return Outcome.UNCHANGED;
+                // a valid index with another definition stays in place until its replacement is built
+                swap = existing.valid();
                 log.warn("SyncKeysetIndexJob: rebuilding {}.{} (valid={}, definition={})",
                         schema, index.name(), existing.valid(), existing.definition());
             }
+            TenantSchema.validate(schema);
+            String qualified = "\"" + schema + "\"." + index.name();
+            String tempName = index.name() + TEMP_SUFFIX;
             stmt.execute(STATEMENT_TIMEOUT_SQL); // bounds the build (lock_timeout would bound only waits)
             try {
-                if (rebuild) stmt.execute("DROP INDEX CONCURRENTLY IF EXISTS \"" + schema + "\"." + index.name());
-                stmt.execute(index.createConcurrentlySql(schema));
+                if (swap) {
+                    // build under a temporary name, then swap: a failed build leaves the old index in place
+                    stmt.execute("DROP INDEX CONCURRENTLY IF EXISTS \"" + schema + "\"." + tempName);
+                    stmt.execute(index.createConcurrentlySql(schema, tempName));
+                    stmt.execute("DROP INDEX CONCURRENTLY IF EXISTS " + qualified);
+                    stmt.execute("ALTER INDEX \"" + schema + "\"." + tempName + " RENAME TO " + index.name());
+                } else {
+                    if (rebuild) stmt.execute("DROP INDEX CONCURRENTLY IF EXISTS " + qualified);
+                    stmt.execute(index.createConcurrentlySql(schema));
+                }
             } finally {
                 resetStatementTimeout(conn, stmt);
             }
@@ -260,14 +311,20 @@ public class SyncKeysetIndexJob {
         }
     }
 
-    private record ExistingIndex(boolean valid, String definition) {}
+    private record ExistingIndex(String relkind, boolean valid, String definition) {
+        boolean isIndex() {
+            return "i".equals(relkind);
+        }
+    }
 
     private static ExistingIndex existingIndex(Connection conn, String schema, String name) throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(EXISTING_INDEX_SQL)) {
             ps.setString(1, schema);
             ps.setString(2, name);
             try (ResultSet rs = ps.executeQuery()) {
-                return rs.next() ? new ExistingIndex(rs.getBoolean(1), rs.getString(2)) : null;
+                return rs.next()
+                        ? new ExistingIndex(rs.getString("relkind"), rs.getBoolean("indisvalid"), rs.getString("def"))
+                        : null;
             }
         }
     }

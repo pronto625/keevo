@@ -35,7 +35,7 @@ class CartBottomSheet extends ConsumerStatefulWidget {
 
 class _CartBottomSheetState extends ConsumerState<CartBottomSheet> {
   static final _currencyFormat =
-      NumberFormat.currency(locale: 'fr_CM', symbol: 'FCFA', decimalDigits: 0);
+      NumberFormat.currency(locale: 'fr_CM', symbol: 'XAF', decimalDigits: 0);
 
   final _sheetController = DraggableScrollableController();
   bool _wasKeyboardOpen = false;
@@ -199,17 +199,28 @@ class _CartBottomSheetState extends ConsumerState<CartBottomSheet> {
                 ),
                 itemBuilder: (context, index) {
                   final item = cart[index];
+                  void stockLimit(bool applied) {
+                    if (applied) return;
+                    ScaffoldMessenger.of(context)
+                      ..hideCurrentSnackBar()
+                      ..showSnackBar(SnackBar(
+                        content: Text(item.stockLimitMessage),
+                        backgroundColor: AppTheme.errorStrong,
+                        behavior: SnackBarBehavior.floating,
+                      ));
+                  }
+
                   return _CartItemTile(
                     item: item,
-                    onIncrement: () =>
-                        notifier.updateQuantity(item.id, item.quantity + 1),
+                    onIncrement: () => stockLimit(
+                        notifier.updateQuantity(item.id, item.quantity + 1)),
                     onDecrement: () =>
                         notifier.updateQuantity(item.id, item.quantity - 1),
                     onDismissed: () => notifier.removeItem(item.id),
                     onPriceChanged: (newPrice) =>
                         notifier.updatePrice(item.id, newPrice),
                     onQuantityChanged: (qty) =>
-                        notifier.setQuantity(item.id, qty),
+                        stockLimit(notifier.setQuantity(item.id, qty)),
                   );
                 },
               ),
@@ -351,7 +362,7 @@ class _CartItemTileState extends State<_CartItemTile> {
   late FocusNode _qtyFocus;
 
   static final _currencyFormat =
-      NumberFormat.currency(locale: 'fr_CM', symbol: 'FCFA', decimalDigits: 0);
+      NumberFormat.currency(locale: 'fr_CM', symbol: 'XAF', decimalDigits: 0);
 
   @override
   void initState() {
@@ -481,7 +492,7 @@ class _CartItemTileState extends State<_CartItemTile> {
                             isDense: true,
                             contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 6),
-                            suffix: const Text('FCFA',
+                            suffix: const Text('XAF',
                                 style: TextStyle(fontSize: 11)),
                           ),
                           onTapOutside: (_) => _priceFocus.unfocus(),

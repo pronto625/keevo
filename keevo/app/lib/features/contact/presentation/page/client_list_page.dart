@@ -333,8 +333,10 @@ class _ClientCard extends ConsumerWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: () => context.push('/clients/${client.id}', extra: client),
-        onLongPress:
-            client.archived ? null : () => _confirmArchive(context, ref),
+        // Archived card (« Voir les archivés »): long press restores it.
+        onLongPress: client.archived
+            ? () => _confirmUnarchive(context, ref)
+            : () => _confirmArchive(context, ref),
         borderRadius: BorderRadius.circular(AppTheme.radiusL),
         // Rangée de liste : bordure fine plutôt qu'une ombre portée.
         child: Ink(
@@ -479,6 +481,31 @@ class _ClientCard extends ConsumerWidget {
               ref.read(clientListNotifierProvider.notifier).archive(client.id);
             },
             child: const Text('Archiver'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmUnarchive(BuildContext context, WidgetRef ref) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Désarchiver le client ?'),
+        content: Text('${client.name} réapparaîtra dans la liste active.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Annuler')),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(dialogCtx);
+              ref
+                  .read(clientListNotifierProvider.notifier)
+                  .unarchive(client.id);
+            },
+            child: const Text('Désarchiver'),
           ),
         ],
       ),

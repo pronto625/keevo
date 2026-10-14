@@ -644,6 +644,34 @@ class AdminTenantServiceTest {
     }
 
     /** Detail of one tenant on schema kv_abc123; returns its id. */
+    @Test
+    @DisplayName("9-2 — detail: unreadable subscription table → plan null, the rest of the detail still served")
+    void getTenantDetail_subscriptionUnreadable_planNull() {
+        UUID id = stubDetail();
+        when(jdbcTemplate.query(contains("\"kv_abc123\".subscriptions"), any(RowMapper.class)))
+                .thenThrow(new org.springframework.jdbc.BadSqlGrammarException("x", "sql",
+                        new java.sql.SQLException("relation subscriptions does not exist")));
+
+        var detail = service.execute(new com.keevo.admin.tenant.domain.port.in.GetTenantDetailQuery(id, 0));
+
+        assertThat(detail.plan()).isNull();
+        assertThat(detail.summary().id()).isEqualTo(id);
+    }
+
+    @Test
+    @DisplayName("9-2 — detail: suspended tenant → suspension date and reason from public.tenants")
+    void getTenantDetail_suspensionTrace() {
+        UUID id = stubDetail();
+        when(jdbcTemplate.queryForList(contains("suspended_reason"), eq(id))).thenReturn(List.of(
+                row("suspended_at", java.sql.Timestamp.from(Instant.parse("2026-10-12T09:00:00Z")),
+                        "suspended_reason", "Impayés")));
+
+        var detail = service.execute(new com.keevo.admin.tenant.domain.port.in.GetTenantDetailQuery(id, 0));
+
+        assertThat(detail.suspension()).isEqualTo(new com.keevo.admin.tenant.domain.model.AdminSuspensionInfo(
+                Instant.parse("2026-10-12T09:00:00Z"), "Impayés"));
+    }
+
     private UUID stubDetail() {
         UUID id = UUID.randomUUID();
         when(jdbcTemplate.query(contains("WHERE t.id = ?"), any(RowMapper.class), any(Object[].class)))

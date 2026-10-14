@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../../../../core/utils/server_date.dart';
+
 part 'inventory_count_model.freezed.dart';
 part 'inventory_count_model.g.dart';
 
@@ -20,8 +22,8 @@ class InventoryCountModel with _$InventoryCountModel {
     required int theoretical,
     int? physical,
     String? countedBy,
-    DateTime? countedAt,
-    required DateTime updatedAt,
+    @NullableServerDateTimeConverter() DateTime? countedAt,
+    @ServerDateTimeConverter() required DateTime updatedAt,
     @Default(false) bool synced,
   }) = _InventoryCountModel;
 

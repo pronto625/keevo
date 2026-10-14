@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:freezed_annotation/freezed_annotation.dart';
+import '../../../../core/utils/server_date.dart';
 
 part 'audit_entry_dto.freezed.dart';
 part 'audit_entry_dto.g.dart';
@@ -39,7 +40,7 @@ class AuditEntryDto with _$AuditEntryDto {
     String? actorPhone,
 
     /// Timestamp of the audit entry (UTC).
-    required DateTime occurredAt,
+    @ServerDateTimeConverter() required DateTime occurredAt,
 
     // ── v1s-18-6 enrichment (null on rows written before it) ──────────────
 

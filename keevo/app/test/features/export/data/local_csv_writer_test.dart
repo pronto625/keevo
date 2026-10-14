@@ -85,6 +85,7 @@ void main() {
         null,
         'Annulée',
         'Mobile Money',
+        'MP2603.1234',
         2,
         0,
         3000
@@ -101,7 +102,7 @@ void main() {
     }
     final salesCsv = utf8.decode(archive.files[1].content.sublist(3));
     expect(salesCsv.split('\r\n')[1],
-        's-1;01/10/2026 10:00:00;A;Awa;;Annulée;Mobile Money;2;0;3000');
+        's-1;01/10/2026 10:00:00;A;Awa;;Annulée;Mobile Money;MP2603.1234;2;0;3000');
   });
 
   test('storage failure surfaces as ExportException.storage', () async {

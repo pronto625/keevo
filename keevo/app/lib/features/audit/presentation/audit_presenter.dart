@@ -193,6 +193,8 @@ class AuditPresenter {
         Icons.person_add_alt_outlined, AuditCategory.contact),
     'CLIENT_ARCHIVED': AuditActionInfo('Client archivé', 'archivé le client',
         Icons.person_off_outlined, AuditCategory.contact),
+    'CLIENT_UNARCHIVED': AuditActionInfo('Client désarchivé',
+        'désarchivé le client', Icons.person_outline, AuditCategory.contact),
     'SUPPLIER_CREATED': AuditActionInfo(
         'Fournisseur créé',
         'créé le fournisseur',
@@ -201,6 +203,11 @@ class AuditPresenter {
     'SUPPLIER_ARCHIVED': AuditActionInfo(
         'Fournisseur archivé',
         'archivé le fournisseur',
+        Icons.local_shipping_outlined,
+        AuditCategory.contact),
+    'SUPPLIER_UNARCHIVED': AuditActionInfo(
+        'Fournisseur désarchivé',
+        'désarchivé le fournisseur',
         Icons.local_shipping_outlined,
         AuditCategory.contact),
     // Categories
@@ -382,7 +389,9 @@ class AuditPresenter {
         : (self ? 'avez' : 'a');
 
     String? object;
-    var phrase = info.phrase;
+    var phrase = e.action == 'STOCK_ADJUSTED'
+        ? stockMovementPhrase(e) ?? info.phrase
+        : info.phrase;
     if (!isKnownAction(e.action)) {
       final label = _readableLabel(e);
       if (label != null) {
@@ -408,6 +417,20 @@ class AuditPresenter {
     }
     return AuditSentence(actor, '$aux $phrase', object);
   }
+
+  /// A38: a stock movement reads after what caused it (`value_after
+  /// .movementType`): the decrement of a sale is « a vendu X », not « a ajusté
+  /// le stock de X ». Null for a manual adjustment or an unknown type (the
+  /// catalogue phrase « ajusté le stock de » applies).
+  static String? stockMovementPhrase(AuditEntryDto e) =>
+      switch (AuditFormat.decodeMap(e.valueAfter)['movementType']) {
+        'SALE' => 'vendu',
+        'SALE_CANCELLED' => 'remis en stock',
+        'STOCK_ENTRY' || 'PURCHASE' => 'réapprovisionné',
+        'TRANSFER_OUT' => 'transféré du stock de',
+        'TRANSFER_IN' => 'reçu par transfert du stock de',
+        _ => null,
+      };
 
   // ── Object ────────────────────────────────────────────────────────────────
 

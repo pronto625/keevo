@@ -13,6 +13,52 @@ class LocalGapReportDataSource {
 
   const LocalGapReportDataSource(this._db);
 
+  /// Fills [InventoryGapRowModel.categoryName] from the local catalogue.
+  ///
+  /// The server's InventoryGapRowDto carries no category name, so a report
+  /// fetched online would otherwise never show the category chip.
+  Future<InventoryGapReportModel> withLocalCategoryNames(
+      InventoryGapReportModel report) async {
+    final rows = [
+      ...report.concordantRows,
+      ...report.surplusRows,
+      ...report.shortageRows,
+    ];
+    final productIds = rows
+        .where((r) => r.categoryName == null)
+        .map((r) => r.productId)
+        .toSet()
+        .toList();
+    if (productIds.isEmpty) return report;
+
+    final products = await (_db.select(_db.products)
+          ..where((p) => p.id.isIn(productIds) & p.categoryId.isNotNull()))
+        .get();
+    if (products.isEmpty) return report;
+    final categoryIds = products.map((p) => p.categoryId!).toSet().toList();
+    final cats = await (_db.select(_db.categories)
+          ..where((c) => c.id.isIn(categoryIds)))
+        .get();
+    final catName = {for (final c in cats) c.id: c.name};
+    final nameByProduct = <String, String>{
+      for (final p in products)
+        if (catName[p.categoryId] != null) p.id: catName[p.categoryId]!,
+    };
+
+    List<InventoryGapRowModel> fill(List<InventoryGapRowModel> list) => [
+          for (final r in list)
+            r.categoryName == null && nameByProduct[r.productId] != null
+                ? r.copyWith(categoryName: nameByProduct[r.productId])
+                : r,
+        ];
+
+    return report.copyWith(
+      concordantRows: fill(report.concordantRows),
+      surplusRows: fill(report.surplusRows),
+      shortageRows: fill(report.shortageRows),
+    );
+  }
+
   /// Generate gap report for a given session.
   ///
   /// Steps:

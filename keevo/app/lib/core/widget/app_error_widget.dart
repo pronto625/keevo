@@ -6,6 +6,7 @@ import 'package:drift/native.dart' show SqliteException;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show PlatformException;
 
+import '../sync/account_read_only_exception.dart';
 import 'soft_icon_badge.dart';
 
 /// Generic French message when nothing readable can be shown.
@@ -119,6 +120,9 @@ String _domainMessage(String code, Map<dynamic, dynamic> body) {
       return 'Cette vente a déjà été validée.';
     case 'SALE_ALREADY_CANCELLED':
       return 'Cette vente a déjà été annulée.';
+    case 'ACCOUNT_SUSPENDED':
+    case 'ACCOUNT_DELETION_PENDING':
+      return AccountReadOnlyException.forDomainCode(code)!.message;
     default:
       return _readable(_text(body['error'])) ??
           _readable(_text(body['message'])) ??

@@ -142,7 +142,7 @@ class _PlanCard extends StatelessWidget {
           Icons.workspace_premium_outlined
         ),
       'PREMIUM_TRIAL' => (
-          'Premium Trial',
+          'Essai Premium',
           cs.primary,
           Icons.auto_awesome_outlined
         ),

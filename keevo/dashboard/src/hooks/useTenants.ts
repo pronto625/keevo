@@ -10,6 +10,7 @@ import {
   getTenants,
   reactivateTenant,
   suspendTenant,
+  voidPayment,
 } from "@/lib/api/admin-tenants";
 import type {
   ActivatePremiumInput,
@@ -117,6 +118,11 @@ export function useTenantPlanActions(tenantId: string) {
     mutationFn: () => reactivateTenant(tenantId),
     onSuccess: invalidate,
   });
+  const voidPaymentMutation = useMutation({
+    mutationFn: ({ paymentId, reason }: { paymentId: string; reason: string }) =>
+      voidPayment(tenantId, paymentId, reason),
+    onSuccess: invalidate,
+  });
 
-  return { activate, downgrade, suspend, reactivate };
+  return { activate, downgrade, suspend, reactivate, voidPayment: voidPaymentMutation };
 }

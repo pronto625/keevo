@@ -40,6 +40,8 @@ export interface TenantDetail {
   auditLog: AuditPage;
   /** Story 9-2 — current subscription read from the tenant schema; null when unreadable. */
   subscription: TenantSubscription | null;
+  /** Story 9-2 — current suspension (date + reason); null when not suspended. */
+  suspension?: TenantSuspension | null;
 }
 
 // ── Story 9-2 — plan & payments ───────────────────────────────────────────────
@@ -53,6 +55,11 @@ export type PaymentMethod = "MOBILE_MONEY" | "CASH" | "BANK_TRANSFER" | "OTHER";
 export interface TenantSubscription {
   planType: PlanType;
   expiresAt: string | null;
+}
+
+export interface TenantSuspension {
+  suspendedAt: string;
+  reason: string | null;
 }
 
 /** POST /admin/tenants/{id}/plan/premium body. `expiresAt` is a yyyy-MM-dd date. */
@@ -71,6 +78,8 @@ export interface PlanState {
 }
 
 export interface TenantPayment {
+  /** Only the target of « Annuler ce paiement » — never displayed. */
+  id: string;
   paidAt: string;
   amountXaf: number;
   method: PaymentMethod;
@@ -80,6 +89,9 @@ export interface TenantPayment {
   periodEnd: string;
   note: string | null;
   recordedByLabel: string;
+  /** Set when the payment was voided (kept in the history, excluded from every count). */
+  voidedAt?: string | null;
+  voidReason?: string | null;
 }
 
 export interface PlanAlert {

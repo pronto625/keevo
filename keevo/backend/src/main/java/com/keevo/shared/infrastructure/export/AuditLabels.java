@@ -43,8 +43,10 @@ public final class AuditLabels {
             // Contacts
             entry("CLIENT_CREATED", "Client créé"),
             entry("CLIENT_ARCHIVED", "Client archivé"),
+            entry("CLIENT_UNARCHIVED", "Client désarchivé"),
             entry("SUPPLIER_CREATED", "Fournisseur créé"),
             entry("SUPPLIER_ARCHIVED", "Fournisseur archivé"),
+            entry("SUPPLIER_UNARCHIVED", "Fournisseur désarchivé"),
             // Categories
             entry("CATEGORY_CREATED", "Catégorie créée"),
             entry("CATEGORY_RENAMED", "Catégorie renommée"),

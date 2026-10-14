@@ -8,6 +8,8 @@ import '../../../../core/widget/soft_icon_badge.dart';
 import '../provider/profitability_providers.dart';
 import '../widget/margin_sparkline.dart';
 import '../widget/period_filter_chips.dart';
+import '../../../../core/utils/fr_plural.dart';
+import '../../../../core/utils/percent_format.dart';
 
 export '../widget/margin_sparkline.dart' show MarginSparkline;
 
@@ -136,8 +138,7 @@ class ProductProfitabilityDetailPage extends ConsumerWidget {
                           valueColor: detail.marginColor),
                       _MetricItem(
                           label: 'Marge %',
-                          value:
-                              '${detail.marginPercent.toStringAsFixed(1)}%',
+                          value: formatPercentFr(detail.marginPercent),
                           valueColor: detail.marginColor),
                     ],
                   ),
@@ -183,7 +184,7 @@ class ProductProfitabilityDetailPage extends ConsumerWidget {
                         Expanded(
                           child: Text(
                             '${detail.topStoreName}'
-                            '  —  ${detail.topStoreUnitsSold} unités',
+                            '  —  ${unitsLabel(detail.topStoreUnitsSold ?? 0)}',
                             style: TextStyle(
                                 fontWeight: FontWeight.w500,
                                 color: cs.onSurface),

@@ -164,6 +164,8 @@ class _AuthPageState extends ConsumerState<AuthPage> {
           'INVALID_CREDENTIALS' => 'Numéro ou mot de passe incorrect',
           'ACCOUNT_LOCKED' =>
             'Compte verrouillé temporairement. Réessayez dans 15 minutes.',
+          'NO_ACTIVE_MEMBERSHIP' =>
+            'Votre accès a été désactivé. Contactez votre employeur.',
           _ => 'Erreur inattendue, réessayez',
         };
       }
@@ -172,6 +174,8 @@ class _AuthPageState extends ConsumerState<AuthPage> {
         'VALIDATION_ERROR' => 'Invalid data, please check your information',
         'INVALID_CREDENTIALS' => 'Incorrect number or password',
         'ACCOUNT_LOCKED' => 'Account temporarily locked. Try again in 15 minutes.',
+        'NO_ACTIVE_MEMBERSHIP' =>
+          'Your access has been deactivated. Contact your employer.',
         _ => 'Unexpected error, please try again',
       };
     }
@@ -327,6 +331,7 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                       IntlPhoneField(
                         key: const Key('phoneField'),
                         decoration: InputDecoration(
+                          errorMaxLines: 3,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
                             borderSide: BorderSide(color: cs.outlineVariant),
@@ -386,6 +391,9 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                           hintText: _isFrench
                               ? 'Entrez votre mot de passe'
                               : 'Enter your password',
+                          // The register-mode length error is longer than a
+                          // 720 px wide screen: let it wrap.
+                          errorMaxLines: 3,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
                             borderSide: BorderSide(color: cs.outlineVariant),

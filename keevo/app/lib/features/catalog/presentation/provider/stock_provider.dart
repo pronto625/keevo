@@ -86,6 +86,10 @@ class StockState {
   final bool hasMoreHistory;
   /// True when the last write attempt was blocked by the offline gate.
   final bool blockedByGate;
+  /// French message when the last write attempt was refused because the
+  /// account is read-only (suspended, deletion pending — A50). Kept apart
+  /// from [error] so the stock levels stay visible.
+  final String? readOnlyMessage;
 
   const StockState({
     this.levels = const [],
@@ -95,6 +99,7 @@ class StockState {
     this.error,
     this.hasMoreHistory = true,
     this.blockedByGate = false,
+    this.readOnlyMessage,
   });
 
   StockState copyWith({
@@ -105,6 +110,7 @@ class StockState {
     String? error,
     bool? hasMoreHistory,
     bool? blockedByGate,
+    String? readOnlyMessage,
   }) =>
       StockState(
         levels: levels ?? this.levels,
@@ -114,6 +120,7 @@ class StockState {
         error: error,
         hasMoreHistory: hasMoreHistory ?? this.hasMoreHistory,
         blockedByGate: blockedByGate ?? this.blockedByGate,
+        readOnlyMessage: readOnlyMessage,
       );
 }
 
@@ -192,6 +199,9 @@ class StockNotifier extends _$StockNotifier {
     } on WriteBlockedException {
       state = state.copyWith(blockedByGate: true);
       return false;
+    } on AccountReadOnlyException catch (e) {
+      state = state.copyWith(blockedByGate: false, readOnlyMessage: e.message);
+      return false;
     }
     state = state.copyWith(isLoading: true, error: null, blockedByGate: false);
     try {
@@ -203,6 +213,10 @@ class StockNotifier extends _$StockNotifier {
           );
       await _loadLevels();
       return true;
+    } on AccountReadOnlyException catch (e) {
+      // Backstop of the sync queue: nothing was written.
+      state = state.copyWith(isLoading: false, readOnlyMessage: e.message);
+      return false;
     } catch (e) {
       final msg = e is DioException && e.response?.statusCode == 404
           ? 'Produit introuvable sur le serveur. Validez le brouillon d\'abord.'
@@ -223,6 +237,9 @@ class StockNotifier extends _$StockNotifier {
     } on WriteBlockedException {
       state = state.copyWith(blockedByGate: true);
       return false;
+    } on AccountReadOnlyException catch (e) {
+      state = state.copyWith(blockedByGate: false, readOnlyMessage: e.message);
+      return false;
     }
     state = state.copyWith(isLoading: true, error: null, blockedByGate: false);
     try {
@@ -234,6 +251,9 @@ class StockNotifier extends _$StockNotifier {
           );
       await _loadLevels();
       return true;
+    } on AccountReadOnlyException catch (e) {
+      state = state.copyWith(isLoading: false, readOnlyMessage: e.message);
+      return false;
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
       return false;

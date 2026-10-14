@@ -311,6 +311,10 @@ class _AuditEntryTile extends StatelessWidget {
         final name = after['name'] as String?;
         return name != null ? 'Client «$name» archivé' : 'Client archivé';
 
+      case 'CLIENT_UNARCHIVED':
+        final name = after['name'] as String?;
+        return name != null ? 'Client «$name» désarchivé' : 'Client désarchivé';
+
       case 'SUPPLIER_CREATED':
         final name = after['name'] as String?;
         return name != null ? 'Fournisseur «$name» ajouté' : 'Nouveau fournisseur ajouté';
@@ -318,6 +322,12 @@ class _AuditEntryTile extends StatelessWidget {
       case 'SUPPLIER_ARCHIVED':
         final name = after['name'] as String?;
         return name != null ? 'Fournisseur «$name» archivé' : 'Fournisseur archivé';
+
+      case 'SUPPLIER_UNARCHIVED':
+        final name = after['name'] as String?;
+        return name != null
+            ? 'Fournisseur «$name» désarchivé'
+            : 'Fournisseur désarchivé';
 
       case 'STORE_CREATED':
         final name  = after['name'] as String?;

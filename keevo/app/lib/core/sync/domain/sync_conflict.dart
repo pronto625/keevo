@@ -1,3 +1,5 @@
+import '../../utils/server_date.dart';
+
 /// SyncConflict — Domain model for a sync conflict event from the backend.
 ///
 /// Immutable value object parsed from GET /api/v1/sync/conflicts response
@@ -35,7 +37,7 @@ class SyncConflict {
       conflictType: json['conflictType'] as String,
       strategy: json['strategy'] as String,
       conflictData: json['conflictData'] as Map<String, dynamic>?,
-      resolvedAt: DateTime.parse(json['resolvedAt'] as String),
+      resolvedAt: parseServerDate(json['resolvedAt'] as String),
     );
   }
 
@@ -49,6 +51,9 @@ class SyncConflict {
       case 'LAST_WRITE_WINS':
         final et = entityType != null ? entityLabel(entityType!) : 'Élément';
         return 'Modification écrasée — $et: dernière version conservée';
+      case 'LAST_WRITE_SUPERSEDED':
+        final et = entityType != null ? entityLabel(entityType!) : 'Élément';
+        return 'Modification hors ligne ignorée — $et: version plus récente conservée';
       default:
         return 'Conflit résolu — ${typeLabel(conflictType)}';
     }
@@ -59,6 +64,7 @@ class SyncConflict {
   static const _types = {
     'STOCK_NEGATIVE': 'Stock négatif',
     'LAST_WRITE_WINS': 'Modification écrasée',
+    'LAST_WRITE_SUPERSEDED': 'Modification hors ligne ignorée',
   };
 
   static const _strategies = {
@@ -89,6 +95,8 @@ class SyncConflict {
     'entityType': 'Élément',
     'overwrittenTimestamp': 'Version remplacée du',
     'winnerTimestamp': 'Version conservée du',
+    'incomingTimestamp': 'Modification hors ligne du',
+    'keptTimestamp': 'Version conservée du',
   };
 
   static final _uuid = RegExp(

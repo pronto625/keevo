@@ -32,7 +32,7 @@ void main() {
       );
       expect(msg, contains('Fatou'));
       // Zero-CA templates don't contain {amount}
-      expect(msg.contains('FCFA'), isFalse);
+      expect(msg.contains('XAF'), isFalse);
     });
 
     test('same day produces same message (deterministic)', () {

@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../../core/storage/search_fold.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../domain/model/csv_import_result.dart';
 import '../../domain/repository/product_repository.dart';
@@ -122,6 +123,44 @@ List<int> _keptColumns(List<String> headerFields) {
   ];
 }
 
+/// Header aliases per mapping field, normalised by [_normaliseHeader]
+/// (the Keevo template headers come first).
+const Map<String, List<String>> _headerAliases = {
+  'nameColumn': ['nom', 'nomproduit', 'nomduproduit', 'produit', 'name', 'designation', 'libelle', 'article'],
+  'priceColumn': ['prixvente', 'prixdevente', 'prix', 'price', 'pv', 'prixunitaire'],
+  'buyPriceColumn': ['prixachat', 'prixdachat', 'buyprice', 'pa', 'coutachat', 'coutdachat'],
+  'transportCostColumn': ['couttransport', 'coutdetransport', 'transport', 'fraistransport', 'fraisdetransport'],
+  'categoryColumn': ['categorie', 'category', 'famille', 'rayon'],
+  'skuColumn': ['sku', 'reference', 'ref', 'codeproduit', 'codebarre', 'codebarres'],
+  'quantityColumn': ['quantiteinitiale', 'quantite', 'qte', 'qty', 'stock', 'stockinitial'],
+  'thresholdColumn': ['seuilmin', 'seuilminimum', 'seuil', 'stockmin', 'stockminimum', 'minimum'],
+};
+
+String _normaliseHeader(String header) =>
+    foldForSearch(header).replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+/// Suggests a column for each mapping field from the CSV [headers]: the first
+/// alias (in priority order) that a header matches once case, accents,
+/// spaces and punctuation are ignored. A header is used for one field only.
+Map<String, String> suggestCsvMapping(List<String> headers) {
+  final byKey = <String, String>{};
+  for (final h in headers) {
+    byKey.putIfAbsent(_normaliseHeader(h), () => h);
+  }
+  final used = <String>{};
+  final result = <String, String>{};
+  _headerAliases.forEach((field, aliases) {
+    for (final alias in aliases) {
+      final header = byKey[alias];
+      if (header != null && used.add(header)) {
+        result[field] = header;
+        break;
+      }
+    }
+  });
+  return result;
+}
+
 /// Column headers from the first CSV line.
 List<String> csvHeadersFromBytes(List<int> bytes) {
   final lines = _csvLines(bytes, 4096);
@@ -182,7 +221,8 @@ class CsvImportNotifier extends _$CsvImportNotifier {
         detectedHeaders: headers,
       );
     } catch (e) {
-      state = CsvImportError('Erreur lors de l\'ouverture du fichier : $e');
+      state = const CsvImportError(
+          'Impossible d\'ouvrir ce fichier. Vérifiez qu\'il s\'agit bien d\'un fichier CSV.');
     }
   }
 

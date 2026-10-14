@@ -256,7 +256,7 @@ public class EndOfDayReportBuilder {
                 "FROM sale_items si JOIN sales s ON si.sale_id = s.id " +
                 "WHERE s.store_id = CAST(:sid AS UUID) AND " + WINDOW_S + " " +
                 "  AND s.status = 'COMPLETED' " +
-                "GROUP BY si.product_name ORDER BY total_qty DESC LIMIT 3")
+                "GROUP BY si.product_name ORDER BY total_qty DESC, total_revenue DESC, si.product_name LIMIT 3")
                 .setParameter("sid", storeId)
                 .setParameter("start", w.start())
                 .setParameter("end", w.end())
@@ -275,7 +275,7 @@ public class EndOfDayReportBuilder {
     private List<EmployeeEntry> getEmployeeBreakdown(String storeId, Window w) {
         List<Object[]> rows = entityManager.createNativeQuery(
                 "SELECT s.employee_id, " +
-                "       COALESCE(e.first_name || ' ' || e.last_name, 'Employé') AS emp_name, " +
+                "       COALESCE(e.first_name || ' ' || e.last_name, 'Propriétaire') AS emp_name, " +
                 "       COUNT(s.id) AS sale_count, SUM(s.total_amount) AS total_revenue " +
                 "FROM sales s " +
                 "LEFT JOIN employees e ON s.employee_id = e.user_id " +
@@ -364,7 +364,7 @@ public class EndOfDayReportBuilder {
                 "FROM sale_items si JOIN sales s ON si.sale_id = s.id " +
                 "WHERE s.store_id = CAST(:sid AS UUID) AND s.employee_id = CAST(:eid AS UUID) " +
                 "AND " + WINDOW_S + " AND s.status = 'COMPLETED' " +
-                "GROUP BY si.product_name ORDER BY total_qty DESC LIMIT 3")
+                "GROUP BY si.product_name ORDER BY total_qty DESC, total_revenue DESC, si.product_name LIMIT 3")
                 .setParameter("sid", storeId).setParameter("eid", empId)
                 .setParameter("start", w.start()).setParameter("end", w.end())
                 .setParameter("lateFrom", w.lateFrom()).setParameter("until", w.until())

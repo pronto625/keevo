@@ -163,6 +163,33 @@ void main() {
     });
   });
 
+  group('unarchive() offline-first', () {
+    test('unarchive_writesLocalFirst_queuesUnarchive', () async {
+      final callOrder = <String>[];
+      when(() => mockLocal.unarchive(any())).thenAnswer((_) async {
+        callOrder.add('local');
+      });
+      when(() => mockSyncService.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).thenAnswer((_) async {
+        callOrder.add('queue');
+      });
+      when(() => mockDispatcher.triggerPushIfIdle()).thenReturn(null);
+
+      await repo.unarchive('client-uuid-1');
+
+      expect(callOrder, ['local', 'queue']);
+      verify(() => mockSyncService.queueOperation(
+            operation: 'UNARCHIVE_CLIENT',
+            payload: {'clientId': 'client-uuid-1'},
+            entityId: 'client-uuid-1',
+          )).called(1);
+      verify(() => mockDispatcher.triggerPushIfIdle()).called(1);
+    });
+  });
+
   group('syncFromRemote()', () {
     test('syncFromRemote_rethrowsWhenRemoteFails', () async {
       when(() => mockRemote.getAll(includeArchived: true))

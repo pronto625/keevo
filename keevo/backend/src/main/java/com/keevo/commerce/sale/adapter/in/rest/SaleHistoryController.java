@@ -137,6 +137,7 @@ public class SaleHistoryController {
                 sale.getEmployeeId(),
                 sale.getClientId(),
                 sale.getPaymentMode().name(),
+                sale.getMobileMoneyRef(),
                 sale.getTotalAmount(),
                 sale.getDiscountAmount(),
                 sale.getStatus().name(),

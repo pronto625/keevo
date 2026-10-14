@@ -1,5 +1,6 @@
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/discard_changes_dialog.dart';
 import '../../../../core/widget/soft_icon_button.dart';
 import 'dart:io';
 
@@ -55,6 +56,10 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
   File? _selectedImage;
   bool _isSaving = false;
 
+  /// Field values when the form opened; leaving with different values asks
+  /// for confirmation instead of silently discarding them.
+  late final String _initialSnapshot;
+
   @override
   void initState() {
     super.initState();
@@ -84,6 +89,30 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
     if (widget.product != null) {
       _initializeFields(widget.product!);
     }
+    _initialSnapshot = _snapshot();
+  }
+
+  String _snapshot() => [
+        _nameController.text,
+        _descriptionController.text,
+        _skuController.text,
+        _priceController.text,
+        _buyPriceController.text,
+        _transportCostController.text,
+        _selectedCategoryId ?? '',
+        _selectedImage?.path ?? '',
+      ].join('\u0000');
+
+  bool get _hasUnsavedChanges => _snapshot() != _initialSnapshot;
+
+  /// Back (app bar or system): asks before discarding unsaved edits. A
+  /// successful save pops through the router, which bypasses this.
+  Future<void> _onPopRequested() async {
+    if (_isSaving) return;
+    if (_hasUnsavedChanges && !await showDiscardChangesDialog(context)) {
+      return;
+    }
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override
@@ -334,7 +363,8 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
           ),
         );
       }
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('TMPDIAG product save failed: $e\n$st');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -362,7 +392,12 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
     final theme = Theme.of(context);
     final categories = ref.watch(categoriesProvider);
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _onPopRequested();
+      },
+      child: Scaffold(
       backgroundColor: theme.colorScheme.surface,
       body: CustomScrollView(
         slivers: [
@@ -390,7 +425,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
             leading: IconButton(
               icon: Icon(Icons.arrow_back_ios_new_rounded,
                   color: theme.colorScheme.onSurface, size: 20),
-              onPressed: () => context.pop(),
+              onPressed: () => Navigator.maybePop(context),
             ),
             actions: [
               SoftIconButton(
@@ -520,9 +555,11 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
                               Expanded(
                                 child: _ModernTextField(
                                   controller: _priceController,
+                                  // No prefix icon on this pair: the two
+                                  // fields share the row, and the icon left
+                                  // too little room for the label on phones.
                                   label: 'Prix de vente',
                                   hint: '0',
-                                  icon: Icons.sell_rounded,
                                   keyboardType: TextInputType.number,
                                   validator: _validatePrice,
                                   suffix: 'XAF',
@@ -535,7 +572,6 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
                                   controller: _buyPriceController,
                                   label: "Prix d'achat",
                                   hint: '0',
-                                  icon: Icons.shopping_cart_rounded,
                                   keyboardType: TextInputType.number,
                                   validator: _validatePrice,
                                   suffix: 'XAF',
@@ -667,6 +703,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
           ),
         ],
       ),
+    ),
     );
   }
 }

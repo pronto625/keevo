@@ -33,7 +33,9 @@ public class UserCountAdapter implements UserCountPort {
     public int countEmployees() {
         String schema = TenantSchema.validate(TenantContext.getCurrentTenant());
         Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM \"" + schema + "\".users WHERE role = 'EMPLOYEE' AND is_active = TRUE",
+                // Employees live in the tenant "employees" table (the legacy tenant "users"
+                // table is empty): the subscription screen showed 0 employees (device test).
+                "SELECT COUNT(*) FROM \"" + schema + "\".employees WHERE status = 'ACTIVE'",
                 Integer.class);
         return count != null ? count : 0;
     }

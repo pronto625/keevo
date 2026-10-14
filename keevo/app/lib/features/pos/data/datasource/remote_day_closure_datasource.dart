@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../../../../core/utils/server_date.dart';
 import '../../domain/model/day_closure_model.dart';
 import '../../domain/model/payment_mode_enum.dart';
 import '../../domain/model/sale_model.dart';
@@ -130,13 +131,14 @@ class RemoteDayClosureDataSource {
       totalAmount: json['totalAmount'] ?? 0,
       discountAmount: json['discountAmount'] ?? 0,
       paymentMode: _parsePaymentMode(json['paymentMode']),
+      mobileMoneyRef: json['mobileMoneyRef'] as String?,
       clientId: json['clientId'],
       status: json['status'] ?? 'COMPLETED',
       occurredAt: json['occurredAt'] != null
-          ? DateTime.parse(json['occurredAt'])
+          ? parseServerDate(json['occurredAt'])
           : DateTime.now(),
       createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'])
+          ? parseServerDate(json['createdAt'])
           : DateTime.now(),
     );
   }

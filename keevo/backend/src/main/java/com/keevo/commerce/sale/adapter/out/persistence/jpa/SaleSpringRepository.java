@@ -37,7 +37,7 @@ public interface SaleSpringRepository extends JpaRepository<SaleJpaEntity, UUID>
          * per-item fan-out to one entity per sale, like {@link #findByIdWithItems}. Oldest sale first.
          */
         @Query("SELECT DISTINCT s FROM SaleJpaEntity s LEFT JOIN FETCH s.items "
-                + "WHERE s.storeId = :storeId AND s.status = :status ORDER BY s.occurredAt")
+                + "WHERE s.storeId = :storeId AND s.status = :status ORDER BY s.occurredAt, s.id")
         List<SaleJpaEntity> findByStoreIdAndStatus(@Param("storeId") UUID storeId, @Param("status") String status);
 
     // ── Story 4.4 — Sales History queries ─────────────────────────────────────

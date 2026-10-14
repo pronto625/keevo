@@ -1,6 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
 import com.keevo.catalog.contact.application.usecase.ArchiveClientUseCase;
+import com.keevo.catalog.contact.application.usecase.UnarchiveClientUseCase;
 import com.keevo.catalog.contact.application.usecase.UpdateClientUseCase;
 import com.keevo.catalog.contact.application.usecase.UpdateClientUseCase.UpdateClientCommand;
 import com.keevo.sync.sync.domain.model.SyncOperation;
@@ -17,15 +18,18 @@ public class ClientSyncHandler extends AbstractSyncOperationHandler {
 
     private final UpdateClientUseCase updateClient;
     private final ArchiveClientUseCase archiveClient;
+    private final UnarchiveClientUseCase unarchiveClient;
 
-    public ClientSyncHandler(UpdateClientUseCase updateClient, ArchiveClientUseCase archiveClient) {
+    public ClientSyncHandler(UpdateClientUseCase updateClient, ArchiveClientUseCase archiveClient,
+                             UnarchiveClientUseCase unarchiveClient) {
         this.updateClient = updateClient;
         this.archiveClient = archiveClient;
+        this.unarchiveClient = unarchiveClient;
     }
 
     @Override
     public Set<String> supportedTypes() {
-        return Set.of("UPDATE_CLIENT", "ARCHIVE_CLIENT");
+        return Set.of("UPDATE_CLIENT", "ARCHIVE_CLIENT", "UNARCHIVE_CLIENT");
     }
 
     @Override
@@ -54,6 +58,12 @@ public class ClientSyncHandler extends AbstractSyncOperationHandler {
             }
             case "ARCHIVE_CLIENT" -> {
                 archiveClient.execute(clientId, actorId, tenantId);
+                yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
+                        clientId.toString(), null);
+            }
+            case "UNARCHIVE_CLIENT" -> {
+                // Same access rules as ARCHIVE_CLIENT (no role restriction).
+                unarchiveClient.execute(clientId, actorId, tenantId);
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         clientId.toString(), null);
             }

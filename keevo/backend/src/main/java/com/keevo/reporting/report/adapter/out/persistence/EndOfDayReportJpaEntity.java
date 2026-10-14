@@ -64,6 +64,24 @@ public class EndOfDayReportJpaEntity {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    /**
+     * Pull cursor of the reports delta (ReportsDeltaProvider): moves on every write, so a later
+     * delivery attempt reaches the other devices. Never set by the mapping: a save merges a new
+     * instance, whose null value is replaced here before the row is written.
+     */
+    @Column(name = "updated_at")
+    private Instant updatedAt;
+
+    @PrePersist
+    void touchUpdatedAtOnInsert() {
+        if (updatedAt == null) updatedAt = Instant.now();
+    }
+
+    @PreUpdate
+    void touchUpdatedAtOnUpdate() {
+        updatedAt = Instant.now();
+    }
+
     protected EndOfDayReportJpaEntity() {}
 
     public EndOfDayReportJpaEntity(UUID id, String tenantId, UUID storeId, String storeName,
@@ -105,4 +123,5 @@ public class EndOfDayReportJpaEntity {
     public int getTotalSales() { return totalSales; }
     public boolean isAutomatic() { return isAutomatic; }
     public Instant getCreatedAt() { return createdAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
 }

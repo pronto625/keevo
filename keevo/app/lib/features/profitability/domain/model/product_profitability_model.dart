@@ -302,7 +302,10 @@ class StorePerformanceEntry {
   final int salesCount;
   final int averageBasket;
   final String? topProductName;
-  final double deltaPercent;
+
+  /// Change vs the preceding period of the same length, in %. Null when that
+  /// period has no sales: there is nothing to compare with (A33).
+  final double? deltaPercent;
 
   const StorePerformanceEntry({
     required this.rank,
@@ -324,6 +327,6 @@ class StorePerformanceEntry {
         salesCount: (json['salesCount'] as num).toInt(),
         averageBasket: (json['averageBasket'] as num).toInt(),
         topProductName: json['topProductName'] as String?,
-        deltaPercent: (json['deltaPercent'] as num).toDouble(),
+        deltaPercent: (json['deltaPercent'] as num?)?.toDouble(),
       );
 }

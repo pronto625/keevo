@@ -1,6 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
 import com.keevo.catalog.contact.application.usecase.ArchiveClientUseCase;
+import com.keevo.catalog.contact.application.usecase.UnarchiveClientUseCase;
 import com.keevo.catalog.contact.application.usecase.UpdateClientUseCase;
 import com.keevo.catalog.contact.domain.entity.Client;
 import com.keevo.shared.domain.exception.DomainException;
@@ -26,6 +27,7 @@ class ClientSyncHandlerTest {
 
     @Mock private UpdateClientUseCase updateClient;
     @Mock private ArchiveClientUseCase archiveClient;
+    @Mock private UnarchiveClientUseCase unarchiveClient;
 
     private ClientSyncHandler handler;
 
@@ -34,7 +36,7 @@ class ClientSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new ClientSyncHandler(updateClient, archiveClient);
+        handler = new ClientSyncHandler(updateClient, archiveClient, unarchiveClient);
     }
 
     @Test
@@ -83,6 +85,33 @@ class ClientSyncHandlerTest {
 
     @Test
     void supportedTypes_containsClientTypes() {
-        assertThat(handler.supportedTypes()).containsExactlyInAnyOrder("UPDATE_CLIENT", "ARCHIVE_CLIENT");
+        assertThat(handler.supportedTypes()).containsExactlyInAnyOrder("UPDATE_CLIENT", "ARCHIVE_CLIENT", "UNARCHIVE_CLIENT");
+    }
+
+    @Test
+    void handle_unarchiveClient_delegatesToUnarchiveClientUseCase() {
+        var clientId = UUID.randomUUID();
+        var op = new SyncOperation("op-2", "UNARCHIVE_CLIENT", clientId.toString(),
+                Map.of("clientId", clientId.toString()), Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        assertThat(result.serverEntityId()).isEqualTo(clientId.toString());
+        verify(unarchiveClient).execute(clientId, ACTOR_ID, TENANT_ID);
+        verifyNoInteractions(archiveClient);
+    }
+
+    @Test
+    void handle_unarchiveUnknownClient_isRejected() {
+        var clientId = UUID.randomUUID();
+        doThrow(new DomainException(ErrorCode.CLIENT_NOT_FOUND))
+                .when(unarchiveClient).execute(any(), any(), any());
+
+        var result = handler.handle(new SyncOperation("op-3", "UNARCHIVE_CLIENT", clientId.toString(),
+                Map.of("clientId", clientId.toString()), Instant.now()), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("CLIENT_NOT_FOUND");
     }
 }

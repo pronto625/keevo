@@ -69,7 +69,8 @@ public class DailyReportFormatter {
             sb.append("\n👤 Équipe :\n");
             for (EmployeeEntry emp : employees) {
                 sb.append("• ").append(emp.name())
-                  .append(" : ").append(emp.salesCount()).append(" ventes — ")
+                  .append(" : ").append(emp.salesCount())
+                  .append(emp.salesCount() > 1 ? " ventes — " : " vente — ")
                   .append(formatXAF(emp.revenue())).append(" FCFA\n");
             }
         }

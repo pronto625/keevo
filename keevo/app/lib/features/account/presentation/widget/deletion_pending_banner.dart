@@ -29,6 +29,9 @@ class _DeletionPendingBannerState extends ConsumerState<DeletionPendingBanner> {
     final messenger = ScaffoldMessenger.maybeOf(context);
     try {
       await ref.read(accountDeletionRepositoryProvider).cancelDeletion();
+      // A50: renew the token so its tenantStatus claim is ACTIVE again —
+      // writes (and the queued operations) are allowed from now on.
+      await renewSessionAfterAccountChange(ref);
       ref.invalidate(deletionPendingStatusProvider);
       messenger?.showSnackBar(const SnackBar(
         content: Text('Suppression annulée — votre compte est de nouveau actif.'),

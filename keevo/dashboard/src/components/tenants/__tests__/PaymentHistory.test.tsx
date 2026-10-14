@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { PaymentHistory } from "@/components/tenants/PaymentHistory";
 import type { TenantPayment } from "@/types/tenant";
 
 const PAYMENTS: TenantPayment[] = [
   {
+    id: "3f2b1c4d-0000-4000-8000-000000000001",
     paidAt: "2026-10-13T09:00:00Z",
     amountXaf: 10000,
     method: "MOBILE_MONEY",
@@ -14,6 +16,7 @@ const PAYMENTS: TenantPayment[] = [
     recordedByLabel: "Super admin",
   },
   {
+    id: "3f2b1c4d-0000-4000-8000-000000000002",
     paidAt: "2026-09-01T23:30:00Z",
     amountXaf: 5000,
     method: "BANK_TRANSFER",
@@ -48,5 +51,29 @@ describe("PaymentHistory", () => {
     expect(screen.getByLabelText("Chargement des paiements")).toBeInTheDocument();
     rerender(<PaymentHistory payments={undefined} isLoading={false} isError />);
     expect(screen.getByText("Erreur de chargement des paiements")).toBeInTheDocument();
+  });
+
+  it("a voided payment is struck through with « Annulé » and its reason; only counted ones can be voided", async () => {
+    const onVoid = vi.fn();
+    const payments: TenantPayment[] = [
+      { ...PAYMENTS[0], voidedAt: "2026-10-14T09:00:00Z", voidReason: "Erreur de saisie" },
+      PAYMENTS[1],
+    ];
+    const { container } = render(
+      <PaymentHistory payments={payments} isLoading={false} isError={false} onVoid={onVoid} />,
+    );
+
+    expect(screen.getByText("Annulé — motif : Erreur de saisie")).toBeInTheDocument();
+    expect(container.querySelector(".line-through")).not.toBeNull();
+    const buttons = screen.getAllByRole("button", { name: "Annuler ce paiement" });
+    expect(buttons).toHaveLength(1);
+    await userEvent.setup().click(buttons[0]);
+    expect(onVoid).toHaveBeenCalledWith(PAYMENTS[1]);
+    expect(container.textContent ?? "").not.toContain(PAYMENTS[1].id);
+  });
+
+  it("read-only without onVoid", () => {
+    render(<PaymentHistory payments={PAYMENTS} isLoading={false} isError={false} />);
+    expect(screen.queryByRole("button", { name: "Annuler ce paiement" })).not.toBeInTheDocument();
   });
 });

@@ -104,13 +104,84 @@ void main() {
       await tester.tap(find.text('Montant fixe'));
       await tester.pumpAndSettle();
 
-      // The FixedAmountDiscountStrategy clamps, so no explicit error —
-      // but preview shows 0 (clamped to subtotal)
       await tester.enterText(find.byType(TextField), '5000');
       await tester.pumpAndSettle();
 
-      // Preview total should be 0 (subtotal 1000, discount clamped to 1000)
-      expect(find.textContaining('0'), findsWidgets);
+      expect(find.text('La réduction ne peut pas dépasser le sous-total'),
+          findsOneWidget);
+      final button = tester.widget<FilledButton>(
+          find.widgetWithText(FilledButton, 'Appliquer'));
+      expect(button.onPressed, isNull);
+    });
+
+    Future<ProviderContainer> openWithSubtotal(
+        WidgetTester tester, int subtotal) async {
+      late ProviderContainer container;
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: Consumer(builder: (context, ref, _) {
+                container = ProviderScope.containerOf(context);
+                return ElevatedButton(
+                  onPressed: () {
+                    ref.read(cartProvider.notifier)
+                        .addItem(_item(price: subtotal, qty: 1));
+                    DiscountSheet.show(context);
+                  },
+                  child: const Text('Open'),
+                );
+              }),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      return container;
+    }
+
+    testWidgets('percentage over 100 is refused inline, Appliquer disabled',
+        (tester) async {
+      final container = await openWithSubtotal(tester, 10000);
+
+      await tester.enterText(find.byType(TextField), '150');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Le pourcentage ne peut pas dépasser 100 %'),
+          findsOneWidget);
+      final button = tester.widget<FilledButton>(
+          find.widgetWithText(FilledButton, 'Appliquer'));
+      expect(button.onPressed, isNull);
+      expect(container.read(cartProvider.notifier).discountAmount, 0);
+    });
+
+    testWidgets('100 % stays allowed (discount equals the subtotal)',
+        (tester) async {
+      final container = await openWithSubtotal(tester, 10000);
+
+      await tester.enterText(find.byType(TextField), '100');
+      await tester.pumpAndSettle();
+      expect(find.textContaining('dépasser'), findsNothing);
+
+      await tester.tap(find.text('Appliquer'));
+      await tester.pumpAndSettle();
+
+      expect(container.read(cartProvider.notifier).discountAmount, 10000);
+    });
+
+    testWidgets('fixed amount equal to the subtotal is accepted',
+        (tester) async {
+      final container = await openWithSubtotal(tester, 3000);
+      await tester.tap(find.text('Montant fixe'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), '3000');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Appliquer'));
+      await tester.pumpAndSettle();
+
+      expect(container.read(cartProvider.notifier).discountAmount, 3000);
     });
 
     testWidgets('Appliquer button applies discount and closes sheet',

@@ -8,11 +8,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -202,6 +204,33 @@ public class GlobalExceptionHandler {
                         FR_MESSAGES.getOrDefault("OPTIMISTIC_LOCK", "Conflit de version"),
                         HttpStatus.CONFLICT.name(),
                         "OPTIMISTIC_LOCK",
+                        null
+                ));
+    }
+
+    /** Unknown route → 404 (was 500 INTERNAL_ERROR with a full stack trace in the logs). */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponseWrapper<Void>> handleNoResource(NoResourceFoundException ex) {
+        log.debug("NO_ROUTE: {}", ex.getResourcePath());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponseWrapper.error(
+                        FR_MESSAGES.getOrDefault("NOT_FOUND", "Ressource introuvable"),
+                        HttpStatus.NOT_FOUND.name(),
+                        "NOT_FOUND",
+                        null
+                ));
+    }
+
+    /** Known route, wrong HTTP method → 405 (was 500). */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponseWrapper<Void>> handleMethodNotSupported(
+            HttpRequestMethodNotSupportedException ex) {
+        log.debug("METHOD_NOT_ALLOWED: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(ApiResponseWrapper.error(
+                        "Méthode non autorisée",
+                        HttpStatus.METHOD_NOT_ALLOWED.name(),
+                        "METHOD_NOT_ALLOWED",
                         null
                 ));
     }

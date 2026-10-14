@@ -65,6 +65,31 @@ class JwtAuthFilterTest {
                 mock(com.keevo.shared.infrastructure.activity.UserActivityRecorder.class));
     }
 
+    // ── Public paths (device test: password reset answered 401) ────────────
+
+    @Test
+    void everyPublicPathOfSecurityConfigSkipsTheJwtFilter() {
+        for (String path : SecurityConfig.PUBLIC_PATHS) {
+            String concrete = path.replace("/**", "/x");
+            var request = new org.springframework.mock.web.MockHttpServletRequest("POST", concrete);
+            request.setServletPath(concrete);
+            org.assertj.core.api.Assertions.assertThat(filter.shouldNotFilter(request))
+                    .as(concrete).isTrue();
+        }
+    }
+
+    @Test
+    void passwordResetPathsArePublic() {
+        for (String path : new String[] {"/api/v1/auth/forgot-password", "/api/v1/auth/reset-password"}) {
+            var request = new org.springframework.mock.web.MockHttpServletRequest("POST", path);
+            request.setServletPath(path);
+            org.assertj.core.api.Assertions.assertThat(filter.shouldNotFilter(request)).as(path).isTrue();
+        }
+        var privatePath = new org.springframework.mock.web.MockHttpServletRequest("GET", "/api/v1/products");
+        privatePath.setServletPath("/api/v1/products");
+        org.assertj.core.api.Assertions.assertThat(filter.shouldNotFilter(privatePath)).isFalse();
+    }
+
     // ── Missing Authorization header ───────────────────────────────────────
 
     @Test

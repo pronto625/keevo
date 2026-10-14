@@ -64,7 +64,7 @@ class PlanExpiryReminderServiceTest {
 
     private void expiring(String schema, String plan, int days) {
         Instant expiry = TODAY.plusDays(days).atTime(LocalTime.of(23, 59, 59))
-                .atZone(PlanWhatsAppMessages.WAT).toInstant();
+                .atZone(com.keevo.shared.domain.time.KeevoZones.WAT).toInstant();
         when(jdbc.queryForList(contains("\"" + schema + "\"")))
                 .thenReturn(List.of(Map.of("plan_type", plan, "expires_at", Timestamp.from(expiry))));
     }

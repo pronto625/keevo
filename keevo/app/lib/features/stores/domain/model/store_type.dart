@@ -8,7 +8,7 @@ enum StoreType {
   /// Human-readable French label for UI display.
   String get displayName => switch (this) {
         StoreType.store => 'Boutique',
-        StoreType.warehouse => 'Warehouse',
+        StoreType.warehouse => 'Entrepôt',
       };
 
   /// Parse a backend-serialised uppercase string ('STORE' | 'WAREHOUSE').

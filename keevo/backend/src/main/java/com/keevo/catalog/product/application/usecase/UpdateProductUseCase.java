@@ -71,11 +71,14 @@ public class UpdateProductUseCase {
     public Product execute(UpdateProductDto dto) {
         // Find existing product
         var existing = productRepository.findById(dto.id())
-            .orElseThrow(() -> new IllegalArgumentException("Product not found: " + dto.id()));
+            .orElseThrow(() -> new DomainException(ErrorCode.PRODUCT_NOT_FOUND,
+                    "Product not found: " + dto.id()));
 
-        // Validate input
-        if (dto.name() == null || dto.name().trim().isEmpty()) {
-            throw new IllegalArgumentException("Product name cannot be null or empty");
+        // PATCH: an absent name keeps the current one; a blank one is invalid.
+        // (Device test: a price-only PATCH answered « Produit introuvable ».)
+        String resolvedName = dto.name() == null ? existing.getName() : dto.name().trim();
+        if (resolvedName.isEmpty()) {
+            throw new DomainException(ErrorCode.VALIDATION_ERROR, "Le nom du produit est requis");
         }
 
         // Story 2.4 (AC6): DRAFT → ACTIVE promotion requires OWNER role
@@ -91,7 +94,8 @@ public class UpdateProductUseCase {
         // Validate SKU uniqueness (only if SKU actually changed)
         if (!existing.getSku().equals(resolvedSku)) {
             if (productRepository.findBySku(resolvedSku).isPresent()) {
-                throw new IllegalArgumentException("Product with SKU '" + resolvedSku + "' already exists");
+                throw new DomainException(ErrorCode.VALIDATION_ERROR,
+                        "La référence « " + resolvedSku + " » est déjà utilisée");
             }
         }
 
@@ -101,7 +105,7 @@ public class UpdateProductUseCase {
         // Create updated product (null-safe: preserve existing values if not provided)
         var updated = new Product(
             existing.getId(),
-            dto.name().trim(),
+            resolvedName,
             dto.description(),
             resolvedSku,
             dto.categoryId() != null ? dto.categoryId() : existing.getCategoryId(),

@@ -16,8 +16,10 @@ import java.util.Optional;
 public interface SyncOperationsLogSpringRepository
         extends JpaRepository<SyncOperationsLogJpaEntity, String> {
 
+    /** Latest operation that wrote the entity: a superseded one (acknowledged, not applied) is skipped. */
     @Query("SELECT e FROM SyncOperationsLogJpaEntity e " +
            "WHERE e.entityId = :entityId AND e.id <> :excludeId AND e.status = 'APPLIED' " +
+           "AND (e.errorReason IS NULL OR e.errorReason <> 'LWW_SUPERSEDED') " +
            "ORDER BY e.processedAt DESC LIMIT 1")
     Optional<SyncOperationsLogJpaEntity> findPreviousAppliedByEntityId(
             @Param("entityId") String entityId,

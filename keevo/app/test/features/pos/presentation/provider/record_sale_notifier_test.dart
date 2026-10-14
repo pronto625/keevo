@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo/core/sync/account_read_only_exception.dart';
+import 'package:keevo/features/settings/presentation/provider/account_status_provider.dart';
 import 'package:keevo/core/di/providers.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:keevo/core/storage/app_database.dart'
@@ -214,6 +216,42 @@ void main() {
       verifyNever(() => mockLocalDs.getAvailableStock(any(), any()));
       verifyNever(() => mockRepo.recordSale(any()));
     });
+
+    // A50: a read-only account (suspended / deletion pending) records no sale.
+    for (final (status, message) in [
+      ('SUSPENDED', AccountReadOnlyException.suspendedMessage),
+      ('DELETION_PENDING', AccountReadOnlyException.deletionPendingMessage),
+    ]) {
+      test('submit while the account is $status → French error, nothing recorded',
+          () async {
+        final container = ProviderContainer(
+          overrides: [
+            daysSinceLastSyncProvider.overrideWithValue(0),
+            tenantStatusClaimProvider.overrideWith((_) async => status),
+            saleRepositoryProvider.overrideWithValue(mockRepo),
+            localSaleDataSourceProvider.overrideWithValue(mockLocalDs),
+            recordSaleUseCaseProvider
+                .overrideWithValue(RecordSaleUseCase(mockRepo)),
+          ],
+        );
+        addTearDown(container.dispose);
+        await container.read(tenantStatusClaimProvider.future);
+        container.read(cartProvider.notifier).addItem(_item());
+
+        await container.read(recordSaleNotifierProvider.notifier).submit(
+          cart: [_item()],
+          mode: PaymentModeEnum.cash,
+          storeId: 'store-1',
+          employeeId: 'emp-1',
+        );
+
+        final state = container.read(recordSaleNotifierProvider);
+        expect(state, isA<RecordSaleError>());
+        expect((state as RecordSaleError).message, message);
+        verifyNever(() => mockLocalDs.getAvailableStock(any(), any()));
+        verifyNever(() => mockRepo.recordSale(any()));
+      });
+    }
 
     // ── AC3: Draft product → inline stock + promotion + COMPLETED ─────────
 

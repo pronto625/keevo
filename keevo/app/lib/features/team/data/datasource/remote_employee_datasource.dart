@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../../../../core/utils/server_date.dart';
 import '../../domain/model/create_employee_result.dart';
 import '../../domain/model/employee_activity.dart';
 import '../../domain/model/employee_model.dart';
@@ -88,7 +89,7 @@ class RemoteEmployeeDataSource {
       storeId: json['storeId'] as String,
       status: json['status'] as String,
       passwordChangeRequired: json['passwordChangeRequired'] as bool? ?? false,
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      createdAt: parseServerDate(json['createdAt'] as String),
       role: json['role'] as String? ?? 'EMPLOYEE',
       phoneNumber: json['phoneNumber'] as String?,
     );

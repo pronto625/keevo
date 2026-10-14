@@ -14,14 +14,22 @@ public record AdminTenantDetail(
         List<AdminEmployeeInfo> employees,
         List<AdminAuditEvent> auditEvents,
         long auditTotalCount,
-        AdminPlanInfo plan
+        AdminPlanInfo plan,
+        AdminSuspensionInfo suspension
 ) {
+
+    /** Detail of a tenant that is not suspended. */
+    public AdminTenantDetail(AdminTenantListItem summary, List<AdminStoreInfo> stores,
+                             List<AdminEmployeeInfo> employees, List<AdminAuditEvent> auditEvents,
+                             long auditTotalCount, AdminPlanInfo plan) {
+        this(summary, stores, employees, auditEvents, auditTotalCount, plan, null);
+    }
 
     /** Detail without subscription info (plan unreadable). */
     public AdminTenantDetail(AdminTenantListItem summary, List<AdminStoreInfo> stores,
                              List<AdminEmployeeInfo> employees, List<AdminAuditEvent> auditEvents,
                              long auditTotalCount) {
-        this(summary, stores, employees, auditEvents, auditTotalCount, null);
+        this(summary, stores, employees, auditEvents, auditTotalCount, null, null);
     }
 
     /** Convenience factory for tests — empty detail with only the summary row. */

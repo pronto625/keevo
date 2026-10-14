@@ -14,6 +14,7 @@ public record SaleHistoryItemDto(
         UUID employeeId,
         UUID clientId,
         String paymentMode,
+        String mobileMoneyRef, // nullable — Mobile Money transaction reference
         int totalAmount,
         int discountAmount,
         String status,

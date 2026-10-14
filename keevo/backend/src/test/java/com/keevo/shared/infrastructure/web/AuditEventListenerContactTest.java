@@ -3,8 +3,10 @@ package com.keevo.shared.infrastructure.web;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.catalog.contact.domain.event.ClientArchivedEvent;
 import com.keevo.catalog.contact.domain.event.ClientCreatedEvent;
+import com.keevo.catalog.contact.domain.event.ClientUnarchivedEvent;
 import com.keevo.catalog.contact.domain.event.SupplierArchivedEvent;
 import com.keevo.catalog.contact.domain.event.SupplierCreatedEvent;
+import com.keevo.catalog.contact.domain.event.SupplierUnarchivedEvent;
 import com.keevo.shared.application.port.AuditPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -94,6 +96,26 @@ class AuditEventListenerContactTest {
         listener.on(event);
 
         verify(auditPort).record(entry(ACTOR_ID, TENANT, "SUPPLIER_ARCHIVED", "Supplier", SUPPLIER_ID, null));
+    }
+
+    // ── Unarchive (sync UNARCHIVE_CLIENT / UNARCHIVE_SUPPLIER) ────────────────
+
+    @Test
+    @DisplayName("on(ClientUnarchivedEvent) records CLIENT_UNARCHIVED, archived true → false")
+    void on_clientUnarchived_records_audit() {
+        listener.on(new ClientUnarchivedEvent(CLIENT_ID, "Alice", ACTOR_ID, TENANT, NOW));
+
+        verify(auditPort).record(entry(ACTOR_ID, TENANT, "CLIENT_UNARCHIVED", "Client", CLIENT_ID,
+                "{\"archived\":true}"));
+    }
+
+    @Test
+    @DisplayName("on(SupplierUnarchivedEvent) records SUPPLIER_UNARCHIVED, archived true → false")
+    void on_supplierUnarchived_records_audit() {
+        listener.on(new SupplierUnarchivedEvent(SUPPLIER_ID, "Fournisseur SA", ACTOR_ID, TENANT, NOW));
+
+        verify(auditPort).record(entry(ACTOR_ID, TENANT, "SUPPLIER_UNARCHIVED", "Supplier", SUPPLIER_ID,
+                "{\"archived\":true}"));
     }
 
     // ── v1s-18-6 — readable label ──

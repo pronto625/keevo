@@ -115,7 +115,7 @@ String formatXaf(int amount) {
     if (i > 0 && (str.length - i) % 3 == 0) buf.write(' ');
     buf.write(str[i]);
   }
-  return '${buf.toString()} FCFA';
+  return '${buf.toString()} XAF';
 }
 
 String _frenchMonth(int month) {

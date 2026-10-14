@@ -189,6 +189,23 @@ class AdminRevenueServiceIntegrationTest extends PostgresIntegrationTest {
         });
     }
 
+    @Test
+    @DisplayName("9-2 — a voided payment (typo corrected) counts nowhere: MRR, new paying, revenue collected")
+    void voidedPayment_excluded_realSql() {
+        UUID f = tenant("Revenus Annulé", "ACTIVE", true);
+        plan(f, "PREMIUM");
+        payment(f, 900_000, "2031-06-10T10:00:00Z", LocalDate.of(2031, 6, 10), LocalDate.of(2031, 7, 9));
+        jdbc.update("UPDATE public.tenant_payments SET voided_at = now(), voided_by = ?, void_reason = 'Erreur de saisie' "
+                + "WHERE tenant_id = ?", UUID.randomUUID(), f);
+
+        RevenueSummary s = service.getSummary(new RevenueRangeQuery(null, null));
+
+        assertThat(s.mrr()).isEqualTo(15_000);
+        assertThat(s.payingTenants()).isEqualTo(1);
+        assertThat(s.newPayingTenants()).isEqualTo(1);
+        assertThat(s.revenueCollected()).isEqualTo(15_000);
+    }
+
     private UUID tenant(String name, String status, boolean provision) {
         UUID id = UUID.randomUUID();
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 6);

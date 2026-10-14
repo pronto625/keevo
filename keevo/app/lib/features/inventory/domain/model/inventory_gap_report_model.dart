@@ -1,4 +1,5 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
+import '../../../../core/utils/server_date.dart';
 import 'inventory_gap_row_model.dart';
 
 part 'inventory_gap_report_model.freezed.dart';
@@ -20,7 +21,7 @@ class InventoryGapReportModel with _$InventoryGapReportModel {
     required List<InventoryGapRowModel> concordantRows,
     required List<InventoryGapRowModel> surplusRows,
     required List<InventoryGapRowModel> shortageRows,
-    required DateTime generatedAt,
+    @ServerDateTimeConverter() required DateTime generatedAt,
     String? sessionStatus,
   }) = _InventoryGapReportModel;
 

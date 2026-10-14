@@ -136,6 +136,11 @@ class ClientListNotifier extends _$ClientListNotifier {
     await refresh();
   }
 
+  Future<void> unarchive(String id) async {
+    await ref.read(clientRepositoryProvider).unarchive(id);
+    await refresh();
+  }
+
   Future<void> syncFromRemote() async {
     try {
       await ref.read(clientRepositoryProvider).syncFromRemote();
@@ -222,6 +227,11 @@ class SupplierListNotifier extends _$SupplierListNotifier {
 
   Future<void> archive(String id) async {
     await ref.read(supplierRepositoryProvider).archive(id);
+    await refresh();
+  }
+
+  Future<void> unarchive(String id) async {
+    await ref.read(supplierRepositoryProvider).unarchive(id);
     await refresh();
   }
 

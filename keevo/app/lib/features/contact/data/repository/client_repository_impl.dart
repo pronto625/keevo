@@ -143,6 +143,19 @@ class ClientRepositoryImpl implements ClientRepository {
   }
 
   @override
+  Future<void> unarchive(String id) async {
+    await _atomic(() async {
+      await _local.unarchive(id);
+      await _syncService.queueOperation(
+        operation: 'UNARCHIVE_CLIENT',
+        payload: {'clientId': id},
+        entityId: id,
+      );
+    });
+    _syncTriggerDispatcher.triggerPushIfIdle();
+  }
+
+  @override
   Future<void> syncFromRemote() async {
     try {
       final remotes = await _remote.getAll(includeArchived: true);

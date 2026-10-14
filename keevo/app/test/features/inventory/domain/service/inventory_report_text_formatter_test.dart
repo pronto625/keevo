@@ -108,10 +108,10 @@ void main() {
   });
 
   test('XAF format with space thousands separator', () {
-    expect(formatXaf(1500), equals('1 500 FCFA'));
-    expect(formatXaf(47500), equals('47 500 FCFA'));
-    expect(formatXaf(1000000), equals('1 000 000 FCFA'));
-    expect(formatXaf(500), equals('500 FCFA'));
-    expect(formatXaf(0), equals('0 FCFA'));
+    expect(formatXaf(1500), equals('1 500 XAF'));
+    expect(formatXaf(47500), equals('47 500 XAF'));
+    expect(formatXaf(1000000), equals('1 000 000 XAF'));
+    expect(formatXaf(500), equals('500 XAF'));
+    expect(formatXaf(0), equals('0 XAF'));
   });
 }

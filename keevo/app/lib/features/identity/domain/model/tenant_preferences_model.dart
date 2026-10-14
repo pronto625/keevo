@@ -1,3 +1,4 @@
+import '../../../../core/utils/server_date.dart';
 import '../../../onboarding/domain/model/sector_type.dart';
 
 /// Normalise une heure en format HH:mm:ss — Java sérialise LocalTime.of(20,0) → "20:00" sans secondes.
@@ -63,7 +64,7 @@ class TenantPreferencesModel {
       sectorType: sectorType,
       eodReportTime: _normalizeTime(json['eodReportTime'] as String?),
       stockAlertEnabled: json['stockAlertEnabled'] as bool? ?? true,
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      createdAt: parseServerDate(json['createdAt'] as String),
       eodReportEnabled: json['eodReportEnabled'] as bool? ?? false,
       eodReportChannel: json['eodReportChannel'] as String? ?? 'WHATSAPP',
       weeklyReportEnabled: json['weeklyReportEnabled'] as bool? ?? false,
@@ -83,7 +84,7 @@ class TenantPreferencesModel {
       'sectorType': sectorType?.apiCode,
       'eodReportTime': eodReportTime,
       'stockAlertEnabled': stockAlertEnabled,
-      'createdAt': createdAt.toIso8601String(),
+      'createdAt': createdAt.toUtc().toIso8601String(),
       'eodReportEnabled': eodReportEnabled,
       'eodReportChannel': eodReportChannel,
       'weeklyReportEnabled': weeklyReportEnabled,

@@ -53,7 +53,13 @@ public class SyncOperationsLogRepositoryAdapter implements SyncOperationsLogRepo
                 entry.status().name(),
                 entry.errorReason(),
                 entry.processedAt(),
-                entry.clientTimestamp()));
+                entry.clientTimestamp(),
+                deviceIdColumn(entry.deviceId())));
+    }
+
+    /** The column holds 100 characters; a longer client-supplied id is cut, never rejected. */
+    private static String deviceIdColumn(String deviceId) {
+        return deviceId != null && deviceId.length() > 100 ? deviceId.substring(0, 100) : deviceId;
     }
 
     @Override
@@ -76,6 +82,7 @@ public class SyncOperationsLogRepositoryAdapter implements SyncOperationsLogRepo
                         SyncOperationStatus.valueOf(e.getStatus()),
                         e.getErrorReason(),
                         e.getProcessedAt(),
-                        e.getClientTimestamp()));
+                        e.getClientTimestamp(),
+                        e.getDeviceId()));
     }
 }

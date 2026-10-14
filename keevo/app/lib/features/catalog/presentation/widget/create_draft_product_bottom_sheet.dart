@@ -261,7 +261,7 @@ class _CreateDraftProductBottomSheetState
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
-                                      '${p.name} — ${p.price} FCFA',
+                                      '${p.name} — ${p.price} XAF',
                                       style: theme.textTheme.bodyMedium,
                                     ),
                                   ),

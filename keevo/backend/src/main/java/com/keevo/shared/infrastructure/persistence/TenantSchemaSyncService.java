@@ -284,9 +284,14 @@ public class TenantSchemaSyncService {
             stmt.execute(TenantSchemaProvisioner.DDL_DAY_CLOSURES_MIGRATE_RECEIVED_AT);
             stmt.execute(TenantSchemaProvisioner.DDL_DAY_CLOSURES_BACKFILL_RECEIVED_AT);
             stmt.execute(TenantSchemaProvisioner.DDL_DAY_CLOSURES_IDX_RECEIVED_AT);
+            // reports.updated_at — pull cursor of the reports delta (status changes after creation)
+            stmt.execute(TenantSchemaProvisioner.DDL_REPORTS_MIGRATE_UPDATED_AT);
+            stmt.execute(TenantSchemaProvisioner.DDL_REPORTS_BACKFILL_UPDATED_AT);
             stmt.execute(TenantSchemaProvisioner.DDL_SALES_IDX_STORE_OCCURRED_AT);
             stmt.execute(TenantSchemaProvisioner.DDL_SALES_IDX_STORE_EMPLOYEE_OCCURRED_AT);
             // Story 5.1 — sync operations log indexes
+            // + device_id (last-write-wins: same-device edits are not concurrent overwrites)
+            stmt.execute(TenantSchemaProvisioner.DDL_SYNC_OPERATIONS_LOG_MIGRATE_DEVICE_ID);
             stmt.execute(TenantSchemaProvisioner.DDL_SYNC_OPERATIONS_LOG_IDX_ENTITY);
             stmt.execute(TenantSchemaProvisioner.DDL_SYNC_OPERATIONS_LOG_IDX_PROCESSED);
             // Story 5.2 — add updated_at on stock_transfers for delta pull sync
@@ -299,6 +304,8 @@ public class TenantSchemaSyncService {
             stmt.execute(TenantSchemaProvisioner.DDL_SALE_ITEMS_MIGRATE_UPDATED_AT);
             // Story v1s-13-10 — optimistic lock column on sales
             stmt.execute(TenantSchemaProvisioner.DDL_SALES_MIGRATE_VERSION);
+            // sales.mobile_money_ref — Mobile Money reference, sent by the app but never stored
+            stmt.execute(TenantSchemaProvisioner.DDL_SALES_MIGRATE_MOBILE_MONEY_REF);
             // Story 5.3 — sync conflicts log indexes
             stmt.execute(TenantSchemaProvisioner.DDL_SYNC_CONFLICTS_LOG_IDX_RESOLVED);
             stmt.execute(TenantSchemaProvisioner.DDL_SYNC_CONFLICTS_LOG_IDX_ENTITY);

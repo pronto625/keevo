@@ -66,6 +66,11 @@ class LocalClientDataSource {
         .write(const ClientsCompanion(archived: Value(true)));
   }
 
+  Future<void> unarchive(String id) async {
+    await (_db.update(_db.clients)..where((c) => c.id.equals(id)))
+        .write(const ClientsCompanion(archived: Value(false)));
+  }
+
   ClientModel _toModel(Client row) => ClientModel(
         id: row.id,
         name: row.name,

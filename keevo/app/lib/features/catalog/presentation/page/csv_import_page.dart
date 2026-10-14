@@ -115,8 +115,17 @@ class _CsvImportPageState extends ConsumerState<CsvImportPage> {
       }
       // Transition to step 1 when file is picked
       if (next is CsvImportFilePicked) {
-        // v1s-16-13: a new file keeps only the mappings whose column it has.
-        setState(() => _keepMappingsFor(next.detectedHeaders));
+        // v1s-16-13: a new file keeps only the mappings whose column it has;
+        // the fields still unmapped get the column whose header matches.
+        setState(() {
+          _keepMappingsFor(next.detectedHeaders);
+          final taken = _mapping.values.whereType<String>().toSet();
+          suggestCsvMapping(next.detectedHeaders).forEach((field, header) {
+            if (_mapping[field] == null && taken.add(header)) {
+              _mapping[field] = header;
+            }
+          });
+        });
         _goToStep(1);
       }
     });

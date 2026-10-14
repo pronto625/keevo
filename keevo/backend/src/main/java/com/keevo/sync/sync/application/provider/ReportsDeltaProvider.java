@@ -12,8 +12,12 @@ import java.util.*;
 @Component
 public class ReportsDeltaProvider implements DeltaEntityProvider {
 
-    /** Keyset cursor of the delta pull; the {@code reports} sync keyset index leads with it (Story 11.5). */
-    static final String CURSOR = "created_at";
+    /**
+     * Keyset cursor of the delta pull; the {@code reports} sync keyset index leads with it (Story 11.5).
+     * updated_at, not created_at: a later delivery attempt (status, attempts) or a regeneration
+     * must reach the other devices. EndOfDayReportJpaEntity stamps it on every write.
+     */
+    static final String CURSOR = "updated_at";
 
     private final EntityManager em;
 
@@ -56,5 +60,5 @@ public class ReportsDeltaProvider implements DeltaEntityProvider {
     }
 
     private String str(Object o) { return o != null ? o.toString() : null; }
-    private String ts(Object o) { return o != null ? o.toString() : null; }
+    private String ts(Object o) { return SyncTimestamps.iso(o); }
 }

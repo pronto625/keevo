@@ -117,7 +117,7 @@ public class CorrectSaleService implements CorrectSaleUseCase {
         Sale correctedSale = new Sale(sale.getId(), sale.getStoreId(), sale.getEmployeeId(),
                 sale.getClientId(), sale.getPaymentMode(), newTotal, sale.getDiscountAmount(),
                 SaleStatus.COMPLETED, sale.getOccurredAt(), sale.getCreatedAt(), correctedItems,
-                sale.getVersion());
+                sale.getVersion(), sale.getMobileMoneyRef());
 
         // Story v1s-13-10: version-checked save — a concurrent cancel/correction that committed
         // since the read makes it throw OptimisticLockingFailureException (→ 409), rolling back

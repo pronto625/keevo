@@ -16,7 +16,7 @@ public record StorePerformanceEntryDto(
         int    salesCount,
         long   averageBasket,
         String topProductName,
-        double deltaPercent
+        Double deltaPercent   // null when the preceding period has no sales (A33)
 ) {
     public static StorePerformanceEntryDto from(StorePerformanceEntry e) {
         return new StorePerformanceEntryDto(

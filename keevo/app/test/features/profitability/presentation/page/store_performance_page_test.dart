@@ -77,7 +77,7 @@ void main() {
       await tester.pumpWidget(buildUnderTest(mockRepo));
       await tester.pumpAndSettle();
 
-      expect(find.text('+8.0%'), findsOneWidget);
+      expect(find.text('+8,0\u00A0%'), findsOneWidget);
     });
 
     testWidgets('rendersNegativeDelta_inRed', (tester) async {
@@ -88,7 +88,33 @@ void main() {
       await tester.pumpWidget(buildUnderTest(mockRepo));
       await tester.pumpAndSettle();
 
-      expect(find.text('-3.0%'), findsOneWidget);
+      expect(find.text('-3,0\u00A0%'), findsOneWidget);
+    });
+
+    // A33: no sales in the preceding period → « — », never « +0,0 % ».
+    testWidgets('no comparison data → dash, no growth badge', (tester) async {
+      final mockRepo = MockProfitabilityRepository();
+      when(() => mockRepo.getStorePerformance(params: any(named: 'params')))
+          .thenAnswer((_) async => [
+                const StorePerformanceEntry(
+                  rank: 1,
+                  storeId: 's1',
+                  storeName: 'Magasin Central',
+                  totalRevenue: 500000,
+                  salesCount: 1,
+                  averageBasket: 500000,
+                  topProductName: null,
+                  deltaPercent: null,
+                ),
+              ]);
+
+      await tester.pumpWidget(buildUnderTest(mockRepo));
+      await tester.pumpAndSettle();
+
+      expect(find.text('—'), findsOneWidget);
+      expect(find.textContaining('%'), findsNothing);
+      // A32: singular agreement.
+      expect(find.text('1 vente'), findsOneWidget);
     });
 
     testWidgets('tapMetricToggle_SALES_COUNT_reranks', (tester) async {

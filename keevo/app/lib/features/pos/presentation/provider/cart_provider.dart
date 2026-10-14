@@ -19,39 +19,58 @@ class CartNotifier extends Notifier<List<CartItem>> {
     super.state = value;
   }
 
-  void addItem(CartItem item) {
+  /// Adds [item] (or its quantity to the same line). Returns false, and
+  /// changes nothing, when the line would go above its known stock.
+  bool addItem(CartItem item) {
     final idx = state.indexWhere((c) => c.id == item.id);
     if (idx >= 0) {
       final existing = state[idx];
+      final qty = existing.quantity + item.quantity;
+      if (!existing.allows(qty)) return false;
       state = [
         ...state.sublist(0, idx),
-        existing.copyWith(quantity: existing.quantity + item.quantity),
+        existing.copyWith(quantity: qty),
         ...state.sublist(idx + 1),
       ];
     } else {
+      if (!item.allows(item.quantity)) return false;
       state = [...state, item];
     }
+    return true;
   }
 
   void removeItem(String id) {
     state = state.where((c) => c.id != id).toList();
   }
 
-  void updateQuantity(String id, int qty) {
+  /// Returns false, and changes nothing, when [qty] is above the known stock.
+  bool updateQuantity(String id, int qty) {
     if (qty <= 0) {
       removeItem(id);
-      return;
+      return true;
     }
+    if (!_fitsStock(id, qty)) return false;
     state = state.map((c) => c.id == id ? c.copyWith(quantity: qty) : c).toList();
+    return true;
   }
 
   /// Sets quantity directly to [qty] — used by the POS quantity dialog (AC6, Story 7.6).
   /// Ignores invalid (≤ 0) input to avoid accidental deletion.
-  void setQuantity(String itemId, int qty) {
-    if (qty <= 0) return;
+  /// Returns false, and changes nothing, when [qty] is above the known stock.
+  bool setQuantity(String itemId, int qty) {
+    if (qty <= 0) return true;
+    if (!_fitsStock(itemId, qty)) return false;
     state = state
         .map((c) => c.id == itemId ? c.copyWith(quantity: qty) : c)
         .toList();
+    return true;
+  }
+
+  bool _fitsStock(String id, int qty) {
+    for (final c in state) {
+      if (c.id == id) return c.allows(qty);
+    }
+    return true;
   }
 
   void updatePrice(String id, int newPrice) {

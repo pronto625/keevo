@@ -45,6 +45,29 @@ void main() {
       expect(s.toString(), 'Awa a créé le produit Pagne wax');
     });
 
+    // A38: a sale's stock decrement read « a ajusté le stock de X ».
+    test('stock movement reads after its cause (movement type)', () {
+      String line(String? type) => AuditPresenter.sentence(_entry(
+            action: 'STOCK_ADJUSTED',
+            entityType: 'StockMovement',
+            actorName: 'Awa',
+            entityLabel: 'Pagne wax',
+            valueAfter: type == null
+                ? '{"quantityChange":-1}'
+                : '{"movementType":"$type","quantityChange":-1}',
+          )).toString();
+
+      expect(line('SALE'), 'Awa a vendu Pagne wax');
+      expect(line('SALE_CANCELLED'), 'Awa a remis en stock Pagne wax');
+      expect(line('STOCK_ENTRY'), 'Awa a réapprovisionné Pagne wax');
+      expect(line('TRANSFER_OUT'), 'Awa a transféré du stock de Pagne wax');
+      expect(line('TRANSFER_IN'),
+          'Awa a reçu par transfert du stock de Pagne wax');
+      // Manual adjustments (and legacy rows) keep their own wording.
+      expect(line('ADJUSTMENT'), 'Awa a ajusté le stock de Pagne wax');
+      expect(line(null), 'Awa a ajusté le stock de Pagne wax');
+    });
+
     test('price override reads « a modifié le prix de »', () {
       final s = AuditPresenter.sentence(_entry(
           action: 'PRICE_OVERRIDDEN',

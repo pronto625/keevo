@@ -244,6 +244,9 @@ class AppTheme {
 
   static InputDecorationTheme _inputDecoration(ColorScheme cs) =>
       InputDecorationTheme(
+        // Long French validation messages wrap instead of being cut with an
+        // ellipsis on narrow phones.
+        errorMaxLines: 3,
         filled: true,
         fillColor: cs.surfaceContainerHighest.withAlpha(80),
         border: OutlineInputBorder(

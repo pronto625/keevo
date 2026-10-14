@@ -3,15 +3,26 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:keevo/core/auth/session_refresher.dart';
 import 'package:keevo/features/account/domain/model/deletion_pending_status.dart';
 import 'package:keevo/features/account/domain/repository/account_deletion_repository.dart';
 import 'package:keevo/features/account/presentation/provider/account_deletion_provider.dart';
 import 'package:keevo/features/account/presentation/widget/deletion_pending_banner.dart';
+import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
+import 'package:keevo/features/settings/presentation/provider/account_status_provider.dart';
 
 class _MockRepo extends Mock implements AccountDeletionRepository {}
 
+class _MockRefresher extends Mock implements SessionRefresher {}
+
+late _MockRefresher _refresher;
+
 Widget _build(AccountDeletionRepository repo) => ProviderScope(
-      overrides: [accountDeletionRepositoryProvider.overrideWithValue(repo)],
+      overrides: [
+        accountDeletionRepositoryProvider.overrideWithValue(repo),
+        sessionRefresherProvider.overrideWithValue(_refresher),
+        tenantStatusClaimProvider.overrideWith((_) async => 'DELETION_PENDING'),
+      ],
       child: const MaterialApp(home: Scaffold(body: DeletionPendingBanner())),
     );
 
@@ -20,6 +31,9 @@ void main() {
 
   setUp(() {
     repo = _MockRepo();
+    _refresher = _MockRefresher();
+    when(() => _refresher.refresh())
+        .thenAnswer((_) async => RefreshOutcome.renewed);
     when(() => repo.cancelDeletion()).thenAnswer((_) async {});
   });
 
@@ -83,6 +97,8 @@ void main() {
       await tester.pumpAndSettle();
 
       verify(() => repo.cancelDeletion()).called(1);
+      // A50: the renewed token says ACTIVE again — writes allowed.
+      verify(() => _refresher.refresh()).called(1);
       expect(find.text('Annuler la suppression'), findsNothing);
       expect(
         find.text('Suppression annulée — votre compte est de nouveau actif.'),
@@ -105,6 +121,7 @@ void main() {
 
       expect(find.text('Annuler la suppression'), findsOneWidget);
       expect(find.text('Serveur indisponible'), findsOneWidget);
+      verifyNever(() => _refresher.refresh());
     });
   });
 }

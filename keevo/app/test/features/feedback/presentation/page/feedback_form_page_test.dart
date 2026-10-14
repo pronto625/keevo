@@ -58,8 +58,10 @@ void main() {
       expect(find.text('Signaler un problème'), findsOneWidget);
       expect(find.text("J'adore Keevo"), findsOneWidget);
       expect(find.text('0 / 500'), findsOneWidget);
-      expect(find.textContaining('Écran : /settings'), findsOneWidget);
-      expect(find.textContaining('Version : 1.1.13'), findsOneWidget);
+      // Readable context only — the raw route is sent, never shown.
+      expect(find.textContaining('écran actuel'), findsOneWidget);
+      expect(find.textContaining('version 1.1.13'), findsOneWidget);
+      expect(find.textContaining('/settings'), findsNothing);
 
       await _typeDescription(tester, 'Bonjour');
       expect(find.text('7 / 500'), findsOneWidget);
@@ -99,8 +101,11 @@ void main() {
         find.text('Merci pour votre retour ! Nous l\'examinerons rapidement.'),
         findsOneWidget,
       );
-      // Reset: description cleared, counter back to zero.
+      // Reset: description cleared, counter back to zero — and no validation
+      // error on the emptied field (device test).
+      await tester.pumpAndSettle();
       expect(find.text('0 / 500'), findsOneWidget);
+      expect(find.textContaining('au moins 10'), findsNothing);
       expect(find.text('Le total de la vente ne se met pas à jour.'),
           findsNothing);
     });

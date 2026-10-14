@@ -326,7 +326,7 @@ void main() {
     expect(events, hasLength(1));
     expect(events.single.type, kSyncEventAbandon);
     expect(events.single.errorMessage, contains('Enregistrement de vente'));
-    expect(events.single.errorMessage, contains('13 000 FCFA'));
+    expect(events.single.errorMessage, contains('13 000 XAF'));
   });
 
   test('abandon of stock ops deletes their unsynced movement / transfer',
@@ -426,9 +426,9 @@ void main() {
     expect(text, contains('Opération : Enregistrement de vente'));
     expect(text, contains('Motif du refus : Produit introuvable'));
     expect(text, contains('Boutique : Boutique Centre'));
-    expect(text, contains('- Savon : 2 × 500 FCFA = 1 000 FCFA'));
-    expect(text, contains('- Riz : 1 × 12 000 FCFA = 12 000 FCFA'));
-    expect(text, contains('Total : 13 000 FCFA'));
+    expect(text, contains('- Savon : 2 × 500 XAF = 1 000 XAF'));
+    expect(text, contains('- Riz : 1 × 12 000 XAF = 12 000 XAF'));
+    expect(text, contains('Total : 13 000 XAF'));
     expect(text, contains('Paiement : Espèces'));
     expect(text, contains('Opérations liées :'));
     expect(text, contains('- Validation de vente du '));
@@ -456,7 +456,7 @@ void main() {
 
     final text = await service.exportText('sale-op');
 
-    expect(text, contains('- Produit inconnu sur cet appareil : 1 × 500 FCFA'));
+    expect(text, contains('- Produit inconnu sur cet appareil : 1 × 500 XAF'));
     expect(text, contains('Boutique : Boutique inconnue sur cet appareil'));
     expect(text, contains('Paiement : Bank card'));
     expectNoTechnicalString(text);

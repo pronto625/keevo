@@ -61,6 +61,9 @@ class _DeleteAccountPageState extends ConsumerState<DeleteAccountPage> {
     try {
       final status =
           await ref.read(accountDeletionRepositoryProvider).requestDeletion();
+      // A50: the access token's tenantStatus claim is frozen at issuance —
+      // renew it so it says DELETION_PENDING (read-only) right away.
+      await renewSessionAfterAccountChange(ref);
       ref.invalidate(deletionPendingStatusProvider);
       if (!mounted) return;
       final date = status.scheduledAt;

@@ -37,8 +37,8 @@ class _DeleteAccountWarningDialog extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Cette action est irréversible. Les données suivantes seront '
-            'définitivement supprimées :',
+            'Les données suivantes seront définitivement supprimées dans '
+            '30 jours :',
             style: TextStyle(fontSize: 14, color: cs.onSurface),
           ),
           const SizedBox(height: 12),
@@ -60,8 +60,8 @@ class _DeleteAccountWarningDialog extends StatelessWidget {
             ),
           const SizedBox(height: 8),
           Text(
-            'Vous disposerez de 30 jours pour annuler depuis Paramètres > '
-            'Mon Compte.',
+            'Vous pouvez annuler d\'ici là depuis Paramètres > Mon Compte. '
+            'Pendant ce délai, votre compte passe en consultation uniquement.',
             style: TextStyle(fontSize: 13, color: cs.muted),
           ),
         ],

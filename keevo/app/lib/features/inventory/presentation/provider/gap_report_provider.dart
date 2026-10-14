@@ -38,7 +38,10 @@ Future<InventoryGapReportModel> gapReport(
         '/api/v1/inventory/sessions/$sessionId/gap-report',
       );
       final data = response.data!['data'] as Map<String, dynamic>;
-      return InventoryGapReportModel.fromJson(data);
+      final report = InventoryGapReportModel.fromJson(data);
+      return ref
+          .read(localGapReportDataSourceProvider)
+          .withLocalCategoryNames(report);
     } catch (e) {
       dev.log('Remote gap report failed, falling back to local: $e',
           name: 'GapReportProvider');

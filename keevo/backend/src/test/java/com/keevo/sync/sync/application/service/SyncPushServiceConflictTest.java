@@ -49,6 +49,11 @@ class SyncPushServiceConflictTest {
     void setUp() {
         lenient().when(transactionManager.getTransaction(any()))
                 .thenReturn(new SimpleTransactionStatus());
+        // As the interface defaults: beforeApply → NONE, evaluate(…, preApply) → the 4-arg evaluate.
+        lenient().when(conflictStrategy.beforeApply(any(), any(), any())).thenReturn(PreApplyCheck.NONE);
+        lenient().when(conflictStrategy.evaluate(any(), any(), any(), any(), any())).thenAnswer(inv ->
+                ((ConflictResolutionStrategy) inv.getMock()).evaluate(inv.getArgument(0), inv.getArgument(1),
+                        inv.getArgument(2), inv.getArgument(3)));
         service = new SyncPushService(handlerRegistry, logRepository, eventPublisher,
                 transactionManager, List.of(), conflictStrategyRegistry, conflictsLogRepository, syncErrorLogRepository);
     }
@@ -167,7 +172,9 @@ class SyncPushServiceConflictTest {
                 ACTOR_ID, TENANT_ID, "device-1", List.of(op));
         service.pushBatch(command);
 
-        verifyNoInteractions(conflictStrategyRegistry);
+        // Resolved once for the pre-apply check; nothing evaluated nor logged after the rejection.
+        verify(conflictStrategyRegistry).resolve("CREATE_SALE");
+        verifyNoInteractions(conflictsLogRepository);
     }
 
     @Test
@@ -224,5 +231,74 @@ class SyncPushServiceConflictTest {
         SyncBatchResult result = service.pushBatch(command);
 
         assertThat(result.results().get(0).status()).isEqualTo(SyncOperationStatus.CONFLICT);
+    }
+
+    // ── Last-write-wins: pre-apply decision ──────────────────────────────────
+
+    @Test
+    void pushBatch_supersededOperation_notAppliedButAcknowledgedAndLogged() {
+        var op = new SyncOperation("op-old", "UPDATE_PRODUCT", "p1",
+                Map.of("productId", "p1", "price", 3600), Instant.parse("2026-10-14T02:44:00Z"));
+        var data = Map.<String, Object>of("conflictType", "LAST_WRITE_SUPERSEDED", "entityType", "PRODUCT",
+                "entityId", "p1");
+        when(logRepository.isSettled("op-old")).thenReturn(false);
+        when(conflictStrategyRegistry.resolve("UPDATE_PRODUCT")).thenReturn(conflictStrategy);
+        doReturn(PreApplyCheck.superseded(new ConflictResult("LAST_WRITE_SUPERSEDED", "LAST_WRITE_WINS", data)))
+                .when(conflictStrategy).beforeApply(op, "device-1", TENANT_ID);
+
+        SyncBatchResult result = service.pushBatch(new com.keevo.sync.sync.domain.port.in.SyncUseCase.PushBatchCommand(
+                ACTOR_ID, TENANT_ID, "device-1", List.of(op)));
+
+        var r = result.results().get(0);
+        assertThat(r.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        assertThat(r.reason()).isEqualTo("LWW_SUPERSEDED");
+        assertThat(r.serverEntityId()).isEqualTo("p1");
+        assertThat(r.conflictData()).containsEntry("conflictType", "LAST_WRITE_SUPERSEDED");
+        verifyNoInteractions(handlerRegistry);
+        var conflict = ArgumentCaptor.forClass(SyncConflictsLogEntry.class);
+        verify(conflictsLogRepository).save(conflict.capture());
+        assertThat(conflict.getValue().conflictType()).isEqualTo("LAST_WRITE_SUPERSEDED");
+        assertThat(conflict.getValue().strategy()).isEqualTo("LAST_WRITE_WINS");
+        var logged = ArgumentCaptor.forClass(SyncOperationsLogEntry.class);
+        verify(logRepository).save(logged.capture());
+        assertThat(logged.getValue().status()).isEqualTo(SyncOperationStatus.APPLIED);
+        assertThat(logged.getValue().errorReason()).isEqualTo("LWW_SUPERSEDED");
+    }
+
+    @Test
+    void pushBatch_logEntryCarriesPushingDevice() {
+        var op = new SyncOperation("op-1", "UPDATE_PRODUCT", "p1", Map.of("productId", "p1"), Instant.now());
+        when(logRepository.isSettled("op-1")).thenReturn(false);
+        when(handlerRegistry.resolve("UPDATE_PRODUCT")).thenReturn(Optional.of(saleHandler));
+        when(saleHandler.handle(any(), eq(ACTOR_ID), eq(TENANT_ID)))
+                .thenReturn(new SyncOperationResult("op-1", SyncOperationStatus.APPLIED, "p1", null));
+
+        service.pushBatch(new com.keevo.sync.sync.domain.port.in.SyncUseCase.PushBatchCommand(
+                ACTOR_ID, TENANT_ID, "device-7", List.of(op)));
+
+        var logged = ArgumentCaptor.forClass(SyncOperationsLogEntry.class);
+        verify(logRepository).save(logged.capture());
+        assertThat(logged.getValue().deviceId()).isEqualTo("device-7");
+    }
+
+    @Test
+    void pushBatch_overwriteDecidedBeforeApply_loggedOnlyOnceApplied() {
+        var op = new SyncOperation("op-1", "UPDATE_PRODUCT", "p1", Map.of("productId", "p1"), Instant.now());
+        var overwrite = new ConflictResult("LAST_WRITE_WINS", "LAST_WRITE_WINS", Map.of("entityType", "PRODUCT"));
+        var pre = PreApplyCheck.overwrite(overwrite);
+        when(logRepository.isSettled("op-1")).thenReturn(false);
+        when(conflictStrategyRegistry.resolve("UPDATE_PRODUCT")).thenReturn(conflictStrategy);
+        doReturn(pre).when(conflictStrategy).beforeApply(any(), any(), any());
+        when(handlerRegistry.resolve("UPDATE_PRODUCT")).thenReturn(Optional.of(saleHandler));
+        when(saleHandler.handle(any(), eq(ACTOR_ID), eq(TENANT_ID)))
+                .thenReturn(new SyncOperationResult("op-1", SyncOperationStatus.APPLIED, "p1", null));
+        doReturn(overwrite).when(conflictStrategy).evaluate(any(), any(), any(), any(), eq(pre));
+
+        SyncBatchResult result = service.pushBatch(new com.keevo.sync.sync.domain.port.in.SyncUseCase.PushBatchCommand(
+                ACTOR_ID, TENANT_ID, "device-1", List.of(op)));
+
+        assertThat(result.results().get(0).status()).isEqualTo(SyncOperationStatus.APPLIED);
+        assertThat(result.results().get(0).conflictData()).containsEntry("entityType", "PRODUCT");
+        verify(conflictsLogRepository).save(any(SyncConflictsLogEntry.class));
     }
 }

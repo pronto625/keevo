@@ -102,7 +102,7 @@ class CategoryUseCasesTest {
 
         @Test
         void createWithId_savesClientUuid_andPublishesEvent() {
-            when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(repository.insert(any())).thenAnswer(inv -> inv.getArgument(0));
 
             Category saved = useCase.createWithId(ID, "Épicerie", null, ACTOR, TENANT);
 

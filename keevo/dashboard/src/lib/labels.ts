@@ -166,6 +166,7 @@ export function entityTypeLabel(code: string | null | undefined): string {
 
 const CONFLICT_TYPE_LABELS: Record<string, string> = {
   LAST_WRITE_WINS: "Modifications concurrentes",
+  LAST_WRITE_SUPERSEDED: "Modification hors ligne ignorée (version plus récente conservée)",
   STOCK_NEGATIVE: "Stock devenu négatif",
 };
 

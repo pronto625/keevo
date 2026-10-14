@@ -36,8 +36,8 @@ void main() {
   testWidgets('XAF values formatted correctly', (tester) async {
     await tester.pumpWidget(buildWidget());
 
-    expect(find.text('+15 000 FCFA'), findsOneWidget);
-    expect(find.text('−47 500 FCFA'), findsOneWidget);
+    expect(find.text('+15 000 XAF'), findsOneWidget);
+    expect(find.text('−47 500 XAF'), findsOneWidget);
   });
 
   testWidgets('displays Résumé header with icon', (tester) async {

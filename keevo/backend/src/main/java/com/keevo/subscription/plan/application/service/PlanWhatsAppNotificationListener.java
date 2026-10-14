@@ -51,7 +51,7 @@ public class PlanWhatsAppNotificationListener {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onExpired(PlanExpiredEvent event) {
-        send(event.tenantId(), event.schemaName(), "expiry", PlanWhatsAppMessages.expired());
+        send(event.tenantId(), event.schemaName(), "expiry", PlanWhatsAppMessages.expired(event.previousPlan()));
     }
 
     private void send(UUID tenantId, String schemaName, String kind, String text) {

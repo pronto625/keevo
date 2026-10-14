@@ -84,8 +84,10 @@ class SessionClaimsApplier {
     if (newSession && _ref.exists(subscriptionInfoProvider)) {
       _ref.invalidate(subscriptionInfoProvider);
     }
-    // Same for the account-deletion banner (cached per process).
-    if (newSession && _ref.exists(deletionPendingStatusProvider)) {
+    // Same for the account-deletion banner (cached per process) — on every
+    // token: a renewal after a deletion request / cancellation carries the
+    // new tenantStatus (A50).
+    if (_ref.exists(deletionPendingStatusProvider)) {
       _ref.invalidate(deletionPendingStatusProvider);
     }
   }
@@ -118,7 +120,13 @@ class SessionClaimsApplier {
       }
       await db.clearAllData();
       // The pull cursor belonged to the previous account: start with a full pull.
-      await _ref.read(flutterSecureStorageProvider).delete(key: kLastSyncTimestampKey);
+      final secure = _ref.read(flutterSecureStorageProvider);
+      await secure.delete(key: kLastSyncTimestampKey);
+      // So did the sync device id: the server binds a device to one user and
+      // answers DEVICE_ID_MISMATCH (403) to anyone else, so an employee signing
+      // in on the owner's phone could never sync (device test). A fresh id is
+      // created on the next sync.
+      await secure.delete(key: kDeviceIdKey);
       for (final key in _accountPrefs) {
         await prefs.remove(key);
       }

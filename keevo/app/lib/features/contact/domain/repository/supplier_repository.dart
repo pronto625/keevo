@@ -19,5 +19,8 @@ abstract class SupplierRepository {
     List<String>? productIds,
   });
   Future<void> archive(String id);
+
+  /// Restores an archived fournisseur (sync UNARCHIVE_SUPPLIER).
+  Future<void> unarchive(String id);
   Future<void> syncFromRemote();
 }

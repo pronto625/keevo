@@ -29,6 +29,7 @@ class ReportsDeltaProviderTest {
     @Test
     void entityKey_returnsReports() { assertThat(provider.entityKey()).isEqualTo("reports"); }
 
+    // updated_at, not created_at: a later delivery attempt must reach the other devices.
     @Test
     void queryDelta_buildsSqlWithSinceFilterAndBindsExactTimestamp() {
         when(em.createNativeQuery(anyString())).thenReturn(query);
@@ -41,7 +42,7 @@ class ReportsDeltaProviderTest {
 
         var sqlCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
         verify(em).createNativeQuery(sqlCaptor.capture());
-        assertThat(sqlCaptor.getValue()).contains("WHERE created_at >= :since");
+        assertThat(sqlCaptor.getValue()).contains("WHERE updated_at >= :since");
 
         verify(query).setParameter("since", Timestamp.from(since));
         verify(query).setMaxResults(1001);
@@ -95,10 +96,10 @@ class ReportsDeltaProviderTest {
         assertThat(mapped).containsEntry("content", content);
         assertThat(mapped).containsEntry("deliveryStatus", "SENT");
         assertThat(mapped).containsEntry("deliveryAttempts", 1);
-        assertThat(mapped).containsEntry("lastAttemptAt", lastAttemptAt.toString());
+        assertThat(mapped).containsEntry("lastAttemptAt", "2026-03-20T09:00:00Z");
         assertThat(mapped).containsEntry("totalRevenue", 50000);
         assertThat(mapped).containsEntry("totalSales", 10);
         assertThat(mapped).containsEntry("isAutomatic", true);
-        assertThat(mapped).containsEntry("createdAt", createdAt.toString());
+        assertThat(mapped).containsEntry("createdAt", "2026-03-20T08:00:00Z");
     }
 }

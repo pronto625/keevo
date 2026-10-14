@@ -4,14 +4,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:keevo/core/auth/session_refresher.dart';
 import 'package:keevo/features/account/domain/model/deletion_pending_status.dart';
 import 'package:keevo/features/account/domain/repository/account_deletion_repository.dart';
 import 'package:keevo/features/account/presentation/page/delete_account_page.dart';
 import 'package:keevo/features/account/presentation/provider/account_deletion_provider.dart';
 import 'package:keevo/features/auth/domain/model/account_profile.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
+import 'package:keevo/features/settings/presentation/provider/account_status_provider.dart';
 
 class _MockRepo extends Mock implements AccountDeletionRepository {}
+
+class _MockRefresher extends Mock implements SessionRefresher {}
+
+late _MockRefresher _refresher;
 
 const _owner = AccountProfile(
   userId: 'u1',
@@ -35,6 +41,8 @@ Widget _build(AccountDeletionRepository repo, AccountProfile profile) {
     overrides: [
       accountDeletionRepositoryProvider.overrideWithValue(repo),
       accountProfileProvider.overrideWith((_) async => profile),
+      sessionRefresherProvider.overrideWithValue(_refresher),
+      tenantStatusClaimProvider.overrideWith((_) async => 'ACTIVE'),
     ],
     child: MaterialApp.router(
       routerConfig: GoRouter(
@@ -69,6 +77,9 @@ void main() {
 
   setUp(() {
     repo = _MockRepo();
+    _refresher = _MockRefresher();
+    when(() => _refresher.refresh())
+        .thenAnswer((_) async => RefreshOutcome.renewed);
     when(() => repo.currentStatus()).thenAnswer((_) async => null);
     when(() => repo.requestDeletion()).thenAnswer((_) async =>
         DeletionPendingStatus(scheduledAt: DateTime(2026, 11, 10, 9)));
@@ -107,6 +118,9 @@ void main() {
       await tester.pumpAndSettle();
 
       verify(() => repo.requestDeletion()).called(1);
+      // A50: the token is renewed so its tenantStatus says DELETION_PENDING
+      // (read-only) at once, not after the 60-day access token expires.
+      verify(() => _refresher.refresh()).called(1);
       expect(
         find.text('Votre demande de suppression a été enregistrée. Vos '
             'données seront supprimées le 10/11/2026.'),
@@ -131,6 +145,7 @@ void main() {
       expect(find.text('Demande déjà enregistrée'), findsOneWidget);
       expect(find.text('AccountPage'), findsNothing);
       expect(_confirmButton(tester).onPressed, isNotNull);
+      verifyNever(() => _refresher.refresh());
     });
 
     testWidgets('"Annuler" goes back without calling the API', (tester) async {

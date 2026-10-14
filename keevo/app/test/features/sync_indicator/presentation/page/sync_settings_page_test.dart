@@ -25,9 +25,10 @@ void main() {
     });
   }
 
-  Widget _buildPage() => ProviderScope(
+  Widget _buildPage({List<Map<String, dynamic>>? devices}) => ProviderScope(
         overrides: [
-          activeDevicesProvider.overrideWith((ref) => Future.value([
+          activeDevicesProvider.overrideWith((ref) => Future.value(devices ??
+              [
                 {'deviceId': 'test-device', 'lastPushAt': '2024-01-01T00:00:00Z'},
               ])),
           currentDeviceIdProvider.overrideWith((ref) async => 'test-device'),
@@ -52,6 +53,24 @@ void main() {
       expect(find.text('Historique'), findsOneWidget);
       expect(find.text('Conflits'), findsOneWidget);
       expect(find.text('File d\'attente'), findsOneWidget);
+    });
+
+    // Device test: a device that only pulled read « Jamais synchronisé ».
+    testWidgets('a device that only received data is not « Jamais synchronisé »',
+        (tester) async {
+      _setPhoneSize(tester);
+      final recent = DateTime.now().toUtc().subtract(const Duration(minutes: 5));
+      await tester.pumpWidget(_buildPage(devices: [
+        {
+          'deviceId': 'test-device',
+          'lastPushAt': '',
+          'updatedAt': recent.toIso8601String(),
+        },
+      ]));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Jamais synchronisé'), findsNothing);
+      expect(find.textContaining('Vu '), findsOneWidget);
     });
 
     testWidgets('shows active devices section', (tester) async {

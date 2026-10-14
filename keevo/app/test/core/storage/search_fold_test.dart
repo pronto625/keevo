@@ -104,6 +104,21 @@ void main() {
     setUp(() => db = AppDatabase.forTesting());
     tearDown(() => db.close());
 
+    // Device regression: 126 nested replace() calls overflowed the parser
+    // stack of Android's SQLCipher build ("parser stack overflow"), so every
+    // local search and the product duplicate check failed on a real phone.
+    test('fold SQL is one function call, no nested replace()', () {
+      expect(foldedSqlRaw('p.name'), 'keevo_fold(p.name)');
+      expect(foldedSqlRaw('p.name').contains('replace('), isFalse);
+    });
+
+    test('keevo_fold keeps NULL', () async {
+      final row = await db
+          .customSelect('SELECT ${foldedSqlRaw('NULL')} AS f')
+          .getSingle();
+      expect(row.read<String?>('f'), equals(null));
+    });
+
     Future<String> rawFold(String input) async {
       final row = await db.customSelect(
         'SELECT ${foldedSqlRaw('v')} AS f FROM (SELECT ? AS v)',

@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/storage/search_fold.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/contact_validation.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import '../../../catalog/domain/model/product_model.dart';
 import '../../../catalog/presentation/provider/product_provider.dart';
@@ -75,14 +76,14 @@ class _SupplierFormPageState extends ConsumerState<SupplierFormPage>
         await ref.read(supplierListNotifierProvider.notifier).patchSupplier(
               id: widget.supplier!.id,
               name: _nameCtrl.text.trim(),
-              phone: _phoneCtrl.text.trim(),
+              phone: normalizeContactPhone(_phoneCtrl.text)!,
               email: _emailCtrl.text.trim().isEmpty ? null : _emailCtrl.text.trim(),
               productIds: _selectedProductIds,
             );
       } else {
         await ref.read(supplierListNotifierProvider.notifier).create(
               name: _nameCtrl.text.trim(),
-              phone: _phoneCtrl.text.trim(),
+              phone: normalizeContactPhone(_phoneCtrl.text)!,
               email: _emailCtrl.text.trim().isEmpty ? null : _emailCtrl.text.trim(),
               productIds: _selectedProductIds,
             );
@@ -206,18 +207,12 @@ class _SupplierFormPageState extends ConsumerState<SupplierFormPage>
                           _ModernField(
                             controller: _phoneCtrl,
                             label: 'Téléphone',
-                            hint: '+22670000010',
+                            hint: '6 99 11 22 33',
                             icon: Icons.phone_outlined,
                             required: true,
                             keyboardType: TextInputType.phone,
-                            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[+\d]'))],
-                            validator: (v) {
-                              if (v == null || v.trim().isEmpty) return 'Le téléphone est requis';
-                              if (!RegExp(r'^\+[1-9]\d{7,14}$').hasMatch(v.trim())) {
-                                return 'Format E.164 requis (+XXXXXXXX)';
-                              }
-                              return null;
-                            },
+                            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[+\d\s]'))],
+                            validator: contactPhoneError,
                           ),
                           const SizedBox(height: 20),
 
@@ -227,12 +222,7 @@ class _SupplierFormPageState extends ConsumerState<SupplierFormPage>
                             hint: 'fournisseur@example.com',
                             icon: Icons.email_outlined,
                             keyboardType: TextInputType.emailAddress,
-                            validator: (v) {
-                              if (v != null && v.isNotEmpty && !v.contains('@')) {
-                                return 'Format email invalide';
-                              }
-                              return null;
-                            },
+                            validator: contactEmailError,
                           ),
 
                           const SizedBox(height: 32),

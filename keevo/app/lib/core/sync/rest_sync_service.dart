@@ -8,10 +8,13 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../features/auth/data/repository/secure_token_storage.dart';
 import '../../features/catalog/data/datasource/remote_product_datasource.dart';
+import '../auth/jwt_claims.dart';
 import '../di/providers.dart' show kUserRoleKey;
 import '../storage/app_constants.dart';
 import '../storage/app_database.dart';
+import 'account_read_only_exception.dart';
 import 'sync_rejection_policy.dart';
 import 'sync_required_exception.dart';
 import 'sync_service.dart';
@@ -79,6 +82,19 @@ class RestSyncService implements SyncService {
     return push;
   }
 
+  /// The read-only state of the account per the stored access token's
+  /// `tenantStatus` claim (A50). Null — writes allowed — when the token cannot
+  /// be read: the server stays the authority.
+  Future<AccountReadOnlyException?> _accountReadOnly() async {
+    try {
+      final token = await SecureTokenStorage(_secureStorage).getToken();
+      return AccountReadOnlyException.forTenantStatus(
+          JwtClaims.tryParse(token)?.tenantStatus);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<List<Map<String, dynamic>>> _push() async {
     // A validation/cancellation queued after its sale was quarantined joins
     // the sale's chain instead of being sent (and refused) on its own.
@@ -99,6 +115,11 @@ class RestSyncService implements SyncService {
         .get();
 
     if (pendingOps.isEmpty) return [];
+
+    // A50: a read-only account (suspended, deletion pending) would be refused
+    // (403) — the queue is kept as is, untouched, until the state lifts.
+    final readOnly = await _accountReadOnly();
+    if (readOnly != null) throw readOnly;
 
     dev.log('📦 Found ${pendingOps.length} pending operations', name: 'RestSync');
 
@@ -134,7 +155,8 @@ class RestSyncService implements SyncService {
       try {
         allConflicts
             .addAll(await _pushBatch(batch, removed, rewritten, quarantined));
-      } on DioException {
+      } on Exception catch (e) {
+        if (e is! DioException && e is! AccountReadOnlyException) rethrow;
         // A later batch could not be sent (its ops stay queued, retried next
         // push). The earlier batches already removed rolled-back /
         // quarantined ops from the queue: their notices must still reach
@@ -144,6 +166,34 @@ class RestSyncService implements SyncService {
       }
     }
     return allConflicts;
+  }
+
+  /// Conflict type the server sets on an offline edit older than the
+  /// entity's current version (acknowledged, not applied).
+  static const supersededConflictType = 'LAST_WRITE_SUPERSEDED';
+
+  /// Device-clock margin when rewinding the pull cursor to an operation's
+  /// creation time.
+  static const supersededPullMargin = Duration(minutes: 5);
+
+  static bool isSupersededResult(Map<String, dynamic> result) {
+    final data = result['conflictData'];
+    return data is Map && data['conflictType'] == supersededConflictType;
+  }
+
+  /// Moves the pull cursor back to just before [since] (never forward), so
+  /// the next pull brings back the version the server kept — it was written
+  /// after the superseded edit — and overwrites the local row, which is no
+  /// longer protected by a pending operation.
+  Future<void> _rewindPullCursor(DateTime since) async {
+    final raw = await _secureStorage.read(key: kLastSyncTimestampKey);
+    final current = raw == null ? null : int.tryParse(raw);
+    if (current == null) return; // no cursor: the next pull is a full one
+    final target =
+        since.subtract(supersededPullMargin).millisecondsSinceEpoch;
+    if (target >= current) return;
+    await _secureStorage.write(
+        key: kLastSyncTimestampKey, value: target.toString());
   }
 
   Future<void> _dropMergedLocalProduct(
@@ -210,6 +260,13 @@ class RestSyncService implements SyncService {
           // otherwise stay REJECTED forever. Other operations are deleted by
           // id only: a later edit of the same entity is still to be sent.
           final confirmedOp = ops.firstWhere((o) => o.id == opId);
+          // Last-write-wins: the server already held a newer version and
+          // kept it, so this offline edit was not applied. The local row
+          // still shows the edit; a pull made while it was queued skipped
+          // the entity and may have moved the cursor past the kept version.
+          if (status == 'APPLIED' && isSupersededResult(result)) {
+            await _rewindPullCursor(confirmedOp.createdAt);
+          }
           // The server merged this product creation into an already-existing
           // product of the same name (serverEntityId != our local id) and
           // will redirect our queued stock entries / sales to it. Drop the
@@ -375,6 +432,15 @@ class RestSyncService implements SyncService {
         throw SyncRequiredException(
             daysSinceLastSync: days, lastPushAt: lastPushAt);
       }
+      // A50: account read-only (claim renewed since the push started, or a
+      // token the app could not read). Not a failed attempt: the ops stay
+      // queued, untouched, and are sent once the account is writable again.
+      final body = e.response?.data;
+      final readOnly = e.response?.statusCode == 403 && body is Map
+          ? AccountReadOnlyException.forDomainCode(
+              body['domainCode'] as String?)
+          : null;
+      if (readOnly != null) throw readOnly;
       // Network error — increment retry on all ops in this batch
       for (final op in ops) {
         await (_database.update(_database.syncQueue)
@@ -1265,8 +1331,8 @@ class RestSyncService implements SyncService {
       await _database.customStatement(
         'INSERT INTO sales (id, store_id, employee_id, total_amount, '
         'discount_amount, payment_mode, client_id, status, occurred_at, '
-        'synced, created_at) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?) '
+        'synced, created_at, mobile_money_ref) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?) '
         'ON CONFLICT(id) DO UPDATE SET '
         // Never downgrade a locally-completed/cancelled sale back to
         // PENDING_VALIDATION with stale server state. Any other server status
@@ -1278,6 +1344,10 @@ class RestSyncService implements SyncService {
         'discount_amount = excluded.discount_amount, '
         'payment_mode = excluded.payment_mode, '
         'client_id = excluded.client_id, '
+        // A server that does not send the reference yet must not erase the
+        // one typed on this device.
+        'mobile_money_ref = COALESCE(excluded.mobile_money_ref, '
+        'sales.mobile_money_ref), '
         'synced = 1, '
         'occurred_at = excluded.occurred_at, created_at = excluded.created_at',
         [
@@ -1291,6 +1361,7 @@ class RestSyncService implements SyncService {
           map['status'] ?? 'COMPLETED',
           _toLocalIso(map['occurredAt']),
           _toLocalIso(map['createdAt']),
+          map['mobileMoneyRef'],
           // Parameters for the CASE guard in ON CONFLICT DO UPDATE:
           'PENDING_VALIDATION',
           'COMPLETED',
@@ -1322,7 +1393,7 @@ class RestSyncService implements SyncService {
             iMap['catalogueUnitPrice'] ?? iMap['appliedUnitPrice'],
             iMap['quantity'],
             iMap['subtotal'],
-            map['createdAt'],
+            _toLocalIso(map['createdAt']),
           ],
         );
       }
@@ -1339,8 +1410,9 @@ class RestSyncService implements SyncService {
         'INSERT INTO day_closures (id, store_id, actor_id, closed_at, '
         'total_sales, total_revenue, cash_amount, momo_amount, '
         'pending_sales_count, pending_sales_total, is_automatic, '
+        'top_product_id, top_product_name, top_product_qty, '
         'synced, created_at) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 1, ?) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?) '
         // The server keeps the client's closure id: a closure pushed from
         // here comes back with it and is now confirmed.
         // Its totals are the server's: late offline sales synced after the
@@ -1350,6 +1422,13 @@ class RestSyncService implements SyncService {
         'total_revenue = excluded.total_revenue, '
         'cash_amount = excluded.cash_amount, '
         'momo_amount = excluded.momo_amount, '
+        // Summary shown in the day sheet: without it a closure made on
+        // another device has no top product and no pending sales.
+        'pending_sales_count = excluded.pending_sales_count, '
+        'pending_sales_total = excluded.pending_sales_total, '
+        'top_product_id = excluded.top_product_id, '
+        'top_product_name = excluded.top_product_name, '
+        'top_product_qty = excluded.top_product_qty, '
         'synced = 1',
         [
           map['id'],
@@ -1360,7 +1439,12 @@ class RestSyncService implements SyncService {
           map['totalRevenue'],
           map['cashTotal'],
           map['mobileMoneyTotal'],
+          map['pendingSalesCount'] ?? 0,
+          map['pendingSalesTotal'] ?? 0,
           isAutomatic,
+          map['topProductId'],
+          map['topProductName'],
+          map['topProductQty'] ?? 0,
           closedAtLocal,
         ],
       );
@@ -1530,7 +1614,12 @@ class RestSyncService implements SyncService {
         'content, delivery_status, delivery_attempts, last_attempt_at, '
         'total_revenue, total_sales, is_automatic, created_at, actor_id) '
         'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) '
+        // The server's report is authoritative: a later delivery attempt or
+        // a regeneration reaches every device (pulled on updated_at).
         'ON CONFLICT(id) DO UPDATE SET '
+        'content = excluded.content, '
+        'total_revenue = excluded.total_revenue, '
+        'total_sales = excluded.total_sales, '
         'delivery_status = excluded.delivery_status, '
         'delivery_attempts = excluded.delivery_attempts, '
         'last_attempt_at = excluded.last_attempt_at, '
@@ -1602,6 +1691,12 @@ class RestSyncService implements SyncService {
     required Map<String, dynamic> payload,
     String? entityId,
   }) async {
+    // A50: no write while the account is read-only (suspended, deletion
+    // pending). Thrown inside the caller's transaction, so the local write
+    // that goes with this operation is rolled back too.
+    final readOnly = await _accountReadOnly();
+    if (readOnly != null) throw readOnly;
+
     const uuid = Uuid();
 
     // Deduplicate: a one-shot operation already queued for this entity (e.g.

@@ -137,7 +137,7 @@ void main() {
         reason: 'the validation is shown under its sale');
     expect(find.text('Enregistrement de vente'), findsOneWidget);
     expect(find.text('Motif : Produit introuvable'), findsOneWidget);
-    expect(find.text('1 article — 1 000 FCFA'), findsOneWidget);
+    expect(find.text('1 article — 1 000 XAF'), findsOneWidget);
     expect(find.text('Boutique : Boutique Centre'), findsOneWidget);
     expect(find.text('Avec : Validation de vente'), findsOneWidget);
     for (final action in ['Renvoyer', 'Exporter', 'Rattacher', 'Abandonner']) {

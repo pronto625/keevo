@@ -155,14 +155,11 @@ public class ProductController {
                 CurrentActor.role()  // v1s-12-10: real role → Story 2.4 draft guard (FORBIDDEN → 403)
         );
         
-        try {
-            Product product = updateProductUseCase.execute(dto);
-            ProductResponseDto response = ProductResponseDto.fromDomain(product);
-            return ResponseEntity.ok(ApiResponseWrapper.ok(response));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(ApiResponseWrapper.error("Produit introuvable", "NOT_FOUND", "PRODUCT_NOT_FOUND", null));
-        }
+        // Domain errors (404 PRODUCT_NOT_FOUND, 422 VALIDATION_ERROR) go through the global
+        // handler: catching IllegalArgumentException here labelled every validation error
+        // « Produit introuvable ».
+        Product product = updateProductUseCase.execute(dto);
+        return ResponseEntity.ok(ApiResponseWrapper.ok(ProductResponseDto.fromDomain(product)));
     }
 
     /**

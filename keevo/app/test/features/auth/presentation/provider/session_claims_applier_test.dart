@@ -60,6 +60,7 @@ void main() {
     FlutterSecureStorage.setMockInitialValues({
       kDbEncryptionKey: 'db-key',
       kLastSyncTimestampKey: '1700000000000',
+      kDeviceIdKey: 'device-of-u1',
     });
     prefs = await SharedPreferences.getInstance();
     db = AppDatabase.forTesting();
@@ -118,6 +119,10 @@ void main() {
     await applier().apply(_employee('u1'), newSession: true);
 
     expect(await db.select(db.categories).get(), hasLength(1));
+    expect(
+      await const FlutterSecureStorage().read(key: kDeviceIdKey),
+      'device-of-u1',
+    );
   });
 
   test('another account signing in starts from a clean device state', () async {
@@ -144,6 +149,12 @@ void main() {
     expect(
       await const FlutterSecureStorage().read(key: kDbEncryptionKey),
       'db-key',
+    );
+    // Device test: the server binds a sync device to one user (403
+    // DEVICE_ID_MISMATCH) — the new account gets a fresh device id.
+    expect(
+      await const FlutterSecureStorage().read(key: kDeviceIdKey),
+      isNull,
     );
   });
 

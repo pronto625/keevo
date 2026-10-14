@@ -195,8 +195,9 @@ FROM audit_entries a''';
   /// Handles both JDBC format ("2023-06-15 12:30:00.0") and ISO-8601.
   DateTime _parseOccurredAt(String raw) {
     // Try ISO-8601 first (e.g. "2023-06-15T12:30:00.000Z")
+    // toLocal(): rows written before the sync stored UTC ("…Z") — show local.
     final parsed = DateTime.tryParse(raw);
-    if (parsed != null) return parsed;
+    if (parsed != null) return parsed.toLocal();
     // JDBC format: "2023-06-15 12:30:00.0" → replace space with T
     final iso = raw.replaceFirst(' ', 'T');
     return DateTime.tryParse(iso) ?? DateTime.now();

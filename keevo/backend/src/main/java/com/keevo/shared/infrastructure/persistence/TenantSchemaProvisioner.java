@@ -543,6 +543,13 @@ public class TenantSchemaProvisioner {
     static final String DDL_SALES_MIGRATE_VERSION =
             "ALTER TABLE sales ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0";
 
+    /**
+     * Mobile Money transaction reference typed at checkout (nullable). Sent by the app since
+     * Story 4.1 but never stored, so other devices, a reinstall and the exports lost it.
+     */
+    static final String DDL_SALES_MIGRATE_MOBILE_MONEY_REF =
+            "ALTER TABLE sales ADD COLUMN IF NOT EXISTS mobile_money_ref VARCHAR(100)";
+
     // ── Employees (Story 3.5) ─────────────────────────────────────────────────
 
     static final String DDL_EMPLOYEES = """
@@ -666,7 +673,12 @@ public class TenantSchemaProvisioner {
 
         /** Non-blocking DDL on an existing schema (must run in autocommit). */
         String createConcurrentlySql(String schema) {
-            return "CREATE INDEX CONCURRENTLY IF NOT EXISTS " + name
+            return createConcurrentlySql(schema, name);
+        }
+
+        /** Same DDL under another index name (temporary index of a swap rebuild). */
+        String createConcurrentlySql(String schema, String indexName) {
+            return "CREATE INDEX CONCURRENTLY IF NOT EXISTS " + indexName
                     + " ON \"" + TenantSchema.validate(schema) + "\"." + table + " (" + keys() + ")";
         }
 
@@ -697,7 +709,7 @@ public class TenantSchemaProvisioner {
             new SyncKeysetIndex("idx_day_closures_sync_keyset", "day_closures", "received_at"),
             new SyncKeysetIndex("idx_inventory_sessions_sync_keyset", "inventory_sessions", "updated_at"),
             new SyncKeysetIndex("idx_inventory_counts_sync_keyset", "inventory_counts", "updated_at"),
-            new SyncKeysetIndex("idx_reports_sync_keyset", "reports", "created_at"));
+            new SyncKeysetIndex("idx_reports_sync_keyset", "reports", "updated_at"));
 
     // Story 5.1 — sync operations log (idempotency guard)
     static final String DDL_SYNC_OPERATIONS_LOG = """
@@ -710,6 +722,9 @@ public class TenantSchemaProvisioner {
                 processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 client_timestamp TIMESTAMPTZ
             )""";
+    /** Device that pushed the operation: last-write-wins tells same-device edits from concurrent ones. */
+    static final String DDL_SYNC_OPERATIONS_LOG_MIGRATE_DEVICE_ID =
+            "ALTER TABLE sync_operations_log ADD COLUMN IF NOT EXISTS device_id VARCHAR(100)";
     static final String DDL_SYNC_OPERATIONS_LOG_IDX_ENTITY =
             "CREATE INDEX IF NOT EXISTS idx_sync_ops_log_entity ON sync_operations_log(entity_id)";
     static final String DDL_SYNC_OPERATIONS_LOG_IDX_PROCESSED =
@@ -818,7 +833,8 @@ public class TenantSchemaProvisioner {
                 total_revenue INT NOT NULL DEFAULT 0,
                 total_sales INT NOT NULL DEFAULT 0,
                 is_automatic BOOLEAN NOT NULL DEFAULT false,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ
             )""";
 
     /** Migration DDL: adds actor_id to existing reports tables (idempotent — Story 7.2) */
@@ -832,6 +848,14 @@ public class TenantSchemaProvisioner {
     /** Migration DDL: adds actor_name to existing reports tables (idempotent — Story 7.6) */
     static final String DDL_REPORTS_MIGRATE_ACTOR_NAME =
             "ALTER TABLE reports ADD COLUMN IF NOT EXISTS actor_name VARCHAR(255)";
+
+    // reports.updated_at — pull cursor (ReportsDeltaProvider): a report changes after creation
+    // (delivery status/attempts). No column default, like day_closures.received_at (public V23):
+    // existing rows are backfilled from created_at; the application always writes it.
+    static final String DDL_REPORTS_MIGRATE_UPDATED_AT =
+            "ALTER TABLE reports ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ";
+    static final String DDL_REPORTS_BACKFILL_UPDATED_AT =
+            "UPDATE reports SET updated_at = created_at WHERE updated_at IS NULL";
 
     static final String DDL_REPORTS_IDX_TENANT_TYPE =
             "CREATE INDEX IF NOT EXISTS idx_reports_tenant_type ON reports (tenant_id, report_type)";
@@ -1098,6 +1122,7 @@ public class TenantSchemaProvisioner {
             // Story 5.2 — updated_at for sales/sale_items delta pull
             stmt.execute(DDL_SALES_MIGRATE_UPDATED_AT);
             stmt.execute(DDL_SALES_MIGRATE_VERSION);            // Story v1s-13-10: optimistic lock
+            stmt.execute(DDL_SALES_MIGRATE_MOBILE_MONEY_REF);   // idempotent: Mobile Money reference
             stmt.execute(DDL_SALE_ITEMS_MIGRATE_UPDATED_AT);
             // Story 3.5 — employees
             stmt.execute(DDL_EMPLOYEES);
@@ -1115,6 +1140,7 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_SALES_IDX_STORE_EMPLOYEE_OCCURRED_AT);
             // Story 5.1 — sync operations log
             stmt.execute(DDL_SYNC_OPERATIONS_LOG);
+            stmt.execute(DDL_SYNC_OPERATIONS_LOG_MIGRATE_DEVICE_ID);
             stmt.execute(DDL_SYNC_OPERATIONS_LOG_IDX_ENTITY);
             stmt.execute(DDL_SYNC_OPERATIONS_LOG_IDX_PROCESSED);
             // Story 5.3 — sync conflicts log
@@ -1138,6 +1164,7 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_REPORTS_MIGRATE_ACTOR_ID);   // idempotent: adds actor_id if missing
             stmt.execute(DDL_REPORTS_MIGRATE_STORE_NAME); // idempotent: adds store_name if missing
             stmt.execute(DDL_REPORTS_MIGRATE_ACTOR_NAME); // idempotent: adds actor_name if missing (Story 7.6)
+            stmt.execute(DDL_REPORTS_MIGRATE_UPDATED_AT); // idempotent: pull cursor of the reports delta
             stmt.execute(DDL_REPORTS_IDX_TENANT_TYPE);
             stmt.execute(DDL_REPORTS_IDX_DATE);
             stmt.execute(DDL_REPORTS_IDX_DELIVERY_STATUS);
@@ -1177,8 +1204,15 @@ public class TenantSchemaProvisioner {
             try {
                 stmt.execute(index.createSql());
                 if (savepoint != null) conn.releaseSavepoint(savepoint);
-            } catch (SQLException e) {
-                if (savepoint != null) conn.rollback(savepoint);
+            } catch (SQLException | RuntimeException e) {
+                if (savepoint != null) {
+                    try {
+                        conn.rollback(savepoint);
+                    } catch (SQLException | RuntimeException rollbackFailure) {
+                        log.warn("Keyset index {}: rollback to savepoint failed on schema {}",
+                                index.name(), schemaName, rollbackFailure);
+                    }
+                }
                 log.warn("Keyset index {} not created on schema {} — left to SyncKeysetIndexJob",
                         index.name(), schemaName, e);
             }

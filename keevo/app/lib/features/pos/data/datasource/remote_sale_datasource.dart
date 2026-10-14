@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/utils/server_date.dart';
 import '../../domain/model/payment_mode_enum.dart';
 import '../../domain/model/sale_model.dart';
 import '../../domain/model/sales_history_filter.dart';
@@ -108,7 +109,7 @@ class RemoteSaleDataSource {
               .toList() ??
           [];
       final createdAt =
-          DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now();
+          tryParseServerDate(json['createdAt'] as String?) ?? DateTime.now();
       return Sale(
         id: json['id'] as String? ?? '',
         storeId: json['storeId'] as String? ?? '',
@@ -118,6 +119,7 @@ class RemoteSaleDataSource {
           (m) => m.value == (json['paymentMode'] as String? ?? 'CASH'),
           orElse: () => PaymentModeEnum.cash,
         ),
+        mobileMoneyRef: json['mobileMoneyRef'] as String?,
         totalAmount: (json['totalAmount'] as num?)?.toInt() ?? 0,
         discountAmount: (json['discountAmount'] as num?)?.toInt() ?? 0,
         status: json['status'] as String? ?? 'PENDING_VALIDATION',
@@ -177,13 +179,14 @@ class RemoteSaleDataSource {
           (m) => m.value == (json['paymentMode'] as String? ?? 'CASH'),
           orElse: () => PaymentModeEnum.cash,
         ),
+        mobileMoneyRef: json['mobileMoneyRef'] as String?,
         totalAmount: (json['totalAmount'] as num?)?.toInt() ?? 0,
         discountAmount: (json['discountAmount'] as num?)?.toInt() ?? 0,
         status: json['status'] as String? ?? 'COMPLETED',
         items: items,
-        occurredAt: DateTime.tryParse(json['occurredAt'] as String? ?? '') ??
+        occurredAt: tryParseServerDate(json['occurredAt'] as String?) ??
             DateTime.now(),
-        createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+        createdAt: tryParseServerDate(json['createdAt'] as String?) ??
             DateTime.now(),
       );
     }).toList();

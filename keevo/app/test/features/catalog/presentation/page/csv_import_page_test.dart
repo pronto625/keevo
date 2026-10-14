@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:keevo/features/catalog/domain/model/csv_import_result.dart';
 import 'package:keevo/features/catalog/presentation/page/csv_import_page.dart';
 import 'package:keevo/features/catalog/presentation/provider/csv_import_provider.dart';
 
@@ -31,6 +32,33 @@ class _FailingImportNotifier extends CsvImportNotifier {
     state = CsvImportLoading(picked: picked);
     await Future<void>.delayed(const Duration(milliseconds: 10));
     state = CsvImportError('Connexion requise', picked: picked);
+  }
+}
+
+/// Picks a fixed file and succeeds the import (3 imported, 1 skipped).
+class _SucceedingImportNotifier extends CsvImportNotifier {
+  @override
+  CsvImportState build() => const CsvImportIdle();
+
+  @override
+  Future<void> pickFile() async {
+    state = CsvImportFilePicked(
+      bytes: Uint8List.fromList(utf8.encode('nom,prix_vente\nRiz,500\n')),
+      fileName: 'f.csv',
+      detectedHeaders: const ['nom', 'prix_vente'],
+    );
+  }
+
+  @override
+  Future<void> runImport({required Map<String, String> mapping}) async {
+    final picked = state as CsvImportFilePicked;
+    state = CsvImportLoading(picked: picked);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    state = const CsvImportSuccess(CsvImportResult(
+      imported: 3,
+      skipped: 1,
+      errors: [CsvRowError(line: 5, column: 'prix_vente', message: 'prix_vente doit être un entier')],
+    ));
   }
 }
 
@@ -132,14 +160,15 @@ void main() {
     await _map(tester, 'Prix de vente *', 'prix');
     expect(_value(tester, 'Prix de vente *'), 'prix');
 
-    // Cancel, then pick another file: nothing carried over.
+    // Cancel, then pick another file: nothing carried over — only what the
+    // new headers suggest ("nom" is recognised, "tarif" is not a known alias).
     await tester.ensureVisible(find.text('Annuler'));
     await tester.tap(find.text('Annuler'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Choisir un fichier .csv'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    expect(_value(tester, 'Nom du produit *'), isNull);
+    expect(_value(tester, 'Nom du produit *'), 'nom');
     expect(_value(tester, 'Prix de vente *'), isNull);
 
     // Map name + price, then a new file that has "nom" but not "tarif".
@@ -150,5 +179,25 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(_value(tester, 'Nom du produit *'), 'nom');
     expect(_value(tester, 'Prix de vente *'), isNull);
+  });
+
+  // Device test: the import succeeded on the server but the page stayed on
+  // the mapping step — the user could not tell and would import again.
+  testWidgets('a successful import shows the result step', (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        csvImportNotifierProvider.overrideWith(_SucceedingImportNotifier.new),
+      ],
+      child: const MaterialApp(home: CsvImportPage()),
+    ));
+    await tester.tap(find.text('Choisir un fichier .csv'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Lancer l\'import'));
+    await tester.tap(find.text('Lancer l\'import'));
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Correspondance des colonnes'), findsNothing);
+    expect(find.textContaining('Lignes ignorées'), findsOneWidget);
   });
 }

@@ -221,7 +221,7 @@ class LocalExportReader {
         return _Spec(
           'SELECT s.id, $_saleDate AS sale_date, st.name AS store_name,'
           ' s.employee_id, cl.name AS client_name, s.status, s.payment_mode,'
-          ' s.discount_amount, s.total_amount FROM sales s'
+          ' s.mobile_money_ref, s.discount_amount, s.total_amount FROM sales s'
           ' LEFT JOIN stores st ON st.id = s.store_id'
           ' LEFT JOIN clients cl ON cl.id = s.client_id'
           '${where.sql}'
@@ -542,6 +542,7 @@ class LocalExportReader {
               exportLabels['sales.status'], r.readNullable<String>('status')),
           exportLabel(exportLabels['sales.paymentMode'],
               r.readNullable<String>('payment_mode')),
+          r.readNullable<String>('mobile_money_ref'),
           items[r.read<String>('id')] ?? 0,
           r.readNullable<int>('discount_amount'),
           r.readNullable<int>('total_amount'),

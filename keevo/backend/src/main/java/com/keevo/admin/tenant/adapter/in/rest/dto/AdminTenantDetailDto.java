@@ -14,8 +14,12 @@ public record AdminTenantDetailDto(
         List<StoreInfoDto> stores,
         List<EmployeeInfoDto> employees,
         AuditPageDto auditLog,
-        SubscriptionDto subscription
+        SubscriptionDto subscription,
+        SuspensionDto suspension
 ) {
+
+    /** Story 9-2 — current suspension trace (date + reason; no actor id); null when not suspended. */
+    public record SuspensionDto(Instant suspendedAt, String reason) {}
 
     /** Story 9-2 — current plan from the tenant schema; null when it could not be read. */
     public record SubscriptionDto(String planType, Instant expiresAt) {}
@@ -54,6 +58,9 @@ public record AdminTenantDetailDto(
                 stores, employees, auditLog,
                 detail.plan() != null
                         ? new SubscriptionDto(detail.plan().planType(), detail.plan().expiresAt())
+                        : null,
+                detail.suspension() != null
+                        ? new SuspensionDto(detail.suspension().suspendedAt(), detail.suspension().reason())
                         : null
         );
     }

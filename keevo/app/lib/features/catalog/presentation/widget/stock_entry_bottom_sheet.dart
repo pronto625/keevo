@@ -112,13 +112,13 @@ class _StockEntryBottomSheetState extends ConsumerState<StockEntryBottomSheet> {
           ),
         );
       } else {
-        final blocked = ref.read(stockNotifierProvider(widget.productId)).blockedByGate;
-        if (blocked) {
+        final stockState = ref.read(stockNotifierProvider(widget.productId));
+        if (stockState.blockedByGate) {
           SyncRequiredModal.show(context);
         } else {
           messenger.showSnackBar(
-            const SnackBar(
-              content: Text('Erreur lors de l\'enregistrement'),
+            SnackBar(
+              content: Text(stockState.readOnlyMessage ?? 'Erreur lors de l\'enregistrement'),
               backgroundColor: AppTheme.errorStrong,
             ),
           );

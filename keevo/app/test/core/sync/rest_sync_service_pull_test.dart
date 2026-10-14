@@ -920,6 +920,8 @@ void main() {
     Map<String, dynamic> serverSale({
       required String status,
       int totalAmount = 10000,
+      String paymentMode = 'CASH',
+      String? mobileMoneyRef,
     }) =>
         {
           'id': 'sale-1',
@@ -928,7 +930,8 @@ void main() {
           'clientId': null,
           'totalAmount': totalAmount,
           'discountAmount': 0,
-          'paymentMode': 'CASH',
+          'paymentMode': paymentMode,
+          'mobileMoneyRef': mobileMoneyRef,
           'status': status,
           'occurredAt': '2026-03-21T10:00:00.000Z',
           'createdAt': '2026-03-21T10:00:00.000Z',
@@ -953,6 +956,32 @@ void main() {
 
     Future<Sale> localSale() =>
         (db.select(db.sales)..where((s) => s.id.equals('sale-1'))).getSingle();
+
+    test('pull_newSale_keepsItsMobileMoneyReference', () async {
+      stubPull(entities: {
+        'sales': [
+          serverSale(
+              status: 'COMPLETED',
+              paymentMode: 'MOBILE_MONEY',
+              mobileMoneyRef: 'MP2603.1234')
+        ]
+      });
+
+      await syncService.pull();
+
+      expect((await localSale()).mobileMoneyRef, 'MP2603.1234');
+    });
+
+    test('pull_withoutReference_keepsTheOneTypedOnThisDevice', () async {
+      await seedLocalSale('COMPLETED');
+      await db.customStatement(
+          "UPDATE sales SET mobile_money_ref = 'MP-LOCAL' WHERE id = 'sale-1'");
+      stubPull(entities: {'sales': [serverSale(status: 'COMPLETED')]});
+
+      await syncService.pull();
+
+      expect((await localSale()).mobileMoneyRef, 'MP-LOCAL');
+    });
 
     test('pull_cancelledOnServer_cancelsTheLocalCompletedSale', () async {
       await seedLocalSale('COMPLETED');

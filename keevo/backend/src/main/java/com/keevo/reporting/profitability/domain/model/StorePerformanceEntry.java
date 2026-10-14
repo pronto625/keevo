@@ -14,5 +14,5 @@ public record StorePerformanceEntry(
         int    salesCount,
         long   averageBasket,
         String topProductName,
-        double deltaPercent   // vs same-length preceding period; positive = improvement
+        Double deltaPercent   // vs same-length preceding period; positive = improvement; null = no data in that period (A33)
 ) {}

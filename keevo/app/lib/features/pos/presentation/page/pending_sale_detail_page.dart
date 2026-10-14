@@ -35,7 +35,7 @@ class PendingSaleDetailPage extends ConsumerStatefulWidget {
 
 class _PendingSaleDetailPageState extends ConsumerState<PendingSaleDetailPage> {
   static final _currencyFormat =
-      NumberFormat.currency(locale: 'fr_CM', symbol: 'FCFA', decimalDigits: 0);
+      NumberFormat.currency(locale: 'fr_CM', symbol: 'XAF', decimalDigits: 0);
   static final _dateFormat = DateFormat('dd/MM/yyyy HH:mm');
 
   bool _loading = false;

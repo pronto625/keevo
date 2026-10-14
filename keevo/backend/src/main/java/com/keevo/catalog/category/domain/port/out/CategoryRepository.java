@@ -33,6 +33,11 @@ public interface CategoryRepository {
     Category save(Category category);
 
     /**
+     * Insert a new category whose UUID was assigned by the caller (offline sync create).
+     */
+    Category insert(Category category);
+
+    /**
      * Find a category by its UUID.
      */
     Optional<Category> findById(UUID id);
@@ -75,6 +80,7 @@ public interface CategoryRepository {
      *
      * <p>Used by {@link com.keevo.sync.sync.application.handler.CategorySyncHandler}
      * to prevent duplicates when two offline devices create the same category name.
+     * Case-insensitive ("boissons" matches "Boissons").
      */
     Optional<Category> findByNameAndParentId(String name, UUID parentId);
 

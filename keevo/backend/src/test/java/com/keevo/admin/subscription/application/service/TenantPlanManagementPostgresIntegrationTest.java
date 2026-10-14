@@ -118,7 +118,7 @@ class TenantPlanManagementPostgresIntegrationTest extends PostgresIntegrationTes
         UUID t = tenant("kv_pm9202", "KV-PM9202", "PREMIUM_TRIAL");
         UUID actor = UUID.randomUUID();
         AdminPlanService service = planService();
-        LocalDate today = LocalDate.now(clock.withZone(AdminPlanService.WAT));
+        LocalDate today = LocalDate.now(clock.withZone(com.keevo.shared.domain.time.KeevoZones.WAT));
 
         service.activatePremium(new ActivatePremiumCommand(actor, t, today.plusDays(30), 10_000,
                 PaymentMethod.MOBILE_MONEY, null, "OM"));
@@ -197,7 +197,7 @@ class TenantPlanManagementPostgresIntegrationTest extends PostgresIntegrationTes
     @DisplayName("reminder 7 days before a PREMIUM expiry: sent once, the second run sends nothing")
     void reminderIdempotent() {
         UUID t = tenant("kv_pm9205", "KV-PM9205", "PREMIUM");
-        LocalDate today = LocalDate.now(clock.withZone(AdminPlanService.WAT));
+        LocalDate today = LocalDate.now(clock.withZone(com.keevo.shared.domain.time.KeevoZones.WAT));
         jdbc.update("UPDATE \"kv_pm9205\".subscriptions SET plan_type = 'PREMIUM', expires_at = ?",
                 java.sql.Timestamp.from(AdminPlanService.endOfDayWat(today.plusDays(7))));
         WhatsAppPort whatsApp = mock(WhatsAppPort.class);
@@ -226,6 +226,70 @@ class TenantPlanManagementPostgresIntegrationTest extends PostgresIntegrationTes
         assertThat(publicPlan(t)).isEqualTo("FREE");
         job.realignAll();
         assertThat(publicPlan(t)).isEqualTo("FREE");
+        // one REALIGNMENT event from the stale public value to the schema value, not repeated
+        assertThat(events(t)).containsExactly("PREMIUM_TRIAL>FREE:REALIGNMENT");
+    }
+
+    // ── Payments: order, void ─────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("payments: two rows with different paid_at → newest first; void once → voided, twice → false")
+    void paymentsNewestFirst_andVoid() {
+        UUID t = tenant("kv_pm9241", "KV-PM9241", "PREMIUM");
+        JdbcTenantPaymentRepository repo = new JdbcTenantPaymentRepository(jdbc);
+        UUID actor = UUID.randomUUID();
+        UUID older = UUID.randomUUID();
+        UUID newer = UUID.randomUUID();
+        LocalDate d = LocalDate.of(2026, 10, 1);
+        // inserted newest first then oldest, so the order cannot come from the insertion order
+        repo.insert(new TenantPayment(newer, t, 20_000, PaymentMethod.CASH, Instant.parse("2026-10-05T09:00:00Z"),
+                d, d.plusDays(30), null, actor));
+        repo.insert(new TenantPayment(older, t, 10_000, PaymentMethod.MOBILE_MONEY, Instant.parse("2026-09-01T09:00:00Z"),
+                d.minusDays(30), d, null, actor));
+
+        assertThat(repo.findByTenant(t)).extracting(TenantPayment::id).containsExactly(newer, older);
+
+        Instant at = Instant.parse("2026-10-06T09:00:00Z");
+        assertThat(repo.voidPayment(t, newer, actor, "Erreur de saisie", at)).isTrue();
+        assertThat(repo.voidPayment(t, newer, actor, "Encore", at)).isFalse();
+        assertThat(repo.voidPayment(UUID.randomUUID(), older, actor, "Autre entreprise", at)).isFalse();
+        TenantPayment voided = repo.findById(t, newer).orElseThrow();
+        assertThat(voided.voidedAt()).isEqualTo(at);
+        assertThat(voided.voidReason()).isEqualTo("Erreur de saisie");
+        assertThat(repo.findById(t, older).orElseThrow().isVoided()).isFalse();
+    }
+
+    @Test
+    @DisplayName("suspension trace: date, reason and actor stored on suspend, cleared on reactivate")
+    void suspensionTrace() {
+        UUID t = tenant("kv_pm9242", "KV-PM9242", "FREE");
+        UUID actor = UUID.randomUUID();
+        AdminTenantSuspensionService service = new AdminTenantSuspensionService(
+                new TargetTenantLookup(jdbc), jdbc, mock(TokenRevocationPort.class), publisher, clock);
+
+        service.suspend(new SuspendTenantCommand(actor, t, " impayés "));
+
+        Map<String, Object> row = jdbc.queryForMap(
+                "SELECT suspended_at, suspended_reason, suspended_by FROM public.tenants WHERE id = ?", t);
+        assertThat(row.get("suspended_at")).isNotNull();
+        assertThat(row.get("suspended_reason")).isEqualTo("impayés");
+        assertThat(row.get("suspended_by")).isEqualTo(actor);
+
+        service.reactivate(actor, t);
+
+        row = jdbc.queryForMap(
+                "SELECT suspended_at, suspended_reason, suspended_by FROM public.tenants WHERE id = ?", t);
+        assertThat(row.get("suspended_at")).isNull();
+        assertThat(row.get("suspended_reason")).isNull();
+        assertThat(row.get("suspended_by")).isNull();
+    }
+
+    @Test
+    @DisplayName("V22: REALIGNMENT accepted by the cause check")
+    void realignmentCauseAccepted() {
+        UUID t = tenant("kv_pm9243", "KV-PM9243", "FREE");
+        assertThat(jdbc.update("INSERT INTO public.tenant_plan_events (tenant_id, from_plan, to_plan, cause) "
+                + "VALUES (?, 'PREMIUM_TRIAL', 'FREE', 'REALIGNMENT')", t)).isEqualTo(1);
     }
 
     // ── Alerts ────────────────────────────────────────────────────────────────
@@ -233,7 +297,7 @@ class TenantPlanManagementPostgresIntegrationTest extends PostgresIntegrationTes
     @Test
     @DisplayName("alerts: +7 d listed, +8 d / past / non-ACTIVE not; EXPIRY 3 d old listed, 10 d old or re-activated not")
     void listAlerts() {
-        LocalDate today = LocalDate.now(clock.withZone(AdminPlanService.WAT));
+        LocalDate today = LocalDate.now(clock.withZone(com.keevo.shared.domain.time.KeevoZones.WAT));
         UUID in7 = premiumExpiring("kv_pm9211", "KV-PM9211", today.plusDays(7), "ACTIVE");
         UUID in8 = premiumExpiring("kv_pm9212", "KV-PM9212", today.plusDays(8), "ACTIVE");
         UUID past = premiumExpiring("kv_pm9213", "KV-PM9213", today.minusDays(1), "ACTIVE");

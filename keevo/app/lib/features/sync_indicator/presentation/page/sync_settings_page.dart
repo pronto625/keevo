@@ -176,10 +176,16 @@ class _DeviceTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final deviceId = device['deviceId'] as String?;
-    final lastPushRaw = device['lastPushAt'] as String?;
-    final lastPush = (lastPushRaw != null && lastPushRaw.isNotEmpty)
-        ? DateTime.tryParse(lastPushRaw)
-        : null;
+    // Last contact = latest of the last push and the last state update (a pull
+    // updates it too): a device that only received data read « Jamais
+    // synchronisé » (device test).
+    DateTime? parse(Object? raw) =>
+        raw is String && raw.isNotEmpty ? DateTime.tryParse(raw)?.toLocal() : null;
+    final pushed = parse(device['lastPushAt']);
+    final updated = parse(device['updatedAt']);
+    final lastPush = pushed == null
+        ? updated
+        : (updated != null && updated.isAfter(pushed) ? updated : pushed);
     final freshness = _freshnessColor(lastPush, theme.colorScheme);
     // v1s-16-20: a device id is never shown — only whose device it is.
     final name = deviceId != null && deviceId == selfDeviceId

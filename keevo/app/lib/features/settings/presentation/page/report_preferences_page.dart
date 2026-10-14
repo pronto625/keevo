@@ -507,13 +507,23 @@ class _TimePickerTile extends StatelessWidget {
   }
 }
 
-class _DayPicker extends StatelessWidget {
-  final int value; // 0=Lun, 6=Dim
-  final ValueChanged<int> onChanged;
+/// Weekly report day options, shown Monday first.
+///
+/// The value is the server's `weeklyReportDay` (TenantPreferences:
+/// 0 = dimanche … 6 = samedi), not the position in the list.
+const List<(int, String)> kWeeklyReportDays = [
+  (1, 'Lundi'),
+  (2, 'Mardi'),
+  (3, 'Mercredi'),
+  (4, 'Jeudi'),
+  (5, 'Vendredi'),
+  (6, 'Samedi'),
+  (0, 'Dimanche'),
+];
 
-  static const _days = [
-    'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'
-  ];
+class _DayPicker extends StatelessWidget {
+  final int value; // server value: 0=Dim, 1=Lun … 6=Sam
+  final ValueChanged<int> onChanged;
 
   const _DayPicker({required this.value, required this.onChanged});
 
@@ -526,10 +536,10 @@ class _DayPicker extends StatelessWidget {
       trailing: DropdownButton<int>(
         value: value,
         underline: const SizedBox.shrink(),
-        items: List.generate(
-          7,
-          (i) => DropdownMenuItem(value: i, child: Text(_days[i])),
-        ),
+        items: [
+          for (final (day, label) in kWeeklyReportDays)
+            DropdownMenuItem(value: day, child: Text(label)),
+        ],
         onChanged: (v) => v != null ? onChanged(v) : null,
         style: TextStyle(
             fontSize: 14,

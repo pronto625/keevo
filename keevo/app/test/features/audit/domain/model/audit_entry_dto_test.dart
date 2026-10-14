@@ -25,8 +25,12 @@ void main() {
       expect(dto.valueBefore, equals('{"qty":5}'));
       expect(dto.valueAfter, equals('{"qty":10}'));
       expect(dto.userId, equals('00000000-0000-0000-0000-000000000099'));
-      expect(dto.occurredAt.isUtc, isTrue);
-      expect(dto.occurredAt.year, equals(2026));
+      // Server UTC instant exposed in local time (UI shows device hours).
+      expect(dto.occurredAt.isUtc, isFalse);
+      expect(
+          dto.occurredAt
+              .isAtSameMomentAs(DateTime.parse('2026-03-01T10:00:00.000Z')),
+          isTrue);
     });
 
     test('fromJson() with null valueBefore — field is null (nullable)', () {

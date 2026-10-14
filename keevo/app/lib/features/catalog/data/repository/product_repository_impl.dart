@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import '../../../../core/utils/server_date.dart';
 import '../../domain/exception/product_exception.dart';
 import '../../domain/model/csv_import_result.dart';
 import '../../domain/model/product_model.dart';
@@ -282,7 +283,14 @@ class ProductRepositoryImpl implements ProductRepository {
       columnMapping: columnMapping,
       storeId: storeId,
     );
-    // Pull newly imported products into local cache.
+    // Pull newly imported products into local cache. The delta pull also
+    // brings their stock levels: without it the catalog listed freshly
+    // imported products under "Rupture" until the next sync (found on device).
+    try {
+      await _syncService.pull();
+    } catch (_) {
+      // The import itself succeeded; the next scheduled sync catches up.
+    }
     await syncFromRemote();
     return result;
   }
@@ -355,7 +363,7 @@ class ProductRepositoryImpl implements ProductRepository {
         photoUrl: dto.photoUrl,
         archived: dto.archived,
         status: ProductStatus.fromString(dto.status),
-        createdAt: DateTime.parse(dto.createdAt),
-        updatedAt: DateTime.parse(dto.updatedAt),
+        createdAt: parseServerDate(dto.createdAt),
+        updatedAt: parseServerDate(dto.updatedAt),
       );
 }

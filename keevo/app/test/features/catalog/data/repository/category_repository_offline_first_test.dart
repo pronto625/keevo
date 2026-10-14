@@ -100,6 +100,33 @@ void main() {
     });
   });
 
+  group('device test — duplicate names refused (case/accent-insensitive)', () {
+    test('create refuses "boissons" when "Boissons" exists, queues nothing',
+        () async {
+      await repo.createCustomCategory('Boissons');
+      clearInteractions(mockSyncService);
+
+      await expectLater(repo.createCustomCategory(' boissons '),
+          throwsA(isA<CategoryNameTakenException>()));
+      await expectLater(repo.createCustomCategory('Epicerie'), completes);
+      await expectLater(repo.createCustomCategory('ÉPICERIE'),
+          throwsA(isA<CategoryNameTakenException>()));
+      final rows = await db.select(db.categories).get();
+      expect(rows.where((c) => c.name.toLowerCase().contains('boisson')),
+          hasLength(1));
+    });
+
+    test('rename to another category name is refused; same name kept is fine',
+        () async {
+      await repo.createCustomCategory('Boissons');
+      final other = await repo.createCustomCategory('Snacks');
+
+      await expectLater(repo.renameCategory(other.id, 'BOISSONS'),
+          throwsA(isA<CategoryNameTakenException>()));
+      await expectLater(repo.renameCategory(other.id, 'snacks'), completes);
+    });
+  });
+
   group('AC3 — toggleCategoryStatus() offline-first', () {
     test('toggleCategoryStatus_writesLocalFirst_queuesToggleCategory', () async {
       final created = await repo.createCustomCategory('Vêtements');

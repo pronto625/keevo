@@ -214,7 +214,7 @@ void main() {
     expect(find.text('Modifier les informations'), findsOneWidget);
     expect(find.text('Définir le mot de passe'), findsOneWidget);
     // The existing regeneration entry is untouched.
-    expect(find.text('Regénérer le mot de passe'), findsOneWidget);
+    expect(find.text('Régénérer le mot de passe'), findsOneWidget);
   });
 
   testWidgets('an employee sees neither entry', (tester) async {
@@ -525,9 +525,9 @@ void main() {
 
     await tester.tap(find.byType(EmployeeCard));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Regénérer le mot de passe'));
+    await tester.tap(find.text('Régénérer le mot de passe'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Regénérer'));
+    await tester.tap(find.text('Régénérer'));
     await tester.pumpAndSettle();
 
     expect(find.text('TmpPass98765'), findsOneWidget);
