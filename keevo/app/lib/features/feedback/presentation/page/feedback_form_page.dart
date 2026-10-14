@@ -170,8 +170,14 @@ class _FeedbackFormPageState extends ConsumerState<FeedbackFormPage> {
   }
 
   void _reset() {
-    _formKey.currentState?.reset();
+    // Clear, then reset the validation once the field has rebuilt with the
+    // empty text: clearing after a reset re-ran « au moins 10 caractères » on
+    // the emptied field (device test), and a reset before the rebuild would
+    // restore the previous text.
     _descriptionController.clear();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _formKey.currentState?.reset();
+    });
     setState(() {
       _type = _defaultType;
       _screenshot = null;
@@ -468,10 +474,17 @@ class _ContextLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    // The raw route and platform code are sent, never shown (no technical
+    // data in the UI): « Écran : /settings · ANDROID » became readable text.
+    final platform = feedbackPlatform();
     final parts = <String>[
-      if (screenContext != null) 'Écran : $screenContext',
-      if (appVersion != null) 'Version : $appVersion',
-      feedbackPlatform(),
+      if (screenContext != null) 'écran actuel',
+      if (appVersion != null) 'version $appVersion',
+      platform == 'IOS'
+          ? 'iPhone'
+          : platform == 'ANDROID'
+              ? 'Android'
+              : 'autre appareil',
     ];
     return Row(
       children: [
