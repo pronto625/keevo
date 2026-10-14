@@ -11,7 +11,9 @@ import '../provider/day_closure_providers.dart';
 
 /// DaySummaryBottomSheet — Displays summary before day closure.
 ///
-/// Auto-dismisses after 5 seconds with a progress indicator.
+/// Auto-dismisses after 5 seconds with a progress indicator when the user does
+/// nothing (Story 4.4 AC2). J20: any touch on the sheet counts as an action —
+/// the countdown stops and the sheet stays until « Annuler » / « Confirmer ».
 /// Shows: total sales, revenue, top product, payment breakdown, pending sales.
 ///
 /// Story 4.4 — Clôture Journalière & Historique des Ventes.
@@ -53,13 +55,15 @@ class DaySummaryBottomSheet extends ConsumerStatefulWidget {
   }
 
   @override
-  ConsumerState<DaySummaryBottomSheet> createState() => _DaySummaryBottomSheetState();
+  ConsumerState<DaySummaryBottomSheet> createState() =>
+      _DaySummaryBottomSheetState();
 }
 
 class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
     with SingleTickerProviderStateMixin {
   late final AnimationController _progressController;
   Timer? _autoDismissTimer;
+  bool _countdownActive = true;
   bool _isClosing = false;
   String? _errorMessage;
 
@@ -100,13 +104,15 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
   void _cancelAutoDismiss() {
     _autoDismissTimer?.cancel();
     _progressController.stop();
+    if (_countdownActive && mounted) setState(() => _countdownActive = false);
   }
 
   Future<void> _confirmClosure() async {
     _cancelAutoDismiss();
     setState(() => _isClosing = true);
 
-    debugPrint('[DayClosure] _confirmClosure called for store=${widget.storeId} actor=${widget.actorId}');
+    debugPrint(
+        '[DayClosure] _confirmClosure called for store=${widget.storeId} actor=${widget.actorId}');
 
     try {
       await ref.read(closeDayNotifierProvider.notifier).closeDay(
@@ -120,7 +126,6 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
 
       // Pop this sheet, returning true = closure succeeded
       Navigator.of(context).pop(true);
-
     } catch (e, st) {
       debugPrint('[DayClosure] closeDay FAILED: $e');
       debugPrint('[DayClosure] stackTrace: $st');
@@ -142,161 +147,170 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
     )));
     final cs = Theme.of(context).colorScheme;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(AppTheme.radiusXL)),
-      ),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Handle bar
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: cs.outlineVariant,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Title
-          Row(
-            children: [
-              Icon(Icons.nightlight_round, color: cs.primary),
-              const SizedBox(width: 8),
-              Text(
-                'Résumé de la journée',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.2,
-                  color: cs.onSurface,
+    // J20: a touch anywhere on the sheet (reading, scrolling) stops the
+    // countdown — the summary is never taken away from someone looking at it.
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _cancelAutoDismiss(),
+      child: Container(
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(AppTheme.radiusXL)),
+        ),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Handle bar
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: cs.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-
-          // Progress indicator
-          AnimatedBuilder(
-            animation: _progressController,
-            builder: (context, _) {
-              return LinearProgressIndicator(
-                value: 1 - _progressController.value,
-                backgroundColor: cs.outlineVariant,
-                valueColor: AlwaysStoppedAnimation(cs.primary),
-              );
-            },
-          ),
-          const SizedBox(height: 16),
-
-          // Summary content
-          summaryAsync.when(
-            data: (summary) => _buildSummaryContent(summary),
-            loading: () => const Center(
-              child: Padding(
-                padding: EdgeInsets.all(32),
-                child: CircularProgressIndicator(),
-              ),
             ),
-            error: (e, _) => AppErrorWidget(
-              error: e,
-              onRetry: () {
-                _cancelAutoDismiss();
-                ref.invalidate(todaySummaryProvider((
-                  storeId: widget.storeId,
-                  employeeId: widget.employeeId,
-                )));
-              },
-            ),
-          ),
+            const SizedBox(height: 16),
 
-          const SizedBox(height: 20),
-
-          // Error message (shown inline)
-          if (_errorMessage != null)
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.errorContainer_,
-                borderRadius: BorderRadius.circular(AppTheme.radiusM),
-                border: Border.all(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .error
-                        .withValues(alpha: 0.4)),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.error_outline,
-                      color: Theme.of(context).colorScheme.error),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _errorMessage!,
-                      style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                          fontWeight: FontWeight.w500),
-                    ),
+            // Title
+            Row(
+              children: [
+                Icon(Icons.nightlight_round, color: cs.primary),
+                const SizedBox(width: 8),
+                Text(
+                  'Résumé de la journée',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
+                    color: cs.onSurface,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
+            const SizedBox(height: 8),
 
-          // Action buttons
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _isClosing ? null : () => Navigator.of(context).pop(),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text('Annuler'),
+            // Countdown (hidden once the user has interacted with the sheet)
+            if (_countdownActive)
+              AnimatedBuilder(
+                key: const Key('day_summary_countdown'),
+                animation: _progressController,
+                builder: (context, _) {
+                  return LinearProgressIndicator(
+                    value: 1 - _progressController.value,
+                    backgroundColor: cs.outlineVariant,
+                    valueColor: AlwaysStoppedAnimation(cs.primary),
+                  );
+                },
+              ),
+            const SizedBox(height: 16),
+
+            // Summary content
+            summaryAsync.when(
+              data: (summary) => _buildSummaryContent(summary),
+              loading: () => const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(32),
+                  child: CircularProgressIndicator(),
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: ElevatedButton(
-                  onPressed: _isClosing ? null : _confirmClosure,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+              error: (e, _) => AppErrorWidget(
+                error: e,
+                onRetry: () {
+                  _cancelAutoDismiss();
+                  ref.invalidate(todaySummaryProvider((
+                    storeId: widget.storeId,
+                    employeeId: widget.employeeId,
+                  )));
+                },
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // Error message (shown inline)
+            if (_errorMessage != null)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.errorContainer_,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusM),
+                  border: Border.all(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .error
+                          .withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.error_outline,
+                        color: Theme.of(context).colorScheme.error),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _errorMessage!,
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                            fontWeight: FontWeight.w500),
+                      ),
                     ),
-                  ),
-                  child: _isClosing
-                      ? SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Theme.of(context).colorScheme.onPrimary,
-                          ),
-                        )
-                      : const Text('Confirmer la clôture'),
+                  ],
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-        ],
+
+            // Action buttons
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed:
+                        _isClosing ? null : () => Navigator.of(context).pop(),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('Annuler'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton(
+                    onPressed: _isClosing ? null : _confirmClosure,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: _isClosing
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Theme.of(context).colorScheme.onPrimary,
+                            ),
+                          )
+                        : const Text('Confirmer la clôture'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
       ),
     );
   }
