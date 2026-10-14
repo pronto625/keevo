@@ -8,6 +8,24 @@ import '../../domain/model/inventory_gap_report_model.dart';
 import '../provider/validate_inventory_provider.dart';
 import 'inventory_validation_success_overlay.dart';
 
+/// Après validation d'un inventaire : revient sur « Inventaire » en DÉPILANT
+/// les pages du parcours (comptage, rapport d'écarts) au lieu de remplacer
+/// toute la pile par `/inventory`. Sinon « Inventaire » devenait la racine de
+/// navigation et le retour Android fermait l'application (J1).
+///
+/// Si `/inventory` n'est pas dans la pile (ouverture directe), on la recrée
+/// au-dessus de l'onglet Plus, d'où elle est normalement ouverte.
+@visibleForTesting
+void returnToInventory(GoRouter router) {
+  String location() => router.routerDelegate.currentConfiguration.uri.path;
+  while (location() != '/inventory' && router.canPop()) {
+    router.pop();
+  }
+  if (location() == '/inventory') return;
+  router.go('/settings');
+  router.push('/inventory');
+}
+
 /// ApplyAdjustmentsButton — triggers inventory validation.
 ///
 /// Shows confirmation dialog with N adjustments count and "irréversible" warning.
@@ -147,7 +165,7 @@ class _ApplyAdjustmentsButtonState
           ref
               .read(validateInventoryNotifierProvider.notifier)
               .invalidateAll();
-          router.go('/inventory');
+          returnToInventory(router);
         },
       );
     } catch (e) {

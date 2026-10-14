@@ -233,6 +233,46 @@ void main() {
       });
     });
 
+    group('J7 — reactivateStore', () {
+      test('online: reactivated store cached locally', () async {
+        final active = sampleStore.copyWith(isActive: true);
+        when(() => remote.reactivate('s1')).thenAnswer((_) async => active);
+        when(() => local.upsert(any())).thenAnswer((_) async => active);
+
+        final result = await repo.reactivateStore('s1');
+
+        expect(result.isActive, isTrue);
+        verify(() => local.upsert(active)).called(1);
+      });
+
+      test('plan limit error is re-thrown as is', () async {
+        when(() => remote.reactivate('s1'))
+            .thenThrow(StoreException.planLimitExceeded());
+
+        expect(
+          () => repo.reactivateStore('s1'),
+          throwsA(isA<StoreException>().having(
+              (e) => e.domainCode, 'domainCode', 'PLAN_LIMIT_EXCEEDED')),
+        );
+      });
+
+      test('offline: French error, nothing written or queued', () async {
+        when(() => remote.reactivate('s1')).thenThrow(Exception('network'));
+
+        await expectLater(
+          repo.reactivateStore('s1'),
+          throwsA(isA<StoreException>()
+              .having((e) => e.message, 'message', contains('Connexion'))),
+        );
+        verifyNever(() => local.upsert(any()));
+        verifyNever(() => syncService.queueOperation(
+              operation: any(named: 'operation'),
+              payload: any(named: 'payload'),
+              entityId: any(named: 'entityId'),
+            ));
+      });
+    });
+
     group('v1s-13-8 — offline guards', () {
       test('deactivateStore() offline, store not cached → notFound, nothing written/queued',
           () async {

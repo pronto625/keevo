@@ -128,6 +128,97 @@ void main() {
     expect(find.text('Boutiques synchronisées'), findsNothing);
   });
 
+  group('J7 — désactiver / réactiver', () {
+    final now = DateTime(2025, 1, 1);
+    final active = StoreModel(
+        id: 's1', name: 'Akwa', type: StoreType.store,
+        createdAt: now, updatedAt: now);
+    final inactive = StoreModel(
+        id: 's2', name: 'Bonamoussadi', type: StoreType.store,
+        isActive: false, createdAt: now, updatedAt: now);
+
+    setUp(() {
+      when(() => repo.getStores(includeInactive: any(named: 'includeInactive')))
+          .thenAnswer((_) async => [active, inactive]);
+      when(() => repo.getStores()).thenAnswer((_) async => [active]);
+    });
+
+    Future<void> openMenu(WidgetTester tester, String name) async {
+      await tester.tap(find.descendant(
+        of: find.ancestor(of: find.text(name), matching: find.byType(ListTile)),
+        matching: find.byTooltip('Actions'),
+      ));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('« Désactiver » asks for confirmation; Annuler does nothing',
+        (tester) async {
+      await tester.pumpWidget(buildPage());
+      await tester.pumpAndSettle();
+
+      await openMenu(tester, 'Akwa');
+      await tester.tap(find.text('Désactiver'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Désactiver la boutique ?'), findsOneWidget);
+      await tester.tap(find.text('Annuler'));
+      await tester.pumpAndSettle();
+
+      verifyNever(() => repo.deactivateStore(any()));
+    });
+
+    testWidgets('confirming deactivates the store', (tester) async {
+      when(() => repo.deactivateStore('s1'))
+          .thenAnswer((_) async => active.copyWith(isActive: false));
+      await tester.pumpWidget(buildPage());
+      await tester.pumpAndSettle();
+
+      await openMenu(tester, 'Akwa');
+      await tester.tap(find.text('Désactiver'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Désactiver'));
+      await tester.pumpAndSettle();
+
+      verify(() => repo.deactivateStore('s1')).called(1);
+    });
+
+    testWidgets('a deactivated store offers « Réactiver »', (tester) async {
+      when(() => repo.reactivateStore('s2'))
+          .thenAnswer((_) async => inactive.copyWith(isActive: true));
+      await tester.pumpWidget(buildPage());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+
+      await openMenu(tester, 'Bonamoussadi');
+      expect(find.text('Désactiver'), findsNothing);
+      expect(find.text('Modifier'), findsNothing);
+      await tester.tap(find.text('Réactiver'));
+      await tester.pumpAndSettle();
+
+      verify(() => repo.reactivateStore('s2')).called(1);
+      expect(find.text('« Bonamoussadi » est de nouveau active.'),
+          findsOneWidget);
+    });
+
+    testWidgets('reactivation over the plan limit shows the French error',
+        (tester) async {
+      when(() => repo.reactivateStore('s2'))
+          .thenThrow(StoreException.planLimitExceeded());
+      await tester.pumpWidget(buildPage());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+
+      await openMenu(tester, 'Bonamoussadi');
+      await tester.tap(find.text('Réactiver'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(StoreException.planLimitExceeded().message),
+          findsOneWidget);
+    });
+  });
+
   testWidgets('create failure keeps the form open with the error shown',
       (tester) async {
     when(() => repo.createStore(

@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 import '../../features/notifications/data/datasource/local_notification_datasource.dart';
 import '../../features/notifications/data/datasource/remote_device_token_datasource.dart';
 import '../../features/notifications/domain/model/notification_model.dart';
+import '../router/deep_link_navigation.dart';
 
 const _kChannelId = 'keevo_notifications';
 const _kChannelName = 'Keevo Notifications';
@@ -322,8 +323,8 @@ class FcmService {
       onDidReceiveNotificationResponse: (response) {
         final deepLink = response.payload;
         if (deepLink != null && deepLink.isNotEmpty) {
-          // Use push() so OS back button returns to the previous screen.
-          router.push(deepLink);
+          // J16: tabs opened with go(), other screens pushed (BACK returns).
+          openDeepLink(router, deepLink);
         }
       },
     );
@@ -337,7 +338,7 @@ class FcmService {
       if ((launch?.didNotificationLaunchApp ?? false) &&
           payload != null &&
           payload.isNotEmpty) {
-        router.push(payload);
+        openDeepLink(router, payload);
       }
     } catch (e) {
       debugPrint('[FCM] getNotificationAppLaunchDetails() failed: $e');
@@ -413,8 +414,8 @@ class FcmService {
   void _onTap(RemoteMessage message, GoRouter router) {
     final route = _tapRoute(message);
     if (route != null) {
-      // Use push() so OS back button returns to the previous screen.
-      router.push(route);
+      // J16: tabs opened with go(), other screens pushed (BACK returns).
+      openDeepLink(router, route);
     }
 
     final notifId = message.data['id'] as String?;

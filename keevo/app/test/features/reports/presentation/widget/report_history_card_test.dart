@@ -49,6 +49,33 @@ void main() {
     expect(find.textContaining('Global'), findsOneWidget);
   });
 
+  group('J5 — employee name', () {
+    testWidgets('actorName from the server wins', (tester) async {
+      await tester.pumpWidget(_wrap(ReportHistoryCard(
+        report: _report().copyWith(actorId: 'u1', actorName: 'Jean Kamga'),
+        actorNameFallback: 'Autre Nom',
+      )));
+      expect(find.text('Boutique Centrale — Jean Kamga'), findsOneWidget);
+    });
+
+    testWidgets('missing actorName uses the locally resolved name',
+        (tester) async {
+      await tester.pumpWidget(_wrap(ReportHistoryCard(
+        report: _report().copyWith(actorId: 'u1'),
+        actorNameFallback: 'Jean Kamga',
+      )));
+      expect(find.text('Boutique Centrale — Jean Kamga'), findsOneWidget);
+    });
+
+    testWidgets('no name anywhere keeps the generic « Employé »',
+        (tester) async {
+      await tester.pumpWidget(_wrap(ReportHistoryCard(
+        report: _report().copyWith(actorId: 'u1'),
+      )));
+      expect(find.text('Boutique Centrale — Employé'), findsOneWidget);
+    });
+  });
+
   testWidgets('shows "Quotidien" type badge for DAILY report', (tester) async {
     await tester.pumpWidget(_wrap(ReportHistoryCard(report: _report(reportType: 'DAILY'))));
     expect(find.text('Quotidien'), findsOneWidget);

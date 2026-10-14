@@ -139,5 +139,46 @@ void main() {
 
       expect(find.text('EN BAISSE'), findsOneWidget);
     });
+
+    // J4 — les sections produits sont filtrées sur la boutique : leurs titres
+    // ne doivent plus dire « toutes boutiques ».
+    testWidgets('top / worst product titles are scoped to this store',
+        (tester) async {
+      const product = TopProduct(
+        productId: 'p1',
+        name: 'Riz 5kg',
+        unitsSold: 4,
+        revenue: 20000,
+        sharePercent: 100,
+      );
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          storeOverviewsProvider.overrideWith((_) => Future.value([
+                const StoreOverview(
+                  storeId: 's1',
+                  storeName: 'Boutique Akwa',
+                  todayCA: 35000,
+                  yesterdayCA: 30000,
+                  employeeCount: 5,
+                  statusLevel: StoreStatusLevel.stable,
+                ),
+              ])),
+          storeTopProductsProvider
+              .overrideWith((_, __) => Future.value(const [product])),
+          storeWorstProductsProvider
+              .overrideWith((_, __) => Future.value(const [product])),
+        ],
+        child: const MaterialApp(
+          home: StoreDashboardPage(storeId: 's1'),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+          find.text('Moins vendus — cette boutique (7j)'), 200);
+      expect(find.text('Top Produits — cette boutique (7j)'), findsOneWidget);
+      expect(find.text('Moins vendus — cette boutique (7j)'), findsOneWidget);
+      expect(find.textContaining('toutes boutiques'), findsNothing);
+    });
   });
 }

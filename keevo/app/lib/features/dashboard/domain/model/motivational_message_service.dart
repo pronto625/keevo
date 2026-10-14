@@ -4,14 +4,18 @@ import 'package:intl/intl.dart';
 ///
 /// Story 7.1 — AC5: personalized, daily rotation, dismissible.
 /// Uses dayOfYear % templates.length for deterministic daily rotation.
+///
+/// J14 — the card stays visible all day, under a time-aware greeting
+/// (« Bonsoir … » in the evening): no template greets by time of day
+/// (no « Bonjour », « Bonne journée », « le soleil brille »).
 class MotivationalMessageService {
   MotivationalMessageService._();
 
   static const List<String> _templates = [
-    'Bonne journée {name} ! Hier vous avez fait {amount} XAF. Visez plus haut aujourd\'hui !',
+    'Allez {name} ! Hier vous avez fait {amount} XAF. Visez plus haut aujourd\'hui !',
     '{name}, prêt(e) à dépasser les {amount} XAF d\'hier ? C\'est parti !',
     'Nouvelle journée, nouvelles ventes ! Hier : {amount} XAF. Aujourd\'hui : encore mieux !',
-    'Bonjour {name} ! Le soleil brille et votre business aussi — {amount} XAF hier !',
+    '{name}, votre business brille — {amount} XAF hier !',
     'Objectif du jour : battre les {amount} XAF d\'hier. Vous pouvez le faire {name} !',
     '{amount} XAF hier, combien aujourd\'hui ? À vous de jouer {name} !',
     'Votre business grandit ! {amount} XAF hier. Continuez comme ça {name} !',
@@ -22,7 +26,7 @@ class MotivationalMessageService {
 
   static const List<String> _zeroCATemplates = [
     'Nouvelle journée, nouvelles opportunités ! C\'est parti {name} !',
-    'Bonjour {name} ! Que cette journée soit pleine de bonnes ventes !',
+    '{name}, que vos ventes soient nombreuses aujourd\'hui !',
     '{name}, aujourd\'hui est un nouveau départ. Chaque vente compte !',
   ];
 

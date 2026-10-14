@@ -123,7 +123,10 @@ class LocalInventoryCountDataSource {
         photoUrl: product.photoUrl,
         variantId: variantId,
         variantLabel: null, // Not available in Drift stock_levels
-        theoreticalQty: qty,
+        // J17: a counted row reads against the count's theoretical snapshot,
+        // the same rule as the gap report (and the server rows).
+        theoreticalQty:
+            count?.physical != null ? count!.theoretical : qty,
         physicalQty: count?.physical,
         ecart: count?.ecart,
       );

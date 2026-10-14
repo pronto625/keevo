@@ -87,5 +87,22 @@ void main() {
         }
       }
     });
+
+    // J14 — shown in the evening under « Bonsoir … »: never a time-of-day
+    // greeting of its own.
+    test('messages never greet by time of day', () {
+      final timed = RegExp(r'Bonjour|Bonsoir|Bonne journée|Bonne soirée|soleil',
+          caseSensitive: false);
+      for (var day = 0; day < 30; day++) {
+        for (final ca in [0, 12000]) {
+          final msg = MotivationalMessageService.getMessage(
+            firstName: 'Awa',
+            yesterdayCA: ca,
+            now: DateTime(2025, 1, 1).add(Duration(days: day)),
+          );
+          expect(timed.hasMatch(msg), isFalse, reason: msg);
+        }
+      }
+    });
   });
 }

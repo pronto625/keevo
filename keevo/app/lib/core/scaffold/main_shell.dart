@@ -19,6 +19,7 @@ import '../theme/app_theme.dart';
 import '../sync/auto_closure_notification_checker.dart';
 import '../sync/sync_trigger_notifier.dart';
 import 'shell_banners.dart';
+import 'shell_tab_back_scope.dart';
 
 /// MainShell — persistent bottom navigation scaffold wrapping the main sections.
 ///
@@ -39,7 +40,13 @@ class _MainShellState extends ConsumerState<MainShell> {
   AppLifecycleListener? _lifecycle;
 
   /// OWNER tab routes — full navigation (5 tabs: Dashboard / Caisse / Catalogue / Rapports / Plus)
-  static const _ownerRoutes = ['/dashboard', '/pos', '/products', '/reports', '/settings'];
+  static const _ownerRoutes = [
+    '/dashboard',
+    '/pos',
+    '/products',
+    '/reports',
+    '/settings'
+  ];
 
   /// EMPLOYEE tab routes — POS + Catalogue (read-only) + Rapports (day closure) + settings (HF-2 AC5)
   static const _employeeRoutes = ['/pos', '/products', '/reports', '/settings'];
@@ -169,7 +176,8 @@ class _MainShellState extends ConsumerState<MainShell> {
               borderRadius: BorderRadius.circular(AppTheme.radiusL),
               color: theme.colorScheme.inverseSurface,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Row(
                   children: [
                     Icon(Icons.event_available_outlined,
@@ -178,7 +186,8 @@ class _MainShellState extends ConsumerState<MainShell> {
                     Expanded(
                       child: Text(
                         message,
-                        style: TextStyle(color: theme.colorScheme.onInverseSurface),
+                        style: TextStyle(
+                            color: theme.colorScheme.onInverseSurface),
                       ),
                     ),
                     IconButton(
@@ -241,12 +250,13 @@ class _MainShellState extends ConsumerState<MainShell> {
         final salesCount = await localDS.getTodaySalesCount(store.id);
         if (salesCount == 0) continue;
 
-        debugPrint('[AutoClose] Missed closure for store ${store.id} — triggering locally');
+        debugPrint(
+            '[AutoClose] Missed closure for store ${store.id} — triggering locally');
         await ref.read(closeDayUseCaseProvider).execute(
-          storeId: store.id,
-          actorId: userId,
-          isAutomatic: true,
-        );
+              storeId: store.id,
+              actorId: userId,
+              isAutomatic: true,
+            );
         debugPrint('[AutoClose] Closure done for store ${store.id}');
       } catch (e) {
         // DAY_ALREADY_CLOSED or other transient errors — not fatal.
@@ -350,40 +360,45 @@ class _MainShellState extends ConsumerState<MainShell> {
 
     final cs = Theme.of(context).colorScheme;
 
-    return Scaffold(
-      // v1s-16-13: one banner at a time, by priority (suspension, deletion
-      // pending — v1s-14-5 AC8 —, offline gate, sync failure, trial expired).
-      body: ShellBannerLayout(child: widget.child),
-      // Soft/modern rebrand (2026-09-16) : coins hauts arrondis + ombre
-      // douce (au lieu de l'élévation Material par défaut, plus dure) pour
-      // que la barre lise comme une "sheet" posée sur le contenu plutôt
-      // qu'un bandeau plat collé au bord de l'écran.
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: cs.surface,
-          borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(AppTheme.radiusXL),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: cs.shadow.withAlpha(20),
-              blurRadius: 20,
-              offset: const Offset(0, -4),
+    // J2 — retour système sur un onglet autre que le premier : on revient au
+    // premier onglet au lieu de quitter l'application.
+    return ShellTabBackScope(
+      tabIndex: index,
+      onGoToFirstTab: () => context.go(routes.first),
+      child: Scaffold(
+        // v1s-16-13: one banner at a time, by priority (suspension, deletion
+        // pending — v1s-14-5 AC8 —, offline gate, sync failure, trial expired).
+        body: ShellBannerLayout(child: widget.child),
+        // Soft/modern rebrand (2026-09-16) : coins hauts arrondis + ombre
+        // douce (au lieu de l'élévation Material par défaut, plus dure) pour
+        // que la barre lise comme une "sheet" posée sur le contenu plutôt
+        // qu'un bandeau plat collé au bord de l'écran.
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            color: cs.surface,
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(AppTheme.radiusXL),
             ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(AppTheme.radiusXL),
+            boxShadow: [
+              BoxShadow(
+                color: cs.shadow.withAlpha(20),
+                blurRadius: 20,
+                offset: const Offset(0, -4),
+              ),
+            ],
           ),
-          child: NavigationBar(
-            selectedIndex: index,
-            onDestinationSelected: (i) => context.go(routes[i]),
-            destinations: destinations,
+          child: ClipRRect(
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(AppTheme.radiusXL),
+            ),
+            child: NavigationBar(
+              selectedIndex: index,
+              onDestinationSelected: (i) => context.go(routes[i]),
+              destinations: destinations,
+            ),
           ),
         ),
       ),
     );
   }
 }
-

@@ -168,7 +168,8 @@ class StoreRepositoryImpl implements StoreRepository {
       // Business error (STORE_NOT_FOUND…) — re-throw.
       rethrow;
     } catch (e) {
-      dev.log('StoreRepository.deactivateStore: offline — local + sync_queue: $e');
+      dev.log(
+          'StoreRepository.deactivateStore: offline — local + sync_queue: $e');
       // v1s-13-8: not cached → notFound before anything is written/queued.
       final existing = await _local.getById(storeId);
       if (existing == null) throw StoreException.notFound();
@@ -182,6 +183,20 @@ class StoreRepositoryImpl implements StoreRepository {
       });
       _syncTriggerDispatcher.triggerPushIfIdle();
       return existing.copyWith(isActive: false);
+    }
+  }
+
+  @override
+  Future<StoreModel> reactivateStore(String storeId) async {
+    try {
+      final remote = await _remote.reactivate(storeId);
+      await _local.upsert(remote);
+      return remote;
+    } on StoreException {
+      rethrow; // PLAN_LIMIT_EXCEEDED, STORE_NOT_FOUND…
+    } catch (e) {
+      dev.log('StoreRepository.reactivateStore: offline — $e');
+      throw StoreException.reactivationNeedsNetwork();
     }
   }
 

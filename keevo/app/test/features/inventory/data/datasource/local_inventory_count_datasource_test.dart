@@ -108,4 +108,26 @@ void main() {
     final rowless = rows.firstWhere((r) => r.productId == 'p-rowless');
     expect(rowless.physicalQty, 4);
   });
+
+  // J17 — a counted row reads against the count snapshot, like the gap
+  // report: live stock 12 = physical 12 but snapshot 0 → gap +12, not
+  // « concordant ».
+  test('counted row: theoretical and gap come from the count snapshot',
+      () async {
+    await db.into(db.inventoryCounts).insert(InventoryCountsCompanion.insert(
+          id: 'c-2',
+          sessionId: sessionId,
+          productId: 'p-stocked',
+          productName: 'Banane',
+          theoretical: 0,
+          physical: const Value(12),
+          updatedAt: DateTime(2026),
+        ));
+
+    final rows = await ds.buildOfflineProductRows(sessionId, storeId, null);
+
+    final row = rows.firstWhere((r) => r.productId == 'p-stocked');
+    expect(row.theoreticalQty, 0);
+    expect(row.ecart, 12);
+  });
 }

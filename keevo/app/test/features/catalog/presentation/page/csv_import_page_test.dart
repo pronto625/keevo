@@ -199,5 +199,33 @@ void main() {
 
     expect(find.text('Correspondance des colonnes'), findsNothing);
     expect(find.textContaining('Lignes ignorées'), findsOneWidget);
+    // J12 — French field label, never the raw key.
+    expect(find.text('Ligne 5 — Prix de vente : Prix de vente doit être un entier'),
+        findsOneWidget);
+    expect(find.textContaining('prix_vente'), findsNothing);
+  });
+
+  group('J12 — csvImportErrorLine', () {
+    test('server labels are kept as is', () {
+      expect(
+          csvImportErrorLine(
+              3, 'Prix de vente', 'Prix de vente est requis et doit être un entier positif'),
+          'Ligne 3 — Prix de vente : Prix de vente est requis et doit être un entier positif');
+    });
+
+    test('legacy raw keys are translated, plain words untouched', () {
+      expect(
+          csvImportErrorLine(6, 'quantite_initiale',
+              "quantite_initiale doit être un entier, reçu : 'abc'"),
+          "Ligne 6 — Quantité initiale : Quantité initiale doit être un entier, reçu : 'abc'");
+      expect(
+          csvImportErrorLine(5, 'nom', 'Un produit avec ce nom existe déjà: Riz'),
+          'Ligne 5 — Nom : Un produit avec ce nom existe déjà: Riz');
+    });
+
+    test('placeholder column « - » is dropped', () {
+      expect(csvImportErrorLine(4, '-', 'Produit non importé'),
+          'Ligne 4 — Produit non importé');
+    });
   });
 }

@@ -81,6 +81,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Prix appliqués'), findsWidgets);
+      // J8 — plain French title, no table name.
+      expect(find.text('Prix appliqués en caisse'), findsOneWidget);
+      expect(find.textContaining('sale_items'), findsNothing);
     });
 
     testWidgets('rendersSparkline_withLast7DaysData', (tester) async {

@@ -48,6 +48,8 @@ class _ReportHistoryPageState extends ConsumerState<ReportHistoryPage> {
       type: _typeFilter,
     ));
     final currentUserId = ref.watch(currentUserIdProvider).valueOrNull;
+    final localNames =
+        ref.watch(employeeNamesByActorIdProvider).valueOrNull ?? const {};
 
     final cs = theme.colorScheme;
     return Scaffold(
@@ -71,7 +73,7 @@ class _ReportHistoryPageState extends ConsumerState<ReportHistoryPage> {
             if (context.canPop()) {
               context.pop();
             } else {
-              context.go('/home');
+              context.go('/reports');
             }
           },
         ),
@@ -128,6 +130,9 @@ class _ReportHistoryPageState extends ConsumerState<ReportHistoryPage> {
                       return ReportHistoryCard(
                         report: report,
                         currentUserId: currentUserId,
+                        actorNameFallback: report.actorId == null
+                            ? null
+                            : localNames[report.actorId],
                         onTap: () => context.push(
                             '/reports/history/${report.id}',
                             extra: report),

@@ -14,6 +14,11 @@ import '../widget/top_products_section.dart';
 /// StoreDashboardPage — full-screen per-store dashboard.
 ///
 /// Story 7.1 — AC4 (sub-dashboard).
+/// Titres des sections produits du tableau de bord d'UNE boutique : les
+/// données sont filtrées sur cette boutique, pas agrégées sur toutes.
+const storeTopProductsTitle = 'Top Produits — cette boutique (7j)';
+const storeWorstProductsTitle = 'Moins vendus — cette boutique (7j)';
+
 class StoreDashboardPage extends ConsumerWidget {
   final String storeId;
   const StoreDashboardPage({super.key, required this.storeId});
@@ -177,7 +182,10 @@ class _StoreDetail extends ConsumerWidget {
         topAsync.when(
           data: (products) => products.isEmpty
               ? const SizedBox.shrink()
-              : TopProductsSection(products: products),
+              : TopProductsSection(
+                  title: storeTopProductsTitle,
+                  products: products,
+                ),
           loading: () => const SizedBox.shrink(),
           error: (_, __) => const SizedBox.shrink(),
         ),
@@ -188,7 +196,7 @@ class _StoreDetail extends ConsumerWidget {
           data: (products) => products.isEmpty
               ? const SizedBox.shrink()
               : TopProductsSection(
-                  title: 'Produits les moins vendus (7j)',
+                  title: storeWorstProductsTitle,
                   products: products,
                 ),
           loading: () => const SizedBox.shrink(),

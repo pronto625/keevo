@@ -55,7 +55,8 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Row(children: [
-              Icon(Icons.check_circle_rounded, color: AppTheme.onBrand, size: 18),
+              Icon(Icons.check_circle_rounded,
+                  color: AppTheme.onBrand, size: 18),
               SizedBox(width: 8),
               Text('Boutiques synchronisées'),
             ]),
@@ -143,6 +144,56 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
         );
   }
 
+  /// J7 — désactiver une boutique a des effets visibles (plus de ventes,
+  /// plus de sélection) : on demande confirmation avant d'agir.
+  Future<void> _confirmDeactivate(StoreModel store) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Désactiver la boutique ?'),
+        content: Text(
+          '« ${store.name} » ne pourra plus être utilisée pour vendre ni '
+          'être choisie comme boutique active. Ses ventes, stocks et '
+          'rapports sont conservés et vous pourrez la réactiver plus tard.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.errorStrong,
+              foregroundColor: AppTheme.onBrand,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Désactiver'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _deactivateStore(store.id);
+  }
+
+  Future<void> _reactivateStore(StoreModel store) async {
+    try {
+      await ref
+          .read(storeListNotifierProvider.notifier)
+          .reactivateStore(store.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('« ${store.name} » est de nouveau active.'),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+        ),
+      );
+    } on StoreException catch (e) {
+      if (mounted) _showErrorSnackBar(e.message);
+    }
+  }
+
   Future<void> _deactivateStore(String storeId) async {
     try {
       await ref
@@ -209,8 +260,7 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
           // ── Filter toggle ─────────────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
                   const Text('Voir les désactivées'),
@@ -255,8 +305,8 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
                         const SizedBox(height: 8),
                         Text(
                           'Appuyez sur « Ajouter une boutique » pour en créer une.',
-                          style: theme.textTheme.bodyMedium
-                              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant),
                         ),
                       ],
                     ),
@@ -270,7 +320,8 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
                     return StoreCard(
                       store: store,
                       onEdit: () => _openEditForm(store),
-                      onDeactivate: () => _deactivateStore(store.id),
+                      onDeactivate: () => _confirmDeactivate(store),
+                      onReactivate: () => _reactivateStore(store),
                     );
                   },
                   childCount: stores.length,
@@ -293,4 +344,3 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
     );
   }
 }
-

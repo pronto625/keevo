@@ -37,6 +37,13 @@ abstract class StoreRepository {
   /// Throws [StoreException.notFound] if no store with [storeId] exists.
   Future<StoreModel> deactivateStore(String storeId);
 
+  /// Remet en service une boutique désactivée (en ligne uniquement : la
+  /// limite du forfait est re-vérifiée par le serveur).
+  ///
+  /// Throws [StoreException.planLimitExceeded] si le forfait est plein,
+  /// [StoreException.reactivationNeedsNetwork] hors connexion.
+  Future<StoreModel> reactivateStore(String storeId);
+
   /// Background sync: fetches all stores from the backend and writes them to local Drift DB.
   Future<void> syncFromRemote();
 }

@@ -52,14 +52,20 @@ class InventoryLaunchPage extends ConsumerWidget {
             ),
             backgroundColor: theme.colorScheme.surface,
             scrolledUnderElevation: 0,
-            leading: Navigator.of(context).canPop()
-                ? IconButton(
-                    icon: Icon(Icons.arrow_back_ios_new_rounded,
-                        color: theme.colorScheme.onSurface, size: 20),
-                    tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-                    onPressed: () => Navigator.maybePop(context),
-                  )
-                : null,
+            // J1: never a dead end — with nothing to pop (opened as the
+            // navigation root), the back arrow returns to the Plus tab.
+            leading: IconButton(
+              icon: Icon(Icons.arrow_back_ios_new_rounded,
+                  color: theme.colorScheme.onSurface, size: 20),
+              tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+              onPressed: () {
+                if (Navigator.of(context).canPop()) {
+                  Navigator.maybePop(context);
+                } else {
+                  context.go('/settings');
+                }
+              },
+            ),
           ),
 
           // ── Active session banner ──

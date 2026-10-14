@@ -118,7 +118,8 @@ class QuickAddProductNotifier extends _$QuickAddProductNotifier {
             price: Value(sellingPrice ?? 0),
             buyPrice: const Value(0),
             transportCost: const Value(0),
-            stockQuantity: Value(result.physicalQty),
+            // J18: no stock at creation — the validation applies the count.
+            stockQuantity: const Value(0),
             archived: const Value(false),
             status: const Value('ACTIVE'),
             createdAt: now,
@@ -132,7 +133,7 @@ class QuickAddProductNotifier extends _$QuickAddProductNotifier {
             id: result.stockLevelId,
             productId: result.productId,
             storeId: storeId,
-            quantity: result.physicalQty,
+            quantity: 0,
             updatedAt: now,
           ),
         );
@@ -201,7 +202,11 @@ class QuickAddProductNotifier extends _$QuickAddProductNotifier {
               price: Value(sellingPrice ?? 0),
               buyPrice: const Value(0),
               transportCost: const Value(0),
-              stockQuantity: Value(physicalQty),
+              // J18: no stock at creation. The counted quantity is the
+              // session count (theoretical 0 → physical N), applied ONCE with
+              // its movement when the inventory is validated — creating the
+              // stock here too doubled it (3 → 6), same as the server.
+              stockQuantity: const Value(0),
               archived: const Value(false),
               status: const Value('ACTIVE'),
               createdAt: now,
@@ -215,7 +220,7 @@ class QuickAddProductNotifier extends _$QuickAddProductNotifier {
               id: stockLevelId,
               productId: productId,
               storeId: storeId,
-              quantity: physicalQty,
+              quantity: 0,
               updatedAt: now,
             ),
           );
@@ -247,19 +252,9 @@ class QuickAddProductNotifier extends _$QuickAddProductNotifier {
           'price': sellingPrice ?? 0,
           'buyPrice': 0,
           'transportCost': 0,
-          'stockQuantity': physicalQty,
+          'stockQuantity': 0,
         },
         entityId: productId,
-      );
-
-      await syncService.queueOperation(
-        operation: 'RECORD_STOCK_ENTRY',
-        payload: {
-          'productId': productId,
-          'storeId': storeId,
-          'quantity': physicalQty,
-        },
-        entityId: stockLevelId,
       );
 
       await syncService.queueOperation(

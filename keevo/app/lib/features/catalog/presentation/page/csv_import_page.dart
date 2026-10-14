@@ -13,6 +13,35 @@ import '../provider/csv_import_provider.dart';
 ///   Step 0 — Choisir un fichier (file picker + template download)
 ///   Step 1 — Correspondance des colonnes (mapping dropdowns + preview)
 ///   Step 2 — Résultat (import stats + errors + CTA)
+/// J12 — French label of each CSV import field. The server now sends these
+/// labels; older servers sent the raw keys (« prix_vente »), mapped here.
+const _csvFieldLabels = <String, String>{
+  'nom': 'Nom',
+  'prix_vente': 'Prix de vente',
+  'prix_achat': 'Prix d\'achat',
+  'cout_transport': 'Coût de transport',
+  'quantite_initiale': 'Quantité initiale',
+  'quantite': 'Quantité initiale',
+  'sku': 'SKU',
+  'categorie': 'Catégorie',
+  'seuil_min': 'Seuil minimum',
+};
+
+/// One rejected line of the import result: « Ligne 3 — Prix de vente : … »,
+/// never a raw field key nor a placeholder column (« - »).
+@visibleForTesting
+String csvImportErrorLine(int line, String column, String message) {
+  var text = message;
+  _csvFieldLabels.forEach((key, label) {
+    // Only the snake_case keys: « nom » is also a plain French word.
+    if (!key.contains('_')) return;
+    text = text.replaceAll(RegExp('(?<![\\w])$key(?![\\w])'), label);
+  });
+  final col = column.trim();
+  if (col.isEmpty || col == '-') return 'Ligne $line — $text';
+  return 'Ligne $line — ${_csvFieldLabels[col] ?? col} : $text';
+}
+
 class CsvImportPage extends ConsumerStatefulWidget {
   const CsvImportPage({super.key});
 
@@ -576,7 +605,7 @@ class _StepResult extends StatelessWidget {
               (e) => Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
-                  'Ligne ${e.line} — ${e.column}: ${e.message}',
+                  csvImportErrorLine(e.line, e.column, e.message),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.error,
                   ),

@@ -181,10 +181,38 @@ void main() {
         'INVENTORY_VALIDATED',
         'PASSWORD_RESET_REQUESTED',
         'PASSWORD_RESET',
+        // J7 / J10
+        'STORE_REACTIVATED',
+        'PRODUCT_UNARCHIVED',
+        'STOCK_THRESHOLD_UPDATED',
+        'SUPPLIER_UPDATED',
+        'SUPPLIER_PRODUCTS_UPDATED',
+        'REPORT_PREFERENCES_UPDATED',
       ];
       for (final a in actions) {
         expect(AuditPresenter.isKnownAction(a), isTrue, reason: a);
       }
+    });
+
+    test('J7 / J10: owner sentences for the newly audited actions', () {
+      String self(String action, String type, String? label) =>
+          AuditPresenter.sentence(
+                  _entry(action: action, entityType: type, entityLabel: label),
+                  selfUserId: 'user-awa')
+              .toString();
+      expect(self('PRODUCT_UNARCHIVED', 'Product', 'Savon'),
+          'Vous avez désarchivé le produit Savon');
+      expect(self('STOCK_THRESHOLD_UPDATED', 'Product', 'Savon'),
+          'Vous avez modifié le seuil d\'alerte de Savon');
+      expect(self('SUPPLIER_UPDATED', 'Supplier', 'Socada'),
+          'Vous avez modifié le fournisseur Socada');
+      expect(self('SUPPLIER_PRODUCTS_UPDATED', 'Supplier', 'Socada'),
+          'Vous avez modifié les produits du fournisseur Socada');
+      expect(self('STORE_REACTIVATED', 'Store', 'Akwa'),
+          'Vous avez réactivé la boutique Akwa');
+      expect(self('REPORT_PREFERENCES_UPDATED', 'Tenant',
+              'Préférences des rapports'),
+          'Vous avez modifié les préférences des rapports');
     });
   });
 

@@ -62,6 +62,7 @@ void main() {
         path: '/inventory/counting/:id',
         builder: (_, s) => Text('counting ${s.pathParameters['id']}'),
       ),
+      GoRoute(path: '/settings', builder: (_, __) => const Text('PLUS')),
     ]);
     return ProviderScope(
       overrides: [
@@ -114,5 +115,18 @@ void main() {
 
     expect(find.byType(SnackBar), findsOneWidget);
     expect(find.text('Session déjà validée'), findsOneWidget);
+  });
+
+  // J1 — opened as the navigation root (nothing to pop), the page still has a
+  // back arrow, which returns to the Plus tab: never a dead end.
+  testWidgets('root Inventaire: back arrow leads to Plus', (tester) async {
+    when(() => repo.getActiveByStoreId('store-1')).thenAnswer((_) async => null);
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.arrow_back_ios_new_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.text('PLUS'), findsOneWidget);
   });
 }

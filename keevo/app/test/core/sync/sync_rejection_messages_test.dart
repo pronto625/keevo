@@ -10,6 +10,12 @@ void main() {
           'Limite de votre forfait atteinte — passez à un forfait supérieur');
     });
 
+    test('J6: a second warehouse is reported as « entrepôt », not a name '
+        'clash', () {
+      expect(friendlySyncRejectionReason('WAREHOUSE_ALREADY_EXISTS'),
+          'Un seul entrepôt est autorisé par compte');
+    });
+
     test('v1s-16-12: every code a queued operation can be rejected with has a '
         'French message', () {
       const codes = [

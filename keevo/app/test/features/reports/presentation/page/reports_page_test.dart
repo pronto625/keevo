@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:keevo/core/di/providers.dart';
@@ -94,5 +95,65 @@ void main() {
     expect(requested, isEmpty);
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.byType(AppErrorWidget), findsOneWidget);
+  });
+
+  // N1 — « Ventes en attente » had no entry point: the owner opens it from the
+  // pending-sales banner of Rapports › Jour.
+  Future<GoRouter> pumpWithPending(WidgetTester tester, String role) async {
+    SharedPreferences.setMockInitialValues({'active_store_id': 'store-1'});
+    final prefs = await SharedPreferences.getInstance();
+    final router = GoRouter(routes: [
+      GoRoute(path: '/', builder: (_, __) => const ReportsPage()),
+      GoRoute(
+          path: '/pos/pending',
+          builder: (_, __) => const Scaffold(body: Text('VENTES EN ATTENTE'))),
+    ]);
+    addTearDown(router.dispose);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        currentUserRoleProvider.overrideWithValue(role),
+        currentUserIdProvider.overrideWith((ref) async => 'user-1'),
+        todaySummaryProvider.overrideWith((ref, args) async =>
+            const DayClosureSummary(
+              totalSales: 3,
+              totalRevenue: 9000,
+              cashAmount: 9000,
+              momoAmount: 0,
+              topProductQty: 0,
+              pendingSalesCount: 2,
+              pendingSalesTotal: 4000,
+            )),
+        dayClosureStateProvider
+            .overrideWith((ref, s) async => DayClosureState.noSales),
+        lastClosureProvider.overrideWith((ref, s) async => null),
+      ],
+      child: MaterialApp.router(routerConfig: router),
+    ));
+    await tester.pumpAndSettle();
+    return router;
+  }
+
+  testWidgets('N1: owner taps the pending banner → Ventes en attente',
+      (tester) async {
+    await pumpWithPending(tester, 'OWNER');
+
+    final banner = find.byKey(const Key('pending-sales-banner'));
+    await tester.ensureVisible(banner);
+    await tester.tap(banner);
+    await tester.pumpAndSettle();
+
+    expect(find.text('VENTES EN ATTENTE'), findsOneWidget);
+  });
+
+  testWidgets('N1: the employee banner is informative only', (tester) async {
+    await pumpWithPending(tester, 'EMPLOYEE');
+
+    final banner = find.byKey(const Key('pending-sales-banner'));
+    await tester.ensureVisible(banner);
+    await tester.tap(banner);
+    await tester.pumpAndSettle();
+
+    expect(find.text('VENTES EN ATTENTE'), findsNothing);
   });
 }
