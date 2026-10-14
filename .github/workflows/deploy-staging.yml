@@ -313,8 +313,11 @@ jobs:
                   KEEVO_FCM_ENABLED: "false"
                   KEEVO_JWT_PRIVATE_KEY_PATH: file:/run/secrets/jwt/private_key.pem
                   KEEVO_JWT_PUBLIC_KEY_PATH: file:/run/secrets/jwt/public_key.pem
+                  KEEVO_PRODUCT_PHOTO_DIR: /app/data/product-photos
                 volumes:
                   - ./keys:/run/secrets/jwt:ro
+                  # Product photos — persistent named volume (staging copy)
+                  - product_photos_staging:/app/data/product-photos
                 # No published port: reachable only via the prod Traefik on keevo_edge.
                 networks:
                   - keevo_staging_net
@@ -322,6 +325,7 @@ jobs:
 
             volumes:
               postgres_staging_data:
+              product_photos_staging:
 
             networks:
               keevo_staging_net:

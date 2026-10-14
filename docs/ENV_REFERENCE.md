@@ -114,7 +114,7 @@ ACME_EMAIL=admin@<TON_DOMAINE>
 | Fichier | Description |
 |---------|-------------|
 | `firebase-credentials.json` | Clé de compte de service Firebase (actuellement `keevo-1d289-firebase-adminsdk-fbsvc-4094494885.json`) |
-| `.env.backup` | Variables pour les sauvegardes S3 : `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `BACKUP_S3_BUCKET`, `BACKUP_S3_PREFIX` |
+| `.env.backup` | Variables pour les sauvegardes S3 : `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `BACKUP_S3_BUCKET`, `BACKUP_S3_PREFIX` ; optionnels `BACKUP_PHOTOS` (1 par défaut, archive aussi les photos), `PHOTOS_CONTAINER` (défaut `keevo_backend`) |
 
 ---
 
@@ -152,3 +152,11 @@ Le workflow génère `docker-compose.prod.yml` sur le serveur avec 3 services :
 | `traefik` | `traefik:v3.3` | 80, 443 | 128 Mo |
 | `postgres` | `postgres:16-alpine` | *(interne)* | 384 Mo |
 | `backend` | `ghcr.io/<repo>/backend:latest` | *(interne:4500)* | 768 Mo |
+
+Volumes persistants (nommés, conservés entre les déploiements — jamais `docker compose down -v`) :
+
+| Volume | Monté dans | Contenu | Sauvegarde |
+|--------|-----------|---------|------------|
+| `postgres_data` | `postgres:/var/lib/postgresql/data` | Base de données | `backup-db.sh` (pg_dump) |
+| `product_photos` | `backend:/app/data/product-photos` | Photos produit (vignettes JPEG, seule copie) — `KEEVO_PRODUCT_PHOTO_DIR` | `backup-db.sh` (`keevo_photos_<date>.tar.gz`) |
+| `traefik_letsencrypt` | `traefik:/letsencrypt` | Certificats TLS | — (réémis automatiquement) |

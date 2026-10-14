@@ -856,9 +856,15 @@ Prod observée : branche `deploy` = app **1.1.12+11**, schéma public **V7**. Ce
       `KEEVO_EXPORT_LINK_SECRET` défini (sinon liens d'export invalidés à chaque redémarrage),
       fournisseur WhatsApp réel configuré (`KEEVO_WHATSAPP_PROVIDER`), FCM activé.
 - [ ] Une seule instance backend (§17).
-- [ ] `KEEVO_PRODUCT_PHOTO_DIR` pointe vers un volume **persistant et sauvegardé** (photos produit en
-      vignettes JPEG ~10 Ko ; défaut `${user.home}/keevo-data/product-photos`, seule copie des photos).
-      Monter ce volume dans le conteneur et l'inclure dans les sauvegardes (§11).
+- [ ] **Photos produit** (seule copie des photos) : l'image Docker fixe `KEEVO_PRODUCT_PHOTO_DIR=/app/data/product-photos`
+      et `docker-compose.prod.yml` (généré par `deploy-backend.yml`) y monte le **volume nommé `product_photos`**
+      (`keevo_product_photos` côté Docker) ; préproduction : `product_photos_staging`. Ne jamais lancer
+      `docker compose down -v` / `docker volume prune` sur ces hôtes. Volume nommé obligatoire (pas un dossier
+      de l'hôte) : il est initialisé avec le bon propriétaire (uid 2001) ; un dossier hôte devrait être `chown 2001:2001`.
+- [ ] Sauvegarde : `backup-db.sh` archive aussi les photos (`keevo_photos_<date>.tar.gz`, depuis le conteneur
+      `keevo_backend`, envoyées sur S3 avec le dump, rotation 30 jours). Si les photos ne peuvent pas être
+      archivées (backend arrêté), la sauvegarde est signalée en échec (alerte). Restauration :
+      `docker exec -i keevo_backend tar -xzf - -C /app/data/product-photos < keevo_photos_<date>.tar.gz`.
 - [ ] Prévoir une fenêtre calme : au premier démarrage, Flyway applique V8→V26, puis
       `TenantSchemaSyncService` met à jour chaque schéma tenant (colonnes `reports.updated_at`,
       `sales.mobile_money_ref`, `sync_operations_log.device_id`, …) et `SyncKeysetIndexJob` construit les
