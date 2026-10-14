@@ -173,7 +173,7 @@ public class WeeklyReportBuilder {
                 "  AND " + WINDOW_S + " " +
                 "  AND s.status = 'COMPLETED' " +
                 "GROUP BY si.product_name " +
-                "ORDER BY total_qty DESC " +
+                "ORDER BY total_qty DESC, total_revenue DESC, si.product_name " +
                 "LIMIT 5")
                 .setParameter("sid", storeId))
                 .getResultList();
@@ -188,7 +188,7 @@ public class WeeklyReportBuilder {
     @SuppressWarnings("unchecked")
     private List<EmployeeEntry> getEmployeeBreakdown(String storeId, Window w) {
         List<Object[]> rows = w.bind(entityManager.createNativeQuery(
-                "SELECT COALESCE(e.first_name || ' ' || e.last_name, 'Employé') AS emp_name, " +
+                "SELECT COALESCE(e.first_name || ' ' || e.last_name, 'Propriétaire') AS emp_name, " +
                 "       COUNT(s.id) AS sale_count, " +
                 "       SUM(s.total_amount) AS total_revenue " +
                 "FROM sales s " +

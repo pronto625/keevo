@@ -41,12 +41,22 @@ class DailyReportFormatterTest {
                 sales > 0 ? revenue / sales : 0,
                 List.of(new TopProductEntry("iPhone 14", 3, 90000),
                          new TopProductEntry("Câble USB", 5, 10000)),
-                List.of(new EmployeeEntry("Alice", 8, 120000)),
+                List.of(new EmployeeEntry("Alice", 8, 120000),
+                        new EmployeeEntry("Propriétaire", 1, 3000)),
                 2,
                 1,
                 5000,
                 null
         );
+    }
+
+    @Test
+    void format_salesCountAgreesInNumber() {
+        // Device test: « Jean Kamga : 1 ventes ».
+        String result = formatter.format(sampleData(5, 150000));
+        assertThat(result).contains("• Alice : 8 ventes — ")
+                .contains("• Propriétaire : 1 vente — ")
+                .doesNotContain("1 ventes");
     }
 
     @Test

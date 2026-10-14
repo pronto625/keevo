@@ -69,7 +69,8 @@ public class WeeklyReportFormatter {
             sb.append("👤 Équipe de la semaine :\n");
             for (EmployeeEntry emp : data.employeeBreakdown()) {
                 sb.append("• ").append(emp.name())
-                  .append(" : ").append(emp.salesCount()).append(" ventes")
+                  .append(" : ").append(emp.salesCount())
+                  .append(emp.salesCount() > 1 ? " ventes" : " vente")
                   .append(" — ").append(emp.revenue()).append(" FCFA\n");
             }
             sb.append("\n");
