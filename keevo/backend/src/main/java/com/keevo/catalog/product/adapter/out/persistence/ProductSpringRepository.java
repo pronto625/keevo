@@ -2,10 +2,12 @@ package com.keevo.catalog.product.adapter.out.persistence;
 
 import com.keevo.shared.infrastructure.persistence.entity.ProductJpaEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -48,4 +50,14 @@ public interface ProductSpringRepository extends JpaRepository<ProductJpaEntity,
 
     @Query("SELECT p.id, p.photoUrl FROM ProductJpaEntity p WHERE p.id IN :ids")
     List<Object[]> findPhotoUrlsByIds(@Param("ids") List<UUID> ids);
+
+    /**
+     * Sets (or clears) the product photo and bumps {@code updated_at} so the sync pull sends the
+     * new photo URL to the other devices. The only write of {@code photo_url} (the column is not
+     * updatable through a product save).
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE ProductJpaEntity p SET p.photoUrl = :photoUrl, p.updatedAt = :updatedAt WHERE p.id = :id")
+    int updatePhotoUrl(@Param("id") UUID id, @Param("photoUrl") String photoUrl,
+                       @Param("updatedAt") Instant updatedAt);
 }

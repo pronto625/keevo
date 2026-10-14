@@ -41,6 +41,9 @@ public enum ErrorCode {
     CLIENT_NOT_FOUND,
     SUPPLIER_NOT_FOUND,    PRODUCT_NAME_ALREADY_EXISTS, // Story 2.4 — name uniqueness (DRAFT or ACTIVE)
     CSV_PARSE_ERROR,             // Story 2.4 — malformed CSV file (422)
+    PRODUCT_PHOTO_TOO_LARGE,     // HTTP 413 — product photo over keevo.product-photo.max-bytes
+    PRODUCT_PHOTO_INVALID,       // HTTP 415 — not a JPEG / PNG / WebP image (or corrupt)
+    PRODUCT_PHOTO_NOT_FOUND,     // HTTP 404 — the product has no photo
     // ── Inventory ─────────────────────────────────────────────────
     INSUFFICIENT_STOCK,
     STOCK_NOT_FOUND,

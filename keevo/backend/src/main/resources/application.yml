@@ -116,6 +116,12 @@ keevo:
     stale-job-after: 2h
     pdf-max-rows: 2000            # v1s-18-3: data rows a PDF may hold (larger → 422 EXPORT_PDF_TOO_LARGE)
     pdf-max-closures: 31          # v1s-18-3: closures in one « Fin de journée » PDF
+  # FR21 — product photo thumbnails, stored server side and synced to every device.
+  # The directory MUST be persistent (volume / backed-up disk): it holds the only copy.
+  product-photo:
+    storage-dir: ${KEEVO_PRODUCT_PHOTO_DIR:${user.home}/keevo-data/product-photos}
+    max-bytes: 204800             # 200 KB — the app sends ~40 KB thumbnails (400 px, JPEG 70 %)
+    max-dimension: 400            # longest side of the stored thumbnail
   # Story v1s-14-6 (FR7) — « Aide & Tutoriels »: short French videos hosted externally (YouTube…).
   # Blank / non-http(s) url = « Bientôt disponible » in the app. Publish a video by setting its env var.
   help:

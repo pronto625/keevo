@@ -46,7 +46,9 @@ public class ProductJpaEntity {
     @Column(name = "minimum_threshold", nullable = false)
     private Integer minimumThreshold = 0;
 
-    @Column(name = "photo_url", length = 500)
+    // Written only by the photo endpoint (ProductSpringRepository.updatePhotoUrl): a product
+    // edit (save of a domain Product, which carries no photo) must never wipe it.
+    @Column(name = "photo_url", length = 500, updatable = false)
     private String photoUrl;
 
     @Column(name = "archived", nullable = false)

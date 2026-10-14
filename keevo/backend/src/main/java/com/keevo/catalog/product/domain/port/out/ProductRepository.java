@@ -104,4 +104,13 @@ public interface ProductRepository {
      * Story 6.2.
      */
     Map<UUID, String> findPhotoUrlsByIds(List<UUID> ids);
+
+    /** Current photo URL of a product, empty when it has none (or does not exist). */
+    Optional<String> findPhotoUrl(UUID id);
+
+    /**
+     * Sets ({@code photoUrl} non-null) or clears the product photo URL and bumps
+     * {@code updatedAt} so the sync pull delivers it. Returns {@code false} when no such product.
+     */
+    boolean updatePhotoUrl(UUID id, String photoUrl, java.time.Instant updatedAt);
 }

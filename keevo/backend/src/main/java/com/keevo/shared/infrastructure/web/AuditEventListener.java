@@ -38,6 +38,7 @@ import com.keevo.store.store.domain.event.StoreCreatedEvent;
 import com.keevo.store.store.domain.event.StoreDeactivatedEvent;
 import com.keevo.store.store.domain.event.StoreReactivatedEvent;
 import com.keevo.catalog.product.domain.event.ProductUnarchivedEvent;
+import com.keevo.catalog.product.domain.event.ProductPhotoUpdatedEvent;
 import com.keevo.catalog.stock.domain.event.StockThresholdChangedEvent;
 import com.keevo.catalog.contact.domain.event.SupplierUpdatedEvent;
 import com.keevo.catalog.contact.domain.event.SupplierProductsChangedEvent;
@@ -220,6 +221,18 @@ public class AuditEventListener {
                 null, event.productName(), null, null);
         log.info("AUDIT: product_updated productId={} productName={} tenantId={} actorId={}",
                 event.productId(), event.productName(), event.tenantId(), event.actorId());
+    }
+
+    @EventListener
+    public void on(ProductPhotoUpdatedEvent event) {
+        // French values only (v1s-16-20): the history shows them as is.
+        write(event.actorId(), event.tenantId(), "PRODUCT_PHOTO_UPDATED", "Product", event.productId(),
+                map("photo", event.hadPhoto() ? "Photo présente" : "Aucune photo"),
+                map("photo", event.hasPhoto() ? (event.hadPhoto() ? "Photo remplacée" : "Photo ajoutée")
+                        : "Photo supprimée"),
+                null, event.productName(), null, event.actorName());
+        log.info("AUDIT: product_photo_updated productId={} hasPhoto={} tenantId={} actorId={}",
+                event.productId(), event.hasPhoto(), event.tenantId(), event.actorId());
     }
 
     @EventListener

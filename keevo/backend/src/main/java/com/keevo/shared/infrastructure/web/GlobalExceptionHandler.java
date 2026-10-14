@@ -67,6 +67,9 @@ public class GlobalExceptionHandler {
             Map.entry("WAREHOUSE_ALREADY_EXISTS",   "Vous avez déjà un entrepôt. Un seul entrepôt est autorisé par compte."),
             Map.entry("STORE_NOT_FOUND",             "Boutique introuvable"),
             Map.entry("PRODUCT_NOT_FOUND",           "Produit introuvable"),
+            Map.entry("PRODUCT_PHOTO_TOO_LARGE",     "La photo est trop lourde (200 Ko maximum)"),
+            Map.entry("PRODUCT_PHOTO_INVALID",       "Format de photo non pris en charge (JPEG, PNG ou WebP)"),
+            Map.entry("PRODUCT_PHOTO_NOT_FOUND",     "Ce produit n'a pas de photo"),
             Map.entry("STORE_NOT_ACTIVE",           "Cette boutique est désactivée"),
             Map.entry("SAME_SOURCE_DESTINATION",    "Source et destination doivent être différentes"),
             Map.entry("CSV_PARSE_ERROR",           "Erreur de lecture du fichier CSV"),
@@ -272,6 +275,7 @@ public class GlobalExceptionHandler {
         return switch (domainCode) {
             case "USER_NOT_FOUND", "TENANT_NOT_FOUND",
                  "PRODUCT_NOT_FOUND", "CATEGORY_NOT_FOUND",
+                 "PRODUCT_PHOTO_NOT_FOUND",
                  "CLIENT_NOT_FOUND", "SUPPLIER_NOT_FOUND",
                  "STOCK_NOT_FOUND", "STORE_NOT_FOUND",
                  "EMPLOYEE_NOT_FOUND",
@@ -321,6 +325,8 @@ public class GlobalExceptionHandler {
                  "CODE_LOCKED",
                  "EXPORT_PDF_TOO_LARGE" -> HttpStatus.UNPROCESSABLE_ENTITY;  // v1s-18-3 — PDF over its row limit
             case "SERVICE_UNAVAILABLE" -> HttpStatus.SERVICE_UNAVAILABLE;
+            case "PRODUCT_PHOTO_TOO_LARGE" -> HttpStatus.PAYLOAD_TOO_LARGE;
+            case "PRODUCT_PHOTO_INVALID" -> HttpStatus.UNSUPPORTED_MEDIA_TYPE;
             case "JUSTIFICATION_REQUIRED",
                  "JUSTIFICATION_TOO_SHORT" -> HttpStatus.BAD_REQUEST;
             case "SECTOR_TEMPLATE_NOT_FOUND",

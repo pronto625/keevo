@@ -117,6 +117,16 @@ public class ProductRepositoryAdapter implements ProductRepository {
                         (a, b) -> a));
     }
 
+    @Override
+    public Optional<String> findPhotoUrl(UUID id) {
+        return Optional.ofNullable(findPhotoUrlsByIds(List.of(id)).get(id));
+    }
+
+    @Override
+    public boolean updatePhotoUrl(UUID id, String photoUrl, Instant updatedAt) {
+        return springRepository.updatePhotoUrl(id, photoUrl, updatedAt) > 0;
+    }
+
     // ── Conversion methods ─────────────────────────────────────────────────────
 
     private ProductJpaEntity toJpaEntity(Product product) {
@@ -131,7 +141,7 @@ public class ProductRepositoryAdapter implements ProductRepository {
             product.getTransportCostValue(),
             product.getStockQuantity(),
             product.getMinimumThreshold(),
-            null, // photoUrl - future story
+            null, // photoUrl — not updatable through save (see ProductJpaEntity / updatePhotoUrl)
             product.getArchived(),
             product.getStatus(),
             product.getCreatedAt(),

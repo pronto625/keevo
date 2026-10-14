@@ -114,6 +114,26 @@ class ProductAuditEventTest {
         verify(auditPort).record(entry(actorId, tenantId, "PRODUCT_UPDATED", "Product", productId, valueBefore, valueAfter));
     }
 
+    // ── ProductPhotoUpdatedEvent ──────────────────────────────────────────────
+
+    @Test
+    @DisplayName("on(ProductPhotoUpdatedEvent) records PRODUCT_PHOTO_UPDATED with French before/after values")
+    void onProductPhotoUpdated_callsAuditPort() {
+        UUID productId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        String tenantId = "kv_abc123";
+
+        listener.on(new ProductPhotoUpdatedEvent(productId, "Savon", false, true, tenantId, actorId,
+                "Awa", Instant.now()));
+        verify(auditPort).record(entry(actorId, tenantId, "PRODUCT_PHOTO_UPDATED", "Product", productId,
+                "{\"photo\":\"Aucune photo\"}", "{\"photo\":\"Photo ajoutée\"}"));
+
+        listener.on(new ProductPhotoUpdatedEvent(productId, "Savon", true, false, tenantId, actorId,
+                "Awa", Instant.now()));
+        verify(auditPort).record(entry(actorId, tenantId, "PRODUCT_PHOTO_UPDATED", "Product", productId,
+                "{\"photo\":\"Photo présente\"}", "{\"photo\":\"Photo supprimée\"}"));
+    }
+
     // ── ProductArchivedEvent ──────────────────────────────────────────────────
 
     @Test
