@@ -1,3 +1,4 @@
+import '../exception/auth_exception.dart';
 import '../model/login_result.dart';
 import '../repository/auth_repository.dart';
 import '../repository/token_storage.dart';
@@ -25,6 +26,7 @@ class LoginUseCase {
   /// Propagates [AuthException] from repository unchanged:
   /// - INVALID_CREDENTIALS: wrong phone or password
   /// - ACCOUNT_LOCKED: too many failed attempts
+  /// - NO_ACTIVE_MEMBERSHIP: valid credentials, no active company (deactivated)
   Future<LoginResult> execute({
     required String phoneNumber,
     required String password,
@@ -33,6 +35,16 @@ class LoginUseCase {
       phoneNumber: phoneNumber.trim(),
       password: password,
     );
+
+    // A deactivated employee (or an owner whose company is gone) has valid
+    // credentials but no active membership: the picker opened empty with no
+    // explanation (device test).
+    if (session.memberships.isEmpty) {
+      throw const AuthException(
+        domainCode: 'NO_ACTIVE_MEMBERSHIP',
+        message: 'No active company for this account',
+      );
+    }
 
     if (session.memberships.length == 1) {
       // AC8: single membership — auto-select without showing picker

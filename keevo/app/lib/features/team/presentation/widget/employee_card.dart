@@ -343,7 +343,7 @@ class EmployeeCard extends ConsumerWidget {
               ListTile(
                 leading: Icon(Icons.lock_reset_rounded,
                     color: Theme.of(context).colorScheme.warningStrong),
-                title: const Text('Regénérer le mot de passe'),
+                title: const Text('Régénérer le mot de passe'),
                 subtitle: const Text('Nouveau mot de passe temporaire'),
                 onTap: () {
                   Navigator.pop(sheetCtx);
@@ -398,7 +398,7 @@ class EmployeeCard extends ConsumerWidget {
               ListTile(
                 leading: Icon(Icons.lock_reset_rounded,
                     color: Theme.of(context).colorScheme.warningStrong),
-                title: const Text('Regénérer le mot de passe'),
+                title: const Text('Régénérer le mot de passe'),
                 subtitle: const Text('Nouveau mot de passe temporaire'),
                 onTap: () {
                   Navigator.pop(sheetCtx);
@@ -537,7 +537,7 @@ class EmployeeCard extends ConsumerWidget {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Regénérer le mot de passe ?'),
+        title: const Text('Régénérer le mot de passe ?'),
         content: Text(
           'Un nouveau mot de passe temporaire sera créé pour '
           '${employee.firstName} ${employee.lastName}. '
@@ -582,7 +582,7 @@ class EmployeeCard extends ConsumerWidget {
                 );
               }
             },
-            child: const Text('Regénérer'),
+            child: const Text('Régénérer'),
           ),
         ],
       ),

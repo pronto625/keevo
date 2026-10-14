@@ -97,6 +97,10 @@ class _CreateEmployeePageState extends ConsumerState<CreateEmployeePage> {
               firstName: result.employee.firstName,
             ).then((_) {
               if (!mounted) return;
+              // The team list must show the new employee on return (device
+              // test: it still read « Aucun employé »).
+              ref.invalidate(employeeListProvider);
+              ref.invalidate(employeeActivityMapProvider);
               // B2: use go() fallback when pop() is unavailable (e.g. GoRouter
               // stack was reset during the bottom-sheet async gap).
               if (context.canPop()) {

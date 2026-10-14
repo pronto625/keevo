@@ -156,6 +156,23 @@ void main() {
     });
 
     group('execute() — error path', () {
+      // Device test: a deactivated employee landed on an empty company picker.
+      test('no active membership → NO_ACTIVE_MEMBERSHIP, nothing stored',
+          () async {
+        when(() => mockRepository.login(
+              phoneNumber: validPhone,
+              password: validPassword,
+            )).thenAnswer((_) async =>
+            const LoginSessionResponse(loginToken: 'login-token', memberships: []));
+
+        await expectLater(
+          useCase.execute(phoneNumber: validPhone, password: validPassword),
+          throwsA(isA<AuthException>().having(
+              (e) => e.domainCode, 'domainCode', 'NO_ACTIVE_MEMBERSHIP')),
+        );
+        verifyNever(() => mockTokenStorage.saveToken(any()));
+      });
+
       test('propagates INVALID_CREDENTIALS AuthException', () async {
         when(() => mockRepository.login(
               phoneNumber: any(named: 'phoneNumber'),
