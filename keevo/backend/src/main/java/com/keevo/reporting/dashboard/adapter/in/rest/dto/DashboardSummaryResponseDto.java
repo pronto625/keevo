@@ -25,8 +25,24 @@ public record DashboardSummaryResponseDto(
         List<DailyCADto> weeklyCA,
         List<DailyCADto> monthlyCA,
         List<DailyCADto> yearlyCA,
-        List<StoreOverviewDto> storeOverviews
+        List<StoreOverviewDto> storeOverviews,
+        PeriodTotalsDto periodTotals
 ) {
+
+    public record PeriodTotalDto(long amount, int salesCount) {
+        public static PeriodTotalDto from(DashboardSummary.PeriodTotal t) {
+            return new PeriodTotalDto(t.amount(), t.salesCount());
+        }
+    }
+
+    /** {@code {week, month, year, allTime}} — added field, older clients ignore it. */
+    public record PeriodTotalsDto(PeriodTotalDto week, PeriodTotalDto month, PeriodTotalDto year,
+                                  PeriodTotalDto allTime) {
+        public static PeriodTotalsDto from(DashboardSummary.PeriodTotals t) {
+            return new PeriodTotalsDto(PeriodTotalDto.from(t.week()), PeriodTotalDto.from(t.month()),
+                    PeriodTotalDto.from(t.year()), PeriodTotalDto.from(t.allTime()));
+        }
+    }
 
     public record TopProductDto(
             String productId,
@@ -88,7 +104,8 @@ public record DashboardSummaryResponseDto(
                 s.weeklyCA().stream().map(DailyCADto::from).toList(),
                 s.monthlyCA().stream().map(DailyCADto::from).toList(),
                 s.yearlyCA().stream().map(DailyCADto::from).toList(),
-                s.storeOverviews().stream().map(StoreOverviewDto::from).toList()
+                s.storeOverviews().stream().map(StoreOverviewDto::from).toList(),
+                PeriodTotalsDto.from(s.periodTotals())
         );
     }
 }

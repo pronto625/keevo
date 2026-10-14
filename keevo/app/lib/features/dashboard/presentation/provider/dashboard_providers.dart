@@ -63,6 +63,70 @@ final storeOverviewsProvider = FutureProvider<List<StoreOverview>>((ref) async {
   return snapshot.storeOverviews;
 });
 
+// ── « Chiffre d'affaires total » ────────────────────────────
+
+/// SharedPreferences key of the period chosen on the « Chiffre d'affaires
+/// total » card (per device).
+const kDashboardRevenuePeriodKey = 'dashboard_revenue_period';
+
+/// Selected period of the « Chiffre d'affaires total » card — « Mois » by
+/// default, persisted per device.
+class RevenuePeriodNotifier extends Notifier<RevenuePeriod> {
+  @override
+  RevenuePeriod build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    return RevenuePeriod.fromKey(prefs.getString(kDashboardRevenuePeriodKey)) ??
+        RevenuePeriod.month;
+  }
+
+  void select(RevenuePeriod period) {
+    ref.read(sharedPreferencesProvider)
+        .setString(kDashboardRevenuePeriodKey, period.key);
+    state = period;
+  }
+}
+
+final revenuePeriodProvider =
+    NotifierProvider<RevenuePeriodNotifier, RevenuePeriod>(
+        RevenuePeriodNotifier.new);
+
+/// Figure shown by the « Chiffre d'affaires total » card.
+class PeriodRevenueView {
+  final RevenuePeriod period;
+  final PeriodRevenue revenue;
+
+  /// True when computed from this device's database (offline, or server
+  /// without the figure): it only covers the sales synced to this device,
+  /// and the card says so.
+  final bool onDeviceOnly;
+
+  const PeriodRevenueView({
+    required this.period,
+    required this.revenue,
+    required this.onDeviceOnly,
+  });
+}
+
+/// « Chiffre d'affaires total » for the selected period. Server figure from
+/// the dashboard summary when online; otherwise the device's aggregation,
+/// flagged [PeriodRevenueView.onDeviceOnly].
+final periodRevenueProvider = FutureProvider<PeriodRevenueView>((ref) async {
+  final period = ref.watch(revenuePeriodProvider);
+  final snapshot = await ref.watch(dashboardSnapshotProvider.future);
+  final fromSnapshot = snapshot.periodRevenue[period];
+  if (fromSnapshot != null) {
+    return PeriodRevenueView(
+      period: period,
+      revenue: fromSnapshot,
+      onDeviceOnly: snapshot.computedOnDevice,
+    );
+  }
+  final local = await ref
+      .watch(localDashboardDatasourceProvider)
+      .getPeriodRevenue(period);
+  return PeriodRevenueView(period: period, revenue: local, onDeviceOnly: true);
+});
+
 // ── Chart period providers ──────────────────────────────────
 
 /// Current chart period selection for the main dashboard.

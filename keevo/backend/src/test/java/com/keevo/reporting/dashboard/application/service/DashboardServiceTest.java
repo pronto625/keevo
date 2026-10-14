@@ -82,6 +82,7 @@ class DashboardServiceTest {
         assertThat(result.monthlyCA()).isNotNull();
         assertThat(result.yearlyCA()).isNotNull();
         assertThat(result.storeOverviews()).isNotNull();
+        assertThat(result.periodTotals()).isEqualTo(DashboardSummary.PeriodTotals.EMPTY);
     }
 
     @Test

@@ -79,7 +79,25 @@ class RemoteDashboardDatasource {
       yearlyCA: yearlyCA,
       storeOverviews: storeOverviews,
       todaySalesCount: (json['todaySalesCount'] as num?)?.toInt() ?? 0,
+      periodRevenue: _mapPeriodTotals(json['periodTotals']),
     );
+  }
+
+  /// `periodTotals: {week|month|year|allTime: {amount, salesCount}}`.
+  /// Absent on an older server → empty map (the dashboard then falls back to
+  /// the device's figures, labelled as such).
+  static Map<RevenuePeriod, PeriodRevenue> _mapPeriodTotals(Object? raw) {
+    if (raw is! Map<String, dynamic>) return const {};
+    final result = <RevenuePeriod, PeriodRevenue>{};
+    for (final period in RevenuePeriod.values) {
+      final entry = raw[period.key];
+      if (entry is! Map<String, dynamic>) continue;
+      result[period] = PeriodRevenue(
+        amount: (entry['amount'] as num?)?.toInt() ?? 0,
+        salesCount: (entry['salesCount'] as num?)?.toInt() ?? 0,
+      );
+    }
+    return result;
   }
 
   TopProduct _mapTopProduct(Map<String, dynamic> json) {
