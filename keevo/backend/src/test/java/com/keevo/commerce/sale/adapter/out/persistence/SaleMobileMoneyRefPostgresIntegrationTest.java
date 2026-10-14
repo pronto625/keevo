@@ -26,7 +26,7 @@ import java.util.function.Supplier;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * sales.mobile_money_ref on a real PostgreSQL migrated by Flyway (V24): the reference typed at
+ * sales.mobile_money_ref on a real PostgreSQL migrated by Flyway (V25): the reference typed at
  * checkout is stored, read back, and survives a status change and a correction.
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
