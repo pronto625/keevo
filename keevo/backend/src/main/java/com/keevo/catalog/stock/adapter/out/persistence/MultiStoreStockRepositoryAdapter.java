@@ -160,7 +160,7 @@ public class MultiStoreStockRepositoryAdapter implements MultiStoreStockReposito
             },
             storeId.toString());
 
-        String countSql = String.format(SQL_STORE_DETAIL_COUNT_TPL, s) + lowFilter;
+        String countSql = String.format(SQL_STORE_DETAIL_COUNT_TPL, TenantSchema.validate(s)) + lowFilter; // re-checked at use
         Long total = jdbc.queryForObject(countSql, Long.class, storeId.toString());
         return new PageImpl<>(content, pageable, total != null ? total : 0L);
     }
