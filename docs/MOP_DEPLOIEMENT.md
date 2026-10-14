@@ -83,10 +83,12 @@ Ajouter un enregistrement A chez ton registrar :
 | Type | Nom | Valeur |
 |------|-----|--------|
 | A    | `@` (ou le sous-domaine) | `<IP_DU_SERVEUR>` |
+| A    | sous-domaine du tableau de bord (ex: `admin`) = `ADMIN_DOMAIN` | `<IP_DU_SERVEUR>` |
 
 ```bash
 # Vérifier la propagation (peut prendre 1-48h)
 dig <TON_DOMAINE> +short
+dig <ADMIN_DOMAIN> +short   # tableau de bord d'administration
 ```
 
 ### 2.7 Déconnecter — on continue en tant que `deploy`
@@ -137,6 +139,12 @@ Va dans **Settings → Secrets and variables → Actions → Repository secrets*
 | `ACME_EMAIL` | Ton email pour Let's Encrypt (ex: `contact@lipagar.com`) |
 | `JWT_PRIVATE_KEY_PEM` | `cat /tmp/private_key.pem` (étape 1) |
 | `JWT_PUBLIC_KEY_PEM` | `cat /tmp/public_key.pem` (étape 1) |
+| `ADMIN_DOMAIN` | Domaine du tableau de bord (ex: `admin.keevo.lipagar.com`), sans `https://`, différent de `APP_DOMAIN` |
+| `ADMIN_PHONE` | Numéro du super-admin (ex: `+2376XXXXXXXX`) — si un super-admin existe déjà en prod, **son** numéro |
+| `ADMIN_PASSWORD` | Mot de passe initial du super-admin : ≥ 12 caractères, 3 classes sur 4 (minuscule, majuscule, chiffre, symbole), sans `'` ; jamais `Admin@1234!` |
+
+> Le déploiement échoue **avant** de toucher le serveur si `ADMIN_DOMAIN`, `ADMIN_PHONE` ou
+> `ADMIN_PASSWORD` manque ou si le mot de passe est trop faible (mêmes règles que le backend).
 
 ---
 
@@ -174,6 +182,8 @@ FLYWAY_ENABLED=true
 JWT_SECRET=unused_in_prod_with_rsa_keys
 
 # ─── Admin bootstrap ──────────────────────────────────────────
+# En prod, remplacés par ~/keevo/.env.admin, écrit par le workflow depuis les secrets
+# ADMIN_PHONE / ADMIN_PASSWORD (étape 3.3). DASHBOARD_ORIGIN est imposé par le compose.
 ADMIN_PHONE=+2376XXXXXXXXX
 ADMIN_PASSWORD=<MDP_ADMIN_FORT>
 
@@ -228,7 +238,12 @@ git merge v1-stabilization   # ou la branche que tu veux déployer
 git push origin deploy
 ```
 
-Le workflow `deploy-backend.yml` se déclenche automatiquement.
+Le workflow `deploy-backend.yml` se déclenche automatiquement à chaque push sur `deploy` et redéploie
+toute la pile (backend + tableau de bord d'administration + PostgreSQL [+ Traefik]) depuis un seul
+`docker-compose.prod.yml`. Il ne reconstruit que les images dont le dossier a changé
+(`keevo/backend/**` → backend, `keevo/dashboard/**` → tableau de bord ; l'autre est reprise depuis
+`:latest`) et ne redémarre que les conteneurs modifiés. Relance manuelle : Actions → *Deploy Backend* →
+*Run workflow* sur `deploy`.
 
 ---
 
@@ -247,7 +262,7 @@ ssh deploy@<IP_DU_SERVEUR>
 
 # 1. Tous les containers sont UP
 docker ps
-# Attendu : keevo_backend, keevo_postgres, keevo_traefik
+# Attendu : keevo_backend, keevo_dashboard (healthy), keevo_postgres, keevo_traefik
 
 # 2. Backend healthy
 curl -s http://localhost:4500/actuator/health
@@ -264,7 +279,21 @@ curl -vI https://<TON_DOMAINE> 2>&1 | grep "issuer"
 # 5. Logs backend — pas d'erreur au boot
 docker logs --tail 50 keevo_backend 2>&1 | grep -E "ERROR|FATAL|Started"
 # Attendu : Started KeevoApplication in X seconds (pas d'ERROR)
+
+# 6. Compte super-admin et CORS du tableau de bord
+docker logs keevo_backend 2>&1 | grep -E "AdminInit|ADMIN_PASSWORD|DASHBOARD_ORIGIN"
+# Attendu : [FailFast] ADMIN_PASSWORD ✓, [CORS] DASHBOARD_ORIGIN configured,
+#           et sur une base neuve : [AdminInit] Super admin account created
+
+# 7. Tableau de bord
+curl -sI https://<ADMIN_DOMAIN>/login | head -1
+# Attendu : HTTP/2 200
 ```
+
+**Première connexion au tableau de bord** : ouvrir `https://<ADMIN_DOMAIN>/login` avec `ADMIN_PHONE` /
+`ADMIN_PASSWORD`, puis changer le mot de passe immédiatement (procédure :
+`keevo/backend/docs/DEPLOYMENT_CHECKLIST.md` §18.7). Le secret `ADMIN_PASSWORD` ne sert qu'à la
+création du compte : un redéploiement n'écrase jamais le mot de passe d'un compte existant.
 
 ---
 
@@ -277,10 +306,23 @@ docker logs keevo_backend 2>&1 | tail -50
 ```
 
 Causes fréquentes :
-- **`PRODUCT_NOT_FOUND`** ou **`Admin@1234!` rejeté** → changer `ADMIN_PASSWORD` dans `.env`
+- **`PRODUCT_NOT_FOUND`** ou **`ADMIN_PASSWORD` rejeté** → corriger le secret GitHub `ADMIN_PASSWORD`
+  (il remplace la valeur de `.env` via `.env.admin`) puis relancer le workflow
 - **`Connection refused` sur postgres** → vérifier `docker ps` (postgres doit être healthy)
 - **Clé JWT illisible** → le groupe `keevo-jwt` n'est pas configuré → refaire l'étape 2.3
 - **Firebase credentials manquantes** → refaire l'étape 4.2
+
+### Le tableau de bord ne répond pas ou refuse la connexion
+
+```bash
+docker logs --tail 50 keevo_dashboard
+docker inspect -f '{{.State.Health.Status}}' keevo_dashboard
+```
+
+- **403 à la connexion** → `DASHBOARD_ORIGIN` du backend ≠ `https://<ADMIN_DOMAIN>` (le relais du tableau
+  de bord transmet l'en-tête `Origin` du navigateur) : vérifier le secret `ADMIN_DOMAIN`.
+- **« Serveur injoignable »** → le conteneur `keevo_backend` n'est pas démarré ou n'est pas sur `keevo_net`.
+- **Certificat absent** → enregistrement DNS de `ADMIN_DOMAIN` manquant (étape 2.6).
 
 ### Let's Encrypt échoue
 

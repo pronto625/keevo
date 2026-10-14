@@ -17,14 +17,60 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}/backend
+  DASHBOARD_IMAGE_NAME: ${{ github.repository }}/dashboard
 
 jobs:
-  # ─── Job 1 : Build & push Docker image to GHCR (staging tag) ───────────────
-  build-and-push:
-    name: Build & Push Docker image (staging)
+  # ─── Job 0 : Which images must be rebuilt? ──────────────────────────────────
+  # Same rules as prod (.github/scripts/changed-components.sh): keevo/backend/** → backend,
+  # keevo/dashboard/** → dashboard, this workflow/script → both, manual run → both; an
+  # unchanged component is redeployed from its last `staging-latest` tag.
+  changes:
+    name: Detect changed components
     # Story 10-7: a manual run (workflow_dispatch) from any branch other than `staging`
     # runs no job at all — staging only ever receives the `staging` branch.
     if: github.ref == 'refs/heads/staging'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      backend: ${{ steps.detect.outputs.backend }}
+      dashboard: ${{ steps.detect.outputs.dashboard }}
+      backend_image: ${{ steps.image.outputs.backend }}
+      dashboard_image: ${{ steps.image.outputs.dashboard }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute lowercase image names
+        id: image
+        run: |
+          echo "backend=$(echo "${REGISTRY}/${IMAGE_NAME}" | tr '[:upper:]' '[:lower:]')"             >> "$GITHUB_OUTPUT"
+          echo "dashboard=$(echo "${REGISTRY}/${DASHBOARD_IMAGE_NAME}" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Detect changes
+        id: detect
+        env:
+          FORCE_ALL: ${{ github.event_name == 'workflow_dispatch' }}
+          BACKEND_IMAGE_REF: ${{ steps.image.outputs.backend }}:staging-latest
+          DASHBOARD_IMAGE_REF: ${{ steps.image.outputs.dashboard }}:staging-latest
+        run: |
+          .github/scripts/changed-components.sh "${GITHUB_SHA}" .github/workflows/deploy-staging.yml
+
+  # ─── Job 1a : Build & push backend image to GHCR (staging tag) ─────────────
+  build-and-push:
+    name: Build & Push Docker image (staging)
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -72,16 +118,67 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=staging-backend
+          cache-to: type=gha,mode=max,scope=staging-backend
 
+  # ─── Job 1b : Build & push admin dashboard image (staging tag) ─────────────
+  build-dashboard:
+    name: Build & Push dashboard image (staging)
+    needs: changes
+    if: needs.changes.outputs.dashboard == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ needs.changes.outputs.dashboard_image }}
+          tags: |
+            type=raw,value=staging-latest
+            type=sha,prefix=staging-sha-
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Backend URL baked at build time: http://backend:4500 = the staging `backend` service
+      # on keevo_staging_net (see keevo/dashboard/Dockerfile).
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./keevo/dashboard
+          file: ./keevo/dashboard/Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=staging-dashboard
+          cache-to: type=gha,mode=max,scope=staging-dashboard
 
   # ─── Job 2 : Deploy staging stack on server ─────────────────────────────────
   deploy:
     name: Deploy to staging server
-    if: github.ref == 'refs/heads/staging'
     runs-on: ubuntu-latest
-    needs: build-and-push
+    needs: [changes, build-and-push, build-dashboard]
+    # Runs when an unchanged component's build is skipped, never after a failure.
+    if: >-
+      !cancelled()
+      && needs.changes.result == 'success'
+      && needs.build-and-push.result != 'failure'
+      && needs.build-dashboard.result != 'failure'
     environment: staging
 
     steps:
@@ -103,6 +200,7 @@ jobs:
           # empty, and the corresponding check is then skipped with a warning).
           PROD_JWT_PRIVATE_KEY_PEM: ${{ secrets.JWT_PRIVATE_KEY_PEM }}
           PROD_DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          ADMIN_STAGING_DOMAIN: ${{ secrets.ADMIN_STAGING_DOMAIN }}
         run: |
           missing=0
           for name in STAGING_SSH_HOST STAGING_SSH_USER STAGING_SSH_PRIVATE_KEY GHCR_PAT \
@@ -140,6 +238,14 @@ jobs:
           if [ -z "${STAGING_FIREBASE_CREDENTIALS:-}" ]; then
             echo "::warning::STAGING_FIREBASE_CREDENTIALS not set — staging runs without push notifications (no Firebase mount)"
           fi
+          # Optional: without it the staging dashboard is deployed but its logins are refused
+          # by CORS (the proxy forwards the browser Origin) unless .env sets DASHBOARD_ORIGIN.
+          if [ -z "${ADMIN_STAGING_DOMAIN:-}" ]; then
+            echo "::warning::ADMIN_STAGING_DOMAIN not set — DASHBOARD_ORIGIN comes from ~/keevo-staging/.env only (checklist §18)"
+          elif ! [[ "${ADMIN_STAGING_DOMAIN}" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$ ]]; then
+            echo "::error::ADMIN_STAGING_DOMAIN must be a bare host name (no https://, path or port)"
+            missing=1
+          fi
           exit "${missing}"
 
       - name: Deploy via SSH
@@ -147,7 +253,9 @@ jobs:
         env:
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
           GH_ACTOR: ${{ github.actor }}
-          IMAGE_REF: ${{ needs.build-and-push.outputs.image_ref }}
+          IMAGE_REF: ${{ needs.changes.outputs.backend_image }}:staging-latest
+          DASHBOARD_IMAGE_REF: ${{ needs.changes.outputs.dashboard_image }}:staging-latest
+          ADMIN_STAGING_DOMAIN: ${{ secrets.ADMIN_STAGING_DOMAIN }}
           JWT_PRIVATE_KEY_PEM: ${{ secrets.STAGING_JWT_PRIVATE_KEY_PEM }}
           JWT_PUBLIC_KEY_PEM: ${{ secrets.STAGING_JWT_PUBLIC_KEY_PEM }}
           STAGING_DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
@@ -157,7 +265,7 @@ jobs:
           username: ${{ secrets.STAGING_SSH_USER }}
           key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
           port: ${{ secrets.STAGING_SSH_PORT || '22' }}
-          envs: GHCR_PAT,GH_ACTOR,IMAGE_REF,JWT_PRIVATE_KEY_PEM,JWT_PUBLIC_KEY_PEM,STAGING_DB_PASSWORD,STAGING_FIREBASE_CREDENTIALS
+          envs: GHCR_PAT,GH_ACTOR,IMAGE_REF,DASHBOARD_IMAGE_REF,ADMIN_STAGING_DOMAIN,JWT_PRIVATE_KEY_PEM,JWT_PUBLIC_KEY_PEM,STAGING_DB_PASSWORD,STAGING_FIREBASE_CREDENTIALS
 
           # ── Script that runs on the remote server ──────────────────────────────
           # Prerequisites on server (keevo/backend/docs/DEPLOYMENT_CHECKLIST.md § Staging bring-up):
@@ -223,6 +331,12 @@ jobs:
               *"'"*|*$'\n'*) echo "❌ STAGING_DB_PASSWORD must not contain a single quote or a newline" >&2; exit 1 ;;
             esac
             printf "POSTGRES_PASSWORD='%s'\n" "${STAGING_DB_PASSWORD}" > .env.secrets
+            # CORS allow-list of the staging backend (the dashboard proxy forwards the browser
+            # Origin). Set only when the secret exists, so a DASHBOARD_ORIGIN kept in .env is
+            # not overridden by an empty value.
+            if [ -n "${ADMIN_STAGING_DOMAIN:-}" ]; then
+              printf "DASHBOARD_ORIGIN='https://%s'\n" "${ADMIN_STAGING_DOMAIN}" >> .env.secrets
+            fi
             chmod 600 .env.secrets
 
             # ── Firebase (dedicated staging service account, optional) ──────────
@@ -323,6 +437,26 @@ jobs:
                   - keevo_staging_net
                   - keevo_edge
 
+              # Admin dashboard. Calls the API server-side at http://backend:4500 (baked into the
+              # image, see keevo/dashboard/Dockerfile) = the staging backend: on keevo_staging_net
+              # and on keevo_edge the alias "backend" is this stack's backend (the prod backend is
+              # not on keevo_edge). Reachable only through the prod Traefik router
+              # staging-admin (keevo/ops/traefik/staging-router.yml, checklist §15/§18).
+              dashboard:
+                image: \${DASHBOARD_IMAGE}
+                container_name: keevo_staging_dashboard
+                restart: unless-stopped
+                mem_limit: 256m
+                mem_reservation: 128m
+                depends_on:
+                  - backend
+                environment:
+                  NODE_ENV: production
+                  NEXT_TELEMETRY_DISABLED: "1"
+                networks:
+                  - keevo_staging_net
+                  - keevo_edge
+
             volumes:
               postgres_staging_data:
               product_photos_staging:
@@ -343,6 +477,7 @@ jobs:
             set -euo pipefail
             cd "\$(dirname "\$0")"
             export BACKEND_IMAGE='${IMAGE_REF}'
+            export DASHBOARD_IMAGE='${DASHBOARD_IMAGE_REF}'
             exec docker compose ${COMPOSE_FILES} "\$@"
             WRAPPER
             chmod 700 compose.sh
@@ -350,10 +485,10 @@ jobs:
             echo "→ Stopping old staging stack…"
             ./compose.sh down --remove-orphans 2>/dev/null || true
             # keevo_staging_traefik: legacy container from before 10-7 (own Traefik on :8080/:8443)
-            docker rm -f keevo_staging_backend keevo_staging_traefik keevo_staging_postgres 2>/dev/null || true
+            docker rm -f keevo_staging_backend keevo_staging_dashboard keevo_staging_traefik keevo_staging_postgres 2>/dev/null || true
 
-            echo "→ Pulling new backend image…"
-            ./compose.sh pull backend
+            echo "→ Pulling backend and dashboard images…"
+            ./compose.sh pull backend dashboard
 
             echo "→ Starting / updating staging stack…"
             ./compose.sh up -d --remove-orphans
@@ -373,6 +508,20 @@ jobs:
               exit 1
             fi
             echo "✓ keevo_staging_backend /actuator/health UP"
+
+            dashboard_ok=false
+            for _ in $(seq 1 12); do
+              if [ "$(docker inspect -f '{{.State.Health.Status}}' keevo_staging_dashboard 2>/dev/null)" = "healthy" ]; then
+                dashboard_ok=true; break
+              fi
+              sleep 5
+            done
+            if ! ${dashboard_ok}; then
+              echo "❌ keevo_staging_dashboard not healthy after 60 s — last logs:" >&2
+              docker logs --tail 80 keevo_staging_dashboard >&2 || true
+              exit 1
+            fi
+            echo "✓ keevo_staging_dashboard healthy"
 
             # Informational only: is the prod Traefik on keevo_edge (staging reachable over HTTPS)?
             if docker network inspect keevo_edge --format '{{range .Containers}}{{.Name}} {{end}}' | grep -qw keevo_traefik; then
@@ -394,5 +543,7 @@ jobs:
 # STAGING_JWT_PUBLIC_KEY_PEM    — matching public key
 # STAGING_DB_PASSWORD           — staging PostgreSQL password (never the prod one)
 # STAGING_FIREBASE_CREDENTIALS  — optional, staging Firebase service-account JSON (content)
+# ADMIN_STAGING_DOMAIN          — optional, staging dashboard host (e.g. staging.admin.keevo.cm);
+#                                 sets the staging backend DASHBOARD_ORIGIN
 # Read only for the "differs from prod" checks (repository-level secrets):
 # JWT_PRIVATE_KEY_PEM, DB_PASSWORD (optional — prod DB password; check skipped with a warning when unset)
