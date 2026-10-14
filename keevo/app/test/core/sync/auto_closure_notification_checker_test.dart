@@ -108,12 +108,13 @@ void main() {
       expect(result.first.storeName, 'Boutique A');
     });
 
-    test('falls back to storeId when store not found', () async {
+    // NFR35: never the raw id — generic label.
+    test('falls back to a generic label when store not found', () async {
       await _insertClosure(db, id: 'c-auto-2', storeId: 'unknown-store', isAutomatic: true);
 
       final result = await checker.getUnnotified();
       expect(result, hasLength(1));
-      expect(result.first.storeName, 'unknown-store');
+      expect(result.first.storeName, 'Boutique');
     });
 
     test('skips already‑notified closures', () async {
@@ -167,6 +168,33 @@ void main() {
       final stored = prefs.getStringList(kAutoClosureNotifiedIds)!;
       expect(stored.length, 200);
       expect(stored.last, 'new-entry');
+    });
+  });
+
+  // J21 (device test): an EMPLOYEE of another store saw « Clôture
+  // automatique : Dépôt Bonaberi ».
+  group('J21 — store scoping', () {
+    setUp(() async {
+      await _insertStore(db, id: 'own', name: 'Boutique Akwa');
+      await _insertStore(db, id: 'depot', name: 'Dépôt Bonaberi');
+      await _insertClosure(db, id: 'c-own', storeId: 'own', isAutomatic: true);
+      await _insertClosure(db, id: 'c-depot', storeId: 'depot', isAutomatic: true);
+    });
+
+    test('employee: only their own store', () async {
+      final result = await checker.getUnnotified(onlyStoreId: 'own');
+      expect(result.map((c) => c.storeName), ['Boutique Akwa']);
+    });
+
+    test('owner: every store', () async {
+      final result = await checker.getUnnotified();
+      expect(result.map((c) => c.id).toSet(), {'c-own', 'c-depot'});
+    });
+
+    test('unknown store never shows its id', () async {
+      await _insertClosure(db, id: 'c-x', storeId: 'b1c2-uuid', isAutomatic: true);
+      final result = await checker.getUnnotified(onlyStoreId: 'b1c2-uuid');
+      expect(result.single.storeName, 'Boutique');
     });
   });
 }

@@ -11,6 +11,7 @@ import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.store.store.domain.model.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
@@ -130,6 +131,12 @@ public class DayClosureAutoScheduler {
 
         // closureDate = todayWAT (Story 13.3: closes the day that ends at configured time)
         storeRepository.findAllActive().forEach(store -> {
+            // J21: a warehouse is a stock origin, not a point of sale (FR34) — no automatic
+            // closure (nor « 0 vente » push). A sale ever recorded there is not lost: a later
+            // closure covers every sale since the previous one (FR51 D1).
+            if (store.type() == StoreType.WAREHOUSE) {
+                return;
+            }
             if (dayClosureRepository.existsByStoreIdAndDate(store.id(), todayWAT)) {
                 log.debug("Store {} already closed for {}", store.id(), todayWAT);
                 return;

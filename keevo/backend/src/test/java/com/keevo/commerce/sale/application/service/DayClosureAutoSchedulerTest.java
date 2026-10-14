@@ -273,6 +273,30 @@ class DayClosureAutoSchedulerTest {
                 .containsExactly(store1Id, store2Id);
     }
 
+    // J21 (device test): the warehouse « Dépôt Bonaberi » was auto-closed with 0 sales.
+    @Test
+    void scheduler_skipsWarehouse_closesStoresOnly() {
+        var tenant = createTenant(TENANT_SCHEMA, TenantStatus.ACTIVE);
+        var warehouseId = UUID.randomUUID();
+        var warehouse = new Store(warehouseId, "Dépôt Bonaberi", StoreType.WAREHOUSE, null, null, true,
+                Instant.now(), Instant.now());
+        var store = createStore(STORE_ID, "Boutique Test");
+
+        when(tenantRepository.findAll()).thenReturn(List.of(tenant));
+        when(storeRepository.findAllActive()).thenReturn(List.of(warehouse, store));
+        when(tenantPreferencesRepository.findByCurrentTenant())
+                .thenReturn(Optional.of(defaultEodPrefs("20:00:00", true)));
+        when(dayClosureRepository.existsByStoreIdAndDate(eq(STORE_ID), any(LocalDate.class)))
+                .thenReturn(false);
+
+        scheduler.runAutoClosure();
+
+        var captor = org.mockito.ArgumentCaptor.forClass(CloseDayCommand.class);
+        verify(closeDayUseCase).closeDay(captor.capture());
+        assertThat(captor.getValue().storeId()).isEqualTo(STORE_ID);
+        verify(dayClosureRepository, never()).existsByStoreIdAndDate(eq(warehouseId), any(LocalDate.class));
+    }
+
     private Tenant createTenant(String schemaName, TenantStatus status) {
         return new Tenant(UUID.randomUUID(), "KV-TEST", schemaName, "Test Tenant",
                 status, PlanType.PREMIUM_TRIAL, Instant.now());
