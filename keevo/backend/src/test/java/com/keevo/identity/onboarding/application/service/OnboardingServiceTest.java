@@ -65,6 +65,7 @@ class OnboardingServiceTest {
 
             verify(categoryRepository, never()).saveAll(any());
             verify(storeRepository, never()).updateStoreName(any());
+            verify(storeRepository, never()).nameCompanyIfStillCode(any());
         }
     }
     void should_create_correct_number_of_categories_for_CLOTHING() {
@@ -101,6 +102,8 @@ class OnboardingServiceTest {
             onboardingService.complete(command);
 
             verify(storeRepository).updateStoreName("Ma Boutique Chic");
+            // Device test: the company kept its code « KV-XXXXXX » as name.
+            verify(storeRepository).nameCompanyIfStillCode("Ma Boutique Chic");
         }
     }
 

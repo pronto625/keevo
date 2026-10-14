@@ -16,4 +16,13 @@ public interface OnboardingStoreRepository {
      * @param newName the new store name (validated: 2–100 chars)
      */
     void updateStoreName(String newName);
+
+    /**
+     * Give the company ({@code public.tenants.name}) the merchant's shop name while it still
+     * carries its technical code (set at registration). Without it the code « KV-XXXXXX »
+     * was shown as the company name (tenant picker, PDF headers, admin).
+     *
+     * @param name the shop name chosen at onboarding
+     */
+    void nameCompanyIfStillCode(String name);
 }

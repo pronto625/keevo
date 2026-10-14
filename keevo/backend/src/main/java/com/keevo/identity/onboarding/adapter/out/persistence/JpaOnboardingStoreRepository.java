@@ -37,6 +37,10 @@ public class JpaOnboardingStoreRepository implements OnboardingStoreRepository {
         "UPDATE stores SET name = :name, updated_at = NOW() " +
         "WHERE id = (SELECT id FROM stores ORDER BY created_at ASC LIMIT 1)";
 
+    private static final String SQL_NAME_COMPANY =
+        "UPDATE public.tenants SET name = :name " +
+        "WHERE schema_name = :schema AND name = code";
+
     @PersistenceContext
     private EntityManager entityManager;
 
@@ -51,5 +55,19 @@ public class JpaOnboardingStoreRepository implements OnboardingStoreRepository {
                 .executeUpdate();
         log.debug("Updated store name to '{}' in schema '{}' — {} row(s) affected",
                 newName, schemaName, updated);
+    }
+
+    @Override
+    public void nameCompanyIfStillCode(String name) {
+        String schemaName = TenantContext.getCurrentTenant();
+        if (schemaName == null || schemaName.isBlank()) {
+            throw new IllegalStateException("TenantContext not set — cannot name the company");
+        }
+        int updated = entityManager.createNativeQuery(SQL_NAME_COMPANY)
+                .setParameter("name", name)
+                .setParameter("schema", schemaName)
+                .executeUpdate();
+        log.debug("Company name set from shop name in schema '{}' — {} row(s) affected",
+                schemaName, updated);
     }
 }
