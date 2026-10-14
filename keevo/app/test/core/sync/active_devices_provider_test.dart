@@ -11,10 +11,14 @@ void main() {
   group('activeDevicesProvider', () {
     test('returns device list from API response', () async {
       final dio = Dio();
+      // J24: only devices seen in the last 30 days are listed.
+      final recent = DateTime.now().toUtc();
       dio.httpClientAdapter = _MockAdapter(data: {
         'data': [
-          {'deviceId': 'dev-1', 'userId': 'u1', 'lastPushAt': '2024-01-01T00:00:00Z'},
-          {'deviceId': 'dev-2', 'userId': 'u2', 'lastPushAt': '2024-01-02T00:00:00Z'},
+          {'deviceId': 'dev-1', 'userId': 'u1',
+           'lastPushAt': recent.subtract(const Duration(days: 1)).toIso8601String()},
+          {'deviceId': 'dev-2', 'userId': 'u2',
+           'lastPushAt': recent.subtract(const Duration(days: 2)).toIso8601String()},
         ],
       });
 
