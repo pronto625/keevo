@@ -96,7 +96,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTestingWith(super.executor);
 
   @override
-  int get schemaVersion => 30;
+  int get schemaVersion => 31;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -294,6 +294,11 @@ class AppDatabase extends _$AppDatabase {
       if (from < 30) {
         // Mobile Money reference of a sale (was sent to the server only).
         await migrator.addColumn(sales, sales.mobileMoneyRef);
+      }
+      if (from < 31) {
+        // Product-wide low-stock threshold (server: products.minimum_threshold),
+        // usable in a store where the product has no stock_levels row yet.
+        await migrator.addColumn(products, products.minimumThreshold);
       }
     },
   );

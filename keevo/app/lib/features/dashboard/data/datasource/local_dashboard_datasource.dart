@@ -214,7 +214,8 @@ class LocalDashboardDatasource {
     final result = await _db.customSelect(
       'SELECT COUNT(DISTINCT sl.product_id) AS cnt FROM stock_levels sl '
       'JOIN products p ON p.id = sl.product_id AND p.archived = 0 '
-      'WHERE sl.quantity <= COALESCE(NULLIF(sl.minimum_threshold, 0), 5)',
+      'WHERE sl.quantity <= COALESCE(NULLIF(p.minimum_threshold, 0), '
+      'NULLIF(sl.minimum_threshold, 0), 5)',
     ).getSingle();
     return result.read<int>('cnt');
   }
@@ -622,10 +623,12 @@ class LocalDashboardDatasource {
   Future<List<LowStockProduct>> getStoreLowStockProducts(String storeId) async {
     final rows = await _db.customSelect(
       'SELECT p.id AS product_id, p.name AS product_name, '
-      'sl.quantity, COALESCE(NULLIF(sl.minimum_threshold, 0), 5) AS threshold '
+      'sl.quantity, COALESCE(NULLIF(p.minimum_threshold, 0), '
+      'NULLIF(sl.minimum_threshold, 0), 5) AS threshold '
       'FROM stock_levels sl '
       'JOIN products p ON p.id = sl.product_id AND p.archived = 0 '
-      'WHERE sl.store_id = ? AND sl.quantity <= COALESCE(NULLIF(sl.minimum_threshold, 0), 5) '
+      'WHERE sl.store_id = ? AND sl.quantity <= COALESCE(NULLIF(p.minimum_threshold, 0), '
+      'NULLIF(sl.minimum_threshold, 0), 5) '
       'ORDER BY sl.quantity ASC',
       variables: [Variable.withString(storeId)],
     ).get();

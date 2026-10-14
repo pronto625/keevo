@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
@@ -68,18 +70,19 @@ class LocalSaleDataSource {
                     s.storeId.equals(sale.storeId)))
               .get();
 
-          final quantityBefore = stockRows.fold<int>(0, (max, r) => r.quantity > max ? r.quantity : max);
-          final quantityAfter = (quantityBefore - item.quantity).clamp(0, quantityBefore);
+          // A sale recorded here already happened: the full quantity leaves
+          // the shelf, as the server applies it when the sale is pushed
+          // (CREATE_SALE, allowNegativeStock) — stock may go negative and a
+          // product never stocked in this store gets its row. The movement's
+          // before/after are the real local values (before − sold = after).
+          final quantityBefore = stockRows.isEmpty
+              ? 0
+              : stockRows.fold<int>(stockRows.first.quantity,
+                  (max, r) => r.quantity > max ? r.quantity : max);
+          final quantityAfter = quantityBefore - item.quantity;
 
-          if (stockRows.isNotEmpty) {
-            await (_db.update(_db.stockLevels)
-                  ..where((s) =>
-                      s.productId.equals(item.productId) &
-                      s.storeId.equals(sale.storeId)))
-                .write(StockLevelsCompanion(
-              quantity: Value(quantityAfter),
-            ));
-          }
+          await _writeStockQuantity(
+              item.productId, sale.storeId, quantityAfter, sale.createdAt);
 
           await _db.into(_db.stockMovements).insert(StockMovementsCompanion.insert(
             // v1s-13-8: SALE movement id = sale item id (also the CREATE_SALE
@@ -255,7 +258,43 @@ class LocalSaleDataSource {
     });
   }
 
-  /// Add [delta] (may be negative, floored at 0) to a product's stock level
+  /// Current local quantity of a (product, store): the highest of its rows
+  /// (B1: legacy duplicates), 0 when the product has no row in the store.
+  static int _currentQuantity(List<StockLevel> rows) => rows.isEmpty
+      ? 0
+      : rows.fold<int>(
+          rows.first.quantity, (max, r) => r.quantity > max ? r.quantity : max);
+
+  /// What a validated sale really takes out (backend ValidateSaleService):
+  /// the sold quantity, capped by what is on the shelf, never below 0.
+  static int _effectiveDecrement(int available, int sold) =>
+      available <= 0 ? 0 : min(available, sold);
+
+  /// Writes the quantity of a (product, store) — update, else insert.
+  ///
+  /// Same approach as a stock entry (LocalStockDataSource.upsertLevel): a row
+  /// created here carries a local id; the next pull reconciles it with the
+  /// server row on the (product_id, store_id) unique key (ON CONFLICT → the
+  /// server id replaces the local one), so no duplicate row appears.
+  Future<void> _writeStockQuantity(
+      String productId, String storeId, int quantity, DateTime now) async {
+    final updated = await (_db.update(_db.stockLevels)
+          ..where((s) => s.productId.equals(productId) & s.storeId.equals(storeId)))
+        .write(StockLevelsCompanion(
+      quantity: Value(quantity),
+      updatedAt: Value(now),
+    ));
+    if (updated > 0) return;
+    await _db.into(_db.stockLevels).insert(StockLevelsCompanion.insert(
+      id: const Uuid().v4(),
+      productId: productId,
+      storeId: storeId,
+      quantity: quantity,
+      updatedAt: now,
+    ));
+  }
+
+  /// Add [delta] to a product's stock level (a decrease is floored at 0)
   /// and record the matching movement [movementId].
   ///
   /// v1s-13-13: the id is the one the backend writes for the same operation.
@@ -273,16 +312,14 @@ class LocalSaleDataSource {
     final rows = await (_db.select(_db.stockLevels)
           ..where((s) => s.productId.equals(productId) & s.storeId.equals(storeId)))
         .get();
-    if (rows.isEmpty) return;
-    final qBefore =
-        rows.fold<int>(0, (max, r) => r.quantity > max ? r.quantity : max);
-    final qAfter = (qBefore + delta) < 0 ? 0 : qBefore + delta;
-    await (_db.update(_db.stockLevels)
-          ..where((s) => s.productId.equals(productId) & s.storeId.equals(storeId)))
-        .write(StockLevelsCompanion(
-      quantity: Value(qAfter),
-      updatedAt: Value(now),
-    ));
+    // No row = never stocked here = quantity 0: the restore still happens
+    // and creates the row (same update-or-insert as a stock entry).
+    final qBefore = _currentQuantity(rows);
+    // A decrease never takes the stock below 0 (nor lower than it already is).
+    final qAfter = delta >= 0
+        ? qBefore + delta
+        : max(qBefore + delta, min(qBefore, 0));
+    await _writeStockQuantity(productId, storeId, qAfter, now);
     await _db
         .into(_db.stockMovements)
         .insertOnConflictUpdate(StockMovementsCompanion.insert(
@@ -402,20 +439,14 @@ class LocalSaleDataSource {
                   s.storeId.equals(sale.storeId)))
             .get();
 
-        final qBefore = stockRowsDecrement.fold<int>(0, (max, r) => r.quantity > max ? r.quantity : max);
-        // Force to 0 if insufficient (matches backend behavior)
-        final qAfter = (qBefore - item.quantity).clamp(0, qBefore);
+        // Force to 0 if insufficient (matches backend ValidateSaleService):
+        // only what is on the shelf is taken out, and nothing at all — no
+        // movement either — when the product has no stock (or no row) here.
+        final qBefore = _currentQuantity(stockRowsDecrement);
+        final qAfter = qBefore - _effectiveDecrement(qBefore, item.quantity);
+        if (qAfter == qBefore) continue;
 
-        if (stockRowsDecrement.isNotEmpty) {
-          await (_db.update(_db.stockLevels)
-                ..where((s) =>
-                    s.productId.equals(item.productId) &
-                    s.storeId.equals(sale.storeId)))
-              .write(StockLevelsCompanion(
-            quantity: Value(qAfter),
-            updatedAt: Value(now),
-          ));
-        }
+        await _writeStockQuantity(item.productId, sale.storeId, qAfter, now);
 
         await _db.into(_db.stockMovements).insert(
             StockMovementsCompanion.insert(
@@ -426,7 +457,7 @@ class LocalSaleDataSource {
           productId: item.productId,
           storeId: sale.storeId,
           type: 'SALE',
-          quantityDelta: -item.quantity,
+          quantityDelta: qAfter - qBefore,
           actorId: sale.employeeId,
           quantityBefore: Value(qBefore),
           quantityAfter: Value(qAfter),
@@ -518,16 +549,13 @@ class LocalSaleDataSource {
                     s.storeId.equals(storeId)))
               .get();
 
-          final qBefore = stockRowsCascade.fold<int>(0, (max, r) => r.quantity > max ? r.quantity : max);
-          final qAfter = (qBefore - item.quantity).clamp(0, qBefore);
+          // Same rule as validateAndDecrementStock: never below 0, no
+          // movement when nothing can be taken out (no stock / no row here).
+          final qBefore = _currentQuantity(stockRowsCascade);
+          final qAfter = qBefore - _effectiveDecrement(qBefore, item.quantity);
+          if (qAfter == qBefore) continue;
 
-          if (stockRowsCascade.isNotEmpty) {
-            await (_db.update(_db.stockLevels)
-                  ..where((s) =>
-                      s.productId.equals(item.productId) &
-                      s.storeId.equals(storeId)))
-                .write(StockLevelsCompanion(quantity: Value(qAfter)));
-          }
+          await _writeStockQuantity(item.productId, storeId, qAfter, now);
 
           await _db.into(_db.stockMovements).insert(
               StockMovementsCompanion.insert(
@@ -537,7 +565,7 @@ class LocalSaleDataSource {
             productId: item.productId,
             storeId: storeId,
             type: 'SALE',
-            quantityDelta: -item.quantity,
+            quantityDelta: qAfter - qBefore,
             actorId: actorId,
             quantityBefore: Value(qBefore),
             quantityAfter: Value(qAfter),

@@ -180,6 +180,120 @@ void main() {
       final result = await datasource.getStoreStockDetail(storeId);
       expect(result.first.quantity, 25);
     });
+
+    // ── A product never stocked in a store (no stock_levels row) is quantity 0
+    // everywhere; zero or negative stock is CRITIQUE. ──────────────────────
+
+    Future<void> addProduct(String id, String name,
+            {int threshold = 0, bool archived = false}) =>
+        db.into(db.products).insert(ProductsCompanion.insert(
+              id: id,
+              name: name,
+              archived: Value(archived),
+              minimumThreshold: Value(threshold),
+              createdAt: DateTime(2025, 1, 1),
+              updatedAt: DateTime(2025, 1, 1),
+            ));
+
+    Future<void> addLevel(String productId, String store, int qty) =>
+        db.into(db.stockLevels).insert(StockLevelsCompanion.insert(
+              id: 'sl-$productId-$store',
+              productId: productId,
+              storeId: store,
+              quantity: qty,
+              updatedAt: DateTime(2025, 1, 1),
+            ));
+
+    test('getStoreStockDetail lists a product never stocked here at 0, CRITIQUE',
+        () async {
+      await addProduct('p-new', 'Attiéké');
+      await addProduct('p-arch', 'Archivé', archived: true);
+
+      final result = await datasource.getStoreStockDetail(storeId);
+
+      expect(result.map((e) => e.productId), containsAll(['p-new', productId]));
+      expect(result.map((e) => e.productId), isNot(contains('p-arch')));
+      final rowless = result.firstWhere((e) => e.productId == 'p-new');
+      expect(rowless.quantity, 0);
+      expect(rowless.storeId, storeId);
+      expect(rowless.status, 'CRITIQUE');
+      expect(rowless.isCritical, isTrue);
+      // No row was created by reading.
+      expect(
+          await (db.select(db.stockLevels)
+                ..where((l) => l.productId.equals('p-new')))
+              .get(),
+          isEmpty);
+    });
+
+    test('getStoreStockDetail: negative stock is CRITIQUE, not OK', () async {
+      await addProduct('p-sard', 'Sardines Boîte');
+      await addLevel('p-sard', storeId, -1);
+
+      final result = await datasource.getStoreStockDetail(storeId);
+
+      final sardines = result.firstWhere((e) => e.productId == 'p-sard');
+      expect(sardines.quantity, -1);
+      expect(sardines.status, 'CRITIQUE');
+      expect(sardines.isCritical, isTrue);
+      expect(sardines.isLow, isFalse);
+      // Sorted low-first: ruptures come before the healthy product (10).
+      expect(result.last.productId, productId);
+    });
+
+    test('searchAcrossStores finds a product never stocked anywhere', () async {
+      await addProduct('p-new', 'Attiéké');
+
+      final result = await datasource.searchAcrossStores('attieke');
+
+      expect(result, hasLength(1));
+      expect(result.single.productId, 'p-new');
+      expect(result.single.storeId, storeId);
+      expect(result.single.quantity, 0);
+      expect(result.single.status, 'CRITIQUE');
+    });
+
+    test('getStoreOverviews counts never-stocked and negative products as low',
+        () async {
+      await addProduct('p-new', 'Attiéké');
+      await addProduct('p-sard', 'Sardines Boîte');
+      await addLevel('p-sard', storeId, -1);
+      await addProduct('p-arch', 'Archivé', archived: true);
+
+      final overview = (await datasource.getStoreOverviews()).single;
+
+      expect(overview.productCount, 2); // stocked here: Chaussures + Sardines
+      expect(overview.lowStockCount, 2); // Attiéké (0) + Sardines (-1)
+    });
+
+    test('product-wide threshold applies where the product has no row',
+        () async {
+      await addProduct('p-thr', 'Bissap', threshold: 8);
+      await addLevel('p-thr', storeId, 6);
+
+      final result = await datasource.getStoreStockDetail(storeId);
+
+      final bissap = result.firstWhere((e) => e.productId == 'p-thr');
+      expect(bissap.minimumThreshold, 8);
+      expect(bissap.status, 'BAS');
+    });
+
+    test('upsertStockLevels creates no row for a never-stocked product at 0',
+        () async {
+      await addProduct('p-new', 'Attiéké');
+
+      await datasource.upsertStockLevels(storeId, [
+        _buildEntry(productId: 'p-new', storeId: storeId, quantity: 0, threshold: 0),
+      ]);
+
+      expect(
+          await (db.select(db.stockLevels)
+                ..where((l) => l.productId.equals('p-new')))
+              .get(),
+          isEmpty);
+      final result = await datasource.getStoreStockDetail(storeId);
+      expect(result.firstWhere((e) => e.productId == 'p-new').quantity, 0);
+    });
   });
 }
 

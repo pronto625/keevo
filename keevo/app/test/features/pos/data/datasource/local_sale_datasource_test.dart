@@ -468,6 +468,153 @@ void main() {
       expect(item.quantity, 1);
     });
 
+    // ── Product never stocked in the store (no stock_levels row) ──────────
+
+    Future<List<StockLevel>> levelsProd1() => (db.select(db.stockLevels)
+          ..where((l) => l.productId.equals('prod-1'))
+          ..where((l) => l.storeId.equals('store-1')))
+        .get();
+
+    test(
+        'cancelAndRestoreStock on a product with no row: the restore creates '
+        'the row and records a truthful movement', () async {
+      await ds.insertAll(_testSale()); // sells 3 of a never-stocked product
+      // The pull brought the server row back to 0 then removed it locally —
+      // simulate the "no row" state the audit found.
+      await (db.delete(db.stockLevels)).go();
+      await (db.delete(db.stockMovements)).go();
+
+      await ds.cancelAndRestoreStock('sale-1');
+
+      final levels = await levelsProd1();
+      expect(levels, hasLength(1));
+      expect(levels.single.quantity, 3);
+      final cancelled = await movementsOfType('SALE_CANCELLED');
+      expect(cancelled, hasLength(1));
+      expect(cancelled.single.quantityBefore, 0);
+      expect(cancelled.single.quantityDelta, 3);
+      expect(cancelled.single.quantityAfter, 3);
+      expect(await saleStatus('sale-1'), 'CANCELLED');
+    });
+
+    test(
+        'restored row on a never-stocked product reconciles with the pulled '
+        'server row (same product/store) — no duplicate', () async {
+      await ds.insertAll(_testSale());
+      await (db.delete(db.stockLevels)).go();
+      await ds.cancelAndRestoreStock('sale-1');
+
+      // Same statement as RestSyncService._upsertStockLevels (the pull).
+      await db.customStatement(
+        'INSERT INTO stock_levels (id, product_id, variant_id, store_id, '
+        'quantity, minimum_threshold, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) '
+        'ON CONFLICT(product_id, store_id) DO UPDATE SET id = excluded.id, '
+        'variant_id = excluded.variant_id, quantity = excluded.quantity, '
+        'minimum_threshold = excluded.minimum_threshold, '
+        'updated_at = excluded.updated_at',
+        ['server-sl', 'prod-1', null, 'store-1', 3, 0,
+          DateTime(2026).toIso8601String()],
+      );
+
+      final levels = await levelsProd1();
+      expect(levels, hasLength(1));
+      expect(levels.single.id, 'server-sl');
+      expect(levels.single.quantity, 3);
+    });
+
+    test(
+        'updateItemQuantities on a never-stocked product: the returned units '
+        'create the row', () async {
+      await ds.insertAll(_testSale());
+      await (db.delete(db.stockLevels)).go();
+
+      await ds.updateItemQuantities('sale-1', {'item-1': 1},
+          correctionId: 'corr-1');
+
+      final levels = await levelsProd1();
+      expect(levels.single.quantity, 2);
+      final adjustment = (await movementsOfType('ADJUSTMENT')).single;
+      expect(adjustment.quantityBefore, 0);
+      expect(adjustment.quantityAfter, 2);
+    });
+
+    test(
+        'insertAll on a never-stocked product: row created, movement '
+        'before − sold = after (as the server applies an offline sale)',
+        () async {
+      await ds.insertAll(_testSale());
+
+      final levels = await levelsProd1();
+      expect(levels, hasLength(1));
+      expect(levels.single.quantity, -3);
+      final sale = (await movementsOfType('SALE')).single;
+      expect(sale.quantityBefore, 0);
+      expect(sale.quantityDelta, -3);
+      expect(sale.quantityAfter, -3);
+    });
+
+    test('insertAll with enough stock decrements as before', () async {
+      await stockProd1(10);
+      await ds.insertAll(_testSale());
+
+      expect(await levelProd1(), 7);
+      final sale = (await movementsOfType('SALE')).single;
+      expect(sale.quantityBefore, 10);
+      expect(sale.quantityAfter, 7);
+    });
+
+    test(
+        'validateAndDecrementStock on a never-stocked product: forced to 0, '
+        'no row and no movement (backend ValidateSaleService)', () async {
+      await ds.insertAll(pendingSale());
+
+      await ds.validateAndDecrementStock('sale-p');
+
+      expect(await saleStatus('sale-p'), 'COMPLETED');
+      expect(await levelsProd1(), isEmpty);
+      expect(await db.select(db.stockMovements).get(), isEmpty);
+    });
+
+    test(
+        'validateAndDecrementStock with insufficient stock: movement carries '
+        'the real decrement (before 2, −2, after 0)', () async {
+      await stockProd1(2);
+      await ds.insertAll(pendingSale());
+
+      await ds.validateAndDecrementStock('sale-p');
+
+      expect(await levelProd1(), 0);
+      final sale = (await movementsOfType('SALE')).single;
+      expect(sale.quantityBefore, 2);
+      expect(sale.quantityDelta, -2);
+      expect(sale.quantityAfter, 0);
+    });
+
+    test('validateAndDecrementStock with negative stock does not throw',
+        () async {
+      await stockProd1(-1);
+      await ds.insertAll(pendingSale());
+
+      await ds.validateAndDecrementStock('sale-p');
+
+      expect(await saleStatus('sale-p'), 'COMPLETED');
+      expect(await levelProd1(), -1);
+      expect(await db.select(db.stockMovements).get(), isEmpty);
+    });
+
+    test(
+        'cascadeValidatePendingSales on a never-stocked product: no row, '
+        'no movement', () async {
+      await ds.insertAll(pendingSale());
+
+      final validated =
+          await ds.cascadeValidatePendingSales('prod-1', 'store-1', 'actor-1');
+
+      expect(validated, 1);
+      expect(await levelsProd1(), isEmpty);
+      expect(await db.select(db.stockMovements).get(), isEmpty);
+    });
+
     test('updateItemQuantities without correctionId keeps a random id (legacy)',
         () async {
       await stockProd1(10);

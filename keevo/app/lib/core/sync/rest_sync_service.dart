@@ -1096,8 +1096,8 @@ class RestSyncService implements SyncService {
       await _database.customStatement(
         'INSERT INTO products (id, name, description, sku, category_id, price, '
         'buy_price, transport_cost, stock_quantity, photo_url, archived, status, '
-        'created_at, updated_at) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) '
+        'created_at, updated_at, minimum_threshold) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?15, 0)) '
         'ON CONFLICT(id) DO UPDATE SET '
         'name = excluded.name, description = excluded.description, '
         'sku = excluded.sku, category_id = excluded.category_id, '
@@ -1106,7 +1106,9 @@ class RestSyncService implements SyncService {
         'stock_quantity = excluded.stock_quantity, '
         'photo_url = COALESCE(excluded.photo_url, products.photo_url), '
         'archived = excluded.archived, status = excluded.status, '
-        'updated_at = excluded.updated_at',
+        'updated_at = excluded.updated_at, '
+        // Product-wide low-stock threshold; kept when an older server omits it.
+        'minimum_threshold = COALESCE(?15, products.minimum_threshold)',
         [
           id,
           map['name'],
@@ -1122,6 +1124,7 @@ class RestSyncService implements SyncService {
           map['status'] ?? 'ACTIVE',
           _toLocalIso(map['createdAt']),
           _toLocalIso(map['updatedAt']),
+          map['minimumThreshold'] as int?,
         ],
       );
     }

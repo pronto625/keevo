@@ -10,14 +10,13 @@ import com.keevo.inventory.counting.domain.model.InventoryScope;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /**
- * FullScopeResolver — resolves ALL active products in a store for inventory counting.
+ * FullScopeResolver — resolves ALL active products for inventory counting in a store.
  *
  * <p>GoF Strategy: concrete strategy for FULL inventory scope.
- * Uses stock_levels to find products in the store, then enriches with product info.
+ * Starts from the active (non-archived) catalogue and joins the store's stock levels;
+ * a product never stocked in the store is counted with a theoretical quantity of 0.
  */
 @Component
 public class FullScopeResolver implements InventoryScopeResolver {
@@ -39,63 +38,13 @@ public class FullScopeResolver implements InventoryScopeResolver {
     @Override
     public List<InventoryProductRow> resolveProducts(UUID storeId, List<UUID> categoryIds,
                                                       List<InventoryCount> existingCounts) {
-        // 1. Get all stock levels for this store
+        List<Product> products = productRepository.findAllActive();
+        if (products.isEmpty()) return List.of();
+
         List<StockLevel> stockLevels = stockLevelRepository.findAllByStoreId(storeId);
-        if (stockLevels.isEmpty()) return List.of();
+        Map<UUID, String> photoUrls = productRepository.findPhotoUrlsByIds(
+                products.stream().map(Product::getId).toList());
 
-        // 2. Extract distinct product IDs
-        List<UUID> productIds = stockLevels.stream()
-                .map(StockLevel::getProductId)
-                .distinct()
-                .toList();
-
-        // 3. Fetch product info
-        Map<UUID, Product> productMap = productRepository.findAllByIds(productIds).stream()
-                .filter(p -> !p.getArchived())
-                .collect(Collectors.toMap(Product::getId, Function.identity(), (a, b) -> a));
-
-        // 4. Fetch photo URLs
-        Map<UUID, String> photoUrls = productRepository.findPhotoUrlsByIds(productIds);
-
-        // 5. Build count lookup (key = productId:variantId)
-        Map<String, InventoryCount> countLookup = buildCountLookup(existingCounts);
-
-        // 6. Build InventoryProductRow list
-        List<InventoryProductRow> rows = new ArrayList<>();
-        for (StockLevel sl : stockLevels) {
-            Product product = productMap.get(sl.getProductId());
-            if (product == null) continue; // archived or missing
-
-            String key = compositeKey(sl.getProductId(), sl.getVariantId());
-            InventoryCount count = countLookup.get(key);
-            Integer physicalQty = count != null ? count.getPhysical() : null;
-
-            rows.add(InventoryProductRow.of(
-                    sl.getProductId(),
-                    product.getName(),
-                    product.getSku(),
-                    photoUrls.get(sl.getProductId()),
-                    sl.getVariantId(),
-                    null, // variantLabel — future variant enrichment
-                    sl.getQuantity(),
-                    physicalQty));
-        }
-
-        // 7. Sort alphabetically by product name
-        rows.sort(Comparator.comparing(InventoryProductRow::productName, String.CASE_INSENSITIVE_ORDER));
-        return rows;
-    }
-
-    private Map<String, InventoryCount> buildCountLookup(List<InventoryCount> counts) {
-        if (counts == null || counts.isEmpty()) return Map.of();
-        return counts.stream()
-                .collect(Collectors.toMap(
-                        c -> compositeKey(c.getProductId(), c.getVariantId()),
-                        Function.identity(),
-                        (a, b) -> a));
-    }
-
-    private String compositeKey(UUID productId, UUID variantId) {
-        return productId + ":" + (variantId != null ? variantId : "null");
+        return InventoryRowsAssembler.assemble(products, stockLevels, photoUrls, existingCounts);
     }
 }

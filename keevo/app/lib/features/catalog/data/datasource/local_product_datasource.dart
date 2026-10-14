@@ -76,11 +76,14 @@ class LocalProductDataSource {
   /// a product that's critically low in another store must not show as
   /// low-stock in a store where it has plenty (or no) stock of its own.
   Future<Set<String>> getLowStockProductIds({String? storeId}) async {
+    // Threshold: product-wide one (server products.minimum_threshold) first.
+    const low = 'sl.quantity <= COALESCE(NULLIF(p.minimum_threshold, 0), '
+        'NULLIF(sl.minimum_threshold, 0), 5)';
+    const from = 'SELECT DISTINCT sl.product_id AS product_id FROM stock_levels sl '
+        'LEFT JOIN products p ON p.id = sl.product_id ';
     final sql = storeId != null
-        ? 'SELECT DISTINCT product_id FROM stock_levels '
-            'WHERE store_id = ? AND quantity <= COALESCE(NULLIF(minimum_threshold, 0), 5)'
-        : 'SELECT DISTINCT product_id FROM stock_levels '
-            'WHERE quantity <= COALESCE(NULLIF(minimum_threshold, 0), 5)';
+        ? '${from}WHERE sl.store_id = ? AND $low'
+        : '${from}WHERE $low';
     final rows = await _db.customSelect(
       sql,
       variables: storeId != null ? [Variable.withString(storeId)] : const [],

@@ -42,54 +42,100 @@ class FullScopeResolverTest {
         resolver = new FullScopeResolver(stockLevelRepository, productRepository);
     }
 
+    private static Product product(UUID id, String name, boolean archived) {
+        return new Product(id, name, "desc", "KEV-" + name.substring(0, 3).toUpperCase() + "001",
+                UUID.randomUUID(), 100, 50, 0, 50, archived, ProductStatus.ACTIVE, Instant.now(), Instant.now());
+    }
+
     @Test
     void supportedScope_shouldReturnFull() {
         assertThat(resolver.supportedScope()).isEqualTo(InventoryScope.FULL);
     }
 
     @Test
-    void resolveProducts_shouldReturnEmptyWhenNoStockLevels() {
-        when(stockLevelRepository.findAllByStoreId(STORE_ID)).thenReturn(List.of());
+    void resolveProducts_shouldReturnEmptyWhenNoActiveProducts() {
+        when(productRepository.findAllActive()).thenReturn(List.of());
 
         List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, null, List.of());
 
         assertThat(rows).isEmpty();
-        verify(productRepository, never()).findAllByIds(anyList());
+        verifyNoInteractions(stockLevelRepository);
     }
 
     @Test
     void resolveProducts_shouldBuildRowsSortedAlphabetically() {
-        // Stock levels
         var slA = new StockLevel(UUID.randomUUID(), PRODUCT_A, null, STORE_ID, 50, Instant.now());
         var slB = new StockLevel(UUID.randomUUID(), PRODUCT_B, null, STORE_ID, 30, Instant.now());
         when(stockLevelRepository.findAllByStoreId(STORE_ID)).thenReturn(List.of(slA, slB));
-
-        // Products — "Banane" before "Ananas" alphabetically by name
-        var productA = new Product(PRODUCT_A, "Banane", "desc", "KEV-BAN001",
-                UUID.randomUUID(), 100, 50, 0, 50, false, ProductStatus.ACTIVE, Instant.now(), Instant.now());
-        var productB = new Product(PRODUCT_B, "Ananas", "desc", "KEV-ANA001",
-                UUID.randomUUID(), 200, 100, 0, 30, false, ProductStatus.ACTIVE, Instant.now(), Instant.now());
-        when(productRepository.findAllByIds(anyList())).thenReturn(List.of(productA, productB));
+        when(productRepository.findAllActive()).thenReturn(List.of(
+                product(PRODUCT_A, "Banane", false), product(PRODUCT_B, "Ananas", false)));
         when(productRepository.findPhotoUrlsByIds(anyList())).thenReturn(Map.of(PRODUCT_A, "url-a"));
 
         List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, null, List.of());
 
         assertThat(rows).hasSize(2);
-        // Sorted: Ananas < Banane
         assertThat(rows.get(0).productName()).isEqualTo("Ananas");
+        assertThat(rows.get(0).theoreticalQty()).isEqualTo(30);
         assertThat(rows.get(1).productName()).isEqualTo("Banane");
         assertThat(rows.get(1).photoUrl()).isEqualTo("url-a");
         assertThat(rows.get(0).physicalQty()).isNull(); // not yet counted
     }
 
     @Test
+    void resolveProducts_shouldIncludeProductNeverStockedInStore_withZeroExpected() {
+        var slA = new StockLevel(UUID.randomUUID(), PRODUCT_A, null, STORE_ID, 12, Instant.now());
+        when(stockLevelRepository.findAllByStoreId(STORE_ID)).thenReturn(List.of(slA));
+        when(productRepository.findAllActive()).thenReturn(List.of(
+                product(PRODUCT_A, "Banane", false), product(PRODUCT_B, "Cacao", false)));
+        when(productRepository.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
+
+        List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, null, List.of());
+
+        assertThat(rows).hasSize(2);
+        InventoryProductRow rowless = rows.get(1);
+        assertThat(rowless.productId()).isEqualTo(PRODUCT_B);
+        assertThat(rowless.theoreticalQty()).isZero();
+        assertThat(rowless.variantId()).isNull();
+        assertThat(rowless.physicalQty()).isNull();
+    }
+
+    @Test
+    void resolveProducts_shouldIncludeAllProductsWhenStoreHasNoStockLevels() {
+        when(stockLevelRepository.findAllByStoreId(STORE_ID)).thenReturn(List.of());
+        when(productRepository.findAllActive()).thenReturn(List.of(product(PRODUCT_A, "Banane", false)));
+        when(productRepository.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
+
+        var existingCount = InventoryCount.create(
+                UUID.randomUUID(), PRODUCT_A, null, "Banane", null, 0, 4, UUID.randomUUID());
+
+        List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, null, List.of(existingCount));
+
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).theoreticalQty()).isZero();
+        assertThat(rows.get(0).physicalQty()).isEqualTo(4);
+        assertThat(rows.get(0).ecart()).isEqualTo(4);
+    }
+
+    @Test
+    void resolveProducts_shouldKeepOneRowPerVariantStockLevel() {
+        UUID variant = UUID.randomUUID();
+        var slBase = new StockLevel(UUID.randomUUID(), PRODUCT_A, null, STORE_ID, 5, Instant.now());
+        var slVar = new StockLevel(UUID.randomUUID(), PRODUCT_A, variant, STORE_ID, 7, Instant.now());
+        when(stockLevelRepository.findAllByStoreId(STORE_ID)).thenReturn(List.of(slBase, slVar));
+        when(productRepository.findAllActive()).thenReturn(List.of(product(PRODUCT_A, "Banane", false)));
+        when(productRepository.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
+
+        List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, null, List.of());
+
+        assertThat(rows).hasSize(2);
+        assertThat(rows).extracting(InventoryProductRow::variantId).containsExactlyInAnyOrder(null, variant);
+    }
+
+    @Test
     void resolveProducts_shouldMergeExistingCounts() {
         var sl = new StockLevel(UUID.randomUUID(), PRODUCT_A, null, STORE_ID, 50, Instant.now());
         when(stockLevelRepository.findAllByStoreId(STORE_ID)).thenReturn(List.of(sl));
-
-        var product = new Product(PRODUCT_A, "Pomme", "desc", "KEV-POM001",
-                UUID.randomUUID(), 100, 50, 0, 50, false, ProductStatus.ACTIVE, Instant.now(), Instant.now());
-        when(productRepository.findAllByIds(anyList())).thenReturn(List.of(product));
+        when(productRepository.findAllActive()).thenReturn(List.of(product(PRODUCT_A, "Pomme", false)));
         when(productRepository.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
 
         var existingCount = InventoryCount.create(
@@ -106,14 +152,24 @@ class FullScopeResolverTest {
     void resolveProducts_shouldSkipArchivedProducts() {
         var sl = new StockLevel(UUID.randomUUID(), PRODUCT_A, null, STORE_ID, 50, Instant.now());
         when(stockLevelRepository.findAllByStoreId(STORE_ID)).thenReturn(List.of(sl));
-
-        var archived = new Product(PRODUCT_A, "Archived", "d", "KEV-ARC001",
-                UUID.randomUUID(), 100, 50, 0, 50, true, ProductStatus.ACTIVE, Instant.now(), Instant.now());
-        when(productRepository.findAllByIds(anyList())).thenReturn(List.of(archived));
+        // Defensive: even if the repository returned an archived product, it is skipped.
+        when(productRepository.findAllActive()).thenReturn(List.of(product(PRODUCT_A, "Archived", true)));
         when(productRepository.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
 
         List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, null, List.of());
 
         assertThat(rows).isEmpty();
+    }
+
+    @Test
+    void resolveProducts_shouldIgnoreStockLevelsOfProductsOutsideActiveCatalogue() {
+        var slOrphan = new StockLevel(UUID.randomUUID(), PRODUCT_B, null, STORE_ID, 9, Instant.now());
+        when(stockLevelRepository.findAllByStoreId(STORE_ID)).thenReturn(List.of(slOrphan));
+        when(productRepository.findAllActive()).thenReturn(List.of(product(PRODUCT_A, "Banane", false)));
+        when(productRepository.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
+
+        List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, null, List.of());
+
+        assertThat(rows).extracting(InventoryProductRow::productId).containsExactly(PRODUCT_A);
     }
 }

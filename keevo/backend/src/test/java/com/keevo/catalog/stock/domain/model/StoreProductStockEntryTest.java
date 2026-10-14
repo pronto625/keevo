@@ -44,6 +44,17 @@ class StoreProductStockEntryTest {
     }
 
     @Test
+    void entry_isCritical_whenQuantityIsNegative_withOrWithoutThreshold() {
+        // Sardines Boîte at -1 was shown "OK": a negative stock is a rupture.
+        for (int threshold : new int[] {0, 5}) {
+            var e = entry(-1, threshold);
+            assertThat(e.isCritical()).isTrue();
+            assertThat(e.isLow()).isFalse();
+            assertThat(e.status()).isEqualTo(StockStatus.CRITIQUE);
+        }
+    }
+
+    @Test
     void entry_isCritical_overridesIsLow() {
         // When qty=0 and threshold>0, CRITIQUE takes priority
         var e = entry(0, 10);

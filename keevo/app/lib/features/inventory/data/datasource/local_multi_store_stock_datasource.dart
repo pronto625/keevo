@@ -15,8 +15,17 @@ class LocalMultiStoreStockDataSource {
 
   LocalMultiStoreStockDataSource(this._db);
 
+  /// Effective low-stock threshold of a product in a store: the product-wide
+  /// threshold (server `products.minimum_threshold`, applies even where the
+  /// product has no stock_levels row), else the legacy per-row one, else 0.
+  static const effectiveThresholdSql =
+      'COALESCE(NULLIF(p.minimum_threshold, 0), sl.minimum_threshold, 0)';
+
   /// Overview SQL: one row per active store with aggregated stock stats.
-  /// Note: minimum_threshold is on stock_levels (sl), not products (p).
+  /// Products come from the catalogue (non-archived) and are joined to the
+  /// store's stock levels: a product never stocked in the store counts as
+  /// quantity 0 (rupture) in low_stock_count, as on the server.
+  /// product_count stays the number of products actually stocked there.
   static const _overviewSql = '''
     SELECT
       s.id           AS store_id,
@@ -24,10 +33,13 @@ class LocalMultiStoreStockDataSource {
       s.type         AS store_type,
       COUNT(DISTINCT sl.product_id)                                         AS product_count,
       COALESCE(SUM(sl.quantity * p.price), 0)                              AS total_value_xaf,
-      COUNT(CASE WHEN sl.quantity <= COALESCE(NULLIF(sl.minimum_threshold, 0), 5) THEN 1 END) AS low_stock_count
+      COUNT(CASE WHEN p.id IS NOT NULL
+                  AND COALESCE(sl.quantity, 0)
+                      <= COALESCE(NULLIF($effectiveThresholdSql, 0), 5)
+                 THEN 1 END)                                                AS low_stock_count
     FROM stores s
-    LEFT JOIN stock_levels sl ON sl.store_id = s.id
-    LEFT JOIN products p      ON p.id = sl.product_id AND p.archived = 0
+    LEFT JOIN products p      ON p.archived = 0
+    LEFT JOIN stock_levels sl ON sl.store_id = s.id AND sl.product_id = p.id
     WHERE s.is_active = 1
     GROUP BY s.id, s.name, s.type
     ORDER BY
@@ -56,32 +68,43 @@ class LocalMultiStoreStockDataSource {
     bool sortLowFirst = true,
   }) async {
     final offset = page * size;
+    // Full expressions, not the output aliases: `minimum_threshold` exists on
+    // both joined tables and would be ambiguous in ORDER BY.
+    const qty = 'MAX(COALESCE(sl.quantity, 0))';
+    const threshold = 'MAX($effectiveThresholdSql)';
     final orderClause = sortLowFirst
-        ? 'CASE WHEN quantity <= COALESCE(NULLIF(minimum_threshold, 0), 5) AND quantity > 0 THEN 0 '
-            'WHEN quantity = 0 THEN 1 ELSE 2 END ASC, p.name ASC'
+        ? 'CASE WHEN $qty <= COALESCE(NULLIF($threshold, 0), 5) AND $qty > 0 THEN 0 '
+            'WHEN $qty <= 0 THEN 1 ELSE 2 END ASC, p.name ASC'
         : 'p.name ASC';
 
+    // Starts from the catalogue: a product never stocked in this store has no
+    // stock_levels row and is listed with quantity 0 instead of being absent.
     final sql = '''
       SELECT
         p.id    AS product_id,
         p.name  AS product_name,
         sl.variant_id,
-        sl.store_id,
-        MAX(sl.quantity)          AS quantity,
-        MAX(sl.minimum_threshold) AS minimum_threshold
-      FROM stock_levels sl
-      JOIN products p ON p.id = sl.product_id
-      WHERE sl.store_id = ? AND p.archived = 0
-      GROUP BY p.id, p.name, sl.variant_id, sl.store_id
+        ?       AS store_id,
+        MAX(COALESCE(sl.quantity, 0))   AS quantity,
+        MAX($effectiveThresholdSql)     AS minimum_threshold
+      FROM products p
+      LEFT JOIN stock_levels sl ON sl.product_id = p.id AND sl.store_id = ?
+      WHERE p.archived = 0
+      GROUP BY p.id, p.name, sl.variant_id
       ORDER BY $orderClause
       LIMIT $size OFFSET $offset
     ''';
 
-    final rows = await _db
-        .customSelect(sql, variables: [Variable.withString(storeId)]).get();
+    final rows = await _db.customSelect(sql, variables: [
+      Variable.withString(storeId),
+      Variable.withString(storeId),
+    ]).get();
     return rows.map(_mapEntry).toList();
   }
 
+  /// Cross-store search: starts from the catalogue so a product never stocked
+  /// anywhere is still found — one entry per active store, quantity 0 where
+  /// the product has no stock_levels row.
   Future<List<StoreProductStockModel>> searchAcrossStores(String query) async {
     if (query.trim().isEmpty) return [];
     // v1s-16-16: case- and accent-insensitive (shared Unicode fold).
@@ -90,14 +113,14 @@ class LocalMultiStoreStockDataSource {
         p.id    AS product_id,
         p.name  AS product_name,
         sl.variant_id,
-        sl.store_id,
-        MAX(sl.quantity)          AS quantity,
-        MAX(sl.minimum_threshold) AS minimum_threshold
-      FROM stock_levels sl
-      JOIN products p ON p.id = sl.product_id
-      JOIN stores   s ON s.id = sl.store_id AND s.is_active = 1
+        s.id    AS store_id,
+        MAX(COALESCE(sl.quantity, 0))   AS quantity,
+        MAX($effectiveThresholdSql)     AS minimum_threshold
+      FROM products p
+      JOIN stores s ON s.is_active = 1
+      LEFT JOIN stock_levels sl ON sl.product_id = p.id AND sl.store_id = s.id
       WHERE ${foldedSqlRaw('p.name')} LIKE ? ESCAPE '\\' AND p.archived = 0
-      GROUP BY p.id, p.name, sl.variant_id, sl.store_id
+      GROUP BY p.id, p.name, sl.variant_id, s.id
       ORDER BY p.name ASC, s.name ASC
     ''';
     final rows = await _db.customSelect(
@@ -110,7 +133,8 @@ class LocalMultiStoreStockDataSource {
   StoreProductStockModel _mapEntry(QueryRow r) {
     final qty = r.read<int>('quantity');
     final threshold = r.read<int>('minimum_threshold');
-    final isCritical = qty == 0;
+    // Zero or negative stock is a rupture (same rule as the server).
+    final isCritical = qty <= 0;
     final isLow = threshold > 0 && qty > 0 && qty <= threshold;
     final status = isCritical ? 'CRITIQUE' : (isLow ? 'BAS' : 'NORMAL');
     return StoreProductStockModel(
@@ -144,7 +168,10 @@ class LocalMultiStoreStockDataSource {
           updatedAt: Value(DateTime.now()),
         ));
 
-        if (updated == 0) {
+        // A product never stocked in this store comes back from the server
+        // at quantity 0 without a stock_levels row: no row is created for it
+        // (the views already read it as 0), so the local cache stays truthful.
+        if (updated == 0 && e.quantity != 0) {
           await _db.into(_db.stockLevels).insert(StockLevelsCompanion.insert(
                 id: 'sync_${e.productId}_$storeId',
                 productId: e.productId,

@@ -23,9 +23,9 @@ public record StoreProductStockEntry(
         return minimumThreshold > 0 && quantity > 0 && quantity <= minimumThreshold;
     }
 
-    /** True when stock is zero — critical regardless of threshold. */
+    /** True when stock is zero or negative (rupture) — critical regardless of threshold. */
     public boolean isCritical() {
-        return quantity == 0;
+        return quantity <= 0;
     }
 
     /** Status label for the frontend badge. */
