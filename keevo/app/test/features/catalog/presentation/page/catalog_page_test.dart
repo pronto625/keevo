@@ -140,7 +140,7 @@ void main() {
       expect(built.container.read(productSearchQueryProvider), 'abc');
     });
 
-    testWidgets('clear goes through the same debounce as typing', (tester) async {
+    testWidgets('clearing restores the full list immediately', (tester) async {
       final prefs = await _setupPrefs();
       final built = _buildPageWithContainer(prefs: prefs);
       addTearDown(built.container.dispose);
@@ -152,15 +152,47 @@ void main() {
       await tester.pump(const Duration(milliseconds: 350));
       expect(built.container.read(productSearchQueryProvider), 'something');
 
-      // Mirrors the clear button's onPressed (_searchController.clear() +
-      // _onSearchChanged('')) without depending on suffixIcon visibility.
       await tester.enterText(searchField, '');
-      await tester.pump(const Duration(milliseconds: 100));
-      expect(built.container.read(productSearchQueryProvider), 'something',
-          reason: 'clear must not update the provider immediately');
+      await tester.pump();
+      expect(built.container.read(productSearchQueryProvider), '',
+          reason: 'clearing must not wait for the debounce');
+    });
 
-      await tester.pump(const Duration(milliseconds: 250));
+    testWidgets('a search still active when the page is rebuilt is shown and clearable',
+        (tester) async {
+      final prefs = await _setupPrefs();
+      final built = _buildPageWithContainer(prefs: prefs);
+      addTearDown(built.container.dispose);
+      // The user searched, left the catalogue and came back: the query is still set.
+      built.container.read(productSearchQueryProvider.notifier).state = 'Bonbons';
+      await tester.pumpWidget(built.widget);
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(TextField, 'Bonbons'), findsOneWidget,
+          reason: 'the field must show the active filter');
+      expect(find.byIcon(Icons.clear_rounded), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.clear_rounded));
+      await tester.pump();
       expect(built.container.read(productSearchQueryProvider), '');
+      expect(find.byIcon(Icons.clear_rounded), findsNothing);
+    });
+
+    testWidgets('clearing then leaving before the debounce still clears the filter',
+        (tester) async {
+      final prefs = await _setupPrefs();
+      final built = _buildPageWithContainer(prefs: prefs);
+      addTearDown(built.container.dispose);
+      await tester.pumpWidget(built.widget);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'Riz');
+      await tester.pump(const Duration(milliseconds: 100));
+      // Leave the page while the debounce is pending.
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+      expect(built.container.read(productSearchQueryProvider), 'Riz',
+          reason: 'a pending query is applied, not lost, when the page goes away');
     });
   });
 

@@ -37,11 +37,17 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
   late final TabController _tabController;
   final _searchController = TextEditingController();
   Timer? _debounce;
+  late final StateController<String> _queryController;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    // The search query outlives this page (global provider): show it in the field
+    // when the page is rebuilt (back from a product, tab switch), otherwise the list
+    // stays filtered behind an empty-looking field that cannot be cleared.
+    _queryController = ref.read(productSearchQueryProvider.notifier);
+    _searchController.text = _queryController.state;
 
     // Trigger a background sync when the page first opens.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -51,7 +57,15 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
 
   @override
   void dispose() {
-    _debounce?.cancel();
+    // A pending debounced query (e.g. the field was just cleared) must not be lost
+    // when the page goes away.
+    if (_debounce?.isActive ?? false) {
+      _debounce!.cancel();
+      final pending = _searchController.text;
+      // Provider writes are not allowed during dispose: defer to the next microtask.
+      final controller = _queryController;
+      Future.microtask(() => controller.state = pending);
+    }
     _tabController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -59,9 +73,17 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
 
   void _onSearchChanged(String query) {
     _debounce?.cancel();
+    // Clearing restores the full list immediately (no debounce).
+    if (query.trim().isEmpty) {
+      ref.read(productSearchQueryProvider.notifier).state = '';
+      setState(() {}); // hide the clear button
+      return;
+    }
     _debounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
       ref.read(productSearchQueryProvider.notifier).state = query;
     });
+    setState(() {}); // show the clear button as soon as there is text
   }
 
   @override
