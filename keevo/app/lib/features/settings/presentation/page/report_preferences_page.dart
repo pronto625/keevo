@@ -126,7 +126,7 @@ class _ReportPreferencesPageState
                   const SizedBox(height: 8),
                   _PrefsCard(children: [
                     _SwitchTile(
-                      title: 'Activer le rapport EOD',
+                      title: 'Activer le rapport de fin de journée',
                       subtitle: 'Reçu automatiquement à la clôture',
                       value: state.preferences!.eodReportEnabled,
                       onChanged: (v) => notifier.updateField(

@@ -48,6 +48,24 @@ class _ExportPageState extends ConsumerState<ExportPage> {
   bool _busy = false;
   bool _pruned = false;
   ExportException? _error;
+
+  /// J11: the error banner sits at the top of the form — scroll back to it
+  /// when an export fails, the « Exporter » button being at the bottom.
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _revealError() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      _scroll.animateTo(0,
+          duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+    });
+  }
   ExportRequest? _lastRequest;
   ExportJob? _queued;
 
@@ -199,9 +217,13 @@ class _ExportPageState extends ConsumerState<ExportPage> {
         if (mounted) setState(() => _format = ExportFormat.csv);
       } else if (mounted) {
         setState(() => _error = e);
+        _revealError();
       }
     } catch (_) {
-      if (mounted) setState(() => _error = ExportException.unexpected);
+      if (mounted) {
+        setState(() => _error = ExportException.unexpected);
+        _revealError();
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -312,6 +334,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
         ),
       ),
       body: ListView(
+        controller: _scroll,
         padding: const EdgeInsets.only(bottom: 24),
         children: [
           if (offline) ...[
