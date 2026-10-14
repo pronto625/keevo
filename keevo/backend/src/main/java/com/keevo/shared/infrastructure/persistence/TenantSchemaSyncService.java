@@ -284,6 +284,9 @@ public class TenantSchemaSyncService {
             stmt.execute(TenantSchemaProvisioner.DDL_DAY_CLOSURES_MIGRATE_RECEIVED_AT);
             stmt.execute(TenantSchemaProvisioner.DDL_DAY_CLOSURES_BACKFILL_RECEIVED_AT);
             stmt.execute(TenantSchemaProvisioner.DDL_DAY_CLOSURES_IDX_RECEIVED_AT);
+            // reports.updated_at — pull cursor of the reports delta (status changes after creation)
+            stmt.execute(TenantSchemaProvisioner.DDL_REPORTS_MIGRATE_UPDATED_AT);
+            stmt.execute(TenantSchemaProvisioner.DDL_REPORTS_BACKFILL_UPDATED_AT);
             stmt.execute(TenantSchemaProvisioner.DDL_SALES_IDX_STORE_OCCURRED_AT);
             stmt.execute(TenantSchemaProvisioner.DDL_SALES_IDX_STORE_EMPLOYEE_OCCURRED_AT);
             // Story 5.1 — sync operations log indexes

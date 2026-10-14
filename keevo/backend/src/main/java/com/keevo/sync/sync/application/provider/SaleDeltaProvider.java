@@ -104,5 +104,5 @@ public class SaleDeltaProvider implements DeltaEntityProvider {
     }
 
     private String str(Object o) { return o != null ? o.toString() : null; }
-    private String ts(Object o) { return o != null ? o.toString() : null; }
+    private String ts(Object o) { return SyncTimestamps.iso(o); }
 }

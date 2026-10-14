@@ -1339,8 +1339,9 @@ class RestSyncService implements SyncService {
         'INSERT INTO day_closures (id, store_id, actor_id, closed_at, '
         'total_sales, total_revenue, cash_amount, momo_amount, '
         'pending_sales_count, pending_sales_total, is_automatic, '
+        'top_product_id, top_product_name, top_product_qty, '
         'synced, created_at) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 1, ?) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?) '
         // The server keeps the client's closure id: a closure pushed from
         // here comes back with it and is now confirmed.
         // Its totals are the server's: late offline sales synced after the
@@ -1350,6 +1351,13 @@ class RestSyncService implements SyncService {
         'total_revenue = excluded.total_revenue, '
         'cash_amount = excluded.cash_amount, '
         'momo_amount = excluded.momo_amount, '
+        // Summary shown in the day sheet: without it a closure made on
+        // another device has no top product and no pending sales.
+        'pending_sales_count = excluded.pending_sales_count, '
+        'pending_sales_total = excluded.pending_sales_total, '
+        'top_product_id = excluded.top_product_id, '
+        'top_product_name = excluded.top_product_name, '
+        'top_product_qty = excluded.top_product_qty, '
         'synced = 1',
         [
           map['id'],
@@ -1360,7 +1368,12 @@ class RestSyncService implements SyncService {
           map['totalRevenue'],
           map['cashTotal'],
           map['mobileMoneyTotal'],
+          map['pendingSalesCount'] ?? 0,
+          map['pendingSalesTotal'] ?? 0,
           isAutomatic,
+          map['topProductId'],
+          map['topProductName'],
+          map['topProductQty'] ?? 0,
           closedAtLocal,
         ],
       );
@@ -1530,7 +1543,12 @@ class RestSyncService implements SyncService {
         'content, delivery_status, delivery_attempts, last_attempt_at, '
         'total_revenue, total_sales, is_automatic, created_at, actor_id) '
         'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) '
+        // The server's report is authoritative: a later delivery attempt or
+        // a regeneration reaches every device (pulled on updated_at).
         'ON CONFLICT(id) DO UPDATE SET '
+        'content = excluded.content, '
+        'total_revenue = excluded.total_revenue, '
+        'total_sales = excluded.total_sales, '
         'delivery_status = excluded.delivery_status, '
         'delivery_attempts = excluded.delivery_attempts, '
         'last_attempt_at = excluded.last_attempt_at, '

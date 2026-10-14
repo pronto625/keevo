@@ -702,7 +702,7 @@ public class TenantSchemaProvisioner {
             new SyncKeysetIndex("idx_day_closures_sync_keyset", "day_closures", "received_at"),
             new SyncKeysetIndex("idx_inventory_sessions_sync_keyset", "inventory_sessions", "updated_at"),
             new SyncKeysetIndex("idx_inventory_counts_sync_keyset", "inventory_counts", "updated_at"),
-            new SyncKeysetIndex("idx_reports_sync_keyset", "reports", "created_at"));
+            new SyncKeysetIndex("idx_reports_sync_keyset", "reports", "updated_at"));
 
     // Story 5.1 — sync operations log (idempotency guard)
     static final String DDL_SYNC_OPERATIONS_LOG = """
@@ -823,7 +823,8 @@ public class TenantSchemaProvisioner {
                 total_revenue INT NOT NULL DEFAULT 0,
                 total_sales INT NOT NULL DEFAULT 0,
                 is_automatic BOOLEAN NOT NULL DEFAULT false,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ
             )""";
 
     /** Migration DDL: adds actor_id to existing reports tables (idempotent — Story 7.2) */
@@ -837,6 +838,14 @@ public class TenantSchemaProvisioner {
     /** Migration DDL: adds actor_name to existing reports tables (idempotent — Story 7.6) */
     static final String DDL_REPORTS_MIGRATE_ACTOR_NAME =
             "ALTER TABLE reports ADD COLUMN IF NOT EXISTS actor_name VARCHAR(255)";
+
+    // reports.updated_at — pull cursor (ReportsDeltaProvider): a report changes after creation
+    // (delivery status/attempts). No column default, like day_closures.received_at (public V23):
+    // existing rows are backfilled from created_at; the application always writes it.
+    static final String DDL_REPORTS_MIGRATE_UPDATED_AT =
+            "ALTER TABLE reports ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ";
+    static final String DDL_REPORTS_BACKFILL_UPDATED_AT =
+            "UPDATE reports SET updated_at = created_at WHERE updated_at IS NULL";
 
     static final String DDL_REPORTS_IDX_TENANT_TYPE =
             "CREATE INDEX IF NOT EXISTS idx_reports_tenant_type ON reports (tenant_id, report_type)";
@@ -1143,6 +1152,7 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_REPORTS_MIGRATE_ACTOR_ID);   // idempotent: adds actor_id if missing
             stmt.execute(DDL_REPORTS_MIGRATE_STORE_NAME); // idempotent: adds store_name if missing
             stmt.execute(DDL_REPORTS_MIGRATE_ACTOR_NAME); // idempotent: adds actor_name if missing (Story 7.6)
+            stmt.execute(DDL_REPORTS_MIGRATE_UPDATED_AT); // idempotent: pull cursor of the reports delta
             stmt.execute(DDL_REPORTS_IDX_TENANT_TYPE);
             stmt.execute(DDL_REPORTS_IDX_DATE);
             stmt.execute(DDL_REPORTS_IDX_DELIVERY_STATUS);
