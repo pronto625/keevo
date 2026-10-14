@@ -1,8 +1,8 @@
 import '../../../../core/theme/app_theme.dart';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/widget/product_photo.dart';
 
 
 /// ProductCard — displays a product in the POS grid.
@@ -257,20 +257,11 @@ class _ProductCardState extends State<ProductCard>
   }
 
   Widget _buildImage(String url) {
-    if (url.startsWith('/')) {
-      final file = File(url);
-      if (file.existsSync()) {
-        return Image.file(file, fit: BoxFit.cover);
-      }
-    }
-    return Image.network(
-      url,
-      fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) {
-        final color =
-            AppTheme.avatarPalette[widget.name.hashCode.abs() % AppTheme.avatarPalette.length];
-        return _buildInitialsBackground(color);
-      },
+    final color = AppTheme
+        .avatarPalette[widget.name.hashCode.abs() % AppTheme.avatarPalette.length];
+    return ProductPhoto(
+      photoUrl: url,
+      placeholder: _buildInitialsBackground(color),
     );
   }
 }

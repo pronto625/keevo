@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../domain/model/inventory_gap_row_model.dart';
 import '../../domain/service/inventory_report_text_formatter.dart';
+import '../../../../core/widget/product_photo.dart';
 
 /// UX2 color tokens.
 const _colorSuccess = AppTheme.success;
@@ -145,18 +146,12 @@ class ProductDetailBottomSheet extends StatelessWidget {
   }
 
   Widget _buildAvatar(BuildContext context) {
-    if (row.photoUrl != null && row.photoUrl!.isNotEmpty) {
-      return CircleAvatar(
-        radius: 40,
-        backgroundImage: NetworkImage(row.photoUrl!),
-      );
-    }
     final colorIndex =
         row.productId.hashCode.abs() % AppTheme.avatarPalette.length;
     final accent = AppTheme.avatarPalette[colorIndex];
     final initials = _initials(row.productName);
     // Même teinte que la ligne du rapport, diluée plutôt qu'en aplat saturé.
-    return CircleAvatar(
+    final placeholder = CircleAvatar(
       radius: 40,
       backgroundColor: accent.withValues(alpha: 0.15),
       child: Text(
@@ -165,6 +160,13 @@ class ProductDetailBottomSheet extends StatelessWidget {
             color: AppTheme.avatarInitials(accent, Theme.of(context).brightness),
             fontWeight: FontWeight.bold,
             fontSize: 24),
+      ),
+    );
+    return ClipOval(
+      child: SizedBox(
+        width: 80,
+        height: 80,
+        child: ProductPhoto(photoUrl: row.photoUrl, placeholder: placeholder),
       ),
     );
   }

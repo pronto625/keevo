@@ -2,15 +2,17 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/discard_changes_dialog.dart';
 import '../../../../core/widget/soft_icon_button.dart';
-import 'dart:io';
+import '../../../../core/photo/product_photo_compressor.dart';
+import '../../../../core/photo/product_photo_providers.dart';
+import '../../../../core/sync/riverpod_sync_trigger_dispatcher.dart';
+import '../../../../core/widget/product_photo.dart';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
 
 import '../../../contact/domain/model/supplier_model.dart';
 import '../../../contact/presentation/provider/contact_provider.dart';
@@ -53,7 +55,11 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
   final _transportCostController = TextEditingController();
 
   String? _selectedCategoryId;
-  File? _selectedImage;
+  /// Thumbnail of the photo picked in this form (already compressed).
+  Uint8List? _selectedImage;
+  /// « Supprimer la photo » on the product's existing photo.
+  bool _removeExistingPhoto = false;
+  bool _compressingPhoto = false;
   bool _isSaving = false;
 
   /// Field values when the form opened; leaving with different values asks
@@ -100,7 +106,8 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
         _buyPriceController.text,
         _transportCostController.text,
         _selectedCategoryId ?? '',
-        _selectedImage?.path ?? '',
+        '${_selectedImage?.length ?? 0}',
+        '$_removeExistingPhoto',
       ].join('\u0000');
 
   bool get _hasUnsavedChanges => _snapshot() != _initialSnapshot;
@@ -225,15 +232,32 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
 
   Future<void> _pickImage(ImageSource source) async {
     Navigator.pop(context);
-    final picker = ImagePicker();
-    final image = await picker.pickImage(
-      source: source, 
-      maxWidth: 1024,
-      maxHeight: 1024,
-      imageQuality: 80,
+    // Native downscale first (cheap on a 12 MP photo), then the thumbnail
+    // re-encode: ~400 px JPEG, < 40 KB, no metadata (FR21).
+    final image = await ref.read(productPhotoPickerProvider).pickImage(
+      source: source,
+      maxWidth: ProductPhotoCompressor.pickerMaxDimension,
+      maxHeight: ProductPhotoCompressor.pickerMaxDimension,
+      imageQuality: ProductPhotoCompressor.pickerQuality,
     );
-    if (image != null) {
-      setState(() => _selectedImage = File(image.path));
+    if (image == null || !mounted) return;
+    setState(() => _compressingPhoto = true);
+    try {
+      final thumb = await ref
+          .read(productPhotoCompressorProvider)
+          .compress(await image.readAsBytes());
+      if (!mounted) return;
+      setState(() {
+        _selectedImage = thumb;
+        _removeExistingPhoto = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Cette image ne peut pas être utilisée, choisissez-en une autre'),
+      ));
+    } finally {
+      if (mounted) setState(() => _compressingPhoto = false);
     }
   }
 
@@ -253,19 +277,22 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
     return null;
   }
 
-  /// Copies the selected image to the app's persistent documents directory.
-  /// Returns the local file path, or null if no image selected.
-  Future<String?> _persistImage(String productId) async {
-    if (_selectedImage == null) return null;
-    final dir = await getApplicationDocumentsDirectory();
-    final imgDir = Directory(p.join(dir.path, 'product_images'));
-    if (!imgDir.existsSync()) imgDir.createSync(recursive: true);
-    final ext = p.extension(_selectedImage!.path).isNotEmpty
-        ? p.extension(_selectedImage!.path)
-        : '.jpg';
-    final dest = File(p.join(imgDir.path, '$productId$ext'));
-    await _selectedImage!.copy(dest.path);
-    return dest.path;
+  /// Applies the photo choice to [productId]: the new thumbnail is kept on
+  /// this device and queued for upload, or the photo deletion is queued —
+  /// both sent with the next sync (offline-first).
+  Future<void> _savePhoto(String productId) async {
+    final outbox = ref.read(productPhotoOutboxProvider);
+    final picked = _selectedImage;
+    if (picked != null) {
+      final path =
+          await ref.read(productPhotoFilesProvider).savePending(productId, picked);
+      await outbox.enqueueUpload(productId, path);
+    } else if (_removeExistingPhoto) {
+      await outbox.enqueueDelete(productId);
+    } else {
+      return;
+    }
+    ref.read(syncTriggerDispatcherProvider).triggerPushIfIdle();
   }
 
   Future<void> _onSave() async {
@@ -277,7 +304,6 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
       final actions = ref.read(productActionsProvider);
       
       if (widget.isEditing && widget.product != null) {
-        final photoUrl = await _persistImage(widget.product!.id);
         await actions.update(
           id: widget.product!.id,
           name: _nameController.text.trim(),
@@ -289,14 +315,10 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
           price: int.tryParse(_priceController.text) ?? 0,
           buyPrice: int.tryParse(_buyPriceController.text) ?? 0,
           transportCost: int.tryParse(_transportCostController.text) ?? 0,
-          photoUrl: photoUrl,
         );
+        await _savePhoto(widget.product!.id);
       } else {
-        // Generate a temporary ID for the image filename; after create, the
-        // real product ID is returned and the image path is already persisted.
-        final tempId = DateTime.now().millisecondsSinceEpoch.toString();
-        final photoUrl = await _persistImage(tempId);
-        await actions.create(
+        final created = await actions.create(
           name: _nameController.text.trim(),
           description: _descriptionController.text.trim().isEmpty 
               ? null 
@@ -306,8 +328,8 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
           price: int.tryParse(_priceController.text) ?? 0,
           buyPrice: int.tryParse(_buyPriceController.text) ?? 0,
           transportCost: int.tryParse(_transportCostController.text) ?? 0,
-          photoUrl: photoUrl,
         );
+        await _savePhoto(created.id);
       }
 
       if (mounted) {
@@ -680,9 +702,18 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage>
                           // Photo section
                           _PhotoSection(
                             selectedImage: _selectedImage,
-                            existingPhotoUrl: widget.product?.photoUrl,
+                            existingPhotoUrl: _removeExistingPhoto
+                                ? null
+                                : widget.product?.photoUrl,
+                            compressing: _compressingPhoto,
                             onTap: _showPhotoOptions,
-                            onRemove: () => setState(() => _selectedImage = null),
+                            onRemove: () => setState(() {
+                              if (_selectedImage != null) {
+                                _selectedImage = null;
+                              } else {
+                                _removeExistingPhoto = true;
+                              }
+                            }),
                           ),
                           
                           const SizedBox(height: 40),
@@ -952,14 +983,16 @@ class _ErrorDropdown extends StatelessWidget {
 }
 
 class _PhotoSection extends StatelessWidget {
-  final File? selectedImage;
+  final Uint8List? selectedImage;
   final String? existingPhotoUrl;
+  final bool compressing;
   final VoidCallback onTap;
   final VoidCallback onRemove;
 
   const _PhotoSection({
     this.selectedImage,
     this.existingPhotoUrl,
+    this.compressing = false,
     required this.onTap,
     required this.onRemove,
   });
@@ -987,8 +1020,8 @@ class _PhotoSection extends StatelessWidget {
                 width: double.infinity,
                 height: 160,
                 child: selectedImage != null
-                    ? Image.file(selectedImage!, fit: BoxFit.cover)
-                    : _buildExistingImage(),
+                    ? Image.memory(selectedImage!, fit: BoxFit.cover)
+                    : _buildExistingImage(context),
               ),
             ),
           ListTile(
@@ -1012,9 +1045,11 @@ class _PhotoSection extends StatelessWidget {
                 fontSize: 16,
               ),
             ),
-            subtitle: selectedImage != null 
+            subtitle: compressing
+                ? const Text('Préparation de la photo…')
+                : selectedImage != null
                 ? Text(
-                    'Taille: ${(selectedImage!.lengthSync() / 1024).toStringAsFixed(1)} KB',
+                    'Taille : ${(selectedImage!.length / 1024).toStringAsFixed(1)} Ko',
                     style: TextStyle(
                       color: AppTheme.success,
                       fontWeight: FontWeight.w500,
@@ -1052,16 +1087,14 @@ class _PhotoSection extends StatelessWidget {
     );
   }
 
-  Widget _buildExistingImage() {
-    final url = existingPhotoUrl!;
-    if (url.startsWith('/')) {
-      final file = File(url);
-      if (file.existsSync()) return Image.file(file, fit: BoxFit.cover);
-    }
-    return Image.network(url, fit: BoxFit.cover,
-        errorBuilder: (ctx, __, ___) => Center(
-          child: Icon(Icons.broken_image_rounded, size: 40, color: Theme.of(ctx).colorScheme.onSurfaceVariant),
-        ));
+  Widget _buildExistingImage(BuildContext context) {
+    return ProductPhoto(
+      photoUrl: existingPhotoUrl,
+      placeholder: Center(
+        child: Icon(Icons.broken_image_rounded,
+            size: 40, color: Theme.of(context).colorScheme.onSurfaceVariant),
+      ),
+    );
   }
 }
 
