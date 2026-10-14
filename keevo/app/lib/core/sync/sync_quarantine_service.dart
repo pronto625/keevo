@@ -319,6 +319,31 @@ class SyncQuarantineService {
     return buf.toString();
   }
 
+  /// J26: one-line human summary of a non-sale operation for the blocked
+  /// list — « Savon de Marseille × 5 » — or null when there is no product.
+  /// Never an id.
+  Future<String?> productSummary(SyncQueueData op) async {
+    if (op.operation == 'CREATE_SALE') return null;
+    final payload = _payloadOf(op);
+    var productName = payload['productName'] as String?;
+    final productId = payload['productId'] as String?;
+    if (productName == null && productId != null) {
+      productName = await _productLabel(productId);
+    }
+    if (productName == null) return null;
+    final quantity = payload['quantity'] ?? payload['quantityDelta'];
+    return quantity == null ? productName : '$productName × $quantity';
+  }
+
+  /// J26: « Source → Destination » for a stock transfer, else null.
+  Future<String?> transferRoute(SyncQueueData op) async {
+    final payload = _payloadOf(op);
+    final source = payload['sourceStoreId'] as String?;
+    final destination = payload['destinationStoreId'] as String?;
+    if (source == null || destination == null) return null;
+    return '${await storeLabel(source)} → ${await storeLabel(destination)}';
+  }
+
   /// Local store name of [storeId], or a "boutique inconnue" label (never
   /// the id).
   Future<String> storeLabel(String storeId) async {

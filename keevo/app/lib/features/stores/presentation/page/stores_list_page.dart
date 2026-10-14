@@ -191,6 +191,9 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
       );
     } on StoreException catch (e) {
       if (mounted) _showErrorSnackBar(e.message);
+    } finally {
+      // J22: this page's own list always reloads after the action.
+      if (mounted) ref.invalidate(managedStoresProvider);
     }
   }
 
@@ -201,6 +204,8 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
           .deactivateStore(storeId);
     } on StoreException catch (e) {
       if (mounted) _showErrorSnackBar(e.message);
+    } finally {
+      if (mounted) ref.invalidate(managedStoresProvider);
     }
   }
 

@@ -486,4 +486,25 @@ void main() {
     expect(await service.exportText('sale-op'), isNot(contains('store-ghost')));
     expect(await service.exportText('pending'), isEmpty);
   });
+
+  // J26: the blocked card's one-line summary (product × quantity, route).
+  test('productSummary / transferRoute: names, never ids', () async {
+    await product('p-1', 'Huile 1L');
+    await op('tr', 'STOCK_TRANSFER', entityId: 't-1', payload: {
+      'sourceStoreId': 'st-gone',
+      'destinationStoreId': 'st-gone-2',
+      'productId': 'p-1',
+      'quantity': 4,
+    });
+    await op('sale-op', 'CREATE_SALE', entityId: 'sale-1', payload: salePayload);
+    final rows = await db.select(db.syncQueue).get();
+    final tr = rows.firstWhere((r) => r.id == 'tr');
+    final sale = rows.firstWhere((r) => r.id == 'sale-op');
+
+    expect(await service.productSummary(tr), 'Huile 1L × 4');
+    expect(await service.transferRoute(tr),
+        'Boutique inconnue sur cet appareil → Boutique inconnue sur cet appareil');
+    expect(await service.productSummary(sale), isNull);
+    expect(await service.transferRoute(sale), isNull);
+  });
 }

@@ -400,6 +400,9 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
 
   /// Invalidate all Riverpod providers for entity types refreshed by pull.
   void _invalidateAllProviders() {
+    // ── J23: offline gate — a successful cycle wrote a fresh last-sync time;
+    // without this the gate stayed blocked in memory until an app restart.
+    ref.invalidate(daysSinceLastSyncProvider);
     // ── Sync queue (v1s-16-15: blocked operations list / counts) ──────────
     ref.invalidate(quarantinedSyncQueueProvider);
     ref.invalidate(quarantinedSyncCountProvider);

@@ -125,7 +125,7 @@ class _ActiveDevicesSection extends ConsumerWidget {
                     size: 16, color: theme.colorScheme.onSurfaceVariant),
                 const SizedBox(width: 6),
                 Text(
-                  'Appareils actifs (${devices.length})',
+                  'Appareils actifs — 30 derniers jours (${devices.length})',
                   style: theme.textTheme.titleSmall
                       ?.copyWith(fontWeight: FontWeight.w600),
                 ),

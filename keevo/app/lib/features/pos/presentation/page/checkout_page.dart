@@ -1,3 +1,4 @@
+import '../../../../core/di/providers.dart';
 import '../../../../core/storage/search_fold.dart';
 import '../../../../core/sync/account_read_only_exception.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -54,6 +55,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   Widget build(BuildContext context) {
     final cart = ref.watch(cartProvider);
     final hasDraftItems = cart.any((c) => c.isDraft);
+    // P1 (v1s-12-10): a cart with draft products is a normal, completed sale
+    // (initial stock entered at the cart). Only the OWNER's sale activates the
+    // drafts; an EMPLOYEE's leaves them for the owner to validate in the
+    // catalog — never a "pending" or "draft" sale.
+    final ownerSelling =
+        hasDraftItems && ref.watch(currentUserRoleProvider) == 'OWNER';
     final cartNotifier = ref.read(cartProvider.notifier);
     final discountAmount = cartNotifier.discountAmount;
     final finalTotal = cartNotifier.finalTotal;
@@ -71,7 +78,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
     ref.listen<RecordSaleState>(recordSaleNotifierProvider, (_, state) {
       if (state is RecordSaleSuccess) {
-        context.go('/pos/success?total=${state.sale.totalAmount}&status=${state.sale.status}');
+        final draftsToValidate = state.sale.originalDraftProductIds.isNotEmpty &&
+            !state.sale.promoteDraftProducts;
+        context.go('/pos/success?total=${state.sale.totalAmount}'
+            '&status=${state.sale.status}'
+            '${draftsToValidate ? '&drafts=1' : ''}');
       } else if (state is RecordSaleBlockedByGate) {
         SyncRequiredModal.show(context);
       } else if (state is RecordSaleError) {
@@ -269,6 +280,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
               const Spacer(),
 
+              if (hasDraftItems)
+                _DraftCartNotice(ownerSelling: ownerSelling),
+
               // Submit button
               Padding(
                 padding: const EdgeInsets.only(bottom: 16),
@@ -310,15 +324,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                               : Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    if (hasDraftItems) ...[
-                                      Icon(Icons.edit_note_rounded,
-                                          color: submitFg, size: 22),
-                                      const SizedBox(width: 8),
-                                    ],
                                     Text(
-                                      hasDraftItems
-                                          ? 'Vente brouillon'
-                                          : 'Valider la vente',
+                                      'Valider la vente',
                                       style: TextStyle(
                                         color: submitFg,
                                         fontSize: 17,
@@ -529,6 +536,43 @@ class _ClientAutocomplete extends ConsumerWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// P1 (v1s-12-10): explains what happens to the draft products of the cart.
+/// The sale itself is recorded as a normal sale (never "en attente").
+class _DraftCartNotice extends StatelessWidget {
+  final bool ownerSelling;
+  const _DraftCartNotice({required this.ownerSelling});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      key: const Key('checkout_draft_notice'),
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppTheme.warning.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.edit_note_rounded,
+                color: Theme.of(context).colorScheme.onSurface, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                ownerSelling
+                    ? 'Produit(s) brouillon : ils seront activés dans le catalogue avec cette vente.'
+                    : 'Produit(s) brouillon : la vente est enregistrée, le propriétaire validera ces produits dans le catalogue.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

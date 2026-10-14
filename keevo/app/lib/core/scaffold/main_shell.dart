@@ -133,7 +133,13 @@ class _MainShellState extends ConsumerState<MainShell> {
       final db = ref.read(appDatabaseProvider);
       final prefs = ref.read(sharedPreferencesProvider);
       final checker = AutoClosureNotificationChecker(db: db, prefs: prefs);
-      final unnotified = await checker.getUnnotified();
+      // J21: an employee only hears about their own store's closure (owner:
+      // all stores). No assigned store → nothing to show.
+      final isEmployee = ref.read(currentUserRoleProvider) == 'EMPLOYEE';
+      final ownStoreId = ref.read(activeStoreIdProvider);
+      if (isEmployee && ownStoreId == null) return;
+      final unnotified = await checker.getUnnotified(
+          onlyStoreId: isEmployee ? ownStoreId : null);
       if (unnotified.isEmpty) return;
 
       final dateFormat = DateFormat('d MMMM yyyy', 'fr_FR');

@@ -507,7 +507,11 @@ final GoRouter appRouter = GoRouter(
         final totalStr = state.uri.queryParameters['total'];
         final total = int.tryParse(totalStr ?? '') ?? 0;
         final status = state.uri.queryParameters['status'] ?? 'COMPLETED';
-        return SaleSuccessPage(totalAmount: total, saleStatus: status);
+        return SaleSuccessPage(
+          totalAmount: total,
+          saleStatus: status,
+          hasDraftsToValidate: state.uri.queryParameters['drafts'] == '1',
+        );
       },
     ),
 

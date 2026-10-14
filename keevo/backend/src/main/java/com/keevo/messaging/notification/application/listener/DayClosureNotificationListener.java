@@ -4,6 +4,10 @@ import com.keevo.commerce.sale.domain.model.DayClosedEvent;
 import com.keevo.commerce.sale.domain.model.DayClosureSummary;
 import com.keevo.messaging.notification.domain.model.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationPort;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.store.store.domain.model.Store;
+import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
@@ -12,6 +16,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * DayClosureNotificationListener — dispatches FCM push notification to owner(s)
@@ -20,6 +25,10 @@ import java.util.Map;
  * <p>Async best-effort: closure must NOT fail due to a notification error.
  *
  * <p>Story 8.0 — FCM Push Notifications.
+ *
+ * <p>J21 (device test): the body names the store and uses XAF (A14). No push for a
+ * warehouse closure, nor for an automatic closure without any sale (the closure is
+ * still recorded for the reporting chain — FR51 — only the push is skipped).
  */
 @Component
 public class DayClosureNotificationListener {
@@ -27,9 +36,12 @@ public class DayClosureNotificationListener {
     private static final Logger log = LoggerFactory.getLogger(DayClosureNotificationListener.class);
 
     private final NotificationPort notificationPort;
+    private final StoreRepository storeRepository;
 
-    public DayClosureNotificationListener(NotificationPort notificationPort) {
+    public DayClosureNotificationListener(NotificationPort notificationPort,
+                                          StoreRepository storeRepository) {
         this.notificationPort = notificationPort;
+        this.storeRepository = storeRepository;
     }
 
     @Async
@@ -40,11 +52,22 @@ public class DayClosureNotificationListener {
 
         try {
             DayClosureSummary s = event.summary();
+            if (event.isAutomatic() && s.totalSales() == 0) {
+                log.info("[FCM-CLOSURE] Automatic closure without sales — no push (closureId={})",
+                        event.closureId());
+                return;
+            }
+            Optional<Store> store = findStore(event);
+            if (store.map(st -> st.type() == StoreType.WAREHOUSE).orElse(false)) {
+                log.info("[FCM-CLOSURE] Warehouse closure — no push (closureId={})", event.closureId());
+                return;
+            }
+            String storeName = store.map(Store::name).orElse("Boutique");
             String mode = event.isAutomatic() ? "automatique" : "manuelle";
             String body = String.format(
-                    "Clôture %s — %d vente(s) · %s FCFA · Espèces : %s · Mobile Money : %s",
-                    mode, s.totalSales(), amount(s.totalRevenue()), amount(s.cashAmount()),
-                    amount(s.momoAmount()));
+                    "%s — Clôture %s : %d vente(s) · %s XAF · Espèces : %s · Mobile Money : %s",
+                    storeName, mode, s.totalSales(), amount(s.totalRevenue()),
+                    amount(s.cashAmount()), amount(s.momoAmount()));
 
             notificationPort.notifyOwners(event.tenantId(), NotificationPayload.of(
                     "DAY_CLOSED",
@@ -54,6 +77,7 @@ public class DayClosureNotificationListener {
                     Map.of(
                             "closureId",    event.closureId().toString(),
                             "storeId",      event.storeId().toString(),
+                            "storeName",    storeName,
                             "tenantId",     event.tenantId(),
                             "totalSales",   String.valueOf(s.totalSales()),
                             "totalRevenue", String.valueOf(s.totalRevenue()),
@@ -63,6 +87,24 @@ public class DayClosureNotificationListener {
         } catch (Exception e) {
             log.warn("[FCM-CLOSURE] Failed to notify owners for closureId={}: {}",
                     event.closureId(), e.getMessage());
+        }
+    }
+
+    /** Store lookup in the closure's tenant schema (async thread: no tenant context yet). */
+    private Optional<Store> findStore(DayClosedEvent event) {
+        String previous = TenantContext.getCurrentTenant();
+        try {
+            TenantContext.setCurrentTenant(event.tenantId());
+            return storeRepository.findById(event.storeId());
+        } catch (Exception e) {
+            log.warn("[FCM-CLOSURE] Store lookup failed for storeId={}: {}", event.storeId(), e.getMessage());
+            return Optional.empty();
+        } finally {
+            if (previous != null) {
+                TenantContext.setCurrentTenant(previous);
+            } else {
+                TenantContext.clear();
+            }
         }
     }
 

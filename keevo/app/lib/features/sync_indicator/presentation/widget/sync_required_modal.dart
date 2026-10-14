@@ -33,39 +33,64 @@ class SyncRequiredModal extends ConsumerStatefulWidget {
 
 class _SyncRequiredModalState extends ConsumerState<SyncRequiredModal> {
   bool _isSyncing = false;
+  bool _closed = false;
   String? _errorMessage;
+  ProviderSubscription<SyncGateState>? _gateSub;
 
   @override
   void initState() {
     super.initState();
-    // Listen for gate state to transition to open — auto-dismiss modal and show success SnackBar.
+    // Gate opens (a sync from anywhere — background pull, this modal) →
+    // dismiss the modal with the success message.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.listenManual(syncGateStateProvider, (prev, next) {
-        if (next == SyncGateState.open && mounted) {
-          final messenger = ScaffoldMessenger.of(context);
-          Navigator.of(context, rootNavigator: true).pop();
-          messenger.showSnackBar(
-            const SnackBar(
-              content: Row(
-                children: [
-                  Icon(Icons.check_circle_rounded,
-                      color: AppTheme.onBrand, size: 20),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Synchronisation réussie — accès complet restauré',
-                      style: TextStyle(color: AppTheme.onBrand),
-                    ),
-                  ),
-                ],
-              ),
-              backgroundColor: AppTheme.successStrong,
-              duration: Duration(seconds: 4),
-            ),
-          );
-        }
+      if (!mounted) return;
+      _gateSub = ref.listenManual(syncGateStateProvider, (prev, next) {
+        if (!next.isWriteBlocked) _closeWithSuccess();
       });
+      // J23: a background sync may already have opened the gate before the
+      // modal was shown — re-read the last-sync time now.
+      _recheckGate();
     });
+  }
+
+  @override
+  void dispose() {
+    _gateSub?.close();
+    super.dispose();
+  }
+
+  /// Re-reads the last-sync time (it is cached by the gate provider) and
+  /// closes the modal when writes are allowed again. Returns true if open.
+  bool _recheckGate() {
+    ref.invalidate(daysSinceLastSyncProvider);
+    final open = !ref.read(syncGateStateProvider).isWriteBlocked;
+    if (open) _closeWithSuccess();
+    return open;
+  }
+
+  void _closeWithSuccess() {
+    if (_closed || !mounted) return;
+    _closed = true;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    Navigator.of(context, rootNavigator: true).pop();
+    messenger?.showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.check_circle_rounded, color: AppTheme.onBrand, size: 20),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Synchronisation réussie — accès complet restauré',
+                style: TextStyle(color: AppTheme.onBrand),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: AppTheme.successStrong,
+        duration: Duration(seconds: 4),
+      ),
+    );
   }
 
   bool _isOnline(WidgetRef ref) {
@@ -84,18 +109,17 @@ class _SyncRequiredModalState extends ConsumerState<SyncRequiredModal> {
     });
     try {
       await ref.read(syncTriggerNotifierProvider.notifier).triggerSync();
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isSyncing = false;
-          _errorMessage = 'La synchronisation a échoué. Vérifiez votre connexion.';
-        });
-      }
-      return;
+    } catch (_) {
+      // triggerSync handles its own failures (retry); the gate decides below.
     }
-    if (mounted) {
-      setState(() => _isSyncing = false);
-    }
+    if (!mounted) return;
+    // J23: the sync cycle reports failures through its retry, not by
+    // throwing — the gate itself says whether the sync succeeded.
+    if (_recheckGate()) return;
+    setState(() {
+      _isSyncing = false;
+      _errorMessage = 'La synchronisation a échoué. Vérifiez votre connexion.';
+    });
   }
 
   @override
@@ -158,7 +182,10 @@ class _SyncRequiredModalState extends ConsumerState<SyncRequiredModal> {
       actions: [
         if (!_isSyncing)
           TextButton(
-            onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+            onPressed: () {
+              _closed = true;
+              Navigator.of(context, rootNavigator: true).pop();
+            },
             child: const Text('Continuer en lecture seule'),
           ),
         FilledButton(

@@ -266,6 +266,29 @@ class SaleSyncHandlerTest {
         assertThat(publishedDraftEvent().draftsPromoted()).isFalse();
     }
 
+    // P1 (v1s-12-10): the app sends an employee draft sale as requestedStatus
+    // COMPLETED — it is recorded COMPLETED (never PENDING_VALIDATION) and the
+    // owner is told the drafts await validation in the catalog.
+    @Test
+    void handle_employeeDraftSale_requestedCompleted_isRecordedCompleted() {
+        var store = UUID.randomUUID();
+        SyncTestAuth.employee(store);
+        var saleId = UUID.randomUUID();
+        var op = new SyncOperation("op-1", "CREATE_SALE", saleId.toString(),
+                Map.of("saleId", saleId.toString(), "storeId", store.toString(),
+                        "paymentMode", "CASH", "discountAmount", 0, "items", validItems(),
+                        "requestedStatus", "COMPLETED",
+                        "originalDraftProductIds", List.of(UUID.randomUUID().toString())),
+                Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        assertThat(capturedCommand().requestedStatus())
+                .isEqualTo(com.keevo.commerce.sale.domain.model.SaleStatus.COMPLETED);
+        assertThat(publishedDraftEvent().draftsPromoted()).isFalse();
+    }
+
     private List<Map<String, Object>> validItems() {
         return List.of(Map.of(
                 "productId", UUID.randomUUID().toString(),

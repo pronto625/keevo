@@ -197,17 +197,22 @@ void main() {
             payload: any(named: 'payload'),
             entityId: any(named: 'entityId'),
           ));
-      verify(() => mockSyncService.queueOperation(
-            operation: 'RECORD_STOCK_ENTRY',
-            payload: any(named: 'payload'),
-            entityId: any(named: 'entityId'),
-          )).called(1);
       final payload = verify(() => mockSyncService.queueOperation(
             operation: 'CREATE_SALE',
             payload: captureAny(named: 'payload'),
             entityId: 'sale-draft',
           )).captured.single as Map<String, dynamic>;
       expect(payload['originalDraftProductIds'], ['prod-draft']);
+      // P1 (v1s-12-10): an employee draft sale is a COMPLETED sale — it never
+      // lands in the owner's pending list; the drafts are validated from the
+      // catalog. The initial stock is sent once, as RECORD_STOCK_ENTRY.
+      expect(payload['requestedStatus'], 'COMPLETED');
+      final stockPayload = verify(() => mockSyncService.queueOperation(
+            operation: 'RECORD_STOCK_ENTRY',
+            payload: captureAny(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          )).captured.single as Map<String, dynamic>;
+      expect(stockPayload['quantity'], 5);
     });
 
     test('recordSale_ownerDraftSale_queuesPromoteProduct', () async {

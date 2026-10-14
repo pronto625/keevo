@@ -112,7 +112,7 @@ void main() {
       // No RenderFlex/overflow errors were thrown during layout.
       expect(tester.takeException(), isNull);
       // The count header reflects all devices even though only a few fit on screen.
-      expect(find.textContaining('Appareils actifs (10)'), findsOneWidget);
+      expect(find.textContaining('Appareils actifs — 30 derniers jours (10)'), findsOneWidget);
       // Tabs below the device list remain visible and reachable.
       expect(find.text('File d\'attente'), findsOneWidget);
       await tester.tap(find.text('File d\'attente'));

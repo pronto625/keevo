@@ -241,6 +241,48 @@ void main() {
     expect(find.text('liste équipe'), findsOneWidget);
   });
 
+  // J31 (device test): after a promotion, setting « Employé » back showed
+  // « Une erreur inattendue… » and sent nothing.
+  testWidgets('J31: a promoted owner can be set back to Employé',
+      (tester) async {
+    when(() => empRepo.changeRole(any(), any())).thenAnswer((_) async {});
+    await pump(tester, target: employee.copyWith(role: 'OWNER'));
+
+    await tester.tap(roleDropdown());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Employé').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Confirmer'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('erreur inattendue'), findsNothing);
+    verify(() => empRepo.changeRole('emp-1', 'EMPLOYEE')).called(1);
+    expect(find.text('liste équipe'), findsOneWidget);
+  });
+
+  testWidgets('J31: an unexpected failure says the role was not changed',
+      (tester) async {
+    when(() => empRepo.changeRole(any(), any()))
+        .thenThrow(StateError('boom'));
+    await pump(tester, target: employee.copyWith(role: 'OWNER'));
+
+    await tester.tap(roleDropdown());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Employé').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Confirmer'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Le rôle n\'a pas pu être modifié'),
+        findsOneWidget);
+    expect(find.textContaining('erreur inattendue'), findsNothing);
+    expect(find.text('liste équipe'), findsNothing);
+  });
+
   testWidgets('cancelling the role confirmation sends nothing',
       (tester) async {
     await pump(tester);

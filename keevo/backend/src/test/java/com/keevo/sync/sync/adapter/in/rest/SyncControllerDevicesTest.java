@@ -81,6 +81,28 @@ class SyncControllerDevicesTest {
         when(jwtTokenProvider.parseToken(anyString())).thenReturn(claims);
     }
 
+    // J24 (device test): 18 « appareils actifs » for one phone — every account
+    // switch renews the device id. Only devices seen within 30 days count.
+    @Test
+    void getDevices_listsOnlyDevicesSeenInTheLast30Days() throws Exception {
+        mockJwt("OWNER");
+        Instant old = Instant.now().minus(java.time.Duration.ofDays(45));
+        var stale = new UserSyncState("device-old", actorId, "kv_abc123", old, old, old);
+        var recentPull = new UserSyncState("device-pull", actorId, "kv_abc123",
+                old, Instant.now().minus(java.time.Duration.ofDays(2)), old);
+        var current = new UserSyncState("device-now", actorId, "kv_abc123",
+                null, null, Instant.now());
+        when(userSyncStateRepository.findAllByTenantId("kv_abc123"))
+                .thenReturn(List.of(stale, recentPull, current));
+
+        mockMvc.perform(get("/api/v1/sync/devices")
+                        .header("Authorization", "Bearer fake-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[0].deviceId").value("device-pull"))
+                .andExpect(jsonPath("$.data[1].deviceId").value("device-now"));
+    }
+
     @Test
     void getDevices_authenticated_returns200WithList() throws Exception {
         mockJwt("OWNER");

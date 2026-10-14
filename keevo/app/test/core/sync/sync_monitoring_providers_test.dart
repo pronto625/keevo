@@ -75,4 +75,19 @@ void main() {
         ['sale', 'validate', 'adjust', 'lone-cancel']);
     expect(await container.read(quarantinedSyncCountProvider.future), 3);
   });
+
+  // J24 (device test): « 18 appareils actifs » for one phone.
+  test('devicesSeenRecently keeps devices seen in the last 30 days', () {
+    final now = DateTime.utc(2026, 10, 14);
+    final kept = devicesSeenRecently([
+      {'deviceId': 'old', 'lastPushAt': '2026-08-01T10:00:00Z',
+       'updatedAt': '2026-08-01T10:00:00Z'},
+      {'deviceId': 'pushed', 'lastPushAt': '2026-10-10T10:00:00Z',
+       'updatedAt': '2026-08-01T10:00:00Z'},
+      {'deviceId': 'updated', 'lastPushAt': '', 'updatedAt': '2026-10-13T10:00:00Z'},
+      {'deviceId': 'broken', 'lastPushAt': '', 'updatedAt': 'n/a'},
+    ], now);
+
+    expect(kept.map((d) => d['deviceId']), ['pushed', 'updated']);
+  });
 }

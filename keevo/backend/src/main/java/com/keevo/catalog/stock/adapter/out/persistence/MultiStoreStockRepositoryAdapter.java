@@ -40,8 +40,10 @@ public class MultiStoreStockRepositoryAdapter implements MultiStoreStockReposito
 
     /**
      * One row per active store. Products are read from the catalogue (non-archived) and joined
-     * to the store's stock levels: a product never stocked in the store has no row there and
-     * counts as quantity 0 — i.e. in rupture, so it is part of {@code low_stock_count}.
+     * to the store's stock levels. J29: {@code low_stock_count} (Catalogue badge, Story 8.1 AC8)
+     * counts only products actually stocked in the store (a stock row exists) at or below the
+     * threshold, negative included — a product never stocked there is shown at 0 in the store
+     * detail but is not an alert (it made the badge « 9+ » for the whole catalogue).
      * {@code product_count} stays the number of products actually stocked in the store.
      */
     private static final String SQL_STORE_OVERVIEW_TPL = """
@@ -51,8 +53,8 @@ public class MultiStoreStockRepositoryAdapter implements MultiStoreStockReposito
             s.type         AS store_type,
             COUNT(DISTINCT sl.product_id)                                        AS product_count,
             COALESCE(SUM(sl.quantity * p.price), 0)                             AS total_value_xaf,
-            COUNT(CASE WHEN p.id IS NOT NULL
-                        AND COALESCE(sl.quantity, 0) <= COALESCE(NULLIF(p.minimum_threshold, 0), 5)
+            COUNT(CASE WHEN sl.product_id IS NOT NULL
+                        AND sl.quantity <= COALESCE(NULLIF(p.minimum_threshold, 0), 5)
                        THEN 1 END)                                               AS low_stock_count
         FROM %1$s.stores s
         LEFT JOIN %1$s.products p      ON p.archived = false

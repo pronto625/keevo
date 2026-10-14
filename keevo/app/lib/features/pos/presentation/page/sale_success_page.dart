@@ -10,10 +10,15 @@ class SaleSuccessPage extends StatefulWidget {
   final int totalAmount;
   final String saleStatus;
 
+  /// P1 (v1s-12-10): the sale holds draft products left for the owner to
+  /// validate (EMPLOYEE seller). The sale itself is recorded normally.
+  final bool hasDraftsToValidate;
+
   const SaleSuccessPage({
     super.key,
     required this.totalAmount,
     this.saleStatus = SaleStatus.completedValue,
+    this.hasDraftsToValidate = false,
   });
 
   @override
@@ -117,6 +122,20 @@ class _SaleSuccessPageState extends State<SaleSuccessPage>
                         ),
                   ),
                 ),
+                if (widget.hasDraftsToValidate && !isPending) ...[
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Text(
+                      'Produit(s) brouillon à valider par le propriétaire',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(color: fg, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

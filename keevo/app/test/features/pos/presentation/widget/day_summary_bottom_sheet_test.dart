@@ -237,5 +237,59 @@ void main() {
         (storeId: testStoreId, employeeId: 'emp-1'),
       ]);
     });
+
+    Widget openerApp() => ProviderScope(
+          overrides: [
+            todaySummaryProvider((storeId: testStoreId, employeeId: null))
+                .overrideWith((ref) => Future.value(mockSummary)),
+          ],
+          child: MaterialApp(
+            home: Consumer(
+              builder: (context, ref, _) => Scaffold(
+                body: TextButton(
+                  onPressed: () => DaySummaryBottomSheet.show(
+                    context: context,
+                    ref: ref,
+                    storeId: testStoreId,
+                    actorId: testActorId,
+                  ),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        );
+
+    // Story 4.4 AC2: untouched, the sheet still closes itself after 5 s.
+    testWidgets('untouched sheet auto-dismisses after 5 s', (tester) async {
+      await tester.pumpWidget(openerApp());
+      await tester.tap(find.text('open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byKey(const Key('day_summary_countdown')), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DaySummaryBottomSheet), findsNothing);
+    });
+
+    // J20 (device test): a user reading the summary lost it after 5 s. Any
+    // touch on the sheet stops the countdown; it stays open until a button.
+    testWidgets('a touch on the sheet stops the countdown — sheet stays open',
+        (tester) async {
+      await tester.pumpWidget(openerApp());
+      await tester.tap(find.text('open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      await tester.tap(find.text('Résumé de la journée'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 10));
+
+      expect(find.byType(DaySummaryBottomSheet), findsOneWidget);
+      expect(find.byKey(const Key('day_summary_countdown')), findsNothing);
+      expect(find.text('Confirmer la clôture'), findsOneWidget);
+    });
   });
 }

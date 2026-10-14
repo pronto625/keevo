@@ -94,19 +94,22 @@ void main() {
               buyPrice: 0,
               transportCost: 0,
               stockQuantity: 0,
+              minimumThreshold: 0,
               archived: false,
               status: 'ACTIVE',
               createdAt: DateTime(2026),
               updatedAt: DateTime(2026)),
         ]);
     when(() => service.reattachableStores()).thenAnswer((_) async => []);
+    when(() => service.productSummary(any())).thenAnswer((_) async => null);
+    when(() => service.transferRoute(any())).thenAnswer((_) async => null);
     _FakeTrigger.syncs = 0;
   });
 
-  Widget build(String role) => ProviderScope(
+  Widget build(String role, {List<SyncQueueData>? ops}) => ProviderScope(
         overrides: [
           quarantinedSyncQueueProvider
-              .overrideWith((ref) => Future.value([sale, validation])),
+              .overrideWith((ref) => Future.value(ops ?? [sale, validation])),
           quarantinedSyncCountProvider.overrideWith((ref) => Future.value(2)),
           pendingSyncQueueProvider.overrideWith((ref) => Future.value([])),
           pendingSyncCountProvider.overrideWith((ref) => Future.value(0)),
@@ -145,6 +148,70 @@ void main() {
     }
     // v1s-16-20: no operation / rejection code or id on the card.
     expectNoTechnicalText(tester);
+  });
+
+  // J26 (device test): the card only said « Transfert de stock / date /
+  // Boutique / Motif » — what is blocked must be readable.
+  testWidgets('J26: a blocked transfer shows product × quantity and route',
+      (tester) async {
+    final transfer = SyncQueueData(
+      id: 'transfer-op',
+      operation: 'STOCK_TRANSFER',
+      payload: '{"sourceStoreId":"s1","destinationStoreId":"s2",'
+          '"productId":"p-1","quantity":5}',
+      createdAt: DateTime(2026, 10, 11, 9, 5),
+      synced: false,
+      retryCount: 1,
+      entityId: 'tr-1',
+      lastError: 'INSUFFICIENT_STOCK',
+      quarantinedAt: DateTime(2026, 10, 11, 10),
+    );
+    when(() => service.productSummary(any()))
+        .thenAnswer((_) async => 'Savon de Marseille × 5');
+    when(() => service.transferRoute(any()))
+        .thenAnswer((_) async => 'Dépôt Bonaberi → Boutique Akwa');
+
+    await tester.pumpWidget(build('OWNER', ops: [transfer]));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Savon de Marseille × 5'), findsOneWidget);
+    expect(find.text('Dépôt Bonaberi → Boutique Akwa'), findsOneWidget);
+    expect(find.textContaining('p-1'), findsNothing);
+  });
+
+  // Device test: no share target → « Abandonner sans exporter », behind a
+  // second confirmation.
+  testWidgets('Abandonner sans exporter: second confirmation, then abandons',
+      (tester) async {
+    await tester.pumpWidget(build('OWNER'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Abandonner'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('abandon_without_export')));
+    await tester.pumpAndSettle();
+    expect(find.text('Supprimer sans aucune trace ?'), findsOneWidget);
+    await tester.tap(find.text('Supprimer définitivement'));
+    await tester.pumpAndSettle();
+
+    expect(shared, isEmpty);
+    verify(() => service.abandon('sale-op')).called(1);
+    expect(find.text('Opération abandonnée'), findsOneWidget);
+  });
+
+  testWidgets('Abandonner sans exporter cancelled at the warning deletes nothing',
+      (tester) async {
+    await tester.pumpWidget(build('OWNER'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Abandonner'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('abandon_without_export')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Annuler'));
+    await tester.pumpAndSettle();
+
+    verifyNever(() => service.abandon(any()));
   });
 
   testWidgets('EMPLOYEE: Renvoyer and Exporter only', (tester) async {
@@ -243,6 +310,7 @@ void main() {
         buyPrice: 0,
         transportCost: 0,
         stockQuantity: 0,
+        minimumThreshold: 0,
         archived: false,
         status: 'ACTIVE',
         createdAt: DateTime(2026),

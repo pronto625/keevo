@@ -36,12 +36,20 @@ class QuarantinedChainView {
   final int? saleTotal;
   final int lineCount;
 
+  /// J26: « Produit × quantité » for a stock operation (never an id).
+  final String? productSummary;
+
+  /// J26: « Source → Destination » for a stock transfer.
+  final String? transferRoute;
+
   const QuarantinedChainView({
     required this.head,
     required this.chained,
     this.storeName,
     this.saleTotal,
     this.lineCount = 0,
+    this.productSummary,
+    this.transferRoute,
   });
 }
 
@@ -77,12 +85,24 @@ final quarantinedChainsProvider =
       chained: chained,
       storeName: storeId == null ? null : await service.storeLabel(storeId),
       saleTotal: isSale ? await service.saleTotal(op) : null,
-      lineCount:
-          isSale ? SyncQuarantineService.saleLinesOf(op).length : 0,
+      lineCount: isSale ? SyncQuarantineService.saleLinesOf(op).length : 0,
+      productSummary:
+          isSale ? null : await _optional(() => service.productSummary(op)),
+      transferRoute:
+          isSale ? null : await _optional(() => service.transferRoute(op)),
     ));
   }
   return views;
 });
+
+/// J26: a summary line is a nicety — its failure never hides the card.
+Future<String?> _optional(Future<String?> Function() read) async {
+  try {
+    return await read();
+  } catch (_) {
+    return null;
+  }
+}
 
 Map<String, dynamic> _payloadOf(SyncQueueData op) {
   try {
@@ -199,8 +219,8 @@ class _QuarantinedChainCard extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(friendlySyncOperationLabel(head.operation),
-                style: const TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w600)),
+                style:
+                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
             const SizedBox(height: 2),
             Text('Le $date', style: secondary),
             if (isSale && chain.saleTotal != null)
@@ -209,7 +229,13 @@ class _QuarantinedChainCard extends ConsumerWidget {
                 '— ${formatQuarantineAmount(chain.saleTotal!)}',
                 style: secondary,
               ),
-            if (chain.storeName != null)
+            if (chain.productSummary != null)
+              Text(chain.productSummary!,
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w500)),
+            if (chain.transferRoute != null)
+              Text(chain.transferRoute!, style: secondary)
+            else if (chain.storeName != null)
               Text('Boutique : ${chain.storeName}', style: secondary),
             if (chain.chained.isNotEmpty)
               Text(
@@ -306,7 +332,7 @@ class _QuarantinedChainCard extends ConsumerWidget {
 
   Future<void> _abandon(BuildContext context, WidgetRef ref) async {
     final isSale = chain.head.operation == 'CREATE_SALE';
-    final confirmed = await showDialog<bool>(
+    final choice = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Abandonner cette opération ?'),
@@ -319,41 +345,76 @@ class _QuarantinedChainCard extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
+            onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('Annuler'),
+          ),
+          // Device test: without any share target the export never leaves
+          // the device — a plain abandon, behind a second confirmation.
+          TextButton(
+            key: const Key('abandon_without_export'),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor),
+            onPressed: () => Navigator.of(ctx).pop('plain'),
+            child: const Text('Abandonner sans exporter'),
           ),
           TextButton(
             style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor),
-            onPressed: () => Navigator.of(ctx).pop(true),
+            onPressed: () => Navigator.of(ctx).pop('export'),
             child: const Text('Exporter et abandonner'),
           ),
         ],
       ),
     );
-    if (confirmed != true || !context.mounted) return;
+    if (choice == null || !context.mounted) return;
 
     final messenger = ScaffoldMessenger.of(context);
     final service = ref.read(syncQuarantineServiceProvider);
-    final bool exported;
-    try {
-      final text = await service.exportText(chain.head.id);
-      if (text.isEmpty) {
-        // Already released or abandoned elsewhere: show the current list.
-        _refresh(ref);
+    if (choice == 'plain') {
+      final sure = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Supprimer sans aucune trace ?'),
+          content: Text(
+            'Attention : ${isSale ? 'cette vente' : 'cette opération'} sera '
+            'définitivement perdue. Rien ne sera envoyé au serveur ni '
+            'exporté, et elle ne pourra pas être récupérée.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              style:
+                  FilledButton.styleFrom(backgroundColor: AppTheme.errorStrong),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Supprimer définitivement'),
+            ),
+          ],
+        ),
+      );
+      if (sure != true || !context.mounted) return;
+    } else {
+      final bool exported;
+      try {
+        final text = await service.exportText(chain.head.id);
+        if (text.isEmpty) {
+          // Already released or abandoned elsewhere: show the current list.
+          _refresh(ref);
+          return;
+        }
+        exported = await ref.read(quarantineExportShareProvider)(text);
+      } catch (_) {
+        messenger.showSnackBar(const SnackBar(content: Text(_actionFailed)));
         return;
       }
-      exported = await ref.read(quarantineExportShareProvider)(text);
-    } catch (_) {
-      messenger.showSnackBar(const SnackBar(content: Text(_actionFailed)));
-      return;
-    }
-    if (!exported) {
-      messenger.showSnackBar(SnackBar(
-        content: Text(isSale
-            ? 'Exportez la vente avant de l\'abandonner'
-            : 'Exportez l\'opération avant de l\'abandonner'),
-      ));
-      return;
+      if (!exported) {
+        messenger.showSnackBar(SnackBar(
+          content: Text(isSale
+              ? 'Exportez la vente avant de l\'abandonner'
+              : 'Exportez l\'opération avant de l\'abandonner'),
+        ));
+        return;
+      }
     }
     final bool abandoned;
     try {
@@ -365,8 +426,8 @@ class _QuarantinedChainCard extends ConsumerWidget {
     }
     _refresh(ref);
     if (abandoned) {
-      messenger.showSnackBar(
-          const SnackBar(content: Text('Opération abandonnée')));
+      messenger
+          .showSnackBar(const SnackBar(content: Text('Opération abandonnée')));
     }
   }
 
@@ -448,8 +509,8 @@ class _ReattachSaleSheetState extends ConsumerState<ReattachSaleSheet> {
 
     return SafeArea(
       child: Padding(
-        padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom),
+        padding:
+            EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
         child: FutureBuilder<(List<Product>, List<Store>)>(
           future: _choices,
           builder: (context, snap) {
@@ -492,7 +553,8 @@ class _ReattachSaleSheetState extends ConsumerState<ReattachSaleSheet> {
                     onTap: () async {
                       final picked = await showDialog<Product>(
                         context: context,
-                        builder: (_) => _ProductPickerDialog(products: products),
+                        builder: (_) =>
+                            _ProductPickerDialog(products: products),
                       );
                       if (picked != null) {
                         setState(() => _products[line.productId!] = picked);
@@ -543,10 +605,9 @@ class _ReattachSaleSheetState extends ConsumerState<ReattachSaleSheet> {
                 SizedBox(
                   height: 48,
                   child: FilledButton(
-                    onPressed:
-                        _saving || (_products.isEmpty && _store == null)
-                            ? null
-                            : _save,
+                    onPressed: _saving || (_products.isEmpty && _store == null)
+                        ? null
+                        : _save,
                     child: const Text('Rattacher et renvoyer'),
                   ),
                 ),

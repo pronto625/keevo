@@ -65,6 +65,18 @@ class StoreListNotifier extends _$StoreListNotifier {
   /// (active store, transfers, employees…), which must never offer a
   /// deactivated store. The stores page lists inactive ones through
   /// [managedStoresProvider].
+  /// J22: the store mutations wait for build()'s server pull first. The
+  /// notifier is auto-disposed between screens, so a « Réactiver » rebuilt it
+  /// and its pull — answered before the PATCH but finished after it — wrote
+  /// the store back as inactive locally until the next manual sync.
+  Future<void> _settled() async {
+    try {
+      await future;
+    } catch (_) {
+      // Offline / failed pull: the mutation decides on its own.
+    }
+  }
+
   Future<void> refresh() async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(
@@ -78,6 +90,7 @@ class StoreListNotifier extends _$StoreListNotifier {
     String? address,
     String? phone,
   }) async {
+    await _settled();
     final result = await ref.read(storeRepositoryProvider).createStore(
           name: name,
           type: type,
@@ -94,6 +107,7 @@ class StoreListNotifier extends _$StoreListNotifier {
     String? address,
     String? phone,
   }) async {
+    await _settled();
     final result = await ref.read(storeRepositoryProvider).updateStore(
           storeId: storeId,
           name: name,
@@ -105,11 +119,13 @@ class StoreListNotifier extends _$StoreListNotifier {
   }
 
   Future<void> deactivateStore(String storeId) async {
+    await _settled();
     await ref.read(storeRepositoryProvider).deactivateStore(storeId);
     await refresh();
   }
 
   Future<void> reactivateStore(String storeId) async {
+    await _settled();
     await ref.read(storeRepositoryProvider).reactivateStore(storeId);
     await refresh();
   }

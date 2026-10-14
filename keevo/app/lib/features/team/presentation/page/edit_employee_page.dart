@@ -49,6 +49,7 @@ class _EditEmployeePageState extends ConsumerState<EditEmployeePage> {
   late String _selectedRole;
   bool _saving = false;
   Object? _error;
+  bool _errorDuringRoleChange = false;
 
   static const _roles = {'EMPLOYEE': 'Employé', 'OWNER': 'Propriétaire'};
 
@@ -75,6 +76,17 @@ class _EditEmployeePageState extends ConsumerState<EditEmployeePage> {
     _firstNameController.dispose();
     _lastNameController.dispose();
     super.dispose();
+  }
+
+  /// J31: a meaningful French message when the error has none of its own.
+  String _errorText(Object error) {
+    final text = appErrorMessage(error);
+    if (text != kAppGenericErrorMessage) return text;
+    return _errorDuringRoleChange
+        ? 'Le rôle n\'a pas pu être modifié. Vérifiez votre connexion puis '
+            'réessayez.'
+        : 'Les modifications n\'ont pas pu être enregistrées. Vérifiez votre '
+            'connexion puis réessayez.';
   }
 
   bool get _isSelf =>
@@ -148,11 +160,16 @@ class _EditEmployeePageState extends ConsumerState<EditEmployeePage> {
         final s = ref.read(changeEmployeeRoleProvider);
         if (s.hasError) throw s.error!;
       }
-    } catch (err) {
+    } catch (err, st) {
+      // J31: an unexpected failure is logged (debug) — it used to surface
+      // only as « Une erreur inattendue… » with nothing to diagnose it.
+      debugPrint('[EditEmployee] save failed (role change: $roleChanged, '
+          'profile: $profileChanged): $err\n$st');
       if (!mounted) return;
       setState(() {
         _saving = false;
         _error = err;
+        _errorDuringRoleChange = roleChanged;
       });
       return;
     }
@@ -332,7 +349,7 @@ class _EditEmployeePageState extends ConsumerState<EditEmployeePage> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          appErrorMessage(_error!),
+                          _errorText(_error!),
                           style: TextStyle(color: cs.onErrorContainer),
                         ),
                       ),

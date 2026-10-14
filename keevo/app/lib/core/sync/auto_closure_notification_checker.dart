@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show BooleanExpressionOperators;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../storage/app_constants.dart';
@@ -31,13 +32,20 @@ class AutoClosureNotificationChecker {
   })  : _db = db,
         _prefs = prefs;
 
-  /// Returns automatic closures for which no SnackBar has been shown yet.
-  Future<List<UnnotifiedClosure>> getUnnotified() async {
+  /// Returns automatic closures for which no notice has been shown yet.
+  ///
+  /// J21: [onlyStoreId] restricts them to one store (an EMPLOYEE only hears
+  /// about their own store; the owner passes null and sees every store).
+  Future<List<UnnotifiedClosure>> getUnnotified({String? onlyStoreId}) async {
     final notifiedIds =
         (_prefs.getStringList(kAutoClosureNotifiedIds) ?? []).toSet();
 
     final closures = await (_db.select(_db.dayClosures)
-          ..where((r) => r.isAutomatic.equals(true)))
+          ..where((r) =>
+              onlyStoreId == null
+                  ? r.isAutomatic.equals(true)
+                  : r.isAutomatic.equals(true) &
+                      r.storeId.equals(onlyStoreId)))
         .get();
 
     final unnotified =
@@ -51,7 +59,8 @@ class AutoClosureNotificationChecker {
           .getSingleOrNull();
       result.add(UnnotifiedClosure(
         id: c.id,
-        storeName: store?.name ?? c.storeId,
+        // No technical id on screen (NFR35): generic label if not pulled yet.
+        storeName: store?.name ?? 'Boutique',
         closedAt: c.closedAt,
       ));
     }

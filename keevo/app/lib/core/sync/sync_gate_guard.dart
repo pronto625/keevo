@@ -24,7 +24,14 @@ class SyncGateGuard {
   /// writes permitted).
   static void assertWriteAllowed(Ref ref) {
     assertAccountWritable(ref.read(tenantStatusClaimProvider).valueOrNull);
-    final gate = ref.read(syncGateStateProvider);
+    var gate = ref.read(syncGateStateProvider);
+    if (gate.isWriteBlocked) {
+      // J23: the last-sync time may have been written by a sync (or a pull
+      // from another screen) since the gate was computed — re-read it before
+      // refusing, so a device that just synced is never kept blocked.
+      ref.invalidate(daysSinceLastSyncProvider);
+      gate = ref.read(syncGateStateProvider);
+    }
     if (gate.isWriteBlocked) throw const WriteBlockedException();
   }
 
