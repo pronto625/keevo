@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/core/sync/sync_gate_provider.dart';
+import 'package:keevo/core/sync/sync_monitoring_providers.dart';
 import 'package:keevo/core/sync/sync_status.dart';
 import 'package:keevo/core/sync/sync_status_provider.dart';
 import 'package:keevo/core/sync/sync_trigger_notifier.dart';
@@ -216,5 +217,114 @@ void main() {
     await tester.pumpAndSettle();
     container.dispose();
     await tester.pumpWidget(const SizedBox());
+  });
+
+  // J27 (device test): « Bloqué (Transfert de stock) … » stayed on screen
+  // for minutes, covering the bottom buttons: a SnackBar with an action
+  // persists by default (Flutter ≥ 3.32). Once per operation, auto-dismissed,
+  // closable.
+  group('J27 / J25 — blocked operation notice', () {
+    setUp(SyncIndicator.resetSurfacedRejections);
+
+    Future<ProviderContainer> pumpIndicator(WidgetTester tester,
+        {int blocked = 0}) async {
+      final container = ProviderContainer(overrides: [
+        syncStatusProvider
+            .overrideWith((ref) => Stream.value(SyncStatus.online)),
+        daysOfflineProvider.overrideWithValue(0),
+        daysSinceLastSyncProvider.overrideWithValue(0),
+        currentUserRoleProvider.overrideWithValue('OWNER'),
+        quarantinedSyncCountProvider
+            .overrideWith((ref) => Future.value(blocked)),
+      ]);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
+            appBar: PreferredSize(
+              preferredSize: const Size.fromHeight(56),
+              child: AppBar(actions: const [SyncIndicator()]),
+            ),
+            body: const SizedBox.shrink(),
+          ),
+        ),
+      ));
+      await tester.pump();
+      await tester.pump();
+      return container;
+    }
+
+    Map<String, dynamic> blockedTransfer() => {
+          'operationId': 'op-transfer-1',
+          'status': 'REJECTED',
+          'operation': 'STOCK_TRANSFER',
+          'reason': 'INSUFFICIENT_STOCK',
+          'rolledBack': false,
+          'quarantined': true,
+        };
+
+    testWidgets('the notice auto-dismisses and can be closed', (tester) async {
+      final container = await pumpIndicator(tester);
+      container.read(pendingRejectionNotificationsProvider.notifier).state = [
+        blockedTransfer(),
+      ];
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      final snack = tester.widget<SnackBar>(find.byType(SnackBar));
+      expect(snack.persist, isFalse);
+      expect(snack.showCloseIcon, isTrue);
+
+      await tester.pump(const Duration(seconds: 7));
+      await tester.pumpAndSettle();
+      expect(find.byType(SnackBar), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+    });
+
+    testWidgets('the same blocked operation is announced only once',
+        (tester) async {
+      final container = await pumpIndicator(tester);
+      final notifier =
+          container.read(pendingRejectionNotificationsProvider.notifier);
+      notifier.state = [blockedTransfer()];
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(SnackBar), findsOneWidget);
+      await tester.pump(const Duration(seconds: 7));
+      await tester.pumpAndSettle();
+      expect(find.byType(SnackBar), findsNothing);
+
+      notifier.state = [blockedTransfer()];
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(SnackBar), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+    });
+
+    testWidgets('J25: a blocked operation turns « En ligne » into '
+        '« Action requise »', (tester) async {
+      final container = await pumpIndicator(tester, blocked: 1);
+
+      expect(find.text('Action requise'), findsOneWidget);
+      expect(find.text('En ligne'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+    });
+
+    testWidgets('J25: no blocked operation keeps « En ligne »', (tester) async {
+      final container = await pumpIndicator(tester);
+
+      expect(find.text('En ligne'), findsOneWidget);
+      expect(find.text('Action requise'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+    });
   });
 }

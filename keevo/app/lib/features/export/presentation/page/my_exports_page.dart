@@ -57,6 +57,9 @@ class _MyExportsPageState extends ConsumerState<MyExportsPage> {
 
   void _snack(String message, {VoidCallback? retry}) =>
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+        // J27: an action no longer makes the SnackBar stay forever.
+        persist: false,
+        showCloseIcon: true,
         content: Text(message),
         action: retry == null
             ? null
