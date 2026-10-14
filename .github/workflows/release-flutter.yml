@@ -73,9 +73,49 @@ jobs:
           keyPassword=${ANDROID_KEY_PASSWORD}
           EOF
 
+      # The app talks to the same host the backend is published on (deploy-backend.yml routes
+      # APP_DOMAIN through Traefik). One source of truth: the APP_DOMAIN secret — never a
+      # hard-coded URL that can drift from the server. A release built without an https URL
+      # refuses to start (lib/core/network/api_base_url.dart), so fail here instead.
+      - name: Resolve production API URL
+        id: api
+        env:
+          APP_DOMAIN: ${{ secrets.APP_DOMAIN }}
+        run: |
+          set -euo pipefail
+          domain="${APP_DOMAIN:-}"
+          domain="${domain#https://}"
+          domain="${domain#http://}"
+          domain="${domain%/}"
+          if [[ -z "${domain}" ]]; then
+            echo "::error::Secret APP_DOMAIN manquant — impossible de construire l'app avec l'adresse du serveur de production."
+            exit 1
+          fi
+          if [[ ! "${domain}" =~ ^[A-Za-z0-9.-]+(:[0-9]+)?$ ]]; then
+            echo "::error::APP_DOMAIN invalide (attendu : nom de domaine seul, ex. keevo.example.com)."
+            exit 1
+          fi
+          echo "url=https://${domain}" >> "$GITHUB_OUTPUT"
+          echo "API_BASE_URL de l'app : https://${domain}"
+
       - name: Build release APK
         working-directory: keevo/app
-        run: flutter build apk --release --dart-define=API_BASE_URL=https://keevo.bookandgo.cloud
+        env:
+          API_BASE_URL: ${{ steps.api.outputs.url }}
+        run: flutter build apk --release --dart-define=API_BASE_URL="${API_BASE_URL}"
+
+      - name: Check the backend answers on that URL
+        # Non-blocking: the backend may be deploying in parallel (same push). A warning makes a
+        # wrong domain visible in the run summary without failing the release.
+        continue-on-error: true
+        env:
+          API_BASE_URL: ${{ steps.api.outputs.url }}
+        run: |
+          if curl -fsS --max-time 15 --retry 5 --retry-delay 20 "${API_BASE_URL}/actuator/health" | grep -q '"UP"'; then
+            echo "Backend joignable : ${API_BASE_URL}"
+          else
+            echo "::warning::Le backend ne répond pas sur ${API_BASE_URL}/actuator/health — vérifier APP_DOMAIN / le déploiement backend."
+          fi
 
       - name: Rename APK
         run: |
@@ -266,6 +306,10 @@ jobs:
 
 # ─── Required GitHub Actions Secrets ─────────────────────────────────────────────────────────────────
 # Settings → Secrets and variables → Actions → Repository secrets
+#
+# ── Serveur ───────────────────────────────────────────────────────────────────────────────
+#  APP_DOMAIN                — domaine du backend (sans https://), le même que deploy-backend.yml ;
+#                              l'app est construite avec API_BASE_URL=https://<APP_DOMAIN>
 #
 # ── Android ───────────────────────────────────────────────────────────────────────────────
 #  ANDROID_KEYSTORE_BASE64   — base64 -w0 keevo-release.keystore
