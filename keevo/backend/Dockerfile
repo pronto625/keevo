@@ -26,6 +26,12 @@ RUN addgroup -S -g 2001 keevo && adduser -S -u 2001 -G keevo keevo
 COPY --from=builder /app/target/*.jar app.jar
 RUN chown keevo:keevo app.jar
 
+# Product photos (thumbnails) — the only copy of the photos lives here. The directory is
+# created and owned by keevo so that a Docker *named* volume mounted on it is initialised
+# with the right owner (uid 2001) on first use. It MUST be a persistent volume in every
+# deployment (see docker-compose.prod.yml / staging and DEPLOYMENT_CHECKLIST §18).
+RUN mkdir -p /app/data/product-photos && chown -R keevo:keevo /app/data
+
 USER keevo
 
 # ── Runtime environment variables ─────────────────────────────────────────────
@@ -42,6 +48,7 @@ USER keevo
 # ──────────────────────────────────────────────────────────────────────────────
 ENV SPRING_PROFILES_ACTIVE=prod
 ENV APP_PORT=4500
+ENV KEEVO_PRODUCT_PHOTO_DIR=/app/data/product-photos
 
 EXPOSE 4500
 

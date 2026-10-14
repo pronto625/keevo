@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Keevo — PostgreSQL Backup Script
+# Keevo — PostgreSQL + product photos Backup Script
 # ============================================================================
 # Performs a full pg_dump (all schemas: public + kv_*) of the Keevo PostgreSQL
 # database, validates the dump, optionally uploads to S3, and rotates local
@@ -29,6 +29,10 @@
 #                       no ping arrives within 26 h — catches a disabled timer or a dead host)
 #   BACKUP_LOCK_STALE_SECONDS — lock age after which a held lock is reported as stale
 #                       (default: 21600 = 6 h)
+#   BACKUP_PHOTOS     — "1" (default) also archives the product photos (only copy, in the
+#                       backend's Docker volume); "0" skips them
+#   PHOTOS_CONTAINER  — container holding the photos volume (default: keevo_backend)
+#   PHOTOS_DIR        — photos directory inside that container (default: /app/data/product-photos)
 #
 # Exit status (Story 10-7): any failure exits non-zero (strict mode + ERR trap), so that
 # systemd's OnFailure= in keevo-backup.service starts the alert unit. The only exit 0
@@ -46,6 +50,11 @@ LOCAL_FILE="${LOCAL_DIR}/${FILENAME}"
 MODE="${BACKUP_MODE:-docker-exec}"
 CONTAINER="${DOCKER_CONTAINER:-keevo_postgres}"
 RETENTION_DAYS=30
+PHOTOS_ENABLED="${BACKUP_PHOTOS:-1}"
+PHOTOS_CONTAINER="${PHOTOS_CONTAINER:-keevo_backend}"
+PHOTOS_DIR="${PHOTOS_DIR:-/app/data/product-photos}"
+PHOTOS_FILENAME="keevo_photos_${TIMESTAMP}.tar.gz"
+PHOTOS_FILE="${LOCAL_DIR}/${PHOTOS_FILENAME}"
 
 # ─── Single-instance lock ─────────────────────────────────────────────────────
 # Prevent concurrent runs (timer + manual, or Persistent=true catch-up) from
@@ -139,6 +148,37 @@ fi
 DUMP_SIZE=$(du -sh "${LOCAL_FILE}" 2>/dev/null | cut -f1 || true)
 echo "[BACKUP][INFO] Dump validated: ${DUMP_SIZE:-unknown}"
 
+# ─── Product photos archive ──────────────────────────────────────────────────
+# The photos live only in the backend's Docker volume: archive them next to the dump.
+# Streamed out of the running container (tar from the image's busybox), so no host path
+# or volume name has to be known. A failure here never discards the DB dump: it is
+# reported at the end (exit 1 → alert), like an S3 failure.
+photos_failed=0
+photos_archived=0
+if [[ "${PHOTOS_ENABLED}" == "1" ]]; then
+  if docker exec "${PHOTOS_CONTAINER}" test -d "${PHOTOS_DIR}" > /dev/null 2>&1; then
+    if docker exec "${PHOTOS_CONTAINER}" tar -czf - -C "${PHOTOS_DIR}" . > "${PHOTOS_FILE}" 2>"${PHOTOS_FILE}.err" \
+        && tar -tzf "${PHOTOS_FILE}" > /dev/null 2>&1; then
+      rm -f "${PHOTOS_FILE}.err"
+      photos_archived=1
+      PHOTOS_SIZE=$(du -sh "${PHOTOS_FILE}" 2>/dev/null | cut -f1 || true)
+      echo "[BACKUP][INFO] Photos archived: ${PHOTOS_FILENAME} (${PHOTOS_SIZE:-unknown})"
+    else
+      echo "[BACKUP][ERROR] Photos archive failed (${PHOTOS_CONTAINER}:${PHOTOS_DIR})" >&2
+      if [[ -s "${PHOTOS_FILE}.err" ]]; then
+        sed 's/^/[BACKUP][ERROR] /' "${PHOTOS_FILE}.err" >&2
+      fi
+      rm -f "${PHOTOS_FILE}" "${PHOTOS_FILE}.err"
+      photos_failed=1
+    fi
+  else
+    echo "[BACKUP][ERROR] Photos directory not reachable: ${PHOTOS_CONTAINER}:${PHOTOS_DIR} (backend down or volume missing)" >&2
+    photos_failed=1
+  fi
+else
+  echo "[BACKUP][INFO] Product photos backup disabled (BACKUP_PHOTOS=0)"
+fi
+
 # ─── Upload to S3 (optional) ────────────────────────────────────────────────
 s3_failed=0
 if [[ -n "${BACKUP_S3_BUCKET:-}" ]]; then
@@ -152,6 +192,15 @@ if [[ -n "${BACKUP_S3_BUCKET:-}" ]]; then
     echo "[BACKUP][ERROR] S3 upload failed for ${S3_PATH}" >&2
     s3_failed=1
   fi
+  if [[ ${photos_archived} -eq 1 ]]; then
+    S3_PHOTOS_PATH="s3://${BACKUP_S3_BUCKET}/${S3_PREFIX}${PHOTOS_FILENAME}"
+    if aws s3 cp "${PHOTOS_FILE}" "${S3_PHOTOS_PATH}" --storage-class STANDARD_IA; then
+      echo "[BACKUP][INFO] Uploaded to S3: ${S3_PHOTOS_PATH}"
+    else
+      echo "[BACKUP][ERROR] S3 upload failed for ${S3_PHOTOS_PATH}" >&2
+      s3_failed=1
+    fi
+  fi
 elif [[ "${BACKUP_REQUIRE_S3:-0}" == "1" ]]; then
   echo "[BACKUP][ERROR] BACKUP_S3_BUCKET not set but BACKUP_REQUIRE_S3=1 — local backup only, no off-site copy" >&2
   s3_failed=1
@@ -162,10 +211,14 @@ fi
 # ─── Rotate local files older than 30 days ──────────────────────────────────
 # Runs regardless of S3 outcome — otherwise a persistent S3 failure would skip
 # rotation and let local backups fill the disk indefinitely.
-ROTATED_COUNT=$(find "${LOCAL_DIR}" -type f -name "keevo_backup_*.dump" -mtime +${RETENTION_DAYS} -print -delete 2>/dev/null | wc -l || true)
+ROTATED_COUNT=$(find "${LOCAL_DIR}" -type f \( -name "keevo_backup_*.dump" -o -name "keevo_photos_*.tar.gz" \) -mtime +${RETENTION_DAYS} -print -delete 2>/dev/null | wc -l || true)
 echo "[BACKUP][INFO] Rotation done: ${ROTATED_COUNT} file(s) older than ${RETENTION_DAYS} days removed"
 
 # Signal failure only after the local copy is safe and rotation has run.
+if [[ ${photos_failed} -ne 0 ]]; then
+  echo "[BACKUP][ERROR] Database backed up but product photos NOT archived — investigate" >&2
+  exit 1
+fi
 if [[ ${s3_failed} -ne 0 ]]; then
   echo "[BACKUP][ERROR] Local backup kept but no off-site copy (S3 upload failed or bucket missing) — durability at risk, investigate" >&2
   exit 1

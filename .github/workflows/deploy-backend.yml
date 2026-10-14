@@ -293,15 +293,19 @@ jobs:
                   KEEVO_JWT_PUBLIC_KEY_PATH: file:/run/secrets/jwt/public_key.pem
                   LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB: DEBUG
                   SERVER_TOMCAT_ACCESSLOG_ENABLED: "true"
+                  KEEVO_PRODUCT_PHOTO_DIR: /app/data/product-photos
                 volumes:
                   - ./firebase-credentials.json:/run/secrets/firebase:ro
                   - ./keys:/run/secrets/jwt:ro
+                  # Product photos — persistent named volume (only copy), backed up by backup-db.sh
+                  - product_photos:/app/data/product-photos
                 networks:
                   - keevo_net
 
             volumes:
               postgres_data:
               traefik_letsencrypt:
+              product_photos:
 
             networks:
               keevo_net:
@@ -363,6 +367,7 @@ jobs:
                   KEEVO_JWT_PUBLIC_KEY_PATH: file:/run/secrets/jwt/public_key.pem
                   LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB: DEBUG
                   SERVER_TOMCAT_ACCESSLOG_ENABLED: "true"
+                  KEEVO_PRODUCT_PHOTO_DIR: /app/data/product-photos
                 labels:
                   - "traefik.enable=true"
                   - "traefik.http.routers.keevo-backend.rule=Host(\`${APP_DOMAIN}\`)"
@@ -373,12 +378,15 @@ jobs:
                 volumes:
                   - ./firebase-credentials.json:/run/secrets/firebase:ro
                   - ./keys:/run/secrets/jwt:ro
+                  # Product photos — persistent named volume (only copy), backed up by backup-db.sh
+                  - product_photos:/app/data/product-photos
                 networks:
                   - keevo_net
                   - traefik-public
 
             volumes:
               postgres_data:
+              product_photos:
 
             networks:
               keevo_net:
