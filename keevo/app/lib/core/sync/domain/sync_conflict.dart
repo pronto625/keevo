@@ -51,6 +51,9 @@ class SyncConflict {
       case 'LAST_WRITE_WINS':
         final et = entityType != null ? entityLabel(entityType!) : 'Élément';
         return 'Modification écrasée — $et: dernière version conservée';
+      case 'LAST_WRITE_SUPERSEDED':
+        final et = entityType != null ? entityLabel(entityType!) : 'Élément';
+        return 'Modification hors ligne ignorée — $et: version plus récente conservée';
       default:
         return 'Conflit résolu — ${typeLabel(conflictType)}';
     }
@@ -61,6 +64,7 @@ class SyncConflict {
   static const _types = {
     'STOCK_NEGATIVE': 'Stock négatif',
     'LAST_WRITE_WINS': 'Modification écrasée',
+    'LAST_WRITE_SUPERSEDED': 'Modification hors ligne ignorée',
   };
 
   static const _strategies = {
@@ -91,6 +95,8 @@ class SyncConflict {
     'entityType': 'Élément',
     'overwrittenTimestamp': 'Version remplacée du',
     'winnerTimestamp': 'Version conservée du',
+    'incomingTimestamp': 'Modification hors ligne du',
+    'keptTimestamp': 'Version conservée du',
   };
 
   static final _uuid = RegExp(

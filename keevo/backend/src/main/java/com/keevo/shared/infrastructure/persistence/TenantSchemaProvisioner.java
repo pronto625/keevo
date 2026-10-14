@@ -722,6 +722,9 @@ public class TenantSchemaProvisioner {
                 processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 client_timestamp TIMESTAMPTZ
             )""";
+    /** Device that pushed the operation: last-write-wins tells same-device edits from concurrent ones. */
+    static final String DDL_SYNC_OPERATIONS_LOG_MIGRATE_DEVICE_ID =
+            "ALTER TABLE sync_operations_log ADD COLUMN IF NOT EXISTS device_id VARCHAR(100)";
     static final String DDL_SYNC_OPERATIONS_LOG_IDX_ENTITY =
             "CREATE INDEX IF NOT EXISTS idx_sync_ops_log_entity ON sync_operations_log(entity_id)";
     static final String DDL_SYNC_OPERATIONS_LOG_IDX_PROCESSED =
@@ -1137,6 +1140,7 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_SALES_IDX_STORE_EMPLOYEE_OCCURRED_AT);
             // Story 5.1 — sync operations log
             stmt.execute(DDL_SYNC_OPERATIONS_LOG);
+            stmt.execute(DDL_SYNC_OPERATIONS_LOG_MIGRATE_DEVICE_ID);
             stmt.execute(DDL_SYNC_OPERATIONS_LOG_IDX_ENTITY);
             stmt.execute(DDL_SYNC_OPERATIONS_LOG_IDX_PROCESSED);
             // Story 5.3 — sync conflicts log

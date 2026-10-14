@@ -25,7 +25,10 @@ public class StoreRepositoryAdapter implements StoreRepository {
     @Override
     public Store save(Store store) {
         StoreJpaEntity entity = domainToEntity(store);
-        StoreJpaEntity saved = jpa.save(entity);
+        // Flushed now: updated_at is stamped by @PreUpdate at flush time; left to the commit it would
+        // be later than the sync log row of the operation that wrote it, and last-write-wins would
+        // take that sync write for a server-side one (see LastWriteWinsStrategy).
+        StoreJpaEntity saved = jpa.saveAndFlush(entity);
         return entityToDomain(saved);
     }
 

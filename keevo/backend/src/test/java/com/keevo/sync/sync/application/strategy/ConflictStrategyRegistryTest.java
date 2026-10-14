@@ -54,6 +54,12 @@ class ConflictStrategyRegistryTest {
     }
 
     @Test
+    void resolve_categoryRenameAndToggle_returnLastWriteWinsStrategy() {
+        assertThat(registry.resolve("RENAME_CATEGORY")).isSameAs(lastWriteWinsStrategy);
+        assertThat(registry.resolve("TOGGLE_CATEGORY")).isSameAs(lastWriteWinsStrategy);
+    }
+
+    @Test
     void resolve_updateSupplier_returnsLastWriteWinsStrategy() {
         assertThat(registry.resolve("UPDATE_SUPPLIER")).isSameAs(lastWriteWinsStrategy);
     }

@@ -29,6 +29,9 @@ public class SyncOperationsLogJpaEntity {
     @Column(name = "client_timestamp")
     private Instant clientTimestamp;
 
+    @Column(name = "device_id", length = 100)
+    private String deviceId;
+
     protected SyncOperationsLogJpaEntity() {}
 
     public SyncOperationsLogJpaEntity(String id, String operationType, String entityId,
@@ -43,6 +46,13 @@ public class SyncOperationsLogJpaEntity {
         this.clientTimestamp = clientTimestamp;
     }
 
+    public SyncOperationsLogJpaEntity(String id, String operationType, String entityId,
+                                      String status, String errorReason,
+                                      Instant processedAt, Instant clientTimestamp, String deviceId) {
+        this(id, operationType, entityId, status, errorReason, processedAt, clientTimestamp);
+        this.deviceId = deviceId;
+    }
+
     public String getId() { return id; }
     public String getOperationType() { return operationType; }
     public String getEntityId() { return entityId; }
@@ -50,4 +60,5 @@ public class SyncOperationsLogJpaEntity {
     public String getErrorReason() { return errorReason; }
     public Instant getProcessedAt() { return processedAt; }
     public Instant getClientTimestamp() { return clientTimestamp; }
+    public String getDeviceId() { return deviceId; }
 }

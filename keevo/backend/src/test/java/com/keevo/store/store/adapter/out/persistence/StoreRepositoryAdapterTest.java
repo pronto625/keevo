@@ -51,13 +51,13 @@ class StoreRepositoryAdapterTest {
     @Test
     @DisplayName("save() should map domain to entity and return domain")
     void save_shouldMapDomainToEntityAndBack() {
-        when(jpa.save(any())).thenReturn(sampleEntity);
+        when(jpa.saveAndFlush(any())).thenReturn(sampleEntity);
 
         Store result = adapter.save(sampleDomain);
 
         assertThat(result.id()).isEqualTo(storeId);
         assertThat(result.name()).isEqualTo("Test Store");
-        verify(jpa).save(any());
+        verify(jpa).saveAndFlush(any());
     }
 
     @Test

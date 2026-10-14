@@ -1,6 +1,7 @@
 package com.keevo.sync.sync.application.service;
 
 import com.keevo.sync.sync.application.strategy.ConflictStrategyRegistry;
+import com.keevo.sync.sync.application.strategy.LastWriteWinsStrategy;
 import com.keevo.sync.sync.domain.model.*;
 import com.keevo.sync.sync.domain.port.in.ConflictResolutionStrategy;
 import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider;
@@ -109,7 +110,8 @@ public class SyncPushService implements SyncUseCase {
                                 opResult.status(),
                                 opResult.reason(),
                                 Instant.now(),
-                                operation.clientTimestamp()));
+                                operation.clientTimestamp(),
+                                command.deviceId()));
                     }
 
                     return opResult;
@@ -264,6 +266,13 @@ public class SyncPushService implements SyncUseCase {
         }
         SyncOperation operation = redirectMergedProductIds(originalOperation);
 
+        // Last-write-wins: an operation older than the entity's current state is not applied.
+        ConflictResolutionStrategy strategy = conflictStrategyRegistry.resolve(operation.operationType());
+        PreApplyCheck preApply = beforeApply(strategy, operation, command);
+        if (preApply.isSuperseded()) {
+            return supersede(operation, preApply.superseded(), command.actorId());
+        }
+
         SyncOperationResult handlerResult = handlerRegistry.resolve(operation.operationType())
                 .map(handler -> {
                     try {
@@ -281,38 +290,71 @@ public class SyncPushService implements SyncUseCase {
         }
 
         try {
-            return evaluateConflict(operation, handlerResult, command.actorId(), command.tenantId());
+            return evaluateConflict(strategy, operation, handlerResult,
+                    command.actorId(), command.tenantId(), preApply);
         } catch (Exception e) {
             log.error("Conflict evaluation failed for operation {}: {}", operation.operationId(), e.getMessage(), e);
             return handlerResult;
         }
     }
 
-    private SyncOperationResult evaluateConflict(SyncOperation operation, SyncOperationResult handlerResult,
-                                                  UUID actorId, String tenantId) {
-        ConflictResolutionStrategy strategy = conflictStrategyRegistry.resolve(operation.operationType());
-        if (strategy == null) {
-            return handlerResult;
+    /** The strategy's pre-apply decision; a failing or absent one never blocks the operation. */
+    private PreApplyCheck beforeApply(ConflictResolutionStrategy strategy, SyncOperation operation,
+                                      PushBatchCommand command) {
+        if (strategy == null) return PreApplyCheck.NONE;
+        try {
+            PreApplyCheck check = strategy.beforeApply(operation, command.deviceId(), command.tenantId());
+            return check != null ? check : PreApplyCheck.NONE;
+        } catch (Exception e) {
+            log.error("Pre-apply conflict check failed for operation {}: {}",
+                    operation.operationId(), e.getMessage(), e);
+            return PreApplyCheck.NONE;
         }
+    }
 
-        ConflictResult conflict = strategy.evaluate(operation, handlerResult, actorId, tenantId);
-        if (conflict == null || conflict.conflictType() == null) {
-            return handlerResult;
-        }
+    /**
+     * The entity already holds a newer state: the operation is acknowledged (APPLIED, so the device
+     * drops it instead of retrying forever) without being applied, and the conflict is logged. The
+     * device gets the kept version back through its next pull.
+     */
+    private SyncOperationResult supersede(SyncOperation operation, ConflictResult conflict, UUID actorId) {
+        logConflict(operation, conflict, actorId);
+        Object entityId = conflict.conflictData() != null ? conflict.conflictData().get("entityId") : null;
+        return new SyncOperationResult(
+                operation.operationId(),
+                SyncOperationStatus.APPLIED,
+                entityId != null ? entityId.toString() : operation.entityId(),
+                LastWriteWinsStrategy.SUPERSEDED_REASON,
+                conflict.conflictData());
+    }
 
-        String entityType = deriveEntityType(conflict, operation.operationType());
-
+    private void logConflict(SyncOperation operation, ConflictResult conflict, UUID actorId) {
         conflictsLogRepository.save(new SyncConflictsLogEntry(
                 UUID.randomUUID().toString(),
                 operation.operationId(),
                 operation.operationType(),
                 operation.entityId(),
-                entityType,
+                deriveEntityType(conflict, operation.operationType()),
                 conflict.conflictType(),
                 conflict.strategy(),
                 conflict.conflictData(),
                 Instant.now(),
                 actorId.toString()));
+    }
+
+    private SyncOperationResult evaluateConflict(ConflictResolutionStrategy strategy, SyncOperation operation,
+                                                 SyncOperationResult handlerResult, UUID actorId,
+                                                 String tenantId, PreApplyCheck preApply) {
+        if (strategy == null) {
+            return handlerResult;
+        }
+
+        ConflictResult conflict = strategy.evaluate(operation, handlerResult, actorId, tenantId, preApply);
+        if (conflict == null || conflict.conflictType() == null) {
+            return handlerResult;
+        }
+
+        logConflict(operation, conflict, actorId);
 
         if ("STOCK_NEGATIVE".equals(conflict.conflictType())) {
             return new SyncOperationResult(

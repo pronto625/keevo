@@ -290,6 +290,8 @@ public class TenantSchemaSyncService {
             stmt.execute(TenantSchemaProvisioner.DDL_SALES_IDX_STORE_OCCURRED_AT);
             stmt.execute(TenantSchemaProvisioner.DDL_SALES_IDX_STORE_EMPLOYEE_OCCURRED_AT);
             // Story 5.1 — sync operations log indexes
+            // + device_id (last-write-wins: same-device edits are not concurrent overwrites)
+            stmt.execute(TenantSchemaProvisioner.DDL_SYNC_OPERATIONS_LOG_MIGRATE_DEVICE_ID);
             stmt.execute(TenantSchemaProvisioner.DDL_SYNC_OPERATIONS_LOG_IDX_ENTITY);
             stmt.execute(TenantSchemaProvisioner.DDL_SYNC_OPERATIONS_LOG_IDX_PROCESSED);
             // Story 5.2 — add updated_at on stock_transfers for delta pull sync

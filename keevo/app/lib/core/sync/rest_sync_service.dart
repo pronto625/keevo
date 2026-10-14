@@ -146,6 +146,34 @@ class RestSyncService implements SyncService {
     return allConflicts;
   }
 
+  /// Conflict type the server sets on an offline edit older than the
+  /// entity's current version (acknowledged, not applied).
+  static const supersededConflictType = 'LAST_WRITE_SUPERSEDED';
+
+  /// Device-clock margin when rewinding the pull cursor to an operation's
+  /// creation time.
+  static const supersededPullMargin = Duration(minutes: 5);
+
+  static bool isSupersededResult(Map<String, dynamic> result) {
+    final data = result['conflictData'];
+    return data is Map && data['conflictType'] == supersededConflictType;
+  }
+
+  /// Moves the pull cursor back to just before [since] (never forward), so
+  /// the next pull brings back the version the server kept — it was written
+  /// after the superseded edit — and overwrites the local row, which is no
+  /// longer protected by a pending operation.
+  Future<void> _rewindPullCursor(DateTime since) async {
+    final raw = await _secureStorage.read(key: kLastSyncTimestampKey);
+    final current = raw == null ? null : int.tryParse(raw);
+    if (current == null) return; // no cursor: the next pull is a full one
+    final target =
+        since.subtract(supersededPullMargin).millisecondsSinceEpoch;
+    if (target >= current) return;
+    await _secureStorage.write(
+        key: kLastSyncTimestampKey, value: target.toString());
+  }
+
   Future<void> _dropMergedLocalProduct(
       String localProductId, String serverProductId) async {
     // Counts entered offline (quick-add) move to the server product: the
@@ -210,6 +238,13 @@ class RestSyncService implements SyncService {
           // otherwise stay REJECTED forever. Other operations are deleted by
           // id only: a later edit of the same entity is still to be sent.
           final confirmedOp = ops.firstWhere((o) => o.id == opId);
+          // Last-write-wins: the server already held a newer version and
+          // kept it, so this offline edit was not applied. The local row
+          // still shows the edit; a pull made while it was queued skipped
+          // the entity and may have moved the cursor past the kept version.
+          if (status == 'APPLIED' && isSupersededResult(result)) {
+            await _rewindPullCursor(confirmedOp.createdAt);
+          }
           // The server merged this product creation into an already-existing
           // product of the same name (serverEntityId != our local id) and
           // will redirect our queued stock entries / sales to it. Drop the

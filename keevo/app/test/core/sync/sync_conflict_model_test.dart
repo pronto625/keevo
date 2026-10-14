@@ -97,5 +97,35 @@ void main() {
 
       expect(conflict.displayTitle, contains('écrasée'));
     });
+
+    test('superseded_frenchTitleAndDetailsWithoutTechnicalData', () {
+      final conflict = SyncConflict(
+        id: 'c-3',
+        operationId: 'op-3',
+        operationType: 'UPDATE_PRODUCT',
+        entityType: 'PRODUCT',
+        conflictType: 'LAST_WRITE_SUPERSEDED',
+        strategy: 'LAST_WRITE_WINS',
+        conflictData: const {
+          'conflictType': 'LAST_WRITE_SUPERSEDED',
+          'entityType': 'PRODUCT',
+          'entityId': '11111111-2222-3333-4444-555555555555',
+          'incomingTimestamp': '2026-10-14T02:44:00Z',
+          'keptTimestamp': '2026-10-14T02:48:00Z',
+        },
+        resolvedAt: DateTime.now(),
+      );
+
+      expect(conflict.displayTitle,
+          'Modification hors ligne ignorée — Produit: version plus récente conservée');
+      expect(SyncConflict.typeLabel(conflict.conflictType),
+          'Modification hors ligne ignorée');
+      final labels = conflict.detailRows.map((r) => r.$1).toList();
+      expect(labels,
+          ['Élément', 'Modification hors ligne du', 'Version conservée du']);
+      final text = conflict.detailRows.map((r) => '${r.$1} ${r.$2}').join(' ');
+      expect(text, isNot(contains('LAST_WRITE')));
+      expect(text, isNot(contains('1111')));
+    });
   });
 }
