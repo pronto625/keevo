@@ -165,4 +165,53 @@ void main() {
 
     expect(find.textContaining('Synchronisation en échec'), findsOneWidget);
   });
+
+  group('ShellBannerLayout (H2)', () {
+    Future<void> pump(WidgetTester tester, AccountStatus status) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
+          accountStatusProvider.overrideWithValue(status),
+          deletionPendingStatusProvider.overrideWith((ref) async => null),
+          syncGateStateProvider.overrideWithValue(SyncGateState.open),
+          daysSinceLastSyncProvider.overrideWithValue(0),
+          syncTriggerNotifierProvider.overrideWith(_IdleSyncTrigger.new),
+        ],
+        child: MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(
+                size: Size(400, 800), padding: EdgeInsets.only(top: 40)),
+            child: Scaffold(
+              body: ShellBannerLayout(
+                child: Builder(
+                  builder: (context) => Text(
+                      'page top inset ${MediaQuery.paddingOf(context).top}'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a banner stays below the status bar; the page drops its own inset',
+        (tester) async {
+      await pump(tester, AccountStatus.suspended);
+
+      final banner = find.textContaining('compte est suspendu');
+      expect(banner, findsOneWidget);
+      expect(tester.getTopLeft(banner).dy, greaterThanOrEqualTo(40));
+      expect(find.text('page top inset 0.0'), findsOneWidget);
+    });
+
+    testWidgets('no banner: the page keeps the status bar inset', (tester) async {
+      await pump(tester, AccountStatus.active);
+
+      expect(find.textContaining('compte est suspendu'), findsNothing);
+      expect(find.text('page top inset 40.0'), findsOneWidget);
+    });
+  });
 }

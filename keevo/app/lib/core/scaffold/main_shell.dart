@@ -351,15 +351,9 @@ class _MainShellState extends ConsumerState<MainShell> {
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      body: Column(
-        children: [
-          // v1s-16-13: one banner at a time, by priority (suspension,
-          // deletion pending — v1s-14-5 AC8 —, offline gate, sync failure,
-          // trial expired).
-          const ShellBanners(),
-          Expanded(child: widget.child),
-        ],
-      ),
+      // v1s-16-13: one banner at a time, by priority (suspension, deletion
+      // pending — v1s-14-5 AC8 —, offline gate, sync failure, trial expired).
+      body: ShellBannerLayout(child: widget.child),
       // Soft/modern rebrand (2026-09-16) : coins hauts arrondis + ombre
       // douce (au lieu de l'élévation Material par défaut, plus dure) pour
       // que la barre lise comme une "sheet" posée sur le contenu plutôt

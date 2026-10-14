@@ -74,3 +74,26 @@ class ShellBanners extends ConsumerWidget {
     };
   }
 }
+
+/// Shell body: the banner slot above [child]. A banner sits at the top of the
+/// screen, so it keeps clear of the status bar itself (H2: the suspension text
+/// was drawn under the clock) and the page below no longer pads for it twice.
+class ShellBannerLayout extends ConsumerWidget {
+  const ShellBannerLayout({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (ref.watch(shellBannerProvider) == null) return child;
+    return Column(
+      children: [
+        const SafeArea(bottom: false, child: ShellBanners()),
+        Expanded(
+          child: MediaQuery.removePadding(
+              context: context, removeTop: true, child: child),
+        ),
+      ],
+    );
+  }
+}
