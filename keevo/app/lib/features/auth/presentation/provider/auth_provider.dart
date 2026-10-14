@@ -10,6 +10,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../../core/auth/jwt_claims.dart';
 import '../../../../core/auth/session_refresher.dart';
 import '../../../../core/di/providers.dart';
+import '../../../../core/network/api_base_url.dart';
 import '../../../../core/network/auth_interceptor.dart';
 import '../../../../core/network/log_redaction.dart';
 import '../../../../core/network/retry_interceptor.dart';
@@ -38,12 +39,9 @@ part 'auth_provider.g.dart';
 
 // ── Infrastructure providers ─────────────────────────────────────────────────
 
-/// Base API URL — replace with environment-based config in Story 1.3.
-const _apiBaseUrl = String.fromEnvironment(
-  'API_BASE_URL',
-  // defaultValue: 'http://10.0.3.2:4500', 
-  defaultValue: 'http://localhost:4500',// local dev (Genymotion); prod: --dart-define=API_BASE_URL=https://<domain>
-);
+/// Base API URL — `--dart-define=API_BASE_URL=…`; localhost in debug/profile,
+/// mandatory https:// in release (checked at startup, see [apiBaseUrl]).
+final _apiBaseUrl = apiBaseUrl;
 
 /// Secure storage — hardened singleton instance (AC1).
 final flutterSecureStorageProvider = Provider<FlutterSecureStorage>((ref) {
@@ -150,7 +148,8 @@ final dioProvider = Provider<Dio>((ref) {
         suspendedNotice, rootScaffoldMessengerKey.currentState),
   ));
 
-  // LogInterceptor — debug-only; redacts Authorization header even in debug
+  // LogInterceptor — debug-only; redacts the Authorization header and the
+  // secrets of bodies / query strings (passwords, codes, tokens) even in debug
   if (kDebugMode) {
     dio.interceptors.add(LogInterceptor(
       requestHeader: true,
@@ -158,7 +157,7 @@ final dioProvider = Provider<Dio>((ref) {
       responseHeader: false,
       responseBody: true,
       error: true,
-      logPrint: (o) => debugPrint('[DIO] ${redactAuthorizationHeader(o.toString())}'),
+      logPrint: (o) => debugPrint('[DIO] ${redactLogLine(o.toString())}'),
     ));
   }
 

@@ -140,6 +140,22 @@ void main() {
       verify(() => local.upsert(sampleStore)).called(1);
     });
 
+    // G2 (device test): an employee got 403 on /stores?includeInactive=true
+    // at each sync; its assigned store comes with the sync pull.
+    test('syncFromRemote() is a no-op for an employee session', () async {
+      final employeeRepo = StoreRepositoryImpl(
+        local: local,
+        remote: remote,
+        syncService: syncService,
+        syncTriggerDispatcher: syncTriggerDispatcher,
+        isOwnerSession: () => false,
+      );
+
+      await employeeRepo.syncFromRemote();
+      verifyNever(() => remote.getAll(includeInactive: any(named: 'includeInactive')));
+      verifyNever(() => local.upsert(any()));
+    });
+
     test('syncFromRemote() rethrows when the remote fetch fails', () async {
       when(() => remote.getAll(includeInactive: true))
           .thenThrow(Exception('network'));

@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3/open.dart';
 
 import 'core/di/providers.dart';
+import 'core/network/api_base_url.dart';
 import 'core/router/app_router.dart';
 import 'core/storage/db_encryption_key_service.dart';
 import 'core/storage/secure_storage_provider.dart';
@@ -19,6 +20,11 @@ import 'features/feedback/presentation/provider/feedback_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ── 00. Backend URL — fail fast: a release build without
+  // --dart-define=API_BASE_URL=https://… throws here instead of shipping an
+  // app that talks to localhost in clear text.
+  dev.log('[API] base URL: $apiBaseUrl', name: 'Config');
 
   // ── 0a. Initialize date formatting for fr_FR locale ──────────────────────
   await initializeDateFormatting('fr_FR');

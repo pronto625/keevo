@@ -4,8 +4,10 @@
 #            The built artefact is written to /output/keevo.apk.
 #
 # USAGE
-#   Build the image (first time / after pubspec changes):
-#     docker build -t keevo-flutter-builder ./app
+#   Build the image (first time / after pubspec changes) — API_BASE_URL is
+#   mandatory (https://), a release app without it stops at startup:
+#     docker build --build-arg API_BASE_URL=https://<domaine-api> \
+#       -t keevo-flutter-builder ./app
 #
 #   Run to get the APK:
 #     docker run --rm \
@@ -89,7 +91,10 @@ RUN flutter pub get \
 # ─── Release APK build ────────────────────────────────────────────────────────
 # key.properties is read by android/app/build.gradle.kts at build time.
 # If no keystore is mounted, signing falls back to debug keys automatically.
-RUN flutter build apk --release
+ARG API_BASE_URL
+RUN test -n "$API_BASE_URL" \
+      || (echo "API_BASE_URL manquant : --build-arg API_BASE_URL=https://<domaine-api>" && exit 1) \
+    && flutter build apk --release --dart-define=API_BASE_URL="$API_BASE_URL"
 
 # ─── Output ───────────────────────────────────────────────────────────────────
 RUN mkdir -p /output \

@@ -436,6 +436,9 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
     // ── POS — Pending sales ───────────────────────────────────────────────
     ref.invalidate(pendingSalesProvider);
     ref.invalidate(pendingSalesCountProvider);
+    // ── POS — product grid (device test: on a first sign-in the grid said
+    // « Aucun produit configuré » after the initial pull, until a tab change)
+    ref.invalidate(frequentProductsProvider);
     // ── Stock transfers — status moves after the push / pull (device test:
     // a pushed transfer stayed « En attente de sync » until a manual refresh)
     ref.invalidate(transferHistoryProvider);

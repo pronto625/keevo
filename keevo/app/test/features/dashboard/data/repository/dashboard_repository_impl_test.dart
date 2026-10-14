@@ -80,6 +80,20 @@ void main() {
     verify(() => mockLocal.getDashboardSnapshot()).called(1);
   });
 
+  // G2 (device test): an employee got 403 on /dashboard/summary at each sync.
+  test('employee session never calls the OWNER-only summary', () async {
+    final employeeRepo = DashboardRepositoryImpl(
+        mockLocal, mockRemote, mockConnectivity,
+        isOwnerSession: () => false);
+    when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
+    when(() => mockLocal.getDashboardSnapshot())
+        .thenAnswer((_) async => snapshot);
+
+    final result = await employeeRepo.getDashboardSnapshot();
+    expect(result.todayCA, 1000);
+    verifyNever(() => mockRemote.getDashboardSummary());
+  });
+
   test('getStoreOverviews delegates to local datasource', () async {
     final overviews = [
       const StoreOverview(

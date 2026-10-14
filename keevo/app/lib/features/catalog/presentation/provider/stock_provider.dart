@@ -137,6 +137,14 @@ class StockState {
 /// SyncTriggerNotifier after a full pull cycle.
 @Riverpod(keepAlive: true)
 class StockNotifier extends _$StockNotifier {
+  /// Bumped by every load. Riverpod 2 keeps the same notifier instance when
+  /// the provider is invalidated (post-sync refresh), so a load started
+  /// before the pull (remote call per card, slow) could answer after the
+  /// post-sync reload and put the old quantity back for good (device test:
+  /// catalog card at 12 while stock_levels and the POS said 11). Only the
+  /// latest load may write the levels.
+  int _loadGeneration = 0;
+
   @override
   StockState build(String productId) {
     // Load levels on creation
@@ -145,13 +153,16 @@ class StockNotifier extends _$StockNotifier {
   }
 
   Future<void> _loadLevels() async {
+    final generation = ++_loadGeneration;
     state = state.copyWith(isLoading: true, error: null);
     try {
       final levels = await ref
           .read(getStockLevelUseCaseProvider)
           .execute(productId);
+      if (generation != _loadGeneration) return; // superseded
       state = state.copyWith(levels: levels, isLoading: false);
     } catch (e) {
+      if (generation != _loadGeneration) return; // superseded
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }

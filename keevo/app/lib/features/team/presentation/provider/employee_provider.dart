@@ -34,6 +34,7 @@ final employeeRepositoryProvider = Provider<EmployeeRepository>((ref) {
     local: ref.watch(localEmployeeDataSourceProvider),
     connectivity: ref.watch(connectivityServiceProvider),
     syncService: ref.watch(syncServiceProvider),
+    isOwnerSession: () => ref.read(isOwnerSessionProvider),
   );
 });
 
