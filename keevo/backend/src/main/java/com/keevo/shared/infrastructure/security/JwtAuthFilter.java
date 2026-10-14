@@ -139,9 +139,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             // fully-qualified "schema"."table" JDBC (revocation adapter, EMPLOYEE branch) — the
             // schema portion MUST be validated. RS256 mitigates forgery but defense-in-depth
             // requires no unvalidated claim ever enters a SQL string.
+            // The SUPER_ADMIN system tenant (schema "public") is the only exception: its requests run
+            // no tenant-qualified SQL (EMPLOYEE branch is role-gated, revocation query is parameterized).
             String schema;
             try {
-                schema = TenantSchema.validate(tenantId);
+                schema = TenantSchema.isPlatformAdminSession(tenantId, role)
+                        ? tenantId
+                        : TenantSchema.validate(tenantId);
             } catch (IllegalArgumentException ex) {
                 writeError(response, "TOKEN_INVALID");
                 return;

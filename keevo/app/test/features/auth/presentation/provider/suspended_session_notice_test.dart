@@ -33,7 +33,7 @@ void main() {
     await tester.pump();
 
     expect(find.byType(SnackBar), findsOneWidget);
-    expect(find.text('Votre accès a été suspendu, veuillez vous reconnecter.'),
+    expect(find.text('Votre session a pris fin suite à un changement sur votre compte. Veuillez vous reconnecter.'),
         findsOneWidget);
 
     // Nothing queued behind it.

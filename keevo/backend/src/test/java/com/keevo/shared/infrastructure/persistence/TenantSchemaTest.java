@@ -43,4 +43,16 @@ class TenantSchemaTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("length=null");
     }
+
+    @Test
+    @DisplayName("W1: only SUPER_ADMIN on the \"public\" system tenant is a platform admin session")
+    void platformAdminSession() {
+        assertThat(TenantSchema.isPlatformAdminSession("public", "SUPER_ADMIN")).isTrue();
+        assertThat(TenantSchema.isPlatformAdminSession("public", "OWNER")).isFalse();
+        assertThat(TenantSchema.isPlatformAdminSession("public", "EMPLOYEE")).isFalse();
+        assertThat(TenantSchema.isPlatformAdminSession("public", null)).isFalse();
+        assertThat(TenantSchema.isPlatformAdminSession("kv_abc123", "SUPER_ADMIN")).isFalse();
+        assertThat(TenantSchema.isPlatformAdminSession("PUBLIC", "SUPER_ADMIN")).isFalse();
+        assertThat(TenantSchema.isPlatformAdminSession(null, "SUPER_ADMIN")).isFalse();
+    }
 }

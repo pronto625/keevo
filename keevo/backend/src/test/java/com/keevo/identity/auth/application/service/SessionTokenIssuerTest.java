@@ -74,6 +74,33 @@ class SessionTokenIssuerTest {
     }
 
     @Test
+    void superAdminOnSystemTenant_issuesSessionWithoutTenantSql() {
+        // W1: the KV-ADMIN system tenant lives in "public" — the dashboard login used to fail with a 500.
+        Tenant admin = new Tenant(UUID.randomUUID(), "KV-ADMIN", "public", TenantStatus.ACTIVE,
+                PlanType.FREE, Instant.now());
+
+        var session = issuer.issue(USER_ID, admin, "SUPER_ADMIN");
+
+        var claims = jwt.parseToken(session.tokens().accessToken());
+        assertThat(jwt.extractRole(claims)).isEqualTo("SUPER_ADMIN");
+        assertThat(jwt.extractTenantId(claims)).isEqualTo("public");
+        assertThat(claims.get("onboardingCompleted")).isEqualTo(true);
+        verifyNoInteractions(jdbcTemplate);
+        verify(refreshTokenRepository).save(any());
+    }
+
+    @Test
+    void publicSchema_withTenantRole_stillThrows() {
+        Tenant bad = new Tenant(UUID.randomUUID(), "KV-ADMIN", "public", TenantStatus.ACTIVE,
+                PlanType.FREE, Instant.now());
+
+        assertThatThrownBy(() -> issuer.issue(USER_ID, bad, "OWNER"))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(jdbcTemplate);
+        verify(refreshTokenRepository, never()).save(any());
+    }
+
+    @Test
     void employeeToken_carriesStoreAndRealTenantStatus() {
         UUID store = UUID.randomUUID();
         onboardingDone(true);

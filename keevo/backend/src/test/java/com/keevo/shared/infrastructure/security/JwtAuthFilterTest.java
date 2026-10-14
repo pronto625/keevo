@@ -354,6 +354,52 @@ class JwtAuthFilterTest {
     // ── EMPLOYEE tenantId validation (Story 12.5 — AC3/AC4) ─────────────────
 
     @Test
+    @DisplayName("W1: SUPER_ADMIN token on the \"public\" system tenant is accepted, no tenant SQL")
+    void shouldAcceptSuperAdminOnSystemTenant() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/admin/tenants");
+        request.addHeader("Authorization", "Bearer admin.jwt.token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        UUID userId = UUID.randomUUID();
+        Claims claims = buildClaims(userId, "public", "SUPER_ADMIN");
+        when(jwtTokenProvider.parseToken("admin.jwt.token")).thenReturn(claims);
+        when(jwtTokenProvider.extractScope(claims)).thenReturn("access");
+        when(jwtTokenProvider.extractTenantId(claims)).thenReturn("public");
+        when(jwtTokenProvider.extractRole(claims)).thenReturn("SUPER_ADMIN");
+        when(jwtTokenProvider.extractUserId(claims)).thenReturn(userId);
+        when(jwtTokenProvider.extractTenantStatus(claims)).thenReturn("ACTIVE");
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+        assertThat(response.getStatus()).isEqualTo(200);
+        verify(jdbcTemplate, never()).queryForMap(anyString(), any());
+    }
+
+    @Test
+    @DisplayName("W1: OWNER token on the \"public\" schema → 401 TOKEN_INVALID")
+    void shouldRejectTenantRoleOnPublicSchema() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/products");
+        request.addHeader("Authorization", "Bearer owner.public.jwt.token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        UUID userId = UUID.randomUUID();
+        Claims claims = buildClaims(userId, "public", "OWNER");
+        when(jwtTokenProvider.parseToken("owner.public.jwt.token")).thenReturn(claims);
+        when(jwtTokenProvider.extractScope(claims)).thenReturn("access");
+        when(jwtTokenProvider.extractTenantId(claims)).thenReturn("public");
+        when(jwtTokenProvider.extractRole(claims)).thenReturn("OWNER");
+        when(jwtTokenProvider.extractUserId(claims)).thenReturn(userId);
+        when(jwtTokenProvider.extractTenantStatus(claims)).thenReturn("ACTIVE");
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("TOKEN_INVALID");
+        verify(filterChain, never()).doFilter(any(), any());
+    }
+
+    @Test
     @DisplayName("EMPLOYEE token with invalid tenantId format → 401 TOKEN_INVALID, no SQL call")
     void shouldRejectTokenWithInvalidTenantIdFormat() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/products");

@@ -94,7 +94,8 @@ final sessionRefresherProvider = Provider<SessionRefresher>((ref) {
   );
 });
 
-/// Shows the "accès suspendu" SnackBar unless [throttle] already let one
+/// Shows the "session terminée" SnackBar (suspension, reactivation, password
+/// change or deactivation revoke the session server-side) unless [throttle] already let one
 /// through in its window (v1s-16-13: N concurrent SESSION_REVOKED → one).
 @visibleForTesting
 void showSuspendedSessionNotice(
@@ -104,12 +105,12 @@ void showSuspendedSessionNotice(
   if (messenger == null || !throttle.tryAcquire()) return;
   messenger.showSnackBar(
     const SnackBar(
-      content: Text('Votre accès a été suspendu, veuillez vous reconnecter.'),
+      content: Text('Votre session a pris fin suite à un changement sur votre compte. Veuillez vous reconnecter.'),
     ),
   );
 }
 
-/// One "accès suspendu" SnackBar per 10 s window (v1s-16-13): concurrent
+/// One "session terminée" SnackBar per 10 s window (v1s-16-13): concurrent
 /// requests refused with SESSION_REVOKED each report it.
 final suspendedSessionNoticeThrottleProvider =
     Provider<NoticeThrottle>((ref) => NoticeThrottle());
