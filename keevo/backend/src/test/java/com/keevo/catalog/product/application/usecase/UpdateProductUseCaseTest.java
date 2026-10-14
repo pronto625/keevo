@@ -50,6 +50,27 @@ class UpdateProductUseCaseTest {
         useCase = new UpdateProductUseCase(productRepository, draftNotificationRepository, eventPublisher, objectMapper);
     }
 
+    // Device test: a price-only PATCH answered 404 « Produit introuvable ».
+    @Test
+    void price_only_patch_keeps_the_name_and_a_blank_name_is_a_validation_error() {
+        var productId = UUID.randomUUID();
+        var existing = new Product(productId, "Riz 5kg", null, "KEV-RIZ5KG", null,
+                3500, 2800, 0, null, false, ProductStatus.ACTIVE, Instant.now(), Instant.now());
+        when(productRepository.findById(productId)).thenReturn(Optional.of(existing));
+        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var priceOnly = new UpdateProductUseCase.UpdateProductDto(productId, null, null, null, null,
+                3700, null, null, null, UUID.randomUUID(), "OWNER");
+        var result = useCase.execute(priceOnly);
+        assertEquals("Riz 5kg", result.getName());
+        assertEquals("3700 XAF", String.valueOf(result.getPrice()));
+
+        var blank = new UpdateProductUseCase.UpdateProductDto(productId, "  ", null, null, null,
+                3700, null, null, null, UUID.randomUUID(), "OWNER");
+        DomainException ex = assertThrows(DomainException.class, () -> useCase.execute(blank));
+        assertEquals(ErrorCode.VALIDATION_ERROR, ex.getErrorCode());
+    }
+
     @Test
     void should_update_existing_product() {
         // Given
@@ -118,9 +139,8 @@ class UpdateProductUseCaseTest {
         when(productRepository.findById(productId)).thenReturn(Optional.empty());
 
         // When/Then
-        assertThrows(IllegalArgumentException.class, () -> {
-            useCase.execute(dto);
-        });
+        DomainException ex = assertThrows(DomainException.class, () -> useCase.execute(dto));
+        assertEquals(ErrorCode.PRODUCT_NOT_FOUND, ex.getErrorCode());
     }
 
     // ── Story 2.4: DRAFT → ACTIVE promotion ──────────────────────────────────
