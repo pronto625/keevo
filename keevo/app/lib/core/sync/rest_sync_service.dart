@@ -1265,8 +1265,8 @@ class RestSyncService implements SyncService {
       await _database.customStatement(
         'INSERT INTO sales (id, store_id, employee_id, total_amount, '
         'discount_amount, payment_mode, client_id, status, occurred_at, '
-        'synced, created_at) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?) '
+        'synced, created_at, mobile_money_ref) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?) '
         'ON CONFLICT(id) DO UPDATE SET '
         // Never downgrade a locally-completed/cancelled sale back to
         // PENDING_VALIDATION with stale server state. Any other server status
@@ -1278,6 +1278,10 @@ class RestSyncService implements SyncService {
         'discount_amount = excluded.discount_amount, '
         'payment_mode = excluded.payment_mode, '
         'client_id = excluded.client_id, '
+        // A server that does not send the reference yet must not erase the
+        // one typed on this device.
+        'mobile_money_ref = COALESCE(excluded.mobile_money_ref, '
+        'sales.mobile_money_ref), '
         'synced = 1, '
         'occurred_at = excluded.occurred_at, created_at = excluded.created_at',
         [
@@ -1291,6 +1295,7 @@ class RestSyncService implements SyncService {
           map['status'] ?? 'COMPLETED',
           _toLocalIso(map['occurredAt']),
           _toLocalIso(map['createdAt']),
+          map['mobileMoneyRef'],
           // Parameters for the CASE guard in ON CONFLICT DO UPDATE:
           'PENDING_VALIDATION',
           'COMPLETED',

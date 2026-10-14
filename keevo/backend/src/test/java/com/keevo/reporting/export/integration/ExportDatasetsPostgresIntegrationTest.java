@@ -167,9 +167,10 @@ class ExportDatasetsPostgresIntegrationTest extends FullContextIntegrationTest {
             // the client also has a CANCELLED (S1/OUT) and a PENDING (S2/IN) sale: not counted as purchases
             // S2/IN: no occurred_at, the server date (created_at) is the sale date
             jdbc.update("INSERT INTO " + q + "sales (id, store_id, employee_id, client_id, total_amount, payment_mode, "
-                    + "created_at, status, occurred_at, discount_amount) VALUES (?, ?, ?, ?, 1500, ?, ?, ?, ?, 100)",
+                    + "created_at, status, occurred_at, discount_amount, mobile_money_ref) "
+                    + "VALUES (?, ?, ?, ?, 1500, ?, ?, ?, ?, 100, ?)",
                     sale, store, empUser, i <= 2 ? client : null, i == 1 ? "MOBILE_MONEY" : "CASH", at, status,
-                    i == 2 ? null : at);
+                    i == 2 ? null : at, i == 1 ? "MP2603.1234" : null);
             jdbc.update("INSERT INTO " + q + "sale_items (id, sale_id, product_id, product_name, applied_unit_price, "
                     + "quantity, subtotal, catalogue_unit_price) VALUES (?, ?, ?, ?, 1500, 1, 1500, 1600)",
                     UUID.randomUUID(), sale, p1, tag + "-P1");
@@ -387,8 +388,9 @@ class ExportDatasetsPostgresIntegrationTest extends FullContextIntegrationTest {
         String sales = String.join("\n", all.get("sales"));
         assertThat(sales).contains("Vente du 15/03/2026 à 11:00:00 — " + a.tag() + "-S1;15/03/2026 11:00:00;"
                 + a.tag() + "-S1;Awa " + a.tag() + "-Emp;" + a.tag()
-                + "-Client;Validée;Espèces;3;100;1500");
-        assertThat(sales).contains(";Annulée;Mobile Money;1;100;1500", ";En attente de validation;Espèces;1;100;1500");
+                + "-Client;Validée;Espèces;;3;100;1500");
+        assertThat(sales).contains(";Annulée;Mobile Money;MP2603.1234;1;100;1500",
+                ";En attente de validation;Espèces;;1;100;1500");
 
         assertThat(String.join("\n", all.get("sale_items")))
                 .contains(";SKU-2;" + a.tag() + "-P2;2;800;800;1600")

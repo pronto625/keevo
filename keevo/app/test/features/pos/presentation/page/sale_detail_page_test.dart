@@ -135,6 +135,51 @@ void main() {
       expect(find.textContaining('Espèces'), findsOneWidget);
     });
 
+    testWidgets('shows the Mobile Money reference',
+        (tester) async {
+      final momo = Sale(
+        id: 'sale-123',
+        storeId: 'store-1',
+        employeeId: 'emp-1',
+        occurredAt: DateTime(2026, 3, 19, 14, 30),
+        totalAmount: 1000,
+        paymentMode: PaymentModeEnum.mobileMoney,
+        mobileMoneyRef: 'MP2603.1234',
+        status: 'COMPLETED',
+        items: const [],
+        createdAt: DateTime(2026, 3, 19, 14, 30),
+      );
+      Widget page(Sale sale) => ProviderScope(
+            overrides: [
+              saleByIdProvider('sale-123')
+                  .overrideWith((ref) => Future.value(sale)),
+              currentUserRoleProvider.overrideWithValue('EMPLOYEE'),
+            ],
+            child: const MaterialApp(
+              home: SaleDetailPage(saleId: 'sale-123'),
+            ),
+          );
+
+      await tester.pumpWidget(page(momo));
+      await tester.pumpAndSettle();
+      expect(find.text('Référence Mobile Money : MP2603.1234'), findsOneWidget);
+    });
+
+    testWidgets('no Mobile Money reference line for a cash sale',
+        (tester) async {
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          saleByIdProvider('sale-123')
+              .overrideWith((ref) => Future.value(mockSale)),
+          currentUserRoleProvider.overrideWithValue('EMPLOYEE'),
+        ],
+        child: const MaterialApp(home: SaleDetailPage(saleId: 'sale-123')),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('mobile-money-ref')), findsNothing);
+    });
+
     testWidgets('displays total amount', (tester) async {
       await tester.pumpWidget(
         ProviderScope(

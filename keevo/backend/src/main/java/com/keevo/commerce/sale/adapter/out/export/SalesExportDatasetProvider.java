@@ -38,6 +38,7 @@ public class SalesExportDatasetProvider extends NativeKeysetExportDataset {
             new ExportColumn("client", "Client", ExportColumnType.TEXT),
             new ExportColumn("status", "Statut", ExportColumnType.TEXT),
             new ExportColumn("paymentMode", "Mode de paiement", ExportColumnType.TEXT),
+            new ExportColumn("mobileMoneyRef", "Référence Mobile Money", ExportColumnType.TEXT),
             new ExportColumn("itemCount", "Articles", ExportColumnType.INTEGER),
             new ExportColumn("discount", "Remise", ExportColumnType.AMOUNT_XAF),
             new ExportColumn("total", "Montant total", ExportColumnType.AMOUNT_XAF));
@@ -57,7 +58,7 @@ public class SalesExportDatasetProvider extends NativeKeysetExportDataset {
     @Override
     protected String selectList(ExportFilter filter) {
         return SaleLabels.SALE_DATE + ", st.name, " + actorNameSelect("a")
-                + ", cl.name, s.status, s.payment_mode,"
+                + ", cl.name, s.status, s.payment_mode, s.mobile_money_ref,"
                 + " (SELECT COALESCE(SUM(si.quantity), 0) FROM sale_items si WHERE si.sale_id = s.id),"
                 + " s.discount_amount, s.total_amount";
     }
@@ -88,7 +89,7 @@ public class SalesExportDatasetProvider extends NativeKeysetExportDataset {
         Instant occurredAt = toInstant(r[0]);
         String store = str(r[1]);
         return Arrays.asList(saleReference(occurredAt, store), occurredAt, store, str(r[2]), str(r[3]),
-                frLabel(SaleLabels.STATUS, r[4]), frLabel(SaleLabels.PAYMENT_MODE, r[5]),
-                toLong(r[6]), toLong(r[7]), toLong(r[8]));
+                frLabel(SaleLabels.STATUS, r[4]), frLabel(SaleLabels.PAYMENT_MODE, r[5]), str(r[6]),
+                toLong(r[7]), toLong(r[8]), toLong(r[9]));
     }
 }

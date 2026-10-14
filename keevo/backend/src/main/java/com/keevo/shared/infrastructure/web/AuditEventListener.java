@@ -15,8 +15,10 @@ import com.keevo.catalog.category.domain.event.CategoryActiveChangedEvent;
 import com.keevo.catalog.category.domain.event.CategoryCreatedEvent;
 import com.keevo.catalog.category.domain.event.CategoryRenamedEvent;
 import com.keevo.catalog.contact.domain.event.ClientArchivedEvent;
+import com.keevo.catalog.contact.domain.event.ClientUnarchivedEvent;
 import com.keevo.catalog.contact.domain.event.ClientCreatedEvent;
 import com.keevo.catalog.contact.domain.event.SupplierArchivedEvent;
+import com.keevo.catalog.contact.domain.event.SupplierUnarchivedEvent;
 import com.keevo.catalog.contact.domain.event.SupplierCreatedEvent;
 import com.keevo.catalog.product.domain.event.ProductCreatedEvent;
 import com.keevo.catalog.product.domain.event.ProductUpdatedEvent;
@@ -295,6 +297,15 @@ public class AuditEventListener {
                 event.clientId(), event.tenantId(), event.actorId());
     }
 
+    @EventListener
+    public void on(ClientUnarchivedEvent event) {
+        write(event.actorId(), event.tenantId(), "CLIENT_UNARCHIVED", "Client", event.clientId(),
+                map("archived", true), map("name", event.name(), "archived", false),
+                null, event.name(), null, null);
+        log.info("AUDIT: client_unarchived clientId={} tenantId={} actorId={}",
+                event.clientId(), event.tenantId(), event.actorId());
+    }
+
     /** v1s-14-15 — REST create or sync CREATE_CATEGORY. */
     @EventListener
     public void on(CategoryCreatedEvent event) {
@@ -345,6 +356,15 @@ public class AuditEventListener {
         write(event.actorId(), event.tenantId(), "SUPPLIER_ARCHIVED", "Supplier", event.supplierId(),
                 null, map("name", event.name(), "archived", true), null, event.name(), null, null);
         log.info("AUDIT: supplier_archived supplierId={} tenantId={} actorId={}",
+                event.supplierId(), event.tenantId(), event.actorId());
+    }
+
+    @EventListener
+    public void on(SupplierUnarchivedEvent event) {
+        write(event.actorId(), event.tenantId(), "SUPPLIER_UNARCHIVED", "Supplier", event.supplierId(),
+                map("archived", true), map("name", event.name(), "archived", false),
+                null, event.name(), null, null);
+        log.info("AUDIT: supplier_unarchived supplierId={} tenantId={} actorId={}",
                 event.supplierId(), event.tenantId(), event.actorId());
     }
 

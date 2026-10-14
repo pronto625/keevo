@@ -333,8 +333,10 @@ class _SupplierCard extends ConsumerWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: () => context.push('/suppliers/${supplier.id}', extra: supplier),
-        onLongPress:
-            supplier.archived ? null : () => _confirmArchive(context, ref),
+        // Archived card (« Voir les archivés »): long press restores it.
+        onLongPress: supplier.archived
+            ? () => _confirmUnarchive(context, ref)
+            : () => _confirmArchive(context, ref),
         borderRadius: BorderRadius.circular(AppTheme.radiusL),
         // Rangée de liste : bordure fine plutôt qu'une ombre portée.
         child: Ink(
@@ -498,6 +500,31 @@ class _SupplierCard extends ConsumerWidget {
                   .archive(supplier.id);
             },
             child: const Text('Archiver'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmUnarchive(BuildContext context, WidgetRef ref) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Désarchiver le fournisseur ?'),
+        content: Text('${supplier.name} réapparaîtra dans la liste active.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Annuler')),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(dialogCtx);
+              ref
+                  .read(supplierListNotifierProvider.notifier)
+                  .unarchive(supplier.id);
+            },
+            child: const Text('Désarchiver'),
           ),
         ],
       ),

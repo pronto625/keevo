@@ -329,4 +329,76 @@ void main() {
     expect(find.text('Réessayer'), findsNothing);
     verifyNever(() => repo.syncFromRemote());
   });
+
+  // A22: an archived card (« Voir les archivés ») is restored by long press.
+  testWidgets('ClientListPage: long press on an archived client unarchives it',
+      (tester) async {
+    final repo = _MockClientRepository();
+    final now = DateTime(2026, 1, 1);
+    final archived = ClientModel(
+        id: 'c1',
+        name: 'Alice',
+        phone: '+237690000001',
+        archived: true,
+        createdAt: now,
+        updatedAt: now);
+    when(() => repo.getAll(includeArchived: any(named: 'includeArchived')))
+        .thenAnswer((_) async => [archived]);
+    when(() => repo.syncFromRemote()).thenAnswer((_) async {});
+    when(() => repo.unarchive(any())).thenAnswer((_) async {});
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [clientRepositoryProvider.overrideWithValue(repo)],
+      child: const MaterialApp(home: ClientListPage()),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('Alice'));
+    await tester.pumpAndSettle();
+    expect(find.text('Désarchiver le client ?'), findsOneWidget);
+    expect(find.text('Archiver le client ?'), findsNothing);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Désarchiver'));
+    await tester.pumpAndSettle();
+
+    verify(() => repo.unarchive('c1')).called(1);
+    verifyNever(() => repo.archive(any()));
+  });
+
+  testWidgets('SupplierListPage: unarchive asks first; Annuler does nothing',
+      (tester) async {
+    final repo = _MockSupplierRepository();
+    final now = DateTime(2026, 1, 1);
+    final archived = SupplierModel(
+        id: 's1',
+        name: 'Grossiste Mokolo',
+        phone: '+237690000002',
+        archived: true,
+        createdAt: now,
+        updatedAt: now);
+    when(() => repo.getAll(includeArchived: any(named: 'includeArchived')))
+        .thenAnswer((_) async => [archived]);
+    when(() => repo.syncFromRemote()).thenAnswer((_) async {});
+    when(() => repo.unarchive(any())).thenAnswer((_) async {});
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [supplierRepositoryProvider.overrideWithValue(repo)],
+      child: const MaterialApp(home: SupplierListPage()),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('Grossiste Mokolo'));
+    await tester.pumpAndSettle();
+    expect(find.text('Désarchiver le fournisseur ?'), findsOneWidget);
+    await tester.tap(find.text('Annuler'));
+    await tester.pumpAndSettle();
+    verifyNever(() => repo.unarchive(any()));
+
+    await tester.longPress(find.text('Grossiste Mokolo'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Désarchiver'));
+    await tester.pumpAndSettle();
+
+    verify(() => repo.unarchive('s1')).called(1);
+  });
 }

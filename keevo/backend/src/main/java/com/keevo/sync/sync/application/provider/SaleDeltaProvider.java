@@ -34,7 +34,7 @@ public class SaleDeltaProvider implements DeltaEntityProvider {
         var page = DeltaPageQuery.fetch(em,
                 "id, store_id, employee_id, client_id, total_amount, " +
                 "COALESCE(discount_amount, 0) AS discount_amount, payment_mode, " +
-                "COALESCE(status, 'COMPLETED') AS status, occurred_at, created_at",
+                "COALESCE(status, 'COMPLETED') AS status, occurred_at, created_at, mobile_money_ref",
                 "sales", CURSOR, since, after, limit);
         List<Object[]> saleRows = page.rows();
 
@@ -86,6 +86,8 @@ public class SaleDeltaProvider implements DeltaEntityProvider {
         map.put("status", str(row[7]));
         map.put("occurredAt", ts(row[8]));
         map.put("createdAt", ts(row[9]));
+        // Without it the sale detail on another device / after a reinstall lost the reference.
+        map.put("mobileMoneyRef", str(row[10]));
         return map;
     }
 

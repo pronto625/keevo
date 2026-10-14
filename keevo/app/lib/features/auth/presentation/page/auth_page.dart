@@ -331,6 +331,7 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                       IntlPhoneField(
                         key: const Key('phoneField'),
                         decoration: InputDecoration(
+                          errorMaxLines: 3,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
                             borderSide: BorderSide(color: cs.outlineVariant),
@@ -390,6 +391,9 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                           hintText: _isFrench
                               ? 'Entrez votre mot de passe'
                               : 'Enter your password',
+                          // The register-mode length error is longer than a
+                          // 720 px wide screen: let it wrap.
+                          errorMaxLines: 3,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
                             borderSide: BorderSide(color: cs.outlineVariant),

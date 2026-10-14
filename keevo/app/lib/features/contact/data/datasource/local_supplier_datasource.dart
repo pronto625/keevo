@@ -106,6 +106,11 @@ class LocalSupplierDataSource {
         .write(const SuppliersCompanion(archived: Value(true)));
   }
 
+  Future<void> unarchive(String id) async {
+    await (_db.update(_db.suppliers)..where((s) => s.id.equals(id)))
+        .write(const SuppliersCompanion(archived: Value(false)));
+  }
+
   SupplierModel _toModel(Supplier row, {List<String> productIds = const []}) =>
       SupplierModel(
         id: row.id,

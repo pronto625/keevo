@@ -28,7 +28,7 @@ class _SaleSuccessPageState extends State<SaleSuccessPage>
   late final Animation<double> _scale;
 
   static final _currencyFormat =
-      NumberFormat.currency(locale: 'fr_CM', symbol: 'FCFA', decimalDigits: 0);
+      NumberFormat.currency(locale: 'fr_CM', symbol: 'XAF', decimalDigits: 0);
 
   @override
   void initState() {

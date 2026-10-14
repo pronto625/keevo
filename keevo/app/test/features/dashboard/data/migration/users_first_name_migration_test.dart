@@ -33,8 +33,8 @@ void main() {
 
     tearDown(() async => db.close());
 
-    test('schemaVersion is 29 (v1s-18-7 audit enrichment columns)', () {
-      expect(db.schemaVersion, 29);
+    test('schemaVersion is 30 (sales.mobileMoneyRef)', () {
+      expect(db.schemaVersion, 30);
     });
 
     test('users table accepts nullable firstName', () async {

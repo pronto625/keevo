@@ -36,7 +36,7 @@ class _ProductCardState extends State<ProductCard>
   late final AnimationController _scaleCtrl;
 
   static final _currencyFormat =
-      NumberFormat.currency(locale: 'fr_CM', symbol: 'FCFA', decimalDigits: 0);
+      NumberFormat.currency(locale: 'fr_CM', symbol: 'XAF', decimalDigits: 0);
 
   @override
   void initState() {

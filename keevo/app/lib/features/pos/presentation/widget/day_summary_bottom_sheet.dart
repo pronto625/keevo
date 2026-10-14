@@ -67,7 +67,7 @@ class _DaySummaryBottomSheetState extends ConsumerState<DaySummaryBottomSheet>
 
   final _currencyFormat = NumberFormat.currency(
     locale: 'fr_FR',
-    symbol: 'FCFA',
+    symbol: 'XAF',
     decimalDigits: 0,
   );
 

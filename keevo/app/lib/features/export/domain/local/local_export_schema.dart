@@ -244,6 +244,8 @@ const localExportCatalog = <LocalExportDataset>[
       LocalExportColumn('status', 'Statut', LocalColumnType.text),
       LocalExportColumn(
           'paymentMode', 'Mode de paiement', LocalColumnType.text),
+      LocalExportColumn(
+          'mobileMoneyRef', 'Référence Mobile Money', LocalColumnType.text),
       LocalExportColumn('itemCount', 'Articles', LocalColumnType.integer),
       LocalExportColumn('discount', 'Remise', LocalColumnType.amountXaf),
       LocalExportColumn('total', 'Montant total', LocalColumnType.amountXaf),

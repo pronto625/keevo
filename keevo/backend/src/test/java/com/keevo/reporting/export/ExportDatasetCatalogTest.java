@@ -104,6 +104,7 @@ class ExportDatasetCatalogTest {
                 client:Client:TEXT
                 status:Statut:TEXT
                 paymentMode:Mode de paiement:TEXT
+                mobileMoneyRef:Référence Mobile Money:TEXT
                 itemCount:Articles:INTEGER
                 discount:Remise:AMOUNT_XAF
                 total:Montant total:AMOUNT_XAF""");

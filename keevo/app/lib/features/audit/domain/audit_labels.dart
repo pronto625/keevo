@@ -18,6 +18,7 @@ const auditActionLabels = <String, String>{
   'CATEGORY_RENAMED': 'Catégorie renommée',
   'CLIENT_ARCHIVED': 'Client archivé',
   'CLIENT_CREATED': 'Client créé',
+  'CLIENT_UNARCHIVED': 'Client désarchivé',
   'DATA_EXPORTED': 'Données exportées',
   'DAY_CLOSED': 'Journée clôturée',
   'EMPLOYEE_CREATED': 'Employé ajouté',
@@ -51,6 +52,7 @@ const auditActionLabels = <String, String>{
   'STORE_UPDATED': 'Boutique modifiée',
   'SUPPLIER_ARCHIVED': 'Fournisseur archivé',
   'SUPPLIER_CREATED': 'Fournisseur créé',
+  'SUPPLIER_UNARCHIVED': 'Fournisseur désarchivé',
   'USER_AUTHENTICATED': 'Connexion',
   'USER_REGISTERED': 'Inscription',
 };

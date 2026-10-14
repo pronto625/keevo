@@ -41,7 +41,7 @@ class SaleDeltaProviderTest {
         UUID saleId = UUID.randomUUID();
         var now = Timestamp.from(Instant.now());
         Object[] saleRow = {saleId, UUID.randomUUID(), UUID.randomUUID(), null,
-                5000, 0, "CASH", "COMPLETED", now, now};
+                5000, 0, "CASH", "COMPLETED", now, now, null};
         when(query.getResultList()).thenReturn(Collections.singletonList(saleRow));
 
         when(em.createNativeQuery(contains("FROM sale_items"))).thenReturn(itemQuery);
@@ -66,7 +66,7 @@ class SaleDeltaProviderTest {
         UUID saleId = UUID.randomUUID();
         var now = Timestamp.from(Instant.now());
         Object[] saleRow = {saleId, UUID.randomUUID(), UUID.randomUUID(), null,
-                5000, 500, "CASH", "COMPLETED", now, now};
+                5000, 500, "MOBILE_MONEY", "COMPLETED", now, now, "MP2603.1234"};
         when(query.getResultList()).thenReturn(Collections.singletonList(saleRow));
 
         when(em.createNativeQuery(contains("FROM sale_items"))).thenReturn(itemQuery);
@@ -79,6 +79,7 @@ class SaleDeltaProviderTest {
         var result = provider.queryDelta(Instant.EPOCH);
         var items = (List<?>) result.get(0).get("items");
         assertThat(items).hasSize(2);
+        assertThat(result.get(0)).containsEntry("mobileMoneyRef", "MP2603.1234");
     }
 
     // A sale validated or cancelled after creation keeps its created_at: filtering on it

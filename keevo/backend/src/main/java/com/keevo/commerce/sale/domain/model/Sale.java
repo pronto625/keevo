@@ -18,6 +18,8 @@ public class Sale {
     private final UUID employeeId;
     private final UUID clientId;  // nullable
     private final PaymentMode paymentMode;
+    /** Mobile Money transaction reference typed at checkout — nullable, at most 100 chars. */
+    private final String mobileMoneyRef;
     private final int totalAmount; // XAF integer — net: subtotal − discountAmount
     private final int discountAmount; // XAF integer — 0 if no discount (Story 4.2)
     private final SaleStatus status;
@@ -39,6 +41,14 @@ public class Sale {
                 PaymentMode paymentMode, int totalAmount, int discountAmount,
                 SaleStatus status, Instant occurredAt, Instant createdAt,
                 List<SaleItem> items, long version) {
+        this(id, storeId, employeeId, clientId, paymentMode, totalAmount, discountAmount,
+                status, occurredAt, createdAt, items, version, null);
+    }
+
+    public Sale(UUID id, UUID storeId, UUID employeeId, UUID clientId,
+                PaymentMode paymentMode, int totalAmount, int discountAmount,
+                SaleStatus status, Instant occurredAt, Instant createdAt,
+                List<SaleItem> items, long version, String mobileMoneyRef) {
         if (discountAmount < 0) {
             throw new IllegalArgumentException("Discount amount must be non-negative, got: " + discountAmount);
         }
@@ -56,6 +66,7 @@ public class Sale {
         this.employeeId = employeeId;
         this.clientId = clientId;
         this.paymentMode = paymentMode;
+        this.mobileMoneyRef = normalizeMobileMoneyRef(mobileMoneyRef);
         this.totalAmount = totalAmount;
         this.discountAmount = discountAmount;
         this.status = status;
@@ -70,6 +81,7 @@ public class Sale {
     public UUID getEmployeeId() { return employeeId; }
     public UUID getClientId() { return clientId; }
     public PaymentMode getPaymentMode() { return paymentMode; }
+    public String getMobileMoneyRef() { return mobileMoneyRef; }
     public int getTotalAmount() { return totalAmount; }
     public int getDiscountAmount() { return discountAmount; }
     public SaleStatus getStatus() { return status; }
@@ -77,4 +89,19 @@ public class Sale {
     public Instant getCreatedAt() { return createdAt; }
     public List<SaleItem> getItems() { return items; }
     public long getVersion() { return version; }
+
+    /** Max length of {@code sales.mobile_money_ref}. */
+    public static final int MOBILE_MONEY_REF_MAX_LENGTH = 100;
+
+    /**
+     * Blank → null, trimmed, cut to the column width: an offline sale already happened, so an
+     * over-long reference must not get it refused on every sync attempt.
+     */
+    static String normalizeMobileMoneyRef(String ref) {
+        if (ref == null || ref.isBlank()) return null;
+        String trimmed = ref.trim();
+        return trimmed.length() > MOBILE_MONEY_REF_MAX_LENGTH
+                ? trimmed.substring(0, MOBILE_MONEY_REF_MAX_LENGTH)
+                : trimmed;
+    }
 }

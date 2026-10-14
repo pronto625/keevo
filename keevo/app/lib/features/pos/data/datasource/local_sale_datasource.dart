@@ -32,6 +32,7 @@ class LocalSaleDataSource {
         totalAmount: sale.totalAmount,
         discountAmount: Value(sale.discountAmount),
         paymentMode: sale.paymentMode.value,
+        mobileMoneyRef: Value(sale.mobileMoneyRef),
         clientId: Value(sale.clientId),
         status: Value(sale.status),
         occurredAt: Value(sale.occurredAt),

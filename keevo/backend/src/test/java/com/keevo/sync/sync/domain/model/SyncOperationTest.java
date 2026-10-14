@@ -55,7 +55,8 @@ class SyncOperationTest {
         var types = new String[]{
                 "CREATE_SALE", "CREATE_PRODUCT", "UPDATE_PRODUCT", "ARCHIVE_PRODUCT",
                 "UNARCHIVE_PRODUCT", "STOCK_TRANSFER", "CREATE_DAY_CLOSURE", "STOCK_ADJUST",
-                "UPDATE_CLIENT", "ARCHIVE_CLIENT", "UPDATE_SUPPLIER", "ARCHIVE_SUPPLIER",
+                "UPDATE_CLIENT", "ARCHIVE_CLIENT", "UNARCHIVE_CLIENT",
+                "UPDATE_SUPPLIER", "ARCHIVE_SUPPLIER", "UNARCHIVE_SUPPLIER",
                 "CREATE_EMPLOYEE", "REASSIGN_EMPLOYEE", "DEACTIVATE_EMPLOYEE", "REACTIVATE_EMPLOYEE"
         };
         for (String type : types) {

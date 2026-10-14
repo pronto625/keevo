@@ -32,6 +32,9 @@ public class SaleJpaEntity {
     @Column(name = "payment_mode", nullable = false, length = 30)
     private String paymentMode;
 
+    @Column(name = "mobile_money_ref", length = 100)
+    private String mobileMoneyRef;
+
     @Column(name = "status", nullable = false, length = 20)
     private String status;
 
@@ -83,6 +86,8 @@ public class SaleJpaEntity {
     public void setDiscountAmount(int discountAmount) { this.discountAmount = discountAmount; }
     public String getPaymentMode() { return paymentMode; }
     public void setPaymentMode(String paymentMode) { this.paymentMode = paymentMode; }
+    public String getMobileMoneyRef() { return mobileMoneyRef; }
+    public void setMobileMoneyRef(String mobileMoneyRef) { this.mobileMoneyRef = mobileMoneyRef; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public Instant getOccurredAt() { return occurredAt; }

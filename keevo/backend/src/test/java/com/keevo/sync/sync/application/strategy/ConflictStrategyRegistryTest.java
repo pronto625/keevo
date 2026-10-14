@@ -59,6 +59,13 @@ class ConflictStrategyRegistryTest {
     }
 
     @Test
+    void resolve_unarchiveContacts_returnLastWriteWinsStrategy_likeArchive() {
+        assertThat(registry.resolve("UNARCHIVE_CLIENT")).isSameAs(lastWriteWinsStrategy);
+        assertThat(registry.resolve("UNARCHIVE_SUPPLIER")).isSameAs(lastWriteWinsStrategy);
+        assertThat(registry.resolve("ARCHIVE_CLIENT")).isSameAs(lastWriteWinsStrategy);
+    }
+
+    @Test
     void resolve_createEmployee_returnsLastWriteWinsStrategy() {
         assertThat(registry.resolve("CREATE_EMPLOYEE")).isSameAs(lastWriteWinsStrategy);
     }

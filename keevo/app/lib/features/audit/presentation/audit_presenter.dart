@@ -193,6 +193,8 @@ class AuditPresenter {
         Icons.person_add_alt_outlined, AuditCategory.contact),
     'CLIENT_ARCHIVED': AuditActionInfo('Client archivé', 'archivé le client',
         Icons.person_off_outlined, AuditCategory.contact),
+    'CLIENT_UNARCHIVED': AuditActionInfo('Client désarchivé',
+        'désarchivé le client', Icons.person_outline, AuditCategory.contact),
     'SUPPLIER_CREATED': AuditActionInfo(
         'Fournisseur créé',
         'créé le fournisseur',
@@ -201,6 +203,11 @@ class AuditPresenter {
     'SUPPLIER_ARCHIVED': AuditActionInfo(
         'Fournisseur archivé',
         'archivé le fournisseur',
+        Icons.local_shipping_outlined,
+        AuditCategory.contact),
+    'SUPPLIER_UNARCHIVED': AuditActionInfo(
+        'Fournisseur désarchivé',
+        'désarchivé le fournisseur',
         Icons.local_shipping_outlined,
         AuditCategory.contact),
     // Categories

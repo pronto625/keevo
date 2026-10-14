@@ -454,7 +454,7 @@ class QuarantinedSaleLine {
   int get total => quantity * unitPrice;
 }
 
-/// Amount with a space as thousands separator, e.g. "12 500 FCFA".
+/// Amount with a space as thousands separator, e.g. "12 500 XAF".
 String formatQuarantineAmount(int amount) {
   final negative = amount < 0;
   final str = amount.abs().toString();
@@ -463,7 +463,7 @@ String formatQuarantineAmount(int amount) {
     if (i > 0 && (str.length - i) % 3 == 0) buf.write(' ');
     buf.write(str[i]);
   }
-  return '${negative ? '-' : ''}$buf FCFA';
+  return '${negative ? '-' : ''}$buf XAF';
 }
 
 final syncQuarantineServiceProvider = Provider<SyncQuarantineService>((ref) {

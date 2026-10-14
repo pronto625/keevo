@@ -131,6 +131,7 @@ class RemoteDayClosureDataSource {
       totalAmount: json['totalAmount'] ?? 0,
       discountAmount: json['discountAmount'] ?? 0,
       paymentMode: _parsePaymentMode(json['paymentMode']),
+      mobileMoneyRef: json['mobileMoneyRef'] as String?,
       clientId: json['clientId'],
       status: json['status'] ?? 'COMPLETED',
       occurredAt: json['occurredAt'] != null

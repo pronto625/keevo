@@ -21,6 +21,8 @@ public interface SupplierRepository {
 
     void archive(UUID id);
 
+    void unarchive(UUID id);
+
     List<UUID> findProductIdsBySupplier(UUID supplierId);
 
     void linkProducts(UUID supplierId, List<UUID> productIds);

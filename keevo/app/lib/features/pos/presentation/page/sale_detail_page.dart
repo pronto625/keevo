@@ -121,6 +121,17 @@ class _SaleDetailContentState extends ConsumerState<_SaleDetailContent> {
                     fontSize: 14,
                   ),
                 ),
+                if (sale.mobileMoneyRef?.trim().isNotEmpty ?? false) ...[
+                  const SizedBox(height: 4),
+                  SelectableText(
+                    'Référence Mobile Money : ${sale.mobileMoneyRef!.trim()}',
+                    key: const Key('mobile-money-ref'),
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -544,7 +555,7 @@ class _CurrencyFormat {
   String format(int amount) {
     final formatter = NumberFormat.currency(
       locale: 'fr_FR',
-      symbol: 'FCFA',
+      symbol: 'XAF',
       decimalDigits: 0,
     );
     return formatter.format(amount);

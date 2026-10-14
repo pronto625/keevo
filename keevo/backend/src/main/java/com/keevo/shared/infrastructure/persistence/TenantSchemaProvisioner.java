@@ -543,6 +543,13 @@ public class TenantSchemaProvisioner {
     static final String DDL_SALES_MIGRATE_VERSION =
             "ALTER TABLE sales ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0";
 
+    /**
+     * Mobile Money transaction reference typed at checkout (nullable). Sent by the app since
+     * Story 4.1 but never stored, so other devices, a reinstall and the exports lost it.
+     */
+    static final String DDL_SALES_MIGRATE_MOBILE_MONEY_REF =
+            "ALTER TABLE sales ADD COLUMN IF NOT EXISTS mobile_money_ref VARCHAR(100)";
+
     // ── Employees (Story 3.5) ─────────────────────────────────────────────────
 
     static final String DDL_EMPLOYEES = """
@@ -1112,6 +1119,7 @@ public class TenantSchemaProvisioner {
             // Story 5.2 — updated_at for sales/sale_items delta pull
             stmt.execute(DDL_SALES_MIGRATE_UPDATED_AT);
             stmt.execute(DDL_SALES_MIGRATE_VERSION);            // Story v1s-13-10: optimistic lock
+            stmt.execute(DDL_SALES_MIGRATE_MOBILE_MONEY_REF);   // idempotent: Mobile Money reference
             stmt.execute(DDL_SALE_ITEMS_MIGRATE_UPDATED_AT);
             // Story 3.5 — employees
             stmt.execute(DDL_EMPLOYEES);

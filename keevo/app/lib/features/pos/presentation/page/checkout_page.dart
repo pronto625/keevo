@@ -216,7 +216,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   decoration: InputDecoration(
                     labelText: 'Montant reçu (optionnel)',
                     hintText: 'Ex: $finalTotal',
-                    suffixText: 'FCFA',
+                    suffixText: 'XAF',
                     helperText: _montantRecu != null && _montantRecu! < finalTotal
                         ? 'Montant inférieur au total (${_currencyFormat.format(finalTotal)})'
                         : null,

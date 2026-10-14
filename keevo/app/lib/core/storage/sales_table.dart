@@ -18,6 +18,11 @@ class Sales extends Table {
   /// Payment mode: 'CASH' | 'MOBILE_MONEY'
   TextColumn get paymentMode => text()();
 
+  /// Mobile Money transaction reference typed at checkout (nullable). Kept
+  /// locally and pulled from the server so the sale detail shows it on every
+  /// device and after a reinstall.
+  TextColumn get mobileMoneyRef => text().nullable()();
+
   /// Optional link to a client — nullable (walk-in sales have no client).
   /// Added in Story 2.5 — Gestion Clients & Fournisseurs.
   TextColumn get clientId => text().nullable()();

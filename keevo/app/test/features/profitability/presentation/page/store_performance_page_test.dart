@@ -77,7 +77,7 @@ void main() {
       await tester.pumpWidget(buildUnderTest(mockRepo));
       await tester.pumpAndSettle();
 
-      expect(find.text('+8.0%'), findsOneWidget);
+      expect(find.text('+8,0\u00A0%'), findsOneWidget);
     });
 
     testWidgets('rendersNegativeDelta_inRed', (tester) async {
@@ -88,7 +88,7 @@ void main() {
       await tester.pumpWidget(buildUnderTest(mockRepo));
       await tester.pumpAndSettle();
 
-      expect(find.text('-3.0%'), findsOneWidget);
+      expect(find.text('-3,0\u00A0%'), findsOneWidget);
     });
 
     testWidgets('tapMetricToggle_SALES_COUNT_reranks', (tester) async {

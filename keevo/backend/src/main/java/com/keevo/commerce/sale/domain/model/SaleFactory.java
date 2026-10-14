@@ -44,7 +44,9 @@ public final class SaleFactory {
                 statusOverride,
                 occurredAt,
                 now,
-                items
+                items,
+                0L,
+                command.mobileMoneyRef()
         );
     }
 

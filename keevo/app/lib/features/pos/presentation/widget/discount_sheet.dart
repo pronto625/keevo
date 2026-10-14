@@ -29,7 +29,7 @@ class _DiscountSheetState extends ConsumerState<DiscountSheet> {
   String? _error;
 
   static final _currencyFormat =
-      NumberFormat.currency(locale: 'fr_CM', symbol: 'FCFA', decimalDigits: 0);
+      NumberFormat.currency(locale: 'fr_CM', symbol: 'XAF', decimalDigits: 0);
 
   @override
   void initState() {
@@ -43,8 +43,24 @@ class _DiscountSheetState extends ConsumerState<DiscountSheet> {
 
   int get _subtotal => ref.read(cartProvider.notifier).totalAmount;
 
+  int get _enteredValue => int.tryParse(_controller.text.trim()) ?? 0;
+
+  /// Inline error for an out-of-range entry. The strategies clamp silently
+  /// (150 % would bring the total to 0), so the sheet refuses it up front;
+  /// 100 % / the exact subtotal stays allowed, as on the backend.
+  String? get _validationError {
+    final value = _enteredValue;
+    if (_isPercentage && value > 100) {
+      return 'Le pourcentage ne peut pas dépasser 100 %';
+    }
+    if (!_isPercentage && value > _subtotal) {
+      return 'La réduction ne peut pas dépasser le sous-total';
+    }
+    return null;
+  }
+
   int _computeDiscount() {
-    final value = int.tryParse(_controller.text.trim()) ?? 0;
+    final value = _enteredValue;
     if (_isPercentage) {
       return PercentageDiscountStrategy(value).compute(_subtotal);
     } else {
@@ -53,6 +69,7 @@ class _DiscountSheetState extends ConsumerState<DiscountSheet> {
   }
 
   void _apply() {
+    if (_validationError != null) return;
     final discount = _computeDiscount();
     final ok = ref.read(cartProvider.notifier).setDiscount(discount);
     if (!ok) {
@@ -75,6 +92,7 @@ class _DiscountSheetState extends ConsumerState<DiscountSheet> {
     final subtotal = _subtotal;
     final discount = _computeDiscount();
     final preview = subtotal - discount;
+    final invalid = _validationError;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -120,8 +138,9 @@ class _DiscountSheetState extends ConsumerState<DiscountSheet> {
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             decoration: InputDecoration(
               hintText: _isPercentage ? 'Ex: 10' : 'Ex: 1000',
-              suffixText: _isPercentage ? '%' : 'FCFA',
-              errorText: _error,
+              suffixText: _isPercentage ? '%' : 'XAF',
+              errorText: invalid ?? _error,
+              errorMaxLines: 2,
             ),
             onChanged: (_) => setState(() => _error = null),
           ),
@@ -134,7 +153,7 @@ class _DiscountSheetState extends ConsumerState<DiscountSheet> {
           ),
           const SizedBox(height: 16),
           FilledButton(
-            onPressed: _apply,
+            onPressed: invalid == null ? _apply : null,
             style: FilledButton.styleFrom(
               backgroundColor: AppTheme.primary,
               padding: const EdgeInsets.symmetric(vertical: 14),

@@ -218,5 +218,27 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.byKey(const Key('submitButton')), findsOneWidget);
     });
+
+    testWidgets('short-password error wraps instead of being truncated',
+        (tester) async {
+      // 720 px wide phone at 2x density.
+      tester.view.physicalSize = const Size(720, 1600);
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(_buildPage([
+        registerUserUseCaseProvider.overrideWithValue(mockUseCase),
+      ]));
+      await tester.pump();
+
+      await tester.enterText(find.byKey(const Key('passwordField')), 'abc');
+      await tester.tap(find.byKey(const Key('submitButton')));
+      await tester.pumpAndSettle();
+
+      final error = tester.widget<Text>(
+          find.text('Le mot de passe doit contenir au moins 8 caractères'));
+      expect(error.maxLines, greaterThan(1));
+      expect(tester.takeException(), isNull);
+    });
   });
 }

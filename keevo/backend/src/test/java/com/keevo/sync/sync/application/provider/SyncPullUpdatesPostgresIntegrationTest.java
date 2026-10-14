@@ -124,6 +124,35 @@ class SyncPullUpdatesPostgresIntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
+    @DisplayName("sales: the Mobile Money reference is pulled; null for a cash sale")
+    void saleCarriesMobileMoneyRef() {
+        UUID momo = UUID.randomUUID();
+        UUID cash = UUID.randomUUID();
+        insertSale(momo, "MOBILE_MONEY", "MP2603.1234");
+        insertSale(cash, "CASH", null);
+
+        List<Map<String, Object>> rows = pull(new SaleDeltaProvider(em), CREATED.minusSeconds(1));
+        assertThat(rows).hasSize(2);
+        assertThat(rows).filteredOn(r -> momo.toString().equals(r.get("id")))
+                .singleElement().satisfies(r -> assertThat(r).containsEntry("mobileMoneyRef", "MP2603.1234"));
+        assertThat(rows).filteredOn(r -> cash.toString().equals(r.get("id")))
+                .singleElement().satisfies(r -> assertThat(r).containsEntry("mobileMoneyRef", null));
+    }
+
+    @Test
+    @DisplayName("schema sync: an old tenant gets sales.mobile_money_ref")
+    void oldTenantGetsMobileMoneyRef() throws Exception {
+        jdbc.execute("ALTER TABLE " + T + "sales DROP COLUMN mobile_money_ref");
+
+        schemaSync.syncNow(SCHEMA);
+
+        Integer columns = jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.columns "
+                + "WHERE table_schema = ? AND table_name = 'sales' AND column_name = 'mobile_money_ref'",
+                Integer.class, SCHEMA);
+        assertThat(columns).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("EndOfDayReportJpaEntity: every save moves updated_at")
     void reportEntityStampsUpdatedAt() {
         UUID id = UUID.randomUUID();
@@ -149,6 +178,13 @@ class SyncPullUpdatesPostgresIntegrationTest extends PostgresIntegrationTest {
                         + "delivery_status, created_at, updated_at) VALUES (?, 'tenant', ?, 'DAILY', ?, 'x', ?, ?, ?)",
                 id, UUID.randomUUID(), java.sql.Date.valueOf(LocalDate.of(2026, 10, 14)), status,
                 Timestamp.from(at), Timestamp.from(at));
+    }
+
+    private void insertSale(UUID id, String paymentMode, String mobileMoneyRef) {
+        jdbc.update("INSERT INTO " + T + "sales (id, store_id, employee_id, total_amount, payment_mode, "
+                        + "mobile_money_ref, created_at, occurred_at, updated_at) VALUES (?, ?, ?, 1500, ?, ?, ?, ?, ?)",
+                id, UUID.randomUUID(), UUID.randomUUID(), paymentMode, mobileMoneyRef,
+                Timestamp.from(CREATED), Timestamp.from(CREATED), Timestamp.from(CREATED));
     }
 
     private static EndOfDayReportJpaEntity report(UUID id, String status, int attempts) {

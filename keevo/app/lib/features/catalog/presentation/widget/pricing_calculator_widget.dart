@@ -1,6 +1,8 @@
 import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/percent_format.dart';
+
 /// Widget de calcul de marge en temps réel.
 ///
 /// Reproduit fidèlement la logique du backend [PricingCalculator] :
@@ -13,6 +15,9 @@ import 'package:flutter/material.dart';
 ///   - LOW    (<  10%) → rouge
 ///   - MODERATE (< 20%) → orange
 ///   - PROFITABLE (≥ 20%) → vert
+///
+/// Sans prix d'achat (coût total à 0), la marge n'est pas calculable : taux et
+/// marge affichés « — », badge neutre, et une invite à saisir le prix d'achat.
 class PricingCalculatorWidget extends StatelessWidget {
   const PricingCalculatorWidget({
     super.key,
@@ -28,6 +33,8 @@ class PricingCalculatorWidget extends StatelessWidget {
   // ---------- logique miroir du backend ----------
 
   int get _totalCost => buyPrice + transportCost;
+
+  bool get _costUnknown => _totalCost <= 0;
 
   int get _grossMarginXaf => sellingPrice - _totalCost;
 
@@ -46,11 +53,13 @@ class PricingCalculatorWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final unknown = _costUnknown;
     final level = _level;
-    final color = level.color;
-    final label = level.label;
+    final color = unknown
+        ? Theme.of(context).colorScheme.onSurfaceVariant
+        : level.color;
     final pct = _marginPercentage;
-    final isLoss = _grossMarginXaf < 0;
+    final isLoss = !unknown && _grossMarginXaf < 0;
 
     return Container(
       decoration: BoxDecoration(
@@ -75,28 +84,38 @@ class PricingCalculatorWidget extends StatelessWidget {
                       ),
                 ),
                 const Spacer(),
-                _Badge(label: label, color: color),
+                if (!unknown) _Badge(label: level.label, color: color),
               ],
             ),
             const SizedBox(height: 12),
             _Row(
               label: 'Coût total',
-              value: _formatXaf(_totalCost),
+              value: unknown ? '—' : _formatXaf(_totalCost),
               context: context,
             ),
             _Row(
               label: 'Marge brute',
-              value: _formatXaf(_grossMarginXaf),
+              value: unknown ? '—' : _formatXaf(_grossMarginXaf),
               context: context,
               valueColor: isLoss ? AppTheme.errorColor : null,
             ),
             _Row(
               label: 'Taux de marge',
-              value: '${pct.toStringAsFixed(1)} %',
+              value: unknown ? '—' : formatPercentFr(pct),
               context: context,
               valueColor: color,
               bold: true,
             ),
+            if (unknown) ...[
+              const SizedBox(height: 8),
+              Text(
+                "Renseignez le prix d'achat pour calculer la marge",
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: color,
+                      fontStyle: FontStyle.italic,
+                    ),
+              ),
+            ],
             if (isLoss) ...[
               const SizedBox(height: 10),
               Container(

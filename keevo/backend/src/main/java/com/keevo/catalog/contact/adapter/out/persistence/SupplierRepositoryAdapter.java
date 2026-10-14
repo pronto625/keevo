@@ -60,6 +60,15 @@ public class SupplierRepositoryAdapter implements SupplierRepository {
     }
 
     @Override
+    public void unarchive(UUID id) {
+        supplierRepo.findById(id).ifPresent(e -> {
+            e.setArchived(false);
+            e.setUpdatedAt(Instant.now()); // pull cursor: the other devices get the restored supplier
+            supplierRepo.save(e);
+        });
+    }
+
+    @Override
     public List<UUID> findProductIdsBySupplier(UUID supplierId) {
         return productSupplierRepo.findProductIdsBySupplierId(supplierId);
     }

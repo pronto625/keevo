@@ -62,4 +62,41 @@ void main() {
     expect(sale.createdAt.isUtc, isFalse);
     expect(sale.createdAt.isAtSameMomentAs(instant), isTrue);
   });
+
+  test('getSalesHistory() reads the Mobile Money reference', () async {
+    when(() => dio.get<Map<String, dynamic>>(
+          '/api/v1/sales/history',
+          queryParameters: any(named: 'queryParameters'),
+        )).thenAnswer((_) async => Response(
+          data: {
+            'data': {
+              'content': [
+                {
+                  'id': 'sale-1',
+                  'storeId': 'store-1',
+                  'employeeId': 'emp-1',
+                  'paymentMode': 'MOBILE_MONEY',
+                  'mobileMoneyRef': 'MP2603.1234',
+                  'totalAmount': 1000,
+                  'status': 'COMPLETED',
+                  'items': <dynamic>[],
+                  'occurredAt': utcIso,
+                  'createdAt': utcIso,
+                },
+              ],
+            },
+          },
+          statusCode: 200,
+          requestOptions: RequestOptions(path: '/api/v1/sales/history'),
+        ));
+
+    final sales = await datasource.getSalesHistory(SalesHistoryFilter(
+      storeId: 'store-1',
+      from: DateTime(2026, 10, 13),
+      to: DateTime(2026, 10, 14, 23, 59, 59),
+      filterType: DateFilterType.custom,
+    ));
+
+    expect(sales.single.mobileMoneyRef, 'MP2603.1234');
+  });
 }

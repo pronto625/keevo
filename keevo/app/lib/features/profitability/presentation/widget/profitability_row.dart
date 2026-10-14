@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../domain/model/product_profitability_model.dart';
+import '../../../../core/utils/percent_format.dart';
 
 /// ProductProfitabilityRow — list tile for one product in the profitability list.
 ///
@@ -76,7 +77,7 @@ class ProductProfitabilityRow extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    '${entry.marginPercent.toStringAsFixed(1)}%',
+                    formatPercentFr(entry.marginPercent),
                     style: theme.textTheme.labelMedium?.copyWith(
                       color: color,
                       fontWeight: FontWeight.w700,

@@ -53,6 +53,7 @@ public class SaleRepositoryAdapter implements SaleRepository {
         entity.setTotalAmount(sale.getTotalAmount());
         entity.setDiscountAmount(sale.getDiscountAmount());
         entity.setPaymentMode(sale.getPaymentMode().name());
+        entity.setMobileMoneyRef(sale.getMobileMoneyRef());
         entity.setStatus(sale.getStatus().name());
         entity.setOccurredAt(sale.getOccurredAt());
         entity.setCreatedAt(sale.getCreatedAt());
@@ -97,7 +98,8 @@ public class SaleRepositoryAdapter implements SaleRepository {
                 entity.getOccurredAt(),
                 entity.getCreatedAt(),
                 items,
-                entity.getVersion()
+                entity.getVersion(),
+                entity.getMobileMoneyRef()
         );
     }
 

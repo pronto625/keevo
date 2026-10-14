@@ -19,5 +19,8 @@ abstract class ClientRepository {
     String? notes,
   });
   Future<void> archive(String id);
+
+  /// Restores an archived client (sync UNARCHIVE_CLIENT).
+  Future<void> unarchive(String id);
   Future<void> syncFromRemote();
 }

@@ -69,7 +69,7 @@ void main() {
     expect(find.textContaining('déc'), findsOneWidget);
   });
 
-  testWidgets('WEEKLY report shows FCFA revenue amount', (tester) async {
+  testWidgets('WEEKLY report shows XAF revenue amount', (tester) async {
     await tester.pumpWidget(_wrap(ReportHistoryCard(report: _weeklyReport())));
     // Revenue 3400000 XAF is shown
     expect(find.textContaining('3'), findsWidgets);

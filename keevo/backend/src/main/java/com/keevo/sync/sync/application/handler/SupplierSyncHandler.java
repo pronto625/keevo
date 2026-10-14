@@ -1,6 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
 import com.keevo.catalog.contact.application.usecase.ArchiveSupplierUseCase;
+import com.keevo.catalog.contact.application.usecase.UnarchiveSupplierUseCase;
 import com.keevo.catalog.contact.application.usecase.UpdateSupplierUseCase;
 import com.keevo.catalog.contact.application.usecase.UpdateSupplierUseCase.UpdateSupplierCommand;
 import com.keevo.sync.sync.domain.model.SyncOperation;
@@ -17,15 +18,18 @@ public class SupplierSyncHandler extends AbstractSyncOperationHandler {
 
     private final UpdateSupplierUseCase updateSupplier;
     private final ArchiveSupplierUseCase archiveSupplier;
+    private final UnarchiveSupplierUseCase unarchiveSupplier;
 
-    public SupplierSyncHandler(UpdateSupplierUseCase updateSupplier, ArchiveSupplierUseCase archiveSupplier) {
+    public SupplierSyncHandler(UpdateSupplierUseCase updateSupplier, ArchiveSupplierUseCase archiveSupplier,
+                             UnarchiveSupplierUseCase unarchiveSupplier) {
         this.updateSupplier = updateSupplier;
         this.archiveSupplier = archiveSupplier;
+        this.unarchiveSupplier = unarchiveSupplier;
     }
 
     @Override
     public Set<String> supportedTypes() {
-        return Set.of("UPDATE_SUPPLIER", "ARCHIVE_SUPPLIER");
+        return Set.of("UPDATE_SUPPLIER", "ARCHIVE_SUPPLIER", "UNARCHIVE_SUPPLIER");
     }
 
     @Override
@@ -54,6 +58,12 @@ public class SupplierSyncHandler extends AbstractSyncOperationHandler {
             }
             case "ARCHIVE_SUPPLIER" -> {
                 archiveSupplier.execute(supplierId, actorId, tenantId);
+                yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
+                        supplierId.toString(), null);
+            }
+            case "UNARCHIVE_SUPPLIER" -> {
+                // Same access rules as ARCHIVE_SUPPLIER (no role restriction).
+                unarchiveSupplier.execute(supplierId, actorId, tenantId);
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         supplierId.toString(), null);
             }

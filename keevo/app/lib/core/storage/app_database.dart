@@ -96,7 +96,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTestingWith(super.executor);
 
   @override
-  int get schemaVersion => 29;
+  int get schemaVersion => 30;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -290,6 +290,10 @@ class AppDatabase extends _$AppDatabase {
         await migrator.addColumn(auditEntries, auditEntries.deviceId);
         await migrator.addColumn(auditEntries, auditEntries.source);
         await migrator.addColumn(auditEntries, auditEntries.metadata);
+      }
+      if (from < 30) {
+        // Mobile Money reference of a sale (was sent to the server only).
+        await migrator.addColumn(sales, sales.mobileMoneyRef);
       }
     },
   );

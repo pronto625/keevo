@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../domain/model/product_profitability_model.dart';
+import '../../../../core/utils/percent_format.dart';
 
 /// StorePerformanceRow — ranked store tile for the store comparison page.
 ///
@@ -42,7 +43,7 @@ class StorePerformanceRow extends StatelessWidget {
     final deltaColor =
         isPositive ? theme.colorScheme.success : theme.colorScheme.error;
     final deltaText =
-        '${isPositive ? '+' : ''}${delta.toStringAsFixed(1)}%';
+        '${isPositive ? '+' : ''}${formatPercentFr(delta)}';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

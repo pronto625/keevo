@@ -80,7 +80,7 @@ class _PendingSaleTile extends StatelessWidget {
   const _PendingSaleTile({required this.sale, required this.onTap});
 
   static final _currencyFormat =
-      NumberFormat.currency(locale: 'fr_CM', symbol: 'FCFA', decimalDigits: 0);
+      NumberFormat.currency(locale: 'fr_CM', symbol: 'XAF', decimalDigits: 0);
 
   static final _dateFormat = DateFormat('dd/MM HH:mm');
 

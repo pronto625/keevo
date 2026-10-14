@@ -302,6 +302,8 @@ public class TenantSchemaSyncService {
             stmt.execute(TenantSchemaProvisioner.DDL_SALE_ITEMS_MIGRATE_UPDATED_AT);
             // Story v1s-13-10 — optimistic lock column on sales
             stmt.execute(TenantSchemaProvisioner.DDL_SALES_MIGRATE_VERSION);
+            // sales.mobile_money_ref — Mobile Money reference, sent by the app but never stored
+            stmt.execute(TenantSchemaProvisioner.DDL_SALES_MIGRATE_MOBILE_MONEY_REF);
             // Story 5.3 — sync conflicts log indexes
             stmt.execute(TenantSchemaProvisioner.DDL_SYNC_CONFLICTS_LOG_IDX_RESOLVED);
             stmt.execute(TenantSchemaProvisioner.DDL_SYNC_CONFLICTS_LOG_IDX_ENTITY);

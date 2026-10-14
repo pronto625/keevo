@@ -35,7 +35,7 @@ class CartBottomSheet extends ConsumerStatefulWidget {
 
 class _CartBottomSheetState extends ConsumerState<CartBottomSheet> {
   static final _currencyFormat =
-      NumberFormat.currency(locale: 'fr_CM', symbol: 'FCFA', decimalDigits: 0);
+      NumberFormat.currency(locale: 'fr_CM', symbol: 'XAF', decimalDigits: 0);
 
   final _sheetController = DraggableScrollableController();
   bool _wasKeyboardOpen = false;
@@ -362,7 +362,7 @@ class _CartItemTileState extends State<_CartItemTile> {
   late FocusNode _qtyFocus;
 
   static final _currencyFormat =
-      NumberFormat.currency(locale: 'fr_CM', symbol: 'FCFA', decimalDigits: 0);
+      NumberFormat.currency(locale: 'fr_CM', symbol: 'XAF', decimalDigits: 0);
 
   @override
   void initState() {
@@ -492,7 +492,7 @@ class _CartItemTileState extends State<_CartItemTile> {
                             isDense: true,
                             contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 6),
-                            suffix: const Text('FCFA',
+                            suffix: const Text('XAF',
                                 style: TextStyle(fontSize: 11)),
                           ),
                           onTapOutside: (_) => _priceFocus.unfocus(),

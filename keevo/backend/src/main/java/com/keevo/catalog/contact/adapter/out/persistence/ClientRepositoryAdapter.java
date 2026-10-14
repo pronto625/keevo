@@ -53,6 +53,15 @@ public class ClientRepositoryAdapter implements ClientRepository {
         });
     }
 
+    @Override
+    public void unarchive(UUID id) {
+        springRepository.findById(id).ifPresent(e -> {
+            e.setArchived(false);
+            e.setUpdatedAt(Instant.now()); // pull cursor: the other devices get the restored client
+            springRepository.save(e);
+        });
+    }
+
     // ── Mapping ───────────────────────────────────────────────────────────────
 
     private ClientJpaEntity toEntity(Client client) {
