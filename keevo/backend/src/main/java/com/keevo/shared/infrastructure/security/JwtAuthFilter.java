@@ -55,22 +55,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(JwtAuthFilter.class);
 
-    /** Paths that must never require a JWT — mirrors SecurityConfig.PUBLIC_PATHS. */
-    private static final Set<String> PUBLIC_PATHS = Set.of(
-            "/actuator/health",
-            "/api/v1/auth/register",
-            "/api/v1/auth/login",
-            "/api/v1/auth/refresh",
-            "/api/v1/auth/logout",
-            "/api/v1/auth/select-tenant",  // Story 1.7 — AC7: two-step login step 2 is public
-            "/api/v1/exports/download"     // v1s-18-1 — signed export link (HMAC token, no JWT)
-    );
-
-    /** Ant-style paths (wildcards) that are also public. */
-    private static final List<String> PUBLIC_ANT_PATHS = List.of(
-            "/v3/api-docs/**",
-            "/swagger-ui/**"
-    );
+    /**
+     * Paths that never require a JWT: {@link SecurityConfig#PUBLIC_PATHS}, the single source.
+     * A separate copy here had drifted — forgot/reset-password were public in SecurityConfig but
+     * answered 401 here, so password reset never worked (device test).
+     */
+    private static final List<String> PUBLIC_PATHS = List.of(SecurityConfig.PUBLIC_PATHS);
 
     private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
 
@@ -108,8 +98,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        if (PUBLIC_PATHS.contains(path)) return true;
-        return PUBLIC_ANT_PATHS.stream().anyMatch(p -> PATH_MATCHER.match(p, path));
+        return PUBLIC_PATHS.stream().anyMatch(p -> PATH_MATCHER.match(p, path));
     }
 
     @Override

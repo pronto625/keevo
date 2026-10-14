@@ -52,7 +52,8 @@ import java.util.List;
 public class SecurityConfig {
 
     /** Public paths that bypass authentication entirely. */
-    private static final String[] PUBLIC_PATHS = {
+    /** Single source of the JWT-free paths — {@link JwtAuthFilter} reads it too. */
+    static final String[] PUBLIC_PATHS = {
             "/actuator/health",
             "/api/v1/auth/register",
             "/api/v1/auth/login",
