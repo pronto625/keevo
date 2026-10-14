@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/contact_validation.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import '../../domain/model/client_model.dart';
 import '../provider/contact_provider.dart';
@@ -56,12 +57,15 @@ class _ClientFormPageState extends ConsumerState<ClientFormPage>
   }
 
   Future<void> _save() async {
-    if (_name.text.trim().isEmpty || _phone.text.trim().isEmpty) {
+    final problem = _name.text.trim().isEmpty
+        ? 'Le nom est requis'
+        : contactPhoneError(_phone.text) ?? contactEmailError(_email.text);
+    if (problem != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Row(children: [
-          Icon(Icons.warning_amber_rounded, color: AppTheme.onBrand, size: 18),
-          SizedBox(width: 8),
-          Text('Nom et téléphone sont requis'),
+        content: Row(children: [
+          const Icon(Icons.warning_amber_rounded, color: AppTheme.onBrand, size: 18),
+          const SizedBox(width: 8),
+          Expanded(child: Text(problem)),
         ]),
         backgroundColor: AppTheme.errorStrong,
         behavior: SnackBarBehavior.floating,
@@ -77,14 +81,14 @@ class _ClientFormPageState extends ConsumerState<ClientFormPage>
         await notifier.patchClient(
           id:    widget.existing!.id,
           name:  _name.text.trim(),
-          phone: _phone.text.trim(),
+          phone: normalizeContactPhone(_phone.text)!,
           email: _email.text.trim().isEmpty ? null : _email.text.trim(),
           notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
         );
       } else {
         await notifier.create(
           name:  _name.text.trim(),
-          phone: _phone.text.trim(),
+          phone: normalizeContactPhone(_phone.text)!,
           email: _email.text.trim().isEmpty ? null : _email.text.trim(),
           notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
         );

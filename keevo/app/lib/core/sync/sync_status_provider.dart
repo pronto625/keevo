@@ -11,10 +11,19 @@ import 'sync_status.dart';
 /// Raw connectivity stream — List<ConnectivityResult> in connectivity_plus v6+.
 ///
 /// Observer pattern: SyncStatusProvider watches this stream and rebuilds
-/// on every network state change.
+/// on every network state change. The current state is emitted first:
+/// `onConnectivityChanged` only fires on a change, so without it the sync
+/// indicator stayed on « Vérification… » for the whole session (device test).
 final connectivityStreamProvider =
-    StreamProvider<List<ConnectivityResult>>((ref) =>
-        Connectivity().onConnectivityChanged);
+    StreamProvider<List<ConnectivityResult>>((ref) async* {
+  final connectivity = Connectivity();
+  try {
+    yield await connectivity.checkConnectivity();
+  } catch (_) {
+    // Unknown until the first change event.
+  }
+  yield* connectivity.onConnectivityChanged;
+});
 
 /// First offline date read from SharedPreferences (production) or overridden
 /// directly in tests via [ProviderContainer.overrides].
@@ -46,25 +55,22 @@ final daysOfflineProvider = Provider<int>((ref) {
 /// Connectivity_plus v6+ note: emits List<ConnectivityResult> not a single value.
 /// Online = list contains wifi | mobile | ethernet.
 final syncStatusProvider = StreamProvider<SyncStatus>((ref) async* {
-  // Watch the connectivityStreamProvider's stream directly (avoids deprecated .stream)
-  await for (final results in ref.watch(connectivityStreamProvider.stream)) {
-    final isOnline = _isConnected(results);
-    if (isOnline) {
-      // Device came back online — persist the reconnect via SharedPreferences
-      // in production; tests override firstOfflineDateProvider directly.
-      yield SyncStatus.online;
-    } else {
-      // Device is offline — compute days offline from firstOfflineDateProvider
-      final firstOfflineDate = ref.read(firstOfflineDateProvider);
-      final int days;
-      if (firstOfflineDate == null) {
-        days = 0; // First moment of going offline — same day
-      } else {
-        days = DateTime.now().difference(firstOfflineDate).inDays;
-      }
-      yield SyncStatus.fromDaysOffline(days == 0 ? 1 : days);
-    }
+  // Watch the latest connectivity value (not `.stream`): the connectivity
+  // provider is often already listened to (sync trigger), and `.stream` only
+  // replays future events — the initial state was missed and the indicator
+  // stayed on « Vérification… » (device test). Each change rebuilds this
+  // provider, which keeps showing the previous status meanwhile.
+  final results = await ref.watch(connectivityStreamProvider.future);
+  if (_isConnected(results)) {
+    yield SyncStatus.online;
+    return;
   }
+  // Device is offline — compute days offline from firstOfflineDateProvider
+  final firstOfflineDate = ref.read(firstOfflineDateProvider);
+  final int days = firstOfflineDate == null
+      ? 0 // First moment of going offline — same day
+      : DateTime.now().difference(firstOfflineDate).inDays;
+  yield SyncStatus.fromDaysOffline(days == 0 ? 1 : days);
 });
 
 /// Returns true if at least one result indicates network connectivity.

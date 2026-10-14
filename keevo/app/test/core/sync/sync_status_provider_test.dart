@@ -21,6 +21,28 @@ void main() {
       expect(result, SyncStatus.online);
     });
 
+    // Device test: the sync trigger listens to connectivity first; the
+    // indicator then subscribed after the only event and stayed on
+    // « Vérification… » for the whole session.
+    test('a status is emitted when connectivity was already listened to',
+        () async {
+      final container = ProviderContainer(overrides: [
+        connectivityStreamProvider.overrideWith(
+          (ref) => Stream.value([ConnectivityResult.wifi]),
+        ),
+        firstOfflineDateProvider.overrideWithValue(null),
+      ]);
+      addTearDown(container.dispose);
+      container.listen(connectivityStreamProvider, (_, __) {});
+      await container.read(connectivityStreamProvider.future);
+      await Future<void>.delayed(Duration.zero);
+
+      final result = await container
+          .read(syncStatusProvider.future)
+          .timeout(const Duration(seconds: 1));
+      expect(result, SyncStatus.online);
+    });
+
     test('emits online when connectivity contains wifi', () async {
       final container = ProviderContainer(overrides: [
         connectivityStreamProvider.overrideWith(
