@@ -5,7 +5,9 @@ import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:keevo/core/di/providers.dart';
+import 'package:keevo/core/storage/app_constants.dart';
 import 'package:keevo/core/sync/sync_event_logger.dart';
+import 'package:keevo/core/sync/sync_gate_provider.dart';
 import 'package:keevo/core/sync/sync_required_exception.dart';
 import 'package:keevo/core/sync/sync_service.dart';
 import 'package:keevo/core/sync/sync_status_provider.dart';
@@ -75,5 +77,29 @@ void main() {
       container.read(syncTriggerNotifierProvider),
       isNot(isA<SyncTriggerIdle>()),
     );
+  });
+
+  // J23 (device test): the gate provider caches the last-sync time. A
+  // successful cycle must recompute it — before the fix the gate stayed
+  // blocked in memory until the app was restarted.
+  test('J23: a successful cycle reopens a stale (8 days) gate', () async {
+    final prefs = container.read(sharedPreferencesProvider);
+    await prefs.setInt(
+        kLastSyncAtKey,
+        DateTime.now()
+            .subtract(const Duration(days: 8))
+            .millisecondsSinceEpoch);
+    container.invalidate(daysSinceLastSyncProvider);
+    expect(container.read(syncGateStateProvider).isWriteBlocked, isTrue);
+
+    when(() => sync.push()).thenAnswer((_) async => <Map<String, dynamic>>[]);
+    when(() => sync.pull()).thenAnswer((_) async {
+      await prefs.setInt(
+          kLastSyncAtKey, DateTime.now().millisecondsSinceEpoch);
+    });
+
+    await container.read(syncTriggerNotifierProvider.notifier).triggerSync();
+
+    expect(container.read(syncGateStateProvider).isWriteBlocked, isFalse);
   });
 }

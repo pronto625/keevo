@@ -54,6 +54,11 @@ class RecordSaleNotifier extends Notifier<RecordSaleState> {
     String? clientId,
     String? mobileRef,
   }) async {
+    // J23: every submit starts from Idle so that its outcome is always a state
+    // change. The outcome states are const: without this, a second tap that is
+    // blocked again (same const RecordSaleBlockedByGate) notified nobody and
+    // « Valider la vente » silently did nothing.
+    state = const RecordSaleIdle();
     try {
       SyncGateGuard.assertWriteAllowed(ref);
     } on WriteBlockedException {

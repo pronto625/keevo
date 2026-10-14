@@ -11,6 +11,8 @@ import 'package:keevo/core/storage/app_database.dart'
     show AppDatabase, ProductsCompanion;
 import 'package:keevo/core/sync/sync_service.dart';
 import 'package:keevo/core/sync/sync_gate_provider.dart';
+import 'package:keevo/core/storage/app_constants.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:keevo/features/catalog/data/datasource/local_product_datasource.dart';
 import 'package:keevo/features/catalog/domain/model/product_status.dart';
 import 'package:keevo/features/catalog/presentation/provider/product_provider.dart';
@@ -215,6 +217,76 @@ void main() {
       );
       verifyNever(() => mockLocalDs.getAvailableStock(any(), any()));
       verifyNever(() => mockRepo.recordSale(any()));
+    });
+
+    // J23 (device test): 8 days offline → blocked; a sync then writes a fresh
+    // last-sync time. The checkout must go through without an app restart,
+    // and a second blocked tap must still notify the page (no silent no-op).
+    group('J23 — gate reopened by a sync', () {
+      late SharedPreferences prefs;
+
+      setUp(() async {
+        SharedPreferences.setMockInitialValues({
+          kLastSyncAtKey: DateTime.now()
+              .subtract(const Duration(days: 8))
+              .millisecondsSinceEpoch,
+        });
+        prefs = await SharedPreferences.getInstance();
+      });
+
+      ProviderContainer gateContainer() {
+        final c = ProviderContainer(overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
+          currentUserRoleProvider.overrideWithValue('EMPLOYEE'),
+          saleRepositoryProvider.overrideWithValue(mockRepo),
+          localSaleDataSourceProvider.overrideWithValue(mockLocalDs),
+          recordSaleUseCaseProvider
+              .overrideWithValue(RecordSaleUseCase(mockRepo)),
+        ]);
+        addTearDown(c.dispose);
+        return c;
+      }
+
+      Future<void> submit(ProviderContainer c) =>
+          c.read(recordSaleNotifierProvider.notifier).submit(
+                cart: [_item()],
+                mode: PaymentModeEnum.cash,
+                storeId: 'store-1',
+                employeeId: 'emp-1',
+              );
+
+      test('a second blocked tap notifies the listener again', () async {
+        final c = gateContainer();
+        final seen = <RecordSaleState>[];
+        c.listen(recordSaleNotifierProvider, (_, next) => seen.add(next),
+            fireImmediately: false);
+
+        await submit(c);
+        await submit(c);
+
+        expect(seen.whereType<RecordSaleBlockedByGate>().length, 2);
+      });
+
+      test('blocked → last sync written → the sale goes through (no restart)',
+          () async {
+        when(() => mockLocalDs.getAvailableStock(any(), any()))
+            .thenAnswer((_) async => 10);
+        when(() => mockRepo.recordSale(any())).thenAnswer((_) async {});
+        final c = gateContainer();
+        c.read(cartProvider.notifier).addItem(_item());
+
+        await submit(c);
+        expect(c.read(recordSaleNotifierProvider),
+            isA<RecordSaleBlockedByGate>());
+
+        // What RestSyncService.pull() does on success.
+        await prefs.setInt(
+            kLastSyncAtKey, DateTime.now().millisecondsSinceEpoch);
+
+        await submit(c);
+        expect(c.read(recordSaleNotifierProvider), isA<RecordSaleSuccess>());
+        verify(() => mockRepo.recordSale(any())).called(1);
+      });
     });
 
     // A50: a read-only account (suspended / deletion pending) records no sale.

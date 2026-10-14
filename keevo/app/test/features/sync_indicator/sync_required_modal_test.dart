@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:keevo/core/di/providers.dart';
+import 'package:keevo/core/storage/app_constants.dart';
 import 'package:keevo/core/sync/sync_gate_provider.dart';
 import 'package:keevo/core/sync/sync_gate_state.dart';
 import 'package:keevo/core/sync/sync_status_provider.dart';
@@ -19,6 +20,7 @@ class _FakeSyncTriggerNotifier extends SyncTriggerNotifier {
   int syncCallCount = 0;
   bool shouldFail = false;
   Completer<void>? syncCompleter;
+  Future<void> Function()? onSync;
 
   @override
   SyncTriggerState build() => const SyncTriggerState.idle();
@@ -28,6 +30,7 @@ class _FakeSyncTriggerNotifier extends SyncTriggerNotifier {
     syncCallCount++;
     if (shouldFail) throw Exception('Sync failed');
     if (syncCompleter != null) await syncCompleter!.future;
+    if (onSync != null) await onSync!();
   }
 
   @override
@@ -64,6 +67,26 @@ Widget _wrapButton({
     ),
   );
 }
+
+Widget _wrapRealGate(SharedPreferences prefs) => ProviderScope(
+      overrides: [
+        connectivityStreamProvider
+            .overrideWith((ref) => Stream.value([ConnectivityResult.wifi])),
+        syncTriggerNotifierProvider
+            .overrideWith(() => _FakeSyncTriggerNotifier()),
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
+      child: MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (ctx) => ElevatedButton(
+              onPressed: () => SyncRequiredModal.show(ctx),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    );
 
 Future<void> _openModal(WidgetTester tester) async {
   await tester.tap(find.text('open'));
@@ -244,6 +267,77 @@ void main() {
 
       expect(fake.syncCallCount, 1,
           reason: 'triggerSync() must be called once on button tap');
+    });
+
+    // J23 (device test): real gate, 8 days stale. The sync writes a fresh
+    // last-sync time (as RestSyncService.pull does) without anybody
+    // invalidating the gate: the modal must still close with the success
+    // message instead of staying open forever.
+    testWidgets('J23: sync succeeds on a real stale gate → modal closes',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({
+        kLastSyncAtKey: DateTime.now()
+            .subtract(const Duration(days: 8))
+            .millisecondsSinceEpoch,
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final fake = _FakeSyncTriggerNotifier()
+        ..onSync = () => prefs.setInt(
+            kLastSyncAtKey, DateTime.now().millisecondsSinceEpoch);
+
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          connectivityStreamProvider
+              .overrideWith((ref) => Stream.value([ConnectivityResult.wifi])),
+          syncTriggerNotifierProvider.overrideWith(() => fake),
+          sharedPreferencesProvider.overrideWithValue(prefs),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (ctx) => ElevatedButton(
+                onPressed: () => SyncRequiredModal.show(ctx),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ));
+      await _openModal(tester);
+      expect(find.text('Synchronisation requise'), findsOneWidget);
+
+      await tester.tap(find.text('Synchroniser maintenant'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Synchronisation requise'), findsNothing);
+      expect(
+          find.text('Synchronisation réussie — accès complet restauré'),
+          findsOneWidget);
+      final container = ProviderScope.containerOf(
+          tester.element(find.byType(ElevatedButton)));
+      expect(container.read(syncGateStateProvider).isWriteBlocked, isFalse);
+    });
+
+    // J23: a background sync already reopened the gate before the modal
+    // shows — it closes itself at once.
+    testWidgets('J23: gate already reopened in prefs → modal closes on open',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({
+        kLastSyncAtKey: DateTime.now()
+            .subtract(const Duration(days: 8))
+            .millisecondsSinceEpoch,
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      await tester.pumpWidget(_wrapRealGate(prefs));
+      final container = ProviderScope.containerOf(
+          tester.element(find.byType(ElevatedButton)));
+      expect(container.read(syncGateStateProvider).isWriteBlocked, isTrue);
+      await prefs.setInt(kLastSyncAtKey, DateTime.now().millisecondsSinceEpoch);
+
+      await _openModal(tester);
+
+      expect(find.text('Synchronisation requise'), findsNothing);
     });
   });
 }
