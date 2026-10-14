@@ -267,6 +267,26 @@ void main() {
       verify(() => mockLocal.getAll()).called(1);
     });
 
+    // G2 (device test): an employee got 403 on /employees at each sync.
+    test('employee session — never calls the OWNER-only list, reads local',
+        () async {
+      final employeeRepo = EmployeeRepositoryImpl(
+        remote: mockRemote,
+        local: mockLocal,
+        connectivity: mockConnectivity,
+        syncService: mockSyncService,
+        isOwnerSession: () => false,
+      );
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
+      when(() => mockLocal.getAll())
+          .thenAnswer((_) async => [_testEmployee()]);
+
+      final result = await employeeRepo.listEmployees();
+
+      expect(result.length, 1);
+      verifyNever(() => mockRemote.listEmployees());
+    });
+
     test('offline — reads from local only', () async {
       final localEmployees = [_testEmployee()];
       when(() => mockConnectivity.isOnline()).thenAnswer((_) async => false);

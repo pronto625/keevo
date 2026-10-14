@@ -53,6 +53,14 @@ final currentUserRoleProvider = Provider<String?>((ref) {
   return ref.watch(sharedPreferencesProvider).getString(kUserRoleKey);
 });
 
+/// True when the session is an OWNER one. Owner-only endpoints (dashboard
+/// summary, employees list, stores list) answer 403 to an employee: their
+/// callers check this before going to the server and fall back to the local
+/// data (filled by the sync pull) otherwise.
+final isOwnerSessionProvider = Provider<bool>((ref) {
+  return ref.watch(currentUserRoleProvider) == 'OWNER';
+});
+
 /// Current user phone number (e.g. +237600000000) — set at login.
 const kUserPhoneKey = 'user_phone';
 

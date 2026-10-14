@@ -15,16 +15,23 @@ class DashboardRepositoryImpl implements DashboardRepository {
   final RemoteDashboardDatasource _remoteDatasource;
   final ConnectivityService _connectivity;
 
+  /// GET /dashboard/summary is OWNER-only: an employee session (403 at every
+  /// sync otherwise) reads the local aggregation.
+  final bool Function() _isOwnerSession;
+
   DashboardRepositoryImpl(
     this._localDatasource,
     this._remoteDatasource,
-    this._connectivity,
-  );
+    this._connectivity, {
+    bool Function()? isOwnerSession,
+  }) : _isOwnerSession = isOwnerSession ?? _always;
+
+  static bool _always() => true;
 
   @override
   Future<DashboardSnapshot> getDashboardSnapshot() async {
     try {
-      if (await _connectivity.isOnline()) {
+      if (_isOwnerSession() && await _connectivity.isOnline()) {
         return await _remoteDatasource.getDashboardSummary();
       }
     } catch (e) {

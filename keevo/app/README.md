@@ -1,17 +1,37 @@
 # keevo
 
-A new Flutter project.
+Application mobile Keevo (Flutter).
 
-## Getting Started
+## Développement local
 
-This project is a starting point for a Flutter application.
+```bash
+flutter pub get
+dart run build_runner build --delete-conflicting-outputs
+flutter run
+```
 
-A few resources to get you started if this is your first Flutter project:
+Sans `--dart-define=API_BASE_URL=…`, les builds debug et profile visent
+`http://localhost:4500` (backend local ; sur un appareil physique :
+`adb reverse tcp:4500 tcp:4500`). Une autre URL peut être passée avec
+`--dart-define=API_BASE_URL=http://<hôte>:4500`.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Build release (Play Store)
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Deux prérequis, sans lesquels le build n'est pas publiable :
+
+1. **URL du backend en HTTPS** — obligatoire en release. Une app release
+   construite sans `API_BASE_URL`, ou avec une URL qui n'est pas `https://`,
+   s'arrête au démarrage (`InvalidApiBaseUrlError`) au lieu de partir vers
+   localhost en clair.
+2. **Keystore de signature** — copier `android/key.properties.example` vers
+   `android/key.properties` (ignoré par git) et le remplir (chemin du keystore,
+   mots de passe, alias). Sans ce fichier, Gradle signe avec la clé **debug**,
+   refusée par le Play Store.
+
+```bash
+flutter build appbundle --release \
+  --dart-define=API_BASE_URL=https://<domaine-api>
+```
+
+Penser à incrémenter `version:` dans `pubspec.yaml` (nom + numéro de build)
+avant chaque envoi.

@@ -42,6 +42,7 @@ final dashboardRepositoryProvider = Provider<DashboardRepository>((ref) {
     ref.watch(localDashboardDatasourceProvider),
     ref.watch(remoteDashboardDatasourceProvider),
     ref.watch(connectivityServiceProvider),
+    isOwnerSession: () => ref.read(isOwnerSessionProvider),
   );
 });
 
