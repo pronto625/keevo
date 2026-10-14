@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/catalog/domain/model/product_status.dart';
 import 'package:keevo/features/contact/domain/model/client_model.dart';
 import 'package:keevo/features/contact/presentation/provider/contact_provider.dart';
@@ -179,30 +180,37 @@ void main() {
       expect(inkWell.onTap, isNotNull);
     });
 
-    // ── AC1: Draft cart → "Vente brouillon" button label ────────────────
+    // ── P1 (v1s-12-10): a draft cart is a normal sale — never "brouillon" ──
 
-    testWidgets('shows Vente brouillon label when cart has a draft item',
+    testWidgets(
+        'EMPLOYEE draft cart: Valider la vente + notice that the owner validates the drafts',
         (tester) async {
       await tester.pumpWidget(_buildApp(items: [
         _item(id: 'd1', price: 3000, qty: 1, productStatus: ProductStatus.draft),
+      ], overrides: [
+        currentUserRoleProvider.overrideWithValue('EMPLOYEE'),
       ]));
       await tester.pumpAndSettle();
 
-      expect(find.text('Vente brouillon'), findsOneWidget);
-      expect(find.text('Valider la vente'), findsNothing);
+      expect(find.text('Valider la vente'), findsOneWidget);
+      expect(find.text('Vente brouillon'), findsNothing);
+      expect(find.byKey(const Key('checkout_draft_notice')), findsOneWidget);
+      expect(find.textContaining('le propriétaire validera'), findsOneWidget);
     });
 
-    // v1s-15-8 (deferred from CR v1s-13-6): one draft item is enough.
-    testWidgets('mixed DRAFT + ACTIVE cart shows Vente brouillon',
+    testWidgets('OWNER mixed DRAFT + ACTIVE cart: notice says drafts get activated',
         (tester) async {
       await tester.pumpWidget(_buildApp(items: [
         _item(id: 'a1', price: 2000, qty: 1),
         _item(id: 'd1', price: 3000, qty: 1, productStatus: ProductStatus.draft),
+      ], overrides: [
+        currentUserRoleProvider.overrideWithValue('OWNER'),
       ]));
       await tester.pumpAndSettle();
 
-      expect(find.text('Vente brouillon'), findsOneWidget);
-      expect(find.text('Valider la vente'), findsNothing);
+      expect(find.text('Valider la vente'), findsOneWidget);
+      expect(find.text('Vente brouillon'), findsNothing);
+      expect(find.textContaining('seront activés'), findsOneWidget);
     });
 
     // v1s-15-8 (deferred from CR v1s-13-6): an empty cart cannot be sold,
@@ -234,6 +242,7 @@ void main() {
 
       expect(find.text('Valider la vente'), findsOneWidget);
       expect(find.text('Vente brouillon'), findsNothing);
+      expect(find.byKey(const Key('checkout_draft_notice')), findsNothing);
     });
       testWidgets('Mobile Money ref typed then Espèces chosen: no ref is sent',
         (tester) async {
