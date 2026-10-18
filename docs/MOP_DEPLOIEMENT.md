@@ -3,6 +3,10 @@
 > Mode Opératoire Pas-à-pas — de zéro à prod.  
 > Date : 2026-07-27
 
+> **Serveur déjà en prod (keevo.ad2s.cm) ?** Pour passer de la 1.1.12 à la version actuelle, suivre
+> `docs/MOP_MISE_A_JOUR_PROD.md` (seulement les secrets et variables à ajouter).
+> Dépôt GitHub qui déploie la prod : **`pronto625/keevo`** (remote `origin2`).
+
 ---
 
 ## Étape 0 — Prérequis machine locale
@@ -101,7 +105,8 @@ exit  # quitter root
 
 ## Étape 3 — Configurer les GitHub Secrets
 
-Aller sur : `https://github.com/<TON_COMPTE>/<TON_REPO>/settings/secrets/actions`
+Aller sur : `https://github.com/<TON_COMPTE>/<TON_REPO>/settings/secrets/actions` (prod :
+`https://github.com/pronto625/keevo/settings/secrets/actions`)
 
 ### 3.1 Générer le GHCR_PAT
 
@@ -135,16 +140,13 @@ Va dans **Settings → Secrets and variables → Actions → Repository secrets*
 | `DEPLOY_SSH_USER` | `deploy` |
 | `DEPLOY_SSH_PRIVATE_KEY` | `cat ~/.ssh/keevo-server` (le contenu ENTIER, avec les `-----BEGIN...`) |
 | `DEPLOY_SSH_PORT` | `22` |
-| `APP_DOMAIN` | Ton domaine (ex: `keevo.lipagar.com`) |
-| `ACME_EMAIL` | Ton email pour Let's Encrypt (ex: `contact@lipagar.com`) |
+| `APP_DOMAIN` | Ton domaine (prod : `keevo.ad2s.cm`) |
+| `ACME_EMAIL` | Ton email pour Let's Encrypt (ex: `contact@<TON_DOMAINE>`) |
 | `JWT_PRIVATE_KEY_PEM` | `cat /tmp/private_key.pem` (étape 1) |
 | `JWT_PUBLIC_KEY_PEM` | `cat /tmp/public_key.pem` (étape 1) |
-| `ADMIN_DOMAIN` | Domaine du tableau de bord (ex: `admin.keevo.lipagar.com`), sans `https://`, différent de `APP_DOMAIN` |
-| `ADMIN_PHONE` | Numéro du super-admin (ex: `+2376XXXXXXXX`) — si un super-admin existe déjà en prod, **son** numéro |
-| `ADMIN_PASSWORD` | Mot de passe initial du super-admin : ≥ 12 caractères, 3 classes sur 4 (minuscule, majuscule, chiffre, symbole), sans `'` ; jamais `Admin@1234!` |
 
-> Le déploiement échoue **avant** de toucher le serveur si `ADMIN_DOMAIN`, `ADMIN_PHONE` ou
-> `ADMIN_PASSWORD` manque ou si le mot de passe est trop faible (mêmes règles que le backend).
+> `ADMIN_DOMAIN`, `ADMIN_PHONE` et `ADMIN_PASSWORD` ne sont **pas** des secrets GitHub : ils se
+> renseignent dans `~/keevo/.env` sur le serveur (étape 4.1).
 
 ---
 
@@ -181,11 +183,16 @@ FLYWAY_ENABLED=true
 # JWT_SECRET n'est pas utilisé en prod (RSA), mais conservé par compatibilité
 JWT_SECRET=unused_in_prod_with_rsa_keys
 
-# ─── Admin bootstrap ──────────────────────────────────────────
-# En prod, remplacés par ~/keevo/.env.admin, écrit par le workflow depuis les secrets
-# ADMIN_PHONE / ADMIN_PASSWORD (étape 3.3). DASHBOARD_ORIGIN est imposé par le compose.
+# ─── Tableau de bord + super-admin (obligatoires) ─────────────
+# ADMIN_DOMAIN : domaine du tableau de bord, sans https://, différent de APP_DOMAIN.
+# ADMIN_PHONE : si un super-admin existe déjà en prod, SON numéro.
+# ADMIN_PASSWORD : ≥ 12 caractères, 3 classes sur 4 (minuscule, majuscule, chiffre, symbole),
+#   ≤ 72 octets, jamais Admin@1234! ni un placeholder. Entre apostrophes s'il contient un $
+#   (sinon le compose l'interprète). Ne sert qu'à la création du compte.
+# DASHBOARD_ORIGIN est imposé par le compose (https://<ADMIN_DOMAIN>) : ne pas le mettre ici.
+ADMIN_DOMAIN=admin.keevo.ad2s.cm
 ADMIN_PHONE=+2376XXXXXXXXX
-ADMIN_PASSWORD=<MDP_ADMIN_FORT>
+ADMIN_PASSWORD='<MDP_ADMIN_FORT>'
 
 # ─── FCM Push ─────────────────────────────────────────────────
 KEEVO_FCM_ENABLED=true
@@ -201,6 +208,17 @@ ACME_EMAIL=<TON_EMAIL>
 ```
 
 Sauver : `Ctrl+O` puis `Ctrl+X`
+
+> Avant de tirer les images ou de redémarrer quoi que ce soit, le workflow copie
+> `check-prod-deploy-secrets.sh` dans `~/keevo/scripts`, lit `ADMIN_DOMAIN` / `ADMIN_PHONE` /
+> `ADMIN_PASSWORD` dans ce `.env` (dernière ligne `CLE=valeur` retenue, guillemets retirés) et les
+> vérifie (mêmes règles que le backend). Valeur absente ou invalide → le déploiement échoue et la pile
+> en place continue de servir. `~/keevo/.env.admin` n'est plus utilisé (un ancien fichier peut être
+> supprimé, il est ignoré).
+>
+> Un `POSTGRES_PASSWORD` faible (vide, défaut connu, placeholder, < 12 caractères) ne bloque pas le
+> démarrage : simple avertissement `[Security] POSTGRES_PASSWORD ...` dans les logs. Le changer quand
+> c'est possible : `ALTER USER` dans PostgreSQL d'abord, puis `.env` et `.env.backup`.
 
 ### 4.2 Copier les credentials Firebase
 
@@ -292,7 +310,7 @@ curl -sI https://<ADMIN_DOMAIN>/login | head -1
 
 **Première connexion au tableau de bord** : ouvrir `https://<ADMIN_DOMAIN>/login` avec `ADMIN_PHONE` /
 `ADMIN_PASSWORD`, puis changer le mot de passe immédiatement (procédure :
-`keevo/backend/docs/DEPLOYMENT_CHECKLIST.md` §18.7). Le secret `ADMIN_PASSWORD` ne sert qu'à la
+`keevo/backend/docs/DEPLOYMENT_CHECKLIST.md` §18.7). La valeur `ADMIN_PASSWORD` de `.env` ne sert qu'à la
 création du compte : un redéploiement n'écrase jamais le mot de passe d'un compte existant.
 
 ---
@@ -306,8 +324,11 @@ docker logs keevo_backend 2>&1 | tail -50
 ```
 
 Causes fréquentes :
-- **`PRODUCT_NOT_FOUND`** ou **`ADMIN_PASSWORD` rejeté** → corriger le secret GitHub `ADMIN_PASSWORD`
-  (il remplace la valeur de `.env` via `.env.admin`) puis relancer le workflow
+- **`PRODUCT_NOT_FOUND`** ou **`ADMIN_PASSWORD` rejeté** → corriger `ADMIN_PASSWORD` dans `~/keevo/.env`
+  puis relancer le workflow
+- **Déploiement en échec à la vérification `ADMIN_*`** (avant tout redémarrage, la pile en place sert
+  toujours) → compléter / corriger `ADMIN_DOMAIN`, `ADMIN_PHONE` ou `ADMIN_PASSWORD` dans `~/keevo/.env`
+  puis relancer le workflow
 - **`Connection refused` sur postgres** → vérifier `docker ps` (postgres doit être healthy)
 - **Clé JWT illisible** → le groupe `keevo-jwt` n'est pas configuré → refaire l'étape 2.3
 - **Firebase credentials manquantes** → refaire l'étape 4.2
@@ -320,7 +341,7 @@ docker inspect -f '{{.State.Health.Status}}' keevo_dashboard
 ```
 
 - **403 à la connexion** → `DASHBOARD_ORIGIN` du backend ≠ `https://<ADMIN_DOMAIN>` (le relais du tableau
-  de bord transmet l'en-tête `Origin` du navigateur) : vérifier le secret `ADMIN_DOMAIN`.
+  de bord transmet l'en-tête `Origin` du navigateur) : vérifier `ADMIN_DOMAIN` dans `~/keevo/.env`.
 - **« Serveur injoignable »** → le conteneur `keevo_backend` n'est pas démarré ou n'est pas sur `keevo_net`.
 - **Certificat absent** → enregistrement DNS de `ADMIN_DOMAIN` manquant (étape 2.6).
 

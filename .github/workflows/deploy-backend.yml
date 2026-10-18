@@ -187,18 +187,22 @@ jobs:
     environment: production
 
     steps:
-      # Fail fast, before touching the server, when a required secret is missing or the admin
-      # password would be refused by ProdSecretsValidator at boot.
       - name: Checkout (pre-flight + backup scripts)
         uses: actions/checkout@v4
 
-      - name: Check production secrets
-        env:
-          APP_DOMAIN: ${{ secrets.APP_DOMAIN }}
-          ADMIN_DOMAIN: ${{ secrets.ADMIN_DOMAIN }}
-          ADMIN_PHONE: ${{ secrets.ADMIN_PHONE }}
-          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
-        run: .github/scripts/check-prod-deploy-secrets.sh
+      # ADMIN_DOMAIN / ADMIN_PHONE / ADMIN_PASSWORD live in the server's ~/keevo/.env (not in
+      # GitHub secrets): the check script is copied there and run before anything is pulled or
+      # restarted, so a missing/invalid value stops the deploy while the running stack stays up.
+      - name: Copy deploy pre-flight to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_SSH_HOST }}
+          username: ${{ secrets.DEPLOY_SSH_USER }}
+          key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.DEPLOY_SSH_PORT || '22' }}
+          source: ".github/scripts/check-prod-deploy-secrets.sh"
+          target: "keevo/scripts"
+          strip_components: 2
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -208,9 +212,6 @@ jobs:
           IMAGE_REF: ${{ needs.changes.outputs.backend_image }}:latest
           DASHBOARD_IMAGE_REF: ${{ needs.changes.outputs.dashboard_image }}:latest
           APP_DOMAIN: ${{ secrets.APP_DOMAIN }}
-          ADMIN_DOMAIN: ${{ secrets.ADMIN_DOMAIN }}
-          ADMIN_PHONE: ${{ secrets.ADMIN_PHONE }}
-          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
           JWT_PRIVATE_KEY_PEM: ${{ secrets.JWT_PRIVATE_KEY_PEM }}
           JWT_PUBLIC_KEY_PEM: ${{ secrets.JWT_PUBLIC_KEY_PEM }}
@@ -219,7 +220,7 @@ jobs:
           username: ${{ secrets.DEPLOY_SSH_USER }}
           key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
           port: ${{ secrets.DEPLOY_SSH_PORT || '22' }}
-          envs: GHCR_PAT,GH_ACTOR,IMAGE_REF,DASHBOARD_IMAGE_REF,APP_DOMAIN,ADMIN_DOMAIN,ADMIN_PHONE,ADMIN_PASSWORD,ACME_EMAIL,JWT_PRIVATE_KEY_PEM,JWT_PUBLIC_KEY_PEM
+          envs: GHCR_PAT,GH_ACTOR,IMAGE_REF,DASHBOARD_IMAGE_REF,APP_DOMAIN,ACME_EMAIL,JWT_PRIVATE_KEY_PEM,JWT_PUBLIC_KEY_PEM
 
           # ── Script that runs on the remote server ──────────────────────────────
           # Prerequisites on server:
@@ -235,24 +236,31 @@ jobs:
             mkdir -p "${DEPLOY_DIR}/keys"
             cd "${DEPLOY_DIR}"
 
-            # ── Super-admin bootstrap credentials (from GitHub secrets) ─────────
-            # The backend (AdminAccountInitializer) creates the SUPER_ADMIN for ADMIN_PHONE on
-            # boot ONLY when that phone is not registered yet; it never resets the password of an
-            # existing account. ProdSecretsValidator refuses to boot with a default/weak
-            # ADMIN_PASSWORD (also checked on the runner before this SSH step).
-            # Same pattern as the other server env files: a mode-600 file read by compose
-            # (env_file, after .env so these values win), so manual `docker compose up` keeps
-            # working without the CI environment. Single-quoted = literal value for compose.
-            # Never echoed.
-            [ -n "${ADMIN_PHONE:-}" ] && [ -n "${ADMIN_PASSWORD:-}" ] || {
-              echo "❌ ADMIN_PHONE / ADMIN_PASSWORD not received from the workflow" >&2; exit 1
+            # ── Dashboard domain + super-admin bootstrap (from ~/keevo/.env) ────
+            # The operator sets ADMIN_DOMAIN, ADMIN_PHONE and ADMIN_PASSWORD in ~/keevo/.env, next
+            # to the other server values. The backend reads ADMIN_PHONE / ADMIN_PASSWORD from it
+            # (env_file) and AdminAccountInitializer creates the SUPER_ADMIN only when that phone is
+            # not registered yet — an existing account keeps its password. ADMIN_DOMAIN is only
+            # needed here, to route the dashboard and set the backend DASHBOARD_ORIGIN.
+            # Values are read like compose reads an env_file (last KEY=value, optional surrounding
+            # quotes) and never echoed. Checked before any pull / restart: a bad value fails the
+            # deploy while the running stack keeps serving.
+            test -f .env || { echo "❌ ${DEPLOY_DIR}/.env not found" >&2; exit 1; }
+            env_value() {
+              local line
+              line="$(grep -E "^[[:space:]]*(export[[:space:]]+)?$1=" .env | tail -n 1)" || return 0
+              line="${line#*=}"
+              line="${line%$'\r'}"
+              case "${line}" in
+                \"*\") line="${line#\"}"; line="${line%\"}" ;;
+                \'*\') line="${line#\'}"; line="${line%\'}" ;;
+              esac
+              printf '%s' "${line}"
             }
-            case "${ADMIN_PASSWORD}${ADMIN_PHONE}" in
-              *"'"*|*$'\n'*) echo "❌ ADMIN_PASSWORD / ADMIN_PHONE must not contain a single quote or a newline" >&2; exit 1 ;;
-            esac
-            ( umask 077; printf "ADMIN_PHONE='%s'\nADMIN_PASSWORD='%s'\n" "${ADMIN_PHONE}" "${ADMIN_PASSWORD}" > .env.admin )
-            chmod 600 .env.admin
-            echo "✓ .env.admin written (mode 600)"
+            ADMIN_DOMAIN="$(env_value ADMIN_DOMAIN)"
+            APP_DOMAIN="${APP_DOMAIN}" ADMIN_DOMAIN="${ADMIN_DOMAIN}" \
+              ADMIN_PHONE="$(env_value ADMIN_PHONE)" ADMIN_PASSWORD="$(env_value ADMIN_PASSWORD)" \
+              bash "${DEPLOY_DIR}/scripts/check-prod-deploy-secrets.sh"
 
             echo "→ Writing RSA key pair for JWT…"
             printf '%s\n' "${JWT_PRIVATE_KEY_PEM}" > keys/private_key.pem
@@ -447,10 +455,8 @@ jobs:
                 depends_on:
                   postgres:
                     condition: service_healthy
-                # .env.admin last: the ADMIN_PHONE / ADMIN_PASSWORD from GitHub secrets win over .env
                 env_file:
                   - .env
-                  - .env.admin
                 environment:
                   POSTGRES_HOST: postgres
                   POSTGRES_PORT: "5432"
@@ -543,10 +549,8 @@ jobs:
                 depends_on:
                   postgres:
                     condition: service_healthy
-                # .env.admin last: the ADMIN_PHONE / ADMIN_PASSWORD from GitHub secrets win over .env
                 env_file:
                   - .env
-                  - .env.admin
                 environment:
                   POSTGRES_HOST: postgres
                   POSTGRES_PORT: "5432"
@@ -744,12 +748,14 @@ jobs:
 
 # ─── Required GitHub Secrets ──────────────────────────────────────────────────
 # GHCR_PAT                — GitHub PAT, scope: read:packages
-# DEPLOY_SSH_HOST         — server IP / hostname  (44.223.221.74)
+# DEPLOY_SSH_HOST         — server IP / hostname (prod: the host behind keevo.ad2s.cm)
 # DEPLOY_SSH_USER         — SSH user
 # DEPLOY_SSH_PRIVATE_KEY  — full SSH private key (ed25519 recommended)
 # DEPLOY_SSH_PORT         — optional, defaults to 22
-# APP_DOMAIN              — public FQDN served by Traefik, e.g. keevo.example.com
-# ADMIN_DOMAIN            — admin dashboard FQDN (bare host, ≠ APP_DOMAIN), e.g. admin.keevo.cm;
+# APP_DOMAIN              — public API FQDN served by Traefik (prod: keevo.ad2s.cm); also the
+#                            API_BASE_URL of the release app (release-flutter.yml)
+# Server ~/keevo/.env (NOT GitHub secrets), checked on the server before the deploy:
+# ADMIN_DOMAIN            — admin dashboard FQDN (bare host, ≠ APP_DOMAIN), e.g. admin.keevo.ad2s.cm;
 #                            DNS A record → server; also sets the backend DASHBOARD_ORIGIN
 # ADMIN_PHONE             — SUPER_ADMIN phone (+2376…), created on first boot if not registered
 # ADMIN_PASSWORD          — SUPER_ADMIN initial password (>= 12 chars, 3 of 4 classes, not a

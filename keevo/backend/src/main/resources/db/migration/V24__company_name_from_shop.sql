@@ -1,7 +1,8 @@
 -- Companies registered before the onboarding fix kept their technical code as
 -- name (« KV-2AOYRK » shown as company name in the tenant picker, PDF headers
 -- and admin). Take the name of their first store, unless it is still the
--- registration placeholder. A schema that cannot be read is skipped.
+-- registration placeholder. A schema that cannot be read is skipped with a
+-- WARNING: this cosmetic fix must never stop a server update.
 DO $$
 DECLARE
     t record;
@@ -9,7 +10,7 @@ DECLARE
 BEGIN
     FOR t IN
         SELECT id, schema_name FROM public.tenants
-        WHERE name = code AND schema_name ~ '^kv_[a-z0-9_]{1,59}$'
+        WHERE name = code AND status <> 'DELETED' AND schema_name ~ '^kv_[a-z0-9_]{1,59}$'
     LOOP
         BEGIN
             EXECUTE format('SELECT name FROM %I.stores ORDER BY created_at ASC LIMIT 1', t.schema_name)
@@ -19,6 +20,8 @@ BEGIN
             END IF;
         EXCEPTION WHEN undefined_table OR invalid_schema_name THEN
             NULL;
+        WHEN OTHERS THEN
+            RAISE WARNING 'V24: company name of % left unchanged (%)', t.schema_name, SQLERRM;
         END;
     END LOOP;
 END $$;

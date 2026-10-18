@@ -214,7 +214,70 @@ class SchemaProvisioningHygienePostgresIntegrationTest {
         }
     }
 
+    @Test
+    @DisplayName("upgrade: a legacy movement_type row does not abort the tenant — constraint NOT VALID, new columns added, row kept")
+    void runnerKeepsLegacyMovementTypeRow() throws Exception {
+        String schema = "kv_hyg005";
+        provisioner.provision("tenant-hyg5", schema);
+        String q = "\"" + schema + "\".";
+        jdbc.execute("ALTER TABLE " + q + "stock_movements DROP CONSTRAINT ck_movement_type");
+        insertWithoutForeignKeys("INSERT INTO " + q + "stock_movements (product_id, store_id, movement_type, "
+                + "quantity_before, quantity_change, quantity_after, actor_id) VALUES (gen_random_uuid(), "
+                + "gen_random_uuid(), 'LEGACY_TYPE', 0, 1, 1, gen_random_uuid())");
+        jdbc.execute("ALTER TABLE " + q + "sales DROP COLUMN mobile_money_ref");
+        registerTenant(schema, "KV-HYG005");
+        try {
+            runner.runAll();
+
+            assertThat(columnExists(schema, "sales", "mobile_money_ref")).as("tenant upgrade committed").isTrue();
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM " + q + "stock_movements WHERE movement_type = 'LEGACY_TYPE'",
+                    Integer.class)).as("legacy row untouched").isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT convalidated FROM pg_constraint WHERE conrelid = ?::regclass "
+                    + "AND conname = 'ck_movement_type'", Boolean.class, q + "stock_movements")).isFalse();
+            assertThat(insertSaleCancelledMovement(schema)).isTrue();
+        } finally {
+            jdbc.update("DELETE FROM public.tenants WHERE schema_name = ?", schema);
+        }
+    }
+
+    @Test
+    @DisplayName("upgrade: duplicate product names skip uq_products_name with a WARNING — no row changed, upgrade committed")
+    void runnerSkipsUniqueNameIndexOnDuplicates() throws Exception {
+        String schema = "kv_hyg006";
+        provisioner.provision("tenant-hyg6", schema);
+        String q = "\"" + schema + "\".";
+        jdbc.execute("DROP INDEX " + q + "uq_products_name");
+        insertWithoutForeignKeys("INSERT INTO " + q + "products (name, sku) VALUES ('Savon', 'SAV-1'), ('SAVON', 'SAV-2')");
+        jdbc.execute("ALTER TABLE " + q + "sales DROP COLUMN mobile_money_ref");
+        registerTenant(schema, "KV-HYG006");
+        try {
+            runner.runAll();
+
+            assertThat(columnExists(schema, "sales", "mobile_money_ref")).as("tenant upgrade committed").isTrue();
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM " + q + "products WHERE lower(name) = 'savon'",
+                    Integer.class)).isEqualTo(2);
+            assertThat(jdbc.queryForObject("SELECT to_regclass(?) IS NULL", Boolean.class, q + "uq_products_name"))
+                    .as("index left out while duplicates exist").isTrue();
+        } finally {
+            jdbc.update("DELETE FROM public.tenants WHERE schema_name = ?", schema);
+        }
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
+
+    /** Commits {@code sql} with FKs disabled (session_replication_role) — legacy rows for upgrade tests. */
+    private void insertWithoutForeignKeys(String sql) throws Exception {
+        try (Connection conn = dataSource.getConnection(); Statement stmt = conn.createStatement()) {
+            conn.setAutoCommit(false);
+            try {
+                stmt.execute("SET LOCAL session_replication_role = replica");
+                stmt.execute(sql);
+                conn.commit();
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        }
+    }
 
     /** Executes the shipped V13 script as-is; returns the server WARNING messages. */
     private List<String> runV13() throws Exception {

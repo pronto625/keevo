@@ -160,9 +160,12 @@ public class TenantSchemaProvisioner {
     private static final String DDL_PRODUCTS_IDX_ARCHIVED =
             "CREATE INDEX IF NOT EXISTS idx_products_archived ON products(archived)";
 
-    /** Story 2.4 — case-insensitive unique constraint on product name (safety net at DB level) */
-    static final String DDL_PRODUCTS_UQ_NAME =
-            "CREATE UNIQUE INDEX IF NOT EXISTS uq_products_name ON products(lower(name))";
+    /**
+     * Story 2.4 — case-insensitive unique constraint on product name (safety net at DB level).
+     * Existing duplicates skip the index with a WARNING instead of aborting the tenant upgrade.
+     */
+    static final String DDL_PRODUCTS_UQ_NAME = guardedUniqueIndex("uq_products_name",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_products_name ON products(lower(name))");
 
     private static final String DDL_TENANT_PREFERENCES = """
             CREATE TABLE IF NOT EXISTS tenant_preferences (
@@ -376,9 +379,18 @@ public class TenantSchemaProvisioner {
                                  AND pg_get_constraintdef(oid) LIKE '%SALE_CANCELLED%') THEN
                     ALTER TABLE stock_movements DROP CONSTRAINT IF EXISTS ck_movement_type;
                     ALTER TABLE stock_movements DROP CONSTRAINT IF EXISTS stock_movements_movement_type_check;
+                    -- NOT VALID + guarded VALIDATE: a legacy row with another movement_type must not
+                    -- abort the tenant upgrade (new rows are checked either way).
                     ALTER TABLE stock_movements ADD CONSTRAINT ck_movement_type
                         CHECK (movement_type IN
-                            ('SALE','STOCK_ENTRY','TRANSFER_IN','TRANSFER_OUT','ADJUSTMENT','SALE_CANCELLED'));
+                            ('SALE','STOCK_ENTRY','TRANSFER_IN','TRANSFER_OUT','ADJUSTMENT','SALE_CANCELLED'))
+                        NOT VALID;
+                    BEGIN
+                        ALTER TABLE stock_movements VALIDATE CONSTRAINT ck_movement_type;
+                    EXCEPTION WHEN check_violation THEN
+                        RAISE WARNING 'ck_movement_type left NOT VALID in %: legacy rows with another movement_type',
+                            current_schema();
+                    END;
                 END IF;
             EXCEPTION WHEN duplicate_object THEN NULL;
             END $$""";
@@ -808,13 +820,26 @@ public class TenantSchemaProvisioner {
     static final String DDL_INVENTORY_COUNTS_IDX_SESSION =
             "CREATE INDEX IF NOT EXISTS idx_inventory_counts_session ON inventory_counts(session_id)";
 
-    static final String DDL_INVENTORY_COUNTS_IDX_UNIQUE_NO_VARIANT =
+    static final String DDL_INVENTORY_COUNTS_IDX_UNIQUE_NO_VARIANT = guardedUniqueIndex(
+            "idx_inventory_counts_session_product_no_variant",
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_counts_session_product_no_variant "
-            + "ON inventory_counts(session_id, product_id) WHERE variant_id IS NULL";
+            + "ON inventory_counts(session_id, product_id) WHERE variant_id IS NULL");
 
-    static final String DDL_INVENTORY_COUNTS_IDX_UNIQUE_VARIANT =
+    static final String DDL_INVENTORY_COUNTS_IDX_UNIQUE_VARIANT = guardedUniqueIndex(
+            "idx_inventory_counts_session_product_variant",
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_counts_session_product_variant "
-            + "ON inventory_counts(session_id, product_id, variant_id) WHERE variant_id IS NOT NULL";
+            + "ON inventory_counts(session_id, product_id, variant_id) WHERE variant_id IS NOT NULL");
+
+    /**
+     * Wraps a {@code CREATE UNIQUE INDEX} so rows that already break it (legacy data) leave the
+     * index out with a WARNING instead of failing the whole tenant transaction: an upgrade never
+     * stops on, nor alters, existing data. {@code name} and {@code ddl} are constants of this class.
+     */
+    private static String guardedUniqueIndex(String name, String ddl) {
+        return "DO $$ BEGIN " + ddl + "; "
+                + "EXCEPTION WHEN unique_violation THEN RAISE WARNING '" + name
+                + " skipped in %: duplicate rows already present', current_schema(); END $$";
+    }
 
     // Story 7.2 — end-of-day reports
     static final String DDL_REPORTS = """

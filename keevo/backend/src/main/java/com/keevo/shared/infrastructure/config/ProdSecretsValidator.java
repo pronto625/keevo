@@ -26,8 +26,10 @@ import java.util.Set;
  *
  * <p>Checks performed:
  * <ul>
- *   <li>{@code POSTGRES_PASSWORD} ({@code spring.datasource.password}) — not blank, not a known
- *       dev/CI default, not a placeholder, at least {@value #MIN_SECRET_LENGTH} characters</li>
+ *   <li>{@code POSTGRES_PASSWORD} ({@code spring.datasource.password}) — WARN only (never fails):
+ *       blank, a known dev/CI default, a placeholder or shorter than {@value #MIN_SECRET_LENGTH}
+ *       characters. The live database already uses it and changing it means {@code ALTER USER}
+ *       first, so a server update must not stop on it.</li>
  *   <li>{@code ADMIN_PASSWORD} — not blank, not a known default ({@code Admin@1234!}) nor a
  *       placeholder, at least {@value #MIN_SECRET_LENGTH} characters, at least 3 of 4 character
  *       classes (lower/upper/digit/symbol), at most 72 UTF-8 bytes (BCrypt limit)</li>
@@ -136,18 +138,18 @@ public class ProdSecretsValidator {
         }
     }
 
+    /** WARN only: the running database already uses this password (see class doc). */
     private void validateDatabasePassword() {
         if (isPlaceholderOrDefault(dbPassword)) {
-            throw new IllegalStateException(
-                    "[FailFast] POSTGRES_PASSWORD is missing or uses a dev/placeholder default in production. "
-                            + "Set POSTGRES_PASSWORD to a generated secret (e.g. openssl rand -hex 16).");
+            log.warn("[Security] POSTGRES_PASSWORD is missing or uses a dev/placeholder default. "
+                    + "Rotate it when convenient: ALTER USER on the database first, then .env "
+                    + "(e.g. openssl rand -hex 16).");
+        } else if (dbPassword.strip().length() < MIN_SECRET_LENGTH) {
+            log.warn("[Security] POSTGRES_PASSWORD is shorter than " + MIN_SECRET_LENGTH
+                    + " characters. Rotate it when convenient: ALTER USER on the database first, then .env.");
+        } else {
+            log.info("[FailFast] POSTGRES_PASSWORD ✓");
         }
-        if (dbPassword.strip().length() < MIN_SECRET_LENGTH) {
-            throw new IllegalStateException(
-                    "[FailFast] POSTGRES_PASSWORD is too short — at least " + MIN_SECRET_LENGTH
-                            + " characters are required in production.");
-        }
-        log.info("[FailFast] POSTGRES_PASSWORD ✓");
     }
 
     private void validateAdminPassword() {

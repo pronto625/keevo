@@ -307,47 +307,61 @@ class ProdSecretsValidatorTest {
     // ── POSTGRES_PASSWORD validation (story v1s-12-13) ─────────────────────
 
     @Nested
-    @DisplayName("POSTGRES_PASSWORD validation")
+    @DisplayName("POSTGRES_PASSWORD validation (warn only — never blocks a server update)")
     class DatabasePasswordValidation {
 
-        @ParameterizedTest(name = "rejects blank/null DB password [{0}]")
+        private void assertWarnsOnly(String pwd) {
+            List<String> warnings = captureWarnings(() ->
+                    assertThatCode(builder().dbPassword(pwd).build()::validate).doesNotThrowAnyException());
+            assertThat(warnings).filteredOn(m -> m.contains("POSTGRES_PASSWORD")).hasSize(1)
+                    .allSatisfy(m -> {
+                        assertThat(m).contains("[Security]");
+                        if (pwd != null && !pwd.isBlank() && !"POSTGRES_PASSWORD".contains(pwd)) {
+                            assertThat(m).doesNotContain(pwd);
+                        }
+                    });
+        }
+
+        @ParameterizedTest(name = "warns on blank/null DB password [{0}]")
         @NullAndEmptySource
         @ValueSource(strings = {"   "})
-        void rejectsMissing(String pwd) {
-            assertRejects(builder().dbPassword(pwd).build(), "POSTGRES_PASSWORD", pwd);
+        void warnsWhenMissing(String pwd) {
+            assertWarnsOnly(pwd);
         }
 
-        @ParameterizedTest(name = "rejects dev default [{0}]")
+        @ParameterizedTest(name = "warns on dev default [{0}]")
         @ValueSource(strings = {"keevo_local_pwd", "change_me_in_dot_env", "ci_password", "postgres",
                 "keevo", "password", "KEEVO_LOCAL_PWD", "Postgres", "PASSWORD"})
-        void rejectsDevDefaults(String pwd) {
-            assertRejects(builder().dbPassword(pwd).build(), "POSTGRES_PASSWORD", pwd);
+        void warnsOnDevDefaults(String pwd) {
+            assertWarnsOnly(pwd);
         }
 
         @Test
-        @DisplayName("v1s-12-13 follow-up: default padded with Unicode spaces is still denylisted (strip, not trim)")
-        void rejectsDefaultPaddedWithUnicodeSpaces() {
-            String padded = "\u3000keevo_local_pwd\u2003";
-            assertRejects(builder().dbPassword(padded).build(), "POSTGRES_PASSWORD", padded);
+        @DisplayName("default padded with Unicode spaces is still denylisted (strip, not trim)")
+        void warnsOnDefaultPaddedWithUnicodeSpaces() {
+            assertWarnsOnly("\u3000keevo_local_pwd\u2003");
         }
 
-        @ParameterizedTest(name = "rejects placeholder [{0}]")
+        @ParameterizedTest(name = "warns on placeholder [{0}]")
         @ValueSource(strings = {"my_change_me_password", "CHANGEME_please_123", "your_db_password_here",
                 "replace_with_secret_value", "db-placeholder-value", "xxxxxxxxxxxxxxxx"})
-        void rejectsPlaceholders(String pwd) {
-            assertRejects(builder().dbPassword(pwd).build(), "POSTGRES_PASSWORD", pwd);
+        void warnsOnPlaceholders(String pwd) {
+            assertWarnsOnly(pwd);
         }
 
         @Test
-        @DisplayName("rejects a DB password shorter than 12 characters")
-        void rejectsShort() {
-            assertRejects(builder().dbPassword("a1b2c3d4e5f").build(), "POSTGRES_PASSWORD", "a1b2c3d4e5f");
+        @DisplayName("warns on a DB password shorter than 12 characters (whitespace does not count)")
+        void warnsWhenShort() {
+            assertWarnsOnly("a1b2c3d4e5f");
+            assertWarnsOnly(" ".repeat(9) + "a1b");
         }
 
         @Test
-        @DisplayName("accepts a 12-char generated DB password (no class policy on DB)")
+        @DisplayName("accepts a 12-char generated DB password without warning (no class policy on DB)")
         void acceptsTwelveChars() {
-            assertThatCode(builder().dbPassword("a1b2c3d4e5f6").build()::validate).doesNotThrowAnyException();
+            List<String> warnings = captureWarnings(() ->
+                    assertThatCode(builder().dbPassword("a1b2c3d4e5f6").build()::validate).doesNotThrowAnyException());
+            assertThat(warnings).noneMatch(m -> m.contains("POSTGRES_PASSWORD"));
         }
 
         @Test
@@ -384,12 +398,10 @@ class ProdSecretsValidatorTest {
         }
 
         @Test
-        @DisplayName("leading/trailing whitespace does not count toward the 12-char minimum (admin + DB)")
+        @DisplayName("leading/trailing whitespace does not count toward the 12-char minimum")
         void whitespacePaddingDoesNotCount() {
             String paddedAdmin = "Ab1" + " ".repeat(9);
             assertRejects(builder().adminPassword(paddedAdmin).build(), "ADMIN_PASSWORD", null);
-            String paddedDb = " ".repeat(9) + "a1b";
-            assertRejects(builder().dbPassword(paddedDb).build(), "POSTGRES_PASSWORD", null);
         }
 
         @Test

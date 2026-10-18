@@ -70,14 +70,16 @@ class ProdSecretsFailFastContextTest {
     }
 
     @Test
-    @DisplayName("weak POSTGRES_PASSWORD → prod context refuses to start with [FailFast] POSTGRES_PASSWORD")
-    void weakDbPasswordAbortsStartup() {
+    @DisplayName("weak POSTGRES_PASSWORD → only a [Security] warning: the validator passes, a server update is not blocked")
+    void weakDbPasswordOnlyWarns(CapturedOutput output) {
         String weak = "keevo_local_pwd";
         Throwable thrown = catchStartupFailure(weak, VALID_ADMIN_PASSWORD);
 
-        IllegalStateException failFast = findFailFast(thrown);
-        assertThat(failFast).as("[FailFast] IllegalStateException in cause chain").isNotNull();
-        assertThat(failFast.getMessage()).contains("POSTGRES_PASSWORD").doesNotContain(weak);
+        assertThat(findFailFast(thrown)).as("no [FailFast] in cause chain").isNull();
+        assertThat(output.getAll())
+                .contains("[Security] POSTGRES_PASSWORD")
+                .contains("[FailFast] Production secrets validation passed.")
+                .doesNotContain(weak);
     }
 
     @Test

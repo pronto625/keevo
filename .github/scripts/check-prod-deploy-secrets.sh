@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Pre-flight check of the production deploy secrets — runs on the GitHub runner BEFORE any
-# SSH to the server, so a missing/weak value fails the deploy without touching prod.
+# Pre-flight check of the production deploy settings — copied to the server by
+# deploy-backend.yml and run there BEFORE any pull / restart, so a missing/weak value fails the
+# deploy while the running stack keeps serving.
 #
-# Env (from GitHub secrets): APP_DOMAIN, ADMIN_DOMAIN, ADMIN_PHONE, ADMIN_PASSWORD.
+# Env: APP_DOMAIN (GitHub secret); ADMIN_DOMAIN, ADMIN_PHONE, ADMIN_PASSWORD (read by the
+# workflow from the server's ~/keevo/.env).
 #
 # The ADMIN_PASSWORD rules mirror ProdSecretsValidator (keevo/backend, fail-fast at boot):
 # not blank, not a known default (Admin@1234!…) nor a placeholder, >= 12 characters,
@@ -14,13 +16,13 @@ export LC_ALL=C.UTF-8
 
 errors=0
 fail() {
-  echo "::error::$1 — see keevo/backend/docs/DEPLOYMENT_CHECKLIST.md §7 / §18"
+  echo "::error::$1 — see docs/MOP_MISE_A_JOUR_PROD.md §4"
   errors=1
 }
 
 for name in APP_DOMAIN ADMIN_DOMAIN ADMIN_PHONE ADMIN_PASSWORD; do
   if [ -z "${!name:-}" ]; then
-    fail "Missing secret ${name} (environment 'production')"
+    fail "Missing ${name} (APP_DOMAIN: GitHub secret; the others: ~/keevo/.env on the server)"
   fi
 done
 
@@ -45,10 +47,6 @@ fi
 if [ -n "${ADMIN_PASSWORD:-}" ]; then
   pwd="${ADMIN_PASSWORD}"
   lower_pwd="${pwd,,}"
-  # Written single-quoted into ~/keevo/.env.admin (compose env_file, literal value).
-  if [[ "${pwd}" == *"'"* || "${pwd}" == *$'\n'* ]]; then
-    fail "ADMIN_PASSWORD must not contain a single quote or a newline"
-  fi
   trimmed="${pwd#"${pwd%%[![:space:]]*}"}"
   trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
   case "${trimmed,,}" in
