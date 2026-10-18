@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:keevo/core/sync/connectivity_service.dart';
@@ -78,6 +79,59 @@ void main() {
     final result = await repository.getDashboardSnapshot();
     expect(result.todayCA, 1000);
     verify(() => mockLocal.getDashboardSnapshot()).called(1);
+  });
+
+  // v1s-16-21: right after sign-in the summary races the initial pull.
+  group('transient remote failure', () {
+    late DashboardRepositoryImpl retrying;
+    final timeout = DioException(
+      requestOptions: RequestOptions(path: '/api/v1/dashboard/summary'),
+      type: DioExceptionType.receiveTimeout,
+    );
+
+    setUp(() {
+      retrying = DashboardRepositoryImpl(mockLocal, mockRemote, mockConnectivity,
+          retryDelay: Duration.zero);
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
+      when(() => mockLocal.getDashboardSnapshot())
+          .thenAnswer((_) async => snapshot);
+    });
+
+    test('is retried once: the server figures, not the device ones', () async {
+      var calls = 0;
+      when(() => mockRemote.getDashboardSummary()).thenAnswer((_) async {
+        if (calls++ == 0) throw timeout;
+        return snapshot;
+      });
+
+      final result = await retrying.getDashboardSnapshot();
+
+      expect(result.computedOnDevice, isFalse);
+      verify(() => mockRemote.getDashboardSummary()).called(2);
+      verifyNever(() => mockLocal.getDashboardSnapshot());
+    });
+
+    test('failing twice falls back to the device', () async {
+      when(() => mockRemote.getDashboardSummary()).thenThrow(timeout);
+
+      await retrying.getDashboardSnapshot();
+
+      verify(() => mockRemote.getDashboardSummary()).called(2);
+      verify(() => mockLocal.getDashboardSnapshot()).called(1);
+    });
+
+    test('a refusal (4xx) is not retried', () async {
+      final options = RequestOptions(path: '/api/v1/dashboard/summary');
+      when(() => mockRemote.getDashboardSummary()).thenThrow(DioException(
+        requestOptions: options,
+        response: Response(requestOptions: options, statusCode: 403),
+      ));
+
+      await retrying.getDashboardSnapshot();
+
+      verify(() => mockRemote.getDashboardSummary()).called(1);
+      verify(() => mockLocal.getDashboardSnapshot()).called(1);
+    });
   });
 
   // G2 (device test): an employee got 403 on /dashboard/summary at each sync.

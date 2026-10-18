@@ -154,25 +154,96 @@ class AdminTenantListPostgresIntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
-    @DisplayName("9-1 — last-activity filter keeps only tenants whose latest audit entry is in range")
+    @DisplayName("last-activity filter keeps only tenants whose latest merchant event is in range")
     void lastActivityFilter() {
         String tag = "Boutique KSD " + UUID.randomUUID().toString().substring(0, 8);
         UUID recent = tenant(tag + " récente");
         UUID old = tenant(tag + " ancienne");
-        tenant(tag + " jamais");
-        jdbc.update("INSERT INTO " + schemaOf.get(recent) + ".audit_log (id, action, entity_id, entity_type, occurred_at, user_id) "
-                + "VALUES (?, 'PRODUCT_CREATED', ?, 'Product', now() - interval '2 days', ?)",
-                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
-        jdbc.update("INSERT INTO " + schemaOf.get(old) + ".audit_log (id, action, entity_id, entity_type, occurred_at, user_id) "
-                + "VALUES (?, 'PRODUCT_CREATED', ?, 'Product', now() - interval '40 days', ?)",
-                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+        UUID never = tenant(tag + " jamais");
+        audit(recent, member(recent, "OWNER"), "now() - interval '2 days'");
+        audit(old, member(old, "EMPLOYEE"), "now() - interval '40 days'");
+        // Nightly automatic day closure on every tenant: technical, must not make them « active ».
+        for (UUID id : List.of(recent, old, never)) systemDayClosure(id, "now() - interval '1 hour'");
 
         Page<AdminTenantListItem> page = springService.execute(new ListTenantsQuery(tag, null, null, null, null,
                 java.time.Instant.now().minus(java.time.Duration.ofDays(7)), java.time.Instant.now(), 0, 25));
 
         assertThat(page.getTotalElements()).isEqualTo(1);
         assertThat(page.getContent()).extracting(AdminTenantListItem::id).containsExactly(recent);
-        assertThat(old).isNotNull();
+    }
+
+    @Test
+    @DisplayName("last activity = latest sale / own user's audit / sync push / app use, never SYSTEM or outsiders")
+    void lastActivityIgnoresTechnicalWrites() {
+        String tag = "Boutique KSE " + UUID.randomUUID().toString().substring(0, 8);
+        UUID bySale = tenant(tag + " vente");
+        UUID byAudit = tenant(tag + " journal");
+        UUID bySync = tenant(tag + " sync");
+        UUID byLogin = tenant(tag + " connexion");
+        UUID none = tenant(tag + " aucune");
+        for (UUID id : List.of(bySale, byAudit, bySync, byLogin, none)) {
+            systemDayClosure(id, "now() - interval '1 hour'");
+            // a write by a user who is not a member of this tenant (e.g. Super Admin) is not merchant activity
+            audit(id, UUID.randomUUID(), "now() - interval '1 hour'");
+        }
+        UUID storeId = jdbc.queryForObject("SELECT id FROM " + schemaOf.get(bySale) + ".stores LIMIT 1", UUID.class);
+        jdbc.update("INSERT INTO " + schemaOf.get(bySale) + ".sales (store_id, employee_id, total_amount, status, "
+                + "occurred_at, created_at) VALUES (?, ?, 1000, 'COMPLETED', now() - interval '3 days', now() - interval '3 days')",
+                storeId, UUID.randomUUID());
+        audit(byAudit, member(byAudit, "OWNER"), "now() - interval '4 days'");
+        jdbc.update("INSERT INTO " + schemaOf.get(bySync) + ".sync_operations_log (id, operation_type, status, processed_at) "
+                + "VALUES (?, 'CREATE_SALE', 'SUCCESS', now() - interval '5 days')", UUID.randomUUID().toString());
+        jdbc.update("INSERT INTO public.user_daily_activity (user_id, tenant_id, activity_date, first_seen_at) "
+                + "VALUES (?, ?, CURRENT_DATE - 6, now() - interval '6 days')", member(byLogin, "EMPLOYEE"), byLogin);
+
+        Page<AdminTenantListItem> page = springService.execute(
+                new ListTenantsQuery(tag, null, null, null, null, null, null, 0, 25));
+
+        java.util.Map<UUID, java.time.Instant> last = new java.util.HashMap<>();
+        page.getContent().forEach(it -> last.put(it.id(), it.lastActivityAt()));
+        java.time.Instant now = java.time.Instant.now();
+        assertThat(last).containsOnlyKeys(bySale, byAudit, bySync, byLogin, none);
+        assertThat(daysAgo(last.get(bySale), now)).isEqualTo(3);
+        assertThat(daysAgo(last.get(byAudit), now)).isEqualTo(4);
+        assertThat(daysAgo(last.get(bySync), now)).isEqualTo(5);
+        assertThat(daysAgo(last.get(byLogin), now)).isEqualTo(6);
+        assertThat(last.get(none)).isNull(); // shown « — »
+    }
+
+    @Test
+    @DisplayName("a sale dated in the future (wrong phone clock) never pushes last activity past now")
+    void lastActivityCapsFutureSaleAtNow() {
+        String tag = "Boutique KSF " + UUID.randomUUID().toString().substring(0, 8);
+        UUID future = tenant(tag + " futur");
+        UUID storeId = jdbc.queryForObject("SELECT id FROM " + schemaOf.get(future) + ".stores LIMIT 1", UUID.class);
+        jdbc.update("INSERT INTO " + schemaOf.get(future) + ".sales (store_id, employee_id, total_amount, status, "
+                + "occurred_at, created_at) VALUES (?, ?, 1000, 'COMPLETED', now() + interval '10 days', now())",
+                storeId, UUID.randomUUID());
+
+        java.time.Instant before = java.time.Instant.now().plusSeconds(5);
+        Page<AdminTenantListItem> page = springService.execute(
+                new ListTenantsQuery(tag, null, null, null, null, null, null, 0, 25));
+
+        assertThat(page.getContent()).singleElement()
+                .satisfies(it -> assertThat(it.lastActivityAt()).isNotNull().isBefore(before));
+    }
+
+    private static long daysAgo(java.time.Instant at, java.time.Instant now) {
+        assertThat(at).isNotNull();
+        return java.time.Duration.between(at, now).toHours() / 24;
+    }
+
+    private void audit(UUID tenantId, UUID userId, String occurredAtSql) {
+        jdbc.update("INSERT INTO " + schemaOf.get(tenantId) + ".audit_log (id, action, entity_id, entity_type, occurred_at, user_id) "
+                + "VALUES (?, 'PRODUCT_CREATED', ?, 'Product', " + occurredAtSql + ", ?)",
+                UUID.randomUUID(), UUID.randomUUID(), userId);
+    }
+
+    /** The audit line the nightly automatic day closure writes for every active store. */
+    private void systemDayClosure(UUID tenantId, String occurredAtSql) {
+        jdbc.update("INSERT INTO " + schemaOf.get(tenantId) + ".audit_log (id, action, entity_id, entity_type, occurred_at, user_id, source) "
+                + "VALUES (?, 'DAY_CLOSED', ?, 'DayClosure', " + occurredAtSql + ", '00000000-0000-0000-0000-000000000000'::uuid, 'SYSTEM')",
+                UUID.randomUUID(), UUID.randomUUID());
     }
 
     private UUID member(UUID tenantId, String role) {

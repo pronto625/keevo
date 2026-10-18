@@ -1,6 +1,7 @@
 package com.keevo.admin.tenant.application.service;
 
 import com.keevo.admin.AdminLabels;
+import com.keevo.admin.TenantLastActivitySql;
 import com.keevo.shared.domain.PhoneNumbers;
 import com.keevo.admin.tenant.domain.model.*;
 import com.keevo.admin.tenant.domain.port.in.*;
@@ -101,8 +102,8 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
         long offset = (long) query.page() * query.pageSize();
         Long total;
         if (query.lastActivityFrom() != null || query.lastActivityTo() != null) {
-            // 9-1 AC3 — last activity = latest audit_log entry (same definition as the column). It
-            // lives in each tenant schema, so the candidates are pre-filtered per schema (one
+            // 9-1 AC3 — last activity = latest merchant event (TenantLastActivitySql, same definition
+            // as the column). It lives in each tenant schema, so the candidates are pre-filtered per schema (one
             // statement each, acceptable at Phase 1 volumes), then paginated on their ids.
             List<UUID> active = tenantsActiveInRange(whereClause, params,
                     query.lastActivityFrom(), query.lastActivityTo());
@@ -304,7 +305,7 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
 
     /**
      * Ids (newest tenant first) of the tenants matching the public filters whose last activity —
-     * the latest {@code audit_log} entry of their schema — falls in [{@code from}, {@code to}]. A
+     * the latest merchant event, see {@link TenantLastActivitySql} — falls in [{@code from}, {@code to}]. A
      * tenant never active, with an invalid schema name or an unreadable schema is excluded.
      */
     private List<UUID> tenantsActiveInRange(String whereClause, List<Object> params, Instant from, Instant to) {
@@ -322,7 +323,8 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
             Object schema = c.get("schema_name");
             if (schema == null || !TenantSchema.isValid(schema.toString())) continue;
             List<Map<String, Object>> rows = tenantRows(id,
-                    "SELECT MAX(occurred_at) AS last_activity FROM " + schema + ".audit_log");
+                    "SELECT " + TenantLastActivitySql.expression(schema.toString()) + " AS last_activity",
+                    TenantLastActivitySql.args(id));
             Instant last = rows == null || rows.isEmpty() ? null : toInstant(rows.get(0).get("last_activity"));
             if (last == null) continue;
             if (from != null && last.isBefore(from)) continue;
@@ -360,7 +362,8 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
         // only loses the name (« Propriétaire »), never the metrics. The list costs 1 + 2N.
         List<Map<String, Object>> rows = tenantRows(item.id(), "SELECT "
                 + "(SELECT COUNT(*) FROM " + schemaName + ".stores WHERE is_active = true) AS store_count, "
-                + "(SELECT MAX(occurred_at) FROM " + schemaName + ".audit_log) AS last_activity");
+                + TenantLastActivitySql.expression(schemaName) + " AS last_activity",
+                TenantLastActivitySql.args(item.id()));
         Map<String, Object> row = rows == null || rows.isEmpty() ? Map.of() : rows.get(0);
         Object count = row.get("store_count");
         Instant lastActivity = toInstant(row.get("last_activity"));

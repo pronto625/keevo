@@ -14,6 +14,12 @@ class _MockDashboardRepository extends Mock implements DashboardRepository {}
 class _MockLocalDashboardDatasource extends Mock
     implements LocalDashboardDatasource {}
 
+/// Signed-in owner (no SharedPreferences / secure storage needed).
+final _ownerSession = [
+  dashboardSessionKeyProvider.overrideWithValue('u1@t1|OWNER'),
+  isOwnerSessionProvider.overrideWithValue(true),
+];
+
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
 
@@ -42,6 +48,7 @@ void main() {
 
       final container = ProviderContainer(overrides: [
         dashboardRepositoryProvider.overrideWithValue(mockRepo),
+        ..._ownerSession,
       ]);
       addTearDown(container.dispose);
 
@@ -84,6 +91,7 @@ void main() {
 
       final container = ProviderContainer(overrides: [
         dashboardRepositoryProvider.overrideWithValue(mockRepo),
+        ..._ownerSession,
       ]);
       addTearDown(container.dispose);
 
@@ -175,6 +183,7 @@ void main() {
       when(() => repo.getDashboardSnapshot()).thenAnswer((_) async => snap);
       final c = ProviderContainer(overrides: [
         dashboardRepositoryProvider.overrideWithValue(repo),
+        ..._ownerSession,
         dashboardClockProvider.overrideWithValue(() => now),
         localDashboardDatasourceProvider
             .overrideWithValue(_MockLocalDashboardDatasource()),

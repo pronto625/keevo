@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import '../../features/catalog/presentation/provider/product_provider.dart';
 import '../../features/inventory/presentation/provider/global_stock_provider.dart';
@@ -140,19 +139,18 @@ class _MainShellState extends ConsumerState<MainShell> {
       if (isEmployee && ownStoreId == null) return;
       final unnotified = await checker.getUnnotified(
           onlyStoreId: isEmployee ? ownStoreId : null);
-      if (unnotified.isEmpty) return;
-
-      final dateFormat = DateFormat('d MMMM yyyy', 'fr_FR');
-      for (final closure in unnotified) {
-        // Persist "seen" BEFORE showing: if the widget is disposed or an
-        // error interrupts this loop, the closure must never come back on
-        // the next check instead of being shown once and then looping forever.
-        await checker.markNotified([closure.id]);
-        if (!mounted) continue;
-        await _showTopClosureNotice(
-          'Clôture automatique\u202f: ${closure.storeName} — ${dateFormat.format(closure.closedAt)}',
-        );
+      if (unnotified.isEmpty) {
+        // Still prune ids that fell out of the notice window.
+        await checker.markNotified(const []);
+        return;
       }
+
+      // Persist "seen" BEFORE showing: if the widget is disposed or an error
+      // interrupts the notice, these closures must never come back on the
+      // next check. Several closures → ONE grouped notice, not a sequence.
+      await checker.markNotified(unnotified.map((c) => c.id).toList());
+      if (!mounted) return;
+      await _showTopClosureNotice(autoClosureNoticeMessage(unnotified));
     } finally {
       _autoClosureCheckInFlight = false;
     }

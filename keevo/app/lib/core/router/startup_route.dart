@@ -51,11 +51,16 @@ Future<bool> hasSession(FlutterSecureStorage storage) async {
 /// works: an expired access token is renewed, and when the server cannot be
 /// reached the session is kept so the shop can keep selling offline. Only a
 /// refusal of the refresh token by the server ends the session.
+///
+/// A platform super-admin session (web admin dashboard only — installed by
+/// app versions that let it through) is ended the same way, and
+/// [onPlatformAdminSessionRefused] is told so the user sees why.
 Future<String> resolveStartupRoute({
   required FlutterSecureStorage storage,
   required SharedPreferences prefs,
   required SessionRefresher refresher,
   required Future<void> Function(String accessToken) applyClaims,
+  void Function()? onPlatformAdminSessionRefused,
 }) async {
   var token = await storage.read(key: kAccessTokenKey);
   if (token != null && JwtClaims.tryParse(token) == null) {
@@ -80,6 +85,13 @@ Future<String> resolveStartupRoute({
 
   final claims = JwtClaims.tryParse(token);
   if (token == null || claims == null) return _signedOutRoute(prefs);
+
+  if (claims.isPlatformAdmin) {
+    await clearSessionSecrets(storage);
+    await prefs.remove(kUserRoleKey);
+    onPlatformAdminSessionRefused?.call();
+    return _signedOutRoute(prefs);
+  }
 
   await applyClaims(token);
 

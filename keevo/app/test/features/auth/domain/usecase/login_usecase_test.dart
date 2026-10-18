@@ -69,6 +69,13 @@ void main() {
     ],
   );
 
+  const platformAdminMembership = MembershipDto(
+    tenantCode: 'KV-ADMIN',
+    tenantName: 'KV-ADMIN',
+    role: 'SUPER_ADMIN',
+    schemaName: 'public',
+  );
+
   group('LoginUseCase', () {
     group('execute() — success path', () {
       setUp(() {
@@ -152,6 +159,97 @@ void main() {
               tenantCode: any(named: 'tenantCode'),
             ));
         verifyNever(() => mockTokenStorage.saveToken(any()));
+      });
+    });
+
+    group('execute() — platform super-admin membership', () {
+      setUp(() {
+        when(() => mockRepository.selectTenant(
+              loginToken: any(named: 'loginToken'),
+              tenantCode: any(named: 'tenantCode'),
+            )).thenAnswer((_) async => tokens);
+        when(() => mockTokenStorage.saveToken(any())).thenAnswer((_) async {});
+        when(() => mockTokenStorage.saveRefreshToken(any()))
+            .thenAnswer((_) async {});
+        when(() => mockTokenStorage.saveUserId(any())).thenAnswer((_) async {});
+        when(() => mockTokenStorage.saveTenantId(any()))
+            .thenAnswer((_) async {});
+        when(() => mockTokenStorage.saveStoreId(any()))
+            .thenAnswer((_) async {});
+      });
+
+      test(
+          'only SUPER_ADMIN → PLATFORM_ADMIN_ACCOUNT, no select-tenant, nothing stored',
+          () async {
+        when(() => mockRepository.login(
+              phoneNumber: validPhone,
+              password: validPassword,
+            )).thenAnswer((_) async => const LoginSessionResponse(
+            loginToken: 'login-token',
+            memberships: [platformAdminMembership]));
+
+        await expectLater(
+          useCase.execute(phoneNumber: validPhone, password: validPassword),
+          throwsA(isA<AuthException>().having(
+              (e) => e.domainCode, 'domainCode', 'PLATFORM_ADMIN_ACCOUNT')),
+        );
+        verifyNever(() => mockRepository.selectTenant(
+              loginToken: any(named: 'loginToken'),
+              tenantCode: any(named: 'tenantCode'),
+            ));
+        verifyNever(() => mockTokenStorage.saveToken(any()));
+        verifyNever(() => mockTokenStorage.saveRefreshToken(any()));
+      });
+
+      test('SUPER_ADMIN + one merchant membership → auto-selects the merchant',
+          () async {
+        when(() => mockRepository.login(
+              phoneNumber: validPhone,
+              password: validPassword,
+            )).thenAnswer((_) async => LoginSessionResponse(
+            loginToken: 'login-token',
+            memberships: [
+              platformAdminMembership,
+              singleMembershipSession.memberships.single,
+            ]));
+
+        final result = await useCase.execute(
+            phoneNumber: validPhone, password: validPassword);
+
+        expect(result, isA<AuthenticatedResult>());
+        verify(() => mockRepository.selectTenant(
+              loginToken: 'login-token',
+              tenantCode: 'KV-ABC123',
+            )).called(1);
+        verifyNever(() => mockRepository.selectTenant(
+              loginToken: any(named: 'loginToken'),
+              tenantCode: 'KV-ADMIN',
+            ));
+      });
+
+      test('SUPER_ADMIN + several merchants → picker without the admin entry',
+          () async {
+        when(() => mockRepository.login(
+              phoneNumber: validPhone,
+              password: validPassword,
+            )).thenAnswer((_) async => LoginSessionResponse(
+            loginToken: 'login-token',
+            memberships: [
+              platformAdminMembership,
+              ...multiMembershipSession.memberships,
+            ]));
+
+        final result = await useCase.execute(
+            phoneNumber: validPhone, password: validPassword);
+
+        expect(result, isA<NeedsTenantSelectionResult>());
+        final picker = result as NeedsTenantSelectionResult;
+        expect(picker.memberships.map((m) => m.tenantCode),
+            ['KV-ABC123', 'KV-XYZ789']);
+        verifyNever(() => mockRepository.selectTenant(
+              loginToken: any(named: 'loginToken'),
+              tenantCode: any(named: 'tenantCode'),
+            ));
       });
     });
 

@@ -156,7 +156,7 @@ class _DashboardContent extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // « Chiffre d'affaires total » — period selectable, first.
-                const _TotalRevenueSection(),
+                _TotalRevenueSection(snapshotAsOf: snapshot.asOf),
 
                 // Hero Card — AC2
                 MorningSummaryHeroCard(
@@ -266,14 +266,22 @@ class _DashboardContent extends ConsumerWidget {
 
 /// « Chiffre d'affaires total » card wired to its providers.
 class _TotalRevenueSection extends ConsumerWidget {
-  const _TotalRevenueSection();
+  /// [DashboardSnapshot.asOf] of the snapshot on screen.
+  final DateTime? snapshotAsOf;
+
+  const _TotalRevenueSection({required this.snapshotAsOf});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final period = ref.watch(revenuePeriodProvider);
     final view = ref.watch(periodRevenueProvider).valueOrNull;
-    // While another period loads, never show the previous period's figure.
-    final current = view != null && view.period == period ? view : null;
+    // While another period — or a newer snapshot (sign-in, refresh) — loads,
+    // show the loading dash, never the previous figure (v1s-16-21).
+    final current = view != null &&
+            view.period == period &&
+            view.asOf == snapshotAsOf
+        ? view
+        : null;
     return TotalRevenueCard(
       period: period,
       revenue: current?.revenue,

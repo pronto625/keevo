@@ -112,6 +112,7 @@ class _SplashRedirectPageState extends ConsumerState<_SplashRedirectPage> {
   Future<void> _redirect() async {
     String route;
     Object? extra;
+    var platformAdminRefused = false;
     try {
       route = await resolveStartupRoute(
         storage: ref.read(flutterSecureStorageProvider),
@@ -119,6 +120,7 @@ class _SplashRedirectPageState extends ConsumerState<_SplashRedirectPage> {
         refresher: ref.read(sessionRefresherProvider),
         applyClaims: (token) =>
             ref.read(sessionClaimsApplierProvider).apply(token),
+        onPlatformAdminSessionRefused: () => platformAdminRefused = true,
       );
     } catch (_) {
       // Storage or local DB failure: never leave the user on the spinner.
@@ -140,6 +142,11 @@ class _SplashRedirectPageState extends ConsumerState<_SplashRedirectPage> {
     }
     if (!mounted) return;
     context.go(route, extra: extra);
+    if (platformAdminRefused) {
+      rootScaffoldMessengerKey.currentState?.showSnackBar(
+        const SnackBar(content: Text(kPlatformAdminAccountMessage)),
+      );
+    }
   }
 
   @override

@@ -166,6 +166,7 @@ class _AuthPageState extends ConsumerState<AuthPage> {
             'Compte verrouillé temporairement. Réessayez dans 15 minutes.',
           'NO_ACTIVE_MEMBERSHIP' =>
             'Votre accès a été désactivé. Contactez votre employeur.',
+          'PLATFORM_ADMIN_ACCOUNT' => kPlatformAdminAccountMessage,
           _ => 'Erreur inattendue, réessayez',
         };
       }
@@ -176,6 +177,7 @@ class _AuthPageState extends ConsumerState<AuthPage> {
         'ACCOUNT_LOCKED' => 'Account temporarily locked. Try again in 15 minutes.',
         'NO_ACTIVE_MEMBERSHIP' =>
           'Your access has been deactivated. Contact your employer.',
+        'PLATFORM_ADMIN_ACCOUNT' => kPlatformAdminAccountMessageEn,
         _ => 'Unexpected error, please try again',
       };
     }

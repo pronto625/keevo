@@ -512,11 +512,18 @@ class AdminOperationsServiceTest {
 
     private static Map<String, Object> activityRow(long gmv, long orders, Timestamp lastSale, Timestamp lastAudit,
                                                    long stores, String plan) {
-        return row("gmv", gmv, "order_count", orders, "last_sale_at", lastSale, "last_audit_at", lastAudit,
+        return row("gmv", gmv, "order_count", orders, "last_activity_at", greatest(lastSale, lastAudit),
                 "store_count", stores, "plan", plan);
     }
 
     private static Map<String, Object> inactiveRow(Timestamp lastSale, Timestamp lastAudit, String plan) {
-        return row("last_sale_at", lastSale, "last_audit_at", lastAudit, "plan", plan);
+        return row("last_activity_at", greatest(lastSale, lastAudit), "plan", plan);
+    }
+
+    /** What SQL GREATEST returns (NULLs ignored) — the service reads one last_activity_at column. */
+    private static Timestamp greatest(Timestamp a, Timestamp b) {
+        if (a == null) return b;
+        if (b == null) return a;
+        return a.after(b) ? a : b;
     }
 }

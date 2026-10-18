@@ -130,6 +130,60 @@ void main() {
     });
   });
 
+  // A 1.1.70 install let the platform super-admin into the merchant shell.
+  group('platform super-admin session', () {
+    late int refusals;
+
+    Future<String> adminRoute() => resolveStartupRoute(
+          storage: storage,
+          prefs: prefs,
+          refresher: refresher,
+          applyClaims: (token) async => applied.add(token),
+          onPlatformAdminSessionRefused: () => refusals++,
+        );
+
+    setUp(() async {
+      refusals = 0;
+      await prefs.setBool(kOnboardingSeenKey, true);
+      await prefs.setBool(kTermsAcceptedKey, true);
+      await prefs.setString(kUserRoleKey, 'SUPER_ADMIN');
+    });
+
+    test('stored session is cleared: back to login, user told', () async {
+      await signedIn(
+          _jwt({'role': 'SUPER_ADMIN', 'tenantId': 'public', 'onboardingCompleted': true}));
+
+      expect(await adminRoute(), '/auth/login');
+      expect(refusals, 1);
+      expect(applied, isEmpty);
+      expect(await storage.read(key: 'jwt_token'), isNull);
+      expect(await storage.read(key: 'refresh_token'), isNull);
+      expect(await storage.read(key: kDbEncryptionKey), 'db-key');
+      expect(prefs.getString(kUserRoleKey), isNull);
+    });
+
+    test('renewed at startup: the renewed session is cleared too', () async {
+      await signedIn(_jwt({'role': 'SUPER_ADMIN'},
+          expiresIn: const Duration(days: -1)));
+      final renewed = _jwt({'role': 'SUPER_ADMIN'});
+      when(() => refresher.refresh()).thenAnswer((_) async {
+        await storage.write(key: 'jwt_token', value: renewed);
+        return RefreshOutcome.renewed;
+      });
+
+      expect(await adminRoute(), '/auth/login');
+      expect(refusals, 1);
+      expect(await storage.read(key: 'jwt_token'), isNull);
+    });
+
+    test('merchant session is not affected', () async {
+      await signedIn(_jwt({'role': 'OWNER', 'onboardingCompleted': true}));
+
+      expect(await adminRoute(), '/dashboard');
+      expect(refusals, 0);
+    });
+  });
+
   group('no session', () {
     test('first launch: welcome screen', () async {
       expect(await route(), '/onboarding');

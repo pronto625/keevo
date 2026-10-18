@@ -9,10 +9,14 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/dashboard/domain/model/dashboard_snapshot.dart';
+import 'package:keevo/features/dashboard/domain/repository/dashboard_repository.dart';
 import 'package:keevo/features/dashboard/presentation/page/dashboard_page.dart';
 import 'package:keevo/features/dashboard/presentation/provider/dashboard_providers.dart';
 import 'package:keevo/features/dashboard/presentation/widget/total_revenue_card.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+class _MockRepo extends Mock implements DashboardRepository {}
 
 const periodTotals = {
   RevenuePeriod.week: PeriodRevenue(amount: 125000, salesCount: 12),
@@ -351,6 +355,78 @@ void main() {
             isTrue);
         expect(find.text(xaf.format(2500000)), findsOneWidget);
         expect(find.text('230 ventes'), findsOneWidget);
+      });
+
+      // v1s-16-21: « 0 XAF — Aucune vente » right after sign-in, the server
+      // totals only after « Actualiser ».
+      testWidgets(
+          'sign-in: loading state, then the server totals without « Actualiser »',
+          (tester) async {
+        DashboardSnapshot make(PeriodRevenue r, {bool onDevice = false}) =>
+            DashboardSnapshot(
+              todayCA: 0,
+              yesterdayCA: 0,
+              dayBeforeYesterdayCA: 0,
+              trendPercent: 0,
+              totalTransactionsMonth: 0,
+              averageBasketMonth: 0,
+              prevMonthTransactions: 0,
+              prevMonthAverageBasket: 0,
+              lowStockCount: 1,
+              weeklyTopProducts: const [],
+              weeklyWorstProducts: const [],
+              dailyCALast30: const [],
+              storeOverviews: const [],
+              todaySalesCount: 0,
+              periodRevenue: {for (final p in RevenuePeriod.values) p: r},
+              computedOnDevice: onDevice,
+            );
+        final session = StateProvider<String?>((_) => null);
+        final server = Completer<DashboardSnapshot>();
+        final repo = _MockRepo();
+        var calls = 0;
+        when(() => repo.getDashboardSnapshot()).thenAnswer((_) => calls++ == 0
+            ? Future.value(make(const PeriodRevenue(amount: 0, salesCount: 0),
+                onDevice: true))
+            : server.future);
+        SharedPreferences.setMockInitialValues({
+          kUserFirstNameKey: 'Simon',
+          kDashboardRevenuePeriodKey: 'allTime',
+        });
+        final sp = await SharedPreferences.getInstance();
+        final container = ProviderContainer(overrides: [
+          dashboardRepositoryProvider.overrideWithValue(repo),
+          dashboardSessionKeyProvider
+              .overrideWith((ref) => ref.watch(session)),
+          isOwnerSessionProvider
+              .overrideWith((ref) => ref.watch(session) != null),
+          storeOverviewsProvider
+              .overrideWith((_) => Future.value(const <StoreOverview>[])),
+          chartDataProvider
+              .overrideWith((_) => Future.value(const <DailyCA>[])),
+          sharedPreferencesProvider.overrideWithValue(sp),
+        ]);
+        addTearDown(container.dispose);
+        await tester.pumpWidget(UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: DashboardPage()),
+        ));
+        await tester.pumpAndSettle();
+        // Computed before the session was known.
+        expect(find.text('Aucune vente'), findsOneWidget);
+
+        container.read(session.notifier).state = 'owner@t1|OWNER';
+        await tester.pump();
+        await tester.pump();
+        // Loading: never the previous session's 0.
+        expect(find.text('Aucune vente'), findsNothing);
+        expect(find.text(xaf.format(0)), findsNothing);
+
+        server.complete(make(const PeriodRevenue(amount: 93500, salesCount: 6)));
+        await tester.pumpAndSettle();
+        expect(find.text(xaf.format(93500)), findsOneWidget);
+        expect(find.text('6 ventes'), findsOneWidget);
+        expect(find.text('Données de cet appareil'), findsNothing);
       });
 
       testWidgets('offline figure is labelled as this device\'s data',

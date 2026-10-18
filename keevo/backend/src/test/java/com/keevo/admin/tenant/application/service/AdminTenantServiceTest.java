@@ -500,7 +500,7 @@ class AdminTenantServiceTest {
     }
 
     @Test
-    @DisplayName("9-1 — last-activity filter keeps only tenants whose latest audit entry is in range, then pages")
+    @DisplayName("9-1 — last-activity filter keeps only tenants whose latest merchant event is in range, then pages")
     void listTenants_lastActivityFilter_preFiltersPerSchema() {
         UUID inRange = UUID.randomUUID();
         UUID tooOld = UUID.randomUUID();

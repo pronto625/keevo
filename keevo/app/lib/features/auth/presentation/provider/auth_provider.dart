@@ -94,6 +94,17 @@ final sessionRefresherProvider = Provider<SessionRefresher>((ref) {
   );
 });
 
+/// Shown when the platform super-admin account is used in the mobile app —
+/// at login, or when such a session is found on the device at startup.
+const kPlatformAdminAccountMessage =
+    "Ce compte est réservé au tableau de bord d'administration Keevo. "
+    'Connectez-vous avec un compte commerçant.';
+
+/// English counterpart of [kPlatformAdminAccountMessage] (login page in EN).
+const kPlatformAdminAccountMessageEn =
+    'This account is reserved for the Keevo admin dashboard. '
+    'Sign in with a merchant account.';
+
 /// Shows the "session terminée" SnackBar (suspension, reactivation, password
 /// change or deactivation revoke the session server-side) unless [throttle] already let one
 /// through in its window (v1s-16-13: N concurrent SESSION_REVOKED → one).

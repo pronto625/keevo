@@ -157,6 +157,30 @@ void main() {
       );
     });
 
+    testWidgets(
+        'platform super-admin account: refused with a clear message, stays on login',
+        (tester) async {
+      when(() => mockUseCase.execute(
+            phoneNumber: any(named: 'phoneNumber'),
+            password: any(named: 'password'),
+          )).thenThrow(const AuthException(
+        domainCode: 'PLATFORM_ADMIN_ACCOUNT',
+        message: 'Platform admin account',
+      ));
+
+      await tester.pumpWidget(buildPage());
+      await tester.pumpAndSettle();
+
+      await _enterPhone(tester, '600000001');
+      await tester.enterText(find.byKey(const Key('passwordField')), 'anypass');
+      await tester.tap(find.byType(FilledButton));
+      await tester.pumpAndSettle();
+
+      expect(find.text(kPlatformAdminAccountMessage), findsOneWidget);
+      expect(find.text('Splash'), findsNothing);
+      expect(find.byKey(const Key('passwordField')), findsOneWidget);
+    });
+
     testWidgets('shows loading indicator while login is in progress',
         (tester) async {
       // Use a Completer so no pending fake timers are left when the test ends

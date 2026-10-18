@@ -1,3 +1,4 @@
+import '../../../../core/auth/jwt_claims.dart';
 import '../exception/auth_exception.dart';
 import '../model/login_result.dart';
 import '../repository/auth_repository.dart';
@@ -27,6 +28,8 @@ class LoginUseCase {
   /// - INVALID_CREDENTIALS: wrong phone or password
   /// - ACCOUNT_LOCKED: too many failed attempts
   /// - NO_ACTIVE_MEMBERSHIP: valid credentials, no active company (deactivated)
+  /// - PLATFORM_ADMIN_ACCOUNT: the only membership is the platform
+  ///   super-admin one, reserved for the web admin dashboard
   Future<LoginResult> execute({
     required String phoneNumber,
     required String password,
@@ -36,27 +39,40 @@ class LoginUseCase {
       password: password,
     );
 
+    // The platform super-admin membership only opens the web admin
+    // dashboard: never offered nor auto-selected here, so select-tenant is
+    // never called with it and no token is stored.
+    final memberships = session.memberships
+        .where((m) => m.role != kPlatformAdminRole)
+        .toList(growable: false);
+    if (memberships.isEmpty && session.memberships.isNotEmpty) {
+      throw const AuthException(
+        domainCode: 'PLATFORM_ADMIN_ACCOUNT',
+        message: 'Platform admin account, not usable in the mobile app',
+      );
+    }
+
     // A deactivated employee (or an owner whose company is gone) has valid
     // credentials but no active membership: the picker opened empty with no
     // explanation (device test).
-    if (session.memberships.isEmpty) {
+    if (memberships.isEmpty) {
       throw const AuthException(
         domainCode: 'NO_ACTIVE_MEMBERSHIP',
         message: 'No active company for this account',
       );
     }
 
-    if (session.memberships.length == 1) {
+    if (memberships.length == 1) {
       // AC8: single membership — auto-select without showing picker
       final selectUseCase = SelectTenantUseCase(_repository, _tokenStorage);
       final tokens = await selectUseCase.execute(
         loginToken: session.loginToken,
-        tenantCode: session.memberships.first.tenantCode,
+        tenantCode: memberships.first.tenantCode,
       );
       return AuthenticatedResult(tokens);
     }
 
     // AC9: multiple memberships — surface picker, keep loginToken in memory only
-    return NeedsTenantSelectionResult(session.loginToken, session.memberships);
+    return NeedsTenantSelectionResult(session.loginToken, memberships);
   }
 }

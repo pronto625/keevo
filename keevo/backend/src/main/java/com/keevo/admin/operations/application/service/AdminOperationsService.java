@@ -1,5 +1,6 @@
 package com.keevo.admin.operations.application.service;
 
+import com.keevo.admin.TenantLastActivitySql;
 import com.keevo.admin.operations.domain.model.*;
 import com.keevo.admin.operations.domain.port.in.*;
 import com.keevo.shared.domain.exception.DomainException;
@@ -28,7 +29,7 @@ import java.util.*;
  * <ul>
  *   <li>GMV = {@code SUM(total_amount)} of {@code sales} with {@code status = 'COMPLETED'}; orders = their count.</li>
  *   <li>The period filters {@code COALESCE(occurred_at, created_at)}; day boundaries are Africa/Douala (WAT).</li>
- *   <li>Last activity = MAX(latest sale time, latest {@code audit_log.occurred_at}); a tenant is inactive when
+ *   <li>Last activity = latest merchant event ({@link com.keevo.admin.TenantLastActivitySql}); a tenant is inactive when
  *       it is null or older than {@value #INACTIVITY_DAYS} days.</li>
  *   <li>Only {@code public.tenants} with {@code status = 'ACTIVE'}, never the KV-ADMIN system tenant.</li>
  * </ul>
@@ -153,17 +154,16 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
                     "WITH w AS (SELECT COALESCE(SUM(total_amount), 0) AS gmv, COUNT(*) AS order_count "
                     + "FROM " + s + ".sales WHERE " + IN_WINDOW + ") "
                     + "SELECT w.gmv, w.order_count, "
-                    + "(SELECT MAX(" + SALE_TIME + ") FROM " + s + ".sales) AS last_sale_at, "
-                    + "(SELECT MAX(occurred_at) FROM " + s + ".audit_log) AS last_audit_at, "
+                    + TenantLastActivitySql.expression(s) + " AS last_activity_at, "
                     + "(SELECT COUNT(*) FROM " + s + ".stores WHERE is_active = true AND type = 'STORE') AS store_count, "
                     + "(SELECT plan_type FROM " + s + ".subscriptions ORDER BY created_at DESC LIMIT 1) AS plan "
                     + "FROM w",
-                    window.startTs(), window.endTs());
+                    params(window.startTs(), window.endTs(), TenantLastActivitySql.args(tenant.id())));
             if (row == null) continue;
             rows.add(new TenantActivity(
                     tenant.id(), tenant.name(), planOf(row, tenant),
                     asLong(row.get("gmv")), asLong(row.get("order_count")),
-                    latest(asInstant(row.get("last_sale_at")), asInstant(row.get("last_audit_at"))),
+                    asInstant(row.get("last_activity_at")),
                     (int) asLong(row.get("store_count"))));
         }
 
@@ -189,11 +189,11 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
             String s = tenant.schemaName();
             if (!TenantSchema.isValid(s)) { skipInvalid(tenant); continue; } // loadActiveTenants() filters; re-checked at use
             Map<String, Object> row = safeSingleRow(tenant,
-                    "SELECT (SELECT MAX(" + SALE_TIME + ") FROM " + s + ".sales) AS last_sale_at, "
-                    + "(SELECT MAX(occurred_at) FROM " + s + ".audit_log) AS last_audit_at, "
-                    + "(SELECT plan_type FROM " + s + ".subscriptions ORDER BY created_at DESC LIMIT 1) AS plan");
+                    "SELECT " + TenantLastActivitySql.expression(s) + " AS last_activity_at, "
+                    + "(SELECT plan_type FROM " + s + ".subscriptions ORDER BY created_at DESC LIMIT 1) AS plan",
+                    TenantLastActivitySql.args(tenant.id()));
             if (row == null) continue;
-            Instant last = latest(asInstant(row.get("last_sale_at")), asInstant(row.get("last_audit_at")));
+            Instant last = asInstant(row.get("last_activity_at"));
             if (last != null && !last.isBefore(threshold)) continue;
             Long days = last == null ? null : Math.max(0, ChronoUnit.DAYS.between(last, now));
             result.add(new InactiveTenant(tenant.id(), tenant.name(), planOf(row, tenant), last, days));
@@ -323,10 +323,12 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
         return plan != null ? plan.toString() : tenant.planType();
     }
 
-    private static Instant latest(Instant a, Instant b) {
-        if (a == null) return b;
-        if (b == null) return a;
-        return a.isAfter(b) ? a : b;
+    private static Object[] params(Object a, Object b, Object[] rest) {
+        Object[] out = new Object[2 + rest.length];
+        out[0] = a;
+        out[1] = b;
+        System.arraycopy(rest, 0, out, 2, rest.length);
+        return out;
     }
 
     private static long asLong(Object value) {

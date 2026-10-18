@@ -1,5 +1,9 @@
 import 'dart:convert';
 
+/// Role of the Keevo platform super-admin (web admin dashboard only). The
+/// mobile app never opens a session with it.
+const kPlatformAdminRole = 'SUPER_ADMIN';
+
 /// Read-only view of an access token's payload. The signature is not checked
 /// here — the server does that; the app only reads its own claims.
 class JwtClaims {
@@ -41,6 +45,10 @@ class JwtClaims {
   String? get tenantId => _data['tenantId'] as String?;
 
   String? get role => _data['role'] as String?;
+
+  /// Platform super-admin session: reserved for the web admin dashboard,
+  /// never usable in the mobile app.
+  bool get isPlatformAdmin => role == kPlatformAdminRole;
   String? get storeId => _data['storeId'] as String?;
   String? get firstName => _data['firstName'] as String?;
   String? get tenantStatus => _data['tenantStatus'] as String?;

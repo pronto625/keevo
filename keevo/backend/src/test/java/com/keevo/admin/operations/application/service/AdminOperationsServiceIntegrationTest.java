@@ -53,6 +53,7 @@ class AdminOperationsServiceIntegrationTest extends PostgresIntegrationTest {
 
     private final List<UUID> tenantIds = new ArrayList<>();
     private final List<String> schemas = new ArrayList<>();
+    private final List<UUID> userIds = new ArrayList<>();
 
     private UUID activeTenant;
     private UUID dormantTenant;
@@ -77,7 +78,11 @@ class AdminOperationsServiceIntegrationTest extends PostgresIntegrationTest {
         dormantTenant = UUID.randomUUID();
         String dormantSchema = provisionTenant(dormantTenant, "Boutique Dormante", true);
         sale(dormantSchema, 400, "COMPLETED", now.minus(20, ChronoUnit.DAYS), now.minus(20, ChronoUnit.DAYS));
-        audit(dormantSchema, now.minus(15, ChronoUnit.DAYS).minus(1, ChronoUnit.HOURS));
+        audit(dormantSchema, member(dormantTenant), now.minus(15, ChronoUnit.DAYS).minus(1, ChronoUnit.HOURS));
+        // Technical writes since then must not count as activity: yesterday's automatic day closure
+        // (SYSTEM actor) and a write by someone who is not a member of the tenant.
+        systemDayClosure(dormantSchema, yesterday);
+        audit(dormantSchema, UUID.randomUUID(), yesterday);
 
         // Valid schema name, but the schema was never provisioned: its queries fail → skipped.
         brokenTenant = UUID.randomUUID();
@@ -86,6 +91,10 @@ class AdminOperationsServiceIntegrationTest extends PostgresIntegrationTest {
 
     @AfterEach
     void cleanup() {
+        for (UUID u : userIds) {
+            jdbc.update("DELETE FROM public.user_tenant_memberships WHERE user_id = ?", u);
+            jdbc.update("DELETE FROM public.users WHERE id = ?", u);
+        }
         for (UUID id : tenantIds) jdbc.update("DELETE FROM public.tenants WHERE id = ?", id);
         for (String s : schemas) jdbc.execute("DROP SCHEMA IF EXISTS \"" + s + "\" CASCADE");
     }
@@ -173,9 +182,30 @@ class AdminOperationsServiceIntegrationTest extends PostgresIntegrationTest {
                 occurredAt == null ? null : Timestamp.from(occurredAt), Timestamp.from(createdAt));
     }
 
-    private void audit(String schema, Instant occurredAt) {
+    private void audit(String schema, UUID userId, Instant occurredAt) {
         jdbc.update("INSERT INTO \"" + schema + "\".audit_log (user_id, entity_type, entity_id, action, occurred_at) "
                         + "VALUES (?, 'SALE', ?, 'TEST', ?)",
-                UUID.randomUUID(), UUID.randomUUID(), Timestamp.from(occurredAt));
+                userId, UUID.randomUUID(), Timestamp.from(occurredAt));
+    }
+
+    /** The audit line the nightly automatic day closure writes for every active store. */
+    private void systemDayClosure(String schema, Instant occurredAt) {
+        jdbc.update("INSERT INTO \"" + schema + "\".audit_log (user_id, entity_type, entity_id, action, occurred_at, source) "
+                        + "VALUES ('00000000-0000-0000-0000-000000000000'::uuid, 'DayClosure', ?, 'DAY_CLOSED', ?, 'SYSTEM')",
+                UUID.randomUUID(), Timestamp.from(occurredAt));
+    }
+
+    /** A user of the tenant (OWNER membership). */
+    private UUID member(UUID tenantId) {
+        UUID userId = UUID.randomUUID();
+        userIds.add(userId);
+        String phone = "+2439" + String.format("%08d", java.util.concurrent.ThreadLocalRandom.current().nextInt(100_000_000));
+        jdbc.update("INSERT INTO public.users (id, created_at, updated_at, is_active, failed_attempts, "
+                + "password_hash, phone_number, role) VALUES (?, now(), now(), true, 0, 'hash', ?, 'OWNER')",
+                userId, phone);
+        jdbc.update("INSERT INTO public.user_tenant_memberships (id, created_at, updated_at, is_active, role, "
+                + "tenant_id, user_id) VALUES (?, now(), now(), true, 'OWNER', ?, ?)",
+                UUID.randomUUID(), tenantId, userId);
+        return userId;
     }
 }
