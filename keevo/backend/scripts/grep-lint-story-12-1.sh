@@ -7,8 +7,8 @@
 #      is group-readable for the container, NOT world-readable)
 #   2. deploy-backend.yml does NOT contain `chmod 644 keys/private_key.pem`
 #      (the old insecure private-key mode)
-#   3. deploy-backend.yml contains `chgrp 1001 keys/private_key.pem` (the
-#      container reads via group GID 1001, no root/chown required)
+#   3. deploy-backend.yml contains `chgrp 2001 keys/private_key.pem` (the
+#      container reads via group GID 2001, no root/chown required)
 #   4. deploy-backend.yml does NOT contain `chown 1001:1001 keys/private_key.pem`
 #      (the old strategy that fails under a non-root SSH deploy user)
 #
@@ -46,12 +46,12 @@ else
   ok "deploy-backend.yml does NOT contain 'chmod 644 keys/private_key.pem'"
 fi
 
-# ── Test 3: deploy-backend.yml must contain chgrp 1001 for private key ────────
-if grep -qF 'chgrp 1001 keys/private_key.pem' "${DEPLOY_FILE}"; then
-  ok "deploy-backend.yml contains 'chgrp 1001 keys/private_key.pem'"
+# ── Test 3: deploy-backend.yml must contain chgrp 2001 for private key ────────
+if grep -qF 'chgrp 2001 keys/private_key.pem' "${DEPLOY_FILE}"; then
+  ok "deploy-backend.yml contains 'chgrp 2001 keys/private_key.pem'"
 else
-  fail "deploy-backend.yml must contain 'chgrp 1001 keys/private_key.pem'" \
-       "container has no group-read channel — key unreadable for UID 1001"
+  fail "deploy-backend.yml must contain 'chgrp 2001 keys/private_key.pem'" \
+       "container has no group-read channel — key unreadable for UID 2001"
 fi
 
 # ── Test 4: deploy-backend.yml must NOT contain the old chown 1001:1001 ───────
