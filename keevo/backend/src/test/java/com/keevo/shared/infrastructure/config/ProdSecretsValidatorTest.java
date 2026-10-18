@@ -445,7 +445,7 @@ class ProdSecretsValidatorTest {
 
         private static final String WASSENDER_URL = "https://www.wasenderapi.com";
         private static final String WASSENDER_TOKEN = "wsd_9a8b7c6d5e4f3a2b1c";
-        private static final String TWILIO_SID = "AC0123456789abcdef0123456789abcdef";
+        private static final String TWILIO_SID = "ACtestsid0000unitfixture";
         private static final String TWILIO_TOKEN = "0123456789abcdef0123456789abcdef";
 
         @ParameterizedTest(name = "noop/unset provider passes with blank tokens [{0}]")
