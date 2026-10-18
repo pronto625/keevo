@@ -155,25 +155,54 @@ Rien d'obligatoire. Les sauvegardes nocturnes archivent maintenant aussi les pho
 
 ---
 
-## 5. GitHub : signature de l'APK (dépôt `pronto625/keevo`)
+## 5. App Android : signature de l'APK (hors Google Play)
 
-Seul le **build de l'app** en a besoin ; le serveur n'est pas concerné. Ces 4 secrets n'existent
-que sur `Dalois-30/keevo-app`. Sans eux, *Release Flutter* échoue sur `pronto625/keevo`, comme
-depuis le 21/09 (`Failed to read key from store`).
+L'app n'est pas encore sur Google Play : l'APK est distribué directement. Pour qu'Android accepte la
+1.1.70 **par-dessus** la 1.1.12 sans désinstaller, ce qui effacerait les ventes non synchronisées,
+elle doit être signée avec **la même clé** que l'APK déjà installé.
+
+Constat du 2026-10-18 : l'app installée sur le téléphone de test est signée avec la **clé de debug
+de ce PC** (`~/.config/.android/debug.keystore`, empreinte SHA-256 `ab3421d9…78185c`). Sans
+`key.properties`, `flutter build apk --release` signe avec cette clé
+(`android/app/build.gradle.kts`). Si l'APK des clients a été construit sur ce PC, c'est la même.
+
+Vérifiez sur un téléphone client (ou sur l'APK 1.1.12 envoyé aux clients) :
 
 ```bash
-base64 -w0 /chemin/vers/keevo-release.keystore | gh secret set ANDROID_KEYSTORE_BASE64 -R pronto625/keevo
-gh secret set ANDROID_KEY_ALIAS      -R pronto625/keevo
-gh secret set ANDROID_STORE_PASSWORD -R pronto625/keevo
-gh secret set ANDROID_KEY_PASSWORD   -R pronto625/keevo
+~/Android/Sdk/build-tools/36.1.0/apksigner verify --print-certs keevo-1.1.12.apk | grep SHA-256
+# ab3421d92df893454fa04e2866757db2daaa44e4fef87f646c1b7e225e78185c → clé de debug de ce PC
 ```
 
-> ⚠️ Prenez **le même keystore** que celui qui a signé l'APK installé chez les utilisateurs.
-> Sinon, Android refuse la mise à jour par-dessus l'ancienne app.
+**Option A, recommandée tant qu'il n'y a pas Google Play** : la CI signe avec cette même clé.
+L'APK publié dans *Releases* se met alors à jour par-dessus l'ancien.
 
-Les autres secrets ne changent pas. Ce sont `APP_DOMAIN` (`keevo.ad2s.cm`, qui sert aussi d'adresse
-API à l'app), `DEPLOY_SSH_*`, `GHCR_PAT`, `ACME_EMAIL` et `JWT_*_PEM`. Ne touchez pas aux clés
-JWT : les changer déconnecterait tout le monde.
+```bash
+base64 -w0 ~/.config/.android/debug.keystore | gh secret set ANDROID_KEYSTORE_BASE64 -R pronto625/keevo
+gh secret set ANDROID_KEY_ALIAS      -R pronto625/keevo --body androiddebugkey
+gh secret set ANDROID_STORE_PASSWORD -R pronto625/keevo --body android
+gh secret set ANDROID_KEY_PASSWORD   -R pronto625/keevo --body android
+```
+
+**Option B** : ne rien configurer. *Release Flutter* échouera, mais c'est un workflow séparé : la
+mise à jour du serveur n'est pas affectée. Construisez alors l'APK sur ce PC, avec la même clé que
+d'habitude :
+
+```bash
+cd keevo/app && flutter build apk --release --dart-define=API_BASE_URL=https://keevo.ad2s.cm
+# → build/app/outputs/flutter-apk/app-release.apk, à distribuer comme la 1.1.12
+```
+
+**Plus tard, pour Google Play** : ce sera une nouvelle publication. Il faudra :
+- passer l'identifiant `com.example.keevo` à `com.keevo.keevo`, car Google refuse `com.example`
+  (voir `docs/RELEASE_IDENTITY.md`) ;
+- utiliser une vraie clé d'envoi, par exemple `~/keevo-release.keystore` créée en avril, dont il
+  faut retrouver le mot de passe.
+
+Les utilisateurs installeront alors l'app Play **une fois**, après avoir synchronisé leurs ventes.
+D'ici là, ne changez pas de clé.
+
+Les autres secrets ne changent pas : `APP_DOMAIN` (`keevo.ad2s.cm`), `DEPLOY_SSH_*`, `GHCR_PAT`,
+`ACME_EMAIL` et `JWT_*_PEM`. Ne touchez pas aux clés JWT : les changer déconnecterait tout le monde.
 
 ---
 
@@ -275,6 +304,6 @@ synchronisation suivante.
 | Serveur | dump de la base (étape 2) | ✅ |
 | `~/keevo/.env` | `ADMIN_DOMAIN`, `ADMIN_PHONE`, `ADMIN_PASSWORD` | ✅ |
 | `~/keevo/.env` | `KEEVO_EXPORT_LINK_SECRET`, `KEEVO_HELP_TUTORIAL_*_URL` | facultatif |
-| Secrets `pronto625/keevo` | `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEY_ALIAS`, `ANDROID_STORE_PASSWORD`, `ANDROID_KEY_PASSWORD` | ✅ pour publier l'app |
+| Secrets `pronto625/keevo` | `ANDROID_*` avec la clé de debug actuelle (§5, option A), sinon APK construit sur ce PC (option B) | pour l'app seulement |
 | Secrets `pronto625/keevo` | rien d'autre à changer | — |
 | Postgres | rien : avertissement seulement s'il est faible | — |
