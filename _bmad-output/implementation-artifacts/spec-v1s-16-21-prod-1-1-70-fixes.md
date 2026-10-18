@@ -93,3 +93,7 @@ Elle a relevé quatre défauts :
   - T3 : fenêtre 48 h, un seul avis groupé, liste des avis bornée.
   - T4 : cause = la clôture automatique du soir (`DAY_CLOSED`, acteur SYSTEM) écrite dans `audit_log` de toutes les entreprises ; `TenantLastActivitySql` (vente plafonnée à now(), audit des membres OWNER/EMPLOYEE hors SYSTEM, synchro, usage de l'app), colonne + filtre + page Opérations alignés.
   - T5 : version 2.0.0+70 ; `flutter analyze` 0 erreur / 0 avertissement ; régression complète par lots — backend 13 paquets 3 495 tests (admin rejoué 504), app 22 lots 2 604 tests (dashboard rejoué 141), 0 échec ; revue : rien de bloquant, 3 constats mineurs corrigés (vente datée dans le futur, reconnexion après démarrage hors ligne, commentaires).
+- 2026-10-18 — T6 fait : déployé sur `pronto625/keevo` (commit f9705ce7), API UP, APK 2.0.0+70 publié (même signature). Recette prod :
+  - Tableau de bord `keevo-dash.ad2s.cm` : 11 pages sans erreur ; « Dernière activité » différenciée par entreprise.
+  - Téléphone : mise à jour 1.1.70 → 2.0.0 sans désinstaller (session conservée, CA exact) ; super-admin refusé avec le message prévu ; installation neuve : CA juste dès la connexion, aucun avis de clôture.
+  - Compte `+237690000001` : vente en ligne, vente hors ligne puis synchro (serveur : 3 ventes / 15 500 XAF ce jour), transfert btq tal → Boutique talos, mouvements de stock à jour, inventaire partiel validé (serveur : PARTIAL / VALIDATED).
