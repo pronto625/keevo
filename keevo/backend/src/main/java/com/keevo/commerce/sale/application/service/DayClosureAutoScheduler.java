@@ -137,6 +137,9 @@ public class DayClosureAutoScheduler {
             if (store.type() == StoreType.WAREHOUSE) {
                 return;
             }
+            // v1s-16-22: each store in its own tenant schema, whatever a closure listener
+            // left in the context (else closures land in public and the store is never closed).
+            TenantContext.setCurrentTenant(tenant.getSchemaName());
             if (dayClosureRepository.existsByStoreIdAndDate(store.id(), todayWAT)) {
                 log.debug("Store {} already closed for {}", store.id(), todayWAT);
                 return;

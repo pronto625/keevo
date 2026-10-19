@@ -57,6 +57,9 @@ public class EndOfDayReportListener {
         log.info("EndOfDayReportListener: DayClosedEvent received storeId={}, tenantId={}, isAutomatic={}",
                 event.storeId(), event.tenantId(), event.isAutomatic());
 
+        // Restored afterwards: on the automatic closure path this runs on the scheduler
+        // thread, which goes on closing the tenant's other stores (v1s-16-22).
+        String previousTenant = TenantContext.getCurrentTenant();
         TenantContext.setCurrentTenant(event.tenantId());
         try {
             // Story 7.5 — check if EOD report is enabled for this tenant
@@ -108,7 +111,11 @@ public class EndOfDayReportListener {
         } catch (Exception e) {
             log.error("Failed to generate reports for storeId={}: {}", event.storeId(), e.getMessage(), e);
         } finally {
-            TenantContext.clear();
+            if (previousTenant != null) {
+                TenantContext.setCurrentTenant(previousTenant);
+            } else {
+                TenantContext.clear();
+            }
         }
     }
 

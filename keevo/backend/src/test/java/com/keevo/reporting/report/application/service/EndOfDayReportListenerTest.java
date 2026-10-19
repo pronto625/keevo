@@ -8,6 +8,7 @@ import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository
 import com.keevo.reporting.report.application.service.EndOfDayReportBuilder;
 import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase;
 import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase.GenerateReportCommand;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -96,6 +97,25 @@ class EndOfDayReportListenerTest {
         doThrow(new RuntimeException("DB error")).when(generateReportUseCase).generateReport(any());
         // Must not throw — listener handles errors internally
         listener.onDayClosed(buildEvent(false));
+    }
+
+    /** v1s-16-22 — on the auto-closure path the caller's tenant must survive the listener. */
+    @Test
+    void onDayClosed_restoresTheCallersTenant() {
+        TenantContext.setCurrentTenant("kv_test01");
+        try {
+            listener.onDayClosed(buildEvent(true));
+            assertThat(TenantContext.getCurrentTenant()).isEqualTo("kv_test01");
+        } finally {
+            TenantContext.clear();
+        }
+    }
+
+    @Test
+    void onDayClosed_withoutCallerTenant_leavesTheContextClear() {
+        TenantContext.clear();
+        listener.onDayClosed(buildEvent(false));
+        assertThat(TenantContext.getCurrentTenant()).isNull();
     }
 
     private TenantPreferences enabledPrefs() {

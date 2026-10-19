@@ -18,6 +18,7 @@ import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.store.domain.model.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,6 +27,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.*;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -165,6 +167,44 @@ class DayClosureAutoSchedulerTest {
         var commandCaptor = ArgumentCaptor.forClass(CloseDayCommand.class);
         verify(closeDayUseCase, times(1)).closeDay(commandCaptor.capture());
         assertThat(commandCaptor.getValue().storeId()).isEqualTo(store2Id);
+    }
+
+    /**
+     * v1s-16-22 — the AFTER_COMMIT report listener runs on the scheduler thread and used
+     * to clear the tenant context: every store after the first was closed in public.
+     */
+    @Test
+    void scheduler_closesEveryStoreInTenantSchema_evenWhenAListenerClearsTheContext() {
+        var tenant = createTenant(TENANT_SCHEMA, TenantStatus.ACTIVE);
+        UUID store1Id = UUID.randomUUID();
+        UUID store2Id = UUID.randomUUID();
+        UUID store3Id = UUID.randomUUID();
+        List<String> schemaAtCheck = new ArrayList<>();
+        List<String> schemaAtClose = new ArrayList<>();
+
+        when(tenantRepository.findAll()).thenReturn(List.of(tenant));
+        when(storeRepository.findAllActive()).thenReturn(List.of(
+                createStore(store1Id, "Store 1"), createStore(store2Id, "Store 2"),
+                createStore(store3Id, "Store 3")));
+        when(tenantPreferencesRepository.findByCurrentTenant())
+                .thenReturn(Optional.of(defaultEodPrefs("20:00:00", true)));
+        when(dayClosureRepository.existsByStoreIdAndDate(any(UUID.class), any(LocalDate.class)))
+                .thenAnswer(inv -> {
+                    schemaAtCheck.add(TenantContext.getCurrentTenant());
+                    return false;
+                });
+        when(closeDayUseCase.closeDay(any())).thenAnswer(inv -> {
+            schemaAtClose.add(TenantContext.getCurrentTenant());
+            TenantContext.clear(); // what the report listener used to do
+            return null;
+        });
+
+        scheduler.runAutoClosure();
+
+        verify(closeDayUseCase, times(3)).closeDay(any());
+        assertThat(schemaAtCheck).containsExactly(TENANT_SCHEMA, TENANT_SCHEMA, TENANT_SCHEMA);
+        assertThat(schemaAtClose).containsExactly(TENANT_SCHEMA, TENANT_SCHEMA, TENANT_SCHEMA);
+        assertThat(TenantContext.getCurrentTenant()).isNull();
     }
 
     // ── New tests for AC4 (per-tenant eodReportTime + fallback 20h WAT) ─────
