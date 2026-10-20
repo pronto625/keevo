@@ -263,6 +263,39 @@ void main() {
       expect(find.textContaining('FCFA'), findsNothing);
     });
 
+    testWidgets('v1s-16-23: transfer line names the other store',
+        (tester) async {
+      AuditEntryDto t(String id, String type, String? metadata, int change) =>
+          AuditEntryDto(
+            id: id,
+            entityType: 'StockMovement',
+            entityId: 'p-1',
+            action: 'STOCK_ADJUSTED',
+            valueAfter: '{"movementType":"$type","quantityChange":$change,'
+                '"quantityAfter":7}',
+            metadata: metadata,
+            userId: 'other-user',
+            occurredAt: DateTime.utc(2026, 3, 1, 10),
+          );
+      await tester.pumpWidget(_buildWidget([
+        t('e-out', 'TRANSFER_OUT', '{"destinationStoreName":"Boutique B"}', -3),
+        t('e-in', 'TRANSFER_IN', '{"sourceStoreName":"Boutique A"}', 3),
+        t('e-old', 'TRANSFER_OUT', null, -2),
+      ]));
+      await tester.pumpAndSettle();
+
+      expect(
+          find.text(
+              'Stock transféré (sortie) vers Boutique B : -3 unité(s) · total : 7'),
+          findsOneWidget);
+      expect(
+          find.text(
+              'Stock transféré (entrée) depuis Boutique A : +3 unité(s) · total : 7'),
+          findsOneWidget);
+      expect(find.text('Stock transféré (sortie) : -2 unité(s) · total : 7'),
+          findsOneWidget);
+    });
+
     testWidgets('shows valueBefore → valueAfter when present', (tester) async {
       await tester.pumpWidget(_buildWidget([_stockEntry]));
       await tester.pumpAndSettle();

@@ -118,7 +118,8 @@ public class ExecuteTransferService implements TransferStockUseCase {
         stockOperationService.recordOperation(
             command.productId(), command.variantId(), command.sourceStoreId(),
             MovementType.TRANSFER_OUT, -command.quantity(),
-            command.actorId(), command.notes());
+            command.actorId(), command.notes(),
+            command.destinationStoreId());
 
         // 6. Persist transfer header with IN_TRANSIT status
         //    Destination stock will be credited when the transfer is received (Step 2).

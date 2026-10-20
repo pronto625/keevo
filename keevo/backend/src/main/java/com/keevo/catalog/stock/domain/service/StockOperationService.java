@@ -102,6 +102,30 @@ public class StockOperationService {
                                          MovementType movementType, int quantityChange,
                                          UUID actorId, String notes,
                                          UUID movementId, boolean allowNegative) {
+        return recordOperation(productId, variantId, storeId, movementType, quantityChange,
+                actorId, notes, movementId, allowNegative, null);
+    }
+
+    /**
+     * Transfer leg — same as {@link #recordOperation(UUID, UUID, UUID, MovementType, int, UUID, String)}
+     * plus the other store of the transfer, whose name is carried by {@link StockAdjustedEvent}
+     * into the audit trail (« vers B » / « depuis A »). v1s-16-23.
+     *
+     * @param counterpartStoreId destination store on TRANSFER_OUT, source store on TRANSFER_IN
+     */
+    @Transactional
+    public StockMovement recordOperation(UUID productId, UUID variantId, UUID storeId,
+                                         MovementType movementType, int quantityChange,
+                                         UUID actorId, String notes, UUID counterpartStoreId) {
+        return recordOperation(productId, variantId, storeId, movementType, quantityChange,
+                actorId, notes, null, false, counterpartStoreId);
+    }
+
+    private StockMovement recordOperation(UUID productId, UUID variantId, UUID storeId,
+                                          MovementType movementType, int quantityChange,
+                                          UUID actorId, String notes,
+                                          UUID movementId, boolean allowNegative,
+                                          UUID counterpartStoreId) {
         // 1. Load product (for name + threshold)
         var product = productRepository.findById(productId)
                 .orElseThrow(() -> new DomainException(ErrorCode.PRODUCT_NOT_FOUND,
@@ -163,6 +187,18 @@ public class StockOperationService {
         } catch (Exception e) {
             log.warn("[STOCK] Actor-context extraction failed for actorId={}: {}", actorId, e.getMessage());
         }
+        // v1s-16-23: name of the other store of a transfer — absent store → no name, no failure.
+        String counterpartStoreName = null;
+        if (counterpartStoreId != null) {
+            try {
+                counterpartStoreName = storeRepository.findById(counterpartStoreId)
+                        .map(s -> s.name())
+                        .orElse(null);
+            } catch (Exception e) {
+                log.warn("[STOCK] Counterpart store lookup failed for storeId={}: {}",
+                        counterpartStoreId, e.getMessage());
+            }
+        }
         eventPublisher.publishEvent(new StockAdjustedEvent(
             productId, variantId, storeId,
             movementType,
@@ -170,7 +206,8 @@ public class StockOperationService {
             actorId, notes,
             tenantId,
             actorRole, actorName, storeName, product.getName(),
-            now
+            now,
+            counterpartStoreName
         ));
 
         // 7. Threshold check — server-side enforcement (cannot be bypassed client-side)

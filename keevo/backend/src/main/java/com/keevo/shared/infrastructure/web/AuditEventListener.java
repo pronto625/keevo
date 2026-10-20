@@ -25,6 +25,7 @@ import com.keevo.catalog.product.domain.event.ProductUpdatedEvent;
 import com.keevo.catalog.product.domain.event.ProductArchivedEvent;
 import com.keevo.catalog.product.domain.event.ProductActivatedEvent;
 import com.keevo.catalog.product.domain.event.SalePriceOverriddenEvent;
+import com.keevo.catalog.stock.domain.entity.MovementType;
 import com.keevo.catalog.stock.domain.event.StockAdjustedEvent;
 import com.keevo.catalog.stock.domain.event.StockThresholdBreachedEvent;
 import com.keevo.commerce.sale.domain.model.*;
@@ -297,7 +298,12 @@ public class AuditEventListener {
                 event.storeId(), event.productName(),
                 map("storeId", str(event.storeId()),
                         "variantId", str(event.variantId()),
-                        "notes", event.notes()),
+                        "notes", event.notes(),
+                        // v1s-16-23: where the goods went / came from (null → dropped by writeRaw)
+                        "destinationStoreName", event.movementType() == MovementType.TRANSFER_OUT
+                                ? event.counterpartStoreName() : null,
+                        "sourceStoreName", event.movementType() == MovementType.TRANSFER_IN
+                                ? event.counterpartStoreName() : null),
                 event.actorName());
         log.info("AUDIT: stock_adjusted productId={} type={} before={} change={} after={} tenantId={}",
                 event.productId(), event.movementType(), event.quantityBefore(),

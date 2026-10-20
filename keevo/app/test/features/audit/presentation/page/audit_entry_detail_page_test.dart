@@ -125,6 +125,51 @@ void main() {
     expectNoTechnicalText(tester);
   });
 
+  testWidgets('v1s-16-23: a sending reads « vers B » with a « Vers » row',
+      (tester) async {
+    repo.onEntry = (_) => Completer<AuditEntryDto>().future;
+    final e = auditEntry('t-out',
+        action: 'STOCK_ADJUSTED',
+        entityType: 'StockMovement',
+        entityLabel: 'Pagne wax',
+        valueAfter: '{"movementType":"TRANSFER_OUT","quantityChange":-3,'
+            '"quantityAfter":7}',
+        metadata: '{"actorLabel":"Awa","destinationStoreName":"Boutique B"}');
+
+    await tester.pumpWidget(app('t-out', e));
+    await tester.pump();
+
+    expect(find.text('Awa a transféré du stock de Pagne wax vers Boutique B'),
+        findsOneWidget);
+    await scrollTo(tester, 'Contexte');
+    expect(find.text('Vers'), findsOneWidget);
+    expect(find.text('Boutique B'), findsOneWidget);
+    expectNoTechnicalText(tester);
+  });
+
+  testWidgets('v1s-16-23: a receipt reads « depuis A » with a « Depuis » row',
+      (tester) async {
+    repo.onEntry = (_) => Completer<AuditEntryDto>().future;
+    final e = auditEntry('t-in',
+        action: 'STOCK_ADJUSTED',
+        entityType: 'StockMovement',
+        entityLabel: 'Pagne wax',
+        valueAfter: '{"movementType":"TRANSFER_IN","quantityChange":3,'
+            '"quantityAfter":3}',
+        metadata: '{"actorLabel":"Awa","sourceStoreName":"Boutique A"}');
+
+    await tester.pumpWidget(app('t-in', e));
+    await tester.pump();
+
+    expect(
+        find.text(
+            'Awa a reçu par transfert du stock de Pagne wax depuis Boutique A'),
+        findsOneWidget);
+    await scrollTo(tester, 'Contexte');
+    expect(find.text('Depuis'), findsOneWidget);
+    expect(find.text('Boutique A'), findsOneWidget);
+  });
+
   testWidgets('the fresh detail replaces the tapped data', (tester) async {
     repo.onEntry = (_) async =>
         auditEntry('e1', storeName: 'Boutique Marché', source: 'ONLINE');

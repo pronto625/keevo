@@ -150,5 +150,56 @@ void main() {
       expect(queryParameters['source'], 'src-001');
       expect(queryParameters['destination'], 'dst-001');
     });
+  
+    test('getHistory passes storeId as "store" and status (v1s-16-23)',
+        () async {
+      when(() => dio.get<Map<String, dynamic>>(
+            '/api/v1/stock/transfers',
+            queryParameters: any(named: 'queryParameters'),
+          )).thenAnswer((_) async => Response(
+            data: {
+              'data': {'content': [], 'totalElements': 0}
+            },
+            statusCode: 200,
+            requestOptions: RequestOptions(path: '/api/v1/stock/transfers'),
+          ));
+
+      await datasource.getHistory(
+          storeId: 'st-1', status: 'COMPLETED', page: 2, pageSize: 20);
+
+      final captured = verify(() => dio.get<Map<String, dynamic>>(
+            '/api/v1/stock/transfers',
+            queryParameters: captureAny(named: 'queryParameters'),
+          )).captured;
+      final q = captured.first as Map<String, dynamic>;
+      expect(q['store'], 'st-1');
+      expect(q['status'], 'COMPLETED');
+      expect(q['page'], 2);
+      expect(q['size'], 20);
+      expect(q.containsKey('source'), isFalse);
+    });
+
+    test('getHistory without store/status sends neither (old contract)',
+        () async {
+      when(() => dio.get<Map<String, dynamic>>(
+            '/api/v1/stock/transfers',
+            queryParameters: any(named: 'queryParameters'),
+          )).thenAnswer((_) async => Response(
+            data: {
+              'data': {'content': [], 'totalElements': 0}
+            },
+            statusCode: 200,
+            requestOptions: RequestOptions(path: '/api/v1/stock/transfers'),
+          ));
+
+      await datasource.getHistory();
+
+      final q = verify(() => dio.get<Map<String, dynamic>>(
+            '/api/v1/stock/transfers',
+            queryParameters: captureAny(named: 'queryParameters'),
+          )).captured.first as Map<String, dynamic>;
+      expect(q.containsKey('store'), isFalse);
+      expect(q.containsKey('status'), isFalse);
+    });
   });
 }

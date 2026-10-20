@@ -66,6 +66,16 @@ class AuditChangesFormatterTest {
     }
 
     @Test
+    @DisplayName("v1s-16-23: transfer counterpart store → « Vers » / « Depuis »")
+    void transferCounterpart() {
+        assertThat(AuditChangesFormatter.details(
+                "{\"storeId\":\"" + UUID_1 + "\",\"destinationStoreName\":\"Boutique B\"}", null))
+                .isEqualTo("Vers : Boutique B");
+        assertThat(AuditChangesFormatter.details("{\"sourceStoreName\":\"Boutique A\"}", null))
+                .isEqualTo("Depuis : Boutique A");
+    }
+
+    @Test
     @DisplayName("dates in WAT dd/MM/yyyy HH:mm")
     void dates() {
         assertThat(AuditChangesFormatter.changes(null, "{\"from\":\"2026-10-01T00:00:00Z\"}"))

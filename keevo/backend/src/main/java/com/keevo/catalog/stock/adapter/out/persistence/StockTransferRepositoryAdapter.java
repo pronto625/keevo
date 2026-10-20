@@ -51,9 +51,11 @@ public class StockTransferRepositoryAdapter implements StockTransferRepository {
     @Override
     @Transactional(readOnly = true)
     public Page<StockTransfer> findByFilters(UUID sourceStoreId, UUID destinationStoreId,
-                                             Instant from, Instant to, Pageable pageable) {
+                                             Instant from, Instant to,
+                                             UUID storeId, TransferStatus status,
+                                             Pageable pageable) {
         Specification<StockTransferJpaEntity> spec =
-                buildSpec(sourceStoreId, destinationStoreId, from, to);
+                buildSpec(sourceStoreId, destinationStoreId, from, to, storeId, status);
         return springRepository.findAll(spec, pageable).map(this::toDomain);
     }
 
@@ -66,7 +68,8 @@ public class StockTransferRepositoryAdapter implements StockTransferRepository {
     // ── Specification builder ────────────────────────────────────────────────
 
     private Specification<StockTransferJpaEntity> buildSpec(
-            UUID sourceStoreId, UUID destinationStoreId, Instant from, Instant to) {
+            UUID sourceStoreId, UUID destinationStoreId, Instant from, Instant to,
+            UUID storeId, TransferStatus status) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
@@ -75,6 +78,15 @@ public class StockTransferRepositoryAdapter implements StockTransferRepository {
             }
             if (destinationStoreId != null) {
                 predicates.add(cb.equal(root.get("destinationStoreId"), destinationStoreId));
+            }
+            if (storeId != null) {
+                // v1s-16-23: a store sees what it sent AND what it received.
+                predicates.add(cb.or(
+                        cb.equal(root.get("sourceStoreId"), storeId),
+                        cb.equal(root.get("destinationStoreId"), storeId)));
+            }
+            if (status != null) {
+                predicates.add(cb.equal(root.get("status"), status));
             }
             if (from != null) {
                 predicates.add(cb.greaterThanOrEqualTo(root.get("occurredAt"), from));

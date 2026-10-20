@@ -268,4 +268,57 @@ class StockOperationServiceTest {
         assertThat(captor.getValue().actorName()).isEqualTo("Un employé").doesNotContain(ACTOR_ID.toString());
         assertThat(captor.getValue().actorRole()).isEqualTo("EMPLOYEE");
     }
+
+    // ── v1s-16-23 — counterpart store of a transfer ──────────────────────────
+
+    @Test
+    void transferLeg_eventCarriesCounterpartStoreName() {
+        UUID dest = UUID.randomUUID();
+        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
+            .thenReturn(Optional.of(levelWithQuantity(10)));
+        when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(stockLevelRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(storeRepository.findById(dest)).thenReturn(Optional.of(new com.keevo.store.store.domain.model.Store(
+            dest, "Boutique B", com.keevo.store.store.domain.model.StoreType.STORE, null, null, true,
+            java.time.Instant.now(), java.time.Instant.now())));
+
+        service.recordOperation(PRODUCT_ID, null, STORE_ID, MovementType.TRANSFER_OUT, -3, ACTOR_ID, null, dest);
+
+        ArgumentCaptor<StockAdjustedEvent> captor = ArgumentCaptor.forClass(StockAdjustedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().counterpartStoreName()).isEqualTo("Boutique B");
+    }
+
+    @Test
+    void transferLeg_missingCounterpartStore_noNameNoFailure() {
+        UUID dest = UUID.randomUUID();
+        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
+            .thenReturn(Optional.of(levelWithQuantity(10)));
+        when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(stockLevelRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(storeRepository.findById(dest)).thenReturn(Optional.empty());
+
+        service.recordOperation(PRODUCT_ID, null, STORE_ID, MovementType.TRANSFER_OUT, -3, ACTOR_ID, null, dest);
+
+        ArgumentCaptor<StockAdjustedEvent> captor = ArgumentCaptor.forClass(StockAdjustedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().counterpartStoreName()).isNull();
+    }
+
+    @Test
+    void nonTransfer_eventHasNoCounterpart() {
+        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
+            .thenReturn(Optional.of(levelWithQuantity(10)));
+        when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(stockLevelRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.recordOperation(PRODUCT_ID, null, STORE_ID, MovementType.STOCK_ENTRY, 5, ACTOR_ID, "delivery");
+
+        ArgumentCaptor<StockAdjustedEvent> captor = ArgumentCaptor.forClass(StockAdjustedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().counterpartStoreName()).isNull();
+    }
 }

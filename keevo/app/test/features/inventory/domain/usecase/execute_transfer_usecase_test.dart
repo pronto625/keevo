@@ -33,6 +33,8 @@ class _FakeRepo implements StockTransferRepository {
     String? sourceStoreId,
     String? destinationStoreId,
     String? productId,
+    String? storeId,
+    String? status,
     int page = 0,
     int pageSize = 20,
   }) async => [];

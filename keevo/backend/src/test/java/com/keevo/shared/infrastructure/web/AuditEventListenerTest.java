@@ -478,6 +478,36 @@ class AuditEventListenerTest {
         }
 
         @Test
+        @DisplayName("v1s-16-23: TRANSFER_OUT → metadata destinationStoreName; TRANSFER_IN → sourceStoreName")
+        void stockAdjusted_transferCarriesCounterpartStoreName() throws Exception {
+            UUID storeId = UUID.randomUUID();
+            listener.on(new StockAdjustedEvent(UUID.randomUUID(), null, storeId, MovementType.TRANSFER_OUT, 10, -3, 7,
+                    actorId, null, "kv_abc123", "OWNER", "Moussa", "Boutique A", "Pagne wax", Instant.now(),
+                    "Boutique B"));
+            var meta = objectMapper.readTree(captureEntry().metadataJson());
+            assertThat(meta.get("destinationStoreName").asText()).isEqualTo("Boutique B");
+            assertThat(meta.has("sourceStoreName")).isFalse();
+
+            org.mockito.Mockito.clearInvocations(auditPort);
+            listener.on(new StockAdjustedEvent(UUID.randomUUID(), null, storeId, MovementType.TRANSFER_IN, 0, 3, 3,
+                    actorId, null, "kv_abc123", "OWNER", "Moussa", "Boutique B", "Pagne wax", Instant.now(),
+                    "Boutique A"));
+            meta = objectMapper.readTree(captureEntry().metadataJson());
+            assertThat(meta.get("sourceStoreName").asText()).isEqualTo("Boutique A");
+            assertThat(meta.has("destinationStoreName")).isFalse();
+        }
+
+        @Test
+        @DisplayName("v1s-16-23: transfer without counterpart name → no Vers/Depuis key")
+        void stockAdjusted_transferWithoutCounterpart_noKey() throws Exception {
+            listener.on(new StockAdjustedEvent(UUID.randomUUID(), null, UUID.randomUUID(), MovementType.TRANSFER_OUT,
+                    10, -3, 7, actorId, null, "kv_abc123", "OWNER", "Moussa", "Boutique A", "Pagne wax", Instant.now()));
+            var meta = objectMapper.readTree(captureEntry().metadataJson());
+            assertThat(meta.has("destinationStoreName")).isFalse();
+            assertThat(meta.has("sourceStoreName")).isFalse();
+        }
+
+        @Test
         @DisplayName("PriceOverridden → cataloguePrice before, appliedPrice/productName after, saleId in metadata")
         void priceOverridden_split() throws Exception {
             UUID saleId = UUID.randomUUID();

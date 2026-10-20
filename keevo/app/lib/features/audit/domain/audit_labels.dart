@@ -215,6 +215,8 @@ const auditValueLabels = <String, String>{
 
 /// French label of each context key (`metadata`).
 const auditContextLabels = <String, String>{
+  // v1s-16-23: other store of a transfer.
+  'destinationStoreName': 'Vers',
   'forcedProducts': 'Produits forcés',
   'isAutomatic': 'Déclenchement',
   'justification': 'Justification',
@@ -223,6 +225,7 @@ const auditContextLabels = <String, String>{
   'notes': 'Motif',
   'reason': 'Motif',
   'scope': 'Périmètre',
+  'sourceStoreName': 'Depuis',
 };
 
 /// Keys never shown; any `id` / `*Id` / `*Ids` key is hidden too.

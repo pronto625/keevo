@@ -21,11 +21,17 @@ public interface StockTransferRepository {
 
     java.util.Optional<StockTransfer> findById(UUID id);
 
+    /**
+     * @param storeId optional — matches transfers where the store is source OR destination
+     * @param status  optional — exact status match
+     */
     Page<StockTransfer> findByFilters(
         UUID sourceStoreId,
         UUID destinationStoreId,
         Instant from,
         Instant to,
+        UUID storeId,
+        TransferStatus status,
         Pageable pageable
     );
 

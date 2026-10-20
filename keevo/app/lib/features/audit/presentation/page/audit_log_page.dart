@@ -715,6 +715,13 @@ class AuditLogTile extends StatelessWidget {
                           TextSpan(text: sentence.joiner),
                           TextSpan(text: sentence.object, style: bold),
                         ],
+                        if (sentence.tail != null) ...[
+                          TextSpan(
+                              text: sentence.tailLead == null
+                                  ? ' '
+                                  : ' ${sentence.tailLead} '),
+                          TextSpan(text: sentence.tail, style: bold),
+                        ],
                       ],
                     ),
                     maxLines: 3,

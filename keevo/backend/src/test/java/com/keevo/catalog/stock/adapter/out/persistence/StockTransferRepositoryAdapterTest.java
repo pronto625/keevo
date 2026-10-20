@@ -68,7 +68,7 @@ class StockTransferRepositoryAdapterTest {
         when(springRepo.findAll(any(Specification.class), eq(pageable)))
             .thenReturn(new PageImpl<>(List.of()));
 
-        adapter.findByFilters(SRC_ID, null, null, null, pageable);
+        adapter.findByFilters(SRC_ID, null, null, null, null, null, pageable);
 
         verify(springRepo).findAll(any(Specification.class), eq(pageable));
     }
@@ -80,7 +80,7 @@ class StockTransferRepositoryAdapterTest {
         when(springRepo.findAll(any(Specification.class), eq(pageable)))
             .thenReturn(new PageImpl<>(List.of()));
 
-        adapter.findByFilters(null, DEST_ID, null, null, pageable);
+        adapter.findByFilters(null, DEST_ID, null, null, null, null, pageable);
 
         verify(springRepo).findAll(any(Specification.class), eq(pageable));
     }
@@ -94,7 +94,7 @@ class StockTransferRepositoryAdapterTest {
         when(springRepo.findAll(any(Specification.class), eq(pageable)))
             .thenReturn(new PageImpl<>(List.of()));
 
-        adapter.findByFilters(null, null, from, to, pageable);
+        adapter.findByFilters(null, null, from, to, null, null, pageable);
 
         verify(springRepo).findAll(any(Specification.class), eq(pageable));
     }
@@ -106,11 +106,45 @@ class StockTransferRepositoryAdapterTest {
         when(springRepo.findAll(any(Specification.class), any(Pageable.class)))
             .thenReturn(new PageImpl<>(List.of()));
 
-        adapter.findByFilters(null, null, null, null, pageable);
+        adapter.findByFilters(null, null, null, null, null, null, pageable);
 
         ArgumentCaptor<Pageable> pageCaptor = ArgumentCaptor.forClass(Pageable.class);
         verify(springRepo).findAll(any(Specification.class), pageCaptor.capture());
         assertThat(pageCaptor.getValue().getSort().getOrderFor("occurredAt"))
             .isNotNull();
+    }
+
+    // ── v1s-16-23 — store OR filter + status ─────────────────────────────────
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void findByFilters_storeFilter_matchesSourceOrDestination_andStatus() {
+        var pageable = PageRequest.of(0, 20);
+        when(springRepo.findAll(any(Specification.class), eq(pageable)))
+            .thenReturn(new PageImpl<>(List.of()));
+
+        adapter.findByFilters(null, null, null, null, SRC_ID, TransferStatus.COMPLETED, pageable);
+
+        ArgumentCaptor<Specification> specCaptor = ArgumentCaptor.forClass(Specification.class);
+        verify(springRepo).findAll(specCaptor.capture(), eq(pageable));
+
+        jakarta.persistence.criteria.Root root = mock(jakarta.persistence.criteria.Root.class);
+        jakarta.persistence.criteria.CriteriaQuery cq = mock(jakarta.persistence.criteria.CriteriaQuery.class);
+        jakarta.persistence.criteria.CriteriaBuilder cb = mock(jakarta.persistence.criteria.CriteriaBuilder.class);
+        jakarta.persistence.criteria.Path srcPath = mock(jakarta.persistence.criteria.Path.class);
+        jakarta.persistence.criteria.Path destPath = mock(jakarta.persistence.criteria.Path.class);
+        jakarta.persistence.criteria.Path statusPath = mock(jakarta.persistence.criteria.Path.class);
+        when(root.get("sourceStoreId")).thenReturn(srcPath);
+        when(root.get("destinationStoreId")).thenReturn(destPath);
+        when(root.get("status")).thenReturn(statusPath);
+        var srcEq = mock(jakarta.persistence.criteria.Predicate.class);
+        var destEq = mock(jakarta.persistence.criteria.Predicate.class);
+        when(cb.equal(srcPath, (Object) SRC_ID)).thenReturn(srcEq);
+        when(cb.equal(destPath, (Object) SRC_ID)).thenReturn(destEq);
+
+        specCaptor.getValue().toPredicate(root, cq, cb);
+
+        verify(cb).or(srcEq, destEq);
+        verify(cb).equal(statusPath, (Object) TransferStatus.COMPLETED);
     }
 }

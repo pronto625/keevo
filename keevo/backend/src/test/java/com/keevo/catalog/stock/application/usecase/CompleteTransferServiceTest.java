@@ -91,7 +91,7 @@ class CompleteTransferServiceTest {
                 .thenReturn(true);
         when(stockOperationService.recordOperation(
                 eq(PRODUCT_ID), eq(null), eq(DESTINATION_STORE_ID),
-                eq(MovementType.TRANSFER_IN), eq(10), eq(ACTOR_ID), anyString()))
+                eq(MovementType.TRANSFER_IN), eq(10), eq(ACTOR_ID), anyString(), eq(SOURCE_STORE_ID)))
                 .thenReturn(null);
         when(transferRepository.findById(TRANSFER_ID))
                 .thenReturn(Optional.of(transfer))   // first findById
@@ -104,7 +104,7 @@ class CompleteTransferServiceTest {
         // Verify recordOperation was called exactly ONCE
         verify(stockOperationService, times(1)).recordOperation(
                 eq(PRODUCT_ID), eq(null), eq(DESTINATION_STORE_ID),
-                eq(MovementType.TRANSFER_IN), eq(10), eq(ACTOR_ID), anyString());
+                eq(MovementType.TRANSFER_IN), eq(10), eq(ACTOR_ID), anyString(), eq(SOURCE_STORE_ID));
 
         // Verify event was published exactly ONCE
         verify(eventPublisher, times(1)).publishEvent(any(StockTransferredEvent.class));
@@ -130,6 +130,8 @@ class CompleteTransferServiceTest {
         assertThat(result.getStatus()).isEqualTo(TransferStatus.COMPLETED);
 
         // recordOperation must NOT be called (no double credit)
+        // any() also matches a null counterpart; the 7-arg overload is checked too.
+        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any());
         verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
 
         // event must NOT be published (no duplicate audit)
@@ -171,6 +173,8 @@ class CompleteTransferServiceTest {
                 .extracting("domainCode")
                 .isEqualTo(ErrorCode.TRANSFER_INVALID_STATUS.name());
 
+        // any() also matches a null counterpart; the 7-arg overload is checked too.
+        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any());
         verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
         verify(eventPublisher, never()).publishEvent(any());
     }
@@ -188,7 +192,7 @@ class CompleteTransferServiceTest {
                 .thenReturn(true);
         when(stockOperationService.recordOperation(
                 eq(PRODUCT_ID), eq(null), eq(DESTINATION_STORE_ID),
-                eq(MovementType.TRANSFER_IN), eq(10), eq(ACTOR_ID), anyString()))
+                eq(MovementType.TRANSFER_IN), eq(10), eq(ACTOR_ID), anyString(), eq(SOURCE_STORE_ID)))
                 .thenReturn(null);
         when(transferRepository.findById(TRANSFER_ID))
                 .thenReturn(Optional.of(transfer))
@@ -198,7 +202,7 @@ class CompleteTransferServiceTest {
                 new CompleteTransferCommand(TRANSFER_ID, ACTOR_ID, DESTINATION_STORE_ID));
 
         assertThat(result.getStatus()).isEqualTo(TransferStatus.COMPLETED);
-        verify(stockOperationService, times(1)).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
+        verify(stockOperationService, times(1)).recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any(java.util.UUID.class));
     }
 
     @Test
@@ -215,6 +219,8 @@ class CompleteTransferServiceTest {
                 .isEqualTo(ErrorCode.FORBIDDEN.name());
 
         // recordOperation must NOT be called (guard before transition)
+        // any() also matches a null counterpart; the 7-arg overload is checked too.
+        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any());
         verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
         // transitionStatus must NOT be called
         verify(transferRepository, never()).transitionStatus(any(), any(), any());
@@ -231,7 +237,7 @@ class CompleteTransferServiceTest {
                 .thenReturn(true);
         when(stockOperationService.recordOperation(
                 eq(PRODUCT_ID), eq(null), eq(DESTINATION_STORE_ID),
-                eq(MovementType.TRANSFER_IN), eq(10), eq(ACTOR_ID), anyString()))
+                eq(MovementType.TRANSFER_IN), eq(10), eq(ACTOR_ID), anyString(), eq(SOURCE_STORE_ID)))
                 .thenReturn(null);
         when(transferRepository.findById(TRANSFER_ID))
                 .thenReturn(Optional.of(transfer))
@@ -241,6 +247,6 @@ class CompleteTransferServiceTest {
                 new CompleteTransferCommand(TRANSFER_ID, ACTOR_ID, null));
 
         assertThat(result.getStatus()).isEqualTo(TransferStatus.COMPLETED);
-        verify(stockOperationService, times(1)).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
+        verify(stockOperationService, times(1)).recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any(java.util.UUID.class));
     }
 }

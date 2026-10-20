@@ -31,5 +31,18 @@ public record StockAdjustedEvent(
         String actorName,      // Story 14.10: display name for notification body
         String storeName,      // Story 14.10: resolved store name
         String productName,    // Story 14.10: resolved product name (for notification body)
-        Instant occurredAt
-) {}
+        Instant occurredAt,
+        String counterpartStoreName // v1s-16-23: other store of a transfer (destination on
+                                    // TRANSFER_OUT, source on TRANSFER_IN); null otherwise
+) {
+
+    /** Pre-v1s-16-23 arity — no counterpart store. */
+    public StockAdjustedEvent(UUID productId, UUID variantId, UUID storeId, MovementType movementType,
+                              int quantityBefore, int quantityChange, int quantityAfter,
+                              UUID actorId, String notes, String tenantId,
+                              String actorRole, String actorName, String storeName, String productName,
+                              Instant occurredAt) {
+        this(productId, variantId, storeId, movementType, quantityBefore, quantityChange, quantityAfter,
+                actorId, notes, tenantId, actorRole, actorName, storeName, productName, occurredAt, null);
+    }
+}

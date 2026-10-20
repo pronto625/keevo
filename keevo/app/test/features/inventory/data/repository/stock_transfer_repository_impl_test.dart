@@ -251,5 +251,51 @@ void main() {
       verify(() => mockLocal.getHistory()).called(1);
       expect(result, hasLength(1));
     });
+  
+    test(
+        'getHistory forwards storeId/page to remote (no status, so a status '
+        'change on the server refreshes the cache) and storeId/status to local',
+        () async {
+      when(() => mockConnectivity.isOnline()).thenAnswer((_) async => true);
+      repository = StockTransferRepositoryImpl(
+        local: mockLocal,
+        remote: mockRemote,
+        connectivity: mockConnectivity,
+        syncService: mockSyncService,
+        syncTriggerDispatcher: mockSyncTriggerDispatcher,
+      );
+      when(() => mockRemote.getHistory(
+            storeId: any(named: 'storeId'),
+            status: any(named: 'status'),
+            page: any(named: 'page'),
+            pageSize: any(named: 'pageSize'),
+          )).thenAnswer((_) async => [fakeTransfer]);
+      when(() => mockLocal.saveTransfer(any())).thenAnswer((_) async {});
+      when(() => mockLocal.getHistory(
+            storeId: any(named: 'storeId'),
+            status: any(named: 'status'),
+            page: any(named: 'page'),
+            pageSize: any(named: 'pageSize'),
+          )).thenAnswer((_) async => [fakeTransfer]);
+
+      await repository.getHistory(
+          storeId: 'st-1', status: 'IN_TRANSIT', page: 3, pageSize: 20);
+
+      verify(() => mockRemote.getHistory(
+            sourceStoreId: null,
+            destinationStoreId: null,
+            storeId: 'st-1',
+            page: 3,
+            pageSize: 20,
+          )).called(1);
+      verify(() => mockLocal.getHistory(
+            sourceStoreId: null,
+            destinationStoreId: null,
+            storeId: 'st-1',
+            status: 'IN_TRANSIT',
+            page: 3,
+            pageSize: 20,
+          )).called(1);
+    });
   });
 }

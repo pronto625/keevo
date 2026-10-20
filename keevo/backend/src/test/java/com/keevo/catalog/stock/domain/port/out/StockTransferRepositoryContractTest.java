@@ -29,6 +29,7 @@ class StockTransferRepositoryContractTest {
         Method method = StockTransferRepository.class.getMethod(
             "findByFilters",
             UUID.class, UUID.class, Instant.class, Instant.class,
+            UUID.class, com.keevo.catalog.stock.domain.model.StockTransfer.TransferStatus.class,
             org.springframework.data.domain.Pageable.class
         );
         assertThat(method.getReturnType()).isEqualTo(Page.class);

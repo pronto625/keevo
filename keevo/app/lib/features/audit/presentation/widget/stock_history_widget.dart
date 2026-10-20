@@ -239,7 +239,8 @@ class _AuditEntryTile extends StatelessWidget {
 
   /// Builds a human-readable description from the action + JSON payloads.
   static String _buildDescription(
-      String action, String? valueBefore, String? valueAfter) {
+      String action, String? valueBefore, String? valueAfter,
+      [AuditEntryDto? entry]) {
     Map<String, dynamic> after = {};
     Map<String, dynamic> before = {};
     try {
@@ -306,7 +307,12 @@ class _AuditEntryTile extends StatelessWidget {
         final afterQty  = after['quantityAfter'];
         final sign      = (change is num && change >= 0) ? '+' : '';
         if (change != null && afterQty != null) {
-          return 'Stock ${_movementLabel(type)} : ${sign}$change unité(s) · total : $afterQty';
+          // v1s-16-23: where the goods went / came from (absent on legacy rows).
+          final counterpart =
+              entry == null ? null : AuditPresenter.transferCounterpart(entry);
+          final route =
+              counterpart == null ? '' : ' ${counterpart.$1} ${counterpart.$2}';
+          return 'Stock ${_movementLabel(type)}$route : $sign$change unité(s) · total : $afterQty';
         }
         return 'Ajustement de stock';
 
@@ -387,7 +393,8 @@ class _AuditEntryTile extends StatelessWidget {
         '${local.day.toString().padLeft(2, '0')}/${local.month.toString().padLeft(2, '0')}/${local.year} '
         '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
 
-    final description = _buildDescription(entry.action, entry.valueBefore, entry.valueAfter);
+    final description = _buildDescription(
+        entry.action, entry.valueBefore, entry.valueAfter, entry);
     final actor = _actorLabel();
 
     return ListTile(

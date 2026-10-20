@@ -242,7 +242,10 @@ public final class AuditLabels {
             entry("reason", "Motif"),
             entry("scope", "Périmètre"),
             entry("isAutomatic", "Déclenchement"),
-            entry("forcedProducts", "Produits forcés"));
+            entry("forcedProducts", "Produits forcés"),
+            // v1s-16-23: other store of a transfer
+            entry("destinationStoreName", "Vers"),
+            entry("sourceStoreName", "Depuis"));
 
     /**
      * Keys never shown (technical or pure context ids). Any key named {@code id} or ending with

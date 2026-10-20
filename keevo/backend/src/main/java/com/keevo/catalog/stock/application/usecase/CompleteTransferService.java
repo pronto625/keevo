@@ -87,7 +87,8 @@ public class CompleteTransferService implements CompleteTransferUseCase {
                 transfer.getProductId(), transfer.getVariantId(),
                 transfer.getDestinationStoreId(),
                 MovementType.TRANSFER_IN, transfer.getQuantity(),
-                command.actorId(), transfer.getNotes());
+                command.actorId(), transfer.getNotes(),
+                transfer.getSourceStoreId());
 
         // 4. Re-fetch completed transfer (version was incremented by the atomic UPDATE)
         var completed = transferRepository.findById(command.transferId())

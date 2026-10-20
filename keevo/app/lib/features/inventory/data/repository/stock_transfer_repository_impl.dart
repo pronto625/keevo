@@ -149,6 +149,8 @@ class StockTransferRepositoryImpl implements StockTransferRepository {
   Future<List<StockTransferModel>> getHistory({
     String? sourceStoreId,
     String? destinationStoreId,
+    String? storeId,
+    String? status,
     int page = 0,
     int pageSize = 20,
   }) async {
@@ -164,6 +166,9 @@ class StockTransferRepositoryImpl implements StockTransferRepository {
         final transfers = await _remote.getHistory(
           sourceStoreId: sourceStoreId,
           destinationStoreId: destinationStoreId,
+          storeId: storeId,
+          // No status on the refresh: a cached IN_TRANSIT row received
+          // meanwhile must come back COMPLETED and leave « En transit ».
           page: page,
           pageSize: pageSize,
         );
@@ -178,6 +183,8 @@ class StockTransferRepositoryImpl implements StockTransferRepository {
     return _local.getHistory(
       sourceStoreId: sourceStoreId,
       destinationStoreId: destinationStoreId,
+      storeId: storeId,
+      status: status,
       page: page,
       pageSize: pageSize,
     );

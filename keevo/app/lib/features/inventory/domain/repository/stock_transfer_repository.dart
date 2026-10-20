@@ -16,10 +16,15 @@ abstract class StockTransferRepository {
   /// Step 2 — Receive a transfer. Marks it COMPLETED and credits destination.
   Future<StockTransferModel> completeTransfer(String transferId);
 
-  /// Paginated transfer history with optional filters.
+  /// Paginated transfer history with optional filters, newest first.
+  ///
+  /// [storeId] keeps transfers where the store is the source OR the
+  /// destination; [status] keeps one status (v1s-16-23).
   Future<List<StockTransferModel>> getHistory({
     String? sourceStoreId,
     String? destinationStoreId,
+    String? storeId,
+    String? status,
     int page = 0,
     int pageSize = 20,
   });

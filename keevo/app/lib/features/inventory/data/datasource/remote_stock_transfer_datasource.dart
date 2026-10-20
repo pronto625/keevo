@@ -61,6 +61,8 @@ class RemoteStockTransferDataSource {
   Future<List<StockTransferModel>> getHistory({
     String? sourceStoreId,
     String? destinationStoreId,
+    String? storeId,
+    String? status,
     int page = 0,
     int pageSize = 20,
   }) async {
@@ -71,6 +73,8 @@ class RemoteStockTransferDataSource {
         'size': pageSize,
         if (sourceStoreId != null) 'source': sourceStoreId,
         if (destinationStoreId != null) 'destination': destinationStoreId,
+        if (storeId != null) 'store': storeId,
+        if (status != null) 'status': status,
       },
     );
     final body = response.data!['data'] as Map<String, dynamic>;

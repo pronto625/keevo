@@ -89,14 +89,14 @@ class ExecuteTransferServiceTest {
         when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, SRC_STORE_ID))
             .thenReturn(Optional.of(level(PRODUCT_ID, SRC_STORE_ID, 20)));
         when(stockOperationService.recordOperation(eq(PRODUCT_ID), isNull(), eq(SRC_STORE_ID),
-            eq(MovementType.TRANSFER_OUT), eq(-5), eq(ACTOR_ID), any()))
+            eq(MovementType.TRANSFER_OUT), eq(-5), eq(ACTOR_ID), any(), eq(DEST_STORE_ID)))
             .thenReturn(movement(MovementType.TRANSFER_OUT));
         when(transferRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         service.execute(cmd);
 
         verify(stockOperationService).recordOperation(
-            eq(PRODUCT_ID), isNull(), eq(SRC_STORE_ID), eq(MovementType.TRANSFER_OUT), eq(-5), eq(ACTOR_ID), any());
+            eq(PRODUCT_ID), isNull(), eq(SRC_STORE_ID), eq(MovementType.TRANSFER_OUT), eq(-5), eq(ACTOR_ID), any(), eq(DEST_STORE_ID));
     }
 
     @Test
@@ -107,12 +107,14 @@ class ExecuteTransferServiceTest {
         when(storeRepository.findById(DEST_STORE_ID)).thenReturn(Optional.of(activeStore(DEST_STORE_ID)));
         when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, SRC_STORE_ID))
             .thenReturn(Optional.of(level(PRODUCT_ID, SRC_STORE_ID, 20)));
-        when(stockOperationService.recordOperation(any(), any(), any(), any(), anyInt(), any(), any()))
+        when(stockOperationService.recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any(java.util.UUID.class)))
             .thenReturn(movement(MovementType.TRANSFER_OUT));
         when(transferRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         service.execute(cmd);
 
+        verify(stockOperationService, never()).recordOperation(
+            eq(PRODUCT_ID), isNull(), eq(DEST_STORE_ID), eq(MovementType.TRANSFER_IN), anyInt(), any(), any(), any());
         verify(stockOperationService, never()).recordOperation(
             eq(PRODUCT_ID), isNull(), eq(DEST_STORE_ID), eq(MovementType.TRANSFER_IN), anyInt(), any(), any());
     }
@@ -124,7 +126,7 @@ class ExecuteTransferServiceTest {
         when(storeRepository.findById(DEST_STORE_ID)).thenReturn(Optional.of(activeStore(DEST_STORE_ID)));
         when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, SRC_STORE_ID))
             .thenReturn(Optional.of(level(PRODUCT_ID, SRC_STORE_ID, 20)));
-        when(stockOperationService.recordOperation(any(), any(), any(), any(), anyInt(), any(), any()))
+        when(stockOperationService.recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any(java.util.UUID.class)))
             .thenReturn(movement(MovementType.TRANSFER_OUT));
 
         ArgumentCaptor<StockTransfer> captor = ArgumentCaptor.forClass(StockTransfer.class);
@@ -148,7 +150,7 @@ class ExecuteTransferServiceTest {
         when(storeRepository.findById(DEST_STORE_ID)).thenReturn(Optional.of(activeStore(DEST_STORE_ID)));
         when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, SRC_STORE_ID))
             .thenReturn(Optional.of(level(PRODUCT_ID, SRC_STORE_ID, 20)));
-        when(stockOperationService.recordOperation(any(), any(), any(), any(), anyInt(), any(), any()))
+        when(stockOperationService.recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any(java.util.UUID.class)))
             .thenReturn(movement(MovementType.TRANSFER_OUT));
         when(transferRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -170,13 +172,13 @@ class ExecuteTransferServiceTest {
         when(storeRepository.findById(DEST_STORE_ID)).thenReturn(Optional.of(activeStore(DEST_STORE_ID)));
         when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, SRC_STORE_ID))
             .thenReturn(Optional.of(level(PRODUCT_ID, SRC_STORE_ID, 20)));
-        when(stockOperationService.recordOperation(any(), any(), any(), any(), anyInt(), any(), any()))
+        when(stockOperationService.recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any(java.util.UUID.class)))
             .thenReturn(movement(MovementType.TRANSFER_OUT));
         when(transferRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         service.execute(cmd);
 
-        verify(stockOperationService, times(1)).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
+        verify(stockOperationService, times(1)).recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any(java.util.UUID.class));
     }
 
     @Test
@@ -236,7 +238,7 @@ class ExecuteTransferServiceTest {
         when(transferRepository.findById(clientId)).thenReturn(Optional.empty());
         when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, SRC_STORE_ID))
             .thenReturn(Optional.of(level(PRODUCT_ID, SRC_STORE_ID, 20)));
-        when(stockOperationService.recordOperation(any(), any(), any(), any(), anyInt(), any(), any()))
+        when(stockOperationService.recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any(java.util.UUID.class)))
             .thenReturn(movement(MovementType.TRANSFER_OUT));
 
         ArgumentCaptor<StockTransfer> captor = ArgumentCaptor.forClass(StockTransfer.class);
@@ -261,6 +263,8 @@ class ExecuteTransferServiceTest {
 
         assertThat(result).isEqualTo(existing);
         verify(storeRepository, never()).findById(any());
+        // any() also matches a null counterpart; the 7-arg overload is checked too.
+        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any());
         verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
         verify(transferRepository, never()).save(any());
         verify(eventPublisher, never()).publishEvent(any());
@@ -284,6 +288,8 @@ class ExecuteTransferServiceTest {
         InOrder inOrder = inOrder(transactionLock, transferRepository);
         inOrder.verify(transactionLock).lock("transfer:" + clientId);
         inOrder.verify(transferRepository).findById(clientId);
+        // any() also matches a null counterpart; the 7-arg overload is checked too.
+        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any());
         verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any());
     }
 
@@ -294,7 +300,7 @@ class ExecuteTransferServiceTest {
         when(storeRepository.findById(DEST_STORE_ID)).thenReturn(Optional.of(activeStore(DEST_STORE_ID)));
         when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, SRC_STORE_ID))
             .thenReturn(Optional.of(level(PRODUCT_ID, SRC_STORE_ID, 20)));
-        when(stockOperationService.recordOperation(any(), any(), any(), any(), anyInt(), any(), any()))
+        when(stockOperationService.recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any(java.util.UUID.class)))
             .thenReturn(movement(MovementType.TRANSFER_OUT));
         when(transferRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 

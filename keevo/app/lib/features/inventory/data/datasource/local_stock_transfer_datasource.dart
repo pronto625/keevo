@@ -164,6 +164,8 @@ class LocalStockTransferDataSource {
   Future<List<StockTransferModel>> getHistory({
     String? sourceStoreId,
     String? destinationStoreId,
+    String? storeId,
+    String? status,
     int page = 0,
     int pageSize = 20,
   }) async {
@@ -176,9 +178,22 @@ class LocalStockTransferDataSource {
         if (destinationStoreId != null) {
           where = where & t.destinationStoreId.equals(destinationStoreId);
         }
+        if (storeId != null) {
+          // v1s-16-23: sent AND received by the store.
+          where = where &
+              (t.sourceStoreId.equals(storeId) |
+                  t.destinationStoreId.equals(storeId));
+        }
+        if (status != null) {
+          where = where & t.status.equals(status);
+        }
         return where;
       })
-      ..orderBy([(t) => OrderingTerm.desc(t.occurredAt)])
+      // id as tie-breaker: a stable order keeps offset pages free of gaps.
+      ..orderBy([
+        (t) => OrderingTerm.desc(t.occurredAt),
+        (t) => OrderingTerm.desc(t.id),
+      ])
       ..limit(pageSize, offset: page * pageSize);
 
     final rows = await query.get();

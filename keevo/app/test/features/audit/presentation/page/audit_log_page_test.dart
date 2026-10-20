@@ -130,6 +130,31 @@ void main() {
     expectNoTechnicalText(tester);
   });
 
+  testWidgets('v1s-16-23: a transfer line ends with « vers Boutique B »',
+      (tester) async {
+    final now = DateTime.now();
+    repo.onSlice = (_, __) async => AuditSlice(entries: [
+          auditEntry('tr1',
+              at: DateTime(now.year, now.month, now.day, 8),
+              action: 'STOCK_ADJUSTED',
+              entityType: 'StockMovement',
+              actorName: 'Awa',
+              entityLabel: 'Pagne wax',
+              valueAfter: '{"movementType":"TRANSFER_OUT","quantityChange":-3,'
+                  '"quantityAfter":7}',
+              metadata: '{"destinationStoreName":"Boutique B"}'),
+        ], nextCursor: null);
+
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+
+    expect(
+        find.text('Awa a transféré du stock de Pagne wax vers Boutique B',
+            findRichText: true),
+        findsOneWidget);
+    expectNoTechnicalText(tester);
+  });
+
   testWidgets('a filter chip reloads from the first page with the filter',
       (tester) async {
     repo.onSlice = (_, __) async => AuditSlice(entries: [auditEntry('a')]);

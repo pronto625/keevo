@@ -6,6 +6,7 @@ import com.keevo.catalog.stock.adapter.in.web.dto.TransferStockRequestDto;
 import com.keevo.catalog.stock.application.usecase.CompleteTransferService;
 import com.keevo.catalog.stock.application.usecase.ExecuteTransferService;
 import com.keevo.catalog.stock.application.usecase.GetTransferHistoryService;
+import com.keevo.catalog.stock.domain.model.StockTransfer.TransferStatus;
 import com.keevo.catalog.stock.domain.port.in.CompleteTransferCommand;
 import com.keevo.catalog.stock.domain.port.in.GetTransferHistoryQuery;
 import com.keevo.catalog.stock.domain.port.in.TransferStockCommand;
@@ -128,9 +129,12 @@ public class StockTransferController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "25") int size) {
+            @RequestParam(defaultValue = "25") int size,
+            @RequestParam(required = false) UUID store,
+            @RequestParam(required = false) TransferStatus status) {
 
-        var query = new GetTransferHistoryQuery(source, destination, from, to, page, size);
+        // v1s-16-23: store (source OR destination) and status are optional — old apps unchanged.
+        var query = new GetTransferHistoryQuery(source, destination, from, to, page, size, store, status);
         Page<StockTransferResponseDto> result =
                 getTransferHistoryService.execute(query)
                                         .map(StockTransferResponseDto::from);

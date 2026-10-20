@@ -38,26 +38,60 @@ class GetTransferHistoryServiceTest {
     @Test
     void execute_shouldDelegateToRepository_withCorrectFilters() {
         var query = new GetTransferHistoryQuery(null, null, null, null, 0, 25);
-        when(transferRepository.findByFilters(any(), any(), any(), any(), any()))
+        when(transferRepository.findByFilters(any(), any(), any(), any(), any(), any(), any()))
             .thenReturn(Page.empty());
 
         service.execute(query);
 
-        verify(transferRepository).findByFilters(isNull(), isNull(), isNull(), isNull(),
+        verify(transferRepository).findByFilters(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
             argThat(p -> p.getPageNumber() == 0 && p.getPageSize() == 25));
     }
 
     @Test
     void execute_shouldDefaultToPage0Size25_whenNotSpecified() {
         var query = new GetTransferHistoryQuery(null, null, null, null, 0, 25);
-        when(transferRepository.findByFilters(any(), any(), any(), any(), any()))
+        when(transferRepository.findByFilters(any(), any(), any(), any(), any(), any(), any()))
             .thenReturn(new PageImpl<>(List.of()));
 
         var result = service.execute(query);
 
         ArgumentCaptor<Pageable> pageCaptor = ArgumentCaptor.forClass(Pageable.class);
-        verify(transferRepository).findByFilters(any(), any(), any(), any(), pageCaptor.capture());
+        verify(transferRepository).findByFilters(any(), any(), any(), any(), any(), any(), pageCaptor.capture());
         assertThat(pageCaptor.getValue().getPageNumber()).isEqualTo(0);
         assertThat(pageCaptor.getValue().getPageSize()).isEqualTo(25);
+    }
+
+    @Test
+    void execute_sortsByOccurredAtDesc_thenIdDesc() {
+        var query = new GetTransferHistoryQuery(null, null, null, null, 0, 20);
+        when(transferRepository.findByFilters(any(), any(), any(), any(), any(), any(), any()))
+            .thenReturn(Page.empty());
+
+        service.execute(query);
+
+        ArgumentCaptor<Pageable> pageCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(transferRepository).findByFilters(any(), any(), any(), any(), any(), any(), pageCaptor.capture());
+        var orders = pageCaptor.getValue().getSort().toList();
+        assertThat(orders).extracting(org.springframework.data.domain.Sort.Order::getProperty)
+            .containsExactly("occurredAt", "id");
+        assertThat(pageCaptor.getValue().getSort().getOrderFor("occurredAt").getDirection())
+            .isEqualTo(org.springframework.data.domain.Sort.Direction.DESC);
+        assertThat(pageCaptor.getValue().getSort().getOrderFor("id").getDirection())
+            .isEqualTo(org.springframework.data.domain.Sort.Direction.DESC);
+    }
+
+    @Test
+    void execute_forwardsStoreAndStatusFilters() {
+        var store = java.util.UUID.randomUUID();
+        var query = new GetTransferHistoryQuery(null, null, null, null, 1, 20,
+            store, StockTransfer.TransferStatus.IN_TRANSIT);
+        when(transferRepository.findByFilters(any(), any(), any(), any(), any(), any(), any()))
+            .thenReturn(Page.empty());
+
+        service.execute(query);
+
+        verify(transferRepository).findByFilters(isNull(), isNull(), isNull(), isNull(),
+            eq(store), eq(StockTransfer.TransferStatus.IN_TRANSIT),
+            argThat(p -> p.getPageNumber() == 1 && p.getPageSize() == 20));
     }
 }

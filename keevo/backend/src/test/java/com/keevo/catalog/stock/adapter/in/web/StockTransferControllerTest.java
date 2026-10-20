@@ -7,6 +7,7 @@ import com.keevo.catalog.stock.application.usecase.GetTransferHistoryService;
 import com.keevo.catalog.stock.domain.model.StockTransfer;
 import com.keevo.catalog.stock.domain.model.StockTransfer.TransferStatus;
 import com.keevo.catalog.stock.domain.port.in.CompleteTransferCommand;
+import com.keevo.catalog.stock.domain.port.in.GetTransferHistoryQuery;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.AuthDetails;
@@ -170,6 +171,45 @@ class StockTransferControllerTest {
                 .param("source", srcId.toString())
                 .param("page", "0").param("size", "25"))
             .andExpect(status().isOk());
+    }
+
+    // ── v1s-16-23 — store (source OR destination) + status filters ─────────
+
+    @Test
+    void GET_history_forwardsStoreAndStatusFilters() throws Exception {
+        when(getTransferHistoryService.execute(any()))
+            .thenReturn(new PageImpl<>(List.of(completedTransfer())));
+
+        mockMvc.perform(get("/api/v1/stock/transfers")
+                .param("store", srcId.toString())
+                .param("status", "COMPLETED")
+                .param("page", "2").param("size", "20"))
+            .andExpect(status().isOk());
+
+        ArgumentCaptor<GetTransferHistoryQuery> captor = ArgumentCaptor.forClass(GetTransferHistoryQuery.class);
+        verify(getTransferHistoryService).execute(captor.capture());
+        var q = captor.getValue();
+        org.assertj.core.api.Assertions.assertThat(q.storeId()).isEqualTo(srcId);
+        org.assertj.core.api.Assertions.assertThat(q.status()).isEqualTo(TransferStatus.COMPLETED);
+        org.assertj.core.api.Assertions.assertThat(q.page()).isEqualTo(2);
+        org.assertj.core.api.Assertions.assertThat(q.size()).isEqualTo(20);
+    }
+
+    @Test
+    void GET_history_withoutNewParams_leavesStoreAndStatusNull() throws Exception {
+        // Old app versions never send store/status — response and query unchanged.
+        when(getTransferHistoryService.execute(any()))
+            .thenReturn(new PageImpl<>(List.of(completedTransfer())));
+
+        mockMvc.perform(get("/api/v1/stock/transfers")
+                .param("page", "0").param("size", "20"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.totalElements").value(1));
+
+        ArgumentCaptor<GetTransferHistoryQuery> captor = ArgumentCaptor.forClass(GetTransferHistoryQuery.class);
+        verify(getTransferHistoryService).execute(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().storeId()).isNull();
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().status()).isNull();
     }
 
     // ── Story v1s-12-11 — POST /transfers: EMPLOYEE scoped to own source store ──

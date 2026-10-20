@@ -31,13 +31,16 @@ public class GetTransferHistoryService implements GetTransferHistoryUseCase {
         Pageable pageable = PageRequest.of(
             query.page(),
             size,
-            Sort.by(Sort.Direction.DESC, "occurredAt")
+            // id tie-breaker (v1s-16-23): stable order, so paged loading never skips a row.
+            Sort.by(Sort.Direction.DESC, "occurredAt").and(Sort.by(Sort.Direction.DESC, "id"))
         );
         return transferRepository.findByFilters(
             query.sourceStoreId(),
             query.destinationStoreId(),
             query.from(),
             query.to(),
+            query.storeId(),
+            query.status(),
             pageable
         );
     }

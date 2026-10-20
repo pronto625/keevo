@@ -60,11 +60,20 @@ class AuditSentence {
   /// « d' » (« le rôle d'un employé »).
   final String joiner;
 
-  const AuditSentence(this.actor, this.verb, this.object, {this.joiner = ' '});
+  /// Optional trailing part after [object]: a plain lead (« vers » /
+  /// « depuis ») and a bold value (the other store of a transfer, v1s-16-23).
+  final String? tailLead;
+  final String? tail;
+
+  const AuditSentence(this.actor, this.verb, this.object,
+      {this.joiner = ' ', this.tailLead, this.tail});
 
   @override
-  String toString() =>
-      object == null ? '$actor $verb' : '$actor $verb$joiner$object';
+  String toString() {
+    final base = object == null ? '$actor $verb' : '$actor $verb$joiner$object';
+    if (tail == null) return base;
+    return tailLead == null ? '$base $tail' : '$base $tailLead $tail';
+  }
 }
 
 /// One line of the « Changements » table.
@@ -435,6 +444,11 @@ class AuditPresenter {
         object = _readableLabel(e) ?? info.fallbackObject;
       }
     }
+    // v1s-16-23: a transfer names the other store (« … vers B » /
+    // « … depuis A »); legacy entries carry none and read as before.
+    final (tailLead, tail) = e.action == 'STOCK_ADJUSTED'
+        ? transferCounterpart(e) ?? (null, null)
+        : (null, null);
     // French elision: « de un employé » → « d'un employé ».
     if (object != null &&
         phrase.endsWith(' de') &&
@@ -442,9 +456,27 @@ class AuditPresenter {
             .hasMatch(object)) {
       return AuditSentence(
           actor, '$aux ${phrase.substring(0, phrase.length - 3)} d\'', object,
-          joiner: '');
+          joiner: '', tailLead: tailLead, tail: tail);
     }
-    return AuditSentence(actor, '$aux $phrase', object);
+    return AuditSentence(actor, '$aux $phrase', object,
+        tailLead: tailLead, tail: tail);
+  }
+
+  /// Other store of a transfer movement, from `metadata` (v1s-16-23):
+  /// (« vers », destination) on a sending, (« depuis », source) on a
+  /// receipt. Null when absent (legacy entry, other movement).
+  static (String, String)? transferCounterpart(AuditEntryDto e) {
+    final type = AuditFormat.decodeMap(e.valueAfter)['movementType'];
+    final meta = AuditFormat.decodeMap(e.metadata);
+    if (type == 'TRANSFER_OUT') {
+      final name = _string(meta['destinationStoreName']);
+      return name == null ? null : ('vers', name);
+    }
+    if (type == 'TRANSFER_IN') {
+      final name = _string(meta['sourceStoreName']);
+      return name == null ? null : ('depuis', name);
+    }
+    return null;
   }
 
   /// A38: a stock movement reads after what caused it (`value_after

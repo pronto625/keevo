@@ -32,6 +32,69 @@ class TransferHistoryPage extends ConsumerStatefulWidget {
 
 class _TransferHistoryPageState extends ConsumerState<TransferHistoryPage> {
   String? _filterStatus;
+  final _scroll = ScrollController();
+  bool _loadMoreFailed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  /// Provider of the list shown: active store (source OR destination) and
+  /// status chip are part of the query, never applied after a page limit
+  /// (v1s-16-23).
+  TransferHistoryProvider get _provider => transferHistoryProvider(
+        storeId: ref.read(activeStoreIdProvider),
+        status: _filterStatus,
+      );
+
+  void _onScroll() {
+    if (!_scroll.hasClients) return;
+    final pos = _scroll.position;
+    if (!_loadMoreFailed && pos.pixels >= pos.maxScrollExtent - 300) {
+      _loadMore();
+    }
+  }
+
+  /// A first page shorter than the screen gives nothing to scroll: load on.
+  void _fillViewport() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients || _loadMoreFailed) return;
+      if (_scroll.position.maxScrollExtent <= 0) _loadMore();
+    });
+  }
+
+  Future<void> _loadMore() async {
+    final provider = _provider;
+    final notifier = ref.read(provider.notifier);
+    if (notifier.isLoadingMore) return;
+    final current = ref.read(provider).valueOrNull;
+    if (current == null || !current.hasMore) return;
+    setState(() => _loadMoreFailed = false);
+    try {
+      await notifier.loadMore();
+    } catch (_) {
+      if (mounted) _loadMoreFailed = true;
+    } finally {
+      if (mounted) setState(() {});
+    }
+  }
+
+  void _resetLoadMoreFailed() {
+    if (_loadMoreFailed && mounted) setState(() => _loadMoreFailed = false);
+  }
+
+  void _selectStatus(String? status) => setState(() {
+        _filterStatus = status;
+        _loadMoreFailed = false;
+      });
 
   void _openNewTransfer() => showTransferFormBottomSheet(
         context: context,
@@ -46,10 +109,17 @@ class _TransferHistoryPageState extends ConsumerState<TransferHistoryPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final historyAsync = ref.watch(transferHistoryProvider());
-
-    // Filter by active store if one is selected
+    // Active store (sent AND received) + status chip go into the query.
     final activeStoreId = ref.watch(activeStoreIdProvider);
+    final provider = transferHistoryProvider(
+        storeId: activeStoreId, status: _filterStatus);
+    final historyAsync = ref.watch(provider);
+    // A new list (store change, refresh, sync / form invalidation) starts
+    // with auto-load on, never on a stale « Réessayer ».
+    ref.listen(activeStoreIdProvider, (_, __) => _resetLoadMoreFailed());
+    ref.listen(provider, (_, next) {
+      if (next.isLoading) _resetLoadMoreFailed();
+    });
     final stores = ref.watch(storeListNotifierProvider).value ?? [];
     // Store list may still be loading (empty) — no name rather than a crash.
     final activeStoreName = activeStoreId == null
@@ -60,14 +130,16 @@ class _TransferHistoryPageState extends ConsumerState<TransferHistoryPage> {
       backgroundColor: theme.colorScheme.surface,
       body: RefreshIndicator(
         onRefresh: () async {
+          setState(() => _loadMoreFailed = false);
           ref.invalidate(transferHistoryProvider);
           try {
-            await ref.read(transferHistoryProvider().future);
+            await ref.read(provider.future);
           } catch (_) {
             // The error state is shown by the list itself.
           }
         },
         child: CustomScrollView(
+        controller: _scroll,
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           // ── App bar — fond neutre, même style que la Vue Stock ─────────
@@ -150,55 +222,65 @@ class _TransferHistoryPageState extends ConsumerState<TransferHistoryPage> {
           SliverToBoxAdapter(
             child: _FilterBar(
               selected: _filterStatus,
-              onSelect: (v) => setState(() => _filterStatus = v),
+              onSelect: _selectStatus,
             ),
           ),
 
           // ── Transfer list ───────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: historyAsync.when(
-              loading: () =>
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 80),
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-              error: (e, _) => AppErrorWidget(
-                error: e,
-                onRetry: () => ref.invalidate(transferHistoryProvider()),
+          // Rows + footer as a SliverList: only visible rows are laid out.
+          ...historyAsync.when(
+            loading: () => const [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 80),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
               ),
-              data: (transfers) {
-                // 1. Restrict to active store if set:
-                //    Show transfers where the active store is either the
-                //    SOURCE (outgoing) or the DESTINATION (incoming).
-                final storeFiltered = activeStoreId == null
-                    ? transfers
-                    : transfers
-                        .where((t) =>
-                            t.destinationStoreId == activeStoreId ||
-                            t.sourceStoreId == activeStoreId)
-                        .toList();
-                // 2. Further filter by status chip
-                final filtered = _filterStatus == null
-                    ? storeFiltered
-                    : storeFiltered
-                        .where((t) => t.status == _filterStatus)
-                        .toList();
-                if (filtered.isEmpty) {
-                  return _EmptyState(
-                    hasFilter:
-                        _filterStatus != null || activeStoreId != null,
-                  );
-                }
-                return ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
+            ],
+            error: (e, _) => [
+              SliverToBoxAdapter(
+                child: AppErrorWidget(
+                  error: e,
+                  onRetry: () => ref.invalidate(provider),
+                ),
+              ),
+            ],
+            data: (state) {
+              final transfers = state.items;
+              if (transfers.isEmpty) {
+                return [
+                  SliverToBoxAdapter(
+                    child: _EmptyState(
+                      hasFilter:
+                          _filterStatus != null || activeStoreId != null,
+                    ),
+                  ),
+                ];
+              }
+              final notifier = ref.read(provider.notifier);
+              final showFooter = state.hasMore || notifier.isLoadingMore;
+              if (state.hasMore && !notifier.isLoadingMore) _fillViewport();
+              return [
+                SliverPadding(
                   padding: const EdgeInsets.only(bottom: 100),
-                  itemCount: filtered.length,
-                  itemBuilder: (ctx, i) =>
-                      _TransferTile(transfer: filtered[i]),
-                );
-              },
-            ),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (ctx, i) {
+                        if (i == transfers.length) {
+                          return _ListFooter(
+                            failed:
+                                _loadMoreFailed && !notifier.isLoadingMore,
+                            onRetry: _loadMore,
+                          );
+                        }
+                        return _TransferTile(transfer: transfers[i]);
+                      },
+                      childCount: transfers.length + (showFooter ? 1 : 0),
+                    ),
+                  ),
+                ),
+              ];
+            },
           ),
         ],
       ),
@@ -232,6 +314,36 @@ class _TransferHistoryPageState extends ConsumerState<TransferHistoryPage> {
               style: TextStyle(fontWeight: FontWeight.w600)),
         ),
       ),
+    );
+  }
+}
+
+/// End of the loaded list: spinner while the next page loads, « Réessayer »
+/// when it failed (v1s-16-23).
+class _ListFooter extends StatelessWidget {
+  final bool failed;
+  final VoidCallback onRetry;
+
+  const _ListFooter({required this.failed, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    if (failed) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Center(
+          child: TextButton.icon(
+            key: const Key('transfer_history_retry'),
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Réessayer'),
+          ),
+        ),
+      );
+    }
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 20),
+      child: Center(child: CircularProgressIndicator()),
     );
   }
 }

@@ -68,6 +68,68 @@ void main() {
       expect(line(null), 'Awa a ajusté le stock de Pagne wax');
     });
 
+    // v1s-16-23: a transfer names the other store; legacy rows unchanged.
+    group('transfer counterpart', () {
+      AuditEntryDto transfer(String type, String? metadata,
+              {String label = 'Pagne wax'}) =>
+          _entry(
+            action: 'STOCK_ADJUSTED',
+            entityType: 'StockMovement',
+            actorName: 'Awa',
+            entityLabel: label,
+            valueAfter: '{"movementType":"$type","quantityChange":-3}',
+            metadata: metadata,
+          );
+
+      test('sending reads « … vers B », receipt « … depuis A »', () {
+        final out = AuditPresenter.sentence(transfer(
+            'TRANSFER_OUT', '{"destinationStoreName":"Boutique B"}'));
+        expect(out.toString(),
+            'Awa a transféré du stock de Pagne wax vers Boutique B');
+        expect(out.tailLead, 'vers');
+        expect(out.tail, 'Boutique B');
+        expect(
+            AuditPresenter.sentence(transfer(
+                    'TRANSFER_IN', '{"sourceStoreName":"Boutique A"}'))
+                .toString(),
+            'Awa a reçu par transfert du stock de Pagne wax depuis Boutique A');
+      });
+
+      test('elided object keeps the counterpart', () {
+        expect(
+            AuditPresenter.sentence(transfer(
+                    'TRANSFER_OUT', '{"destinationStoreName":"Boutique B"}',
+                    label: 'Ananas'))
+                .toString(),
+            'Awa a transféré du stock d\'Ananas vers Boutique B');
+      });
+
+      test('legacy entry or missing store: sentence unchanged', () {
+        expect(AuditPresenter.sentence(transfer('TRANSFER_OUT', null)).toString(),
+            'Awa a transféré du stock de Pagne wax');
+        expect(
+            AuditPresenter.sentence(
+                    transfer('TRANSFER_IN', '{"storeId":"x","notes":"n"}'))
+                .tail,
+            isNull);
+        // The key of the other direction is ignored.
+        expect(
+            AuditPresenter.sentence(transfer(
+                    'TRANSFER_OUT', '{"sourceStoreName":"Boutique A"}'))
+                .tail,
+            isNull);
+      });
+
+      test('Contexte rows « Vers » / « Depuis »', () {
+        final out = AuditPresenter.context(transfer(
+            'TRANSFER_OUT', '{"storeId":"x","destinationStoreName":"Boutique B"}'));
+        expect(out.map((c) => '${c.label} : ${c.value}'), ['Vers : Boutique B']);
+        final inn = AuditPresenter.context(transfer(
+            'TRANSFER_IN', '{"sourceStoreName":"Boutique A"}'));
+        expect(inn.map((c) => '${c.label} : ${c.value}'), ['Depuis : Boutique A']);
+      });
+    });
+
     test('price override reads « a modifié le prix de »', () {
       final s = AuditPresenter.sentence(_entry(
           action: 'PRICE_OVERRIDDEN',

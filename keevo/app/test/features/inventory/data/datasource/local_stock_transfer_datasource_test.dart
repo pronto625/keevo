@@ -24,6 +24,7 @@ StockTransferModel _buildTransfer({
   required String sourceStoreId,
   required String destinationStoreId,
   String status = 'COMPLETED',
+  DateTime? occurredAt,
 }) =>
     StockTransferModel(
       id: id,
@@ -32,7 +33,7 @@ StockTransferModel _buildTransfer({
       productId: 'prod-001',
       quantity: 5,
       actorId: 'actor-001',
-      occurredAt: DateTime(2026, 3, 14),
+      occurredAt: occurredAt ?? DateTime(2026, 3, 14),
       status: status,
     );
 
@@ -115,5 +116,73 @@ void main() {
       final results = await datasource.getHistory(sourceStoreId: 'src-999');
       expect(results, isEmpty);
     });
-  });
+  
+    // ── v1s-16-23 — store OR filter, status, paging ──────────────────────
+
+    test('getHistory storeId keeps transfers sent AND received by the store',
+        () async {
+      await datasource.saveTransfer(_buildTransfer(
+          id: 'sent', sourceStoreId: 'S', destinationStoreId: 'B'));
+      await datasource.saveTransfer(_buildTransfer(
+          id: 'recv', sourceStoreId: 'A', destinationStoreId: 'S'));
+      await datasource.saveTransfer(_buildTransfer(
+          id: 'other', sourceStoreId: 'A', destinationStoreId: 'B'));
+
+      final results = await datasource.getHistory(storeId: 'S');
+      expect(results.map((t) => t.id).toSet(), {'sent', 'recv'});
+    });
+
+    test('getHistory status keeps one status (pending included offline)',
+        () async {
+      await datasource.saveTransfer(_buildTransfer(
+          id: 'done', sourceStoreId: 'S', destinationStoreId: 'B'));
+      await datasource.saveTransfer(_buildTransfer(
+          id: 'pending',
+          sourceStoreId: 'S',
+          destinationStoreId: 'B',
+          status: 'PENDING_SYNC'));
+
+      final completed =
+          await datasource.getHistory(storeId: 'S', status: 'COMPLETED');
+      expect(completed.map((t) => t.id), ['done']);
+      final pending =
+          await datasource.getHistory(storeId: 'S', status: 'PENDING_SYNC');
+      expect(pending.map((t) => t.id), ['pending']);
+    });
+
+    test('getHistory pages newest first without overlap', () async {
+      for (var i = 0; i < 5; i++) {
+        await datasource.saveTransfer(_buildTransfer(
+          id: 'tf-$i',
+          sourceStoreId: 'S',
+          destinationStoreId: 'B',
+          occurredAt: DateTime(2026, 1, 1 + i),
+        ));
+      }
+      final p0 = await datasource.getHistory(storeId: 'S', pageSize: 2);
+      final p1 =
+          await datasource.getHistory(storeId: 'S', page: 1, pageSize: 2);
+      final p2 =
+          await datasource.getHistory(storeId: 'S', page: 2, pageSize: 2);
+      expect(p0.map((t) => t.id), ['tf-4', 'tf-3']);
+      expect(p1.map((t) => t.id), ['tf-2', 'tf-1']);
+      expect(p2.map((t) => t.id), ['tf-0']);
+    });
+  
+    test('getHistory with equal occurredAt pages by id desc, each id once',
+        () async {
+      final at = DateTime(2026, 2, 2, 10);
+      for (final id in ['tf-c', 'tf-a', 'tf-e', 'tf-b', 'tf-d']) {
+        await datasource.saveTransfer(_buildTransfer(
+            id: id, sourceStoreId: 'S', destinationStoreId: 'B', occurredAt: at));
+      }
+      final ids = <String>[];
+      for (var page = 0; page < 3; page++) {
+        final rows = await datasource.getHistory(
+            storeId: 'S', page: page, pageSize: 2);
+        ids.addAll(rows.map((t) => t.id));
+      }
+      expect(ids, ['tf-e', 'tf-d', 'tf-c', 'tf-b', 'tf-a']);
+    });
+});
 }
