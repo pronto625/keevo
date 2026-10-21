@@ -1184,6 +1184,7 @@
       "WAREHOUSE" : "Entrepôt"
     },
     "context" : {
+      "destinationStoreName" : "Vers",
       "forcedProducts" : "Produits forcés",
       "isAutomatic" : "Déclenchement",
       "justification" : "Justification",
@@ -1191,7 +1192,8 @@
       "note" : "Motif",
       "notes" : "Motif",
       "reason" : "Motif",
-      "scope" : "Périmètre"
+      "scope" : "Périmètre",
+      "sourceStoreName" : "Depuis"
     },
     "hiddenKeys" : [
       "actorLabel",
