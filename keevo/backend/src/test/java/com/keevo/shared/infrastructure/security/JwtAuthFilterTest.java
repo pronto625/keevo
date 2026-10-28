@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.MDC;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
@@ -29,6 +30,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -46,6 +48,11 @@ class JwtAuthFilterTest {
     @AfterEach
     void clearSecurityContext() {
         SecurityContextHolder.clearContext();
+    }
+
+    @AfterEach
+    void clearMdc() {
+        MDC.clear();
     }
 
     @Mock JwtTokenProvider jwtTokenProvider;
@@ -779,5 +786,108 @@ class JwtAuthFilterTest {
         filter.doFilterInternal(ownerRequest("expired.jwt"), new MockHttpServletResponse(), filterChain);
 
         verifyNoInteractions(recorder);
+    }
+
+    // ── Story 11.1 — MDC tenantId/userId for structured logs ────────────────
+
+    /** Runs the filter and captures the MDC as seen by the downstream chain (null if never called). */
+    private Map<String, String> mdcSeenByChain(MockHttpServletRequest request) throws Exception {
+        AtomicReference<Map<String, String>> seen = new AtomicReference<>();
+        lenient().doAnswer(inv -> {
+            Map<String, String> copy = MDC.getCopyOfContextMap();
+            seen.set(copy == null ? Map.of() : copy);
+            return null;
+        }).when(filterChain).doFilter(any(), any());
+        filter.doFilterInternal(request, new MockHttpServletResponse(), filterChain);
+        return seen.get();
+    }
+
+    @Test
+    @DisplayName("11.1 — valid token: tenantId/userId in MDC during the chain, removed after")
+    void validToken_populatesMdcDuringChain_andClearsAfter() throws Exception {
+        UUID userId = UUID.randomUUID();
+        stubOwnerToken("owner.jwt", userId);
+
+        Map<String, String> seen = mdcSeenByChain(ownerRequest("owner.jwt"));
+
+        assertThat(seen).containsEntry("tenantId", "kv_abc123")
+                .containsEntry("userId", userId.toString());
+        assertThat(MDC.get("tenantId")).isNull();
+        assertThat(MDC.get("userId")).isNull();
+    }
+
+    @Test
+    @DisplayName("11.1 — MDC is removed even when the chain throws, other MDC keys untouched")
+    void chainThrows_mdcStillCleared() throws Exception {
+        stubOwnerToken("owner.jwt", UUID.randomUUID());
+        MDC.put("traceId", "t-1");
+        doThrow(new RuntimeException("downstream")).when(filterChain).doFilter(any(), any());
+
+        assertThatThrownBy(() -> filter.doFilterInternal(
+                ownerRequest("owner.jwt"), new MockHttpServletResponse(), filterChain))
+                .isInstanceOf(RuntimeException.class);
+
+        assertThat(MDC.get("tenantId")).isNull();
+        assertThat(MDC.get("userId")).isNull();
+        assertThat(MDC.get("traceId")).isEqualTo("t-1");
+    }
+
+    @Test
+    @DisplayName("11.1 — login_pending token never seeds the MDC")
+    void loginPendingToken_noMdc() throws Exception {
+        Claims claims = buildClaims(UUID.randomUUID(), "kv_abc123", "OWNER");
+        when(jwtTokenProvider.parseToken("login.jwt")).thenReturn(claims);
+        when(jwtTokenProvider.extractScope(claims)).thenReturn("login_pending");
+        try (var mdc = mockStatic(MDC.class, CALLS_REAL_METHODS)) {
+            filter.doFilterInternal(ownerRequest("login.jwt"), new MockHttpServletResponse(), filterChain);
+            mdc.verify(() -> MDC.put(anyString(), anyString()), never());
+        }
+        assertThat(MDC.get("tenantId")).isNull();
+        verify(filterChain, never()).doFilter(any(), any());
+    }
+
+    @Test
+    @DisplayName("11.1 — revoked token (SESSION_REVOKED) never seeds the MDC")
+    void revokedToken_noMdc() throws Exception {
+        UUID userId = UUID.randomUUID();
+        Claims claims = stubOwnerToken("revoked.jwt", userId);
+        when(tokenRevocationPort.getTokensValidAfter(userId, "kv_abc123"))
+                .thenReturn(Instant.now().plus(1, ChronoUnit.MINUTES));
+        when(jwtTokenProvider.extractIssuedAt(claims))
+                .thenReturn(Instant.now().minus(10, ChronoUnit.MINUTES));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        try (var mdc = mockStatic(MDC.class, CALLS_REAL_METHODS)) {
+            filter.doFilterInternal(ownerRequest("revoked.jwt"), response, filterChain);
+            mdc.verify(() -> MDC.put(anyString(), anyString()), never());
+        }
+        assertThat(response.getContentAsString()).contains("SESSION_REVOKED");
+        assertThat(MDC.get("tenantId")).isNull();
+        assertThat(MDC.get("userId")).isNull();
+    }
+
+    @Test
+    @DisplayName("11.1 — invalid token never seeds the MDC")
+    void invalidToken_noMdc() throws Exception {
+        when(jwtTokenProvider.parseToken("bad.jwt")).thenThrow(new JwtException("invalid"));
+        try (var mdc = mockStatic(MDC.class, CALLS_REAL_METHODS)) {
+            filter.doFilterInternal(ownerRequest("bad.jwt"), new MockHttpServletResponse(), filterChain);
+            mdc.verify(() -> MDC.put(anyString(), anyString()), never());
+        }
+        assertThat(MDC.get("tenantId")).isNull();
+    }
+
+    @Test
+    @DisplayName("11.1 — thread reuse: an unauthenticated request after an authenticated one sees no tenant MDC")
+    void threadReuse_secondRequestSeesNoPreviousMdc() throws Exception {
+        stubOwnerToken("owner.jwt", UUID.randomUUID());
+        assertThat(mdcSeenByChain(ownerRequest("owner.jwt"))).containsKey("tenantId");
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        filter.doFilterInternal(new MockHttpServletRequest("GET", "/api/v1/products"), response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(MDC.getCopyOfContextMap()).satisfiesAnyOf(
+                m -> assertThat(m).isNull(),
+                m -> assertThat(m).doesNotContainKeys("tenantId", "userId"));
     }
 }

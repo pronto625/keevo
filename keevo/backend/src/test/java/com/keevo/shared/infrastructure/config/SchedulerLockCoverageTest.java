@@ -10,6 +10,7 @@ import com.keevo.messaging.notification.application.scheduler.SalesTrendDetectio
 import com.keevo.reporting.report.application.service.ReportDeliveryRetryService;
 import com.keevo.reporting.report.application.service.WeeklyReportScheduler;
 import com.keevo.shared.infrastructure.activity.UserActivityPurgeJob;
+import com.keevo.shared.infrastructure.observability.SyncLagMetrics;
 import com.keevo.shared.infrastructure.persistence.SyncKeysetIndexJob;
 import com.keevo.shared.infrastructure.scheduling.AccountDeletionScheduler;
 import com.keevo.shared.infrastructure.scheduling.GlobalNotificationPurgeJob;
@@ -73,11 +74,16 @@ class SchedulerLockCoverageTest {
             Map.entry(GlobalNotificationScheduler.class, Duration.ofMinutes(15)),
             Map.entry(GlobalNotificationPurgeJob.class, Duration.ofDays(1))); // 9-5 (2/2)
 
-    /** In-memory sweeps: must run on every instance → never locked. */
+    /**
+     * Per-instance sweeps: must run on every instance → never locked. Includes the 11.2 sync-lag
+     * gauge refresh: a read-only query feeding each instance's own meter registry (a lock would leave
+     * the other instances' gauge stale).
+     */
     private static final List<Class<?>> IN_MEMORY_SWEEPS = List.of(
             ProductCreationNotificationListener.class,
             StockModificationNotificationListener.class,
-            StockAlertNotificationListener.class);
+            StockAlertNotificationListener.class,
+            SyncLagMetrics.class); // 11.2
 
     @Test
     @DisplayName("every @Scheduled method of the DB-driven jobs has @SchedulerLock with sane bounds")

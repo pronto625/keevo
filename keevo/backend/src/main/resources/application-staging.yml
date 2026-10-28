@@ -17,6 +17,17 @@ logging:
   level:
     root: WARN
     com.keevo: INFO
+  # Story 11.1 (MOD-NFR4): one JSON object per console line (Spring Boot native structured
+  # logging, logstash layout). Every MDC entry (traceId, tenantId, userId) becomes a root field.
+  # Dev/test keep the human-readable pattern — this block lives only in prod/staging.
+  structured:
+    format:
+      console: logstash
+    json:
+      rename:
+        logger_name: logger
+        # Brackets are required: without them relaxed binding strips "@" and the rename is a no-op.
+        "[@timestamp]": timestamp
 
 server:
   tomcat:

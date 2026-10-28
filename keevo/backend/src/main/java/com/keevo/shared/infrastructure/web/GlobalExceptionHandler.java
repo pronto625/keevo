@@ -1,8 +1,12 @@
 package com.keevo.shared.infrastructure.web;
 
 import com.keevo.shared.domain.exception.DomainException;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -122,8 +126,28 @@ public class GlobalExceptionHandler {
             Map.entry("OPTIMISTIC_LOCK",              "Cette donnée a été modifiée par une autre opération, veuillez réessayer")
     );
 
+    /**
+     * Story 11.2 — {@code keevo_errors_total{domainCode}}: every handler counts the {@code domainCode}
+     * it returns (domain errors, validation, 403/404/405/409 and the catch-all INTERNAL_ERROR 500).
+     */
+    static final String ERRORS_METRIC = "keevo.errors";
+    static final String UNKNOWN_DOMAIN_CODE = "UNKNOWN";
+
+    /** Absent in slice tests and {@code new GlobalExceptionHandler()} — the counter is then skipped. */
+    private final MeterRegistry meterRegistry;
+
+    public GlobalExceptionHandler() {
+        this.meterRegistry = null;
+    }
+
+    @Autowired
+    public GlobalExceptionHandler(ObjectProvider<MeterRegistry> meterRegistry) {
+        this.meterRegistry = meterRegistry.getIfAvailable();
+    }
+
     @ExceptionHandler(DomainException.class)
     public ResponseEntity<ApiResponseWrapper<Void>> handleDomainException(DomainException ex) {
+        countDomainError(ex.getDomainCode());
         HttpStatus status = domainCodeToHttpStatus(ex.getDomainCode());
         String userMessage = userMessage(ex.getDomainCode(), ex.getMessage(), ex.getDetails());
         return ResponseEntity.status(status)
@@ -142,6 +166,7 @@ public class GlobalExceptionHandler {
         for (FieldError fe : ex.getBindingResult().getFieldErrors()) {
             fieldErrors.put(fe.getField(), fe.getDefaultMessage());
         }
+        countDomainError("VALIDATION_ERROR");
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
                 .body(ApiResponseWrapper.error(
                         "Validation failed",
@@ -154,6 +179,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ApiResponseWrapper<Void>> handleTypeMismatch(
             MethodArgumentTypeMismatchException ex) {
+        countDomainError("VALIDATION_ERROR");
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponseWrapper.error(
                         "Paramètre invalide : " + ex.getName(),
@@ -166,6 +192,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidRequestParameterException.class)
     public ResponseEntity<ApiResponseWrapper<Void>> handleInvalidParameter(
             InvalidRequestParameterException ex) {
+        countDomainError("VALIDATION_ERROR");
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponseWrapper.error(
                         "Paramètre invalide : " + ex.getParameter(),
@@ -178,6 +205,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ResponseEntity<ApiResponseWrapper<Void>> handleMissingParam(
             MissingServletRequestParameterException ex) {
+        countDomainError("MISSING_PARAMETER");
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponseWrapper.error(
                         "Paramètre requis manquant : " + ex.getParameterName(),
@@ -189,6 +217,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AuthorizationDeniedException.class)
     public ResponseEntity<ApiResponseWrapper<Void>> handleAccessDenied(AuthorizationDeniedException ex) {
+        countDomainError("FORBIDDEN");
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(ApiResponseWrapper.error(
                         FR_MESSAGES.getOrDefault("FORBIDDEN", "Vous n'avez pas les droits nécessaires"),
@@ -202,6 +231,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponseWrapper<Void>> handleOptimisticLock(
             OptimisticLockingFailureException ex) {
         log.warn("OPTIMISTIC_LOCK: {}", ex.getMessage());
+        countDomainError("OPTIMISTIC_LOCK");
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponseWrapper.error(
                         FR_MESSAGES.getOrDefault("OPTIMISTIC_LOCK", "Conflit de version"),
@@ -215,6 +245,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ApiResponseWrapper<Void>> handleNoResource(NoResourceFoundException ex) {
         log.debug("NO_ROUTE: {}", ex.getResourcePath());
+        countDomainError("NOT_FOUND");
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiResponseWrapper.error(
                         FR_MESSAGES.getOrDefault("NOT_FOUND", "Ressource introuvable"),
@@ -229,6 +260,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponseWrapper<Void>> handleMethodNotSupported(
             HttpRequestMethodNotSupportedException ex) {
         log.debug("METHOD_NOT_ALLOWED: {}", ex.getMessage());
+        countDomainError("METHOD_NOT_ALLOWED");
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
                 .body(ApiResponseWrapper.error(
                         "Méthode non autorisée",
@@ -241,6 +273,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponseWrapper<Void>> handleGeneral(Exception ex) {
         log.error("Unhandled exception — {}: {}", ex.getClass().getSimpleName(), ex.getMessage(), ex);
+        countDomainError("INTERNAL_ERROR");
         String userMessage = FR_MESSAGES.getOrDefault("INTERNAL_ERROR", "Une erreur inattendue s'est produite");
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponseWrapper.error(
@@ -355,5 +388,22 @@ public class GlobalExceptionHandler {
             case "WHATSAPP_DELIVERY_FAILED" -> HttpStatus.BAD_GATEWAY;  // upstream WhatsApp failure
             default -> HttpStatus.INTERNAL_SERVER_ERROR;
         };
+    }
+
+    /** Bounded tag: {@code domainCode} values come from the {@code ErrorCode} set; null → UNKNOWN. */
+    private void countDomainError(String domainCode) {
+        if (meterRegistry == null) {
+            return;
+        }
+        try {
+            Counter.builder(ERRORS_METRIC)
+                    .description("Domain errors mapped to an API response, by domainCode")
+                    .tag("domainCode", domainCode == null || domainCode.isBlank() ? UNKNOWN_DOMAIN_CODE : domainCode)
+                    .register(meterRegistry)
+                    .increment();
+        } catch (RuntimeException e) {
+            // a metrics failure must never change the error response
+            log.warn("METRICS: domain error not counted: {}", e.getMessage());
+        }
     }
 }

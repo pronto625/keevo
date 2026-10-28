@@ -77,10 +77,26 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        # Story 11.2 — prometheus is scraped with a static bearer token (PrometheusScrapeAuthFilter)
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       show-details: when-authorized
+  # Story 11.2 — OpenTelemetry tracing (Micrometer Tracing bridge). The trace id lands in the MDC
+  # (traceId) and the X-Request-Id echo. Export is OFF by default: the app needs no collector.
+  tracing:
+    sampling:
+      probability: ${KEEVO_TRACING_SAMPLING_PROBABILITY:0.1}
+    # Public clients must not pick the trace id (MDC traceId) nor force sampling: inbound
+    # traceparent / B3 headers are NOT consumed (empty list); outbound calls still produce W3C.
+    propagation:
+      consume: ""
+      produce: W3C
+  otlp:
+    tracing:
+      endpoint: ${KEEVO_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+      export:
+        enabled: ${KEEVO_OTLP_EXPORT_ENABLED:false}
   # Story 9-5 — client-side percentiles of the HTTP timer, read every 5 min by the health sampler
   metrics:
     distribution:
@@ -94,6 +110,9 @@ management:
 
 # Keevo custom config
 keevo:
+  # Story 11.2 — static bearer token for /actuator/prometheus. Unset/blank → the endpoint answers 404.
+  observability:
+    prometheus-token: ${KEEVO_PROMETHEUS_TOKEN:}
   jwt:
     private-key-path: ${KEEVO_JWT_PRIVATE_KEY_PATH:classpath:keys/private_key.pem}
     public-key-path: ${KEEVO_JWT_PUBLIC_KEY_PATH:classpath:keys/public_key.pem}

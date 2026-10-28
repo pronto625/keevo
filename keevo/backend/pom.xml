@@ -71,6 +71,23 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
+        <!-- ── Observability (Story 11.2) — Boot-managed versions ── -->
+        <!-- Prometheus scrape format for /actuator/prometheus (token-protected) -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+        <!-- Micrometer Tracing → OpenTelemetry; puts traceId/spanId in the MDC -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-otel</artifactId>
+        </dependency>
+        <!-- OTLP span exporter — disabled by default (KEEVO_OTLP_EXPORT_ENABLED) -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-otlp</artifactId>
+        </dependency>
+
         <!-- ── Validation ───────────────────────────────────────── -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

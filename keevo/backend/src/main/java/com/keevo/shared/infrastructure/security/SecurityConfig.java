@@ -2,6 +2,7 @@ package com.keevo.shared.infrastructure.security;
 
 import com.keevo.identity.auth.domain.model.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.keevo.shared.infrastructure.observability.PrometheusScrapeAuthFilter;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -55,6 +56,8 @@ public class SecurityConfig {
     /** Single source of the JWT-free paths — {@link JwtAuthFilter} reads it too. */
     static final String[] PUBLIC_PATHS = {
             "/actuator/health",
+            // Story 11.2 — no JWT parsing; guarded by PrometheusScrapeAuthFilter (static bearer token)
+            "/actuator/prometheus",
             "/api/v1/auth/register",
             "/api/v1/auth/login",
             "/api/v1/auth/refresh",
@@ -76,6 +79,9 @@ public class SecurityConfig {
 
     /** Local Next.js dashboard — allowed only outside the prod/staging profiles (AC6). */
     static final String LOCAL_DASHBOARD_ORIGIN = "http://localhost:3000";
+
+    /** Story 11.2 — static bearer token of {@code /actuator/prometheus} ({@code KEEVO_PROMETHEUS_TOKEN}). */
+    static final String PROMETHEUS_TOKEN_PROPERTY = "keevo.observability.prometheus-token";
 
     private final JwtAuthFilter jwtAuthFilter;
     private final ObjectMapper objectMapper;
@@ -134,6 +140,13 @@ public class SecurityConfig {
                         .requestMatchers(PUBLIC_PATHS).permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole(Role.SUPER_ADMIN.name())
                         .anyRequest().authenticated())
+
+                // ── Prometheus scrape guard (Story 11.2): 404 when no token is configured, 401 on
+                //    a missing/wrong bearer token. Added first, so it runs before JwtAuthFilter
+                //    (same anchor, insertion order) and before authorization.
+                .addFilterBefore(new PrometheusScrapeAuthFilter(
+                                environment.getProperty(PROMETHEUS_TOKEN_PROPERTY)),
+                        UsernamePasswordAuthenticationFilter.class)
 
                 // ── JWT filter: runs before Spring's authentication filter ────
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

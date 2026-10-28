@@ -15,6 +15,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
@@ -63,6 +64,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private static final List<String> PUBLIC_PATHS = List.of(SecurityConfig.PUBLIC_PATHS);
 
     private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
+
+    /** Story 11.1 — MDC keys written to every structured (JSON) log line of an authenticated request. */
+    static final String MDC_TENANT_ID = "tenantId";
+    static final String MDC_USER_ID = "userId";
 
     /** Paths where passwordChangeRequired check is skipped (employee CAN access these). */
     private static final Set<String> PASSWORD_CHANGE_ALLOWED = Set.of(
@@ -171,6 +176,16 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
             // Set multi-tenant context for JPA routing
             TenantContext.setCurrentTenant(tenantId);
+            // Story 11.1 — per-tenant log correlation. Seeded only after the revocation check, so an
+            // invalid/expired/login_pending/revoked token never reaches the MDC. Later rejections
+            // (SUSPENDED tenant, employee guards) do carry tenantId/userId — wanted for diagnosis.
+            // Removed in the same finally as TenantContext.
+            if (tenantId != null) {
+                MDC.put(MDC_TENANT_ID, tenantId);
+            }
+            if (userId != null) {
+                MDC.put(MDC_USER_ID, userId.toString());
+            }
 
             // SUSPENDED tenants: block all write operations (manual admin lockout).
             // Read operations (GET, HEAD) are always permitted — data is preserved.
@@ -266,6 +281,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             // MANDATORY: clear ThreadLocal to prevent tenant leakage in thread-pool
             TenantContext.clear();
             SecurityContextHolder.clearContext();
+            MDC.remove(MDC_TENANT_ID);
+            MDC.remove(MDC_USER_ID);
         }
     }
 
