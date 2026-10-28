@@ -43,6 +43,6 @@ class TenantSchemaProvisionerSaleCancelledDDLTest {
     @DisplayName("MovementType enum must include SALE_CANCELLED")
     void should_define_sale_cancelled_movement_type() {
         assertDoesNotThrow(() ->
-                com.keevo.catalog.stock.domain.entity.MovementType.valueOf("SALE_CANCELLED"));
+                com.keevo.inventory.stock.domain.entity.MovementType.valueOf("SALE_CANCELLED"));
     }
 }

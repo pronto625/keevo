@@ -526,7 +526,7 @@ So that **les frontières deviennent un artefact vérifiable et documenté (MOD-
 **Implementation Notes:**
 - `@ApplicationModule(allowedDependencies = {...})` au départ permissif (refléter le réel) pour ne pas casser la build.
 - `core`/`shared` déclaré comme module ouvert (`type = OPEN`) consommable par tous.
-- Générer la doc dans `target/modulith-docs` (artefact CI).
+- Générer la doc dans `target/modulith-docs` (artefact CI). *(2026-10-29 : chemin réel `target/spring-modulith-docs`, Documenter par défaut — cf. spec-12-1)*
 - Réf : Spring Modulith [Application Modules](https://docs.spring.io/spring-modulith/reference/fundamentals.html).
 
 > **Stories 12.2a → 12.2e** : la définition des API publiques est découpée **par module**, du plus dépendu au moins (chaque sous-story = une session dev). Patron commun : créer `{module}/api/` (named interface Spring Modulith — interfaces/ports + DTO + events uniquement, jamais d'entité JPA ni de service interne) ; marquer le reste `internal` ; remplacer chaque dépendance directe cassée par (a) un appel via `{autre}.api` ou (b) un event (12.3) ; **les 1429 tests backend restent verts à chaque étape** (filet strangler, MOD-NFR9).
@@ -543,10 +543,20 @@ As a **architecte**, I want **exposer une `api` propre pour `catalog` et couper 
 
 **Implementation Notes:** prioritaire car le plus couplé ; créer `catalog/api` (ProductLookup, CategoryLookup, events) ; basculer les consommateurs ; tests verts.
 
+**Items (routed 2026-10-29 from 12.5):**
+- [ ] [Deferred-from: 12.5 realignment, 2026-10-29] `ProductController` uses crm use cases + DTO directly (catalog → crm, 5 non-exposed violations) [catalog/product/adapter/in/web/ProductController.java] — go through a crm `api` port
+
+- [ ] [Deferred-from: review 12-1/12-5, 2026-10-29] crm public API (`com.keevo.crm.api`, incl. future `ClientLookupPort`) and its consumers `sync` handlers (`ClientRepository`), `ProductController` [crm/, sync/, catalog/product] — crm was split out of catalog in 12.5 and has no API story of its own; published with the catalog API
+
 ### Story 12.2b : API publique du module `inventory`
 
 As a **architecte**, I want **une `api` pour `inventory` (stock, mouvements, seuils)**, So that **`sync`, `reporting`, `commerce` y accèdent via contrat (MOD-NFR3)**.
 **Acceptance Criteria:** **Given** les consommateurs d'`inventory` **When** la story est faite **Then** ils passent par `inventory.api` ; `verify()` propre côté `inventory`. *(Dépend du ré-alignement 12.5 si fait avant — sinon coordonner.)*
+
+**Items (routed 2026-10-29 from 12.5):**
+- [ ] [Deferred-from: 12.5 realignment, 2026-10-29] `ImportCsvProductsUseCase` seeds initial stock via `StockOperationService`/`MovementType` (catalog → inventory back-edge, closes catalog ↔ inventory cycles) [catalog/product/application/usecase/ImportCsvProductsUseCase.java] — inventory `api` port or a `ProductImported` event consumed by inventory
+
+- [ ] [Deferred-from: review 12-1/12-5, 2026-10-29] Consumers of inventory internals kept by the move: `messaging` listeners (`StockAlertNotificationListener`, `TransferCreatedNotificationListener`, `OwnerAndDestinationEmployeeStrategy`), `sync` handlers (`inventory.stock.application.usecase.*`), `commerce` sale services (`StockOperationService`, `MovementType`) [messaging/, sync/, commerce/sale] — switch to the inventory `api`/events
 
 ### Story 12.2c : API publique du module `commerce`
 
@@ -557,6 +567,9 @@ As a **architecte**, I want **une `api` pour `commerce` (ventes, clôture)**, So
 
 As a **architecte**, I want **des `api` pour les modules transverses très dépendus (`identity` 21+14 imports, `store`, `subscription`)**, So that **leurs consommateurs passent par contrat (MOD-NFR3)**.
 **Acceptance Criteria:** **Given** `reporting→identity`, `messaging→identity`, `subscription→identity`, `catalog→store/subscription` **When** la story est faite **Then** tous via `{module}.api` ; `verify()` propre sur ces 3 modules.
+
+**Items (routed 2026-10-29 from review 12-1/12-5):**
+- [ ] [Deferred-from: review 12-1/12-5, 2026-10-29] `shared` depends on crm/inventory internals (`StockMovementJpaEntity`/`StockTransferJpaEntity` → `MovementType`/`TransferStatus`, `AuditEventListener` → crm/inventory events, Product/Stock/Supplier/Client JPA entities) [shared/infrastructure/persistence/entity, shared/infrastructure/web/AuditEventListener.java] — move entities to their owning modules / events to `core.event.catalog` during core extraction
 
 ### Story 12.2e : API publiques `reporting`/`messaging`/`sync` + activation `verify()` BLOQUANT
 
@@ -644,6 +657,7 @@ So that **la structure reflète les vraies frontières de modules (MOD-NFR8, dé
 - Refactor de packages (déplacement) + mise à jour des imports vers les nouvelles `api`.
 - Conserver les endpoints REST stables (pas de breaking change client) — seuls les packages internes bougent.
 - `verify()` doit rester vert après déplacement.
+- *(2026-10-29, décision déléguée — spec-12-5)* : le module `crm` (clients/fournisseurs) est aussi extrait de `catalog/contact` vers `com.keevo.crm.contact` (plan §5) ; les transferts restent dans `inventory.stock` (sous-découpage tranché en 12.2b).
 - Migrations Flyway inchangées (tables identiques) ; pur refactor de code.
 
 ### Story 12.6 : Règles ArchUnit complémentaires (graphe `requires`, capabilities, schéma)

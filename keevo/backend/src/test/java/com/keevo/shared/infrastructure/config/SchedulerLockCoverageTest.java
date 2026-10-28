@@ -155,7 +155,7 @@ class SchedulerLockCoverageTest {
         Map<Class<?>, String> lockTakers = Map.ofEntries(
                 Map.entry(com.keevo.catalog.product.application.usecase.CreateProductUseCase.class, "execute"),
                 Map.entry(com.keevo.catalog.product.application.usecase.CreateDraftProductUseCase.class, "execute"),
-                Map.entry(com.keevo.catalog.stock.application.usecase.ExecuteTransferService.class, "execute"),
+                Map.entry(com.keevo.inventory.stock.application.usecase.ExecuteTransferService.class, "execute"),
                 Map.entry(com.keevo.commerce.sale.application.service.CloseDayService.class, "closeDay"),
                 Map.entry(com.keevo.identity.employee.application.service.ChangeEmployeeRoleService.class, "execute"),
                 Map.entry(com.keevo.identity.employee.application.service.DeactivateEmployeeService.class, "execute"),

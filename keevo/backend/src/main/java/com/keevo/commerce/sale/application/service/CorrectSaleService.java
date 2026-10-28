@@ -1,8 +1,8 @@
 package com.keevo.commerce.sale.application.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.keevo.catalog.stock.domain.entity.MovementType;
-import com.keevo.catalog.stock.domain.service.StockOperationService;
+import com.keevo.inventory.stock.domain.entity.MovementType;
+import com.keevo.inventory.stock.domain.service.StockOperationService;
 import com.keevo.commerce.sale.domain.model.*;
 import com.keevo.commerce.sale.domain.port.in.CorrectSaleUseCase;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;

@@ -2,9 +2,9 @@ package com.keevo.commerce.sale.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.catalog.product.domain.event.SalePriceOverriddenEvent;
-import com.keevo.catalog.stock.domain.entity.StockLevel;
-import com.keevo.catalog.stock.domain.port.out.StockLevelRepository;
-import com.keevo.catalog.stock.domain.service.StockOperationService;
+import com.keevo.inventory.stock.domain.entity.StockLevel;
+import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
+import com.keevo.inventory.stock.domain.service.StockOperationService;
 import com.keevo.commerce.sale.application.service.RecordSaleService;
 import com.keevo.commerce.sale.domain.model.PaymentMode;
 import com.keevo.commerce.sale.domain.model.SaleCompletedEvent;

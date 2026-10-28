@@ -1,7 +1,7 @@
 package com.keevo.inventory.counting.domain.model;
 
 import com.keevo.catalog.product.domain.entity.Product;
-import com.keevo.catalog.stock.domain.entity.StockLevel;
+import com.keevo.inventory.stock.domain.entity.StockLevel;
 
 /**
  * QuickAddProductResult — output of the quick-add facade.

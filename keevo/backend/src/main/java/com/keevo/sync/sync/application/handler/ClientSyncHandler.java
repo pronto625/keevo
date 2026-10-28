@@ -1,9 +1,9 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.catalog.contact.application.usecase.ArchiveClientUseCase;
-import com.keevo.catalog.contact.application.usecase.UnarchiveClientUseCase;
-import com.keevo.catalog.contact.application.usecase.UpdateClientUseCase;
-import com.keevo.catalog.contact.application.usecase.UpdateClientUseCase.UpdateClientCommand;
+import com.keevo.crm.contact.application.usecase.ArchiveClientUseCase;
+import com.keevo.crm.contact.application.usecase.UnarchiveClientUseCase;
+import com.keevo.crm.contact.application.usecase.UpdateClientUseCase;
+import com.keevo.crm.contact.application.usecase.UpdateClientUseCase.UpdateClientCommand;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;

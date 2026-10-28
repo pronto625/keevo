@@ -1,0 +1,239 @@
+package com.keevo.inventory.stock.domain.service;
+
+import com.keevo.shared.infrastructure.security.CurrentActor;
+import com.keevo.catalog.product.domain.port.out.ProductRepository;
+import com.keevo.inventory.stock.domain.entity.MovementType;
+import com.keevo.inventory.stock.domain.entity.StockLevel;
+import com.keevo.inventory.stock.domain.entity.StockMovement;
+import com.keevo.inventory.stock.domain.event.StockAdjustedEvent;
+import com.keevo.inventory.stock.domain.event.StockThresholdBreachedEvent;
+import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
+import com.keevo.inventory.stock.domain.port.out.StockMovementRepository;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.store.store.domain.port.out.StoreRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
+import java.util.UUID;
+
+/**
+ * StockOperationService — coordinates all stock-modifying operations.
+ *
+ * <p>Single responsibility: manage the lifecycle of a stock change:
+ * load state → validate → record movement → update level → emit events.
+ *
+ * <p>GoF Patterns:
+ * <ul>
+ *   <li><b>Domain Service</b>: encapsulates multi-entity business logic.
+ *       Use cases stay thin and delegate here.</li>
+ *   <li><b>Observer</b>: publishes {@link StockAdjustedEvent} and
+ *       {@link StockThresholdBreachedEvent} via Spring's ApplicationEventPublisher.
+ *       Audit and notification handlers react without coupling.</li>
+ * </ul>
+ *
+ * <p><b>@Transactional</b>: all steps are atomic. If the transaction rolls back,
+ * no events are published (Spring publishes after commit by default).
+ *
+ * Story 2.3.
+ */
+@Service
+public class StockOperationService {
+
+    private static final Logger log = LoggerFactory.getLogger(StockOperationService.class);
+
+    private final StockLevelRepository stockLevelRepository;
+    private final StockMovementRepository stockMovementRepository;
+    private final ProductRepository productRepository;
+    private final ApplicationEventPublisher eventPublisher;
+    private final StoreRepository storeRepository; // Story 14.10
+
+    public StockOperationService(StockLevelRepository stockLevelRepository,
+                                 StockMovementRepository stockMovementRepository,
+                                 ProductRepository productRepository,
+                                 ApplicationEventPublisher eventPublisher,
+                                 StoreRepository storeRepository) {
+        this.stockLevelRepository    = stockLevelRepository;
+        this.stockMovementRepository = stockMovementRepository;
+        this.productRepository       = productRepository;
+        this.eventPublisher          = eventPublisher;
+        this.storeRepository         = storeRepository;
+    }
+
+    /**
+     * Record a stock operation and update the stock level atomically.
+     *
+     * @param productId      target product
+     * @param variantId      null for simple products
+     * @param storeId        target store
+     * @param movementType   operation type
+     * @param quantityChange signed delta (positive=in, negative=out)
+     * @param actorId        user performing the operation
+     * @param notes          optional reason/notes
+     * @return the saved StockMovement record
+     * @throws DomainException PRODUCT_NOT_FOUND if product does not exist
+     * @throws DomainException INSUFFICIENT_STOCK if quantityAfter would be negative
+     */
+    @Transactional
+    public StockMovement recordOperation(UUID productId, UUID variantId, UUID storeId,
+                                         MovementType movementType, int quantityChange,
+                                         UUID actorId, String notes) {
+        return recordOperation(productId, variantId, storeId, movementType, quantityChange,
+                actorId, notes, null, false);
+    }
+
+    /**
+     * Same as {@link #recordOperation(UUID, UUID, UUID, MovementType, int, UUID, String)} for
+     * operations replayed from an offline device.
+     *
+     * @param movementId    client-generated movement id (null → server generates). Keeping the
+     *                      local id lets the pull upsert the device's own movement row instead of
+     *                      adding a second copy to the history.
+     * @param allowNegative true only for an offline sale that already happened: the stock may go
+     *                      negative and the sync layer reports it as a STOCK_NEGATIVE conflict.
+     */
+    @Transactional
+    public StockMovement recordOperation(UUID productId, UUID variantId, UUID storeId,
+                                         MovementType movementType, int quantityChange,
+                                         UUID actorId, String notes,
+                                         UUID movementId, boolean allowNegative) {
+        return recordOperation(productId, variantId, storeId, movementType, quantityChange,
+                actorId, notes, movementId, allowNegative, null);
+    }
+
+    /**
+     * Transfer leg — same as {@link #recordOperation(UUID, UUID, UUID, MovementType, int, UUID, String)}
+     * plus the other store of the transfer, whose name is carried by {@link StockAdjustedEvent}
+     * into the audit trail (« vers B » / « depuis A »). v1s-16-23.
+     *
+     * @param counterpartStoreId destination store on TRANSFER_OUT, source store on TRANSFER_IN
+     */
+    @Transactional
+    public StockMovement recordOperation(UUID productId, UUID variantId, UUID storeId,
+                                         MovementType movementType, int quantityChange,
+                                         UUID actorId, String notes, UUID counterpartStoreId) {
+        return recordOperation(productId, variantId, storeId, movementType, quantityChange,
+                actorId, notes, null, false, counterpartStoreId);
+    }
+
+    private StockMovement recordOperation(UUID productId, UUID variantId, UUID storeId,
+                                          MovementType movementType, int quantityChange,
+                                          UUID actorId, String notes,
+                                          UUID movementId, boolean allowNegative,
+                                          UUID counterpartStoreId) {
+        // 1. Load product (for name + threshold)
+        var product = productRepository.findById(productId)
+                .orElseThrow(() -> new DomainException(ErrorCode.PRODUCT_NOT_FOUND,
+                        "Product not found: " + productId));
+
+        // 2. Load current stock level (creating one at 0 if first operation)
+        StockLevel currentLevel;
+        if (variantId != null) {
+            currentLevel = stockLevelRepository
+                    .findByProductVariantAndStore(productId, variantId, storeId)
+                    .orElse(newZeroLevel(productId, variantId, storeId));
+        } else {
+            currentLevel = stockLevelRepository
+                    .findByProductAndStore(productId, storeId)
+                    .orElse(newZeroLevel(productId, null, storeId));
+        }
+
+        int quantityBefore = currentLevel.getQuantity();
+        int quantityAfter  = quantityBefore + quantityChange;
+
+        // 3. Guard: no negative stock (except explicit adjustment to 0 via AdjustStockUseCase)
+        if (quantityAfter < 0 && !allowNegative) {
+            throw new DomainException(ErrorCode.INSUFFICIENT_STOCK,
+                    "Stock insuffisant: avant=" + quantityBefore + " delta=" + quantityChange);
+        }
+
+        // 4. Build and persist the immutable movement record
+        var now = Instant.now();
+        var movement = new StockMovement(
+            movementId != null ? movementId : UUID.randomUUID(),
+            productId, variantId, storeId,
+            movementType,
+            quantityBefore, quantityChange, quantityAfter,
+            actorId, notes, now
+        );
+        var savedMovement = stockMovementRepository.save(movement);
+
+        // 5. Update (or create) the stock level
+        StockLevel updatedLevel = currentLevel.withQuantity(quantityAfter);
+        stockLevelRepository.save(updatedLevel);
+
+        String tenantId = TenantContext.getCurrentTenant();
+
+        // 6. Publish stock adjusted event (Observer — decouples audit from domain)
+        // Story 14.10: actorRole/actorName/storeName from the authenticated actor.
+        // v1s-15-9: CurrentActor — the label falls back to a role label, never a raw UUID.
+        String actorRole = null;
+        String actorName = null;
+        String storeName = null;
+        try {
+            if (CurrentActor.authentication() != null) {
+                actorRole = CurrentActor.role();
+                actorName = CurrentActor.actorLabel();
+                // Resolve store name from repository
+                storeName = storeRepository.findById(storeId)
+                        .map(s -> s.name())
+                        .orElse(null);
+            }
+        } catch (Exception e) {
+            log.warn("[STOCK] Actor-context extraction failed for actorId={}: {}", actorId, e.getMessage());
+        }
+        // v1s-16-23: name of the other store of a transfer — absent store → no name, no failure.
+        String counterpartStoreName = null;
+        if (counterpartStoreId != null) {
+            try {
+                counterpartStoreName = storeRepository.findById(counterpartStoreId)
+                        .map(s -> s.name())
+                        .orElse(null);
+            } catch (Exception e) {
+                log.warn("[STOCK] Counterpart store lookup failed for storeId={}: {}",
+                        counterpartStoreId, e.getMessage());
+            }
+        }
+        eventPublisher.publishEvent(new StockAdjustedEvent(
+            productId, variantId, storeId,
+            movementType,
+            quantityBefore, quantityChange, quantityAfter,
+            actorId, notes,
+            tenantId,
+            actorRole, actorName, storeName, product.getName(),
+            now,
+            counterpartStoreName
+        ));
+
+        // 7. Threshold check — server-side enforcement (cannot be bypassed client-side)
+        int threshold = product.getMinimumThreshold();
+        if (threshold > 0 && quantityAfter <= threshold) {
+            eventPublisher.publishEvent(new StockThresholdBreachedEvent(
+                productId,
+                product.getName(),
+                storeId,
+                quantityAfter,
+                threshold,
+                actorId,
+                tenantId,
+                now
+            ));
+            log.warn("STOCK_THRESHOLD_BREACHED: product={} store={} quantity={} threshold={}",
+                productId, storeId, quantityAfter, threshold);
+        }
+
+        log.info("STOCK_OPERATION: type={} product={} store={} before={} change={} after={}",
+            movementType, productId, storeId, quantityBefore, quantityChange, quantityAfter);
+
+        return savedMovement;
+    }
+
+    private StockLevel newZeroLevel(UUID productId, UUID variantId, UUID storeId) {
+        return new StockLevel(UUID.randomUUID(), productId, variantId, storeId, 0, Instant.now(), 0L);
+    }
+}

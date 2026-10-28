@@ -1,7 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.catalog.contact.domain.entity.Supplier;
-import com.keevo.catalog.contact.domain.port.out.SupplierRepository;
+import com.keevo.crm.contact.domain.entity.Supplier;
+import com.keevo.crm.contact.domain.port.out.SupplierRepository;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;

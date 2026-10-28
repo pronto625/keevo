@@ -1,8 +1,8 @@
 package com.keevo.inventory.counting.application.service;
 
-import com.keevo.catalog.stock.domain.entity.MovementType;
-import com.keevo.catalog.stock.domain.port.out.StockLevelRepository;
-import com.keevo.catalog.stock.domain.service.StockOperationService;
+import com.keevo.inventory.stock.domain.entity.MovementType;
+import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
+import com.keevo.inventory.stock.domain.service.StockOperationService;
 import com.keevo.inventory.counting.domain.event.InventoryValidatedEvent;
 import com.keevo.inventory.counting.domain.model.InventoryCount;
 import com.keevo.inventory.counting.domain.model.InventorySession;

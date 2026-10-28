@@ -1,7 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.catalog.stock.domain.port.in.TransferStockCommand;
-import com.keevo.catalog.stock.domain.port.in.TransferStockUseCase;
+import com.keevo.inventory.stock.domain.port.in.TransferStockCommand;
+import com.keevo.inventory.stock.domain.port.in.TransferStockUseCase;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;

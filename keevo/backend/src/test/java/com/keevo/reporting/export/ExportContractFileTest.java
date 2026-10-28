@@ -64,9 +64,9 @@ class ExportContractFileTest {
         LABEL_FIELDS.put("stores.type",
                 new String[]{"com.keevo.store.store.adapter.out.export.StoresExportDatasetProvider", "TYPES"});
         LABEL_FIELDS.put("stock_movements.type",
-                new String[]{"com.keevo.catalog.stock.adapter.out.export.StockMovementsExportDatasetProvider", "TYPES"});
+                new String[]{"com.keevo.inventory.stock.adapter.out.export.StockMovementsExportDatasetProvider", "TYPES"});
         LABEL_FIELDS.put("stock_transfers.status",
-                new String[]{"com.keevo.catalog.stock.adapter.out.export.StockTransfersExportDatasetProvider", "STATUS"});
+                new String[]{"com.keevo.inventory.stock.adapter.out.export.StockTransfersExportDatasetProvider", "STATUS"});
         LABEL_FIELDS.put("sales.status", new String[]{SALE + "SaleLabels", "STATUS"});
         LABEL_FIELDS.put("sales.paymentMode", new String[]{SALE + "SaleLabels", "PAYMENT_MODE"});
         LABEL_FIELDS.put("sale_items.saleStatus", new String[]{SALE + "SaleLabels", "STATUS"});
@@ -104,7 +104,7 @@ class ExportContractFileTest {
             AUDIT_LABELS);
 
     private static final String STOCK_LEVELS =
-            "com.keevo.catalog.stock.adapter.out.export.StockLevelsExportDatasetProvider";
+            "com.keevo.inventory.stock.adapter.out.export.StockLevelsExportDatasetProvider";
 
     private final ObjectMapper mapper = new ObjectMapper();
 

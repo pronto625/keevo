@@ -1,7 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.catalog.contact.domain.entity.Client;
-import com.keevo.catalog.contact.domain.port.out.ClientRepository;
+import com.keevo.crm.contact.domain.entity.Client;
+import com.keevo.crm.contact.domain.port.out.ClientRepository;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import org.junit.jupiter.api.BeforeEach;

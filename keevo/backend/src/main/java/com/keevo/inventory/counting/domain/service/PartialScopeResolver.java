@@ -2,8 +2,8 @@ package com.keevo.inventory.counting.domain.service;
 
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
-import com.keevo.catalog.stock.domain.entity.StockLevel;
-import com.keevo.catalog.stock.domain.port.out.StockLevelRepository;
+import com.keevo.inventory.stock.domain.entity.StockLevel;
+import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
 import com.keevo.inventory.counting.domain.model.InventoryCount;
 import com.keevo.inventory.counting.domain.model.InventoryProductRow;
 import com.keevo.inventory.counting.domain.model.InventoryScope;

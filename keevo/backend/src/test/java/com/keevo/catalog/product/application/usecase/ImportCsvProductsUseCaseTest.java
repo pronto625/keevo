@@ -10,7 +10,7 @@ import com.keevo.catalog.product.domain.event.CsvImportCompletedEvent;
 import com.keevo.catalog.product.domain.port.out.CsvParserPort;
 import com.keevo.catalog.product.domain.port.out.DefaultStorePort;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
-import com.keevo.catalog.stock.domain.service.StockOperationService;
+import com.keevo.inventory.stock.domain.service.StockOperationService;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;

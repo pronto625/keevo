@@ -1,7 +1,7 @@
 package com.keevo.messaging.notification.application.listener;
 
-import com.keevo.catalog.stock.domain.entity.MovementType;
-import com.keevo.catalog.stock.domain.event.StockAdjustedEvent;
+import com.keevo.inventory.stock.domain.entity.MovementType;
+import com.keevo.inventory.stock.domain.event.StockAdjustedEvent;
 import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
 import com.keevo.messaging.notification.domain.model.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationPort;

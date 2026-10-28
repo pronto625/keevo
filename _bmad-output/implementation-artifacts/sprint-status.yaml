@@ -227,16 +227,16 @@ development_status:
   # ─────────────────────────────────────────────────────────
   # Epic 12: Découplage en Bounded Contexts (Phase 2) — le vrai chantier
   # ─────────────────────────────────────────────────────────
-  epic-12: backlog
-  12-1-declarer-modules-spring-modulith: backlog
-  12-2a-api-publique-catalog: backlog
-  12-2b-api-publique-inventory: backlog
+  epic-12: in-progress  # 2026-10-29 démarrage refonte (refonte/modulaire)
+  12-1-declarer-modules-spring-modulith: review  # 2026-10-29 done (revue groupée avec 12-5) — 13 modules, allow-lists = graphe observé + shared, not-allowed épinglé à 0 | 2026-10-29 bmad-build-auto (spec-12-1-declarer-modules-spring-modulith.md)
+  12-2a-api-publique-catalog: backlog  # 2026-10-29 review 12-1/12-5 — +1 item (API crm + consommateurs) | 2026-10-29 12.5 — 1 item routé (ProductController → crm)
+  12-2b-api-publique-inventory: backlog  # 2026-10-29 review 12-1/12-5 — +1 item (consommateurs messaging/sync/commerce) | 2026-10-29 12.5 — 1 item routé (import CSV → stock)
   12-2c-api-publique-commerce: backlog
-  12-2d-api-publiques-identity-store-subscription: backlog
+  12-2d-api-publiques-identity-store-subscription: backlog  # 2026-10-29 review 12-1/12-5 — 1 item (shared → crm/inventory, entités)
   12-2e-api-reporting-messaging-sync-verify-bloquant: backlog
   12-3-events-spring-modulith-registry: backlog  # 2026-10-28 refonte-journal A3/A4 — 2 items routés dans le brief (epics-refonte-modulaire.md)
   12-4-registre-events-schema-per-tenant: backlog  # 2026-10-28 review 11-1/11-2 — +1 item (MDC vers @Async) | 2026-10-28 refonte-journal A2 — 1 item routé dans le brief (schéma public du registre)
-  12-5-realignement-modules-inventory-payment-warehouse: backlog
+  12-5-realignement-modules-inventory-payment-warehouse: review  # 2026-10-29 done — stock→inventory, contact→crm.contact, placeholders supprimés ; baseline 1308 ; test live Redmi OK | 2026-10-29 bmad-build-auto (spec-12-5-realigner-modules-inventory-crm.md), avancée avant 12-2a/b (journal A6)
   12-6-regles-archunit-complementaires: backlog  # 2026-10-11 : 6 items deferred routés dans le brief de la story (epics-refonte-modulaire.md) ; story file à créer par bmad-create-story
   12-7-sync-module-aware: backlog
   epic-12-retrospective: optional
@@ -412,6 +412,7 @@ development_status:
   v1s-16-21-prod-1-1-70-fixes: done  # 2026-10-18 done — app 2.0.0+70, régression complète verte | 2026-10-18 recette prod 1.1.70 — 4 constats (super-admin dans l'app mobile, CA total à 0 au 1er affichage, avalanche d'avis de clôture, « Dernière activité » identique dans l'admin) — spec-v1s-16-21-prod-1-1-70-fixes.md
   v1s-16-22-auto-closure-tenant-context: done  # 2026-10-19 rapport A17 (Boutique 6e) ≠ tableau de bord : la clôture automatique écrivait dans public à partir de la 2e boutique d'une entreprise — backend seul — spec-v1s-16-22-auto-closure-tenant-context.md
   v1s-16-23-transfer-history-and-audit-route: done  # 2026-10-20 demande utilisateur — liste des transferts mobile limitée aux 20 derniers (filtres boutique/statut appliqués après la limite) + audit d'un transfert sans boutique d'origine/destination — done 2026-10-20 (bmad-build), app 2.0.1+71, 1 passe de revue (19 constats, 9 patchés, 1 routé → v1s-12-9) — spec-v1s-16-23-transfer-history-and-audit-route.md
+  v1s-16-24-onboarding-landscape-overflow: backlog  # 2026-10-29 live device run refonte 12-1/12-5 — 1 item (débordement paysage + clavier, V1)
   v1s-epic-16-retrospective: optional
 
   # ─────────────────────────────────────────────────────────

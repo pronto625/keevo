@@ -1,9 +1,9 @@
 package com.keevo.commerce.sale.application;
 
-import com.keevo.catalog.stock.domain.entity.MovementType;
-import com.keevo.catalog.stock.domain.entity.StockLevel;
-import com.keevo.catalog.stock.domain.port.out.StockLevelRepository;
-import com.keevo.catalog.stock.domain.service.StockOperationService;
+import com.keevo.inventory.stock.domain.entity.MovementType;
+import com.keevo.inventory.stock.domain.entity.StockLevel;
+import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
+import com.keevo.inventory.stock.domain.service.StockOperationService;
 import com.keevo.commerce.sale.application.service.SaleValidationCascadeService;
 import com.keevo.commerce.sale.domain.model.*;
 import com.keevo.commerce.sale.domain.port.out.ProductStatusPort;

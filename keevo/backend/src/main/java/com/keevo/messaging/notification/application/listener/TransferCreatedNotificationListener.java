@@ -1,6 +1,6 @@
 package com.keevo.messaging.notification.application.listener;
 
-import com.keevo.catalog.stock.domain.event.TransferCreatedEvent;
+import com.keevo.inventory.stock.domain.event.TransferCreatedEvent;
 import com.keevo.messaging.notification.application.strategy.TransferNotificationRecipientStrategy;
 import com.keevo.messaging.notification.domain.model.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationPort;

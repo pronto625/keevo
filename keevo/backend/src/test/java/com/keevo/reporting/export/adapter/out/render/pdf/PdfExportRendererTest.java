@@ -1,6 +1,6 @@
 package com.keevo.reporting.export.adapter.out.render.pdf;
 
-import com.keevo.catalog.stock.adapter.out.export.StockLevelsExportDatasetProvider;
+import com.keevo.inventory.stock.adapter.out.export.StockLevelsExportDatasetProvider;
 import com.keevo.commerce.sale.adapter.out.export.DayClosuresExportDatasetProvider;
 import com.keevo.commerce.sale.adapter.out.export.SalesExportDatasetProvider;
 import com.keevo.commerce.sale.domain.model.ClosureWindow;

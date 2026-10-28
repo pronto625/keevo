@@ -1,9 +1,9 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.catalog.contact.application.usecase.ArchiveClientUseCase;
-import com.keevo.catalog.contact.application.usecase.UnarchiveClientUseCase;
-import com.keevo.catalog.contact.application.usecase.UpdateClientUseCase;
-import com.keevo.catalog.contact.domain.entity.Client;
+import com.keevo.crm.contact.application.usecase.ArchiveClientUseCase;
+import com.keevo.crm.contact.application.usecase.UnarchiveClientUseCase;
+import com.keevo.crm.contact.application.usecase.UpdateClientUseCase;
+import com.keevo.crm.contact.domain.entity.Client;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;

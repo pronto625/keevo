@@ -2,10 +2,10 @@ package com.keevo.shared.infrastructure.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.catalog.category.domain.event.CategoryCreatedEvent;
-import com.keevo.catalog.contact.domain.event.ClientCreatedEvent;
+import com.keevo.crm.contact.domain.event.ClientCreatedEvent;
 import com.keevo.catalog.product.domain.event.SalePriceOverriddenEvent;
-import com.keevo.catalog.stock.domain.event.StockAdjustedEvent;
-import com.keevo.catalog.stock.domain.entity.MovementType;
+import com.keevo.inventory.stock.domain.event.StockAdjustedEvent;
+import com.keevo.inventory.stock.domain.entity.MovementType;
 import com.keevo.commerce.sale.domain.model.DayClosedEvent;
 import com.keevo.commerce.sale.domain.model.DayClosureSummary;
 import com.keevo.commerce.sale.domain.model.SaleCorrectedEvent;
@@ -588,7 +588,7 @@ class AuditEventListenerTest {
         @DisplayName("J10 StockThresholdChanged → STOCK_THRESHOLD_UPDATED, before/after threshold")
         void stockThresholdChanged() throws Exception {
             UUID productId = UUID.randomUUID();
-            listener.on(new com.keevo.catalog.stock.domain.event.StockThresholdChangedEvent(
+            listener.on(new com.keevo.inventory.stock.domain.event.StockThresholdChangedEvent(
                     productId, "Riz 5kg", 5, 12, actorId, "kv_abc123", Instant.now()));
 
             AuditPort.AuditEntry e = captureEntry();

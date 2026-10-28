@@ -190,17 +190,17 @@ src/main/java/com/keevo/
 │
 ├── commerce/                        # DOMAIN: Sales & POS
 │   ├── pos/                         # MODULE: Point of Sale
-│   ├── sale/                        # MODULE: Sales
-│   └── payment/                     # MODULE: Payments
+│   └── sale/                        # MODULE: Sales
+│
+├── crm/                             # DOMAIN: Clients & Suppliers
+│   └── contact/                     # MODULE: Clients & suppliers
 │
 ├── inventory/                       # DOMAIN: Stock Management
-│   ├── stock/                       # MODULE: Stock tracking
-│   ├── transfer/                    # MODULE: Inter-store transfers (planned — Story 3.3 impl in catalog/stock/)
+│   ├── stock/                       # MODULE: Stock tracking + inter-store transfers (Story 3.3)
 │   └── counting/                    # MODULE: Physical inventory
 │
 ├── store/                           # DOMAIN: Multi-Store
-│   ├── store/                       # MODULE: Store CRUD
-│   └── warehouse/                   # MODULE: Warehouse
+│   └── store/                       # MODULE: Store CRUD
 │
 ├── reporting/                       # DOMAIN: Reports & Analytics
 │   ├── dashboard/                   # MODULE: Real-time dashboard
@@ -725,12 +725,12 @@ Events are placed in the domain that **owns the concept**, even if other domains
 | `ProductUpdatedEvent` | `catalog.product.domain.event` | Story 2.1 | `PRODUCT_UPDATED` | `Product` | |
 | `ProductArchivedEvent` | `catalog.product.domain.event` | Story 2.1 | `PRODUCT_ARCHIVED` | `Product` | |
 | `SalePriceOverriddenEvent` | `catalog.product.domain.event` | Story 2.2 | `PRICE_OVERRIDDEN` | `PriceOverride` | Published by `RecordSaleService` (commerce domain) — lives in catalog because it's a pricing concept |
-| `StockAdjustedEvent` | `catalog.stock.domain.event` | Story 2.3 | `STOCK_ADJUSTED` | `StockMovement` | |
-| `StockThresholdBreachedEvent` | `catalog.stock.domain.event` | Story 2.3 | `STOCK_THRESHOLD_BREACHED` | `StockLevel` | |
-| `ClientCreatedEvent` | `catalog.contact.domain.event` | Story 2.5 | `CLIENT_CREATED` | `Client` | |
-| `ClientArchivedEvent` | `catalog.contact.domain.event` | Story 2.5 | `CLIENT_ARCHIVED` | `Client` | |
-| `SupplierCreatedEvent` | `catalog.contact.domain.event` | Story 2.5 | `SUPPLIER_CREATED` | `Supplier` | |
-| `SupplierArchivedEvent` | `catalog.contact.domain.event` | Story 2.5 | `SUPPLIER_ARCHIVED` | `Supplier` | |
+| `StockAdjustedEvent` | `inventory.stock.domain.event` | Story 2.3 | `STOCK_ADJUSTED` | `StockMovement` | |
+| `StockThresholdBreachedEvent` | `inventory.stock.domain.event` | Story 2.3 | `STOCK_THRESHOLD_BREACHED` | `StockLevel` | |
+| `ClientCreatedEvent` | `crm.contact.domain.event` | Story 2.5 | `CLIENT_CREATED` | `Client` | |
+| `ClientArchivedEvent` | `crm.contact.domain.event` | Story 2.5 | `CLIENT_ARCHIVED` | `Client` | |
+| `SupplierCreatedEvent` | `crm.contact.domain.event` | Story 2.5 | `SUPPLIER_CREATED` | `Supplier` | |
+| `SupplierArchivedEvent` | `crm.contact.domain.event` | Story 2.5 | `SUPPLIER_ARCHIVED` | `Supplier` | |
 | `StoreCreatedEvent` | `store.store.domain.event` | Story 3.1 | `STORE_CREATED` | `Store` | |
 | `StoreUpdatedEvent` | `store.store.domain.event` | Story 3.1 | `STORE_UPDATED` | `Store` | |
 | `StoreDeactivatedEvent` | `store.store.domain.event` | Story 3.1 | `STORE_DEACTIVATED` | `Store` | |
@@ -1051,20 +1051,19 @@ backend/
 │   │   └── variant/                   # MODULE: Variants & attributes
 │   ├── commerce/                      # DOMAIN: Sales & POS
 │   │   ├── pos/                       # MODULE: Point of Sale
-│   │   ├── sale/                      # MODULE: Sales & receipts
-│   │   └── payment/                   # MODULE: Payments & cash
+│   │   └── sale/                      # MODULE: Sales & receipts
+│   ├── crm/                           # DOMAIN: Clients & Suppliers
+│   │   └── contact/                   # MODULE: Clients & suppliers
 │   ├── inventory/                     # DOMAIN: Stock Management
 │   │   ├── stock/                     # MODULE: Stock tracking per store
-│   │   │                              #   ⚠️  Inter-store transfers implemented HERE (catalog/stock/)
-│   │   │                              #   not in inventory/transfer/ — Story 3.3 reuses StockOperationService
+│   │   │                              #   ⚠️  Inter-store transfers implemented HERE (inventory/stock/)
+│   │   │                              #   no separate transfer/ package — Story 3.3 reuses StockOperationService
 │   │   │                              #   Tables: stock_transfers (IN_TRANSIT→COMPLETED two-step),
 │   │   │                              #           stock_movements (TRANSFER_OUT step1, TRANSFER_IN step2)
 │   │   │                              #   API: POST /stock/transfers (step1) · POST /stock/transfers/{id}/complete (step2)
-│   │   ├── transfer/                  # MODULE: Inter-store transfers (placeholder — logic in catalog/stock/)
 │   │   └── counting/                  # MODULE: Physical inventory counting
 │   ├── store/                         # DOMAIN: Multi-Store
-│   │   ├── store/                     # MODULE: Store CRUD & settings
-│   │   └── warehouse/                 # MODULE: Warehouse management
+│   │   └── store/                     # MODULE: Store CRUD & settings
 │   ├── reporting/                     # DOMAIN: Reports & Analytics
 │   │   ├── dashboard/                 # MODULE: Real-time dashboard
 │   │   ├── report/                    # MODULE: End-of-day, weekly, custom
@@ -1125,10 +1124,10 @@ app/
 | FR8-15: Tenant Provisioning | `admin/tenant/` | — (backend) |
 | FR16-20: Subscriptions | `subscription/plan/` | `settings/` |
 | FR21-29: Products | `catalog/product/`, `category/`, `variant/` | `products/` |
-| FR30-36: Multi-Store | `store/store/`, `store/warehouse/` | `stores/` |
-| FR37-44: POS | `commerce/pos/`, `sale/`, `payment/` | `pos/` |
-| FR45-49: Inventory | `catalog/stock/` (stock tracking + inter-store transfers — Story 3.3) | `inventory/` |
-> ⚠️ Inter-store transfers (FR32, Story 3.3) are in `catalog/stock/` (not `inventory/transfer/`) — they reuse `StockOperationService`. Two-step flow: `ExecuteTransferService` (TRANSFER_OUT, → IN_TRANSIT) + `CompleteTransferService` (TRANSFER_IN, → COMPLETED).
+| FR30-36: Multi-Store | `store/store/` | `stores/` |
+| FR37-44: POS | `commerce/pos/`, `sale/` | `pos/` |
+| FR45-49: Inventory | `inventory/stock/` (stock tracking + inter-store transfers — Story 3.3) | `inventory/` |
+> ⚠️ Inter-store transfers (FR32, Story 3.3) are in `inventory/stock/` (no separate `transfer/` package) — they reuse `StockOperationService`. Two-step flow: `ExecuteTransferService` (TRANSFER_OUT, → IN_TRANSIT) + `CompleteTransferService` (TRANSFER_IN, → COMPLETED).
 | FR50-56: Reports | `reporting/dashboard/`, `report/` | `reports/` |
 | FR55, FR94-97: Data export | `reporting/export/` (+ one `ExportDatasetProvider` per domain) | `export/` |
 | FR84, FR98: Audit log | `shared/` audit port + `AuditController` | `audit/` |

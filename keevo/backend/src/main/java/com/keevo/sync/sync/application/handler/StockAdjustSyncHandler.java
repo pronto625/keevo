@@ -1,7 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.catalog.stock.application.usecase.AdjustStockUseCase;
-import com.keevo.catalog.stock.application.usecase.RecordStockEntryUseCase;
+import com.keevo.inventory.stock.application.usecase.AdjustStockUseCase;
+import com.keevo.inventory.stock.application.usecase.RecordStockEntryUseCase;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;

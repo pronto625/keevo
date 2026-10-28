@@ -1303,6 +1303,14 @@ Le propriétaire peut récupérer toutes ses données dans le format de son choi
 **Refs:** FR55, FR84, FR94–FR98 ; sprint-change-proposal-2026-10-11. **Refonte absorption:** native — `reporting/export` et les `ExportDatasetProvider` sont repris tels quels. Remplace 17-6 et v1s-14-7.
 **Ordre:** 18.6 → 18.7 (valeur immédiate, sans dépendance) ; puis 18.1 → 18.2 → 18.4 → 18.3 → 18.5.
 
+## Story 16.24: Écrans d'onboarding en paysage — débordement avec clavier ouvert — **[A]**
+
+Scope: in landscape with the soft keyboard open, the onboarding "Comment s'appelle votre boutique ?" step overflows (Flutter "BOTTOM OVERFLOWED BY 240 PIXELS"). Found during the 2026-10-29 live device run (Redmi 23106RN0DA, debug build) of the modular refactor; V1 behaviour, not caused by the refactor. Either lock the app to portrait (as the iOS release identity story did for iOS) or make the onboarding steps scrollable.
+
+- [ ] [Deferred-from: live device run 12-1/12-5, 2026-10-29] Onboarding shop-name step overflows in landscape with keyboard [keevo/app/lib/features/onboarding] — reproduce in landscape, keyboard open
+
+**AC (interim):** Given the app in landscape with the keyboard open, when the owner reaches any onboarding step, then no overflow stripe appears and the primary button stays reachable.
+
 ## Story 18.1: Socle du module export (backend) — **[C]**
 
 As an owner, I want to export my data as CSV or Excel, so that I can use it outside Keevo.

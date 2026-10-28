@@ -3,7 +3,7 @@ package com.keevo.inventory.counting.adapter.in.rest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
-import com.keevo.catalog.stock.domain.entity.StockLevel;
+import com.keevo.inventory.stock.domain.entity.StockLevel;
 import com.keevo.inventory.counting.domain.model.InventoryCount;
 import com.keevo.inventory.counting.domain.model.InventoryScope;
 import com.keevo.inventory.counting.domain.model.InventorySession;

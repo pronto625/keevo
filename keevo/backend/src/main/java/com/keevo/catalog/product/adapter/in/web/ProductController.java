@@ -1,9 +1,9 @@
 package com.keevo.catalog.product.adapter.in.web;
 
 import com.keevo.shared.infrastructure.security.CurrentActor;
-import com.keevo.catalog.contact.adapter.in.web.dto.SupplierResponseDto;
-import com.keevo.catalog.contact.application.usecase.GetSupplierByProductUseCase;
-import com.keevo.catalog.contact.application.usecase.GetSupplierProfileUseCase;
+import com.keevo.crm.contact.adapter.in.web.dto.SupplierResponseDto;
+import com.keevo.crm.contact.application.usecase.GetSupplierByProductUseCase;
+import com.keevo.crm.contact.application.usecase.GetSupplierProfileUseCase;
 import com.keevo.catalog.product.adapter.in.web.dto.CreateProductRequestDto;
 import com.keevo.catalog.product.adapter.in.web.dto.UpdateProductRequestDto;
 import com.keevo.catalog.product.adapter.in.web.dto.ProductResponseDto;

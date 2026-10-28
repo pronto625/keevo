@@ -1,6 +1,6 @@
 package com.keevo.shared.infrastructure.persistence.entity;
 
-import com.keevo.catalog.stock.domain.model.StockTransfer.TransferStatus;
+import com.keevo.inventory.stock.domain.model.StockTransfer.TransferStatus;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;

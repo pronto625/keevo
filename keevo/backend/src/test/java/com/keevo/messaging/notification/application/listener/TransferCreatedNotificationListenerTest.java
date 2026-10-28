@@ -1,6 +1,6 @@
 package com.keevo.messaging.notification.application.listener;
 
-import com.keevo.catalog.stock.domain.event.TransferCreatedEvent;
+import com.keevo.inventory.stock.domain.event.TransferCreatedEvent;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.auth.domain.model.Role;
