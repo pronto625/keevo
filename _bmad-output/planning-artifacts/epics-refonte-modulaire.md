@@ -159,6 +159,9 @@ So that **les garde-fous backups / staging / sécurité soient réellement actif
 
 **Interim AC :** **Given** la checklist §11–§16, **When** l'agent ops a exécuté chaque étape sur le serveur, **Then** chaque vérification indiquée (curl HTTPS staging 200, AccessDenied sur suppression S3, alerte reçue sur un échec simulé, 0 adhésion de tenant DELETED) est consignée avec sa date dans cette story.
 
+**Items (routed 2026-10-28 from review 11-1/11-2):**
+- [ ] [Deferred-from: review 11-1/11-2, 2026-10-28] Set `KEEVO_PROMETHEUS_TOKEN` (and optionally `KEEVO_OTLP_*`) in prod/staging `~/keevo/.env` and add the Prometheus scrape job with the bearer token [server env, Prometheus config] — until then `/actuator/prometheus` answers 404 and monitoring is silently off
+
 ## Epic 11 : Stabilisation du Socle & Dette (Phase 1 allégée)
 **Valeur :** servir les tenants réels (< 100) de façon **fiable et diagnosticable** — observabilité de base + correction des bugs/sécurité consensuels. (Redis/HA différés : non requis sous ~500 tenants.)
 **Exigences couvertes :** MOD-NFR4, MOD-NFR6 + dette consensuelle (N+1, bug `DayClosureDeltaProvider`, RBAC brouillon, `DeviceToken` ownership, CORS prod, allow-list schéma) ; durcissement FR68/FR93.
@@ -591,6 +594,10 @@ So that **la livraison est fiable/atomique (outbox) et les modules sont découpl
 - Réf : [Spring Modulith — Working with Events](https://docs.spring.io/spring-modulith/reference/events.html).
 - ⚠️ Cette story **remplace** la section §7 « Outbox maison » de `spec-socle-modulaire.md`.
 
+**Items (routed 2026-10-28 from refonte-journal-incoherences.md):**
+- [ ] [Deferred-from: journal A3, 2026-10-28] Bump spring-modulith-bom 1.4.0 → latest 1.4.x patch [keevo/backend/pom.xml:36] — 1.4.x is the Boot 3.5 line; do not move to 2.x (Boot 4)
+- [ ] [Deferred-from: journal A4, 2026-10-28] Choose `spring.modulith.events.completion-mode` (UPDATE + purge job vs ARCHIVE vs DELETE) [application.yml] — decide with 12.4 retention needs
+
 ### Story 12.4 : Intégrer le registre d'events avec le schema-per-tenant
 
 As a **développeur plateforme**,
@@ -614,6 +621,10 @@ So that **chaque event est traité dans le bon contexte tenant sans fuite (MOD-N
 - Wrapper de dispatch : avant d'invoquer le listener, `TenantContext.setCurrentTenant(event.tenantId())` ; `finally` clear. Vérifier la compatibilité avec `@Async` (le `ThreadLocal` ne traverse pas les threads — repositionner le contexte **dans** le listener via un aspect/décorateur sur `@ApplicationModuleListener`).
 - Test multi-tenant : publier dans 2 tenants, forcer un échec+rejeu, vérifier l'absence de cross-tenant.
 - Si l'intégration s'avère trop contrainte : repli documenté = conserver un dispatch maison tenant-aware (mais privilégier Modulith).
+
+**Items (routed 2026-10-28 from refonte-journal-incoherences.md):**
+- [ ] [Deferred-from: journal A2, 2026-10-28] Pin the registry to `public`: `spring.modulith.events.jdbc.schema=public`, table created by a Flyway public migration [application.yml, db/migration] — unqualified `event_publication` would follow the per-tenant search_path
+- [ ] [Deferred-from: review 11-1/11-2, 2026-10-28] Propagate MDC (`traceId`, `tenantId`, `userId`) to `@Async` executors (e.g. `AsyncConfig.notificationExecutor`) with a context-propagating `TaskDecorator`, alongside the `TenantContext` restoration [shared/infrastructure/config/AsyncConfig.java] — async logs are not correlated today
 
 ### Story 12.5 : Ré-aligner les modules mal placés (inventory, payment, warehouse)
 
