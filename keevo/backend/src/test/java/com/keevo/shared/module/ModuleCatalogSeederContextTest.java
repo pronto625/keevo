@@ -1,5 +1,6 @@
 package com.keevo.shared.module;
 
+import com.keevo.shared.module.application.ModuleCatalog;
 import com.keevo.shared.module.application.ModuleCatalogSeeder;
 import com.keevo.shared.module.application.port.ModuleDefinitionPort;
 import org.junit.jupiter.api.Test;
@@ -42,7 +43,7 @@ class ModuleCatalogSeederContextTest {
                     .withClassLoader(loader)
                     .withBean(ModuleDefinitionPort.class, () -> port)
                     .withBean(PlatformTransactionManager.class, () -> transactionManager)
-                    .withUserConfiguration(ModuleCatalogSeeder.class)
+                    .withUserConfiguration(ModuleCatalog.class, ModuleCatalogSeeder.class)
                     .run(context -> {
                         assertThat(context).hasFailed();
                         assertThat(context.getStartupFailure()).rootCause()

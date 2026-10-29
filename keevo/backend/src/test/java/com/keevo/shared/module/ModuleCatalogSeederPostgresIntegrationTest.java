@@ -6,6 +6,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.keevo.shared.infrastructure.persistence.SharedPostgresContainer;
 import com.keevo.shared.module.adapter.out.persistence.JdbcModuleDefinitionStore;
+import com.keevo.shared.module.application.ModuleCatalog;
 import com.keevo.shared.module.application.ModuleCatalogSeeder;
 import com.keevo.shared.module.application.ModuleCatalogSeeder.SeedReport;
 import com.keevo.shared.module.application.port.ModuleDefinitionPort;
@@ -65,7 +66,7 @@ class ModuleCatalogSeederPostgresIntegrationTest {
         jdbc = new JdbcTemplate(dataSource);
         store = new JdbcModuleDefinitionStore(dataSource);
         transactionManager = new DataSourceTransactionManager(dataSource);
-        seeder = new ModuleCatalogSeeder(store, transactionManager, RESOLVER);
+        seeder = new ModuleCatalogSeeder(store, transactionManager, new ModuleCatalog(RESOLVER));
     }
 
     @AfterAll
@@ -227,7 +228,7 @@ class ModuleCatalogSeederPostgresIntegrationTest {
                 return store.findVersions();
             }
         };
-        ModuleCatalogSeeder failing = new ModuleCatalogSeeder(failingOnMessaging, transactionManager, RESOLVER);
+        ModuleCatalogSeeder failing = new ModuleCatalogSeeder(failingOnMessaging, transactionManager, new ModuleCatalog(RESOLVER));
 
         assertThatThrownBy(() -> failing.seed(shipped())).hasMessage("boom");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM public.module_definitions", Integer.class)).isZero();

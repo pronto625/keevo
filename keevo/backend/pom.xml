@@ -211,10 +211,21 @@
         </dependency>
 
         <!-- Story 12.4: Spring Modulith Event Publication Registry (JDBC outbox, table public.event_publication,
-             created by Flyway — schema initialization disabled in application.yml) -->
+             created by Flyway — schema initialization disabled in application.yml)
+             Story 13.2: spring-modulith-core (and with it ArchUnit) is excluded from the prod jar. It is only the
+             module model used by verify()/docs; at runtime it only contributes a guard that fails when an
+             ApplicationModuleInitializer bean exists without spring-modulith-runtime (we have neither). No class of
+             the events/moments/api jars references org.springframework.modulith.core. Tests keep it (and ArchUnit)
+             through spring-modulith-starter-test → spring-modulith-test / spring-modulith-docs. -->
         <dependency>
             <groupId>org.springframework.modulith</groupId>
             <artifactId>spring-modulith-starter-jdbc</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.modulith</groupId>
+                    <artifactId>spring-modulith-core</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Story 10.6: Spring Modulith — module verification + documentation -->
@@ -226,7 +237,8 @@
 
         <!-- Story 10.6 / 12.6b: ArchUnit is NOT declared here. The architecture tests use the ArchUnit core API
              only (no @AnalyzeClasses engine); `com.tngtech.archunit:archunit` comes TRANSITIVELY from
-             spring-modulith-core (its own pom fixes 1.4.2; the Modulith BOM does not manage archunit). The former
+             spring-modulith-core (its own pom fixes 1.4.2; the Modulith BOM does not manage archunit) — since 13.2
+             at test scope only, via spring-modulith-starter-test. The former
              pinned archunit-junit5 1.3.0 overrode that transitive version (skew vs. what modulith-core is built on). -->
         <!-- Story 2.4: CSV import -->
         <dependency>
@@ -274,6 +286,35 @@
                     </environmentVariables>
                 </configuration>
             </plugin>
+            <!-- Story 13.2: the prod classpath must not carry the Modulith module model nor ArchUnit (only tests
+                 use them, via spring-modulith-starter-test). Fails the build if an upgrade or a new dependency
+                 brings them back at compile/runtime scope. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>prod-classpath-banned-dependencies</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <bannedDependencies>
+                                    <excludes>
+                                        <exclude>org.springframework.modulith:spring-modulith-core:*:*:compile</exclude>
+                                        <exclude>org.springframework.modulith:spring-modulith-core:*:*:runtime</exclude>
+                                        <exclude>com.tngtech.archunit:archunit:*:*:compile</exclude>
+                                        <exclude>com.tngtech.archunit:archunit:*:*:runtime</exclude>
+                                    </excludes>
+                                    <message>spring-modulith-core / ArchUnit must stay off the prod classpath (test scope only) — exclude them from the dependency that brings them (Story 13.2)</message>
+                                </bannedDependencies>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
@@ -288,4 +329,32 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- Story 13.2: runs the boot + event-registry integration tests on the prod runtime classpath, i.e. without
+             the test-only Modulith/ArchUnit jars (spring-modulith-core is excluded from the prod jar). CI:
+             `mvn -Pprod-classpath test`. -->
+        <profile>
+            <id>prod-classpath</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <test>EventPublicationRegistryIntegrationTest,ModuleCatalogBootIntegrationTest</test>
+                            <failIfNoSpecifiedTests>true</failIfNoSpecifiedTests>
+                            <classpathDependencyExcludes>
+                                <classpathDependencyExclude>org.springframework.modulith:spring-modulith-core</classpathDependencyExclude>
+                                <classpathDependencyExclude>com.tngtech.archunit:archunit</classpathDependencyExclude>
+                                <classpathDependencyExclude>org.springframework.modulith:spring-modulith-test</classpathDependencyExclude>
+                                <classpathDependencyExclude>org.springframework.modulith:spring-modulith-docs</classpathDependencyExclude>
+                                <classpathDependencyExclude>org.springframework.modulith:spring-modulith-starter-test</classpathDependencyExclude>
+                            </classpathDependencyExcludes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

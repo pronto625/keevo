@@ -7,7 +7,9 @@
  * ({@code public.module_definitions}) is seeded at boot by {@code shared.module.application.ModuleCatalogSeeder}
  * through the {@code shared.module.application.port.ModuleDefinitionPort} port.
  *
- * <p>Per-tenant state ({@code public.tenant_modules}), the {@code ModuleRegistry} / {@code DependencyResolver}
- * services and entitlement gating come with Stories 13.2+.
+ * <p>Since Story 13.2 the validated set is held once by {@code shared.module.application.ModuleCatalog}, and
+ * {@link com.keevo.shared.module.ModuleRegistry} answers which modules are installed and which are active for a
+ * tenant ({@code public.tenant_modules}, {@link com.keevo.shared.module.TenantModuleStatus}). The
+ * {@code DependencyResolver}, activation and entitlement gating come with Stories 13.3+.
  */
 package com.keevo.shared.module;

@@ -757,6 +757,12 @@ So that **l'offline-first reste cohérent quand on active/désactive/ajoute des 
 
 > Construire le noyau qui permet **d'activer/désactiver un module par tenant** avec gestion des dépendances. Cœur de la plateforme « mini-apps ». Réf : `spec-socle-modulaire.md §1-10`.
 
+- [ ] [Deferred-from: review 13-2, 2026-10-29] Source of `moduleOf(operationType)`: manifest field (e.g. `syncOperations`, validated by the loader) or per-handler declaration — every existing handler mapped, unmapped op types fail the boot/test [sync]
+
+- [ ] [Deferred-from: review 13-2, 2026-10-29] Guard placement: read `activeModules(schema)` once per push batch before the loop, check per operation before `processOperation`; a registry failure → that operation REJECTED (not a batch-wide 500); distinguish `MODULE_INACTIVE` vs `MODULE_READ_ONLY` once 13.5 exposes grace [SyncPushService]
+
+- [ ] [Deferred-from: review 13-2, 2026-10-29] Full-context proof of the per-request registry cache through a real HTTP call (MockMvc sync push: N operations → 1 `tenant_modules` query) [shared.module cache]
+
 ### Story 13.1 : Modèle de données du registre + manifest + seed au boot
 
 As a **développeur plateforme**,
@@ -798,11 +804,11 @@ So that **tout composant peut savoir si un module est actif pour un tenant (MOD-
 - Interface `ModuleRegistry` (spec §5.1) ; impl JDBC/JPA ; cache `@RequestScope` ou `ThreadLocal` invalidé en fin de requête.
 - Pas de Redis (différé) — DB suffit < 100 tenants.
 
-- [ ] [Deferred-from: review 12-6b, 2026-10-29] `spring-modulith-core` + ArchUnit ship in the prod boot jar via `spring-modulith-starter-jdbc` but are unused at runtime — decide (exclusion vs `spring-modulith-runtime` for the registry), verify with `dependency:tree` + boot smoke [pom.xml]
+- [x] [Deferred-from: review 12-6b, 2026-10-29] `spring-modulith-core` + ArchUnit ship in the prod boot jar via `spring-modulith-starter-jdbc` but are unused at runtime — decide (exclusion vs `spring-modulith-runtime` for the registry), verify with `dependency:tree` + boot smoke [pom.xml] — ✅ 13.2: excluded from `spring-modulith-starter-jdbc` (the registry is the core's own `ModuleRegistry`, not `spring-modulith-runtime`); no runtime class references `modulith.core`, its only auto-config is a guard for `ApplicationModuleInitializer` beans (none). `dependency:tree` after: modulith-core/archunit only at test scope (via `spring-modulith-test`); packaged jar has neither in `BOOT-INF/lib` and boots on `keevo_dev` (health 200, 0 ERROR); `EventPublicationRegistryIntegrationTest` 9/9 green on a test classpath stripped of modulith-core/archunit/modulith-test
 
-- [ ] [Deferred-from: review 13-1, 2026-10-29] Rows of `module_definitions` whose manifest is no longer on the classpath (kept by the seed, WARN) must be treated as not installed by the registry (no activation, hidden from catalogue) [ModuleRegistry]
+- [x] [Deferred-from: review 13-1, 2026-10-29] Rows of `module_definitions` whose manifest is no longer on the classpath (kept by the seed, WARN) must be treated as not installed by the registry (no activation, hidden from catalogue) [ModuleRegistry] — ✅ 13.2: `ModuleRegistry.installed()`/`definition()` come from the classpath manifests only (`ModuleCatalog`), and the effective state rule never activates a module that is not installed, even with an ACTIVE `tenant_modules` row (`ModuleRegistryPostgresIntegrationTest.orphanRow`: orphan `legacy` row + ACTIVE state → not active, not installed). Activation refusal itself = 13.8
 
-- [ ] [Deferred-from: review 13-1, 2026-10-29] Expose the validated manifest set once as a bean (e.g. `ModuleCatalog`) consumed by the seeder, registry and resolver — no re-scan of the classpath per caller [shared.module]
+- [x] [Deferred-from: review 13-1, 2026-10-29] Expose the validated manifest set once as a bean (e.g. `ModuleCatalog`) consumed by the seeder, registry and resolver — no re-scan of the classpath per caller [shared.module] — ✅ 13.2: `shared.module.application.ModuleCatalog` singleton (loaded + validated once through the context `ResourcePatternResolver`, invalid set fails the boot from its constructor); `ModuleCatalogSeeder` and `ModuleRegistryService` consume it (`ModuleCatalogSeederContextTest` still fails fast naming file + field; boot IT asserts the bean holds 10)
 
 ### Story 13.3 : `DependencyResolver` (requires, cascade, cycles, blocage)
 
@@ -828,6 +834,8 @@ So that **on n'atteint jamais un état incohérent (MOD-FR4, MOD-FR5, MOD-FR6)**
 - Tri topologique (Kahn) sur le graphe `requires` ; détection de cycle au boot + à l'ajout.
 - `enhances`/`needs` n'imposent **aucune** contrainte (opportuniste).
 - TDD exhaustif : cascade multi-niveaux, cycle, blocage, requires déjà actifs.
+
+- [ ] [Deferred-from: review 13-2, 2026-10-29] `checkDeactivation` must compute dependents from `ModuleRegistry.activeModules` (free modules without a row are active), never from raw `tenant_modules` rows [DependencyResolver]
 
 ### Story 13.4 : `ModuleProvisioner` — Flyway par module dans le schéma tenant
 
@@ -873,6 +881,8 @@ So that **l'accès est refusé proprement si le module n'est pas souscrit (MOD-F
 - `EntitlementService.isEnabled/assertEnabled/enabledModules` (source de vérité = `tenant_modules`).
 - Aspects `@RequiresEntitlement` (+ `@RequiresPermission` généralisant le RBAC) ; mapping `domainCode=MODULE_NOT_ENTITLED` → HTTP dans `GlobalExceptionHandler`.
 - TDD slice : 402/403 si non entitled, OK sinon ; combinable avec `@RequiresPermission`.
+
+- [ ] [Deferred-from: review 13-2, 2026-10-29] Single source of truth between `ModuleRegistry.isActive` and `EntitlementService`: extend `TenantModuleStatePort` with `expires_at`/`grace_until`/`tier`, EXPIRED in grace = read-only, keep the free-without-row rule shared; decide SUSPENDED / DELETION_PENDING tenants [entitlement]
 
 ### Story 13.6 : `CapabilityRegistry` (intégration synchrone optionnelle)
 
@@ -935,6 +945,8 @@ So that **je gère le catalogue de chaque tenant sans redéploiement (MOD-FR2, M
 - `ModuleLifecycleService` orchestre (spec §10) ; `ModuleAdminController` (SUPER_ADMIN only — décision V1).
 - Endpoints complémentaires : `GET /admin/modules`, `GET /tenants/me/modules` (owner). Bundles = Epic 16.
 - TDD E2E : activer invoicing → tables présentes ; désactiver → routes off + données conservées.
+
+- [ ] [Deferred-from: review 13-2, 2026-10-29] Deactivation must upsert a `DISABLED` row (+ `disabled_at`) — deleting the row re-activates a free module; evict the registry request cache (`ModuleRegistry.evict(schema)`) after every write; resolve the schema from the tenant UUID of the admin API [ModuleLifecycleService]
 
 ### Story 13.9 : Convertir 2 modules existants au contrat `KeevoModule`
 

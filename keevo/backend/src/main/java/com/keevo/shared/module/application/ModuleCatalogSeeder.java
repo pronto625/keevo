@@ -1,14 +1,12 @@
 package com.keevo.shared.module.application;
 
 import com.keevo.shared.module.LoadedModuleManifest;
-import com.keevo.shared.module.ModuleManifestLoader;
 import com.keevo.shared.module.application.port.ModuleDefinitionPort;
 import com.keevo.shared.module.application.port.ModuleDefinitionPort.UpsertOutcome;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization;
-import org.springframework.core.io.support.ResourcePatternResolver;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -25,9 +23,9 @@ import java.util.TreeSet;
  * Seeds the global module catalogue {@code public.module_definitions} at boot (Story 13.1, spec-socle §2.1).
  *
  * <p>Runs during bean initialisation, after Flyway ({@link DependsOnDatabaseInitialization}) and therefore before
- * the web server accepts traffic. The manifests are loaded (through the application context's resource resolver)
- * and validated first: an invalid set throws {@link com.keevo.shared.module.InvalidModuleManifestException}, boot
- * fails, and the catalogue is not touched. The whole seed then runs in one transaction (all or nothing): each
+ * the web server accepts traffic. The manifests come from the {@link ModuleCatalog} bean (loaded and validated
+ * once, Story 13.2): an invalid set throws {@link com.keevo.shared.module.InvalidModuleManifestException} while that
+ * bean is created, boot fails, and the catalogue is not touched. The whole seed then runs in one transaction (all or nothing): each
  * manifest is inserted if absent or updated when a seeded column changed ({@code installed_at} kept). A manifest
  * older than the stored row (rollback, rolling deploy of an older build) is skipped with a WARN — the catalogue is
  * never downgraded. Rows of modules no longer on the classpath are kept and logged at WARN — never deleted.
@@ -43,13 +41,13 @@ public class ModuleCatalogSeeder implements InitializingBean {
 
     private final ModuleDefinitionPort catalogue;
     private final TransactionTemplate transaction;
-    private final ResourcePatternResolver resources;
+    private final ModuleCatalog modules;
 
     public ModuleCatalogSeeder(ModuleDefinitionPort catalogue, PlatformTransactionManager transactionManager,
-                               ResourcePatternResolver resources) {
+                               ModuleCatalog modules) {
         this.catalogue = catalogue;
         this.transaction = new TransactionTemplate(transactionManager);
-        this.resources = resources;
+        this.modules = modules;
     }
 
     /** What a seed run did, by module id. */
@@ -71,7 +69,7 @@ public class ModuleCatalogSeeder implements InitializingBean {
 
     @Override
     public void afterPropertiesSet() {
-        seed(ModuleManifestLoader.loadFromClasspath(resources));
+        seed(modules.loaded());
     }
 
     /** Upserts {@code manifests} (already validated) in one transaction and reports rows without a manifest. */

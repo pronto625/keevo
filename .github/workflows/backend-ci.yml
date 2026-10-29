@@ -65,6 +65,15 @@ jobs:
           JWT_SECRET: ci_test_secret_minimum_256_bits_long_for_hmac_sha256_algorithm
           JWT_EXPIRATION_MS: 15552000000
 
+      # Story 13.2: boot + event-registry ITs on the prod runtime classpath (no spring-modulith-core / ArchUnit /
+      # spring-modulith-test), which the prod jar ships without.
+      - name: Prod classpath tests
+        working-directory: keevo/backend
+        run: mvn -Pprod-classpath test --batch-mode --no-transfer-progress
+        env:
+          JWT_SECRET: ci_test_secret_minimum_256_bits_long_for_hmac_sha256_algorithm
+          JWT_EXPIRATION_MS: 15552000000
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
