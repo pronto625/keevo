@@ -45,6 +45,17 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
+      # v1s-12-13: the RSA test keys are gitignored (*.pem) — generate a throwaway
+      # PKCS#8 pair on the classpath the tests load (classpath:keys/*.pem).
+      - name: Generate JWT test keys
+        working-directory: keevo/backend
+        run: |
+          mkdir -p src/test/resources/keys
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
+            -out src/test/resources/keys/private_key.pem
+          openssl pkey -in src/test/resources/keys/private_key.pem -pubout \
+            -out src/test/resources/keys/public_key.pem
+
       # v1s-15-11: no Postgres service — the tests start their own Testcontainer
       # (postgres:16-alpine) on the runner's Docker, with the `test` profile.
       - name: Build and test
